@@ -1,0 +1,327 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: xyz_config
+  annotations:
+    description: Kamatera-based platform configuration for Docker Swarm deployments
+  labels:
+    version: "1.0.0"
+  tags: []
+spec:
+  # Logging configuration
+  logging:
+    file: "config/xyz/configs/xyz-logging.yaml"
+  
+  # Deployment hierarchy: simple single-layer structure
+  layering:
+    - name: environment
+      description: "Deployment environment"
+      pattern: ""
+      required: true
+  
+  repositories:
+    - name: xyz_config
+      type: bundled
+      repository: .
+      reference: "1.0.0"
+      source_path: config/xyz
+      deploy_path: config
+    - name: xyz_deploy
+      type: bundled
+      repository: .
+      reference: "1.0.0"
+      source_path: deploy/xyz
+      deploy_path: deploy
+    - name: xyz_envs
+      type: bundled
+      repository: .
+      reference: "1.0.0"
+      source_path: envs/xyz
+      deploy_path: envs
+    - name: xyz_services
+      type: bundled
+      repository: .
+      reference: "1.0.0"
+      source_path: services/xyz
+      deploy_path: services
+  
+  # Integrations define external tools and services the platform uses
+  integrations:
+    # === Essential Tools (Required for platform operation) ===
+    # GitTool class for Git integration
+    - name: git
+      type: git 
+      capabilities: [ repository ]
+      description: Git version control system for repository management
+      required: true
+      validation:
+        command: git --version
+        min_version: "2.30.0"
+      authentication:
+        method: optional
+        env_vars:
+          - GIT_SSH_COMMAND
+          - GIT_USERNAME
+          - GIT_PASSWORD
+        description: |
+          Git authentication for private repositories (optional)
+          SSH (Recommended):
+            1. Generate SSH key: ssh-keygen -t ed25519 -C "xyz-platform"
+            2. Add to GitHub/GitLab: cat ~/.ssh/id_ed25519.pub
+            3. Use SSH URL: git@github.com:org/repo.git
+          HTTPS with token:
+            export GIT_USERNAME="oauth2"
+            export GIT_PASSWORD="your-personal-access-token"
+          Note: Not required for public repositories or if SSH is already configured
+    
+    # TerraformTool class for Terraform integration
+    - name: terraform
+      type: terraform 
+      capabilities: [ infrastructure ]
+      description: Terraform infrastructure as code provisioner
+      required: true
+      validation:
+        command: terraform version
+        min_version: "1.0.0"
+      authentication:
+        method: optional
+        env_vars:
+          - TERRAFORM_API_TOKEN
+        description: |
+          Terraform Cloud/Enterprise API token (optional - only if using remote backend)
+          Setup:
+            1. Create token at https://app.terraform.io/app/settings/tokens
+            2. Set environment variable:
+               export TERRAFORM_API_TOKEN="your-terraform-token"
+          Note: Not required for local Terraform execution
+    
+    # === Secret Management Tools (Choose one or more) ===
+    # BitwardenTool class for Bitwarden Secrets Manager integration
+    - name: bitwarden
+      type: bitwarden
+      capabilities: [ secrets ]
+      description: Bitwarden Secrets Manager
+      required: false
+      validation:
+        command: bws --version
+        min_version: "0.3.0"
+      endpoints:
+        address: https://bitwarden.com/api
+      authentication:
+        method: access_token
+        env_vars:
+          - BWS_ACCESS_TOKEN
+        description: |
+          Bitwarden Secrets Manager access token
+          Setup: Create machine account at https://bitwarden.com/sm
+          Then: export BWS_ACCESS_TOKEN="your-access-token"
+    
+    # HashiCorpVaultTool class for Vault integration
+    - name: vault
+      type: hashicorp_vault
+      capabilities: [secrets, keyvalue]
+      description: HashiCorp Vault for secrets and KV store
+      required: false
+      validation:
+        command: vault version
+        min_version: "1.12.0"
+      endpoints:
+        address: ${VAULT_ADDR:https://vault.example.com:8200}
+      authentication:
+        method: token
+        env_vars:
+          - VAULT_ADDR
+          - VAULT_TOKEN
+        description: |
+          HashiCorp Vault authentication token
+          Setup: vault login -method=userpass username=myuser
+          Or: vault login -method=token token=your-token
+          Then: export VAULT_TOKEN="your-vault-token"
+          And: export VAULT_ADDR="https://vault.example.com:8200"
+    
+    # AzureKeyVaultTool class for Azure Key Vault integration
+    - name: azure_keyvault
+      type: azure_keyvault
+      capabilities: [ secrets ]
+      description: Azure Key Vault for secret management
+      required: false
+      validation:
+        command: az --version
+        min_version: "2.40.0"
+      endpoints:
+        address: https://${AZURE_KEYVAULT_NAME}.vault.azure.net
+      authentication:
+        method: azure_ad
+        env_vars:
+          - AZURE_CLIENT_ID
+          - AZURE_CLIENT_SECRET
+          - AZURE_TENANT_ID
+          - AZURE_KEYVAULT_NAME
+        description: |
+          Azure Active Directory service principal authentication
+          Setup:
+            1. Create service principal: az ad sp create-for-rbac --name xyz-platform
+            2. Grant Key Vault access: az keyvault set-policy --name <vault> --spn <client-id> --secret-permissions get list
+            3. Set environment variables:
+               export AZURE_CLIENT_ID="your-client-id"
+               export AZURE_CLIENT_SECRET="your-client-secret"
+               export AZURE_TENANT_ID="your-tenant-id"
+               export AZURE_KEYVAULT_NAME="your-keyvault-name"
+          Alternative: Use Azure CLI default credentials (az login)
+    
+    # === Variable/Config Stores ===
+    # HashiCorpConsulTool class for Consul integration
+    - name: consul
+      type: hashicorp_consul
+      capabilities: [variables, keyvalues]
+      description: HashiCorp Consul for variables and KV store
+      required: false
+      validation:
+        command: consul version
+        min_version: "1.14.0"
+      endpoints:
+        address: ${CONSUL_HTTP_ADDR:http://consul.example.com:8500}
+      authentication:
+        method: token
+        env_var: CONSUL_HTTP_TOKEN
+        description: |
+          HashiCorp Consul ACL token
+          Setup:
+            1. Enable ACLs in Consul
+            2. Create token: consul acl token create -description "xyz-platform"
+            3. Set environment variables:
+               export CONSUL_HTTP_ADDR="http://consul.example.com:8500"
+               export CONSUL_HTTP_TOKEN="your-consul-token"
+    
+    # AzureAppConfigTool class for Azure App Configuration integration
+    - name: azure_appconfig
+      type: azure_appconfig
+      capabilities: [variables, features]
+      description: Azure App Configuration for variables and feature flags
+      required: false
+      validation:
+        command: az --version
+        min_version: "2.40.0"
+      endpoints:
+        address: https://${AZURE_APPCONFIG_NAME}.azconfig.io
+      authentication:
+        method: connection_string
+        env_vars:
+          - AZURE_APPCONFIG_CONNECTION_STRING
+          - AZURE_APPCONFIG_NAME
+        description: |
+          Azure App Configuration connection string
+          Setup:
+            1. Get connection string from Azure Portal
+            2. Set environment variables:
+               export AZURE_APPCONFIG_NAME="your-appconfig-name"
+               export AZURE_APPCONFIG_CONNECTION_STRING="Endpoint=...;Id=...;Secret=..."
+          Alternative: Use Azure AD (requires AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET)
+    
+    # === API Integrations (Optional, for workflow hooks) ===
+    # Custom API integration example for artifact registry example
+    - name: artifact_registry
+      type: api
+      capabilities: api
+      description: Upload deployment manifests for audit trail
+      enabled: false
+      endpoints:
+        address: https://artifacts.example.com/api/v1/manifests
+      authentication:
+        method: api_key
+        env_var: ARTIFACT_REGISTRY_API_KEY
+        description: |
+          Artifact registry API key
+          Setup:
+            1. Generate API key in artifact registry UI
+            2. Set environment variable:
+               export ARTIFACT_REGISTRY_API_KEY="your-api-key"
+      lifecycle:
+        trigger: deploy_apply
+        action: upload_manifest
+    
+    # Custom API integration example for test management system
+    - name: test_management
+      type: api
+      capability: api
+      description: OMP test management suite integration
+      enabled: false
+      endpoints:
+        address: https://test-api.omp.com/api/v1
+      authentication:
+        method: bearer_token
+        env_var: OMP_TEST_API_TOKEN
+        description: |
+          OMP test management API bearer token
+          Setup:
+            1. Obtain API token from OMP test management system
+            2. Set environment variable:
+               export OMP_TEST_API_TOKEN="your-bearer-token"
+      lifecycle:
+        trigger: verification
+        action: check_tests_passed
+
+  providers:
+    - name: kamatera
+      description: Kamatera Cloud Provider
+      additional_regions: false
+      regions:
+        - name: eu-fr
+          description: Europe - Frankfurt
+      additional_resources: false
+      resources:
+        - name: virtualmachine
+          category: compute
+          subcategory: virtualmachine
+          description: Virtual Machine Resource
+          additional_configurations: false
+          configuration:
+            os_name:
+              pattern: "^[A-Za-z0-9_\\-]{2,32}$"
+              required: true
+              description: "Operating system name (alphanumeric, underscores, hyphens, 2-32 chars)"
+            os_code:
+              pattern: "^[A-Za-z0-9.\\- ]{2,32}$"
+              required: true
+              description: "Operating system version code"
+            cpu_type:
+              pattern: "^(A|B|P|T)$"
+              required: true
+              description: "CPU type: A (Availability), B (Balanced), P (Performance), T (Turbo)"
+            cpu_cores:
+              pattern: "^[1-9][0-9]?$"
+              required: true
+              description: "Number of CPU cores (1-99)"
+            ram_mb:
+              pattern: "^(512|1024|2048|4096|8192|16384|32768)$"
+              required: true
+              description: "RAM in MB"
+            billing:
+              pattern: "^(hourly|monthly)$"
+              required: true
+              description: "Billing frequency"
+            disk_size:
+              pattern: "^[1-9][0-9]*$"
+              required: false
+              description: "Optional custom disk size in GB"
+  
+  additional_topologies: false
+  topologies:
+    - type: docker_swarm # Docker Swarm Cluster Topology
+      description: Docker Swarm Cluster Topology
+      additional_components: false
+      components:
+        - role: manager # Manager role definition
+          description: Docker Swarm Manager Node
+          uses_module: false
+          is_control: true
+          required: true
+          min_count: 1
+          max_count: 5
+        - role: worker # Worker role definition
+          description: Docker Swarm Worker Node
+          uses_module: false
+          is_control: false
+          required: true
+          min_count: 1
+          max_count: 5

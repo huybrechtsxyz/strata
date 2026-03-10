@@ -1,0 +1,12 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: xyz_base
+  annotations:
+    description: Base infrastructure stack for XYZ Platform
+  labels:
+    version: 1.0.0
+spec:
+  modules:
+    - name: traefik
+      file: config/xyz/modules/xyz-traefik.yaml
