@@ -1,0 +1,23 @@
+{
+  "recommendations": [
+    "davidanson.vscode-markdownlint", // Markdown linting extension
+    "esbenp.prettier-vscode", // Prettier formatter for markdown tables
+    "redhat.vscode-yaml", // YAML extension
+    "hashicorp.terraform", // Terraform extension
+    "ms-python.python", // Python extension
+    "ms-python.debugpy", // Python debugging extension
+    "ms-python.isort", // isort extension
+    "ms-python.black-formatter", // Black formatter extension
+    "ms-python.vscode-python-envs", // Python environment management
+    "ms-python.vscode-pylance", // Pylance extension for Python
+    "donjayamanne.python-extension-pack", // Python extension pack
+    "ms-vscode.powershell", // PowerShell extension
+    "pspester.pester-test", // Pester testing framework for PowerShell
+    "streetsidesoftware.code-spell-checker", // Spell checker extension
+    "vscode-icons-team.vscode-icons", // VSCode icons extension
+    "yzhang.markdown-all-in-one" // All-in-one Markdown extension
+  ],
+  "unwantedRecommendations": [
+    // extensions you don't want in this workspace
+  ]
+}
