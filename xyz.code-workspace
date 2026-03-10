@@ -1,7 +1,6 @@
 {
   "folders": [
     { "path": "." },
-    { "path": "../xyz-traefik" },
   ],
   "settings": {
     "files.exclude":{
