@@ -10,11 +10,8 @@ meta:
   tags: ["traefik", "proxy", "docker-swarm", "kubernetes", "system"]
 spec:
   source:
-    type: bundled
-    repository: .
-    reference: .
-    source_path: services/traefik
-    deploy_path: services/traefik
+    repository: xyz_services
+    path: traefik
   properties:
     mounts:
       - name: configuration_files
