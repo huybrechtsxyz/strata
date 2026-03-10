@@ -33,6 +33,7 @@ bld/
 [Oo]ut/
 [Ll]og/
 [Ll]ogs/
+.log/*
 
 # Build results on 'Bin' directories
 **/[Bb]in/*
@@ -343,6 +344,97 @@ paket-files/
 **/__pycache__/
 *.pyc
 
+# Python-specific ignores
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env/
+
+# Python bytecode
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
 # Cake - Uncomment if you are using it
 #tools/**
 #!tools/packages.config
@@ -419,3 +511,9 @@ FodyWeavers.xsd
 
 # Nothing in the .app temporary deployment folder
 /.app/
+
+# Temporary example files
+examples/temp_*
+build/temp/
+
+.xyz-platform/
