@@ -1,0 +1,42 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: workspace
+meta:
+  name: test_workspace_with_lifecycle
+  annotations:
+    description: Test workspace with lifecycle hooks
+  labels:
+    version: "1.0.0"
+  tags: ["test", "lifecycle"]
+spec:
+  lifecycle:
+    validate_before:
+      scripts:
+        - tests/data/scripts/validate-before.ps1
+    validate_after:
+      scripts:
+        - tests/data/scripts/validate-after.ps1
+  providers:
+    - name: kamatera_eu_fr
+      file: config/providers/xyz-kamatera-eu-fr.yaml
+  provisioners:
+    - name: test_iac
+      provisioner: terraform
+      source:
+        repository: platform-iac
+        source_path: deploy/terraform
+        target_path: terraform
+  resources:
+    - name: manager
+      role: manager
+      file: config/resources/xyz-platform-vm-manager.yaml
+      count: 1
+  topology:
+    - name: test_swarm
+      provider: kamatera_eu_fr
+      provisioner: terraform
+      type: docker_swarm
+      components:
+        - resource: manager
+  firewalls:
+    - name: test_fw
+      file: tests/data/firewalls/firewall-standard.yaml

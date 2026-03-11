@@ -1,0 +1,48 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: workspace
+meta:
+  # Missing required 'name' field
+  annotations:
+    description: Invalid workspace example
+  labels:
+    # version is present, but missing other required label fields if any
+  tags: ["invalid", "test"]
+spec:
+  # 'providers' is missing required fields and has wrong types
+  providers:
+    - name: 123 # Invalid type, should be string matching PlatformName
+      # Missing file
+    - name: kamatera_europe # Duplicate name
+      file: tests/data/providers/kamatera-eu-fr.yaml
+  provisioners: "should-be-a-list-not-string"
+  resources:
+    - name: manager
+      role: manager
+      file: tests/data/resources/doesnotexists.yaml
+      count: 1
+    - name: manager # Duplicate name
+      role: manager
+      file: tests/data/resources/resource-standard.yaml
+      count: 1
+  topology:
+    - name: platform_swarm
+      provider: kamatera_europe
+      provisioner: terraform
+      type: dockerswarm
+      components:
+        - resource: manager
+        - resource: manager # Duplicate resource reference
+  variables:
+    - key: WORKSPACE
+      store: constant
+      value: platform
+    - key: WORKSPACE # Duplicate key
+      store: constant
+      value: platform
+  secrets:
+    - key: TERRAFORM_API_TOKEN
+      store: bitwarden
+      value: d47e736b-2db8-47d5-b46b-b2c8016ece73
+    - key: TERRAFORM_API_TOKEN # Duplicate key
+      store: bitwarden
+      value: d47e736b-2db8-47d5-b46b-b2c8016ece73
