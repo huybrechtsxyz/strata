@@ -1,0 +1,199 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: configuration
+  annotations:
+    description: Full example configuration for the platform
+    owner: "example@xyz.com"
+    created: "2025-12-29"
+  labels:
+    version: "1.0.1"
+    environment: "production"
+    customer: "example-xyz"
+    project: "cloud-platform"
+  tags:
+    - "platform"
+    - "infrastructure"
+    - "example"
+spec:
+  # Optional: Specify custom logging configuration
+  logging:
+    file: "examples/logging.development.yaml"
+  
+  # Deployment hierarchy layers
+  layering:
+    - name: environment
+      description: "Deployment environment (dev, staging, prod)"
+      pattern: "^(dev|staging|prod)$"
+      required: true
+  
+  properties:
+    # Example of arbitrary configuration properties
+    deployment_manifests:
+      source:
+        type: local
+        repository: /
+        reference: /
+        source_path: tests/data/deployments
+    enable_feature_x: true
+    max_nodes: 10
+    custom_settings:
+      retry_count: 3
+      timeout_seconds: 120
+
+  integrations:
+    - name: git
+      type: git
+      capabilities: [repository]
+      description: "Git version control for repository operations"
+      required: true
+      enabled: true
+      validation:
+        command: "git --version"
+        min_version: "2.30.0"
+    
+    - name: terraform
+      type: terraform
+      capabilities: [infrastructure]
+      description: "Terraform IaC tool for infrastructure provisioning"
+      required: true
+      enabled: true
+      validation:
+        command: "terraform --version"
+        min_version: "1.0.0"
+    
+    - name: bitwarden
+      type: bitwarden
+      capabilities: [secrets]
+      description: "Bitwarden secret management"
+      required: false
+      enabled: true
+      authentication:
+        method: api_key
+        api_key:
+          api_key: bitwarden_api_key
+          api_secret: bitwarden_api_secret
+      endpoints:
+        address: https://vault.bitwarden.com/api
+    
+    - name: consul
+      type: consul
+      capabilities: [variables, keyvalue]
+      description: "HashiCorp Consul for variable storage"
+      required: false
+      enabled: true
+      endpoints:
+        address: http://consul.example.local:8500
+    
+    - name: azure-keyvault
+      type: azure-keyvault
+      capabilities: [secrets]
+      description: "Azure Key Vault for secret management"
+      required: false
+      enabled: true
+      authentication:
+        method: oauth2
+        oauth2:
+          client_id: azure_client_id
+          client_secret: azure_client_secret
+          tenant_id: azure_tenant_id
+      endpoints:
+        address: https://test-platform-kv.vault.azure.net/
+  
+  repositories:
+    - name: platform-iac
+      type: bundled
+      repository: /
+      reference: main
+      source_path: deploy
+      description: "Platform IaC deployment artifacts"
+    
+    - name: platform-modules
+      type: gitops
+      repository: https://github.com/example/platform-modules.git
+      reference: main
+      source_path: modules
+      description: "Platform application modules"
+    
+    - name: docker-registry
+      type: container
+      repository: registry.example.com/platform
+      reference: latest
+      description: "Container image registry"
+
+  providers:
+    - name: kamatera
+      description: Kamatera cloud provider
+      additional_regions: false
+      regions:
+        - eu-fr
+        - us-ny
+        - name: eu-de
+          description: Germany (Frankfurt)
+      additional_resources: false
+      resources:
+        - name: vm_standard
+          description: Standard VM resource
+          additional_configurations: false
+          configuration:
+            cpu:
+              pattern: "^[1-9][0-9]?$"
+              required: true
+              description: "Number of CPU cores (1-99)"
+            ram_mb:
+              pattern: "^(1024|2048|4096|8192|16384)$"
+              required: true
+              description: "RAM in MB"
+            disk_gb:
+              pattern: "^[1-9][0-9]*$"
+              required: true
+              description: "Disk size in GB"
+            custom_tag:
+              pattern: "^[a-zA-Z0-9_-]+$"
+              required: false
+              description: "Optional custom tag"
+        - name: vm_highmem
+          description: High memory VM resource
+          additional_configurations: true
+          configuration:
+            cpu:
+              pattern: "^[1-9][0-9]?$"
+              required: true
+            ram_mb:
+              pattern: "^(8192|16384|32768)$"
+              required: true
+            disk_gb:
+              pattern: "^[1-9][0-9]*$"
+              required: false
+
+  topologies:
+    - type: dockerswarm
+      description: Docker Swarm cluster topology
+      components:
+        - role: manager
+          description: Swarm manager node
+          uses_module: false
+          required: true
+          min_count: 1
+          max_count: 3
+        - role: worker
+          description: Swarm worker node
+          uses_module: false
+          required: true
+          min_count: 1
+          max_count: 10
+    - type: kubernetes
+      description: Kubernetes cluster topology
+      components:
+        - role: controlplane
+          description: Kubernetes control plane node
+          uses_module: false
+          required: true
+          min_count: 1
+          max_count: 5
+        - role: worker
+          description: Kubernetes worker node
+          uses_module: false
+          required: true
+          min_count: 1
+          max_count: 20
