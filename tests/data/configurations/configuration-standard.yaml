@@ -86,7 +86,7 @@ spec:
         address: http://consul.example.local:8500
     
     - name: azure-keyvault
-      type: azure-keyvault
+      type: azure_keyvault
       capabilities: [secrets]
       description: "Azure Key Vault for secret management"
       required: false
