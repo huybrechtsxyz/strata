@@ -1,0 +1,52 @@
+apiVersion: workspace.huybrechts.xyz/v1
+kind: firewallrules
+meta:
+  name: fw-docker
+  annotations:
+    description: Firewall rules for Docker Swarm
+    resource.type: firewallpolicies
+  labels:
+    version: "1.0.0"
+  tags: []
+specs:
+  reset: true
+  defaults:
+    - direction: in
+      permission: deny
+      comment: Deny all incoming traffic by default
+    - direction: out
+      permission: deny
+      comment: Deny all outgoing traffic by default
+  deny:
+  allow:
+    - direction: out
+      proto: udp
+      port: 53
+      comment: DNS (UDP)
+    - direction: out
+      proto: tcp
+      port: 53
+      comment: DNS (TCP)
+    - direction: out
+      proto: udp
+      port: 123
+      comment: NTP
+    - direction: in
+      interface: lo
+      comment: Loopback IN
+    - direction: out
+      interface: lo
+      comment: Loopback OUT
+    - direction: out
+      proto: tcp
+      port: [20, 21]
+      comment: FTP
+    - direction: out
+      proto: tcp
+      port: 11371
+      comment: GPG keyserver
+    - direction: out
+      proto: tcp
+      port: 22
+      to: 10.0.0.0/23
+      comment: SSH Outbound to internal nodes

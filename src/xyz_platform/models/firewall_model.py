@@ -222,7 +222,7 @@ class FirewallMetaModel(BaseModel):
     annotations: Optional[Dict[str, Any]] = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
-    labels: Optional[Dict[Any]] = Field(
+    labels: Optional[Dict[str, Any]] = Field(
         ..., description="Labels for categorization and filtering."
     )
     tags: Optional[List[Any]] = Field(

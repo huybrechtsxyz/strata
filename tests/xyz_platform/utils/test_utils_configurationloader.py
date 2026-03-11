@@ -3,9 +3,7 @@
 ===============================================================================
 Script Name   : test_utils_configurationloader.py
 Author        : Vincent Huybrechts
-Created       : 2026-02-06
-Last Updated  : 2026-02-16
-Version       : 2.0.0
+Version       : 1.0.0
 Python Version: 3.12+
 Description   : Tests for ConfigurationLoader class (simplified API v2.0).
 ===============================================================================

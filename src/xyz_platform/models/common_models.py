@@ -100,7 +100,7 @@ class ScriptPathModel(BaseModel):
         None, description="Optional description for documentation purposes"
     )
 
-    @field_validator("path")
+    @field_validator("file")
     @classmethod
     def validate_script_path(cls, v):
         """Validate script file exists and has valid extension."""

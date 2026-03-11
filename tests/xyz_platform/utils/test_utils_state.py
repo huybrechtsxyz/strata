@@ -3,7 +3,6 @@
 ===============================================================================
 Script Name   : test_utils_state.py
 Author        : Vincent Huybrechts
-Created       : 2026-03-11
 Version       : 1.0.0
 Python Version: 3.11+
 Description   : Unit tests for WorkspaceState utility class.

@@ -1,0 +1,18 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: module
+meta:
+  # Missing required 'name' field
+  annotations:
+    description: Invalid module example
+  labels:
+    # version is present, but missing other required label fields if any
+  tags: ["invalid", "test"]
+spec:
+  # 'lifecycle' is present but has wrong types
+  lifecycle:
+    service_start_before:
+      scripts: "should-be-a-list-not-string"
+    deploy_provision:
+      scripts: 123 # Invalid type
+  # 'source' is missing required fields and has wrong types
+  source: "should-be-a-dict-not-string"

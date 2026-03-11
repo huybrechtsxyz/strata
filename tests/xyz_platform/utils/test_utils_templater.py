@@ -3,8 +3,6 @@
 ===============================================================================
 Script Name   : test_utils_templater.py
 Author        : Vincent Huybrechts
-Created       : 2026-02-06
-Last Updated  : 2026-02-06
 Version       : 1.0.0
 Python Version: 3.12+
 Description   : Template processing functionality for files with placeholders.
