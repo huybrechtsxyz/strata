@@ -18,68 +18,18 @@ from pydantic import (
     StringConstraints,
     model_validator,
     field_validator,
-    RootModel,
 )
-from typing import List, Dict, Optional, Annotated, Any, Union
+from typing import List, Dict, Optional, Annotated, Any
 
 from xyz_platform.models.common_models import (
     CommonLifecycleModel,
     ProvisionerType,
-    ScriptsModel,
     SourceModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    validate_slot_type,
 )
-
-# Standard slot types for module deployments
-STANDARD_SLOT_TYPES = {"main", "staging", "canary", "sidecar", "init"}
-
-
-# Validator for slot_type field with warning for non-standard values
-def validate_slot_type(value: Optional[str]) -> Optional[str]:
-    """
-    Validate slot_type field.
-
-    Accepts any PlatformName-compliant value (lowercase alphanumeric + underscores, starts with letter).
-    Issues a warning if the value is not one of the standard slot types.
-
-    Standard slot types:
-    - main: Primary/production deployment
-    - staging: Staging/pre-production deployment
-    - canary: Canary deployment for gradual rollout
-    - sidecar: Sidecar container in Kubernetes
-    - init: Init container in Kubernetes
-
-    Args:
-        value: The slot_type value to validate
-
-    Returns:
-        The validated slot_type value
-
-    Raises:
-        ValueError: If value doesn't match PlatformName pattern
-    """
-    if value is None:
-        return value
-
-    # Validate against PlatformName pattern
-    try:
-        validate_platform_name(value)
-    except ValueError as e:
-        raise ValueError(f"slot_type must follow PlatformName rules: {e}")
-
-    # Warn if not a standard slot type
-    if value not in STANDARD_SLOT_TYPES:
-        warnings.warn(
-            f"slot_type '{value}' is not a standard value. "
-            f"Standard values are: {', '.join(sorted(STANDARD_SLOT_TYPES))}. "
-            f"Custom slot types are allowed but may not be supported by all provisioners.",
-            UserWarning,
-            stacklevel=3,
-        )
-
-    return value
 
 
 # Enumeration of supported workspace volume types.
