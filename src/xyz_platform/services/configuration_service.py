@@ -13,6 +13,7 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from xyz_platform.models.configuration_model import ConfigurationModel
+from xyz_platform.models.repository_model import RepositoryModel
 from xyz_platform.services.base_service import BaseService
 from xyz_platform.utils.configuration_loader import ConfigurationLoader
 from xyz_platform.utils import config
@@ -336,6 +337,13 @@ class ConfigurationService(BaseService):
         self._ensure_validated()
         return self.model if self.model else None
 
+    def get_repositories(self) -> Optional[List[RepositoryModel]]:
+        """Get the list of repositories from the configuration."""
+        self._ensure_validated()
+        if self.model and self.model.spec and self.model.spec.repositories:
+            return self.model.spec.repositories
+        return None
+
     # Get configuration defaults
 
     def get_configuration_defaults(self) -> Optional[Dict[str, Any]]:
@@ -394,7 +402,7 @@ class ConfigurationService(BaseService):
             ):
                 dist_path = config.DEFAULT_DIST_PATH
             else:
-                dist_path = "dist"
+                dist_path = "build/dist"
 
         # Resolve full path (resolve_path handles absolute vs relative)
         target_path = resolve_path(str(work_path), dist_path)
@@ -422,38 +430,10 @@ class ConfigurationService(BaseService):
             ):
                 cfg_path = config.DEFAULT_CONFIG_PATH
             else:
-                cfg_path = "build/cfg"
+                cfg_path = "build/obj"
 
         # Resolve full path (resolve_path handles absolute vs relative)
         target_path = resolve_path(str(work_path), cfg_path)
-        if create_path and not target_path.exists():
-            target_path.mkdir(parents=True, exist_ok=True)
-
-        return target_path
-
-    def get_default_provisioner_path(
-        self, work_path: str, create_path: bool
-    ) -> Optional[Path]:
-        """Get the default provisioner path from configuration defaults."""
-        prov_path: str = None
-        # Try to get from configuration if validated, otherwise use defaults
-        if self.is_validated():
-            defaults = self.get_configuration_defaults()
-            if defaults and "default_provisioner_path" in defaults:
-                prov_path = defaults["default_provisioner_path"]
-
-        # Fall back to config constants or hardcoded defaults
-        if not prov_path:
-            if (
-                config.DEFAULT_PROVISIONER_PATH is not None
-                and len(config.DEFAULT_PROVISIONER_PATH) > 0
-            ):
-                prov_path = config.DEFAULT_PROVISIONER_PATH
-            else:
-                prov_path = "build/iac"
-
-        # Resolve full path (resolve_path handles absolute vs relative)
-        target_path = resolve_path(str(work_path), prov_path)
         if create_path and not target_path.exists():
             target_path.mkdir(parents=True, exist_ok=True)
 
