@@ -17,6 +17,7 @@ from typing import List, Optional, Set
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from xyz_platform.models.common_models import CommonLifecycleModel
+from xyz_platform.models.auth_models import AuthenticationModel
 
 
 class IntegrationValidationSpecModel(BaseModel):
@@ -31,21 +32,6 @@ class IntegrationValidationSpecModel(BaseModel):
     )
     max_version: Optional[str] = Field(
         None, description="Maximum supported version (e.g., '2.40.0')"
-    )
-
-
-class IntegrationAuthenticationSpecModel(BaseModel):
-    """Authentication specification for integration access."""
-
-    method: str = Field(
-        ...,
-        description="Authentication method: optional, token, access_token, api_key, azure_ad, connection_string",
-    )
-    env_vars: Optional[List[str]] = Field(
-        None, description="Environment variables required for authentication"
-    )
-    description: Optional[str] = Field(
-        None, description="Human-readable setup instructions for authentication"
     )
 
 
@@ -105,8 +91,8 @@ class IntegrationModel(BaseModel):
         None,
         description="Validation specification for checking integration availability",
     )
-    authentication: Optional[IntegrationAuthenticationSpecModel] = Field(
-        None, description="Authentication specification for accessing the integration"
+    authentication: Optional[AuthenticationModel] = Field(
+        None, description="Authentication configuration for accessing the integration"
     )
     endpoints: Optional[IntegrationEndpointsSpecModel] = Field(
         None, description="Endpoint specification for remote integrations"

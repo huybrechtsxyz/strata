@@ -37,6 +37,14 @@ PlatformName = Annotated[
     ),
 ]
 
+# Variable key type for dictionary keys (environment variables, configurations)
+VariableKey = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+
+# VariableRefs, SecretRefs, and FeatureRefs are lists of variable keys for referencing in modules and resources
+VariableRefs = Optional[List[VariableKey]]
+SecretRefs = Optional[List[VariableKey]]
+FeatureRefs = Optional[List[VariableKey]]
+
 
 # Enumeration of supported platform kinds.
 class PlatformKind(str, Enum):
@@ -149,3 +157,77 @@ class CommonLifecycleModel(RootModel):
     """
 
     root: Dict[str, CommonLifecyclePhaseModel] = {}
+
+
+# Model for source configuration referencing a repository
+class SourceModel(BaseModel):
+    """
+    Reusable model for source configuration that references a repository.
+
+    Used by resources, modules, and other components to specify where their
+    source artifacts come from and where they should be deployed/built.
+
+    Example usage in a resource:
+        source:
+          repository: my-infra-repo
+          source_path: terraform/modules/vpc
+          target_path: build/vpc
+    """
+
+    repository: PlatformName = Field(
+        description="Name of the repository from configuration's repositories list"
+    )
+    source_path: Annotated[
+        str, StringConstraints(min_length=1, strip_whitespace=True)
+    ] = Field(
+        description="Path to the source artifacts within the repository (relative path)"
+    )
+    target_path: Optional[
+        Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+    ] = Field(
+        None,
+        description="Target path where artifacts should be built/deployed (relative to build/deploy directory)",
+    )
+    description: Optional[str] = Field(
+        None, description="Optional description for documentation purposes"
+    )
+
+    @field_validator("source_path", "target_path")
+    @classmethod
+    def validate_relative_path(cls, v):
+        """
+        Validate that paths are relative and secure.
+
+        Ensures paths:
+        - Do not contain absolute path markers (/, \\, drive letters)
+        - Do not contain parent directory references (..)
+        - Do not start with / or \\
+        - Use forward slashes only
+        """
+        if v is None:
+            return v
+
+        # Convert to string if Path
+        path_str = str(v)
+
+        # Check for absolute paths
+        if path_str.startswith("/") or path_str.startswith("\\"):
+            raise ValueError(f"Path must be relative, not absolute. Got: {path_str}")
+
+        # Check for drive letters (Windows)
+        if len(path_str) >= 2 and path_str[1] == ":":
+            raise ValueError(f"Path must be relative, not absolute. Got: {path_str}")
+
+        # Check for parent directory references
+        if ".." in path_str:
+            raise ValueError(
+                f"Path cannot contain parent directory references (..). Got: {path_str}"
+            )
+
+        # Normalize to forward slashes
+        normalized = path_str.replace("\\", "/")
+
+        # Remove leading/trailing slashes
+        normalized = normalized.strip("/")
+
+        return normalized
