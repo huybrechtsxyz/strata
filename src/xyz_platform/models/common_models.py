@@ -68,6 +68,14 @@ class PlatformVersion(str, Enum):
     v1 = "platform.huybrechts.xyz/v1"
 
 
+# Enumeration of supported provisioner names.
+class ProvisionerType(str, Enum):
+    """Enumeration of supported provisioner names."""
+
+    TERRAFORM = "terraform"
+    SCRIPT = "script"
+
+
 # Model for individual script with scope and execution metadata
 class ScriptPathModel(BaseModel):
     """Individual script with scope and execution metadata."""
