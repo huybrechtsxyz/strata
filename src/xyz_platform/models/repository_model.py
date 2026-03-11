@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""
+===============================================================================
+Script Name   : source_model.py
+Author        : Vincent Huybrechts
+Version       : 1.0.0
+Python Version: 3.9+
+Description   : Pydantic model for deployment source configuration validation.
+===============================================================================
+"""
+
+import re
+from enum import Enum
+from pathlib import Path
+from typing import Annotated, Optional
+
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+
+from xyz_platform.models.common_models import PlatformName
+
+
+class RepositoryType(str, Enum):
+    """
+    Enumeration of supported deployment source types.
+
+    BUNDLED: Platform-bundled modules (available within the platform)
+    GITOPS: GitOps repository to clone from
+    CONTAINER: Container image source
+    """
+
+    BUNDLED = "bundled"
+    GITOPS = "gitops"
+    CONTAINER = "container"
+
+
+# Model for deployment configuration.
+class RepositoryModel(BaseModel):
+    """
+    Model for deployment source configuration.
+
+    Supports two source types:
+
+    BUNDLED:
+        - Platform-bundled modules available within the platform itself
+        - repository: Platform-relative path ('.' or relative path)
+        - reference: Version, tag, or branch identifier
+        - source_path: Path to the module from the platform root
+        - deploy_path: Optional path to deployment artifacts
+
+    GITOPS:
+        - Module deployed via GitOps workflow from Git repository
+        - repository: Git repository URL (e.g., GitHub, GitLab)
+        - reference: Branch, tag, or commit hash
+        - source_path: Path to the module within the repository
+        - deploy_path: Optional path to deployment artifacts
+
+    CONTAINER:
+        - Module deployed via container image
+        - repository: Container image repository (e.g., Docker Hub, ECR)
+        - reference: Image tag or digest
+        - source_path: Path to the module within the container image
+        - deploy_path: Optional path to deployment artifacts
+    """
+
+    name: Optional[PlatformName] = Field(
+        None, description="Optional name for the source configuration"
+    )
+    type: RepositoryType = Field(
+        description="Source type: bundled (platform-bundled) or gitops (Git repository)"
+    )
+    repository: Annotated[
+        str, StringConstraints(min_length=1, strip_whitespace=True)
+    ] = Field(description="Source repository or image for the deployment")
+    reference: Annotated[
+        str, StringConstraints(min_length=1, strip_whitespace=True)
+    ] = Field(description="Version/tag/branch or image tag/digest for the deployment")
+    source_path: Optional[
+        Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
+    ] = Field(
+        None,
+        description="Path to the module configuration or script (not applicable for container type)",
+    )
+    deploy_path: Optional[str] = Field(
+        None, description="Path to deployment artifacts (if applicable)"
+    )
+
+    @staticmethod
+    def _validate_relative_path(v: str, field_name: str) -> str:
+        """
+        Validate that a path is relative and secure.
+
+        Args:
+            v: Path value to validate
+            field_name: Name of the field being validated (for error messages)
+
+        Returns:
+            Validated path string
+
+        Raises:
+            ValueError: If path is invalid, absolute, or contains unsafe patterns
+        """
+        if not v or v.strip() == "":
+            raise ValueError(f"{field_name} must not be empty")
+
+        path_obj = Path(v)
+
+        # Reject absolute paths
+        if path_obj.is_absolute():
+            raise ValueError(
+                f"{field_name} must be relative, not absolute: {v}. "
+                f"Absolute paths are not allowed for security reasons."
+            )
+
+        # Reject Windows drive letters (C:\, X:\, etc.)
+        if re.match(r"^[A-Za-z]:[/\\]", v):
+            raise ValueError(
+                f"{field_name} must be relative, found Windows drive letter: {v}"
+            )
+
+        # Reject UNC paths (\\\\server\\share)
+        if v.startswith("\\\\"):
+            raise ValueError(f"{field_name} must be relative, found UNC path: {v}")
+
+        # Reject Unix absolute paths starting with /
+        if v.startswith("/"):
+            raise ValueError(f"{field_name} must be relative, not absolute: {v}")
+
+        # Ensure it's a valid path format (allow spaces, @, ~, but not colons for security)
+        if not re.match(r"^[a-zA-Z0-9.\-_/\\@ ~]+$", v):
+            raise ValueError(f"{field_name} contains invalid characters: {v}")
+
+        # Document that parent directory traversal (..) is allowed but risky
+        if ".." in v:
+            # SECURITY WARNING: Parent directory traversal (..) is allowed
+            # This may allow access outside the intended workspace.
+            # Ensure proper sandboxing and path resolution is in place.
+            pass
+
+        return v
+
+    @field_validator("repository")
+    @classmethod
+    def validate_repository(cls, v: str, info) -> str:
+        """
+        Validate repository based on deployment type (format only, not existence).
+        """
+        deployment_type = info.data.get("type")
+
+        if deployment_type == RepositoryType.BUNDLED:
+            # Bundled: validate format (paths can be created later)
+            if v not in [".", "/"] and not re.match(r"^[a-zA-Z0-9.\-_/\\: ]+$", v):
+                raise ValueError(f"Bundled repository path format is invalid: {v}")
+        elif deployment_type == RepositoryType.GITOPS:
+            # Git URL: must look like a valid git URL
+            if not re.match(r"^(https?://|git@|ssh://)", v):
+                raise ValueError(f"GitOps repository must be a valid Git URL: {v}")
+        elif deployment_type == RepositoryType.CONTAINER:
+            # Container: validate registry/image format
+            # Examples: docker.io/library/nginx, ghcr.io/org/image, myregistry.azurecr.io/namespace/image
+            if not re.match(r"^[a-zA-Z0-9.\-_:/]+$", v):
+                raise ValueError(
+                    f"Container repository must be a valid image path: {v}"
+                )
+
+        return v
+
+    @field_validator("reference")
+    @classmethod
+    def validate_reference(cls, v: str, info) -> str:
+        """
+        Validate reference based on source type.
+        """
+        deployment_type = info.data.get("type")
+
+        if deployment_type == RepositoryType.BUNDLED:
+            # Bundled: can be '.' or '/' or a version string
+            pass  # Allow any value for bundled references
+        elif deployment_type == RepositoryType.GITOPS:
+            # Git: must be a valid branch/tag/commit
+            if not re.match(r"^[a-zA-Z0-9.\-_/]+$", v):
+                raise ValueError(
+                    f"Git reference must be a valid branch, tag, or commit hash: {v}"
+                )
+        elif deployment_type == RepositoryType.CONTAINER:
+            # Container: can be tag (v1.0.0, latest) or digest (sha256:abc123...)
+            # Allow alphanumeric, dots, dashes, underscores, and sha256: prefix
+            if not re.match(r"^(sha256:[a-f0-9]{64}|[a-zA-Z0-9.\-_]+)$", v):
+                raise ValueError(
+                    f"Container reference must be a valid tag or digest: {v}"
+                )
+
+        return v
+
+    @field_validator("source_path")
+    @classmethod
+    def validate_config_path(cls, v: Optional[str], info) -> Optional[str]:
+        """
+        Validate source_path is relative and properly formatted.
+        Absolute paths are not allowed for security reasons.
+        Not required for CONTAINER type.
+        """
+        if v is None:
+            return v
+        return cls._validate_relative_path(v, "source_path")
+
+    @field_validator("deploy_path")
+    @classmethod
+    def validate_deploy_path(cls, v: Optional[str], info) -> Optional[str]:
+        """
+        Validate deploy_path is relative if provided.
+        Absolute paths are not allowed for security reasons.
+        """
+        if v is None:
+            return v
+
+        return cls._validate_relative_path(v, "deploy_path")
+
+    @model_validator(mode="after")
+    def validate_type_specific_requirements(self) -> "RepositoryModel":
+        """
+        Cross-field validation for type-specific field requirements.
+        """
+        # BUNDLED and GITOPS require source_path
+        if self.type in [RepositoryType.BUNDLED, RepositoryType.GITOPS]:
+            if not self.source_path:
+                raise ValueError(
+                    f"source_path is required for {self.type.value} source type"
+                )
+
+        # CONTAINER type should not use source_path
+        if self.type == RepositoryType.CONTAINER:
+            if self.source_path is not None:
+                raise ValueError(
+                    "source_path is not applicable for container source type. "
+                    "Container images are self-contained."
+                )
+
+        return self
+
+    def get_label(self) -> str:  # Not Optional
+        """Get the label/name of the source configuration."""
+        if self.name and self.type:
+            return f"{self.name} ({self.type.value})"
+        elif self.type:
+            return str(self.type.value)
+        return "Unnamed Source"
