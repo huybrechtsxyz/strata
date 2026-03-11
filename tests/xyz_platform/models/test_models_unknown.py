@@ -13,12 +13,7 @@ import os
 import yaml
 import pytest
 
-from src.xyz_platform.models.unknown_model import UnknownModel
-
-
-@pytest.fixture(autouse=True)
-def set_pythonpath_env(monkeypatch):
-    monkeypatch.setenv("PYTHONPATH", "src")
+from xyz_platform.models.unknown_model import UnknownModel
 
 
 UNKNOWN_FOLDER = os.path.join(
