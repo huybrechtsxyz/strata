@@ -1,0 +1,22 @@
+  Official HashiCorp Installer (Recommended):
+    - Windows: Download from https://www.terraform.io/downloads
+    - macOS: brew install terraform
+    - Linux: Use package manager or direct download
+  
+  Manual Installation:
+    - Download binary from https://releases.hashicorp.com/terraform/
+    - Extract and add to PATH
+  
+  Configuration:
+    - Ensure 'terraform' is in your system PATH
+    - Verify installation: terraform version
+    - Initialize providers: terraform init
+  
+  Environment Variables:
+    - TF_LOG: Set logging level (TRACE, DEBUG, INFO, WARN, ERROR)
+    - TF_CLI_CONFIG_FILE: Custom CLI configuration file path
+    - TF_DATA_DIR: Override default data directory
+  
+  Documentation:
+    - Official docs: https://www.terraform.io/docs
+    - CLI reference: https://www.terraform.io/cli"""

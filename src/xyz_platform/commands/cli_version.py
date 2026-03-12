@@ -12,13 +12,19 @@ import click
 import json
 
 from xyz_platform.commands.base_command import BaseCommand
-from xyz_platform.commands.cli_common import click_output_format
+from xyz_platform.commands.cli_common import (
+    click_output_format,
+    click_output_quiet,
+    click_output_verbose,
+)
 from xyz_platform.utils import system
 
 
 @click.command()
 @click_output_format
-def version_command(output: str = None):
+@click_output_verbose
+@click_output_quiet
+def version_command(output: str = None, verbose: bool = None, quiet: bool = None):
     """Show CLI version."""
     version = system.get_cli_version()
 
@@ -33,7 +39,7 @@ def version_command(output: str = None):
         return
 
     # If no output format specified, show full console header and footer with version in between
-    command: BaseCommand = BaseCommand()
+    command: BaseCommand = BaseCommand(output=output, verbose=verbose, quiet=quiet)
     command.ShowConsoleHeader(work_path=None)  # No work path for version command
     click.echo("")
     click.echo(f"XYZ Platform CLI Version: {version}")

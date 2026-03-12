@@ -1,0 +1,71 @@
+  Official Installation (Recommended):
+    - Windows: Download from https://git-scm.com/download/win
+      * Git for Windows (includes Git Bash, Git GUI)
+      * Standalone installer or chocolatey: choco install git
+      * Or winget: winget install --id Git.Git -e --source winget
+    - macOS: 
+      * Homebrew: brew install git
+      * Xcode Command Line Tools: xcode-select --install
+      * Download from https://git-scm.com/download/mac
+    - Linux: 
+      * Debian/Ubuntu: apt-get install git
+      * RHEL/CentOS: yum install git
+      * Fedora: dnf install git
+      * Arch: pacman -S git
+  
+  Manual Installation:
+    - Download installer from https://git-scm.com/downloads
+    - Run installer and follow setup wizard
+    - Ensure "Add to PATH" option is selected during installation
+  
+  Configuration:
+    - Ensure 'git' is in your system PATH
+    - Verify installation: git --version
+    - Configure user: git config --global user.name "Your Name"
+    - Configure email: git config --global user.email "your@email.com"
+    - View config: git config --list
+  
+  Authentication:
+    - HTTPS: Use personal access token or credential manager
+      * GitHub: Settings > Developer settings > Personal access tokens
+      * Configure credential helper: git config --global credential.helper manager
+    - SSH: Generate and add SSH key
+      * Generate key: ssh-keygen -t ed25519 -C "your@email.com"
+      * Add to ssh-agent: ssh-add ~/.ssh/id_ed25519
+      * Add public key to GitHub/GitLab settings
+  
+  Common Operations:
+    - Clone repository: git clone <url> [directory]
+    - Clone specific branch: git clone -b <branch> <url>
+    - Shallow clone: git clone --depth 1 <url>
+    - Pull changes: git pull [remote] [branch]
+    - Fetch updates: git fetch [remote]
+    - Checkout branch: git checkout <branch>
+    - View status: git status
+    - View branches: git branch -a
+    - View remotes: git remote -v
+  
+  XYZ Platform Integration:
+    - GitOps source type uses git clone with --depth 1 (shallow clone)
+    - Supports any git URL: https://, git@, ssh://, file://
+    - Requires git to be installed and in PATH
+    - Reference can be: branch name, tag, or commit hash
+    - Private repositories require authentication (HTTPS token or SSH key)
+  
+  Environment Variables:
+    - GIT_SSH_COMMAND: Custom SSH command for authentication
+    - GIT_ASKPASS: Program to prompt for credentials
+    - GIT_CONFIG: Alternative git config file location
+  
+  Troubleshooting:
+    - "git not found": Ensure git is in PATH
+    - Authentication failed: Check credentials or SSH keys
+    - SSL certificate error: git config --global http.sslVerify false (caution)
+    - Timeout on clone: Increase timeout or check network
+  
+  Documentation:
+    - Official docs: https://git-scm.com/doc
+    - Book: https://git-scm.com/book/en/v2
+    - Reference: https://git-scm.com/docs
+    - GitHub guides: https://guides.github.com/
+    - Cheat sheet: https://training.github.com/downloads/github-git-cheat-sheet/

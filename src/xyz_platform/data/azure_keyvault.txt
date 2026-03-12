@@ -1,0 +1,39 @@
+  Prerequisites:
+    - Azure subscription with Key Vault access
+    - Key Vault created in Azure Portal (if not already exists)
+    - Service Principal or Managed Identity with appropriate permissions
+  
+  Authentication Methods:
+  
+  1. OIDC / Federated Identity (Recommended for CI/CD):
+    - AZURE_TENANT_ID: Your Azure Tenant ID (from Azure AD)
+    - AZURE_CLIENT_ID: Your Application (client) ID
+    - AZURE_SUBSCRIPTION_ID: Your Azure Subscription ID
+    - KEYVAULT_URL: Your Key Vault URL (e.g., https://myvault.vault.azure.net/)
+    
+    Use cases: GitHub Actions, Azure Pipelines, Managed Identity
+  
+  2. Service Principal with Client Secret:
+    - AZURE_TENANT_ID: Your Azure Tenant ID (from Azure AD)
+    - AZURE_CLIENT_ID: Your Application (client) ID
+    - AZURE_CLIENT_SECRET: Your Client Secret (from App Registration)
+    - KEYVAULT_URL: Your Key Vault URL (e.g., https://myvault.vault.azure.net/)
+    
+    Use cases: Local development, service-to-service authentication
+  
+  Configuration:
+    - Set environment variables based on your authentication method
+    - Ensure only ONE authentication method is used at a time
+    - Verify Key Vault access permissions are configured
+    - Test connection: az keyvault secret list --vault-name <vault-name>
+  
+  Common Issues:
+    - Both AZURE_CLIENT_SECRET and AZURE_SUBSCRIPTION_ID set (ambiguous auth)
+    - Missing KEYVAULT_URL or incorrect URL format
+    - Insufficient permissions on Key Vault (requires Get, List permissions)
+    - Service Principal not granted access to Key Vault
+  
+  Documentation:
+    - Azure Key Vault: https://learn.microsoft.com/azure/key-vault/
+    - Service Principals: https://learn.microsoft.com/azure/active-directory/develop/app-objects-and-service-principals
+    - Managed Identity: https://learn.microsoft.com/azure/active-directory/managed-identities-azure-resources/"""

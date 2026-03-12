@@ -1,0 +1,19 @@
+  Official HashiCorp Installer (Recommended):
+    - Windows: Download from https://www.vaultproject.io/downloads
+    - macOS: brew install vault
+    - Linux: Use package manager or direct download 
+  
+  Manual Installation:
+    - Download binary from https://releases.hashicorp.com/vault/
+    - Extract and add to PATH
+  
+  Configuration:
+    - Set VAULT_ADDR environment variable
+    - Authenticate using one of the supported methods:
+      1. Direct Token:
+         - Set VAULT_TOKEN
+      2. AppRole Authentication:
+         - Set VAULT_ROLE_ID and VAULT_SECRET_ID
+      3. Kubernetes Authentication:
+         - Set VAULT_K8S_ROLE
+    - (Optional) Set VAULT_NAMESPACE for Vault Enterprise"""

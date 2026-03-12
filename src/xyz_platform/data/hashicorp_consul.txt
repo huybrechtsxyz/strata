@@ -1,0 +1,15 @@
+  Official HashiCorp Installer (Recommended):
+    - Windows: Download from https://www.consul.io/downloads
+    - macOS: brew install consul
+    - Linux: Use package manager or direct download
+  
+  Manual Installation:
+    - Download binary from https://releases.hashicorp.com/consul/
+    - Extract and add to PATH
+  
+  Configuration:
+    - Set CONSUL_HTTP_ADDR environment variable (e.g., export CONSUL_HTTP_ADDR="http://
+    - Set CONSUL_HTTP_TOKEN environment variable if using ACLs
+    - Set CONSUL_NAMESPACE environment variable if using Consul Enterprise namespaces
+    - Verify installation: consul version
+    - Test connectivity: consul kv get <some-key>"""

@@ -1,0 +1,35 @@
+  Official Installation (Recommended):
+    - Windows: Download from https://github.com/bitwarden/sdk-sm/releases
+      * Download the latest bws-x86_64-pc-windows-msvc.zip
+      * Extract and add to PATH
+    - macOS: 
+      * Download bws-x86_64-apple-darwin.zip or bws-aarch64-apple-darwin.zip
+      * Extract and add to PATH
+    - Linux: 
+      * Download bws-x86_64-unknown-linux-gnu.zip
+      * Extract and add to PATH
+  
+  Manual Installation:
+    - Download binary from https://github.com/bitwarden/sdk-sm/releases
+    - Extract the bws executable
+    - Add to system PATH
+  
+  Configuration:
+    - Ensure 'bws' is in your system PATH
+    - Verify installation: bws --version
+    - Set access token: export BWS_ACCESS_TOKEN="your-access-token"
+  
+  Environment Variables:
+    - BWS_ACCESS_TOKEN: Bitwarden Secrets Manager access token (required)
+      * Obtain from Bitwarden Secrets Manager dashboard
+      * Create machine account and generate access token
+  
+  Usage:
+    - Get secret: bws secret get <secret-id>
+    - List secrets: bws secret list
+    - Create secret: bws secret create
+  
+  Documentation:
+    - Official docs: https://bitwarden.com/help/secrets-manager-cli/
+    - SDK repository: https://github.com/bitwarden/sdk-sm
+    - API reference: https://bitwarden.com/help/secrets-manager-api/"""
