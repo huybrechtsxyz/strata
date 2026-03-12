@@ -278,6 +278,41 @@ class ConfigurationLoggingModel(BaseModel):
     )
 
 
+class ConfigurationDeploymentModel(BaseModel):
+    """Model for deployment configuration and schema definition.
+
+    Defines required and optional properties that deployments must provide,
+    similar to how ConfigurationProviderResourceModel defines resource configuration schemas.
+
+    Example:
+        deployment:
+          properties:
+            additional_properties: false
+            properties:
+              environment:
+                pattern: "^(dev|test|staging|prod)$"
+                required: true
+                description: "Deployment environment"
+              customer:
+                pattern: "^[a-z][a-z0-9-]*$"
+                required: true
+                description: "Customer identifier"
+              region:
+                pattern: "^[a-z]{2}-[a-z]+(-[0-9]+)?$"
+                required: false
+                description: "Deployment region"
+    """
+
+    additional_properties: bool = Field(
+        False,
+        description="Allow properties not listed in the schema for deployments",
+    )
+    properties: Optional[Dict[str, Union[str, ConfigurationSchemaField]]] = Field(
+        None,
+        description="Deployment properties schema (pattern string or structured field with validation)",
+    )
+
+
 class ConfigurationSpecModel(BaseModel):
     """Specification for the configuration model."""
 
@@ -303,6 +338,10 @@ class ConfigurationSpecModel(BaseModel):
     )
     properties: Optional[Dict[str, Any]] = Field(
         None, description="List of configuration properties"
+    )
+    deployment: Optional[ConfigurationDeploymentModel] = Field(
+        None,
+        description="Deployment configuration and schema for deployment.spec.properties validation",
     )
     providers: Optional[List[ConfigurationProviderModel]] = Field(
         None, description="List of supported providers"

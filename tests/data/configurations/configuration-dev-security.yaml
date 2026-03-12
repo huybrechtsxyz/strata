@@ -12,6 +12,19 @@ meta:
     - "development"
     - "testing"
 spec:
+  # Deployment properties schema
+  deployment:
+    additional_properties: false
+    properties:
+      environment:
+        pattern: "^(dev|test|staging|prod)$"
+        required: true
+        description: "Deployment environment"
+      customer:
+        pattern: "^[a-z][a-z0-9-]*$"
+        required: true
+        description: "Customer identifier"
+  
   properties:
     deployment_manifests:
       source:

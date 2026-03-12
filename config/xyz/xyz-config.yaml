@@ -19,6 +19,16 @@ spec:
       pattern: ""
       required: true
   
+  # Deployment properties schema - defines required properties for all deployments
+  deployment:
+    additional_properties: false
+    properties:
+      environment:
+        pattern: "^(dev|tst|stg|prd)$"
+        required: true
+        description: "Deployment environment (dev, tst, stg, prd)"
+  
+  # Required repositories for this configuration (bundled with platform)
   repositories:
     - name: xyz_config
       type: bundled
@@ -261,6 +271,7 @@ spec:
         trigger: verification
         action: check_tests_passed
 
+  # Providers define supported infrastructure providers and their resource schemas
   providers:
     - name: kamatera
       description: Kamatera Cloud Provider
@@ -305,6 +316,7 @@ spec:
               required: false
               description: "Optional custom disk size in GB"
   
+  # Topologies define supported deployment topologies and their component schemas
   additional_topologies: false
   topologies:
     - type: docker_swarm # Docker Swarm Cluster Topology
