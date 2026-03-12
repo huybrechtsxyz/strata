@@ -1,0 +1,43 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: valid_platform
+  annotations:
+    description: Valid deployment example
+    remarks: This deployment is fully valid and matches the model.
+  labels:
+    version: "1.0.0"
+    environment: "production"
+    customer: "example-xyz"
+  tags: ["platform", "infrastructure", "kamatera"]
+spec:
+  layers:
+    environment: prod
+  
+  properties:
+    deployment_type: production
+    customer: example-xyz
+    region: eu-west-1
+  
+  custom:
+    costcenter: "XYZ-PLATFORM"
+    project: platform
+  
+  workspace:
+    name: example_xyz_workspace
+    description: Standard xyz workspace
+    file: tests/data/workspaces/workspace-standard.yaml
+  environments:
+    - tests/data/environments/environment-standard.yaml
+  approvals:
+    type: auto
+  stages:
+    - name: production
+      type: infrastructure
+  configurations:
+    - name: configuration
+      description: Standard configuration
+      file: tests/data/configurations/configuration-standard.yaml
+  features: null
+  variables: null
+  secrets: null

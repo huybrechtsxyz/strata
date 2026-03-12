@@ -43,9 +43,10 @@ class DeploymentService(BaseService):
 
         Validates cross-references when related services are loaded:
         - Deployment layer values against configuration.spec.layering
+        - Deployment properties against configuration.spec.deployment.properties schema
         - Environment variable/secret references against workspace
         - Deployment variable/secret references against workspace
-        - Bundled source paths exist (if work_path provided)
+        - Security policies for variable/secret/feature stores
 
         Note: Uniqueness validations (environments, configurations, variables, secrets)
         are already enforced by MODEL validators in DeploymentSpecModel.
@@ -63,6 +64,13 @@ class DeploymentService(BaseService):
         if configuration_model and configuration_model.spec.layering:
             layer_errors = self._validate_deployment_layers(configuration_model)
             errors.extend(layer_errors)
+
+        # Validate deployment properties against configuration schema
+        if configuration_model and configuration_model.spec.deployment:
+            properties_errors = self._validate_deployment_properties(
+                configuration_model
+            )
+            errors.extend(properties_errors)
 
         # Validate against security policies if configuration is provided
         if configuration_model and configuration_model.spec.security:
@@ -108,7 +116,7 @@ class DeploymentService(BaseService):
             )
             return errors  # Fatal error - can't proceed with other validations
 
-        deployment_values = self.model.spec.deployment or {}
+        deployment_values = self.model.spec.layers or {}
 
         # Validate all required layers are provided
         for layer in configuration_model.spec.layering:
@@ -145,5 +153,107 @@ class DeploymentService(BaseService):
             self.logger.warning(
                 f"Deployment contains layers not defined in configuration: {unknown_layers}"
             )
+
+        return errors
+
+    def _validate_deployment_properties(
+        self, configuration_model: "ConfigurationModel"
+    ) -> List[str]:
+        """
+        Validate deployment properties against configuration schema.
+
+        The schema is defined in configuration.spec.deployment.properties
+        where each field maps to a regex pattern that values must match.
+
+        When additional_properties=False, only fields in the schema are allowed.
+        When additional_properties=True, extra fields are permitted.
+
+        Args:
+            configuration_model: Configuration model with deployment schema
+
+        Returns:
+            List[str]: List of validation error messages
+        """
+        errors = []
+
+        # No validation if no deployment schema configured
+        if not configuration_model.spec.deployment:
+            return errors
+
+        deployment_config = configuration_model.spec.deployment
+        schema = deployment_config.properties or {}
+        additional_allowed = deployment_config.additional_properties
+        deployment_properties = self.model.spec.properties or {}
+
+        # Validate each field in deployment.spec.properties
+        for field_name, field_value in deployment_properties.items():
+            if field_name not in schema:
+                # Field not in schema
+                if not additional_allowed:
+                    errors.append(
+                        f"Deployment property '{field_name}' is not allowed. "
+                        f"additional_properties is False. Valid fields: {list(schema.keys())}"
+                    )
+                continue
+
+            schema_def = schema[field_name]
+
+            # Handle both string pattern (legacy) and structured field object
+            if isinstance(schema_def, str):
+                # Legacy: string pattern (always required)
+                pattern = schema_def
+            elif isinstance(schema_def, dict):
+                # Structured field with pattern and required flag
+                pattern = schema_def.get("pattern")
+                if not pattern:
+                    errors.append(
+                        f"Deployment property '{field_name}' schema is missing 'pattern' property"
+                    )
+                    continue
+            else:
+                # ConfigurationSchemaField model instance
+                pattern = schema_def.pattern
+
+            # Convert value to string for pattern matching
+            value_str = str(field_value)
+
+            # Validate against regex pattern
+            try:
+                if not re.match(pattern, value_str):
+                    errors.append(
+                        f"Deployment property '{field_name}' value '{value_str}' does not match "
+                        f"required pattern '{pattern}'"
+                    )
+            except re.error as e:
+                errors.append(
+                    f"Invalid regex pattern '{pattern}' for property '{field_name}' in "
+                    f"deployment schema: {str(e)}"
+                )
+
+        # Check for required fields (fields in schema but not in properties)
+        for schema_field, schema_def in schema.items():
+            if schema_field in deployment_properties:
+                continue
+
+            # Determine if field is required
+            is_required = True  # Default to required
+            if isinstance(schema_def, dict):
+                is_required = schema_def.get("required", True)
+            elif hasattr(schema_def, "required"):
+                is_required = schema_def.required
+
+            if is_required:
+                # Get pattern for error message
+                if isinstance(schema_def, str):
+                    pattern = schema_def
+                elif isinstance(schema_def, dict):
+                    pattern = schema_def.get("pattern", "N/A")
+                else:
+                    pattern = schema_def.pattern
+
+                errors.append(
+                    f"Required deployment property '{schema_field}' is missing. "
+                    f"Pattern: {pattern}"
+                )
 
         return errors

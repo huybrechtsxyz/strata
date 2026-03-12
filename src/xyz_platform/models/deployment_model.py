@@ -165,25 +165,27 @@ class DeploymentStageModel(BaseModel):
 class DeploymentSpecModel(BaseModel):
     """Model for deployment specification (properties, workspace, stages)."""
 
+    configurations: Optional[List[DeploymentConfigurationModel]] = Field(
+        None, description="Optional configuration list"
+    )
     lifecycle: Optional[CommonLifecycleModel] = Field(
         None, description="Deployment lifecycle phases"
     )
-    deployment: Optional[Dict[str, str]] = Field(
-        None,
-        description="Deployment layer values (keys must match configuration.spec.layering[].name). "
-        "Defines the artifact path location for this deployment.",
-    )
     properties: Optional[Dict[str, Any]] = Field(
-        None, description="Deployment-specific properties and configurations"
+        None,
+        description="Deployment-specific properties and configurations. "
+        "Validated against configuration.spec.deployment.properties schema if defined.",
     )
     custom: Optional[Dict[str, Any]] = Field(
         None, description="Deployment-specific custom properties and configurations"
     )
+    layers: Optional[Dict[str, str]] = Field(
+        None,
+        description="Deployment layer values (keys must match configuration.spec.layering[].name). "
+        "Defines the artifact path location for this deployment.",
+    )
     workspace: DeploymentWorkspaceModel = Field(
         description="Name of the associated workspace for this deployment"
-    )
-    configurations: Optional[List[DeploymentConfigurationModel]] = Field(
-        None, description="Optional configuration list"
     )
     environments: Annotated[
         List[FilePath],

@@ -1,0 +1,36 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: deployment
+meta:
+  # Missing required 'name' field
+  annotations:
+    description: Invalid deployment example
+  labels:
+    # version is present, but missing other required label fields if any
+  tags: ["invalid", "test"]
+spec:
+  # layers has invalid value that doesn't match pattern
+  layers:
+    environment: invalid_env  # Should match ^(dev|staging|prod)$ pattern
+  
+  # properties has invalid and missing required fields
+  properties:
+    deployment_type: invalid-type  # Should match ^(development|production|testing)$ pattern
+    # Missing required 'customer' field
+    invalid_field: test  # Not allowed when additional_properties=false
+  
+  # 'workspace' is missing required fields and has wrong types
+  workspace:
+    name: 123  # Invalid type, should be a string matching PlatformName
+    # Missing description and file
+  
+  # Missing required 'environments' field
+  
+  stages:
+    - name: ''  # Empty name, should not be allowed
+      type: infrastructure
+      # Missing other required fields
+  
+  configurations:
+    - name: configuration
+      # Missing description and file
+      file: "not-a-valid-path.yaml"
