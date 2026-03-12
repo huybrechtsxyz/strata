@@ -27,12 +27,12 @@ Usage:
 ===============================================================================
 """
 
-from datetime import datetime
 import sys
 import os
-from pathlib import Path
 import click
 
+from xyz_platform.commands.cli_help import help_command
+from xyz_platform.commands.cli_version import version_command
 
 # from xyz_platform.commands.cli_builder import build
 # from xyz_platform.commands.cli_builder import build
@@ -82,58 +82,13 @@ def main():
     pass
 
 
-@main.command()
-@click.option(
-    "--raw",
-    "-r",
-    is_flag=True,
-    default=False,
-    help="Output only the version string (for CI/CD or scripting)",
-)
-def version(raw):
-    """Show CLI version."""
-    version = "1.0.0"  # system.get_cli_version()
-    if raw:
-        click.echo(version)
-        return
-
-    click.echo("=" * 80)
-    click.echo(f"🚀 XYZ PLATFORM — CLI (v{version})")
-    click.echo("=" * 80)
-    click.echo("Automates workspace preparation, configuration, and deployment.")
-    click.echo(f"⏱️   Timestamp       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    click.echo(f"📜  Running file    : {os.path.abspath(__file__)}")
-    click.echo(f"📂  Current dir     : {os.getcwd()}")
-    click.echo("")
-    click.echo(f"XYZ Platform CLI Version: {version}")
-    click.echo("")
-    click.echo("=" * 80)
-    click.echo("✨ Thank you for using XYZ Platform CLI!")
-    click.echo("📘 Documentation: https://docs.xyzplatform.com")
-    click.echo("💬 Support: https://support.xyzplatform.com")
-    click.echo("=" * 80)
-
-
-@main.command()
-@click.argument("topic_name", type=str, required=False)
-@click.pass_context
-def help(ctx, topic_name: str = None):
-    """Show help for the topic."""
-    # ctx.parent.command is the main group
-    # ctx.find_root().command is also the root command
-    # command: TopicHelpCommand = TopicHelpCommand(
-    #     topic=topic_name,
-    #     cli_context=ctx,
-    # )
-    # command.execute()
-    click.echo(f"Help for topic: {topic_name}")
-
-
 #
 # REGISTER COMMAND GROUPS
+# Register command groups so they're available when module is imported
 #
 
-# Register command groups so they're available when module is imported
+main.add_command(help_command)
+main.add_command(version_command)
 # main.add_command(session)
 # main.add_command(tools)
 # main.add_command(config)
