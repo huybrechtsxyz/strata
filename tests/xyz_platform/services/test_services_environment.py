@@ -327,3 +327,185 @@ class TestEnvironmentSecurityValidation:
         # Verify all secrets use secure stores
         for secret in service.model.spec.secrets:
             assert secret.store in ["bitwarden", "vault", "azure-keyvault"]
+
+
+class TestEnvironmentOverrideHelpers:
+    """Test environment service override helper methods."""
+
+    def test_has_overrides_true(self):
+        """Test has_overrides returns True when overrides exist."""
+        service = EnvironmentService(path=str(ENVIRONMENT_OVERRIDES))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+        assert service.has_overrides() is True
+
+    def test_has_overrides_false(self):
+        """Test has_overrides returns False when no overrides exist."""
+        service = EnvironmentService(path=str(ENVIRONMENT_STANDARD))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+        # Standard environment has no overrides
+        assert service.has_overrides() is False
+
+    def test_get_resource_override(self):
+        """Test getting a resource override by name."""
+        service = EnvironmentService(path=str(ENVIRONMENT_OVERRIDES))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        # Get an existing resource override
+        override = service.get_resource_override("manager")
+        assert override is not None
+        assert override.resource == "manager"
+        assert override.count == 3
+        assert override.configuration is not None
+
+        # Get a non-existent resource override
+        override = service.get_resource_override("nonexistent")
+        assert override is None
+
+    def test_get_module_override(self):
+        """Test getting a module override by resource, module, and slot_type."""
+        service = EnvironmentService(path=str(ENVIRONMENT_OVERRIDES))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        # Get an existing module override (main slot_type)
+        override = service.get_module_override("manager", "traefik", "main")
+        assert override is not None
+        assert override.resource == "manager"
+        assert override.module == "traefik"
+        assert override.configuration is not None
+
+        # Get canary slot_type
+        override_canary = service.get_module_override("manager", "traefik", "canary")
+        assert override_canary is not None
+        assert override_canary.slot_type == "canary"
+
+        # Get a non-existent module override
+        override = service.get_module_override("nonexistent", "nonexistent", "main")
+        assert override is None
+
+    def test_get_provider_override(self):
+        """Test getting a provider override by name."""
+        service = EnvironmentService(path=str(ENVIRONMENT_OVERRIDES))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        # Get an existing provider override
+        override = service.get_provider_override("kamatera_europe")
+        assert override is not None
+        assert override.provider == "kamatera_europe"
+
+        # Get a non-existent provider override
+        override = service.get_provider_override("nonexistent")
+        assert override is None
+
+    def test_get_overridden_resource_names(self):
+        """Test getting set of all overridden resource names."""
+        service = EnvironmentService(path=str(ENVIRONMENT_OVERRIDES))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        resource_names = service.get_overridden_resource_names()
+        assert isinstance(resource_names, set)
+        assert "manager" in resource_names
+        assert "worker" in resource_names
+        assert len(resource_names) == 2
+
+    def test_get_overridden_provider_names(self):
+        """Test getting set of all overridden provider names."""
+        service = EnvironmentService(path=str(ENVIRONMENT_OVERRIDES))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        provider_names = service.get_overridden_provider_names()
+        assert isinstance(provider_names, set)
+        assert "kamatera_europe" in provider_names
+        assert len(provider_names) == 1
+
+    def test_get_overridden_module_keys(self):
+        """Test getting set of all overridden module keys."""
+        service = EnvironmentService(path=str(ENVIRONMENT_OVERRIDES))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        module_keys = service.get_overridden_module_keys()
+        assert isinstance(module_keys, set)
+        # Each key is (resource, module, slot_type)
+        for key in module_keys:
+            assert isinstance(key, tuple)
+            assert len(key) == 3
+
+    def test_get_merged_properties_no_workspace(self):
+        """Test merging properties without workspace properties."""
+        env_data = {
+            "apiVersion": "platform.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_props", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "properties": {"env_prop": "env_value"},
+                "overrides": {"properties": {"override_prop": "override_value"}},
+            },
+        }
+        service = EnvironmentService(data=env_data)
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        merged = service.get_merged_properties()
+        assert merged["env_prop"] == "env_value"
+        assert merged["override_prop"] == "override_value"
+
+    def test_get_merged_properties_with_workspace(self):
+        """Test merging properties with workspace properties."""
+        env_data = {
+            "apiVersion": "platform.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_props", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "properties": {"env_prop": "env_value", "shared_prop": "from_env"},
+                "overrides": {
+                    "properties": {
+                        "override_prop": "override_value",
+                        "shared_prop": "from_override",
+                    }
+                },
+            },
+        }
+        service = EnvironmentService(data=env_data)
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        workspace_props = {
+            "workspace_prop": "workspace_value",
+            "shared_prop": "from_workspace",
+        }
+        merged = service.get_merged_properties(workspace_props)
+
+        # Verify precedence: workspace < env < override
+        assert merged["workspace_prop"] == "workspace_value"  # From workspace
+        assert merged["env_prop"] == "env_value"  # From env
+        assert merged["override_prop"] == "override_value"  # From override
+        assert merged["shared_prop"] == "from_override"  # Override wins
+
+    def test_get_variables(self):
+        """Test getting variables from environment."""
+        service = EnvironmentService(path=str(ENVIRONMENT_STANDARD))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        variables = service.get_variables()
+        assert isinstance(variables, list)
+        # Standard environment should have variables
+        assert len(variables) > 0
+
+    def test_get_secrets(self):
+        """Test getting secrets from environment."""
+        service = EnvironmentService(path=str(ENVIRONMENT_STANDARD))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        secrets = service.get_secrets()
+        assert isinstance(secrets, list)
+        # Standard environment should have secrets
+        assert len(secrets) > 0
