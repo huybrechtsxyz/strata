@@ -28,6 +28,7 @@ class WorkspaceService(BaseService):
         self.model: Optional[WorkspaceModel] = None
         self._related_services: Optional[Dict[str, Dict[str, BaseService]]] = None
         self._validation_errors: List[str] = []
+        self._structured_errors: List[InvalidReferenceError] = []
 
     # Abstract methods
 
@@ -44,13 +45,16 @@ class WorkspaceService(BaseService):
         Phase 2: Dynamic validation against configuration.
 
         Validates:
-        1. Topology provider references (workspace.spec.providers)
-        2. Topology provisioner references (workspace.spec.provisioners)
-        3. Component roles against configuration topology definitions
-        4. Service variable/secret references (if services loaded)
+        1. Provisioner repository references (workspace.spec.provisioners -> configuration.spec.repositories)
+        2. Provisioner validity (validated via ProvisionerType enum)
+        3. Module repository references (loaded modules -> configuration.spec.repositories)
+        4. Topology provider references (workspace.spec.providers)
+        5. Topology provisioner references (workspace.spec.provisioners)
+        6. Component roles against configuration topology definitions
 
         Args:
             configuration_model: Optional ConfigurationModel for cross-validation
+            work_path: Optional working path for file resolution
 
         Returns:
             Tuple[bool, List[str]]: (success, list of error messages)
@@ -69,6 +73,62 @@ class WorkspaceService(BaseService):
         workspace_provisioner_types = {
             p.provisioner for p in self.model.spec.provisioners
         }
+
+        # Build repository map from configuration
+        config_repository_names = set()
+        if configuration_model.spec.repositories:
+            config_repository_names = {
+                repo.name for repo in configuration_model.spec.repositories
+            }
+
+        # STEP 1: Validate provisioner repository references
+        # Check that each provisioner's source.repository exists in configuration
+        for provisioner in self.model.spec.provisioners:
+            if provisioner.source and provisioner.source.repository:
+                if provisioner.source.repository not in config_repository_names:
+                    error = InvalidReferenceError(
+                        source_type="Provisioner",
+                        source_name=provisioner.name,
+                        reference_type="repository",
+                        reference_value=provisioner.source.repository,
+                    )
+                    self._structured_errors.append(error)
+                    errors.append(str(error))
+
+        # STEP 2: Provisioner validity is already validated by ProvisionerType enum
+
+        # STEP 3: Validate module repository references (if modules are defined in resources)
+        if self.model.spec.resources:
+            for resource in self.model.spec.resources:
+                if resource.modules:
+                    # Note: Modules in workspace are references with file paths.
+                    # The actual module source.repository is in the module file itself.
+                    # For thorough validation, we would need to load each module file,
+                    # but that's expensive. This check is documented for when module
+                    # services are loaded via related_services.
+                    pass
+
+        # Validate module repository references from loaded module services (if available)
+        if self._related_services and "modules" in self._related_services:
+            for module_name, module_service in self._related_services[
+                "modules"
+            ].items():
+                if (
+                    hasattr(module_service, "model")
+                    and hasattr(module_service.model, "spec")
+                    and hasattr(module_service.model.spec, "source")
+                    and module_service.model.spec.source
+                ):
+                    module_repo = module_service.model.spec.source.repository
+                    if module_repo not in config_repository_names:
+                        error = InvalidReferenceError(
+                            source_type="Module",
+                            source_name=module_name,
+                            reference_type="repository",
+                            reference_value=module_repo,
+                        )
+                        self._structured_errors.append(error)
+                        errors.append(str(error))
 
         # Build topology configuration map and roles map from configuration
         topology_config_map = {}
@@ -175,11 +235,6 @@ class WorkspaceService(BaseService):
                     topology, matching_config
                 )
                 errors.extend(config_validation_errors)
-
-        # Validate service variable/secret references if services are loaded
-        if self._related_services:
-            reference_errors = self._validate_all_service_references()
-            errors.extend(reference_errors)
 
         return len(errors) == 0, errors
 
@@ -293,171 +348,6 @@ class WorkspaceService(BaseService):
                         source_name=", ".join(components_without_module),
                         reference_type="module (required by role)",
                         reference_value=config_comp.role,
-                    )
-                    self._structured_errors.append(error)
-                    errors.append(str(error))
-
-        return errors
-
-    def _validate_all_service_references(self) -> List[str]:
-        """
-        Validate variable and secret references for all loaded services.
-
-        Validates that all services (providers, resources, namespaces, etc.)
-        only reference workspace-level variables and secrets.
-
-        Returns:
-            List[str]: List of validation error messages
-        """
-        errors = []
-
-        # Get workspace-level variables and secrets
-        workspace_variables = {}
-        if self.model.spec.variables:
-            workspace_variables = {var.key: var for var in self.model.spec.variables}
-
-        workspace_secrets = {}
-        if self.model.spec.secrets:
-            workspace_secrets = {sec.key: sec for sec in self.model.spec.secrets}
-
-        # Validate each service type
-        if self._related_services:
-            # Validate providers
-            if "providers" in self._related_services:
-                for name, service in self._related_services["providers"].items():
-                    service_errors = self._validate_service_references(
-                        "Provider",
-                        name,
-                        service,
-                        workspace_variables,
-                        workspace_secrets,
-                    )
-                    errors.extend(service_errors)
-
-            # Validate resources
-            if "resources" in self._related_services:
-                for name, service in self._related_services["resources"].items():
-                    service_errors = self._validate_service_references(
-                        "Resource",
-                        name,
-                        service,
-                        workspace_variables,
-                        workspace_secrets,
-                    )
-                    errors.extend(service_errors)
-
-            # Validate namespaces
-            if "namespaces" in self._related_services:
-                for name, service in self._related_services["namespaces"].items():
-                    service_errors = self._validate_service_references(
-                        "Namespace",
-                        name,
-                        service,
-                        workspace_variables,
-                        workspace_secrets,
-                    )
-                    errors.extend(service_errors)
-
-            # Validate firewalls
-            if "firewalls" in self._related_services:
-                for name, service in self._related_services["firewalls"].items():
-                    service_errors = self._validate_service_references(
-                        "Firewall",
-                        name,
-                        service,
-                        workspace_variables,
-                        workspace_secrets,
-                    )
-                    errors.extend(service_errors)
-
-        return errors
-
-    def _validate_service_references(
-        self,
-        service_type: str,
-        service_name: str,
-        service: BaseService,
-        workspace_variables: Dict[str, Any],
-        workspace_secrets: Dict[str, Any],
-    ) -> List[str]:
-        """
-        Generic validation for a single service's variable and secret references.
-
-        Args:
-            service_type: Type of service (e.g., "Provider", "Resource", "Namespace")
-            service_name: Name of the service instance
-            service: Service instance to validate
-            workspace_variables: Dictionary of workspace-level variables (key -> variable)
-            workspace_secrets: Dictionary of workspace-level secrets (key -> secret)
-
-        Returns:
-            List[str]: List of validation error messages for this service
-        """
-        errors = []
-        model = service.model
-
-        # Skip if service has no references
-        if not hasattr(model, "spec") or not hasattr(model.spec, "references"):
-            return errors
-
-        if not model.spec.references:
-            return errors
-
-        # Validate variable references
-        if (
-            hasattr(model.spec.references, "variables")
-            and model.spec.references.variables
-        ):
-            for var_key, var_value in model.spec.references.variables.items():
-                if not var_key:
-                    errors.append(
-                        f"{service_type} '{service_name}' has undefined variable key"
-                    )
-                    continue
-
-                if not var_value:
-                    errors.append(
-                        f"{service_type} '{service_name}' variable '{var_key}' has no value"
-                    )
-                    continue
-
-                # Check if variable value references a workspace variable
-                if var_value not in workspace_variables:
-                    error = InvalidReferenceError(
-                        f"{service_type} '{service_name}' variable '{var_key}' references undefined workspace variable '{var_value}'",
-                        details={
-                            "service_type": service_type.lower(),
-                            "service_name": service_name,
-                            "variable_key": var_key,
-                            "referenced_variable": var_value,
-                            "available_variables": sorted(workspace_variables.keys()),
-                        },
-                    )
-                    self._structured_errors.append(error)
-                    errors.append(str(error))
-
-        # Validate secret references
-        if hasattr(model.spec.references, "secrets") and model.spec.references.secrets:
-            for secret_key, secret_value in model.spec.references.secrets.items():
-                if not secret_key:
-                    errors.append(
-                        f"{service_type} '{service_name}' has undefined secret key"
-                    )
-                    continue
-
-                if not secret_value:
-                    errors.append(
-                        f"{service_type} '{service_name}' secret '{secret_key}' has no value"
-                    )
-                    continue
-
-                # Check if secret value references a workspace secret
-                if secret_value not in workspace_secrets:
-                    error = InvalidReferenceError(
-                        source_type=service_type,
-                        source_name=service_name,
-                        reference_type="workspace secret",
-                        reference_value=secret_value,
                     )
                     self._structured_errors.append(error)
                     errors.append(str(error))

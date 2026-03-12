@@ -79,12 +79,7 @@ spec:
     cpu: 4
     ram_mb: 8192
     disk_gb: 100
-    network_interface: private
-    enable_public_ip: false
-    custom_tags:
-      Role: manager
-      Cluster: docker-swarm
-      ManagedBy: xyz-platform
+    custom_tag: manager-swarm
   
   custom:
     deployment_priority: high
