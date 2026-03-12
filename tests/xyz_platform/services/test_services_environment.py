@@ -509,3 +509,14 @@ class TestEnvironmentOverrideHelpers:
         assert isinstance(secrets, list)
         # Standard environment should have secrets
         assert len(secrets) > 0
+
+    def test_get_features(self):
+        """Test getting feature flags from environment."""
+        service = EnvironmentService(path=str(ENVIRONMENT_STANDARD))
+        is_valid, errors = service.validate()
+        assert is_valid, f"Validation failed: {errors}"
+
+        features = service.get_features()
+        assert isinstance(features, list)
+        # Standard environment should have features
+        assert len(features) > 0

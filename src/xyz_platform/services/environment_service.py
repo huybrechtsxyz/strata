@@ -26,6 +26,7 @@ from xyz_platform.models.store_models import (
     validate_store_security_policy,
     VariableStoreModel,
     SecretStoreModel,
+    FeatureStoreModel,
 )
 from xyz_platform.services.base_service import BaseService
 
@@ -182,6 +183,18 @@ class EnvironmentService(BaseService):
         self._ensure_validated()
         if self.model.spec and self.model.spec.secrets:
             return self.model.spec.secrets
+        return []
+
+    def get_features(self) -> List[FeatureStoreModel]:
+        """
+        Get all feature flags defined in the environment.
+
+        Returns:
+            List[FeatureStoreModel]: List of feature store models
+        """
+        self._ensure_validated()
+        if self.model.spec and self.model.spec.features:
+            return self.model.spec.features
         return []
 
     # Helper methods for workspace override application
