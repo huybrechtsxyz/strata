@@ -10,7 +10,7 @@ Description   : Environment service class for handling environment configuration
 """
 
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.environment_model import (
     EnvironmentModel,

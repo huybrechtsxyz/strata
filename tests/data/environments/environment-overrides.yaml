@@ -1,0 +1,127 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: production
+  annotations:
+    description: Production environment with overrides for scaling and configuration
+    owner: ops@xyz.com
+  labels:
+    version: "1.0.0"
+    environment: production
+    customer: example-xyz
+    project: cloud-platform
+  tags: ["production", "high-availability", "monitored"]
+spec:
+  lifecycle:
+    deploy_before:
+      scripts:
+        - tests/data/scripts/validate-before.ps1
+    deploy_after:
+      scripts:
+        - tests/data/scripts/validate-after.ps1
+  properties:
+    deployment_strategy: blue_green
+    maintenance_window: "03:00-05:00 UTC"
+    backup_retention_days: 30
+  custom:
+    costcenter: "PROD-PLATFORM"
+    compliance: "SOC2"
+  
+  # Environment-specific overrides on workspace configurations
+  overrides:
+    # Override resource configurations for production
+    resources:
+      - resource: manager
+        count: 3  # Override from 1 to 3 for HA
+        configuration:
+          vm_size: Standard_D4s_v3  # Larger VMs for production
+          disk_size_gb: 100
+      - resource: worker
+        count: 5  # Override from 2 to 5 for production load
+        configuration:
+          vm_size: Standard_D8s_v3
+          disk_size_gb: 200
+          auto_scaling:
+            enabled: true
+            min_instances: 3
+            max_instances: 10
+    
+    # Override module configurations for production
+    modules:
+      - resource: manager
+        module: traefik
+        enabled: true
+        slot_type: main
+        configuration:
+          replicas: 2
+          resources:
+            cpu: "2000m"
+            memory: "2Gi"
+          monitoring:
+            enabled: true
+            prometheus_endpoint: /metrics
+      - resource: manager
+        module: traefik
+        enabled: true
+        slot_type: canary
+        configuration:
+          replicas: 1
+          traffic_percentage: 10
+    
+    # Override provider configurations for production
+    providers:
+      - provider: kamatera_europe
+        configuration:
+          datacenter: FR  # Production in France datacenter
+          network_tier: premium
+          backup_enabled: true
+          monitoring_enabled: true
+    
+    # Override workspace properties
+    properties:
+      terraform:
+        organization: example-xyz-prod
+        cloudspace: example-xyz-platform-prod
+  
+  # Environment-specific variables (merged with workspace)
+  variables:
+    - key: ENVIRONMENT
+      store: constant
+      value: production
+    - key: LOG_LEVEL
+      store: constant
+      value: info
+    - key: API_ENDPOINT
+      store: constant
+      value: https://api.production.xyz.com
+    - key: CDN_URL
+      store: constant
+      value: https://cdn.production.xyz.com
+    - key: DATABASE_POOL_SIZE
+      store: constant
+      value: 50
+  
+  # Environment-specific secrets (merged with workspace)
+  secrets:
+    - key: DATABASE_PASSWORD
+      store: azure-keyvault
+      value: prod-db-password
+    - key: API_KEY
+      store: azure-keyvault
+      value: prod-api-key
+    - key: SSL_CERTIFICATE
+      store: azure-keyvault
+      value: prod-ssl-cert
+      version: latest
+  
+  # Environment-specific feature flags
+  features:
+    - key: enable_caching
+      store: constant
+      value: true
+    - key: enable_rate_limiting
+      store: constant
+      value: true
+    - key: maintenance_mode
+      store: constant
+      value: false
