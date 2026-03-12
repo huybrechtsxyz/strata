@@ -12,6 +12,7 @@ Description   : Base command class for the XYZ Platform.
 from abc import abstractmethod
 from datetime import datetime
 import os
+from pathlib import Path
 import sys
 from typing import List
 
@@ -26,6 +27,7 @@ class BaseCommand:
 
     def __init__(
         self,
+        work_path: str = None,
         output: str = None,
         verbose: bool = None,
         quiet: bool = None,
@@ -38,6 +40,9 @@ class BaseCommand:
         # Timer attributes
         self._start_time = None
         self._end_time = None
+
+        # Paths
+        self._work_path = Path(work_path) if work_path else Path.cwd()
 
         # Message and error accumulation
         self._messages = []

@@ -13,6 +13,46 @@ import click
 OUTPUT_FORMATS = ["", "text", "json"]
 
 
+# Exit code handler for commands with validation
+def handle_command_exit(command, success: bool) -> None:
+    """
+    Handle command exit codes based on success status and validation errors.
+
+    Exit codes:
+        0 - Success
+        1 - System/execution failure
+        3 - Validation failure (file invalid)
+
+    Args:
+        command: Command instance with has_validation_errors() method
+        success: Initial success status from command.execute()
+
+    Raises:
+        click.exceptions.Exit: With appropriate exit code
+    """
+    # Mark as failure if there are validation errors
+    if (
+        success
+        and hasattr(command, "has_validation_errors")
+        and command.has_validation_errors()
+    ):
+        success = False
+
+    if not success:
+        # Check if failure was due to validation errors vs system errors
+        if (
+            hasattr(command, "has_validation_errors")
+            and command.has_validation_errors()
+        ):
+            # File didn't validate - exit code 3
+            raise click.exceptions.Exit(3)
+        else:
+            # System/execution error - exit code 1
+            raise click.exceptions.Exit(1)
+
+    # Success - exit code 0 (implicit)
+
+
 # Validation for mutually exclusive options
 def validate_mutually_exclusive_options(ctx, param, value, exclusive_params):
     """
@@ -161,5 +201,16 @@ def click_output_quiet(func):
         is_flag=True,
         callback=combined_callback,
         help="Disable any console output",
+    )(func)
+    return func
+
+
+# --work-path -> The path to the root of the workspace if not in pwd
+def click_work_path(func):
+    func = click.option(
+        "--work-path",
+        default=None,
+        type=click.Path(exists=True, file_okay=False, dir_okay=True),
+        help="Optional root path of the workspace, if different then PWD (must exist)",
     )(func)
     return func
