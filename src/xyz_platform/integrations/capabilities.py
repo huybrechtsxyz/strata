@@ -34,6 +34,7 @@ __all__ = [
     "IKVStore",
     "IRepositoryTool",
     "IInfrastructureTool",
+    "IContainerTool",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -188,6 +189,34 @@ class IInfrastructureTool(Protocol):
         ...
 
 
+@runtime_checkable
+class IContainerTool(Protocol):
+    """
+    Capability: Integration supports container operations.
+
+    Integrations implementing this interface can build, run, push, pull, and
+    manage container images and containers.
+
+    Examples: Docker, Podman, Containerd
+    """
+
+    def build(self, context_dir: str, tag: str, **kwargs) -> Any:
+        """Build a container image."""
+        ...
+
+    def run(self, image: str, **kwargs) -> Any:
+        """Run a container."""
+        ...
+
+    def push(self, image: str, **kwargs) -> Any:
+        """Push a container image to a registry."""
+        ...
+
+    def pull(self, image: str, **kwargs) -> Any:
+        """Pull a container image from a registry."""
+        ...
+
+
 # Capability registry for metadata
 CAPABILITY_REGISTRY = {
     "IVariableStore": {
@@ -220,6 +249,11 @@ CAPABILITY_REGISTRY = {
         "methods": ["init", "plan", "apply"],
         "examples": ["Terraform", "Pulumi"],
     },
+    "IContainerTool": {
+        "description": "Container management operations",
+        "methods": ["build", "run", "push", "pull"],
+        "examples": ["Docker", "Podman"],
+    },
 }
 
 
@@ -231,6 +265,7 @@ CAPABILITY_MAP = {
     "keyvalue": IKVStore,
     "repository": IRepositoryTool,
     "infrastructure": IInfrastructureTool,
+    "container": IContainerTool,
 }
 
 
@@ -248,6 +283,7 @@ CUSTOM_INTEGRATION_TYPES = frozenset(
         "customfeature",  # Generic feature flag store CLI wrapper
         "customrepository",  # Generic VCS tool wrapper
         "custominfrastructure",  # Generic IaC tool wrapper
+        "customcontainer",  # Generic container tool wrapper
         "customapi",  # Generic REST API wrapper
     ]
 )
@@ -261,6 +297,7 @@ CUSTOM_TYPE_CAPABILITY_MAP = {
     "customfeature": "features",
     "customrepository": "repository",
     "custominfrastructure": "infrastructure",
+    "customcontainer": "container",
     "customapi": None,  # Can have any capability
 }
 

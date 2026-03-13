@@ -185,6 +185,7 @@ def _auto_register_builtin_integrations():
     """
     builtin_integrations = [
         ("git", "xyz_platform.integrations.git", "GitIntegration"),
+        ("docker", "xyz_platform.integrations.docker", "DockerIntegration"),
         ("terraform", "xyz_platform.integrations.terraform", "TerraformIntegration"),
         ("bitwarden", "xyz_platform.integrations.bitwarden", "BitwardenIntegration"),
         (
