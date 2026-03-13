@@ -27,6 +27,7 @@ Usage:
 ===============================================================================
 """
 
+from pathlib import Path
 import sys
 import os
 import click
@@ -34,6 +35,7 @@ import click
 from xyz_platform.commands.cli_help import help_command
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.commands.cli_session import session
+from xyz_platform.logger.logger import configure_logging, get_logger
 
 # from xyz_platform.commands.cli_builder import build
 # from xyz_platform.commands.cli_builder import build
@@ -45,7 +47,7 @@ from xyz_platform.commands.cli_session import session
 # from xyz_platform.logger import get_logger, configure_logging, shutdown_logging
 # from xyz_platform.utils import system
 
-# logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 #
 # MAIN CLI GROUP
@@ -62,24 +64,11 @@ from xyz_platform.commands.cli_session import session
 )
 def main():
     """XYZ Platform CLI entry point."""
-    # Check for logging configuration file
-    # data_dir = Path(__file__).parent / "data"
-    # logging_config = data_dir / "logging.yaml"
-
-    # if logging_config.exists():
-    # Use logging config file if available
-    # configure_logging(config_path=str(logging_config))
-    # logger.debug(f"Loaded logging configuration from {logging_config}")
-    #    pass
-    # else:
     # Fallback to WARNING level console logging
     # INFO/DEBUG logs only shown when commands use --verbose flag
-    # configure_logging(level="WARNING", enable_console=True)
-    # logger.debug("Using default WARNING level console logging")
-    #    pass
-
-    # logger.debug("XYZ Platform CLI initialized")
-    pass
+    configure_logging(level="WARNING", enable_console=True)
+    logger.debug("Using default WARNING level console logging")
+    logger.debug("XYZ Platform CLI initialized")
 
 
 #

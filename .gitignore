@@ -515,5 +515,3 @@ FodyWeavers.xsd
 # Temporary example files
 examples/temp_*
 build/temp/
-
-.xyz-platform/
