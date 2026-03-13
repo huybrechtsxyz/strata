@@ -10,9 +10,10 @@ Description   : Controller for managing XYZ Platform sessions.
 """
 
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -141,6 +142,113 @@ class SessionController:
             self._errors.append(error_msg)
             return False, {}
 
+    def add_repository(
+        self,
+        name: str,
+        url: str,
+        work_path: Path,
+        repo_type: Optional[str] = None,
+        branch: str = "main",
+        integrations: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[bool, Dict[str, str]]:
+        """
+        Add a repository to the session workspace.
+
+        Args:
+            name: Repository name (folder name)
+            url: Repository URL or local path
+            work_path: Root working directory
+            repo_type: Repository type (git, local, archive) - auto-detected if None
+            branch: Git branch to clone (default: main)
+            integrations: Resolved integration instances keyed by integration name
+
+        Returns:
+            Tuple[bool, Dict]: Success status and repository metadata
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            # Auto-detect repository type if not provided
+            if not repo_type:
+                repo_type = self._detect_repo_type(url)
+
+            self.logger.info(
+                f"Adding repository '{name}' from '{url}' (type: {repo_type})"
+            )
+
+            # Define repository path
+            repo_path = work_path / name
+
+            # Handle repository based on type
+            if repo_type == "git":
+                git_integration = integrations.get("git") if integrations else None
+                if not self._clone_git_repository(
+                    url, repo_path, branch, git_integration
+                ):
+                    return False, {}
+            elif repo_type == "local":
+                if not self._copy_local_repository(url, repo_path):
+                    return False, {}
+            elif repo_type == "archive":
+                error_msg = "Archive repository type not yet implemented"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+            else:
+                error_msg = f"Unknown repository type: {repo_type}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Create repository metadata
+            repo_metadata = {
+                "name": name,
+                "url": url,
+                "path": name,
+                "type": repo_type,
+                "branch": branch if repo_type == "git" else None,
+            }
+
+            # Update session.json
+            if not self._update_session_repositories(work_path, repo_metadata):
+                return False, {}
+
+            # Update VSCode workspace (optional)
+            self._add_to_vscode_workspace(work_path, name)
+
+            self._messages.append(f"Repository '{name}' added successfully")
+
+            return True, repo_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to add repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def get_required_integrations_for_add_repository(
+        self,
+        url: str,
+        repo_type: Optional[str] = None,
+    ) -> Dict[str, str]:
+        """
+        Determine required integrations for add-repository operation.
+
+        Args:
+            url: Repository URL or local path
+            repo_type: Repository type (git, local, archive) - auto-detected if None
+
+        Returns:
+            Dict[str, str]: Required integrations mapped to operation descriptions
+        """
+        detected_type = repo_type or self._detect_repo_type(url)
+
+        if detected_type == "git":
+            return {"git": "repository clone operations"}
+
+        return {}
+
     def _validate_work_path(self, work_path: Path) -> bool:
         """
         Validate that work path exists and is a directory.
@@ -178,13 +286,13 @@ class SessionController:
         if existing_workspaces:
             for ws_file in existing_workspaces:
                 warning_msg = f"Found existing workspace file: {ws_file.name}"
-                self.logger.warning(warning_msg)
+                self.logger.info(warning_msg)
                 self._messages.append(warning_msg)
 
         # Check if .xyz-platform folder already exists
         if session_folder.exists():
             warning_msg = f".xyz-platform folder already exists: {session_folder}"
-            self.logger.warning(warning_msg)
+            self.logger.info(warning_msg)
             self._messages.append(warning_msg)
 
     def _create_session_folder(self, session_folder: Path) -> bool:
@@ -374,6 +482,254 @@ class SessionController:
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False
+
+    def _detect_repo_type(self, url: str) -> str:
+        """
+        Auto-detect repository type from URL.
+
+        Args:
+            url: Repository URL or path
+
+        Returns:
+            str: Repository type (git, local, or archive)
+        """
+        url_lower = url.lower()
+
+        # Check for git patterns
+        git_patterns = [
+            "https://github.com",
+            "https://gitlab.com",
+            "https://bitbucket.org",
+            "git@",
+            ".git",
+        ]
+        if any(pattern in url_lower for pattern in git_patterns):
+            return "git"
+
+        # Check for archive patterns
+        archive_patterns = [".zip", ".tar.gz", ".tar.bz2", ".tgz"]
+        if any(url_lower.endswith(pattern) for pattern in archive_patterns):
+            return "archive"
+
+        # Check if local path exists
+        local_path = Path(url)
+        if local_path.exists():
+            return "local"
+
+        # Default to git if no pattern matches
+        self.logger.warning(
+            f"Could not detect repository type for '{url}', defaulting to 'git'"
+        )
+        return "git"
+
+    def _clone_git_repository(
+        self, url: str, repo_path: Path, branch: str, git_integration
+    ) -> bool:
+        """
+        Clone a git repository using GitIntegration.
+
+        Args:
+            url: Git repository URL
+            repo_path: Destination path for repository
+            branch: Branch to clone
+            git_integration: GitIntegration instance from command
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            if repo_path.exists():
+                error_msg = f"Repository path already exists: {repo_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            if not git_integration:
+                error_msg = "Git integration not provided"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            self.logger.info(f"Cloning git repository from '{url}' (branch: {branch})")
+
+            # Execute git clone via integration
+            result = git_integration.clone(
+                repo_url=url,
+                target_dir=str(repo_path),
+                branch=branch,
+                depth=0,  # Full clone (not shallow)
+                timeout=300,  # 5 minute timeout
+            )
+
+            if result["returncode"] != 0:
+                error_msg = f"Git clone failed: {result.get('stderr', 'Unknown error')}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            self._messages.append(f"Cloned git repository to {repo_path}")
+            return True
+
+        except RuntimeError as e:
+            # GitIntegration raises RuntimeError on failure
+            error_msg = f"Git clone failed: {str(e)}"
+            self.logger.error(error_msg)
+            self._errors.append(error_msg)
+            return False
+        except Exception as e:
+            error_msg = f"Failed to clone git repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+    def _copy_local_repository(self, url: str, repo_path: Path) -> bool:
+        """
+        Copy a local repository to the workspace.
+
+        Args:
+            url: Local repository path
+            repo_path: Destination path for repository
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            source_path = Path(url)
+
+            if not source_path.exists():
+                error_msg = f"Local repository not found: {source_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            if repo_path.exists():
+                error_msg = f"Repository path already exists: {repo_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            if not source_path.is_dir():
+                error_msg = f"Local repository is not a directory: {source_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            self.logger.info(f"Copying local repository from '{source_path}'")
+
+            # Copy directory tree
+            shutil.copytree(source_path, repo_path)
+
+            self._messages.append(f"Copied local repository to {repo_path}")
+            return True
+
+        except Exception as e:
+            error_msg = f"Failed to copy local repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+    def _update_session_repositories(
+        self, work_path: Path, repo_metadata: Dict[str, str]
+    ) -> bool:
+        """
+        Update session.json with new repository metadata.
+
+        Args:
+            work_path: Root working directory
+            repo_metadata: Repository metadata dictionary
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            session_file = work_path / ".xyz-platform" / "session.json"
+
+            if not session_file.exists():
+                error_msg = f"Session file not found: {session_file}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            # Read existing session data
+            with open(session_file, "r", encoding="utf-8") as f:
+                session_data = json.load(f)
+
+            # Check if repository already exists
+            existing_repos = session_data.get("repositories", [])
+            if any(repo["name"] == repo_metadata["name"] for repo in existing_repos):
+                error_msg = (
+                    f"Repository '{repo_metadata['name']}' already exists in session"
+                )
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            # Add repository to list
+            existing_repos.append(repo_metadata)
+            session_data["repositories"] = existing_repos
+
+            # Write updated session data
+            self.logger.info(f"Updating session file: {session_file}")
+            with open(session_file, "w", encoding="utf-8") as f:
+                json.dump(session_data, f, indent=2)
+
+            self._messages.append(
+                f"Updated session with repository '{repo_metadata['name']}'"
+            )
+            return True
+
+        except Exception as e:
+            error_msg = f"Failed to update session file: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+    def _add_to_vscode_workspace(self, work_path: Path, repo_name: str) -> bool:
+        """
+        Add repository folder to VSCode workspace (optional).
+
+        Args:
+            work_path: Root working directory
+            repo_name: Repository name (folder name)
+
+        Returns:
+            bool: Success status (True if workspace updated or doesn't exist)
+        """
+        try:
+            workspace_file = work_path / f"{work_path.name}.code-workspace"
+
+            if not workspace_file.exists():
+                self.logger.debug(
+                    f"Workspace file not found, skipping: {workspace_file}"
+                )
+                return True
+
+            # Read existing workspace data
+            with open(workspace_file, "r", encoding="utf-8") as f:
+                workspace_data = json.load(f)
+
+            # Check if repository already in workspace
+            folders = workspace_data.get("folders", [])
+            if any(folder.get("path") == repo_name for folder in folders):
+                self.logger.debug(f"Repository '{repo_name}' already in workspace")
+                return True
+
+            # Add repository folder
+            folders.append({"path": repo_name})
+            workspace_data["folders"] = folders
+
+            # Write updated workspace data
+            self.logger.info(f"Updating workspace file: {workspace_file}")
+            with open(workspace_file, "w", encoding="utf-8") as f:
+                json.dump(workspace_data, f, indent=2)
+
+            self._messages.append(f"Added '{repo_name}' to VSCode workspace")
+            return True
+
+        except Exception as e:
+            # Workspace update is optional, log warning but don't fail
+            self.logger.warning(f"Failed to update VSCode workspace: {str(e)}")
+            return True
 
     def _get_template_path(self, template_name: str) -> Path:
         """

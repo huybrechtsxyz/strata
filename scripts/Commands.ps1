@@ -24,3 +24,7 @@ New-Item -Path .app -ItemType Directory -Force # Create .platform directory for 
 .\scripts\Run.ps1 session init -h # Show help for session init
 .\scripts\Run.ps1 session init # Error name required
 .\scripts\Run.ps1 session init --name platform --work-path .app # Initialize session with name and custom work path
+
+# Add repo command
+.\scripts\Run.ps1 session add -h # Show help for session add
+.\scripts\Run.ps1 session add config --work-path .app --url "../config" #

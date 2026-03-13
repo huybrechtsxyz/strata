@@ -15,7 +15,7 @@ IntegrationController provides:
 ===============================================================================
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.integrations.factory import IntegrationFactory
@@ -351,6 +351,78 @@ class IntegrationController:
             },
         )
         return True, []
+
+    def get_integration(self, name: str, operation: str = None) -> Optional[Any]:
+        """
+        Get a validated integration instance.
+
+        Args:
+            name: Integration name
+            operation: Optional operation context for validation errors
+
+        Returns:
+            Integration instance if available and validated, otherwise None
+        """
+        success, _ = self.ensure_integration_available(name, operation)
+        if not success:
+            return None
+
+        return self._registry.get_integration(name)
+
+    def resolve_required_integrations(
+        self, required_integrations: Dict[str, str]
+    ) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """
+        Resolve and return all required integrations for dependency injection.
+
+        Args:
+            required_integrations: Mapping of integration name to operation description
+
+        Returns:
+            Tuple[bool, Dict[str, Any], List[str]]:
+                - success: True if all required integrations resolved
+                - integrations: Mapping of integration name to integration instance
+                - errors: List of validation/resolution errors
+        """
+        self._errors.clear()
+        self._messages.clear()
+
+        if not required_integrations:
+            return True, {}, []
+
+        resolved_integrations: Dict[str, Any] = {}
+        errors: List[str] = []
+
+        for integration_name, operation in required_integrations.items():
+            integration = self.get_integration(integration_name, operation)
+            if integration is None:
+                error_msg = (
+                    self._errors[-1]
+                    if self._errors
+                    else f"Failed to resolve integration '{integration_name}'"
+                )
+                errors.append(error_msg)
+                continue
+
+            resolved_integrations[integration_name] = integration
+
+        if errors:
+            self._errors = errors
+            self.logger.error(
+                "Failed to resolve all required integrations",
+                extra={
+                    "required": list(required_integrations.keys()),
+                    "resolved": list(resolved_integrations.keys()),
+                    "errors": errors,
+                },
+            )
+            return False, {}, errors
+
+        self.logger.debug(
+            "Resolved required integrations",
+            extra={"integrations": list(resolved_integrations.keys())},
+        )
+        return True, resolved_integrations, []
 
     # Convenience methods for common integrations
 

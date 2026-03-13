@@ -14,7 +14,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import sys
-from typing import List
+from typing import Any, Dict, List, Optional
 
 import click
 
@@ -53,6 +53,9 @@ class BaseCommand:
         self._output_verbose = verbose or False
         self._output_quiet = quiet or False
 
+        # Integration controller (lazy-loaded)
+        self._integration_controller: Optional[object] = None
+
         # Determine output behavior based on quiet flag
         # Note: --verbose and --quiet mutual exclusivity is enforced in cli_common.py validators
         # Note: --output and --quiet mutual exclusivity is enforced in cli_common.py validators
@@ -81,6 +84,21 @@ class BaseCommand:
             bool: Success status (errors stored in self._errors)
         """
         raise NotImplementedError("Subclasses must implement execute() method")
+
+    def get_required_integrations(self) -> Dict[str, str]:
+        """
+        Declare required integrations for this command.
+
+        Subclasses override this to declare what external tools they need.
+        Returns a dict mapping integration names to operation descriptions.
+
+        Example:
+            return {"git": "repository clone operations", "docker": "container build"}
+
+        Returns:
+            Dict[str, str]: Empty dict (no requirements by default)
+        """
+        return {}
 
     def has_errors(self) -> bool:
         """Check if any errors were accumulated during execution."""
@@ -177,7 +195,12 @@ class BaseCommand:
             "Executing pre-command logic",
             extra={"command_class": self.__class__.__name__},
         )
-        # Placeholder for pre-execution logic (hooks, validation, etc.)
+
+        # Validate integration requirements
+        if not self._validate_requirements():
+            return False
+
+        # Placeholder for additional pre-execution logic (hooks, validation, etc.)
         self.logger.debug(
             "Pre-command logic executed successfully",
             extra={"command_class": self.__class__.__name__},
@@ -247,3 +270,105 @@ class BaseCommand:
             )
 
         return True
+
+    def _get_integration_controller(self):
+        """
+        Get or create the IntegrationController instance (lazy-loaded).
+
+        Returns:
+            IntegrationController: The controller instance
+        """
+        if self._integration_controller is None:
+            # Import here to avoid circular dependencies
+            from xyz_platform.controllers.integration_controller import (
+                IntegrationController,
+            )
+
+            self._integration_controller = IntegrationController()
+        return self._integration_controller
+
+    def _validate_requirements(self) -> bool:
+        """
+        Validate that all required integrations are available.
+
+        Called automatically by _before_execute() before command execution.
+        Checks each integration declared in get_required_integrations().
+
+        Returns:
+            bool: True if all requirements met, False otherwise (errors stored in self._errors)
+        """
+        required = self.get_required_integrations()
+
+        if not required:
+            # No requirements - validation passes
+            return True
+
+        self.logger.debug(
+            f"Validating {len(required)} required integration(s)",
+            extra={
+                "command_class": self.__class__.__name__,
+                "integrations": list(required.keys()),
+            },
+        )
+
+        integration_controller = self._get_integration_controller()
+
+        for integration_name, operation_desc in required.items():
+            is_available, error_msg = (
+                integration_controller.ensure_integration_available(
+                    integration_name, operation_desc
+                )
+            )
+
+            if not is_available:
+                self.logger.error(
+                    f"Integration requirement not met: {integration_name}",
+                    extra={
+                        "command_class": self.__class__.__name__,
+                        "integration": integration_name,
+                        "operation": operation_desc,
+                    },
+                )
+                self._errors.append(error_msg)
+                return False
+
+            self.logger.debug(
+                f"Integration '{integration_name}' validated successfully",
+                extra={
+                    "command_class": self.__class__.__name__,
+                    "integration": integration_name,
+                },
+            )
+
+        self.logger.debug(
+            "All integration requirements validated",
+            extra={"command_class": self.__class__.__name__},
+        )
+        return True
+
+    def _resolve_required_integrations(self) -> Dict[str, Any]:
+        """
+        Resolve all integrations declared by get_required_integrations().
+
+        Returns:
+            Dict[str, Any]: Mapping of integration name to integration instance.
+                Empty dict when no requirements are declared.
+
+        Raises:
+            RuntimeError: If required integrations cannot be resolved.
+        """
+        required = self.get_required_integrations()
+        if not required:
+            return {}
+
+        integration_controller = self._get_integration_controller()
+        success, integrations, errors = (
+            integration_controller.resolve_required_integrations(required)
+        )
+
+        if not success:
+            if errors:
+                self._errors.extend(errors)
+            raise RuntimeError("Failed to resolve required integrations")
+
+        return integrations
