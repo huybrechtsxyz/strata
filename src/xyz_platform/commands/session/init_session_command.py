@@ -183,23 +183,30 @@ class InitSessionCommand(BaseSessionCommand):
 
         # Display created paths
         if self._allow_output and self._created_paths:
-            click.echo("\n📁  Created session structure:")
-            if self._created_paths.get("session_folder"):
-                click.echo(
-                    f"    • Session folder: {self._created_paths['session_folder']}"
-                )
-            if self._created_paths.get("session_file"):
-                click.echo(
-                    f"    • Session file:   {self._created_paths['session_file']}"
-                )
-            if self._created_paths.get("workspace_file"):
-                click.echo(
-                    f"    • Workspace file: {self._created_paths['workspace_file']}"
-                )
-            if self._created_paths.get("logging_config"):
-                click.echo(
-                    f"    • Logging config: {self._created_paths['logging_config']}"
-                )
+            # Always populate structured output data
+            self._output_data = {
+                k: str(v) for k, v in self._created_paths.items() if v is not None
+            }
+            self._output_data["workspace_name"] = self._workspace_name
+
+            if not self._is_structured_output():
+                click.echo("\n📁  Created session structure:")
+                if self._created_paths.get("session_folder"):
+                    click.echo(
+                        f"    • Session folder: {self._created_paths['session_folder']}"
+                    )
+                if self._created_paths.get("session_file"):
+                    click.echo(
+                        f"    • Session file:   {self._created_paths['session_file']}"
+                    )
+                if self._created_paths.get("workspace_file"):
+                    click.echo(
+                        f"    • Workspace file: {self._created_paths['workspace_file']}"
+                    )
+                if self._created_paths.get("logging_config"):
+                    click.echo(
+                        f"    • Logging config: {self._created_paths['logging_config']}"
+                    )
 
         # Configure logging with the new logging.yaml
         if self._created_paths.get("logging_config"):
@@ -208,7 +215,7 @@ class InitSessionCommand(BaseSessionCommand):
                 self.logger.info(f"Configuring logging with: {logging_config_path}")
                 configure_logging(config_path=logging_config_path)
 
-                if self._allow_output:
+                if self._allow_output and not self._is_structured_output():
                     click.echo("\n✅  Logging configured successfully\n")
 
                 self._messages.append(f"Logging configured with: {logging_config_path}")

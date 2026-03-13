@@ -54,10 +54,17 @@ class BaseCommand:
         self._messages = []
         self._errors = []
 
+        # Structured result data — populated by each command's _after_execute()
+        # Used when --output json/text is requested
+        self._output_data: dict = {}
+
         # Output format and flags
         self._output_format = output or ""
         self._output_verbose = verbose or False
         self._output_quiet = quiet or False
+        self._structured_output = bool(
+            self._output_format
+        )  # any non-empty format → structured
 
         # Correlation IDs — set during _initialize()
         self.session_id: Optional[str] = None
@@ -67,23 +74,15 @@ class BaseCommand:
         self._integration_controller: Optional[object] = None
 
         # Determine output behavior based on quiet flag
-        # Note: --verbose and --quiet mutual exclusivity is enforced in cli_common.py validators
-        # Note: --output and --quiet mutual exclusivity is enforced in cli_common.py validators
         # Allowed combinations:
-        #   --output json/text/yaml alone → formatted output, no logs
-        #   --output json --verbose → formatted output + debug logs
+        #   --output json/text alone → structured output, no header/footer
+        #   --output json --verbose → structured output + debug logs
         #   --quiet alone → silent execution (no output)
         #   (no flags) → default human-readable output
-        # Blocked by validators:
+        # Blocked by validators in cli_common.py:
         #   --verbose --quiet → contradictory
         #   --output json --quiet → pointless
-
-        if self._output_quiet:
-            # --quiet: Disable all console output
-            self._allow_output = False
-        else:
-            # Default or any --output format: Enable console output
-            self._allow_output = True
+        self._allow_output = not self._output_quiet
 
     @abstractmethod
     def execute(self) -> bool:
@@ -180,7 +179,9 @@ class BaseCommand:
             # Assign correlation IDs (UUID v7 — time-ordered)
             self.session_id = self._read_session_id()
             self.execution_id = generate_uuid7()
-            set_context({"session_id": self.session_id, "execution_id": self.execution_id})
+            set_context(
+                {"session_id": self.session_id, "execution_id": self.execution_id}
+            )
 
             self.logger.debug(
                 "Initializing command",
@@ -191,7 +192,7 @@ class BaseCommand:
                 },
             )
 
-            if show_header and self._allow_output:
+            if show_header and self._allow_output and not self._is_structured_output():
                 self.ShowConsoleHeader()
 
             self.logger.debug(
@@ -307,6 +308,10 @@ class BaseCommand:
         )
         return True
 
+    def _is_structured_output(self) -> bool:
+        """Return True when any explicit --output format is active (json, text, etc.)."""
+        return self._structured_output
+
     def _finalize(
         self, operation: str = None, success: bool = None, show_footer: bool = True
     ) -> bool:
@@ -317,7 +322,33 @@ class BaseCommand:
             bool: Success status (errors stored in self._errors)
         """
 
-        if show_footer and self._allow_output:
+        if self._allow_output and self._is_structured_output():
+            # ── Structured output (--output json / text) ─────────────────────
+            envelope = {
+                "success": bool(success),
+                "command": operation or "",
+                "data": self._output_data,
+                "messages": self._messages,
+                "errors": self._errors,
+            }
+            if self._output_format == "json":
+                click.echo(json.dumps(envelope, indent=2, default=str))
+            else:  # text
+                click.echo(f"success: {envelope['success']}")
+                click.echo(f"command: {envelope['command']}")
+                for k, v in envelope["data"].items():
+                    click.echo(f"{k}: {v}")
+                if envelope["messages"]:
+                    click.echo("messages:")
+                    for m in envelope["messages"]:
+                        click.echo(f"  - {m}")
+                if envelope["errors"]:
+                    click.echo("errors:")
+                    for e in envelope["errors"]:
+                        click.echo(f"  - {e}")
+
+        elif show_footer and self._allow_output:
+            # ── Human-readable output (default) ──────────────────────────────
             # Show messages
             if self._messages and len(self._messages) > 0:
                 click.echo("💬  Messages:")

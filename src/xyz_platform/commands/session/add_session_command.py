@@ -238,17 +238,23 @@ class AddSessionCommand(BaseSessionCommand):
 
         # Display added item (currently repository)
         if self._allow_output and self._added_repo:
-            click.echo("\n📦  Added item:")
-            if self._added_repo.get("name"):
-                click.echo(f"    • Name:   {self._added_repo['name']}")
-            if self._added_repo.get("type"):
-                click.echo(f"    • Type:   {self._added_repo['type']}")
-            if self._added_repo.get("url"):
-                click.echo(f"    • URL:    {self._added_repo['url']}")
-            if self._added_repo.get("path"):
-                click.echo(f"    • Path:   {self._added_repo['path']}")
-            if self._added_repo.get("branch"):
-                click.echo(f"    • Branch: {self._added_repo['branch']}")
+            # Always populate structured output data
+            self._output_data = {
+                k: v for k, v in self._added_repo.items() if v is not None
+            }
+
+            if not self._is_structured_output():
+                click.echo("\n📦  Added item:")
+                if self._added_repo.get("name"):
+                    click.echo(f"    • Name:   {self._added_repo['name']}")
+                if self._added_repo.get("type"):
+                    click.echo(f"    • Type:   {self._added_repo['type']}")
+                if self._added_repo.get("url"):
+                    click.echo(f"    • URL:    {self._added_repo['url']}")
+                if self._added_repo.get("path"):
+                    click.echo(f"    • Path:   {self._added_repo['path']}")
+                if self._added_repo.get("branch"):
+                    click.echo(f"    • Branch: {self._added_repo['branch']}")
 
         # Call parent last
         return super()._after_execute()
