@@ -1,5 +1,6 @@
 {
   "session": {
+    "session_id": "{{session_id}}",
     "name": "{{workspace_name}}",
     "created": "{{created_timestamp}}",
     "work_path": "{{work_path}}"

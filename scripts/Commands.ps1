@@ -5,26 +5,39 @@
 .\scripts\Run.ps1 -h
 
 # Version command
-.\scripts\Run.ps1 version # Show version with default formatting
-.\scripts\Run.ps1 version --output text # Standard output with formatting
-.\scripts\Run.ps1 version --output json # Output version in JSON format
-.\scripts\Run.ps1 version --output raw # Error unsupported
+.\scripts\Run.ps1 version
+.\scripts\Run.ps1 version -h
+.\scripts\Run.ps1 version --output text
+.\scripts\Run.ps1 version --output json
+.\scripts\Run.ps1 version --output raw
 
 # Help command
-.\scripts\Run.ps1 help -h # Show general help
-.\scripts\Run.ps1 help # Show general help
+.\scripts\Run.ps1 help
+.\scripts\Run.ps1 help -h
 .\scripts\Run.ps1 help terraform # Show help for version command
 .\scripts\Run.ps1 help tf # Show topic not found
 
 # Temporary app directory for testing
-New-Item -Path .app -ItemType Directory -Force # Create .platform directory for testing
+# Create .platform directory for testing
+New-Item -Path .app -ItemType Directory -Force
+
+# Clean up .platform directory after testing
+Remove-Item -Path .app -Recurse -Force
 
 # Session command
-.\scripts\Run.ps1 session -h # Show help for session command
-.\scripts\Run.ps1 session init -h # Show help for session init
-.\scripts\Run.ps1 session init # Error name required
-.\scripts\Run.ps1 session init --name platform --work-path .app # Initialize session with name and custom work path
+.\scripts\Run.ps1 session -h
+.\scripts\Run.ps1 session init
+.\scripts\Run.ps1 session init --name platform --work-path .app
+.\scripts\Run.ps1 session init --name platform --work-path .app --output json
+.\scripts\Run.ps1 session init --name platform --work-path .app --output text
+.\scripts\Run.ps1 session init --name platform --work-path .app --output raw
+.\scripts\Run.ps1 session init --name platform --work-path .app --verbose
+.\scripts\Run.ps1 session init --name platform --work-path .app --quiet
+
 
 # Add repo command
-.\scripts\Run.ps1 session add -h # Show help for session add
-.\scripts\Run.ps1 session add config --work-path .app --url "../config" # Add a local repository to the session
+.\scripts\Run.ps1 session add -h
+.\scripts\Run.ps1 session add config --work-path .app --url "../config"
+.\scripts\Run.ps1 session add config --work-path .app --url "../config" --output json
+.\scripts\Run.ps1 session add config --work-path .app --url "../config" --output text
+.\scripts\Run.ps1 session add config --work-path .app --url "../config" --output raw

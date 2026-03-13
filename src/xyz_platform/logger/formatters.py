@@ -57,9 +57,11 @@ class JsonFormatter(jsonlogger.JsonFormatter):
                 datetime.utcfromtimestamp(record.created).isoformat() + "Z"
             )
 
-        # Rename 'levelname' to 'level' for consistency
-        if "levelname" in log_record:
-            log_record["level"] = log_record.pop("levelname")
+        # Always write level (pythonjsonlogger does not include levelname by default
+        # unless a format string is provided — set it explicitly from the LogRecord)
+        log_record["level"] = record.levelname
+        # Remove pythonjsonlogger's own levelname if it happened to be included
+        log_record.pop("levelname", None)
 
         # Rename 'name' to 'logger' for clarity
         if "name" in log_record:

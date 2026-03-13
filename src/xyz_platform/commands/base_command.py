@@ -11,6 +11,7 @@ Description   : Base command class for the XYZ Platform.
 
 from abc import abstractmethod
 from datetime import datetime
+import json
 import os
 from pathlib import Path
 import sys
@@ -18,8 +19,11 @@ from typing import Any, Dict, List, Optional
 
 import click
 
+from xyz_platform.controllers.session_controller import SessionController
 from xyz_platform.logger.logger import get_logger, reconfigure_logging
+from xyz_platform.logger.context import set_context
 from xyz_platform.utils import system
+from xyz_platform.utils.system import generate_uuid7
 
 
 class BaseCommand:
@@ -54,6 +58,10 @@ class BaseCommand:
         self._output_format = output or ""
         self._output_verbose = verbose or False
         self._output_quiet = quiet or False
+
+        # Correlation IDs — set during _initialize()
+        self.session_id: Optional[str] = None
+        self.execution_id: Optional[str] = None
 
         # Integration controller (lazy-loaded)
         self._integration_controller: Optional[object] = None
@@ -168,9 +176,19 @@ class BaseCommand:
             self._configure_session_logging()
 
             self._start_time = datetime.now()
+
+            # Assign correlation IDs (UUID v7 — time-ordered)
+            self.session_id = self._read_session_id()
+            self.execution_id = generate_uuid7()
+            set_context({"session_id": self.session_id, "execution_id": self.execution_id})
+
             self.logger.debug(
                 "Initializing command",
-                extra={"command_class": self.__class__.__name__},
+                extra={
+                    "command_class": self.__class__.__name__,
+                    "session_id": self.session_id,
+                    "execution_id": self.execution_id,
+                },
             )
 
             if show_header and self._allow_output:
@@ -187,6 +205,29 @@ class BaseCommand:
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False
+
+    def _read_session_id(self) -> str:
+        """
+        Read the persistent session_id from session.json.
+
+        Falls back to a fresh UUID v7 when:
+        - session.json does not exist yet (e.g. during ``session init``)
+        - the file is unreadable or missing the ``session_id`` key
+
+        Returns:
+            str: UUID v7 session identifier
+        """
+        try:
+            session_file = self._work_path / ".xyz-platform" / "session.json"
+            if session_file.exists():
+                with open(session_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                sid = data.get("session", {}).get("session_id")
+                if sid:
+                    return sid
+        except Exception as e:
+            self.logger.debug(f"Could not read session_id from session.json: {e}")
+        return generate_uuid7()
 
     def _configure_session_logging(self) -> None:
         """
@@ -294,6 +335,30 @@ class BaseCommand:
             # Show verbose logging
             if self._output_verbose:
                 click.echo("🔍  Verbose logs enabled (see console output for details)")
+                session_controller = SessionController()
+                success, log_entries, errors = session_controller.get_logs(
+                    work_path=self._work_path, execution_id=self.execution_id
+                )
+
+                if success and log_entries:
+                    for log in log_entries:
+                        timestamp = log.get("timestamp", "")
+                        level = (
+                            log.get("level") or log.get("levelname") or "INFO"
+                        ).upper()
+                        message = log.get("message", "")
+                        extra = log.get("extra", {})
+                        click.secho(
+                            f"    [{timestamp}] {level:8} - {message}", fg="cyan"
+                        )
+                        if extra:
+                            click.secho(f"        Extra: {extra}", fg="cyan")
+                elif errors:
+                    click.secho(
+                        f"    Failed to retrieve logs: {errors[0]}", fg="yellow"
+                    )
+                else:
+                    click.secho("    No logs available", fg="yellow")
                 click.echo("")
 
             # Show footer

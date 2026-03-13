@@ -11,13 +11,14 @@ Description   : Controller for managing XYZ Platform sessions.
 
 import json
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from xyz_platform.logger.logger import get_logger
+from xyz_platform.logger.logger import get_logger, get_active_log_file
+from xyz_platform.utils.system import generate_uuid7
 
 
 class SessionController:
@@ -460,7 +461,8 @@ class SessionController:
 
             # Replace placeholders (use as_posix() to avoid backslash issues in JSON on Windows)
             session_content = (
-                template_content.replace("{{workspace_name}}", workspace_name)
+                template_content.replace("{{session_id}}", generate_uuid7())
+                .replace("{{workspace_name}}", workspace_name)
                 .replace("{{created_timestamp}}", datetime.now().isoformat())
                 .replace("{{work_path}}", work_path.absolute().as_posix())
                 .replace(
@@ -769,3 +771,239 @@ class SessionController:
         package_dir = Path(__file__).parent.parent
         template_path = package_dir / "data" / template_name
         return template_path
+
+    def _resolve_log_file(self, work_path: Path) -> Optional[Path]:
+        """
+        Resolve the active log file for a session.
+
+        Resolution order:
+        1. Active Python logging file handler (fast path)
+        2. ``logging.log_path`` from ``.xyz-platform/session.json`` — scans for
+           the first ``*.log`` file in that directory
+        3. Returns ``None`` if no log file can be found
+
+        Args:
+            work_path: Working directory path used to locate session.json
+
+        Returns:
+            Path to log file, or None if unavailable
+        """
+        # 1. Try global logging handler introspection first
+        log_file = get_active_log_file()
+        if log_file and log_file.exists():
+            return log_file
+
+        # 2. Fall back to session.json log_path
+        try:
+            session_file = work_path / ".xyz-platform" / "session.json"
+            if session_file.exists():
+                with open(session_file, "r", encoding="utf-8") as f:
+                    session_data = json.load(f)
+                log_path_str = session_data.get("logging", {}).get("log_path")
+                if log_path_str:
+                    log_path = Path(log_path_str)
+                    if log_path.exists():
+                        candidates = sorted(log_path.glob("*.log"))
+                        if candidates:
+                            self.logger.debug(
+                                "Resolved log file from session.json",
+                                extra={"log_file": str(candidates[0])},
+                            )
+                            return candidates[0]
+        except Exception as e:
+            self.logger.debug(f"Could not resolve log path from session.json: {e}")
+
+        # 3. Return original result (may be None or a non-existent path)
+        return log_file
+
+    def get_logs(
+        self,
+        work_path: Path,
+        lines: int = 50,
+        minutes: Optional[int] = None,
+        level: Optional[str] = None,
+        session_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+    ) -> tuple[bool, List[Dict[str, Any]], List[str]]:
+        """
+        Read and filter execution logs.
+
+        Args:
+            work_path: Working directory path
+            lines: Number of log lines to return (default: 50)
+            minutes: Filter logs from last N minutes
+            level: Filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+            session_id: Filter by session ID
+            execution_id: Filter by execution ID
+
+        Returns:
+            Tuple of (success: bool, log_entries: List[dict], errors: List[str])
+        """
+        errors = []
+
+        try:
+            # Resolve log file: active handler → session.json log_path fallback
+            log_file = self._resolve_log_file(work_path)
+
+            if not log_file:
+                self.logger.debug(
+                    "No log file found (no active handler and no session.json log_path)"
+                )
+                return True, [], []
+
+            if not log_file.exists():
+                self.logger.debug(
+                    "Log file not found", extra={"log_file": str(log_file)}
+                )
+                return True, [], []
+
+            # Read and parse log entries
+            log_entries = self._read_log_entries(log_file)
+
+            if not log_entries:
+                return True, [], []
+
+            # Apply filters
+            log_entries = self._apply_filters(
+                log_entries,
+                minutes=minutes,
+                level=level,
+                session_id=session_id,
+                execution_id=execution_id,
+            )
+
+            # Limit to last N lines (unless filtering by session_id or execution_id)
+            if not session_id and not execution_id and len(log_entries) > lines:
+                log_entries = log_entries[-lines:]
+
+            self.logger.debug(
+                "Retrieved logs",
+                extra={
+                    "total_entries": len(log_entries),
+                    "filters": {
+                        "minutes": minutes,
+                        "level": level,
+                        "session_id": session_id,
+                        "execution_id": execution_id,
+                    },
+                },
+            )
+
+            return True, log_entries, []
+
+        except Exception as e:
+            error_msg = f"Failed to read logs: {str(e)}"
+            self.logger.exception(error_msg)
+            errors.append(error_msg)
+            return False, [], errors
+
+    def _read_log_entries(self, log_file: Path) -> List[Dict[str, Any]]:
+        """
+        Read and parse JSON log entries from file.
+
+        Args:
+            log_file: Path to log file
+
+        Returns:
+            List of parsed log entry dictionaries
+        """
+        entries = []
+
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        entries.append(entry)
+                    except json.JSONDecodeError:
+                        # Skip malformed lines
+                        self.logger.debug(f"Skipping malformed log line: {line[:100]}")
+                        continue
+        except Exception as e:
+            self.logger.warning(f"Error reading log file: {e}")
+
+        return entries
+
+    def _apply_filters(
+        self,
+        log_entries: List[Dict[str, Any]],
+        minutes: Optional[int] = None,
+        level: Optional[str] = None,
+        session_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Apply filters to log entries.
+
+        Args:
+            log_entries: List of log entry dictionaries
+            minutes: Filter logs from last N minutes
+            level: Filter by log level
+            session_id: Filter by session ID
+            execution_id: Filter by execution ID
+
+        Returns:
+            Filtered list of log entries
+        """
+        filtered = log_entries
+
+        # Filter by time
+        if minutes:
+            cutoff_time = datetime.now() - timedelta(minutes=minutes)
+            filtered = [
+                entry
+                for entry in filtered
+                if self._parse_timestamp(entry) >= cutoff_time
+            ]
+
+        # Filter by level
+        if level:
+            level_upper = level.upper()
+            filtered = [
+                entry
+                for entry in filtered
+                if entry.get("level", "").upper() == level_upper
+            ]
+
+        # Filter by session_id
+        if session_id:
+            filtered = [
+                entry for entry in filtered if entry.get("session_id") == session_id
+            ]
+
+        # Filter by execution_id
+        if execution_id:
+            filtered = [
+                entry for entry in filtered if entry.get("execution_id") == execution_id
+            ]
+
+        return filtered
+
+    def _parse_timestamp(self, entry: Dict[str, Any]) -> datetime:
+        """
+        Parse timestamp from log entry.
+
+        Args:
+            entry: Log entry dictionary
+
+        Returns:
+            Parsed datetime object (returns datetime.min if parsing fails)
+        """
+        timestamp_str = entry.get("timestamp", "")
+        try:
+            # Try ISO format first
+            dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            # Make timezone-naive for comparison
+            if dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+            return dt
+        except:
+            try:
+                # Try common log format
+                return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
+            except:
+                # Return very old date if parsing fails
+                return datetime.min

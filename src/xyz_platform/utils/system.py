@@ -13,7 +13,7 @@ import os
 import re
 import subprocess
 import unicodedata
-import yaml
+import uuid
 import time
 
 from dataclasses import dataclass
@@ -23,6 +23,22 @@ from rich.console import Console
 from xyz_platform.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def generate_uuid7() -> str:
+    """
+    Generate a time-ordered UUID.
+
+    Uses ``uuid.uuid7()`` (Python 3.13+) when available for true UUID v7
+    (RFC 9562) which is monotonically ordered by creation time.
+    Falls back to ``uuid.uuid4()`` (random) on older Python versions.
+
+    Returns:
+        str: UUID formatted string
+    """
+    if hasattr(uuid, "uuid7"):
+        return str(uuid.uuid7())
+    return str(uuid.uuid4())
 
 
 # Get the normalized path
