@@ -186,19 +186,19 @@ class InitSessionCommand(BaseSessionCommand):
             click.echo("\n📁  Created session structure:")
             if self._created_paths.get("session_folder"):
                 click.echo(
-                    f"   • Session folder: {self._created_paths['session_folder']}"
+                    f"    • Session folder: {self._created_paths['session_folder']}"
                 )
             if self._created_paths.get("session_file"):
                 click.echo(
-                    f"   • Session file:   {self._created_paths['session_file']}"
+                    f"    • Session file:   {self._created_paths['session_file']}"
                 )
             if self._created_paths.get("workspace_file"):
                 click.echo(
-                    f"   • Workspace file: {self._created_paths['workspace_file']}"
+                    f"    • Workspace file: {self._created_paths['workspace_file']}"
                 )
             if self._created_paths.get("logging_config"):
                 click.echo(
-                    f"   • Logging config: {self._created_paths['logging_config']}"
+                    f"    • Logging config: {self._created_paths['logging_config']}"
                 )
 
         # Configure logging with the new logging.yaml
@@ -209,7 +209,7 @@ class InitSessionCommand(BaseSessionCommand):
                 configure_logging(config_path=logging_config_path)
 
                 if self._allow_output:
-                    click.echo("\n✅  Logging configured successfully")
+                    click.echo("\n✅  Logging configured successfully\n")
 
                 self._messages.append(f"Logging configured with: {logging_config_path}")
             except Exception as e:
