@@ -103,7 +103,7 @@ class ConsulIntegration(StoreIntegration):
         logger.debug(
             "HashiCorp Consul integration initialized",
             extra={
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
                 "address": self.consul_addr,
                 "has_token": bool(self.consul_token),
             },
@@ -142,7 +142,7 @@ class ConsulIntegration(StoreIntegration):
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
             logger.warning(
-                "HashiCorp Consul CLI not found", extra={"name": self.integration_name}
+                "HashiCorp Consul CLI not found", extra={"integration_name": self.integration_name}
             )
             return (
                 False,
@@ -156,7 +156,7 @@ class ConsulIntegration(StoreIntegration):
             self._info = version_error
             logger.warning(
                 "HashiCorp Consul version validation failed",
-                extra={"name": self.integration_name, "error": version_error},
+                extra={"integration_name": self.integration_name, "error": version_error},
             )
             return False, version_error
 
@@ -165,7 +165,7 @@ class ConsulIntegration(StoreIntegration):
             self._info = f"{self.integration_name} address not configured."
             logger.warning(
                 "HashiCorp Consul address not configured",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -178,7 +178,7 @@ class ConsulIntegration(StoreIntegration):
         logger.debug(
             "HashiCorp Consul is available and configured",
             extra={
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
                 "version": self.get_version(),
                 "address": self.consul_addr,
             },
@@ -259,13 +259,13 @@ class ConsulIntegration(StoreIntegration):
         if not available:
             logger.warning(
                 "Cannot retrieve KV from HashiCorp Consul",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             return None
 
         logger.debug(
             "Retrieving key from HashiCorp Consul",
-            extra={"key": key, "prefer_cli": prefer_cli, "name": self.integration_name},
+            extra={"key": key, "prefer_cli": prefer_cli, "integration_name": self.integration_name},
         )
 
         if prefer_cli:
@@ -274,7 +274,7 @@ class ConsulIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Key retrieved from HashiCorp Consul via CLI",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -283,7 +283,7 @@ class ConsulIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Key retrieved from HashiCorp Consul via API",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
             return result
         else:
@@ -292,7 +292,7 @@ class ConsulIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Key retrieved from HashiCorp Consul via API",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -301,7 +301,7 @@ class ConsulIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Key retrieved from HashiCorp Consul via CLI",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
             return result
 

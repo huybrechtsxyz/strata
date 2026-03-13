@@ -107,11 +107,11 @@ class AddSessionCommand(BaseSessionCommand):
         """
         try:
             # Initialize
-            if not self._initialize(operation="session_add", show_header=True):
+            if not self._initialize(operation="session_add"):
                 self.logger.error(f"Initialization failed in {self.__class__.__name__}")
                 if self._allow_output:
                     click.echo("\n❌  Initialization failed")
-                self._finalize(operation="session_add", success=False, show_footer=True)
+                self._finalize(operation="session_add", success=False)
                 return False
 
             # Before
@@ -121,7 +121,7 @@ class AddSessionCommand(BaseSessionCommand):
                 )
                 if self._allow_output:
                     click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(operation="session_add", success=False, show_footer=True)
+                self._finalize(operation="session_add", success=False)
                 return False
 
             # Resolve required integrations for dependency injection
@@ -145,7 +145,7 @@ class AddSessionCommand(BaseSessionCommand):
                 self.logger.error(f"Item add failed in {self.__class__.__name__}")
                 if self._allow_output:
                     click.echo("\n❌  Item add failed")
-                self._finalize(operation="session_add", success=False, show_footer=True)
+                self._finalize(operation="session_add", success=False)
                 return False
 
             # After
@@ -155,13 +155,11 @@ class AddSessionCommand(BaseSessionCommand):
                 )
                 if self._allow_output:
                     click.echo("\n❌  Post-execution hook failed")
-                self._finalize(operation="session_add", success=False, show_footer=True)
+                self._finalize(operation="session_add", success=False)
                 return False
 
             # Finalize
-            if not self._finalize(
-                operation="session_add", success=True, show_footer=True
-            ):
+            if not self._finalize(operation="session_add", success=True):
                 self.logger.error(f"Finalization failed in {self.__class__.__name__}")
                 if self._allow_output:
                     click.echo("\n❌  Finalization failed")
@@ -173,10 +171,10 @@ class AddSessionCommand(BaseSessionCommand):
             error_msg = f"Failed to add item: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
-            self._finalize(operation="session_add", success=False, show_footer=True)
+            self._finalize(operation="session_add", success=False)
             return False
 
-    def _initialize(self, operation: str = None, show_header: bool = True) -> bool:
+    def _initialize(self, operation: str = None) -> bool:
         """
         Initialize add command - validate parameters.
 
@@ -184,7 +182,7 @@ class AddSessionCommand(BaseSessionCommand):
             bool: Success status (errors stored in self._errors)
         """
         # Call parent first
-        if not super()._initialize(operation=operation, show_header=show_header):
+        if not super()._initialize(operation=operation):
             return False
 
         self.logger.debug(
@@ -254,9 +252,7 @@ class AddSessionCommand(BaseSessionCommand):
         # Call parent last
         return super()._after_execute()
 
-    def _finalize(
-        self, operation: str = None, success: bool = None, show_footer: bool = True
-    ) -> bool:
+    def _finalize(self, operation: str = None, success: bool = None) -> bool:
         """
         Finalize add command.
 
@@ -269,6 +265,4 @@ class AddSessionCommand(BaseSessionCommand):
         )
 
         # Call parent last
-        return super()._finalize(
-            operation=operation, success=success, show_footer=show_footer
-        )
+        return super()._finalize(operation=operation, success=success)

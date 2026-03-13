@@ -83,7 +83,7 @@ class BitwardenIntegration(StoreIntegration):
             logger.debug(
                 "Bitwarden access token configuration",
                 extra={
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                     "has_token": bool(self.access_token),
                 },
             )
@@ -121,7 +121,7 @@ class BitwardenIntegration(StoreIntegration):
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
             logger.warning(
-                "Bitwarden CLI not found", extra={"name": self.integration_name}
+                "Bitwarden CLI not found", extra={"integration_name": self.integration_name}
             )
             return (
                 False,
@@ -135,7 +135,7 @@ class BitwardenIntegration(StoreIntegration):
             self._info = version_error
             logger.warning(
                 "Bitwarden version validation failed",
-                extra={"name": self.integration_name, "error": version_error},
+                extra={"integration_name": self.integration_name, "error": version_error},
             )
             return False, version_error
 
@@ -149,7 +149,7 @@ class BitwardenIntegration(StoreIntegration):
             self._info = f"{self.integration_name} access token '{token_var}' not set."
             logger.warning(
                 "Bitwarden access token not configured",
-                extra={"name": self.integration_name, "env_var": token_var},
+                extra={"integration_name": self.integration_name, "env_var": token_var},
             )
             return (
                 False,
@@ -160,7 +160,7 @@ class BitwardenIntegration(StoreIntegration):
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Bitwarden is available and configured",
-            extra={"name": self.integration_name, "version": self.get_version()},
+            extra={"integration_name": self.integration_name, "version": self.get_version()},
         )
         return True, ""
 
@@ -204,14 +204,14 @@ class BitwardenIntegration(StoreIntegration):
         if not available:
             logger.warning(
                 "Cannot retrieve secret",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             return None
 
         try:
             logger.debug(
                 "Retrieving secret from Bitwarden",
-                extra={"secret_id": key, "name": self.integration_name},
+                extra={"secret_id": key, "integration_name": self.integration_name},
             )
 
             # Set up environment with access token
@@ -234,7 +234,7 @@ class BitwardenIntegration(StoreIntegration):
                 data = json.loads(result["stdout"])
                 logger.info(
                     "Secret retrieved from Bitwarden",
-                    extra={"secret_id": key, "name": self.integration_name},
+                    extra={"secret_id": key, "integration_name": self.integration_name},
                 )
                 return data.get("value")
 
@@ -243,7 +243,7 @@ class BitwardenIntegration(StoreIntegration):
                 extra={
                     "secret_id": key,
                     "stderr": result["stderr"],
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
             )
             return None
@@ -251,7 +251,7 @@ class BitwardenIntegration(StoreIntegration):
         except json.JSONDecodeError as e:
             logger.error(
                 "Failed to parse secret JSON from Bitwarden",
-                extra={"secret_id": key, "name": self.integration_name},
+                extra={"secret_id": key, "integration_name": self.integration_name},
                 exc_info=True,
             )
             return None
@@ -262,7 +262,7 @@ class BitwardenIntegration(StoreIntegration):
                 extra={
                     "secret_id": key,
                     "error_type": type(e).__name__,
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
                 exc_info=True,
             )
@@ -284,13 +284,13 @@ class BitwardenIntegration(StoreIntegration):
         if not available:
             logger.warning(
                 "Cannot list secrets",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             return None
 
         try:
             logger.debug(
-                "Listing secrets from Bitwarden", extra={"name": self.integration_name}
+                "Listing secrets from Bitwarden", extra={"integration_name": self.integration_name}
             )
 
             # Set up environment with access token
@@ -313,20 +313,20 @@ class BitwardenIntegration(StoreIntegration):
                 secrets = json.loads(result["stdout"])
                 logger.info(
                     "Listed secrets from Bitwarden",
-                    extra={"count": len(secrets), "name": self.integration_name},
+                    extra={"count": len(secrets), "integration_name": self.integration_name},
                 )
                 return secrets
 
             logger.error(
                 "Failed to list secrets from Bitwarden",
-                extra={"stderr": result["stderr"], "name": self.integration_name},
+                extra={"stderr": result["stderr"], "integration_name": self.integration_name},
             )
             return None
 
         except json.JSONDecodeError as e:
             logger.error(
                 "Failed to parse secrets JSON from Bitwarden",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
                 exc_info=True,
             )
             return None
@@ -334,7 +334,7 @@ class BitwardenIntegration(StoreIntegration):
         except Exception as e:
             logger.error(
                 "Error listing secrets from Bitwarden",
-                extra={"error_type": type(e).__name__, "name": self.integration_name},
+                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
                 exc_info=True,
             )
             return None
@@ -358,7 +358,7 @@ class BitwardenIntegration(StoreIntegration):
         if secrets is None:
             logger.debug(
                 "Failed to list secrets from Bitwarden",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return []
 
@@ -373,7 +373,7 @@ class BitwardenIntegration(StoreIntegration):
             extra={
                 "count": len(secret_ids),
                 "prefix": prefix,
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
             },
         )
 

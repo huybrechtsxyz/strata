@@ -108,7 +108,7 @@ class AzureAppConfigIntegration(StoreIntegration):
         logger.debug(
             "Azure App Configuration integration initialized",
             extra={
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
                 "has_endpoint": bool(self.appconfig_endpoint),
                 "has_connection_string": bool(self.connection_string),
             },
@@ -154,7 +154,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             self._info = (
                 f"{self.integration_name} CLI (az) is not installed or not in PATH."
             )
-            logger.warning("Azure CLI not found", extra={"name": self.integration_name})
+            logger.warning("Azure CLI not found", extra={"integration_name": self.integration_name})
             return (
                 False,
                 f"{self.integration_name} CLI (az) is not installed or not in PATH. "
@@ -167,7 +167,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             self._info = version_error
             logger.warning(
                 "Azure CLI version validation failed",
-                extra={"name": self.integration_name, "error": version_error},
+                extra={"integration_name": self.integration_name, "error": version_error},
             )
             return False, version_error
 
@@ -176,7 +176,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             self._info = f"{self.integration_name} configured with connection string authentication"
             logger.debug(
                 "Azure App Configuration using connection string auth",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return True, ""
 
@@ -185,7 +185,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             self._info = f"{self.integration_name} endpoint not configured."
             logger.warning(
                 "Azure App Configuration endpoint not configured",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -202,7 +202,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             self._info = f"{self.integration_name} authentication not configured."
             logger.warning(
                 "Azure authentication not configured",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -215,7 +215,7 @@ class AzureAppConfigIntegration(StoreIntegration):
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Azure App Configuration is available and configured",
-            extra={"name": self.integration_name, "version": self.get_version()},
+            extra={"integration_name": self.integration_name, "version": self.get_version()},
         )
         return True, ""
 
@@ -372,7 +372,7 @@ class AzureAppConfigIntegration(StoreIntegration):
         if not available:
             logger.warning(
                 "Cannot retrieve value from Azure App Configuration",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             return None
 
@@ -382,7 +382,7 @@ class AzureAppConfigIntegration(StoreIntegration):
                 "key": key,
                 "label": label,
                 "prefer_cli": prefer_cli,
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
             },
         )
 
@@ -392,7 +392,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Value retrieved from Azure App Configuration via CLI",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -401,7 +401,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Value retrieved from Azure App Configuration via API (CLI token)",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -410,7 +410,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Value retrieved from Azure App Configuration via API (client credentials)",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
             return result
         else:
@@ -419,7 +419,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Value retrieved from Azure App Configuration via API (client credentials)",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -428,7 +428,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Value retrieved from Azure App Configuration via API (CLI token)",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -437,7 +437,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Value retrieved from Azure App Configuration via CLI",
-                    extra={"key": key, "name": self.integration_name},
+                    extra={"key": key, "integration_name": self.integration_name},
                 )
             return result
 
@@ -571,20 +571,20 @@ class AzureAppConfigIntegration(StoreIntegration):
                 if token:
                     logger.debug(
                         "Successfully obtained Azure access token via CLI",
-                        extra={"name": self.integration_name},
+                        extra={"integration_name": self.integration_name},
                     )
                 return token
 
             logger.warning(
                 "Failed to get Azure access token via CLI",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return None
 
         except Exception as e:
             logger.warning(
                 "Error getting Azure access token via CLI",
-                extra={"error_type": type(e).__name__, "name": self.integration_name},
+                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
             )
             return None
 
@@ -602,7 +602,7 @@ class AzureAppConfigIntegration(StoreIntegration):
         try:
             logger.debug(
                 "Authenticating to Azure App Configuration using client credentials",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             token_url = (
                 f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
@@ -625,13 +625,13 @@ class AzureAppConfigIntegration(StoreIntegration):
                 if token:
                     logger.info(
                         "Successfully authenticated to Azure App Configuration using client credentials",
-                        extra={"name": self.integration_name},
+                        extra={"integration_name": self.integration_name},
                     )
                 return token
         except Exception as e:
             logger.warning(
                 "Client credentials authentication to Azure App Configuration failed",
-                extra={"error_type": type(e).__name__, "name": self.integration_name},
+                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
             )
             return None
 

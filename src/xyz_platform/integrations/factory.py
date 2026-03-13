@@ -93,7 +93,7 @@ class IntegrationFactory:
 
         logger.debug(
             "Creating integration",
-            extra={"name": config.name, "type": integration_type},
+            extra={"integration_name": config.name, "type": integration_type},
         )
 
         # Check if type is registered
@@ -121,7 +121,7 @@ class IntegrationFactory:
             logger.info(
                 "Integration created",
                 extra={
-                    "name": config.name,
+                    "integration_name": config.name,
                     "type": integration_type,
                     "class": integration_class.__name__,
                 },
@@ -133,7 +133,7 @@ class IntegrationFactory:
             logger.error(
                 "Failed to create integration",
                 extra={
-                    "name": config.name,
+                    "integration_name": config.name,
                     "type": integration_type,
                     "class": integration_class.__name__,
                     "error": str(e),

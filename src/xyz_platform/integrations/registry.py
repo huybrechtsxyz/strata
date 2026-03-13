@@ -92,7 +92,7 @@ class IntegrationRegistry:
                 f"Integration instance for '{name}' must have is_available() method"
             )
         self._integrations[name] = integration_instance
-        logger.debug("Integration registered", extra={"name": name})
+        logger.debug("Integration registered", extra={"integration_name": name})
 
     def get_integration(self, name: str) -> Optional[Any]:
         """

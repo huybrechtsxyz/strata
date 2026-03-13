@@ -115,7 +115,7 @@ class VaultIntegration(StoreIntegration):
         logger.debug(
             "HashiCorp Vault integration initialized",
             extra={
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
                 "address": self.vault_addr,
                 "auth_method": self._get_auth_method(),
             },
@@ -154,7 +154,7 @@ class VaultIntegration(StoreIntegration):
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
             logger.warning(
-                "HashiCorp Vault CLI not found", extra={"name": self.integration_name}
+                "HashiCorp Vault CLI not found", extra={"integration_name": self.integration_name}
             )
             return (
                 False,
@@ -168,7 +168,7 @@ class VaultIntegration(StoreIntegration):
             self._info = version_error
             logger.warning(
                 "HashiCorp Vault version validation failed",
-                extra={"name": self.integration_name, "error": version_error},
+                extra={"integration_name": self.integration_name, "error": version_error},
             )
             return False, version_error
 
@@ -177,7 +177,7 @@ class VaultIntegration(StoreIntegration):
             self._info = f"{self.integration_name} address not configured."
             logger.warning(
                 "HashiCorp Vault address not configured",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -192,7 +192,7 @@ class VaultIntegration(StoreIntegration):
             self._info = f"{self.integration_name} has no authentication configured."
             logger.warning(
                 "HashiCorp Vault authentication not configured",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -206,7 +206,7 @@ class VaultIntegration(StoreIntegration):
         logger.debug(
             "HashiCorp Vault is available and configured",
             extra={
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
                 "version": self.get_version(),
                 "address": self.vault_addr,
                 "auth_method": auth_method,
@@ -298,7 +298,7 @@ class VaultIntegration(StoreIntegration):
         try:
             logger.debug(
                 "Authenticating to HashiCorp Vault using AppRole",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             auth_url = f"{self.vault_addr}/v1/auth/approle/login"
             data = json.dumps(
@@ -316,13 +316,13 @@ class VaultIntegration(StoreIntegration):
                 if token:
                     logger.info(
                         "Successfully authenticated to HashiCorp Vault using AppRole",
-                        extra={"name": self.integration_name},
+                        extra={"integration_name": self.integration_name},
                     )
                 return token
         except Exception as e:
             logger.warning(
                 "AppRole authentication to HashiCorp Vault failed",
-                extra={"error_type": type(e).__name__, "name": self.integration_name},
+                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
             )
             return None
 
@@ -339,7 +339,7 @@ class VaultIntegration(StoreIntegration):
         try:
             logger.debug(
                 "Authenticating to HashiCorp Vault using Kubernetes auth",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             # Read Kubernetes service account JWT
             if not os.path.exists(self.vault_k8s_jwt_path):
@@ -347,7 +347,7 @@ class VaultIntegration(StoreIntegration):
                     "Kubernetes JWT not found",
                     extra={
                         "jwt_path": self.vault_k8s_jwt_path,
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 return None
@@ -369,13 +369,13 @@ class VaultIntegration(StoreIntegration):
                 if token:
                     logger.info(
                         "Successfully authenticated to HashiCorp Vault using Kubernetes auth",
-                        extra={"name": self.integration_name},
+                        extra={"integration_name": self.integration_name},
                     )
                 return token
         except Exception as e:
             logger.warning(
                 "Kubernetes authentication to HashiCorp Vault failed",
-                extra={"error_type": type(e).__name__, "name": self.integration_name},
+                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
             )
             return None
 
@@ -424,7 +424,7 @@ class VaultIntegration(StoreIntegration):
         if not available:
             logger.warning(
                 "Cannot retrieve secret from HashiCorp Vault",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             return None
 
@@ -434,7 +434,7 @@ class VaultIntegration(StoreIntegration):
                 "secret_path": secret_path,
                 "field": field,
                 "prefer_cli": prefer_cli,
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
             },
         )
 
@@ -444,7 +444,7 @@ class VaultIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via CLI",
-                    extra={"secret_path": secret_path, "name": self.integration_name},
+                    extra={"secret_path": secret_path, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -453,7 +453,7 @@ class VaultIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via API",
-                    extra={"secret_path": secret_path, "name": self.integration_name},
+                    extra={"secret_path": secret_path, "integration_name": self.integration_name},
                 )
             return result
         else:
@@ -462,7 +462,7 @@ class VaultIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via API",
-                    extra={"secret_path": secret_path, "name": self.integration_name},
+                    extra={"secret_path": secret_path, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -471,7 +471,7 @@ class VaultIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via CLI",
-                    extra={"secret_path": secret_path, "name": self.integration_name},
+                    extra={"secret_path": secret_path, "integration_name": self.integration_name},
                 )
             return result
 

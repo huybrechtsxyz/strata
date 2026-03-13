@@ -124,7 +124,10 @@ class BaseIntegration(ABC):
 
         logger.debug(
             "Integration initialized",
-            extra={"name": self.integration_name, "type": self.integration_type},
+            extra={
+                "integration_name": self.integration_name,
+                "type": self.integration_type,
+            },
         )
 
     @classmethod
@@ -284,20 +287,26 @@ class BaseIntegration(ABC):
                 self._version = self.parse_version(result["stdout"])
                 logger.debug(
                     "Integration version detected",
-                    extra={"name": self.integration_name, "version": self._version},
+                    extra={
+                        "integration_name": self.integration_name,
+                        "version": self._version,
+                    },
                 )
                 return self._version
             else:
                 logger.warning(
                     "Failed to get integration version",
-                    extra={"name": self.integration_name, "stderr": result["stderr"]},
+                    extra={
+                        "integration_name": self.integration_name,
+                        "stderr": result["stderr"],
+                    },
                 )
                 return None
 
         except Exception as e:
             logger.warning(
                 "Exception getting integration version",
-                extra={"name": self.integration_name, "error": str(e)},
+                extra={"integration_name": self.integration_name, "error": str(e)},
                 exc_info=True,
             )
             return None
@@ -335,7 +344,7 @@ class BaseIntegration(ABC):
                     logger.warning(
                         "Integration version below minimum",
                         extra={
-                            "name": self.integration_name,
+                            "integration_name": self.integration_name,
                             "current": current_version,
                             "min_required": self.config.validation.min_version,
                         },
@@ -353,7 +362,7 @@ class BaseIntegration(ABC):
                     logger.warning(
                         "Integration version above maximum",
                         extra={
-                            "name": self.integration_name,
+                            "integration_name": self.integration_name,
                             "current": current_version,
                             "max_supported": self.config.validation.max_version,
                         },
@@ -364,7 +373,7 @@ class BaseIntegration(ABC):
             logger.debug(
                 "Integration version validated",
                 extra={
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                     "version": current_version,
                     "min_version": self.config.validation.min_version,
                     "max_version": self.config.validation.max_version,
@@ -377,7 +386,7 @@ class BaseIntegration(ABC):
             logger.error(
                 "Version validation failed",
                 extra={
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                     "version": current_version,
                     "error": str(e),
                 },
@@ -405,7 +414,10 @@ class BaseIntegration(ABC):
 
             logger.debug(
                 "Integration availability checked",
-                extra={"name": self.integration_name, "available": self._is_available},
+                extra={
+                    "integration_name": self.integration_name,
+                    "available": self._is_available,
+                },
             )
 
             return self._is_available
@@ -413,7 +425,7 @@ class BaseIntegration(ABC):
         except Exception as e:
             logger.debug(
                 "Integration not available",
-                extra={"name": self.integration_name, "error": str(e)},
+                extra={"integration_name": self.integration_name, "error": str(e)},
             )
             self._is_available = False
             return False
@@ -437,7 +449,10 @@ class BaseIntegration(ABC):
 
         logger.debug(
             "Running integration command",
-            extra={"name": self.integration_name, "command": " ".join(command)},
+            extra={
+                "integration_name": self.integration_name,
+                "command": " ".join(command),
+            },
         )
 
         result = run_command(command, cwd=cwd, timeout=timeout, **kwargs)
@@ -446,7 +461,7 @@ class BaseIntegration(ABC):
             logger.warning(
                 "Integration command failed",
                 extra={
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                     "command": " ".join(command),
                     "returncode": result["returncode"],
                     "stderr": result["stderr"],

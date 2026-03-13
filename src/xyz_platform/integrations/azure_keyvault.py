@@ -104,7 +104,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
         logger.debug(
             "Azure Key Vault integration initialized",
             extra={
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
                 "has_vault_url": bool(self.keyvault_url),
             },
         )
@@ -149,7 +149,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             self._info = (
                 f"{self.integration_name} CLI (az) is not installed or not in PATH."
             )
-            logger.warning("Azure CLI not found", extra={"name": self.integration_name})
+            logger.warning("Azure CLI not found", extra={"integration_name": self.integration_name})
             return (
                 False,
                 f"{self.integration_name} CLI (az) is not installed or not in PATH. "
@@ -162,7 +162,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             self._info = version_error
             logger.warning(
                 "Azure CLI version validation failed",
-                extra={"name": self.integration_name, "error": version_error},
+                extra={"integration_name": self.integration_name, "error": version_error},
             )
             return False, version_error
 
@@ -171,7 +171,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             self._info = f"{self.integration_name} Key Vault URL not configured."
             logger.warning(
                 "Azure Key Vault URL not configured",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -188,7 +188,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             self._info = f"{self.integration_name} authentication not configured."
             logger.warning(
                 "Azure authentication not configured",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -200,7 +200,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Azure Key Vault is available and configured",
-            extra={"name": self.integration_name, "version": self.get_version()},
+            extra={"integration_name": self.integration_name, "version": self.get_version()},
         )
         return True, ""
 
@@ -244,7 +244,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
         if not available:
             logger.warning(
                 "Cannot retrieve secret from Azure Key Vault",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             return None
 
@@ -253,7 +253,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             extra={
                 "secret_name": key,
                 "prefer_cli": prefer_cli,
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
             },
         )
 
@@ -263,7 +263,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Secret retrieved from Azure Key Vault via CLI",
-                    extra={"secret_name": key, "name": self.integration_name},
+                    extra={"secret_name": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -272,7 +272,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Secret retrieved from Azure Key Vault via API (CLI token)",
-                    extra={"secret_name": key, "name": self.integration_name},
+                    extra={"secret_name": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -281,7 +281,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Secret retrieved from Azure Key Vault via API (client credentials)",
-                    extra={"secret_name": key, "name": self.integration_name},
+                    extra={"secret_name": key, "integration_name": self.integration_name},
                 )
             return result
         else:
@@ -290,7 +290,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Secret retrieved from Azure Key Vault via API (client credentials)",
-                    extra={"secret_name": key, "name": self.integration_name},
+                    extra={"secret_name": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -299,7 +299,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Secret retrieved from Azure Key Vault via API (CLI token)",
-                    extra={"secret_name": key, "name": self.integration_name},
+                    extra={"secret_name": key, "integration_name": self.integration_name},
                 )
                 return result
 
@@ -308,7 +308,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             if result:
                 logger.info(
                     "Secret retrieved from Azure Key Vault via CLI",
-                    extra={"secret_name": key, "name": self.integration_name},
+                    extra={"secret_name": key, "integration_name": self.integration_name},
                 )
             return result
 
@@ -332,7 +332,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
         if not available:
             logger.debug(
                 "Cannot list secrets from Azure Key Vault",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             return []
 
@@ -341,7 +341,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
             extra={
                 "prefix": prefix,
                 "prefer_cli": prefer_cli,
-                "name": self.integration_name,
+                "integration_name": self.integration_name,
             },
         )
 
@@ -357,7 +357,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
                     extra={
                         "count": len(result),
                         "prefix": prefix,
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 return result
@@ -373,7 +373,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
                     extra={
                         "count": len(result),
                         "prefix": prefix,
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 return result
@@ -388,7 +388,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 extra={
                     "count": len(result),
                     "prefix": prefix,
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
             )
             return result
@@ -404,7 +404,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
                     extra={
                         "count": len(result),
                         "prefix": prefix,
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 return result
@@ -420,7 +420,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
                     extra={
                         "count": len(result),
                         "prefix": prefix,
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 return result
@@ -435,7 +435,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 extra={
                     "count": len(result),
                     "prefix": prefix,
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
             )
             return result
@@ -467,20 +467,20 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 if token:
                     logger.debug(
                         "Successfully obtained Azure access token via CLI",
-                        extra={"name": self.integration_name},
+                        extra={"integration_name": self.integration_name},
                     )
                 return token
 
             logger.warning(
                 "Failed to get Azure access token via CLI",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             return None
 
         except Exception as e:
             logger.warning(
                 "Error getting Azure access token via CLI",
-                extra={"error_type": type(e).__name__, "name": self.integration_name},
+                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
             )
             return None
 
@@ -498,7 +498,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
         try:
             logger.debug(
                 "Authenticating to Azure Key Vault using client credentials",
-                extra={"name": self.integration_name},
+                extra={"integration_name": self.integration_name},
             )
             token_url = (
                 f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
@@ -521,13 +521,13 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 if token:
                     logger.info(
                         "Successfully authenticated to Azure Key Vault using client credentials",
-                        extra={"name": self.integration_name},
+                        extra={"integration_name": self.integration_name},
                     )
                 return token
         except Exception as e:
             logger.warning(
                 "Client credentials authentication to Azure Key Vault failed",
-                extra={"error_type": type(e).__name__, "name": self.integration_name},
+                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
             )
             return None
 

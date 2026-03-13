@@ -78,7 +78,7 @@ class GitIntegration(BaseIntegration):
 
         logger.debug(
             "Git integration initialized",
-            extra={"name": self.integration_name},
+            extra={"integration_name": self.integration_name},
         )
 
     # Base integration methods
@@ -113,7 +113,10 @@ class GitIntegration(BaseIntegration):
         # Check integration availability
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
-            logger.warning("Git CLI not found", extra={"name": self.integration_name})
+            logger.warning(
+                "Git CLI not found",
+                extra={"integration_name": self.integration_name},
+            )
             return (
                 False,
                 f"{self.integration_name} CLI is not installed or not in PATH. "
@@ -126,14 +129,20 @@ class GitIntegration(BaseIntegration):
             self._info = version_error
             logger.warning(
                 "Git version validation failed",
-                extra={"name": self.integration_name, "error": version_error},
+                extra={
+                    "integration_name": self.integration_name,
+                    "error": version_error,
+                },
             )
             return False, version_error
 
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Git is available",
-            extra={"name": self.integration_name, "version": self.get_version()},
+            extra={
+                "integration_name": self.integration_name,
+                "version": self.get_version(),
+            },
         )
         return True, ""
 
@@ -171,7 +180,7 @@ class GitIntegration(BaseIntegration):
         if not available:
             logger.warning(
                 "Cannot clone repository",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             raise RuntimeError(error)
 
@@ -183,7 +192,7 @@ class GitIntegration(BaseIntegration):
                     "target_dir": target_dir,
                     "branch": branch,
                     "depth": depth,
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
             )
 
@@ -208,7 +217,7 @@ class GitIntegration(BaseIntegration):
                     "Git clone completed",
                     extra={
                         "target_dir": target_dir,
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
             else:
@@ -219,7 +228,7 @@ class GitIntegration(BaseIntegration):
                         "target_dir": target_dir,
                         "returncode": result["returncode"],
                         "stderr": result.get("stderr", ""),
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
 
@@ -232,7 +241,7 @@ class GitIntegration(BaseIntegration):
                     "repo_url": repo_url,
                     "target_dir": target_dir,
                     "error_type": type(e).__name__,
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
                 exc_info=True,
             )
@@ -270,7 +279,7 @@ class GitIntegration(BaseIntegration):
                 extra={
                     "working_dir": working_dir,
                     "branch": branch,
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
             )
 
@@ -283,7 +292,10 @@ class GitIntegration(BaseIntegration):
             if result["returncode"] == 0:
                 logger.info(
                     "Git pull completed",
-                    extra={"working_dir": working_dir, "name": self.integration_name},
+                    extra={
+                        "working_dir": working_dir,
+                        "integration_name": self.integration_name,
+                    },
                 )
             else:
                 logger.error(
@@ -292,7 +304,7 @@ class GitIntegration(BaseIntegration):
                         "working_dir": working_dir,
                         "returncode": result["returncode"],
                         "stderr": result.get("stderr", ""),
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
 
@@ -304,7 +316,7 @@ class GitIntegration(BaseIntegration):
                 extra={
                     "working_dir": working_dir,
                     "error_type": type(e).__name__,
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
                 exc_info=True,
             )
@@ -337,7 +349,7 @@ class GitIntegration(BaseIntegration):
                     extra={
                         "working_dir": working_dir,
                         "branch": branch,
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 return branch
@@ -350,7 +362,7 @@ class GitIntegration(BaseIntegration):
                 extra={
                     "working_dir": working_dir,
                     "error": str(e),
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
             )
             return None

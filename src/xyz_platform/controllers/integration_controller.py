@@ -72,7 +72,7 @@ class IntegrationController:
 
             self.logger.debug(
                 f"Auto-registered integration '{name}'",
-                extra={"name": name, "type": integration_type},
+                extra={"integration_name": name, "type": integration_type},
             )
 
             return True
@@ -80,7 +80,11 @@ class IntegrationController:
         except Exception as e:
             self.logger.warning(
                 f"Failed to auto-register integration '{name}': {str(e)}",
-                extra={"name": name, "type": integration_type, "error": str(e)},
+                extra={
+                    "integration_name": name,
+                    "type": integration_type,
+                    "error": str(e),
+                },
             )
             return False
 

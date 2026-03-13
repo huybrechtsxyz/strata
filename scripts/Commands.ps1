@@ -27,4 +27,4 @@ New-Item -Path .app -ItemType Directory -Force # Create .platform directory for 
 
 # Add repo command
 .\scripts\Run.ps1 session add -h # Show help for session add
-.\scripts\Run.ps1 session add config --work-path .app --url "../config" #
+.\scripts\Run.ps1 session add config --work-path .app --url "../config" # Add a local repository to the session

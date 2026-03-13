@@ -78,7 +78,7 @@ class DockerIntegration(BaseIntegration):
 
         logger.debug(
             "Docker integration initialized",
-            extra={"name": self.integration_name},
+            extra={"integration_name": self.integration_name},
         )
 
     # Base integration methods
@@ -114,7 +114,7 @@ class DockerIntegration(BaseIntegration):
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
             logger.warning(
-                "Docker CLI not found", extra={"name": self.integration_name}
+                "Docker CLI not found", extra={"integration_name": self.integration_name}
             )
             return (
                 False,
@@ -128,14 +128,14 @@ class DockerIntegration(BaseIntegration):
             self._info = version_error
             logger.warning(
                 "Docker version validation failed",
-                extra={"name": self.integration_name, "error": version_error},
+                extra={"integration_name": self.integration_name, "error": version_error},
             )
             return False, version_error
 
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Docker is available",
-            extra={"name": self.integration_name, "version": self.get_version()},
+            extra={"integration_name": self.integration_name, "version": self.get_version()},
         )
         return True, ""
 
@@ -175,7 +175,7 @@ class DockerIntegration(BaseIntegration):
         if not available:
             logger.warning(
                 "Cannot build image",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             raise RuntimeError(error)
 
@@ -186,7 +186,7 @@ class DockerIntegration(BaseIntegration):
                     "context_dir": context_dir,
                     "tag": tag,
                     "dockerfile": dockerfile,
-                    "name": self.integration_name,
+                    "integration_name": self.integration_name,
                 },
             )
 
@@ -217,14 +217,14 @@ class DockerIntegration(BaseIntegration):
                     extra={
                         "tag": tag,
                         "stderr": result["stderr"],
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 raise RuntimeError(error_msg)
 
             logger.info(
                 "Docker image built successfully",
-                extra={"tag": tag, "name": self.integration_name},
+                extra={"tag": tag, "integration_name": self.integration_name},
             )
 
             return result
@@ -232,7 +232,7 @@ class DockerIntegration(BaseIntegration):
         except Exception as e:
             logger.error(
                 "Failed to build Docker image",
-                extra={"tag": tag, "error": str(e), "name": self.integration_name},
+                extra={"tag": tag, "error": str(e), "integration_name": self.integration_name},
                 exc_info=True,
             )
             raise
@@ -277,14 +277,14 @@ class DockerIntegration(BaseIntegration):
         if not available:
             logger.warning(
                 "Cannot run container",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             raise RuntimeError(error)
 
         try:
             logger.debug(
                 "Running Docker container",
-                extra={"image": image, "name": self.integration_name},
+                extra={"image": image, "integration_name": self.integration_name},
             )
 
             args = ["run"]
@@ -332,14 +332,14 @@ class DockerIntegration(BaseIntegration):
                     extra={
                         "image": image,
                         "stderr": result["stderr"],
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 raise RuntimeError(error_msg)
 
             logger.info(
                 "Docker container started successfully",
-                extra={"image": image, "name": self.integration_name},
+                extra={"image": image, "integration_name": self.integration_name},
             )
 
             return result
@@ -347,7 +347,7 @@ class DockerIntegration(BaseIntegration):
         except Exception as e:
             logger.error(
                 "Failed to run Docker container",
-                extra={"image": image, "error": str(e), "name": self.integration_name},
+                extra={"image": image, "error": str(e), "integration_name": self.integration_name},
                 exc_info=True,
             )
             raise
@@ -378,14 +378,14 @@ class DockerIntegration(BaseIntegration):
         if not available:
             logger.warning(
                 "Cannot push image",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             raise RuntimeError(error)
 
         try:
             logger.debug(
                 "Pushing Docker image",
-                extra={"image": image, "name": self.integration_name},
+                extra={"image": image, "integration_name": self.integration_name},
             )
 
             args = ["push", image]
@@ -399,14 +399,14 @@ class DockerIntegration(BaseIntegration):
                     extra={
                         "image": image,
                         "stderr": result["stderr"],
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 raise RuntimeError(error_msg)
 
             logger.info(
                 "Docker image pushed successfully",
-                extra={"image": image, "name": self.integration_name},
+                extra={"image": image, "integration_name": self.integration_name},
             )
 
             return result
@@ -414,7 +414,7 @@ class DockerIntegration(BaseIntegration):
         except Exception as e:
             logger.error(
                 "Failed to push Docker image",
-                extra={"image": image, "error": str(e), "name": self.integration_name},
+                extra={"image": image, "error": str(e), "integration_name": self.integration_name},
                 exc_info=True,
             )
             raise
@@ -443,14 +443,14 @@ class DockerIntegration(BaseIntegration):
         if not available:
             logger.warning(
                 "Cannot pull image",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             raise RuntimeError(error)
 
         try:
             logger.debug(
                 "Pulling Docker image",
-                extra={"image": image, "name": self.integration_name},
+                extra={"image": image, "integration_name": self.integration_name},
             )
 
             args = ["pull", image]
@@ -464,14 +464,14 @@ class DockerIntegration(BaseIntegration):
                     extra={
                         "image": image,
                         "stderr": result["stderr"],
-                        "name": self.integration_name,
+                        "integration_name": self.integration_name,
                     },
                 )
                 raise RuntimeError(error_msg)
 
             logger.info(
                 "Docker image pulled successfully",
-                extra={"image": image, "name": self.integration_name},
+                extra={"image": image, "integration_name": self.integration_name},
             )
 
             return result
@@ -479,7 +479,7 @@ class DockerIntegration(BaseIntegration):
         except Exception as e:
             logger.error(
                 "Failed to pull Docker image",
-                extra={"image": image, "error": str(e), "name": self.integration_name},
+                extra={"image": image, "error": str(e), "integration_name": self.integration_name},
                 exc_info=True,
             )
             raise
@@ -508,7 +508,7 @@ class DockerIntegration(BaseIntegration):
         if not available:
             logger.warning(
                 "Cannot list containers",
-                extra={"error": error, "name": self.integration_name},
+                extra={"error": error, "integration_name": self.integration_name},
             )
             raise RuntimeError(error)
 
@@ -524,7 +524,7 @@ class DockerIntegration(BaseIntegration):
                 error_msg = f"Docker ps failed: {result['stderr']}"
                 logger.error(
                     "Docker ps failed",
-                    extra={"stderr": result["stderr"], "name": self.integration_name},
+                    extra={"stderr": result["stderr"], "integration_name": self.integration_name},
                 )
                 raise RuntimeError(error_msg)
 
@@ -533,7 +533,7 @@ class DockerIntegration(BaseIntegration):
         except Exception as e:
             logger.error(
                 "Failed to list Docker containers",
-                extra={"error": str(e), "name": self.integration_name},
+                extra={"error": str(e), "integration_name": self.integration_name},
                 exc_info=True,
             )
             raise
