@@ -283,8 +283,8 @@ class BaseIntegration(ABC):
             version_cmd = self.get_version_command()
             result = run_command(version_cmd, timeout=5)
 
-            if result["returncode"] == 0:
-                self._version = self.parse_version(result["stdout"])
+            if result.returncode == 0:
+                self._version = self.parse_version(result.stdout)
                 logger.debug(
                     "Integration version detected",
                     extra={
@@ -298,7 +298,7 @@ class BaseIntegration(ABC):
                     "Failed to get integration version",
                     extra={
                         "integration_name": self.integration_name,
-                        "stderr": result["stderr"],
+                        "stderr": result.stderr,
                     },
                 )
                 return None
@@ -410,7 +410,7 @@ class BaseIntegration(ABC):
         try:
             # Try running version command
             result = run_command(self.get_version_command(), timeout=5)
-            self._is_available = result["returncode"] == 0
+            self._is_available = result.returncode == 0
 
             logger.debug(
                 "Integration availability checked",
@@ -457,14 +457,14 @@ class BaseIntegration(ABC):
 
         result = run_command(command, cwd=cwd, timeout=timeout, **kwargs)
 
-        if result["returncode"] != 0:
+        if result.returncode != 0:
             logger.warning(
                 "Integration command failed",
                 extra={
                     "integration_name": self.integration_name,
                     "command": " ".join(command),
-                    "returncode": result["returncode"],
-                    "stderr": result["stderr"],
+                    "returncode": result.returncode,
+                    "stderr": result.stderr,
                 },
             )
 

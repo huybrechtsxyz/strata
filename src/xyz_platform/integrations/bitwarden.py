@@ -229,9 +229,9 @@ class BitwardenIntegration(StoreIntegration):
                 args=["secret", "get", key], timeout=timeout, env=env
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
+            if result.returncode == 0 and result.stdout:
                 # Parse JSON output
-                data = json.loads(result["stdout"])
+                data = json.loads(result.stdout)
                 logger.info(
                     "Secret retrieved from Bitwarden",
                     extra={"secret_id": key, "integration_name": self.integration_name},
@@ -242,7 +242,7 @@ class BitwardenIntegration(StoreIntegration):
                 "Failed to get secret from Bitwarden",
                 extra={
                     "secret_id": key,
-                    "stderr": result["stderr"],
+                    "stderr": result.stderr,
                     "integration_name": self.integration_name,
                 },
             )
@@ -308,9 +308,9 @@ class BitwardenIntegration(StoreIntegration):
                 args=["secret", "list"], timeout=timeout, env=env
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
+            if result.returncode == 0 and result.stdout:
                 # Parse JSON output - returns array of secrets
-                secrets = json.loads(result["stdout"])
+                secrets = json.loads(result.stdout)
                 logger.info(
                     "Listed secrets from Bitwarden",
                     extra={"count": len(secrets), "integration_name": self.integration_name},
@@ -319,7 +319,7 @@ class BitwardenIntegration(StoreIntegration):
 
             logger.error(
                 "Failed to list secrets from Bitwarden",
-                extra={"stderr": result["stderr"], "integration_name": self.integration_name},
+                extra={"stderr": result.stderr, "integration_name": self.integration_name},
             )
             return None
 

@@ -503,15 +503,15 @@ class VaultIntegration(StoreIntegration):
                 timeout=timeout,
             )
 
-            if result["returncode"] != 0:
+            if result.returncode != 0:
                 return None
 
             if field:
                 # CLI returns just the field value
-                return result["stdout"].strip() if result["stdout"] else None
+                return result.stdout.strip() if result.stdout else None
             else:
                 # Parse JSON response
-                secret_data = json.loads(result["stdout"])
+                secret_data = json.loads(result.stdout)
                 return secret_data.get("data", {}).get("data", {})
         except Exception:
             return None
@@ -621,8 +621,8 @@ class VaultIntegration(StoreIntegration):
                 timeout=timeout,
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
-                return json.loads(result["stdout"])
+            if result.returncode == 0 and result.stdout:
+                return json.loads(result.stdout)
 
             return None
 

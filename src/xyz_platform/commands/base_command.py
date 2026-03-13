@@ -18,12 +18,14 @@ from typing import Any, Dict, List, Optional
 
 import click
 
-from xyz_platform.logger.logger import get_logger
+from xyz_platform.logger.logger import get_logger, reconfigure_logging
 from xyz_platform.utils import system
 
 
 class BaseCommand:
     """Base command class for the XYZ Platform. All CLI commands should inherit from this class to ensure consistent behavior and shared functionality."""
+
+    _active_logging_config_path: Optional[str] = None
 
     def __init__(
         self,
@@ -163,6 +165,8 @@ class BaseCommand:
             bool: Success status (errors stored in self._errors)
         """
         try:
+            self._configure_session_logging()
+
             self._start_time = datetime.now()
             self.logger.debug(
                 "Initializing command",
@@ -183,6 +187,43 @@ class BaseCommand:
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False
+
+    def _configure_session_logging(self) -> None:
+        """
+        Auto-configure logging from session-specific YAML if available.
+
+        Looks for `.xyz-platform/logging.yaml` under `self._work_path`.
+        Reconfigures logging only when the discovered config path changes.
+        """
+        try:
+            session_logging_config = self._work_path / ".xyz-platform" / "logging.yaml"
+
+            if not session_logging_config.exists():
+                return
+
+            config_path = str(session_logging_config.resolve())
+            if BaseCommand._active_logging_config_path == config_path:
+                return
+
+            reconfigure_logging(config_path=config_path)
+            BaseCommand._active_logging_config_path = config_path
+
+            # Refresh logger after reconfiguration
+            self.logger = get_logger(self.__class__.__module__)
+            self.logger.debug(
+                "Session logging configuration loaded",
+                extra={
+                    "command_class": self.__class__.__name__,
+                    "logging_config_path": config_path,
+                },
+            )
+
+        except Exception as e:
+            # Logging configuration should not block command execution
+            self.logger.warning(
+                f"Failed to auto-configure session logging: {str(e)}",
+                extra={"command_class": self.__class__.__name__},
+            )
 
     def _before_execute(self, message: str = None) -> bool:
         """

@@ -212,7 +212,7 @@ class GitIntegration(BaseIntegration):
             # Execute git command
             result = self._run_integration(args, timeout=timeout)
 
-            if result["returncode"] == 0:
+            if result.returncode == 0:
                 logger.info(
                     "Git clone completed",
                     extra={
@@ -226,8 +226,8 @@ class GitIntegration(BaseIntegration):
                     extra={
                         "repo_url": repo_url,
                         "target_dir": target_dir,
-                        "returncode": result["returncode"],
-                        "stderr": result.get("stderr", ""),
+                        "returncode": result.returncode,
+                        "stderr": result.stderr,
                         "integration_name": self.integration_name,
                     },
                 )
@@ -289,7 +289,7 @@ class GitIntegration(BaseIntegration):
 
             result = self._run_integration(args, cwd=working_dir, timeout=timeout)
 
-            if result["returncode"] == 0:
+            if result.returncode == 0:
                 logger.info(
                     "Git pull completed",
                     extra={
@@ -302,8 +302,8 @@ class GitIntegration(BaseIntegration):
                     "Git pull failed",
                     extra={
                         "working_dir": working_dir,
-                        "returncode": result["returncode"],
-                        "stderr": result.get("stderr", ""),
+                        "returncode": result.returncode,
+                        "stderr": result.stderr,
                         "integration_name": self.integration_name,
                     },
                 )
@@ -342,8 +342,8 @@ class GitIntegration(BaseIntegration):
                 ["branch", "--show-current"], cwd=working_dir, timeout=timeout
             )
 
-            if result["returncode"] == 0:
-                branch = result["stdout"].strip()
+            if result.returncode == 0:
+                branch = result.stdout.strip()
                 logger.debug(
                     "Current branch retrieved",
                     extra={

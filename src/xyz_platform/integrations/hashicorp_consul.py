@@ -361,8 +361,8 @@ class ConsulIntegration(StoreIntegration):
                 timeout=timeout,
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
-                return result["stdout"].strip()
+            if result.returncode == 0 and result.stdout:
+                return result.stdout.strip()
 
             return None
 
@@ -425,9 +425,9 @@ class ConsulIntegration(StoreIntegration):
                 timeout=timeout,
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
+            if result.returncode == 0 and result.stdout:
                 return [
-                    k.strip() for k in result["stdout"].strip().split("\n") if k.strip()
+                    k.strip() for k in result.stdout.strip().split("\n") if k.strip()
                 ]
 
             return None

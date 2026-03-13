@@ -565,8 +565,8 @@ class AzureAppConfigIntegration(StoreIntegration):
                 timeout=30,
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
-                token_data = json.loads(result["stdout"])
+            if result.returncode == 0 and result.stdout:
+                token_data = json.loads(result.stdout)
                 token = token_data.get("accessToken")
                 if token:
                     logger.debug(
@@ -691,8 +691,8 @@ class AzureAppConfigIntegration(StoreIntegration):
                 timeout=timeout,
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
-                return result["stdout"].strip()
+            if result.returncode == 0 and result.stdout:
+                return result.stdout.strip()
 
             return None
 
@@ -791,8 +791,8 @@ class AzureAppConfigIntegration(StoreIntegration):
                 timeout=timeout,
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
-                return json.loads(result["stdout"])
+            if result.returncode == 0 and result.stdout:
+                return json.loads(result.stdout)
 
             return []
 

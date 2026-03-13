@@ -587,7 +587,7 @@ class SessionController:
                 timeout=300,  # 5 minute timeout
             )
 
-            if result["returncode"] != 0:
+            if result.returncode != 0:
                 error_msg = f"Git clone failed: {result.get('stderr', 'Unknown error')}"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)

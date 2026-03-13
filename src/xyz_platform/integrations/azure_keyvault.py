@@ -461,8 +461,8 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 timeout=30,
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
-                token_data = json.loads(result["stdout"])
+            if result.returncode == 0 and result.stdout:
+                token_data = json.loads(result.stdout)
                 token = token_data.get("accessToken")
                 if token:
                     logger.debug(
@@ -565,8 +565,8 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 timeout=timeout,
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
-                return result["stdout"].strip()
+            if result.returncode == 0 and result.stdout:
+                return result.stdout.strip()
 
             return None
 
@@ -636,9 +636,9 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 timeout=timeout,
             )
 
-            if result["returncode"] == 0 and result["stdout"]:
+            if result.returncode == 0 and result.stdout:
                 # Split output by newlines and filter out empty strings
-                secrets = [s.strip() for s in result["stdout"].split("\n") if s.strip()]
+                secrets = [s.strip() for s in result.stdout.split("\n") if s.strip()]
                 return secrets
 
             return []
