@@ -110,7 +110,7 @@ class AddSessionCommand(BaseSessionCommand):
             # Initialize
             if not self._initialize(operation="session_add"):
                 self.logger.error(f"Initialization failed in {self.__class__.__name__}")
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Initialization failed")
                 self._finalize(operation="session_add", success=False)
                 return False
@@ -120,7 +120,7 @@ class AddSessionCommand(BaseSessionCommand):
                 self.logger.error(
                     f"Pre-execution validation failed in {self.__class__.__name__}"
                 )
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Pre-execution validation failed")
                 self._finalize(operation="session_add", success=False)
                 return False
@@ -144,7 +144,7 @@ class AddSessionCommand(BaseSessionCommand):
 
             if not success:
                 self.logger.error(f"Item add failed in {self.__class__.__name__}")
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Item add failed")
                 self._finalize(operation="session_add", success=False)
                 return False
@@ -154,7 +154,7 @@ class AddSessionCommand(BaseSessionCommand):
                 self.logger.error(
                     f"Post-execution hook failed in {self.__class__.__name__}"
                 )
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Post-execution hook failed")
                 self._finalize(operation="session_add", success=False)
                 return False
@@ -162,7 +162,7 @@ class AddSessionCommand(BaseSessionCommand):
             # Finalize
             if not self._finalize(operation="session_add", success=True):
                 self.logger.error(f"Finalization failed in {self.__class__.__name__}")
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Finalization failed")
                 return False
 
@@ -237,13 +237,13 @@ class AddSessionCommand(BaseSessionCommand):
         )
 
         # Display added item (currently repository)
-        if self._allow_output and self._added_repo:
+        if not self._is_quiet() and self._added_repo:
             # Always populate structured output data
             self._output_data = {
                 k: v for k, v in self._added_repo.items() if v is not None
             }
 
-            if not self._is_structured_output():
+            if self._is_console_output():
                 click.echo("\n📦  Added item:")
                 if self._added_repo.get("name"):
                     click.echo(f"    • Name:   {self._added_repo['name']}")

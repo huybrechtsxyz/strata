@@ -66,7 +66,7 @@ class HelpCommand(BaseCommand):
             # Initialize
             if not self._initialize():
                 self.logger.error(f"Initialization failed in {self.__class__.__name__}")
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Initialization failed")
                 self._finalize(success=False)
                 return False
@@ -76,7 +76,7 @@ class HelpCommand(BaseCommand):
                 self.logger.error(
                     f"Pre-execution validation failed in {self.__class__.__name__}"
                 )
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Pre-execution validation failed")
                 self._finalize(success=False)
                 return False
@@ -87,7 +87,7 @@ class HelpCommand(BaseCommand):
                 self.logger.error(
                     f"Failed to display help for the requested topic in {self.__class__.__name__}"
                 )
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Failed to display help for the requested topic")
                 self._finalize(success=False)
                 return False
@@ -97,7 +97,7 @@ class HelpCommand(BaseCommand):
                 self.logger.error(
                     f"Post-execution hook failed in {self.__class__.__name__}"
                 )
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Post-execution hook failed")
                 self._finalize(success=False)
                 return False
@@ -105,7 +105,7 @@ class HelpCommand(BaseCommand):
             # Finalize
             if not self._finalize(success=True):
                 self.logger.error(f"Finalization failed in {self.__class__.__name__}")
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Finalization failed")
                 return False
 

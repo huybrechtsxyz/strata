@@ -69,7 +69,7 @@ class InitSessionCommand(BaseSessionCommand):
             # Initialize
             if not self._initialize(operation="session_init"):
                 self.logger.error(f"Initialization failed in {self.__class__.__name__}")
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Initialization failed")
                 self._finalize(operation="session_init", success=False)
                 return False
@@ -79,7 +79,7 @@ class InitSessionCommand(BaseSessionCommand):
                 self.logger.error(
                     f"Pre-execution validation failed in {self.__class__.__name__}"
                 )
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Pre-execution validation failed")
                 self._finalize(operation="session_init", success=False)
                 return False
@@ -98,7 +98,7 @@ class InitSessionCommand(BaseSessionCommand):
                 self.logger.error(
                     f"Session initialization failed in {self.__class__.__name__}"
                 )
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Session initialization failed")
                 self._finalize(operation="session_init", success=False)
                 return False
@@ -108,7 +108,7 @@ class InitSessionCommand(BaseSessionCommand):
                 self.logger.error(
                     f"Post-execution hook failed in {self.__class__.__name__}"
                 )
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Post-execution hook failed")
                 self._finalize(operation="session_init", success=False)
                 return False
@@ -116,7 +116,7 @@ class InitSessionCommand(BaseSessionCommand):
             # Finalize
             if not self._finalize(operation="session_init", success=True):
                 self.logger.error(f"Finalization failed in {self.__class__.__name__}")
-                if self._allow_output:
+                if self._is_console_output():
                     click.echo("\n❌  Finalization failed")
                 return False
 
@@ -182,14 +182,14 @@ class InitSessionCommand(BaseSessionCommand):
         )
 
         # Display created paths
-        if self._allow_output and self._created_paths:
+        if not self._is_quiet() and self._created_paths:
             # Always populate structured output data
             self._output_data = {
                 k: str(v) for k, v in self._created_paths.items() if v is not None
             }
             self._output_data["workspace_name"] = self._workspace_name
 
-            if not self._is_structured_output():
+            if self._is_console_output():
                 click.echo("\n📁  Created session structure:")
                 if self._created_paths.get("session_folder"):
                     click.echo(
@@ -215,7 +215,7 @@ class InitSessionCommand(BaseSessionCommand):
                 self.logger.info(f"Configuring logging with: {logging_config_path}")
                 configure_logging(config_path=logging_config_path)
 
-                if self._allow_output and not self._is_structured_output():
+                if self._is_console_output():
                     click.echo("\n✅  Logging configured successfully\n")
 
                 self._messages.append(f"Logging configured with: {logging_config_path}")

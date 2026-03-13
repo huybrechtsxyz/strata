@@ -30,14 +30,14 @@ Remove-Item -Path .app -Recurse -Force
 .\scripts\Run.ps1 session init --name platform --work-path .app
 .\scripts\Run.ps1 session init --name platform --work-path .app --output json
 .\scripts\Run.ps1 session init --name platform --work-path .app --output text
-.\scripts\Run.ps1 session init --name platform --work-path .app --output raw
 .\scripts\Run.ps1 session init --name platform --work-path .app --verbose
 .\scripts\Run.ps1 session init --name platform --work-path .app --quiet
-
 
 # Add repo command
 .\scripts\Run.ps1 session add -h
 .\scripts\Run.ps1 session add config --work-path .app --url "../config"
 .\scripts\Run.ps1 session add config --work-path .app --url "../config" --output json
 .\scripts\Run.ps1 session add config --work-path .app --url "../config" --output text
-.\scripts\Run.ps1 session add config --work-path .app --url "../config" --output raw
+.\scripts\Run.ps1 session add config --work-path .app --url "../config" --verbose
+.\scripts\Run.ps1 session add config --work-path .app --url "../config" --quiet
+

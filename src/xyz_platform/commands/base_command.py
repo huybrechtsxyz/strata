@@ -62,9 +62,6 @@ class BaseCommand:
         self._output_format = output or ""
         self._output_verbose = verbose or False
         self._output_quiet = quiet or False
-        self._structured_output = bool(
-            self._output_format
-        )  # any non-empty format → structured
 
         # Correlation IDs — set during _initialize()
         self.session_id: Optional[str] = None
@@ -72,17 +69,6 @@ class BaseCommand:
 
         # Integration controller (lazy-loaded)
         self._integration_controller: Optional[object] = None
-
-        # Determine output behavior based on quiet flag
-        # Allowed combinations:
-        #   --output json/text alone → structured output, no header/footer
-        #   --output json --verbose → structured output + debug logs
-        #   --quiet alone → silent execution (no output)
-        #   (no flags) → default human-readable output
-        # Blocked by validators in cli_common.py:
-        #   --verbose --quiet → contradictory
-        #   --output json --quiet → pointless
-        self._allow_output = not self._output_quiet
 
     @abstractmethod
     def execute(self) -> bool:
@@ -192,7 +178,7 @@ class BaseCommand:
                 },
             )
 
-            if show_header and self._allow_output and not self._is_structured_output():
+            if show_header and self._is_console_output():
                 self.ShowConsoleHeader()
 
             self.logger.debug(
@@ -308,9 +294,21 @@ class BaseCommand:
         )
         return True
 
+    def _is_quiet(self) -> bool:
+        """Return True when --quiet is active: suppress all output."""
+        return self._output_quiet
+
+    def _is_verbose(self) -> bool:
+        """Return True when --verbose is active: include debug log replay."""
+        return self._output_verbose
+
     def _is_structured_output(self) -> bool:
-        """Return True when any explicit --output format is active (json, text, etc.)."""
-        return self._structured_output
+        """Return True when --output <format> is active: emit machine-readable data (json, text, etc.)."""
+        return bool(self._output_format)
+
+    def _is_console_output(self) -> bool:
+        """Return True for default human-readable console output (no --quiet, no explicit --output format)."""
+        return not self._output_quiet and not bool(self._output_format)
 
     def _finalize(
         self, operation: str = None, success: bool = None, show_footer: bool = True
@@ -322,7 +320,7 @@ class BaseCommand:
             bool: Success status (errors stored in self._errors)
         """
 
-        if self._allow_output and self._is_structured_output():
+        if self._is_structured_output():
             # ── Structured output (--output json / text) ─────────────────────
             envelope = {
                 "success": bool(success),
@@ -347,7 +345,7 @@ class BaseCommand:
                     for e in envelope["errors"]:
                         click.echo(f"  - {e}")
 
-        elif show_footer and self._allow_output:
+        elif show_footer and self._is_console_output():
             # ── Human-readable output (default) ──────────────────────────────
             # Show messages
             if self._messages and len(self._messages) > 0:
@@ -364,7 +362,7 @@ class BaseCommand:
                 click.echo("")
 
             # Show verbose logging
-            if self._output_verbose:
+            if self._is_verbose():
                 click.echo("🔍  Verbose logs enabled (see console output for details)")
                 session_controller = SessionController()
                 success, log_entries, errors = session_controller.get_logs(
