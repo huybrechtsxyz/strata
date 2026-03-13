@@ -83,7 +83,7 @@ class HelpCommand(BaseCommand):
 
             # Show help documentation
             return_code = self._show_helpdoc()
-            if return_code is 1:
+            if return_code == 1:
                 self.logger.error(
                     f"Failed to display help for the requested topic in {self.__class__.__name__}"
                 )
