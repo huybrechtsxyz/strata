@@ -9,15 +9,13 @@ Description   : Command to initialize a new XYZ Platform session workspace.
 ===============================================================================
 """
 
-import json
-import os
-from pathlib import Path
 from typing import Optional
 
 import click
-import yaml
 
 from xyz_platform.commands.session.base_session_command import BaseSessionCommand
+from xyz_platform.controllers.session_controller import SessionController
+from xyz_platform.logger.logger import configure_logging
 
 
 class InitSessionCommand(BaseSessionCommand):
@@ -26,9 +24,9 @@ class InitSessionCommand(BaseSessionCommand):
 
     This command prepares a workspace for XYZ Platform development by:
     - Creating the workspace folder structure
-    - Generating a VSCode workspace file
+    - Generating a VSCode workspace file (from template)
     - Creating .xyz-platform configuration directory
-    - Initializing session.yaml state file
+    - Initializing session.yaml state file (from template)
     """
 
     def __init__(
@@ -50,13 +48,15 @@ class InitSessionCommand(BaseSessionCommand):
             quiet: Disable all console output
         """
         super().__init__(
-            work_path=work_path, output=output, verbose=verbose, quiet=quiet
+            work_path=work_path,
+            output=output,
+            verbose=verbose,
+            quiet=quiet,
         )
 
         self._workspace_name = name
-        self._session_folder = self._work_path / ".xyz-platform"
-        self._session_file = self._session_folder / "session.yaml"
-        self._workspace_file = self._work_path / f"{name}.code-workspace"
+        self._controller = SessionController()
+        self._created_paths = {}
 
     def execute(self) -> bool:
         """
@@ -71,7 +71,7 @@ class InitSessionCommand(BaseSessionCommand):
                 self.logger.error(f"Initialization failed in {self.__class__.__name__}")
                 if self._allow_output:
                     click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
+                self._finalize(operation="session_init", success=False)
                 return False
 
             # Before
@@ -81,17 +81,26 @@ class InitSessionCommand(BaseSessionCommand):
                 )
                 if self._allow_output:
                     click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
+                self._finalize(operation="session_init", success=False)
                 return False
 
-            # Create workspace structure
-            if not self._create_workspace_structure():
+            # Execute via controller
+            success, self._created_paths = self._controller.initialize_session(
+                workspace_name=self._workspace_name,
+                work_path=self._work_path,
+            )
+
+            # Copy controller errors/messages to command
+            self._errors.extend(self._controller.get_errors())
+            self._messages.extend(self._controller.get_messages())
+
+            if not success:
                 self.logger.error(
-                    f"Failed to create workspace structure in {self.__class__.__name__}"
+                    f"Session initialization failed in {self.__class__.__name__}"
                 )
                 if self._allow_output:
-                    click.echo("\n❌  Failed to create workspace structure")
-                self._finalize(success=False)
+                    click.echo("\n❌  Session initialization failed")
+                self._finalize(operation="session_init", success=False)
                 return False
 
             # After
@@ -101,7 +110,7 @@ class InitSessionCommand(BaseSessionCommand):
                 )
                 if self._allow_output:
                     click.echo("\n❌  Post-execution hook failed")
-                self._finalize(success=False)
+                self._finalize(operation="session_init", success=False)
                 return False
 
             # Finalize
@@ -117,7 +126,7 @@ class InitSessionCommand(BaseSessionCommand):
             error_msg = f"Failed to initialize session workspace: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
-            self._finalize(success=False)
+            self._finalize(operation="session_init", success=False)
             return False
 
     def _initialize(self, operation: str = None) -> bool:
@@ -153,32 +162,6 @@ class InitSessionCommand(BaseSessionCommand):
         if not super()._before_execute():
             return False
 
-        # Validate work path exists
-        if not self._work_path.exists():
-            error_msg = f"Work path does not exist: {self._work_path}"
-            self.logger.error(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-        # Validate work path is a directory
-        if not self._work_path.is_dir():
-            error_msg = f"Work path is not a directory: {self._work_path}"
-            self.logger.error(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-        # Check if workspace already exists
-        if self._workspace_file.exists():
-            warning_msg = f"Workspace file already exists: {self._workspace_file}"
-            self.logger.warning(warning_msg)
-            self._messages.append(warning_msg)
-
-        # Check if .xyz-platform folder already exists
-        if self._session_folder.exists():
-            warning_msg = f".xyz-platform folder already exists: {self._session_folder}"
-            self.logger.warning(warning_msg)
-            self._messages.append(warning_msg)
-
         self.logger.debug(
             "Session init pre-execution validation passed",
             extra={"command_class": self.__class__.__name__},
@@ -186,99 +169,68 @@ class InitSessionCommand(BaseSessionCommand):
 
         return True
 
-    def _create_workspace_structure(self) -> bool:
+    def _after_execute(self) -> bool:
         """
-        Create the workspace folder structure and files.
+        Post-execution logic - display created paths.
 
         Returns:
             bool: Success status (errors stored in self._errors)
         """
-        try:
-            # Create .xyz-platform folder
-            self.logger.info(f"Creating .xyz-platform folder: {self._session_folder}")
-            self._session_folder.mkdir(parents=True, exist_ok=True)
+        self.logger.debug(
+            "Session init post-execution",
+            extra={"command_class": self.__class__.__name__},
+        )
 
-            if self._allow_output:
-                click.echo(f"✅  Created .xyz-platform folder: {self._session_folder}")
+        # Display created paths
+        if self._allow_output and self._created_paths:
+            click.echo("\n📁  Created session structure:")
+            if self._created_paths.get("session_folder"):
+                click.echo(
+                    f"   • Session folder: {self._created_paths['session_folder']}"
+                )
+            if self._created_paths.get("session_file"):
+                click.echo(
+                    f"   • Session file:   {self._created_paths['session_file']}"
+                )
+            if self._created_paths.get("workspace_file"):
+                click.echo(
+                    f"   • Workspace file: {self._created_paths['workspace_file']}"
+                )
+            if self._created_paths.get("logging_config"):
+                click.echo(
+                    f"   • Logging config: {self._created_paths['logging_config']}"
+                )
 
-            # Create VSCode workspace file
-            self.logger.info(f"Creating VSCode workspace file: {self._workspace_file}")
-            workspace_content = self._generate_workspace_file()
-            with open(self._workspace_file, "w", encoding="utf-8") as f:
-                json.dump(workspace_content, f, indent=2)
+        # Configure logging with the new logging.yaml
+        if self._created_paths.get("logging_config"):
+            try:
+                logging_config_path = str(self._created_paths["logging_config"])
+                self.logger.info(f"Configuring logging with: {logging_config_path}")
+                configure_logging(config_path=logging_config_path)
 
-            if self._allow_output:
-                click.echo(f"✅  Created VSCode workspace file: {self._workspace_file}")
+                if self._allow_output:
+                    click.echo("\n✅  Logging configured successfully")
 
-            # Create session.yaml
-            self.logger.info(f"Creating session state file: {self._session_file}")
-            session_content = self._generate_session_file()
-            with open(self._session_file, "w", encoding="utf-8") as f:
-                yaml.dump(session_content, f, default_flow_style=False, sort_keys=False)
+                self._messages.append(f"Logging configured with: {logging_config_path}")
+            except Exception as e:
+                error_msg = f"Failed to configure logging: {str(e)}"
+                self.logger.warning(error_msg)
+                self._messages.append(error_msg)
 
-            if self._allow_output:
-                click.echo(f"✅  Created session state file: {self._session_file}")
+        # Call parent last
+        return super()._after_execute()
 
-            self._messages.append(
-                f"Session workspace '{self._workspace_name}' initialized successfully"
-            )
-
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to create workspace structure: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-    def _generate_workspace_file(self) -> dict:
+    def _finalize(self, operation: str = None, success: bool = None) -> bool:
         """
-        Generate VSCode workspace file content.
+        Finalize session init command.
 
         Returns:
-            dict: Workspace file content
+            bool: Success status (errors stored in self._errors)
         """
-        return {
-            "folders": [
-                {"path": ".", "name": self._workspace_name},
-            ],
-            "settings": {
-                "files.exclude": {
-                    "**/__pycache__": True,
-                    "**/*.pyc": True,
-                    ".xyz-platform": False,
-                }
-            },
-            "extensions": {
-                "recommendations": [
-                    "ms-python.python",
-                    "ms-python.vscode-pylance",
-                    "ms-azuretools.vscode-docker",
-                ]
-            },
-        }
+        self.logger.debug(
+            "Session init command finalized",
+            extra={"command_class": self.__class__.__name__},
+        )
 
-    def _generate_session_file(self) -> dict:
-        """
-        Generate session.yaml state file content.
-
-        Returns:
-            dict: Session state content
-        """
-        from datetime import datetime
-
-        return {
-            "session": {
-                "name": self._workspace_name,
-                "created": datetime.now().isoformat(),
-                "work_path": str(self._work_path.absolute()),
-            },
-            "workspace": {
-                "active": None,
-                "config_path": None,
-            },
-            "environment": {
-                "active": None,
-            },
-            "repositories": [],
-        }
+        # Call parent last
+        return super()._finalize(operation=operation, success=success)

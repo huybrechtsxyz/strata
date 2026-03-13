@@ -1,0 +1,19 @@
+{
+  "session": {
+    "name": "{{workspace_name}}",
+    "created": "{{created_timestamp}}",
+    "work_path": "{{work_path}}"
+  },
+  "logging": {
+    "config_path": "{{logging_config_path}}",
+    "log_path": "{{log_path}}"
+  },
+  "workspace": {
+    "active": null,
+    "config_path": null
+  },
+  "environment": {
+    "active": null
+  },
+  "repositories": []
+}

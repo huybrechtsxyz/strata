@@ -1,0 +1,31 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "{{workspace_name}}"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/*.pyc": true,
+      "**/*.pyo": true,
+      ".xyz-platform": false
+    },
+    "python.analysis.typeCheckingMode": "basic",
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "editor.formatOnSave": true
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "ms-azuretools.vscode-docker",
+      "redhat.vscode-yaml",
+      "editorconfig.editorconfig",
+      "ms-vscode.powershell",
+      "mads-hartmann.bash-ide-vscode"
+    ]
+  }
+}
