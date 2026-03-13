@@ -171,7 +171,7 @@ class SessionController:
 
             # Auto-detect repository type if not provided
             if not repo_type:
-                repo_type = self._detect_repo_type(url)
+                repo_type = self._detect_repo_type(url, work_path)
 
             self.logger.info(
                 f"Adding repository '{name}' from '{url}' (type: {repo_type})"
@@ -188,7 +188,8 @@ class SessionController:
                 ):
                     return False, {}
             elif repo_type == "local":
-                if not self._copy_local_repository(url, repo_path):
+                source_path = self._resolve_local_source_path(url, work_path)
+                if not self._copy_local_repository(source_path, repo_path):
                     return False, {}
             elif repo_type == "archive":
                 error_msg = "Archive repository type not yet implemented"
@@ -231,6 +232,7 @@ class SessionController:
         self,
         url: str,
         repo_type: Optional[str] = None,
+        work_path: Optional[Path] = None,
     ) -> Dict[str, str]:
         """
         Determine required integrations for add-repository operation.
@@ -238,11 +240,12 @@ class SessionController:
         Args:
             url: Repository URL or local path
             repo_type: Repository type (git, local, archive) - auto-detected if None
+            work_path: Root working directory used to resolve relative local paths
 
         Returns:
             Dict[str, str]: Required integrations mapped to operation descriptions
         """
-        detected_type = repo_type or self._detect_repo_type(url)
+        detected_type = repo_type or self._detect_repo_type(url, work_path)
 
         if detected_type == "git":
             return {"git": "repository clone operations"}
@@ -483,12 +486,13 @@ class SessionController:
             self._errors.append(error_msg)
             return False
 
-    def _detect_repo_type(self, url: str) -> str:
+    def _detect_repo_type(self, url: str, work_path: Optional[Path] = None) -> str:
         """
         Auto-detect repository type from URL.
 
         Args:
             url: Repository URL or path
+            work_path: Root working directory for resolving relative local paths
 
         Returns:
             str: Repository type (git, local, or archive)
@@ -512,7 +516,7 @@ class SessionController:
             return "archive"
 
         # Check if local path exists
-        local_path = Path(url)
+        local_path = self._resolve_local_source_path(url, work_path)
         if local_path.exists():
             return "local"
 
@@ -521,6 +525,28 @@ class SessionController:
             f"Could not detect repository type for '{url}', defaulting to 'git'"
         )
         return "git"
+
+    def _resolve_local_source_path(
+        self, url: str, work_path: Optional[Path] = None
+    ) -> Path:
+        """
+        Resolve local source path using work_path for relative URLs.
+
+        Args:
+            url: Local repository URL/path provided by user
+            work_path: Root working directory for relative path resolution
+
+        Returns:
+            Path: Resolved source path
+        """
+        source_path = Path(url)
+        if source_path.is_absolute():
+            return source_path
+
+        if work_path is not None:
+            return work_path / source_path
+
+        return source_path
 
     def _clone_git_repository(
         self, url: str, repo_path: Path, branch: str, git_integration
@@ -582,20 +608,18 @@ class SessionController:
             self._errors.append(error_msg)
             return False
 
-    def _copy_local_repository(self, url: str, repo_path: Path) -> bool:
+    def _copy_local_repository(self, source_path: Path, repo_path: Path) -> bool:
         """
         Copy a local repository to the workspace.
 
         Args:
-            url: Local repository path
+            source_path: Local repository source path
             repo_path: Destination path for repository
 
         Returns:
             bool: Success status
         """
         try:
-            source_path = Path(url)
-
             if not source_path.exists():
                 error_msg = f"Local repository not found: {source_path}"
                 self.logger.error(error_msg)

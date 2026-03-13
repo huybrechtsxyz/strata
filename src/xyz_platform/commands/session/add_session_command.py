@@ -96,6 +96,7 @@ class AddSessionCommand(BaseSessionCommand):
         return self._controller.get_required_integrations_for_add_repository(
             url=self._repo_url,
             repo_type=self._repo_type,
+            work_path=self._work_path,
         )
 
     def execute(self) -> bool:
