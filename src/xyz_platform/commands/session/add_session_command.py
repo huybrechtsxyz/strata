@@ -14,7 +14,6 @@ from typing import Optional
 import click
 
 from xyz_platform.commands.session.base_session_command import BaseSessionCommand
-from xyz_platform.controllers.session_controller import SessionController
 
 
 class AddSessionCommand(BaseSessionCommand):
@@ -62,7 +61,6 @@ class AddSessionCommand(BaseSessionCommand):
         self._repo_url = url
         self._repo_type = self._normalize_item_type(item_type)
         self._repo_branch = branch or "main"
-        self._controller = SessionController()
         self._added_repo = {}
 
     def _normalize_item_type(self, item_type: Optional[str]) -> Optional[str]:
@@ -93,7 +91,7 @@ class AddSessionCommand(BaseSessionCommand):
         Returns:
             Dict[str, str]: Required integrations with operation descriptions
         """
-        return self._controller.get_required_integrations_for_add_repository(
+        return self._session_controller.get_required_integrations_for_add_repository(
             url=self._repo_url,
             repo_type=self._repo_type,
             work_path=self._work_path,
@@ -129,7 +127,7 @@ class AddSessionCommand(BaseSessionCommand):
             integrations = self._resolve_required_integrations()
 
             # Execute via controller
-            success, self._added_repo = self._controller.add_repository(
+            success, self._added_repo = self._session_controller.add_repository(
                 name=self._repo_name,
                 url=self._repo_url,
                 work_path=self._work_path,
@@ -139,8 +137,8 @@ class AddSessionCommand(BaseSessionCommand):
             )
 
             # Copy controller errors/messages to command
-            self._errors.extend(self._controller.get_errors())
-            self._messages.extend(self._controller.get_messages())
+            self._errors.extend(self._session_controller.get_errors())
+            self._messages.extend(self._session_controller.get_messages())
 
             if not success:
                 self.logger.error(f"Item add failed in {self.__class__.__name__}")

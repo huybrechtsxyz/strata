@@ -67,6 +67,9 @@ class BaseCommand:
         self.session_id: Optional[str] = None
         self.execution_id: Optional[str] = None
 
+        # Session controller — one instance per command run
+        self._session_controller = SessionController()
+
         # Integration controller (lazy-loaded)
         self._integration_controller: Optional[object] = None
 
@@ -162,8 +165,13 @@ class BaseCommand:
 
             self._start_time = datetime.now()
 
+            # Load session.json into memory once for this command run
+            self._session_controller.load_session(self._work_path)
+
             # Assign correlation IDs (UUID v7 — time-ordered)
-            self.session_id = self._read_session_id()
+            self.session_id = (
+                self._session_controller.get_session_id() or generate_uuid7()
+            )
             self.execution_id = generate_uuid7()
             set_context(
                 {"session_id": self.session_id, "execution_id": self.execution_id}
@@ -192,29 +200,6 @@ class BaseCommand:
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False
-
-    def _read_session_id(self) -> str:
-        """
-        Read the persistent session_id from session.json.
-
-        Falls back to a fresh UUID v7 when:
-        - session.json does not exist yet (e.g. during ``session init``)
-        - the file is unreadable or missing the ``session_id`` key
-
-        Returns:
-            str: UUID v7 session identifier
-        """
-        try:
-            session_file = self._work_path / ".xyz-platform" / "session.json"
-            if session_file.exists():
-                with open(session_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                sid = data.get("session", {}).get("session_id")
-                if sid:
-                    return sid
-        except Exception as e:
-            self.logger.debug(f"Could not read session_id from session.json: {e}")
-        return generate_uuid7()
 
     def _configure_session_logging(self) -> None:
         """
@@ -364,8 +349,7 @@ class BaseCommand:
             # Show verbose logging
             if self._is_verbose():
                 click.echo("🔍  Verbose logs enabled (see console output for details)")
-                session_controller = SessionController()
-                success, log_entries, errors = session_controller.get_logs(
+                success, log_entries, errors = self._session_controller.get_logs(
                     work_path=self._work_path, execution_id=self.execution_id
                 )
 
@@ -403,15 +387,6 @@ class BaseCommand:
                     "duration_seconds": duration.total_seconds(),
                 },
             )
-
-        # Persist execution_id so subsequent commands can use --last-exec
-        if self.execution_id and self._work_path:
-            try:
-                SessionController().update_last_execution(
-                    work_path=self._work_path, execution_id=self.execution_id
-                )
-            except Exception:
-                pass
 
         return True
 

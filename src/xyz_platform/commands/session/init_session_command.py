@@ -14,7 +14,6 @@ from typing import Optional
 import click
 
 from xyz_platform.commands.session.base_session_command import BaseSessionCommand
-from xyz_platform.controllers.session_controller import SessionController
 from xyz_platform.logger.logger import configure_logging
 
 
@@ -52,10 +51,10 @@ class InitSessionCommand(BaseSessionCommand):
             output=output,
             verbose=verbose,
             quiet=quiet,
+            require_session=False,  # init creates the session, doesn't need one to exist
         )
 
         self._workspace_name = name
-        self._controller = SessionController()
         self._created_paths = {}
 
     def execute(self) -> bool:
@@ -85,14 +84,14 @@ class InitSessionCommand(BaseSessionCommand):
                 return False
 
             # Execute via controller
-            success, self._created_paths = self._controller.initialize_session(
+            success, self._created_paths = self._session_controller.initialize_session(
                 workspace_name=self._workspace_name,
                 work_path=self._work_path,
             )
 
             # Copy controller errors/messages to command
-            self._errors.extend(self._controller.get_errors())
-            self._messages.extend(self._controller.get_messages())
+            self._errors.extend(self._session_controller.get_errors())
+            self._messages.extend(self._session_controller.get_messages())
 
             if not success:
                 self.logger.error(

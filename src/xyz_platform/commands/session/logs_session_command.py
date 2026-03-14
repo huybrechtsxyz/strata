@@ -14,7 +14,6 @@ from typing import Optional
 import click
 
 from xyz_platform.commands.session.base_session_command import BaseSessionCommand
-from xyz_platform.controllers.session_controller import SessionController
 
 
 class LogsSessionCommand(BaseSessionCommand):
@@ -103,29 +102,23 @@ class LogsSessionCommand(BaseSessionCommand):
                 self._filter_session_id = self.session_id
                 self.logger.debug(f"Using current session ID: {self.session_id}")
 
-            # Resolve --last-exec flag: read last_execution_id from session.json
+            # Resolve --last-exec flag: read last_execution_id from in-memory session data
             if self._use_last_execution and not self._filter_execution_id:
-                try:
-                    import json as _json
-
-                    session_file = self._work_path / ".xyz-platform" / "session.json"
-                    if session_file.exists():
-                        with open(session_file, "r", encoding="utf-8") as f:
-                            _data = _json.load(f)
-                        eid = _data.get("session", {}).get("last_execution_id")
-                        if eid:
-                            self._filter_execution_id = eid
-                            self.logger.debug(f"Using last execution ID: {eid}")
-                        else:
-                            self.logger.warning(
-                                "No last_execution_id found in session.json"
-                            )
-                except Exception as e:
-                    self.logger.warning(f"Could not read last execution ID: {e}")
+                session_data = self._session_controller.get_session_data()
+                if session_data:
+                    eid = session_data.get("session", {}).get("last_execution_id")
+                    if eid:
+                        self._filter_execution_id = eid
+                        self.logger.debug(f"Using last execution ID: {eid}")
+                    else:
+                        self.logger.warning(
+                            "No last_execution_id found in session.json"
+                        )
+                else:
+                    self.logger.warning("Session data not loaded")
 
             # Fetch logs
-            controller = SessionController()
-            success, self._log_entries, errors = controller.get_logs(
+            success, self._log_entries, errors = self._session_controller.get_logs(
                 work_path=self._work_path,
                 lines=self._lines,
                 minutes=self._minutes,

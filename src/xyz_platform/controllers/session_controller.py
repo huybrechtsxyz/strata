@@ -29,11 +29,27 @@ class SessionController:
     This is a stateless controller - it does not maintain session state between calls.
     """
 
+    @staticmethod
+    def _session_folder_path(work_path: Path) -> Path:
+        """Return the .xyz-platform folder path for a given work_path."""
+        return work_path / ".xyz-platform"
+
+    @staticmethod
+    def _session_file_path(work_path: Path) -> Path:
+        """Return the session.json file path for a given work_path."""
+        return work_path / ".xyz-platform" / "session.json"
+
+    # Initialize the controller with empty error and message lists
     def __init__(self):
         """Initialize the session controller."""
         self.logger = get_logger(self.__class__.__module__)
         self._errors: List[str] = []
         self._messages: List[str] = []
+        # In-memory session state — loaded once at command start, saved once at end
+        self._session_data: Optional[Dict] = None
+        self._session_file: Optional[Path] = None
+
+    # Error and message handling methods
 
     def has_errors(self) -> bool:
         """Check if any errors were accumulated."""
@@ -54,6 +70,73 @@ class SessionController:
     def clear_messages(self) -> None:
         """Clear accumulated messages."""
         self._messages.clear()
+
+    # Session in-memory load / save
+
+    def load_session(self, work_path: Path) -> bool:
+        """
+        Load session.json into memory.
+
+        Called once at the start of every command via BaseCommand._initialize().
+        Silent no-op when the file does not exist yet (e.g. before ``session init``).
+
+        Args:
+            work_path: Working directory containing .xyz-platform/session.json
+
+        Returns:
+            bool: True if loaded successfully, False if file missing or unreadable
+        """
+        try:
+            session_file = self._session_file_path(work_path)
+            if not session_file.exists():
+                return False
+            with open(session_file, "r", encoding="utf-8") as f:
+                self._session_data = json.load(f)
+            self._session_file = session_file
+            self.logger.debug(
+                "Session loaded into memory",
+                extra={"session_file": str(session_file)},
+            )
+            return True
+        except Exception as e:
+            self.logger.debug(f"Could not load session: {e}")
+            return False
+
+    def save_session(self) -> bool:
+        """
+        Write in-memory session data back to session.json.
+
+        Called once at the end of every command via BaseCommand._finalize().
+        No-op when session was never loaded (e.g. command ran before ``session init``).
+
+        Returns:
+            bool: True if saved successfully, False otherwise
+        """
+        if self._session_data is None or self._session_file is None:
+            return False
+        try:
+            with open(self._session_file, "w", encoding="utf-8") as f:
+                json.dump(self._session_data, f, indent=2)
+            self.logger.debug(
+                "Session saved to disk",
+                extra={"session_file": str(self._session_file)},
+            )
+            return True
+        except Exception as e:
+            self.logger.debug(f"Could not save session: {e}")
+            return False
+
+    def get_session_id(self) -> Optional[str]:
+        """Return the session_id from in-memory session data, or None if not loaded."""
+        if self._session_data is None:
+            return None
+        return self._session_data.get("session", {}).get("session_id")
+
+    def get_session_data(self) -> Optional[Dict]:
+        """Return the in-memory session data dict, or None if not loaded."""
+        return self._session_data
+
+    # Session initialization methods
 
     def initialize_session(
         self,
@@ -80,8 +163,8 @@ class SessionController:
             self._messages.clear()
 
             # Define paths
-            session_folder = work_path / ".xyz-platform"
-            session_file = session_folder / "session.json"
+            session_folder = self._session_folder_path(work_path)
+            session_file = self._session_file_path(work_path)
             workspace_file = work_path / f"{workspace_name}.code-workspace"
 
             created_paths = {
@@ -252,6 +335,23 @@ class SessionController:
             return {"git": "repository clone operations"}
 
         return {}
+
+    def update_last_execution(self, execution_id: str) -> bool:
+        """
+        Update last_execution_id in the in-memory session data.
+
+        The caller is responsible for persisting via save_session().
+
+        Args:
+            execution_id: Execution ID of the completed command
+
+        Returns:
+            bool: True if updated, False if session not loaded
+        """
+        if self._session_data is None:
+            return False
+        self._session_data.setdefault("session", {})["last_execution_id"] = execution_id
+        return True
 
     def _validate_work_path(self, work_path: Path) -> bool:
         """
@@ -479,6 +579,10 @@ class SessionController:
             with open(session_file, "w", encoding="utf-8") as f:
                 json.dump(session_data, f, indent=2)
 
+            # Load into memory so subsequent calls in this run use in-memory data
+            self._session_data = session_data
+            self._session_file = session_file
+
             self._messages.append(f"Created session state file: {session_file}")
             return True
 
@@ -668,20 +772,14 @@ class SessionController:
             bool: Success status
         """
         try:
-            session_file = work_path / ".xyz-platform" / "session.json"
-
-            if not session_file.exists():
-                error_msg = f"Session file not found: {session_file}"
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False
 
-            # Read existing session data
-            with open(session_file, "r", encoding="utf-8") as f:
-                session_data = json.load(f)
-
             # Check if repository already exists
-            existing_repos = session_data.get("repositories", [])
+            existing_repos = self._session_data.get("repositories", [])
             if any(repo["name"] == repo_metadata["name"] for repo in existing_repos):
                 error_msg = (
                     f"Repository '{repo_metadata['name']}' already exists in session"
@@ -690,14 +788,9 @@ class SessionController:
                 self._errors.append(error_msg)
                 return False
 
-            # Add repository to list
+            # Add repository to in-memory list (save_session() will persist it)
             existing_repos.append(repo_metadata)
-            session_data["repositories"] = existing_repos
-
-            # Write updated session data
-            self.logger.info(f"Updating session file: {session_file}")
-            with open(session_file, "w", encoding="utf-8") as f:
-                json.dump(session_data, f, indent=2)
+            self._session_data["repositories"] = existing_repos
 
             self._messages.append(
                 f"Updated session with repository '{repo_metadata['name']}'"
@@ -705,7 +798,7 @@ class SessionController:
             return True
 
         except Exception as e:
-            error_msg = f"Failed to update session file: {str(e)}"
+            error_msg = f"Failed to update session repositories: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False
@@ -795,54 +888,33 @@ class SessionController:
 
         # 2. Fall back to session.json log_path
         try:
-            session_file = work_path / ".xyz-platform" / "session.json"
-            if session_file.exists():
+            # Use in-memory data if already loaded, otherwise read from file
+            if self._session_data is not None:
+                session_data = self._session_data
+            else:
+                session_file = self._session_file_path(work_path)
+                if not session_file.exists():
+                    return log_file
                 with open(session_file, "r", encoding="utf-8") as f:
                     session_data = json.load(f)
-                log_path_str = session_data.get("logging", {}).get("log_path")
-                if log_path_str:
-                    log_path = Path(log_path_str)
-                    if log_path.exists():
-                        candidates = sorted(log_path.glob("*.log"))
-                        if candidates:
-                            self.logger.debug(
-                                "Resolved log file from session.json",
-                                extra={"log_file": str(candidates[0])},
-                            )
-                            return candidates[0]
+            log_path_str = session_data.get("logging", {}).get("log_path")
+            if log_path_str:
+                log_path = Path(log_path_str)
+                if log_path.exists():
+                    candidates = sorted(log_path.glob("*.log"))
+                    if candidates:
+                        self.logger.debug(
+                            "Resolved log file from session.json",
+                            extra={"log_file": str(candidates[0])},
+                        )
+                        return candidates[0]
         except Exception as e:
             self.logger.debug(f"Could not resolve log path from session.json: {e}")
 
         # 3. Return original result (may be None or a non-existent path)
         return log_file
 
-    def update_last_execution(self, work_path: Path, execution_id: str) -> bool:
-        """
-        Persist the last execution_id into session.json.
-
-        Called at the end of every command so that ``session logs --last-exec``
-        can retrieve it without scanning log entries.
-
-        Args:
-            work_path: Working directory path
-            execution_id: Execution ID of the completed command
-
-        Returns:
-            bool: True on success, False if session.json does not exist
-        """
-        try:
-            session_file = work_path / ".xyz-platform" / "session.json"
-            if not session_file.exists():
-                return False
-            with open(session_file, "r", encoding="utf-8") as f:
-                session_data = json.load(f)
-            session_data.setdefault("session", {})["last_execution_id"] = execution_id
-            with open(session_file, "w", encoding="utf-8") as f:
-                json.dump(session_data, f, indent=2)
-            return True
-        except Exception as e:
-            self.logger.debug(f"Could not update last_execution_id: {e}")
-            return False
+    # Get logs with filtering options
 
     def get_logs(
         self,

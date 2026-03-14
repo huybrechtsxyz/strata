@@ -42,6 +42,7 @@ class BaseSessionCommand(BaseCommand):
         output: str = None,
         verbose: bool = None,
         quiet: bool = None,
+        require_session: bool = True,
     ):
         """
         Initialize the session command.
@@ -50,6 +51,8 @@ class BaseSessionCommand(BaseCommand):
             output: Output format (json, yaml, text)
             verbose: If True, enable verbose output
             quiet: If True, suppress all console output
+            require_session: If True (default), fail when session.json does not exist.
+                             Set to False for commands that create the session (e.g. init).
         """
         super().__init__(
             work_path=work_path,
@@ -57,6 +60,7 @@ class BaseSessionCommand(BaseCommand):
             verbose=verbose,
             quiet=quiet,
         )
+        self._require_session = require_session
 
     @abstractmethod
     def execute(self) -> bool:
@@ -83,8 +87,20 @@ class BaseSessionCommand(BaseCommand):
         Returns:
             bool: Success status (errors stored in self._errors)
         """
-        # Call parent first (REQUIRED)
+        # Call parent first (REQUIRED) — this calls load_session()
         if not super()._initialize(operation=operation):
+            return False
+
+        # Guard: fail early when session.json doesn't exist and this command needs it
+        if (
+            self._require_session
+            and self._session_controller.get_session_data() is None
+        ):
+            error_msg = (
+                f"No session found at '{self._work_path}'. " "Run 'session init' first."
+            )
+            self.logger.error(error_msg)
+            self._errors.append(error_msg)
             return False
 
         self.logger.debug(
@@ -156,6 +172,11 @@ class BaseSessionCommand(BaseCommand):
             "Session command finalized",
             extra={"command_class": self.__class__.__name__},
         )
+
+        # Update last execution ID and persist session to disk once per command run
+        if self.execution_id:
+            self._session_controller.update_last_execution(self.execution_id)
+        self._session_controller.save_session()
 
         # Call parent last (REQUIRED)
         return super()._finalize(operation=operation, success=success)
