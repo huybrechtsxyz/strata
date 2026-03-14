@@ -816,6 +816,34 @@ class SessionController:
         # 3. Return original result (may be None or a non-existent path)
         return log_file
 
+    def update_last_execution(self, work_path: Path, execution_id: str) -> bool:
+        """
+        Persist the last execution_id into session.json.
+
+        Called at the end of every command so that ``session logs --last-exec``
+        can retrieve it without scanning log entries.
+
+        Args:
+            work_path: Working directory path
+            execution_id: Execution ID of the completed command
+
+        Returns:
+            bool: True on success, False if session.json does not exist
+        """
+        try:
+            session_file = work_path / ".xyz-platform" / "session.json"
+            if not session_file.exists():
+                return False
+            with open(session_file, "r", encoding="utf-8") as f:
+                session_data = json.load(f)
+            session_data.setdefault("session", {})["last_execution_id"] = execution_id
+            with open(session_file, "w", encoding="utf-8") as f:
+                json.dump(session_data, f, indent=2)
+            return True
+        except Exception as e:
+            self.logger.debug(f"Could not update last_execution_id: {e}")
+            return False
+
     def get_logs(
         self,
         work_path: Path,

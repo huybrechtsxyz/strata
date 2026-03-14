@@ -404,6 +404,15 @@ class BaseCommand:
                 },
             )
 
+        # Persist execution_id so subsequent commands can use --last-exec
+        if self.execution_id and self._work_path:
+            try:
+                SessionController().update_last_execution(
+                    work_path=self._work_path, execution_id=self.execution_id
+                )
+            except Exception:
+                pass
+
         return True
 
     def _get_integration_controller(self):
