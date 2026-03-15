@@ -245,7 +245,9 @@ class LogsSessionCommand(BaseSessionCommand):
 
         return super()._after_execute()
 
-    def _finalize(self, operation: str = None, success: bool = None) -> bool:
+    def _finalize(
+        self, operation: str = None, success: bool = None, show_footer: bool = True
+    ) -> bool:
         """
         Finalize logs command.
 
@@ -283,8 +285,12 @@ class LogsSessionCommand(BaseSessionCommand):
             # Suppress _output_format so the base _finalize only runs its
             # timing/logging side-effects and does not re-render structured output.
             fmt, self._output_format = self._output_format, ""
-            result = super()._finalize(operation=operation, success=success)
+            result = super()._finalize(
+                operation=operation, success=success, show_footer=False
+            )
             self._output_format = fmt
             return result
 
-        return super()._finalize(operation=operation, success=success)
+        return super()._finalize(
+            operation=operation, success=success, show_footer=show_footer
+        )

@@ -136,6 +136,76 @@ class SessionController:
         """Return the in-memory session data dict, or None if not loaded."""
         return self._session_data
 
+    def get_repositories(self) -> list:
+        """Return the repositories list from in-memory session data, or [] if not loaded."""
+        if self._session_data is None:
+            return []
+        return self._session_data.get("repositories", [])
+
+    def get_session_status(self, work_path: Path) -> List[Dict]:
+        """
+        Check on-disk status of each registered repository.
+
+        For each repository compares what is registered in session.json against
+        what is actually on disk.  Git repos also report their current branch.
+
+        Args:
+            work_path: Root working directory
+
+        Returns:
+            List[Dict]: One entry per repository with keys:
+                name, type, url, registered_branch, folder_exists,
+                current_branch, branch_match, status
+                (status is 'ok', 'missing', or 'branch_mismatch')
+        """
+        import subprocess
+
+        results = []
+        for repo in self.get_repositories():
+            name = repo.get("name", "")
+            registered_branch = repo.get("branch")
+            repo_path = work_path / name
+            folder_exists = repo_path.exists()
+            current_branch = None
+            branch_match = None
+
+            if folder_exists and (repo_path / ".git").exists():
+                try:
+                    result = subprocess.run(
+                        ["git", "branch", "--show-current"],
+                        cwd=repo_path,
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    )
+                    if result.returncode == 0:
+                        current_branch = result.stdout.strip() or None
+                        if registered_branch and current_branch:
+                            branch_match = current_branch == registered_branch
+                except Exception:
+                    pass
+
+            if not folder_exists:
+                status = "missing"
+            elif branch_match is False:
+                status = "branch_mismatch"
+            else:
+                status = "ok"
+
+            results.append(
+                {
+                    "name": name,
+                    "type": repo.get("type"),
+                    "url": repo.get("url"),
+                    "registered_branch": registered_branch,
+                    "folder_exists": folder_exists,
+                    "current_branch": current_branch,
+                    "branch_match": branch_match,
+                    "status": status,
+                }
+            )
+        return results
+
     # Session initialization methods
 
     def initialize_session(
@@ -352,6 +422,163 @@ class SessionController:
             return False
         self._session_data.setdefault("session", {})["last_execution_id"] = execution_id
         return True
+
+    def remove_repository(
+        self,
+        name: str,
+        work_path: Path,
+        delete_folder: bool = False,
+        dry_run: bool = False,
+    ) -> Tuple[bool, Dict[str, str]]:
+        """
+        Remove a repository from the session.
+
+        Removes the entry from in-memory repositories[] (save_session() persists it).
+        Optionally deletes the repository folder from disk.
+
+        Args:
+            name: Repository name to remove
+            work_path: Root working directory
+            delete_folder: If True, also delete the repository folder on disk
+            dry_run: If True, report what would happen without making any changes
+
+        Returns:
+            Tuple[bool, Dict]: Success status and removed repository metadata
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            repositories = self._session_data.get("repositories", [])
+            repo_metadata = next((r for r in repositories if r["name"] == name), None)
+
+            if repo_metadata is None:
+                error_msg = f"Repository '{name}' not found in session"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            if dry_run:
+                self._messages.append(
+                    f"[dry-run] Would remove repository '{name}' from session"
+                )
+                if delete_folder:
+                    repo_path = work_path / name
+                    if repo_path.exists():
+                        self._messages.append(
+                            f"[dry-run] Would delete folder: {repo_path}"
+                        )
+                    else:
+                        self._messages.append(
+                            f"[dry-run] Folder not found on disk (would skip): {repo_path}"
+                        )
+                return True, dict(repo_metadata)
+
+            # Remove from in-memory list
+            self._session_data["repositories"] = [
+                r for r in repositories if r["name"] != name
+            ]
+            self._messages.append(f"Removed repository '{name}' from session")
+
+            # Optionally delete the folder
+            if delete_folder:
+                repo_path = work_path / name
+                if repo_path.exists():
+                    shutil.rmtree(repo_path)
+                    self.logger.info(f"Deleted repository folder: {repo_path}")
+                    self._messages.append(f"Deleted folder: {repo_path}")
+                else:
+                    self._messages.append(
+                        f"Folder not found on disk (skipped): {repo_path}"
+                    )
+
+            return True, repo_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to remove repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def clean_session(
+        self,
+        work_path: Path,
+        logs: bool = True,
+        dry_run: bool = False,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Clean workspace artifacts without modifying session state.
+
+        Args:
+            work_path: Root working directory
+            logs: If True (default), delete files in the logs/ folder
+            dry_run: If True, report what would be deleted without removing anything
+
+        Returns:
+            Tuple[bool, Dict]: Success status and stats dict
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            stats: Dict[str, Any] = {
+                "logs_deleted": 0,
+                "logs_folder": None,
+                "dry_run": dry_run,
+            }
+
+            if logs:
+                logs_folder = work_path / "logs"
+                stats["logs_folder"] = str(logs_folder)
+                if logs_folder.exists():
+                    deleted = 0
+                    skipped = 0
+                    for log_file in logs_folder.iterdir():
+                        if log_file.is_file():
+                            if dry_run:
+                                deleted += 1
+                            else:
+                                try:
+                                    log_file.unlink()
+                                    deleted += 1
+                                except PermissionError:
+                                    # File is held open by the logging system; skip it
+                                    skipped += 1
+                                    self._messages.append(
+                                        f"Skipped locked file: {log_file.name}"
+                                    )
+                    stats["logs_deleted"] = deleted
+                    stats["logs_skipped"] = skipped
+                    prefix = "[dry-run] Would delete" if dry_run else "Deleted"
+                    self.logger.info(
+                        f"{'[dry-run] ' if dry_run else ''}Cleaned logs folder: {logs_folder} ({deleted} files{',' if not dry_run else ''}{'' if dry_run else f' deleted, {skipped} skipped'})"
+                    )
+                    self._messages.append(
+                        f"{prefix} {deleted} log file(s) from {logs_folder}"
+                        + (
+                            f" ({skipped} skipped — in use)"
+                            if skipped and not dry_run
+                            else ""
+                        )
+                    )
+                else:
+                    self._messages.append(
+                        f"Logs folder not found (skipped): {logs_folder}"
+                    )
+
+            return True, stats
+
+        except Exception as e:
+            error_msg = f"Failed to clean session: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
 
     def _validate_work_path(self, work_path: Path) -> bool:
         """

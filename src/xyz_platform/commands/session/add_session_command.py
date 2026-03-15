@@ -257,7 +257,9 @@ class AddSessionCommand(BaseSessionCommand):
         # Call parent last
         return super()._after_execute()
 
-    def _finalize(self, operation: str = None, success: bool = None) -> bool:
+    def _finalize(
+        self, operation: str = None, success: bool = None, show_footer: bool = True
+    ) -> bool:
         """
         Finalize add command.
 

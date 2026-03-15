@@ -18,8 +18,13 @@ from xyz_platform.commands.cli_common import (
     handle_command_exit,
 )
 from xyz_platform.commands.session.init_session_command import InitSessionCommand
+from xyz_platform.commands.session.show_session_command import ShowSessionCommand
 from xyz_platform.commands.session.add_session_command import AddSessionCommand
 from xyz_platform.commands.session.logs_session_command import LogsSessionCommand
+from xyz_platform.commands.session.list_session_command import ListSessionCommand
+from xyz_platform.commands.session.status_session_command import StatusSessionCommand
+from xyz_platform.commands.session.remove_session_command import RemoveSessionCommand
+from xyz_platform.commands.session.clean_session_command import CleanSessionCommand
 
 
 @click.group(name="session", help="Manage and view session information.")
@@ -58,11 +63,46 @@ def session_init(
     handle_command_exit(command, success)
 
 
+@session.command(name="show", help="Show details of the current session.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+def session_show(work_path, output, verbose):
+    """Show details of the current session."""
+    command = ShowSessionCommand(
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@session.command(name="status", help="Show on-disk status of session workspace items.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+def session_status(work_path, output, verbose):
+    """Show on-disk status of session workspace items."""
+    command = StatusSessionCommand(
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
 @session.command(
     name="add",
     help="Add an item to the current session workspace (repository, config, etc.).",
 )
-@click.argument("name", type=str, required=True)
+@click.option(
+    "--name",
+    required=True,
+    type=str,
+    help="Name of the item (used as the folder name)",
+)
 @click.option(
     "--url",
     required=True,
@@ -187,6 +227,91 @@ def session_logs(
         use_last_execution=use_last_execution,
         output=output,
         verbose=verbose,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@session.command(name="list", help="List items tracked in the session workspace.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+def session_list(work_path, output, verbose):
+    """List items tracked in the session workspace."""
+    command = ListSessionCommand(
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@session.command(name="remove", help="Remove an item from the session workspace.")
+@click.option(
+    "--name",
+    required=True,
+    type=str,
+    help="Name of the item to remove",
+)
+@click.option(
+    "--delete",
+    "delete_folder",
+    is_flag=True,
+    default=False,
+    help="Also delete the repository folder from disk.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Report what would be removed without making changes.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_remove(name, delete_folder, dry_run, work_path, output, verbose, quiet):
+    """Remove an item from the session workspace."""
+    command = RemoveSessionCommand(
+        name=name,
+        work_path=work_path,
+        delete_folder=delete_folder,
+        dry_run=dry_run,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@session.command(name="clean", help="Clean workspace artifacts (logs, temp files).")
+@click.option(
+    "--logs/--no-logs",
+    default=True,
+    show_default=True,
+    help="Delete files in the logs/ folder.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Report what would be deleted without making changes.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_clean(logs, dry_run, work_path, output, verbose, quiet):
+    """Clean workspace artifacts (logs, temp files)."""
+    command = CleanSessionCommand(
+        work_path=work_path,
+        logs=logs,
+        dry_run=dry_run,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
     )
     success = command.execute()
     handle_command_exit(command, success)

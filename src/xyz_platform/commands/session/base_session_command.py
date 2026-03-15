@@ -155,7 +155,9 @@ class BaseSessionCommand(BaseCommand):
         # Call parent last (REQUIRED)
         return super()._after_execute()
 
-    def _finalize(self, operation: str = None, success: bool = None) -> bool:
+    def _finalize(
+        self, operation: str = None, success: bool = None, show_footer: bool = True
+    ) -> bool:
         """
         Finalize session-specific logic.
         Called BEFORE BaseCommand._finalize().
@@ -179,4 +181,6 @@ class BaseSessionCommand(BaseCommand):
         self._session_controller.save_session()
 
         # Call parent last (REQUIRED)
-        return super()._finalize(operation=operation, success=success)
+        return super()._finalize(
+            operation=operation, success=success, show_footer=show_footer
+        )
