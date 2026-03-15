@@ -143,7 +143,7 @@ class IntegrationModel(BaseModel):
 
         # For built-in types, we just check the format (lowercase, alphanumeric + underscore)
         # Actual registration is checked when IntegrationService tries to create the instance
-        if not v.islower() or not v.replace("_", "").isalnum():
+        if not v.islower() or not v.replace("_", "").replace("-", "").isalnum():
             raise ValueError(
                 f"Invalid integration type format: '{v}'. "
                 f"Type must be lowercase alphanumeric (with underscores). "

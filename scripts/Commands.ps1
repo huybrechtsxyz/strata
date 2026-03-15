@@ -80,3 +80,11 @@ Remove-Item -Path .app -Recurse -Force
 
 # Add with branch
 .\scripts\Run.ps1 session add --name traefik --work-path .app --url "https://github.com/huybrechtsxyz/xyz-traefik.git" --branch develop
+
+# Tools command
+.\scripts\Run.ps1 tools -h
+.\scripts\Run.ps1 tools status
+.\scripts\Run.ps1 tools status --work-path .app
+.\scripts\Run.ps1 tools status --work-path .app --output json
+.\scripts\Run.ps1 tools status --work-path .app --output text
+.\scripts\Run.ps1 tools status --work-path .app --verbose

@@ -35,13 +35,13 @@ import click
 from xyz_platform.commands.cli_help import help_command
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.commands.cli_session import session
+from xyz_platform.commands.cli_tools import tools
 from xyz_platform.logger.logger import configure_logging, get_logger
 
 # from xyz_platform.commands.cli_builder import build
 # from xyz_platform.commands.cli_builder import build
 # from xyz_platform.commands.cli_deploy import deploy
 # from xyz_platform.commands.help.topic_help_command import TopicHelpCommand
-# from xyz_platform.commands.cli_tools import tools
 # from xyz_platform.commands.cli_config import config
 # from xyz_platform.commands.cli_validate import validate
 # from xyz_platform.logger import get_logger, configure_logging, shutdown_logging
@@ -79,7 +79,7 @@ def main():
 main.add_command(help_command)
 main.add_command(version_command)
 main.add_command(session)
-# main.add_command(tools)
+main.add_command(tools)
 # main.add_command(config)
 # main.add_command(validate)
 # main.add_command(build)
