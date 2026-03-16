@@ -199,7 +199,9 @@ class SessionController:
                     self._errors.append(error_msg)
                     return False, {}
             else:
-                error_msg = f"Invalid source_type '{source_type}' — expected 'file' or 'path'"
+                error_msg = (
+                    f"Invalid source_type '{source_type}' — expected 'file' or 'path'"
+                )
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False, {}
@@ -265,7 +267,9 @@ class SessionController:
 
             import yaml
             from xyz_platform.utils.configuration_loader import ConfigurationLoader
-            from xyz_platform.controllers.workspace_controller import WorkspaceController
+            from xyz_platform.controllers.workspace_controller import (
+                WorkspaceController,
+            )
 
             file_paths: List[str] = []
 
@@ -308,7 +312,9 @@ class SessionController:
                 # Nothing to merge — remove stale output file if present
                 if merged_config_file.exists():
                     merged_config_file.unlink()
-                self.logger.info("No config sources to merge — cleared configuration.yaml")
+                self.logger.info(
+                    "No config sources to merge — cleared configuration.yaml"
+                )
                 return True, []
 
             loader = ConfigurationLoader()

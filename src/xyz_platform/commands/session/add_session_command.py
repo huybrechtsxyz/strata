@@ -310,13 +310,21 @@ class AddSessionCommand(BaseSessionCommand):
             extra={"command_class": self.__class__.__name__},
         )
 
-        if self._mode == "config" and not self._is_quiet() and self._added_config_source:
+        if (
+            self._mode == "config"
+            and not self._is_quiet()
+            and self._added_config_source
+        ):
             self._output_data = self._added_config_source
             if self._is_console_output():
                 click.echo("\n📄  Registered config source(s):")
                 for src in self._added_config_source.get("sources", []):
-                    click.echo(f"    • {src.get('name', '')}  [{src.get('type', '')}]  {src.get('path', '')}")
-                click.echo(f"    • Merged config: {self._added_config_source.get('merged_config', '')}")
+                    click.echo(
+                        f"    • {src.get('name', '')}  [{src.get('type', '')}]  {src.get('path', '')}"
+                    )
+                click.echo(
+                    f"    • Merged config: {self._added_config_source.get('merged_config', '')}"
+                )
 
         # Display added repository
         elif self._mode == "repo" and not self._is_quiet() and self._added_repo:

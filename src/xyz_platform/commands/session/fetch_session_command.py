@@ -86,8 +86,10 @@ class FetchSessionCommand(BaseSessionCommand):
                 return False
 
             # Step 1: Re-merge config sources → configuration.yaml
-            merge_success, merge_errors = self._session_controller.merge_config_and_save(
-                work_path=self._work_path
+            merge_success, merge_errors = (
+                self._session_controller.merge_config_and_save(
+                    work_path=self._work_path
+                )
             )
             self._errors.extend(self._session_controller.get_errors())
             self._messages.extend(self._session_controller.get_messages())
@@ -99,7 +101,9 @@ class FetchSessionCommand(BaseSessionCommand):
                 return False
 
             # Step 2: Load the merged config into ConfigurationService
-            merged_config_file = self._work_path / ".xyz-platform" / "configuration.yaml"
+            merged_config_file = (
+                self._work_path / ".xyz-platform" / "configuration.yaml"
+            )
             if not merged_config_file.exists():
                 if self._is_console_output():
                     click.echo(
@@ -110,7 +114,9 @@ class FetchSessionCommand(BaseSessionCommand):
                 self._finalize(operation="session_fetch", success=True)
                 return True
 
-            from xyz_platform.controllers.workspace_controller import WorkspaceController
+            from xyz_platform.controllers.workspace_controller import (
+                WorkspaceController,
+            )
             from xyz_platform.services.configuration_service import ConfigurationService
 
             workspace_controller = WorkspaceController()
@@ -133,7 +139,9 @@ class FetchSessionCommand(BaseSessionCommand):
                 or not config_service.model.spec.repositories
             ):
                 if self._is_console_output():
-                    click.echo("\n⚠️   No repositories declared in configuration — nothing to fetch.")
+                    click.echo(
+                        "\n⚠️   No repositories declared in configuration — nothing to fetch."
+                    )
                 self._finalize(operation="session_fetch", success=True)
                 return True
 
@@ -142,7 +150,8 @@ class FetchSessionCommand(BaseSessionCommand):
             # Apply single-name filter
             if self._filter_name:
                 repositories = [
-                    r for r in repositories
+                    r
+                    for r in repositories
                     if (r.name or r.repository) == self._filter_name
                 ]
                 if not repositories:
@@ -154,22 +163,33 @@ class FetchSessionCommand(BaseSessionCommand):
 
             if self._dry_run:
                 if self._is_console_output():
-                    click.echo(f"\n🔍  Dry run — {len(repositories)} repository(s) would be fetched:")
+                    click.echo(
+                        f"\n🔍  Dry run — {len(repositories)} repository(s) would be fetched:"
+                    )
                     for repo in repositories:
                         name = repo.name or repo.repository
-                        click.echo(f"    • {name}  [{repo.type.value}]"
-                                   f"  → {self._work_path / repo.deploy_path}"
-                                   if repo.deploy_path else f"    • {name}  [{repo.type.value}]")
+                        click.echo(
+                            f"    • {name}  [{repo.type.value}]"
+                            f"  → {self._work_path / repo.deploy_path}"
+                            if repo.deploy_path
+                            else f"    • {name}  [{repo.type.value}]"
+                        )
                     click.echo("")
                 self._fetch_results = [
-                    {"name": r.name or r.repository, "type": r.type.value, "status": "dry_run"}
+                    {
+                        "name": r.name or r.repository,
+                        "type": r.type.value,
+                        "status": "dry_run",
+                    }
                     for r in repositories
                 ]
                 self._finalize(operation="session_fetch", success=True)
                 return True
 
             # Actual fetch
-            from xyz_platform.controllers.repository_controller import RepositoryController
+            from xyz_platform.controllers.repository_controller import (
+                RepositoryController,
+            )
 
             repo_controller = RepositoryController()
             build_path = workspace_controller.get_workspace_buildpath(self._work_path)
@@ -195,7 +215,11 @@ class FetchSessionCommand(BaseSessionCommand):
             for repo in repositories:
                 repo_name = repo.name or repo.repository
                 deploy_path = repo.deploy_path or repo_name
-                status = "ok" if repo_name not in [e.split(":")[0] for e in fetch_errors] else "error"
+                status = (
+                    "ok"
+                    if repo_name not in [e.split(":")[0] for e in fetch_errors]
+                    else "error"
+                )
                 self._fetch_results.append(
                     {
                         "name": repo_name,
@@ -213,14 +237,18 @@ class FetchSessionCommand(BaseSessionCommand):
                             "url": repo.repository,
                             "path": deploy_path,
                             "type": repo.type.value,
-                            "branch": repo.reference if repo.type.value == "gitops" else None,
+                            "branch": (
+                                repo.reference if repo.type.value == "gitops" else None
+                            ),
                         },
                     )
                     # Clear duplicate-exists errors — idempotent fetch is expected
                     self._session_controller.clear_errors()
 
             if not self._after_execute():
-                self.logger.error(f"Post-execution hook failed in {self.__class__.__name__}")
+                self.logger.error(
+                    f"Post-execution hook failed in {self.__class__.__name__}"
+                )
                 self._finalize(operation="session_fetch", success=False)
                 return False
 
@@ -271,14 +299,18 @@ class FetchSessionCommand(BaseSessionCommand):
         }
 
         if self._is_console_output() and self._fetch_results:
-            click.echo(f"\n✅  Fetched {ok_count} / {len(self._fetch_results)} repository(s)")
+            click.echo(
+                f"\n✅  Fetched {ok_count} / {len(self._fetch_results)} repository(s)"
+            )
             if err_count:
                 click.echo(f"    ❌ {err_count} failed — see errors above")
             click.echo("")
 
         return super()._after_execute()
 
-    def _finalize(self, operation: str = None, success: bool = None, show_footer: bool = True) -> bool:
+    def _finalize(
+        self, operation: str = None, success: bool = None, show_footer: bool = True
+    ) -> bool:
         self.logger.debug(
             "Fetch command finalized",
             extra={"command_class": self.__class__.__name__},

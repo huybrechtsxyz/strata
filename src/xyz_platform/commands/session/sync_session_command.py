@@ -110,7 +110,9 @@ class SyncSessionCommand(BaseSessionCommand):
             self._messages.extend(self._session_controller.get_messages())
 
             if not self._after_execute():
-                self.logger.error(f"Post-execution hook failed in {self.__class__.__name__}")
+                self.logger.error(
+                    f"Post-execution hook failed in {self.__class__.__name__}"
+                )
                 self._finalize(operation="session_sync", success=False)
                 return False
 
@@ -162,14 +164,14 @@ class SyncSessionCommand(BaseSessionCommand):
         if self._is_console_output():
             total = len(self._source_statuses)
             if total == 0:
-                click.echo("\n⚠️   No config sources registered. Use 'session add --config-file/--config-path' first.")
+                click.echo(
+                    "\n⚠️   No config sources registered. Use 'session add --config-file/--config-path' first."
+                )
             else:
                 click.echo(f"\n🔄  Config sources ({total}):")
                 for src in self._source_statuses:
                     icon = "✅" if src["exists"] else "❌"
-                    removed = (
-                        "  (removed)" if not src["exists"] and self._force else ""
-                    )
+                    removed = "  (removed)" if not src["exists"] and self._force else ""
                     click.echo(
                         f"    {icon}  {src['name']:<20} [{src['type']}]  {src['path']}{removed}"
                     )
@@ -191,7 +193,9 @@ class SyncSessionCommand(BaseSessionCommand):
 
         return super()._after_execute()
 
-    def _finalize(self, operation: str = None, success: bool = None, show_footer: bool = True) -> bool:
+    def _finalize(
+        self, operation: str = None, success: bool = None, show_footer: bool = True
+    ) -> bool:
         self.logger.debug(
             "Sync command finalized",
             extra={"command_class": self.__class__.__name__},
