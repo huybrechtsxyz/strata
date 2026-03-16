@@ -357,7 +357,10 @@ def session_list(work_path, output, verbose):
     handle_command_exit(command, success)
 
 
-@session.command(name="remove", help="Remove a repository or config source from the session workspace.")
+@session.command(
+    name="remove",
+    help="Remove a repository or config source from the session workspace.",
+)
 @click.option(
     "--name",
     required=True,
@@ -388,7 +391,9 @@ def session_list(work_path, output, verbose):
 @click_output_format
 @click_output_verbose
 @click_output_quiet
-def session_remove(name, remove_config, delete_folder, dry_run, work_path, output, verbose, quiet):
+def session_remove(
+    name, remove_config, delete_folder, dry_run, work_path, output, verbose, quiet
+):
     """Remove a repository or config source from the session workspace."""
     command = RemoveSessionCommand(
         name=name,
@@ -402,7 +407,6 @@ def session_remove(name, remove_config, delete_folder, dry_run, work_path, outpu
     )
     success = command.execute()
     handle_command_exit(command, success)
-
 
 
 @session.command(name="clean", help="Clean workspace artifacts (logs, temp files).")
