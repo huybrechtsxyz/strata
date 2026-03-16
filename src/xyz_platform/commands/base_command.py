@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 import click
 
 from xyz_platform.controllers.session_controller import SessionController
+from xyz_platform.controllers.workspace_controller import WorkspaceController
 from xyz_platform.logger.logger import get_logger, reconfigure_logging
 from xyz_platform.logger.context import set_context
 from xyz_platform.utils import system
@@ -31,9 +32,13 @@ class BaseCommand:
 
     _active_logging_config_path: Optional[str] = None
 
+    # Initialization parameters common to all commands
+
     def __init__(
         self,
+        file_path: str = None,
         work_path: str = None,
+        no_hooks: bool = False,
         output: str = None,
         verbose: bool = None,
         quiet: bool = None,
@@ -47,8 +52,15 @@ class BaseCommand:
         self._start_time = None
         self._end_time = None
 
-        # Paths
+        # Standard paths
+        self._file_path = file_path
         self._work_path = Path(work_path) if work_path else Path.cwd()
+        self._build_path = None
+        self._object_path = None
+        self._dist_path = None
+
+        # Execution flags
+        self._no_hooks = no_hooks
 
         # Message and error accumulation
         self._messages = []
@@ -73,6 +85,8 @@ class BaseCommand:
         # Integration controller (lazy-loaded)
         self._integration_controller: Optional[object] = None
 
+    # Abstract method to be implemented by subclasses
+
     @abstractmethod
     def execute(self) -> bool:
         """
@@ -82,21 +96,6 @@ class BaseCommand:
             bool: Success status (errors stored in self._errors)
         """
         raise NotImplementedError("Subclasses must implement execute() method")
-
-    def get_required_integrations(self) -> Dict[str, str]:
-        """
-        Declare required integrations for this command.
-
-        Subclasses override this to declare what external tools they need.
-        Returns a dict mapping integration names to operation descriptions.
-
-        Example:
-            return {"git": "repository clone operations", "docker": "container build"}
-
-        Returns:
-            Dict[str, str]: Empty dict (no requirements by default)
-        """
-        return {}
 
     def has_errors(self) -> bool:
         """Check if any errors were accumulated during execution."""
@@ -132,6 +131,25 @@ class BaseCommand:
         """Clear accumulated messages."""
         self._messages.clear()
 
+    # Integration requirements declaration — subclasses override this to declare what external tools they need
+
+    def get_required_integrations(self) -> Dict[str, str]:
+        """
+        Declare required integrations for this command.
+
+        Subclasses override this to declare what external tools they need.
+        Returns a dict mapping integration names to operation descriptions.
+
+        Example:
+            return {"git": "repository clone operations", "docker": "container build"}
+
+        Returns:
+            Dict[str, str]: Empty dict (no requirements by default)
+        """
+        return {}
+
+    # Console output methods
+
     def ShowConsoleHeader(self, work_path: str = None):
         click.echo("=" * 80)
         click.echo(f"🚀 XYZ PLATFORM — CLI (v{system.get_cli_version()})")
@@ -152,6 +170,8 @@ class BaseCommand:
         click.echo("💬 Support: https://support.xyzplatform.com")
         click.echo("=" * 80)
 
+    # Lifecycle methods
+
     def _initialize(self, operation: str = None, show_header: bool = True) -> bool:
         """
         Initialize the command before execution.
@@ -168,6 +188,17 @@ class BaseCommand:
             # Load session.json into memory once for this command run
             self._session_controller.load_session(self._work_path)
 
+            # Set up work path (default to current directory)
+            workspace_controller = WorkspaceController()
+            self._work_path = workspace_controller.get_workspace_workpath(
+                self._work_path
+            )
+            if not self._work_path.exists():
+                error_msg = f"Work path does not exist: {self._work_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
             # Assign correlation IDs (UUID v7 — time-ordered)
             self.session_id = (
                 self._session_controller.get_session_id() or generate_uuid7()
@@ -176,6 +207,10 @@ class BaseCommand:
             set_context(
                 {"session_id": self.session_id, "execution_id": self.execution_id}
             )
+
+            # Start session operation if specified
+            if operation:
+                self._start_session_operation(operation=operation)
 
             self.logger.debug(
                 "Initializing command",
@@ -200,43 +235,6 @@ class BaseCommand:
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False
-
-    def _configure_session_logging(self) -> None:
-        """
-        Auto-configure logging from session-specific YAML if available.
-
-        Looks for `.xyz-platform/logging.yaml` under `self._work_path`.
-        Reconfigures logging only when the discovered config path changes.
-        """
-        try:
-            session_logging_config = self._work_path / ".xyz-platform" / "logging.yaml"
-
-            if not session_logging_config.exists():
-                return
-
-            config_path = str(session_logging_config.resolve())
-            if BaseCommand._active_logging_config_path == config_path:
-                return
-
-            reconfigure_logging(config_path=config_path)
-            BaseCommand._active_logging_config_path = config_path
-
-            # Refresh logger after reconfiguration
-            self.logger = get_logger(self.__class__.__module__)
-            self.logger.debug(
-                "Session logging configuration loaded",
-                extra={
-                    "command_class": self.__class__.__name__,
-                    "logging_config_path": config_path,
-                },
-            )
-
-        except Exception as e:
-            # Logging configuration should not block command execution
-            self.logger.warning(
-                f"Failed to auto-configure session logging: {str(e)}",
-                extra={"command_class": self.__class__.__name__},
-            )
 
     def _before_execute(self, message: str = None) -> bool:
         """
@@ -278,22 +276,6 @@ class BaseCommand:
             extra={"command_class": self.__class__.__name__},
         )
         return True
-
-    def _is_quiet(self) -> bool:
-        """Return True when --quiet is active: suppress all output."""
-        return self._output_quiet
-
-    def _is_verbose(self) -> bool:
-        """Return True when --verbose is active: include debug log replay."""
-        return self._output_verbose
-
-    def _is_structured_output(self) -> bool:
-        """Return True when --output <format> is active: emit machine-readable data (json, text, etc.)."""
-        return bool(self._output_format)
-
-    def _is_console_output(self) -> bool:
-        """Return True for default human-readable console output (no --quiet, no explicit --output format)."""
-        return not self._output_quiet and not bool(self._output_format)
 
     def _finalize(
         self, operation: str = None, success: bool = None, show_footer: bool = True
@@ -388,7 +370,68 @@ class BaseCommand:
                 },
             )
 
+        # Complete the named operation in session state
+        if operation:
+            self._complete_session_operation(operation=operation, success=bool(success))
+
         return True
+
+    # Output and logging
+
+    def _configure_session_logging(self) -> None:
+        """
+        Auto-configure logging from session-specific YAML if available.
+
+        Looks for `.xyz-platform/logging.yaml` under `self._work_path`.
+        Reconfigures logging only when the discovered config path changes.
+        """
+        try:
+            session_logging_config = self._work_path / ".xyz-platform" / "logging.yaml"
+
+            if not session_logging_config.exists():
+                return
+
+            config_path = str(session_logging_config.resolve())
+            if BaseCommand._active_logging_config_path == config_path:
+                return
+
+            reconfigure_logging(config_path=config_path)
+            BaseCommand._active_logging_config_path = config_path
+
+            # Refresh logger after reconfiguration
+            self.logger = get_logger(self.__class__.__module__)
+            self.logger.debug(
+                "Session logging configuration loaded",
+                extra={
+                    "command_class": self.__class__.__name__,
+                    "logging_config_path": config_path,
+                },
+            )
+
+        except Exception as e:
+            # Logging configuration should not block command execution
+            self.logger.warning(
+                f"Failed to auto-configure session logging: {str(e)}",
+                extra={"command_class": self.__class__.__name__},
+            )
+
+    def _is_quiet(self) -> bool:
+        """Return True when --quiet is active: suppress all output."""
+        return self._output_quiet
+
+    def _is_verbose(self) -> bool:
+        """Return True when --verbose is active: include debug log replay."""
+        return self._output_verbose
+
+    def _is_structured_output(self) -> bool:
+        """Return True when --output <format> is active: emit machine-readable data (json, text, etc.)."""
+        return bool(self._output_format)
+
+    def _is_console_output(self) -> bool:
+        """Return True for default human-readable console output (no --quiet, no explicit --output format)."""
+        return not self._output_quiet and not bool(self._output_format)
+
+    # Integration resolution and validation
 
     def _get_integration_controller(self):
         """
@@ -464,6 +507,60 @@ class BaseCommand:
             extra={"command_class": self.__class__.__name__},
         )
         return True
+
+    # Session operation helpers
+
+    def _start_session_operation(self, operation: str) -> None:
+        """
+        Mark the start of a named operation in the session state.
+
+        Records the current execution_id against the session and persists it.
+        The current SessionController tracks last-execution rather than named
+        operation trees, so this calls update_last_execution + save_session.
+
+        Args:
+            operation: Name of the operation (e.g., 'tools_status', 'session_init')
+        """
+        try:
+            self._session_controller.update_last_execution(self.execution_id)
+            self._session_controller.save_session()
+            self.logger.debug(
+                f"Started session operation: {operation}",
+                extra={"operation": operation, "execution_id": self.execution_id},
+            )
+        except Exception as e:
+            # Session tracking must never block command execution
+            self.logger.warning(
+                f"Failed to start session operation '{operation}': {e}",
+                extra={"operation": operation},
+            )
+
+    def _complete_session_operation(
+        self, operation: str, success: bool, flush: bool = True
+    ) -> None:
+        """
+        Mark the completion of a named operation in the session state.
+
+        Persists session to disk so the last-execution record reflects the
+        completed run.
+
+        Args:
+            operation: Name of the operation (e.g., 'tools_status', 'session_init')
+            success: Whether the operation completed successfully
+            flush: Whether to save session state to disk (default: True)
+        """
+        try:
+            if flush:
+                self._session_controller.save_session()
+            self.logger.debug(
+                f"Completed session operation: {operation}",
+                extra={"operation": operation, "success": success},
+            )
+        except Exception as e:
+            self.logger.warning(
+                f"Failed to complete session operation '{operation}': {e}",
+                extra={"operation": operation},
+            )
 
     def _resolve_required_integrations(self) -> Dict[str, Any]:
         """

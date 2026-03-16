@@ -142,6 +142,267 @@ class SessionController:
             return []
         return self._session_data.get("repositories", [])
 
+    def get_config_sources(self) -> list:
+        """Return the config_sources list from in-memory session data, or [] if not loaded."""
+        if self._session_data is None:
+            return []
+        return self._session_data.get("config_sources", [])
+
+    # Config source management
+
+    def add_config_source(
+        self,
+        path: str,
+        source_type: str,
+        name: Optional[str] = None,
+        work_path: Optional[Path] = None,
+    ) -> Tuple[bool, Dict]:
+        """
+        Register a config file or directory as a config source in session state.
+
+        Args:
+            path: Path to config file (source_type='file') or directory (source_type='path')
+            source_type: 'file' for a single YAML file, 'path' for a directory of YAML files
+            name: Optional logical name (derived from filename/dirname if omitted)
+            work_path: Working directory used to resolve relative paths
+
+        Returns:
+            Tuple[bool, Dict]: (success, metadata dict)
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Resolve to absolute path
+            source_path = Path(path)
+            if work_path and not source_path.is_absolute():
+                source_path = work_path / source_path
+            source_path = source_path.resolve()
+
+            # Validate exists
+            if source_type == "file":
+                if not source_path.is_file():
+                    error_msg = f"Config file not found: {source_path}"
+                    self.logger.error(error_msg)
+                    self._errors.append(error_msg)
+                    return False, {}
+            elif source_type == "path":
+                if not source_path.is_dir():
+                    error_msg = f"Config path not found: {source_path}"
+                    self.logger.error(error_msg)
+                    self._errors.append(error_msg)
+                    return False, {}
+            else:
+                error_msg = f"Invalid source_type '{source_type}' — expected 'file' or 'path'"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Derive name if not provided
+            if not name:
+                name = source_path.stem if source_type == "file" else source_path.name
+
+            metadata = {
+                "name": name,
+                "path": source_path.as_posix(),
+                "type": source_type,
+                "registered": datetime.now().isoformat(),
+            }
+
+            # Idempotent: skip duplicate paths
+            existing = self._session_data.setdefault("config_sources", [])
+            if any(s.get("path") == metadata["path"] for s in existing):
+                self._messages.append(
+                    f"Config source already registered (skipped): {source_path}"
+                )
+                return True, metadata
+
+            existing.append(metadata)
+            self.logger.info(
+                f"Registered config source '{name}'",
+                extra={"path": str(source_path), "type": source_type},
+            )
+            self._messages.append(f"Registered config source '{name}': {source_path}")
+            return True, metadata
+
+        except Exception as e:
+            error_msg = f"Failed to add config source: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def merge_config_and_save(
+        self,
+        work_path: Path,
+        extra_config_path: Optional[str] = None,
+        extra_config_file: Optional[str] = None,
+    ) -> Tuple[bool, List[str]]:
+        """
+        Merge all registered config sources and save to .xyz-platform/configuration.yaml.
+
+        Load order (lowest → highest priority):
+          1. Platform bundled configuration.yaml
+          2. Session-registered config sources (in registration order)
+          3. extra_config_path / extra_config_file (callers can pass ad-hoc overrides)
+
+        Args:
+            work_path: Root working directory
+            extra_config_path: Optional extra config directory not yet persisted in session
+            extra_config_file: Optional extra config file not yet persisted in session
+
+        Returns:
+            Tuple[bool, List[str]]: (success, list of error messages)
+        """
+        errors: List[str] = []
+        try:
+            from glob import glob
+
+            import yaml
+            from xyz_platform.utils.configuration_loader import ConfigurationLoader
+            from xyz_platform.controllers.workspace_controller import WorkspaceController
+
+            file_paths: List[str] = []
+
+            # 1. Platform bundled config (lowest priority)
+            workspace_controller = WorkspaceController()
+            bundled = workspace_controller.resolve_configuration_files(
+                work_path=work_path
+            )
+            file_paths.extend(bundled)
+
+            # 2. Session-registered sources
+            for source in self.get_config_sources():
+                source_path = Path(source["path"])
+                source_type = source.get("type", "file")
+
+                if source_type == "file":
+                    if source_path.is_file():
+                        file_paths.append(str(source_path))
+                    else:
+                        errors.append(f"Config source file missing: {source_path}")
+                elif source_type == "path":
+                    if source_path.is_dir():
+                        file_paths.extend(sorted(glob(str(source_path / "*.yaml"))))
+                    else:
+                        errors.append(f"Config source path missing: {source_path}")
+
+            # 3. Ad-hoc extras (not yet persisted)
+            if extra_config_path:
+                extra_dir = Path(extra_config_path)
+                if extra_dir.is_dir():
+                    file_paths.extend(sorted(glob(str(extra_dir / "*.yaml"))))
+            if extra_config_file:
+                extra_file = Path(extra_config_file)
+                if extra_file.is_file():
+                    file_paths.append(str(extra_file))
+
+            merged_config_file = work_path / ".xyz-platform" / "configuration.yaml"
+
+            if not file_paths:
+                # Nothing to merge — remove stale output file if present
+                if merged_config_file.exists():
+                    merged_config_file.unlink()
+                self.logger.info("No config sources to merge — cleared configuration.yaml")
+                return True, []
+
+            loader = ConfigurationLoader()
+            merged = loader.load_and_merge_yaml_files(file_paths)
+
+            merged_config_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(merged_config_file, "w", encoding="utf-8") as f:
+                yaml.dump(merged, f, default_flow_style=False, sort_keys=False)
+
+            self.logger.info(
+                "Merged configuration saved",
+                extra={
+                    "source_count": len(file_paths),
+                    "output": str(merged_config_file),
+                    "missing_errors": len(errors),
+                },
+            )
+            return len(errors) == 0, errors
+
+        except Exception as e:
+            error_msg = f"Failed to merge configuration: {str(e)}"
+            self.logger.exception(error_msg)
+            errors.append(error_msg)
+            return False, errors
+
+    def sync_config_sources(
+        self,
+        work_path: Path,
+        force: bool = False,
+    ) -> Tuple[bool, List[str], List[str]]:
+        """
+        Validate all registered config sources and re-merge configuration.
+
+        Reports missing sources as errors. With force=True, removes missing
+        sources from session state before re-merging.
+
+        Args:
+            work_path: Root working directory
+            force: If True, remove missing config sources from session state
+
+        Returns:
+            Tuple[bool, List[str], List[str]]: (success, errors, warnings)
+        """
+        errors: List[str] = []
+        warnings: List[str] = []
+
+        try:
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self._errors.append(error_msg)
+                return False, [error_msg], []
+
+            sources = self.get_config_sources()
+            missing = []
+
+            for source in sources:
+                source_path = Path(source["path"])
+                source_type = source.get("type", "file")
+                exists = (
+                    source_path.is_file()
+                    if source_type == "file"
+                    else source_path.is_dir()
+                )
+                if not exists:
+                    missing.append(source)
+                    label = f"{source.get('name', '')} ({source_path})"
+                    if force:
+                        warnings.append(f"Removed missing config source: {label}")
+                    else:
+                        errors.append(f"Config source missing: {label}")
+
+            if missing and force:
+                self._session_data["config_sources"] = [
+                    s for s in sources if s not in missing
+                ]
+                self._messages.append(
+                    f"Removed {len(missing)} missing config source(s)"
+                )
+
+            # Re-merge regardless (best-effort even when sources are missing)
+            merge_success, merge_errors = self.merge_config_and_save(work_path)
+            if not merge_success:
+                errors.extend(merge_errors)
+
+            self._errors.extend(errors)
+            self._messages.extend(warnings)
+            return len(errors) == 0, errors, warnings
+
+        except Exception as e:
+            error_msg = f"Failed to sync config sources: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, [error_msg], []
+
     def get_session_status(self, work_path: Path) -> List[Dict]:
         """
         Check on-disk status of each registered repository.

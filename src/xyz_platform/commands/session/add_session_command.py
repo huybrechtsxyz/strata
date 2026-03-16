@@ -28,10 +28,12 @@ class AddSessionCommand(BaseSessionCommand):
 
     def __init__(
         self,
-        name: str,
-        url: str,
+        name: str = None,
+        url: str = None,
         item_type: Optional[str] = None,
         branch: Optional[str] = None,
+        config_path: Optional[str] = None,
+        config_file: Optional[str] = None,
         work_path: Optional[str] = None,
         output: str = None,
         verbose: bool = None,
@@ -41,12 +43,14 @@ class AddSessionCommand(BaseSessionCommand):
         Initialize the add command.
 
         Args:
-            name: Name of the item (folder name for repositories)
-            url: URL or path to the item
-            item_type: Item type (repo, git, local, archive) - repo/None auto-detect
+            name: Optional name for the item (derived from path if omitted)
+            url: URL or path to the repository (mutually exclusive with config_path/config_file)
+            item_type: Item type (repo, git, local, archive)
             branch: Git branch to clone (default: main, for git repositories)
+            config_path: Config directory to register as config source
+            config_file: Single config file to register as config source
             work_path: Root working directory (defaults to current directory)
-            output: Output format (json, yaml, text)
+            output: Output format
             verbose: Enable verbose output
             quiet: Disable all console output
         """
@@ -61,7 +65,13 @@ class AddSessionCommand(BaseSessionCommand):
         self._repo_url = url
         self._repo_type = self._normalize_item_type(item_type)
         self._repo_branch = branch or "main"
+        self._config_path = config_path
+        self._config_file = config_file
         self._added_repo = {}
+        self._added_config_source = {}
+
+        # Determine execution mode
+        self._mode = "config" if (config_path or config_file) else "repo"
 
     def _normalize_item_type(self, item_type: Optional[str]) -> Optional[str]:
         """
@@ -91,6 +101,8 @@ class AddSessionCommand(BaseSessionCommand):
         Returns:
             Dict[str, str]: Required integrations with operation descriptions
         """
+        if self._mode == "config":
+            return {}  # Config registration needs no external tools
         return self._session_controller.get_required_integrations_for_add_repository(
             url=self._repo_url,
             repo_type=self._repo_type,
@@ -126,15 +138,19 @@ class AddSessionCommand(BaseSessionCommand):
             # Resolve required integrations for dependency injection
             integrations = self._resolve_required_integrations()
 
-            # Execute via controller
-            success, self._added_repo = self._session_controller.add_repository(
-                name=self._repo_name,
-                url=self._repo_url,
-                work_path=self._work_path,
-                repo_type=self._repo_type,
-                branch=self._repo_branch,
-                integrations=integrations,
-            )
+            # Branch: config-source registration OR repository add
+            if self._mode == "config":
+                success = self._execute_config_source_mode()
+            else:
+                # Execute via controller
+                success, self._added_repo = self._session_controller.add_repository(
+                    name=self._repo_name,
+                    url=self._repo_url,
+                    work_path=self._work_path,
+                    repo_type=self._repo_type,
+                    branch=self._repo_branch,
+                    integrations=integrations,
+                )
 
             # Copy controller errors/messages to command
             self._errors.extend(self._session_controller.get_errors())
@@ -188,8 +204,11 @@ class AddSessionCommand(BaseSessionCommand):
             "Add command initialized",
             extra={
                 "command_class": self.__class__.__name__,
+                "mode": self._mode,
                 "repo_name": self._repo_name,
                 "repo_url": self._repo_url,
+                "config_path": self._config_path,
+                "config_file": self._config_file,
                 "work_path": str(self._work_path),
             },
         )
@@ -215,11 +234,68 @@ class AddSessionCommand(BaseSessionCommand):
             self._errors.append(error_msg)
             return False
 
+        if self._mode == "repo":
+            if not self._repo_url:
+                error_msg = "Either --url (for a repository) or --config-path/--config-file (for a config source) is required"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
         self.logger.debug(
             "Add pre-execution validation passed",
-            extra={"command_class": self.__class__.__name__},
+            extra={"command_class": self.__class__.__name__, "mode": self._mode},
         )
 
+        return True
+
+    def _execute_config_source_mode(self) -> bool:
+        """
+        Register a config file or directory as a config source in session state.
+
+        Returns:
+            bool: Success status
+        """
+        results = []
+
+        if self._config_file:
+            success, metadata = self._session_controller.add_config_source(
+                path=self._config_file,
+                source_type="file",
+                name=self._repo_name,
+                work_path=self._work_path,
+            )
+            if success:
+                results.append(metadata)
+            else:
+                return False
+
+        if self._config_path:
+            success, metadata = self._session_controller.add_config_source(
+                path=self._config_path,
+                source_type="path",
+                name=self._repo_name,
+                work_path=self._work_path,
+            )
+            if success:
+                results.append(metadata)
+            else:
+                return False
+
+        # Merge and save configuration.yaml
+        merge_success, merge_errors = self._session_controller.merge_config_and_save(
+            work_path=self._work_path
+        )
+        if not merge_success:
+            self._errors.extend(merge_errors)
+            return False
+
+        # Store results for _after_execute display
+        self._added_config_source = {
+            "sources": results,
+            "merged_config": str(
+                self._work_path / ".xyz-platform" / "configuration.yaml"
+            ),
+        }
         return True
 
     def _after_execute(self) -> bool:
@@ -234,8 +310,16 @@ class AddSessionCommand(BaseSessionCommand):
             extra={"command_class": self.__class__.__name__},
         )
 
-        # Display added item (currently repository)
-        if not self._is_quiet() and self._added_repo:
+        if self._mode == "config" and not self._is_quiet() and self._added_config_source:
+            self._output_data = self._added_config_source
+            if self._is_console_output():
+                click.echo("\n📄  Registered config source(s):")
+                for src in self._added_config_source.get("sources", []):
+                    click.echo(f"    • {src.get('name', '')}  [{src.get('type', '')}]  {src.get('path', '')}")
+                click.echo(f"    • Merged config: {self._added_config_source.get('merged_config', '')}")
+
+        # Display added repository
+        elif self._mode == "repo" and not self._is_quiet() and self._added_repo:
             # Always populate structured output data
             self._output_data = {
                 k: v for k, v in self._added_repo.items() if v is not None

@@ -15,11 +15,15 @@ from xyz_platform.commands.cli_common import (
     click_output_format,
     click_output_verbose,
     click_output_quiet,
+    click_config_path,
+    click_config_file,
     handle_command_exit,
 )
 from xyz_platform.commands.session.init_session_command import InitSessionCommand
 from xyz_platform.commands.session.show_session_command import ShowSessionCommand
 from xyz_platform.commands.session.add_session_command import AddSessionCommand
+from xyz_platform.commands.session.fetch_session_command import FetchSessionCommand
+from xyz_platform.commands.session.sync_session_command import SyncSessionCommand
 from xyz_platform.commands.session.logs_session_command import LogsSessionCommand
 from xyz_platform.commands.session.list_session_command import ListSessionCommand
 from xyz_platform.commands.session.status_session_command import StatusSessionCommand
@@ -104,25 +108,25 @@ def session_status(work_path, output, verbose):
 
 @session.command(
     name="add",
-    help="Add an item to the current session workspace (repository, config, etc.).",
+    help="Add a repository OR register a config source to the current session workspace.",
 )
 @click.option(
     "--name",
-    required=True,
+    required=False,
     type=str,
-    help="Name of the item (used as the folder name)",
+    help="Name of the item (used as folder name for repos; derived from path for config sources)",
 )
 @click.option(
     "--url",
-    required=True,
+    required=False,
     type=str,
-    help="URL or path to the item",
+    help="URL or path of a repository to add (mutually exclusive with --config-path/--config-file)",
 )
 @click.option(
     "--type",
     "item_type",
     type=click.Choice(["repo", "git", "local", "archive"], case_sensitive=False),
-    help="Item type: repo (auto-detect git/local/archive), git, local, or archive. Auto-detected from URL if omitted.",
+    help="Item type: repo (auto-detect), git, local, or archive. Ignored for config sources.",
 )
 @click.option(
     "--branch",
@@ -130,26 +134,123 @@ def session_status(work_path, output, verbose):
     default="main",
     help="Git branch to clone (default: main, only for git repositories)",
 )
+@click_config_path
+@click_config_file
 @click_work_path
 @click_output_format
 @click_output_verbose
 @click_output_quiet
 def session_add(
-    name: str,
-    url: str,
+    name: str = None,
+    url: str = None,
     item_type: str = None,
     branch: str = "main",
+    config_path: str = None,
+    config_file: str = None,
     work_path: str = None,
     output: str = None,
     verbose: bool = None,
     quiet: bool = None,
 ):
-    """Add an item to the session workspace."""
+    """Add a repository or register a config source in the session workspace."""
+    # Validate: exactly one mode must be chosen
+    if not url and not config_path and not config_file:
+        raise click.UsageError(
+            "Provide --url (repository) or --config-path/--config-file (config source)."
+        )
+    if url and (config_path or config_file):
+        raise click.UsageError(
+            "--url and --config-path/--config-file are mutually exclusive."
+        )
     command = AddSessionCommand(
         name=name,
         url=url,
         item_type=item_type,
         branch=branch,
+        config_path=config_path,
+        config_file=config_file,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@session.command(
+    name="fetch",
+    help="Fetch all repositories declared in the merged platform configuration.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Re-fetch even if the repository already exists on disk.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="List what would be fetched without touching disk.",
+)
+@click.option(
+    "--name",
+    type=str,
+    default=None,
+    help="Fetch only the repository with this name.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_fetch(
+    force: bool = False,
+    dry_run: bool = False,
+    name: str = None,
+    work_path: str = None,
+    output: str = None,
+    verbose: bool = None,
+    quiet: bool = None,
+):
+    """Fetch all repositories declared in the merged platform configuration."""
+    command = FetchSessionCommand(
+        force=force,
+        dry_run=dry_run,
+        name=name,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@session.command(
+    name="sync",
+    help="Re-validate config sources and re-merge the platform configuration.",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Remove missing config sources from session state then re-merge.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_sync(
+    force: bool = False,
+    work_path: str = None,
+    output: str = None,
+    verbose: bool = None,
+    quiet: bool = None,
+):
+    """Re-validate config sources and re-merge the platform configuration."""
+    command = SyncSessionCommand(
+        force=force,
         work_path=work_path,
         output=output,
         verbose=verbose,
