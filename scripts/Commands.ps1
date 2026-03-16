@@ -5,8 +5,8 @@
 .\scripts\Run.ps1 -h
 
 # Version command
-.\scripts\Run.ps1 version
 .\scripts\Run.ps1 version -h
+.\scripts\Run.ps1 version
 .\scripts\Run.ps1 version --output text
 .\scripts\Run.ps1 version --output json
 .\scripts\Run.ps1 version --output raw

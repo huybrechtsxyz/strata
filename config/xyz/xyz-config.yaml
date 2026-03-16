@@ -68,7 +68,7 @@ spec:
         command: git --version
         min_version: "2.30.0"
       authentication:
-        method: optional
+        method: cli
         env_vars:
           - GIT_SSH_COMMAND
           - GIT_USERNAME
@@ -94,7 +94,7 @@ spec:
         command: terraform version
         min_version: "1.0.0"
       authentication:
-        method: optional
+        method: cli
         env_vars:
           - TERRAFORM_API_TOKEN
         description: |
@@ -118,7 +118,7 @@ spec:
       endpoints:
         address: https://bitwarden.com/api
       authentication:
-        method: access_token
+        method: api_key
         env_vars:
           - BWS_ACCESS_TOKEN
         description: |
@@ -138,7 +138,7 @@ spec:
       endpoints:
         address: ${VAULT_ADDR:https://vault.example.com:8200}
       authentication:
-        method: token
+        method: api_key
         env_vars:
           - VAULT_ADDR
           - VAULT_TOKEN
@@ -161,7 +161,7 @@ spec:
       endpoints:
         address: https://${AZURE_KEYVAULT_NAME}.vault.azure.net
       authentication:
-        method: azure_ad
+        method: oauth2
         env_vars:
           - AZURE_CLIENT_ID
           - AZURE_CLIENT_SECRET
@@ -183,7 +183,7 @@ spec:
     # HashiCorpConsulTool class for Consul integration
     - name: consul
       type: hashicorp_consul
-      capabilities: [variables, keyvalues]
+      capabilities: [variables, keyvalue]
       description: HashiCorp Consul for variables and KV store
       required: false
       validation:
@@ -192,7 +192,7 @@ spec:
       endpoints:
         address: ${CONSUL_HTTP_ADDR:http://consul.example.com:8500}
       authentication:
-        method: token
+        method: api_key
         env_var: CONSUL_HTTP_TOKEN
         description: |
           HashiCorp Consul ACL token
@@ -215,7 +215,7 @@ spec:
       endpoints:
         address: https://${AZURE_APPCONFIG_NAME}.azconfig.io
       authentication:
-        method: connection_string
+        method: api_key
         env_vars:
           - AZURE_APPCONFIG_CONNECTION_STRING
           - AZURE_APPCONFIG_NAME
@@ -232,7 +232,7 @@ spec:
     # Custom API integration example for artifact registry example
     - name: artifact_registry
       type: api
-      capabilities: api
+      capabilities: [api]
       description: Upload deployment manifests for audit trail
       enabled: false
       endpoints:
@@ -247,19 +247,19 @@ spec:
             2. Set environment variable:
                export ARTIFACT_REGISTRY_API_KEY="your-api-key"
       lifecycle:
-        trigger: deploy_apply
-        action: upload_manifest
+        deploy_apply_after:
+          description: "Upload deployment manifests after deploy apply"
     
     # Custom API integration example for test management system
     - name: test_management
       type: api
-      capability: api
+      capabilities: [api]
       description: OMP test management suite integration
       enabled: false
       endpoints:
         address: https://test-api.omp.com/api/v1
       authentication:
-        method: bearer_token
+        method: api_key
         env_var: OMP_TEST_API_TOKEN
         description: |
           OMP test management API bearer token
@@ -268,8 +268,8 @@ spec:
             2. Set environment variable:
                export OMP_TEST_API_TOKEN="your-bearer-token"
       lifecycle:
-        trigger: verification
-        action: check_tests_passed
+        verification:
+          description: "Check tests passed before proceeding"
 
   # Providers define supported infrastructure providers and their resource schemas
   providers:

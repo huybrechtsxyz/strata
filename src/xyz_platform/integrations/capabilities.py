@@ -270,7 +270,7 @@ CAPABILITY_MAP = {
 
 
 # Valid capability names users can specify in config
-VALID_CAPABILITY_NAMES = frozenset(CAPABILITY_MAP.keys())
+VALID_CAPABILITY_NAMES = frozenset(CAPABILITY_MAP.keys()) | {"api"}
 
 
 # Custom integration types
