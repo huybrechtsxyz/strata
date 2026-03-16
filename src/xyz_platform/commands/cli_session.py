@@ -357,7 +357,7 @@ def session_list(work_path, output, verbose):
     handle_command_exit(command, success)
 
 
-@session.command(name="remove", help="Remove an item from the session workspace.")
+@session.command(name="remove", help="Remove a repository or config source from the session workspace.")
 @click.option(
     "--name",
     required=True,
@@ -365,11 +365,18 @@ def session_list(work_path, output, verbose):
     help="Name of the item to remove",
 )
 @click.option(
+    "--config",
+    "remove_config",
+    is_flag=True,
+    default=False,
+    help="Remove a config source instead of a repository.",
+)
+@click.option(
     "--delete",
     "delete_folder",
     is_flag=True,
     default=False,
-    help="Also delete the repository folder from disk.",
+    help="Also delete the repository folder from disk (repo mode only).",
 )
 @click.option(
     "--dry-run",
@@ -381,19 +388,21 @@ def session_list(work_path, output, verbose):
 @click_output_format
 @click_output_verbose
 @click_output_quiet
-def session_remove(name, delete_folder, dry_run, work_path, output, verbose, quiet):
-    """Remove an item from the session workspace."""
+def session_remove(name, remove_config, delete_folder, dry_run, work_path, output, verbose, quiet):
+    """Remove a repository or config source from the session workspace."""
     command = RemoveSessionCommand(
         name=name,
         work_path=work_path,
         delete_folder=delete_folder,
         dry_run=dry_run,
+        config=remove_config,
         output=output,
         verbose=verbose,
         quiet=quiet,
     )
     success = command.execute()
     handle_command_exit(command, success)
+
 
 
 @session.command(name="clean", help="Clean workspace artifacts (logs, temp files).")

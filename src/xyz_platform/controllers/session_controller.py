@@ -775,6 +775,76 @@ class SessionController:
             self._errors.append(error_msg)
             return False, {}
 
+    def remove_config_source(
+        self,
+        name: str,
+        work_path: Path,
+        dry_run: bool = False,
+    ) -> Tuple[bool, Dict]:
+        """
+        Remove a config source from the session by name.
+
+        Removes the entry from in-memory config_sources[] and re-merges the
+        remaining sources into the active configuration (save_session() persists it).
+
+        Args:
+            name: Logical name of the config source to remove
+            work_path: Root working directory (used for merge)
+            dry_run: If True, report what would happen without making any changes
+
+        Returns:
+            Tuple[bool, Dict]: Success status and removed config source metadata
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            sources = self._session_data.get("config_sources", [])
+            source_metadata = next((s for s in sources if s["name"] == name), None)
+
+            if source_metadata is None:
+                error_msg = f"Config source '{name}' not found in session"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            if dry_run:
+                self._messages.append(
+                    f"[dry-run] Would remove config source '{name}' from session"
+                )
+                self._messages.append(
+                    f"[dry-run] Would re-merge remaining config sources"
+                )
+                return True, dict(source_metadata)
+
+            # Remove from in-memory list
+            self._session_data["config_sources"] = [
+                s for s in sources if s["name"] != name
+            ]
+            self._messages.append(f"Removed config source '{name}' from session")
+
+            # Re-merge remaining sources so active configuration stays consistent
+            merge_success, merge_errors = self.merge_config_and_save(
+                work_path=work_path
+            )
+            if not merge_success:
+                self._errors.extend(merge_errors)
+                return False, source_metadata
+
+            return True, source_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to remove config source: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
     def clean_session(
         self,
         work_path: Path,

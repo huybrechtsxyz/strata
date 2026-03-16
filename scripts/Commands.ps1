@@ -111,14 +111,20 @@ Remove-Item -Path .app -Recurse -Force
 .\scripts\Run.ps1 session logs --work-path .app --output text
 .\scripts\Run.ps1 session logs --work-path .app --verbose
 
-# session remove
+# session remove (repo mode)
 .\scripts\Run.ps1 session remove -h
-.\scripts\Run.ps1 session remove --name config --work-path .app
-.\scripts\Run.ps1 session remove --name config --work-path .app --dry-run
-.\scripts\Run.ps1 session remove --name config --work-path .app --delete
-.\scripts\Run.ps1 session remove --name config --work-path .app --delete --dry-run
-.\scripts\Run.ps1 session remove --name config --work-path .app --output json
-.\scripts\Run.ps1 session remove --name config --work-path .app --quiet
+.\scripts\Run.ps1 session remove --name my-repo --work-path .app
+.\scripts\Run.ps1 session remove --name my-repo --work-path .app --dry-run
+.\scripts\Run.ps1 session remove --name my-repo --work-path .app --delete
+.\scripts\Run.ps1 session remove --name my-repo --work-path .app --delete --dry-run
+.\scripts\Run.ps1 session remove --name my-repo --work-path .app --output json
+.\scripts\Run.ps1 session remove --name my-repo --work-path .app --quiet
+
+# session remove (config source mode)
+.\scripts\Run.ps1 session remove --config --name my-config --work-path .app
+.\scripts\Run.ps1 session remove --config --name my-config --work-path .app --dry-run
+.\scripts\Run.ps1 session remove --config --name my-config --work-path .app --output json
+.\scripts\Run.ps1 session remove --config --name my-config --work-path .app --quiet
 
 # session clean
 .\scripts\Run.ps1 session clean -h
