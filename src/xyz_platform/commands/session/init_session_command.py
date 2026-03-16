@@ -35,16 +35,19 @@ class InitSessionCommand(BaseSessionCommand):
         output: str = None,
         verbose: bool = None,
         quiet: bool = None,
+        editor: Optional[str] = None,
     ):
         """
         Initialize the session init command.
 
         Args:
-            name: Name of the VSCode workspace
+            name: Name of the workspace
             work_path: Root working directory (defaults to current directory)
             output: Output format (json, yaml, text)
             verbose: Enable verbose output
             quiet: Disable all console output
+            editor: Editor integration to activate (e.g. 'vscode'). When set to
+                'vscode', creates the .code-workspace file.
         """
         super().__init__(
             work_path=work_path,
@@ -55,6 +58,7 @@ class InitSessionCommand(BaseSessionCommand):
         )
 
         self._workspace_name = name
+        self._editor = editor
         self._created_paths = {}
 
     def execute(self) -> bool:
@@ -87,6 +91,7 @@ class InitSessionCommand(BaseSessionCommand):
             success, self._created_paths = self._session_controller.initialize_session(
                 workspace_name=self._workspace_name,
                 work_path=self._work_path,
+                editor=self._editor,
             )
 
             # Copy controller errors/messages to command
@@ -145,6 +150,7 @@ class InitSessionCommand(BaseSessionCommand):
                 "command_class": self.__class__.__name__,
                 "workspace_name": self._workspace_name,
                 "work_path": str(self._work_path),
+                "editor": self._editor,
             },
         )
 

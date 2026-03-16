@@ -25,6 +25,7 @@ from xyz_platform.commands.session.list_session_command import ListSessionComman
 from xyz_platform.commands.session.status_session_command import StatusSessionCommand
 from xyz_platform.commands.session.remove_session_command import RemoveSessionCommand
 from xyz_platform.commands.session.clean_session_command import CleanSessionCommand
+from xyz_platform.commands.session.schema_session_command import SchemaSessionCommand
 
 
 @click.group(name="session", help="Manage and view session information.")
@@ -38,7 +39,13 @@ def session():
     "--name",
     required=True,
     type=str,
-    help="Name of the VSCode workspace (required)",
+    help="Name of the workspace (required)",
+)
+@click.option(
+    "--editor",
+    type=click.Choice(["vscode"], case_sensitive=False),
+    default=None,
+    help="Editor integration to activate. Use 'vscode' to create the .code-workspace file.",
 )
 @click_work_path
 @click_output_format
@@ -46,6 +53,7 @@ def session():
 @click_output_quiet
 def session_init(
     name: str,
+    editor: str = None,
     work_path: str = None,
     output: str = None,
     verbose: bool = None,
@@ -54,6 +62,7 @@ def session_init(
     """Initialize a new session workspace."""
     command = InitSessionCommand(
         name=name,
+        editor=editor,
         work_path=work_path,
         output=output,
         verbose=verbose,
@@ -309,6 +318,46 @@ def session_clean(logs, dry_run, work_path, output, verbose, quiet):
         work_path=work_path,
         logs=logs,
         dry_run=dry_run,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@session.command(
+    name="schemas", help="Export JSON schemas for all platform config models."
+)
+@click.option(
+    "--output-dir",
+    type=str,
+    default=None,
+    help="Directory to write schema files into (default: .xyz-platform/schemas)",
+)
+@click.option(
+    "--editor",
+    type=click.Choice(["vscode"], case_sensitive=False),
+    default=None,
+    help="Editor integration to activate. Use 'vscode' to update .vscode/settings.json with yaml.schemas entries.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_schemas(
+    output_dir: str = None,
+    editor: str = None,
+    work_path: str = None,
+    output: str = None,
+    verbose: bool = None,
+    quiet: bool = None,
+):
+    """Export JSON schemas for all platform config models."""
+    command = SchemaSessionCommand(
+        work_path=work_path,
+        output_dir=output_dir,
+        editor=editor,
         output=output,
         verbose=verbose,
         quiet=quiet,

@@ -212,6 +212,7 @@ class SessionController:
         self,
         workspace_name: str,
         work_path: Path,
+        editor: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Path]]:
         """
         Initialize a new session workspace.
@@ -260,16 +261,17 @@ class SessionController:
             self.logger.info(f"Creating logs folder: {logs_folder}")
             logs_folder.mkdir(parents=True, exist_ok=True)
 
-            # Create workspace file (skip if already exists)
-            workspace_created = self._create_workspace_file(
-                workspace_file, workspace_name
-            )
-            if workspace_created:
-                created_paths["workspace_file"] = workspace_file
-            else:
-                self._messages.append(
-                    f"Skipped workspace file creation (already exists): {workspace_file}"
+            # Create workspace file only when VS Code editor integration is requested
+            if editor and editor.lower() == "vscode":
+                workspace_created = self._create_workspace_file(
+                    workspace_file, workspace_name
                 )
+                if workspace_created:
+                    created_paths["workspace_file"] = workspace_file
+                else:
+                    self._messages.append(
+                        f"Skipped workspace file creation (already exists): {workspace_file}"
+                    )
 
             # Create logging configuration
             logging_config_path = session_folder / "logging.yaml"
@@ -921,7 +923,9 @@ class SessionController:
             )
 
             if result.returncode != 0:
-                error_msg = f"Git clone failed: {result.get('stderr', 'Unknown error')}"
+                error_msg = (
+                    f"Git clone failed: {result.stderr.strip() or 'Unknown error'}"
+                )
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False
