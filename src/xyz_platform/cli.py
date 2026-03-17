@@ -59,6 +59,15 @@ logger = get_logger(__name__)
     help=(
         "XYZ Platform CLI.\n\n"
         "Automates workspace preparation, configuration, and deployment for the XYZ Platform.\n\n"
+        "Typical flow:\n\n"
+        "  1) xyz session init --work-path <wp>\n\n"
+        "  2) xyz session add --url <repo-url> --name <repo> --work-path <wp>\n\n"
+        "  3) xyz session add --config-file <cfg-file> --work-path <wp>\n\n"
+        "  4) xyz session sync --work-path <wp>\n\n"
+        "  5) xyz session fetch --work-path <wp>\n\n"
+        "  6) xyz validate --work-path <wp> --file <def-file>\n\n"
+        "  7) xyz build --work-path <wp> --file <dep-file>\n\n"
+        "  8) xyz deploy --work-path <wp> --file <dep-file>\n\n"
     ),
     context_settings={"help_option_names": ["-h", "--help"]},
 )

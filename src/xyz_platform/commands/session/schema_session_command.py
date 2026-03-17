@@ -17,6 +17,7 @@ import click
 from pydantic import BaseModel
 
 from xyz_platform.commands.session.base_session_command import BaseSessionCommand
+from xyz_platform.exceptions import PathValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -227,12 +228,42 @@ class SchemaSessionCommand(BaseSessionCommand):
             # User supplied a relative --output-dir: resolve against work_path
             self._output_dir = self._work_path / self._output_dir
 
+        self._output_dir = self._output_dir.resolve()
+
+        # Validate output-dir semantics before attempting mkdir
+        try:
+            if self._output_dir.exists() and not self._output_dir.is_dir():
+                raise PathValidationError(
+                    option="--output-dir",
+                    provided=str(self._output_dir),
+                    expected="directory path",
+                    resolved=str(self._output_dir),
+                    work_path=str(self._work_path),
+                    message=(
+                        f"--output-dir must be a directory path, "
+                        f"but an existing file was provided: '{self._output_dir}'"
+                    ),
+                )
+        except PathValidationError as exc:
+            self.logger.error(str(exc))
+            self._errors.append(exc.message)
+            return False
+
         try:
             self._output_dir.mkdir(parents=True, exist_ok=True)
         except Exception as exc:
-            error_msg = (
-                f"Cannot create schema output directory '{self._output_dir}': {exc}"
+            path_exc = PathValidationError(
+                option="--output-dir",
+                provided=str(self._output_dir),
+                expected="writable directory path",
+                resolved=str(self._output_dir),
+                work_path=str(self._work_path),
+                message=(
+                    f"Cannot create schema output directory "
+                    f"'{self._output_dir}': {exc}"
+                ),
             )
+            error_msg = path_exc.message
             self.logger.error(error_msg)
             self._errors.append(error_msg)
             return False

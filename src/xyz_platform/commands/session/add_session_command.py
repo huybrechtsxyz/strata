@@ -9,11 +9,14 @@ Description   : Command to add items to an XYZ Platform session.
 ===============================================================================
 """
 
+from pathlib import Path
 from typing import Optional
 
 import click
 
 from xyz_platform.commands.session.base_session_command import BaseSessionCommand
+from xyz_platform.exceptions import PathValidationError
+from xyz_platform.utils.system import resolve_path
 
 
 class AddSessionCommand(BaseSessionCommand):
@@ -200,6 +203,29 @@ class AddSessionCommand(BaseSessionCommand):
         if not super()._initialize(operation=operation):
             return False
 
+        try:
+            if self._mode == "config":
+                if self._config_file:
+                    self._config_file = str(
+                        self._resolve_and_validate_input_path(
+                            value=self._config_file,
+                            option="--config-file",
+                            expected_type="file",
+                        )
+                    )
+                if self._config_path:
+                    self._config_path = str(
+                        self._resolve_and_validate_input_path(
+                            value=self._config_path,
+                            option="--config-path",
+                            expected_type="dir",
+                        )
+                    )
+        except PathValidationError as exc:
+            self.logger.error(str(exc))
+            self._errors.append(exc.message)
+            return False
+
         self.logger.debug(
             "Add command initialized",
             extra={
@@ -214,6 +240,68 @@ class AddSessionCommand(BaseSessionCommand):
         )
 
         return True
+
+    def _resolve_and_validate_input_path(
+        self,
+        value: str,
+        option: str,
+        expected_type: str,
+    ) -> Path:
+        """
+        Resolve and validate a user-supplied path for config mode.
+
+        Resolution strategy:
+        1) Absolute paths are used directly.
+        2) Relative paths are resolved against --work-path.
+        """
+        raw = (value or "").strip()
+        if not raw:
+            raise PathValidationError(
+                option=option,
+                provided=value,
+                expected=f"a valid {expected_type} path",
+                work_path=str(self._work_path),
+                message=f"{option} requires a non-empty path value",
+            )
+
+        input_path = Path(raw)
+        resolved = (
+            input_path
+            if input_path.is_absolute()
+            else resolve_path(str(self._work_path), raw)
+        )
+
+        if not resolved.exists():
+            raise PathValidationError(
+                option=option,
+                provided=raw,
+                expected=f"existing {expected_type}",
+                resolved=str(resolved),
+                work_path=str(self._work_path),
+                message=f"{option} path not found: '{raw}'. Resolved to '{resolved}'",
+            )
+
+        if expected_type == "file" and not resolved.is_file():
+            raise PathValidationError(
+                option=option,
+                provided=raw,
+                expected="existing file",
+                resolved=str(resolved),
+                work_path=str(self._work_path),
+                message=f"{option} must point to a file: '{resolved}'",
+            )
+
+        if expected_type == "dir" and not resolved.is_dir():
+            raise PathValidationError(
+                option=option,
+                provided=raw,
+                expected="existing directory",
+                resolved=str(resolved),
+                work_path=str(self._work_path),
+                message=f"{option} must point to a directory: '{resolved}'",
+            )
+
+        return resolved.resolve()
 
     def _before_execute(self) -> bool:
         """

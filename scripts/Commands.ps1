@@ -51,15 +51,15 @@ Remove-Item -Path .app -Recurse -Force
 
 # session add — repository mode
 .\scripts\Run.ps1 session add -h
-.\scripts\Run.ps1 session add --name config --work-path .app --url "../config"
-.\scripts\Run.ps1 session add --name config --work-path .app --url "../config" --output json
-.\scripts\Run.ps1 session add --name config --work-path .app --url "../config" --output text
-.\scripts\Run.ps1 session add --name config --work-path .app --url "../config" --verbose
-.\scripts\Run.ps1 session add --name config --work-path .app --url "../config" --quiet
-.\scripts\Run.ps1 session add --name traefik --work-path .app --url "https://github.com/huybrechtsxyz/xyz-traefik.git" --branch main
+.\scripts\Run.ps1 session add --name config --work-path .app --url "../config/xyz"
+.\scripts\Run.ps1 session add --name config --work-path .app --url "../config/xyz" --output json
+.\scripts\Run.ps1 session add --name config --work-path .app --url "../config/xyz" --output text
+.\scripts\Run.ps1 session add --name config --work-path .app --url "../config/xyz" --verbose
+.\scripts\Run.ps1 session add --name config --work-path .app --url "../config/xyz" --quiet
+.\scripts\Run.ps1 session add --name services/traefik --work-path .app --url "https://github.com/huybrechtsxyz/xyz-traefik.git" --branch main
 
 # session add — config source mode (--config-file or --config-path, mutually exclusive with --url)
-.\scripts\Run.ps1 session add --work-path .app --config-file "config/xyz/xyz-config.yaml"
+.\scripts\Run.ps1 session add --work-path .app --config-file "config/xyz-config.yaml"
 .\scripts\Run.ps1 session add --name xyz_config --work-path .app --config-file "config/xyz/xyz-config.yaml"
 .\scripts\Run.ps1 session add --work-path .app --config-path "config/xyz"
 .\scripts\Run.ps1 session add --work-path .app --config-file "config/xyz/xyz-config.yaml" --output json

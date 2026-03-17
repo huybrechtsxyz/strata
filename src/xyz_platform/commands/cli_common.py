@@ -136,7 +136,7 @@ def click_config_path(func):
     func = click.option(
         "--config-path",
         default=None,
-        type=click.Path(exists=True, file_okay=False, dir_okay=True),
+        type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
         help="Optional configuration directory path (must exist)",
     )(func)
     return func
@@ -147,7 +147,7 @@ def click_config_file(func):
     func = click.option(
         "--config-file",
         default=None,
-        type=click.Path(exists=True, file_okay=True, dir_okay=False),
+        type=click.Path(exists=False, file_okay=True, dir_okay=False, path_type=str),
         help="Optional path to a specific configuration file (must exist)",
     )(func)
     return func
@@ -210,7 +210,7 @@ def click_work_path(func):
     func = click.option(
         "--work-path",
         default=None,
-        type=click.Path(exists=True, file_okay=False, dir_okay=True),
+        type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
         help="Optional root path of the workspace, if different then PWD (must exist)",
     )(func)
     return func

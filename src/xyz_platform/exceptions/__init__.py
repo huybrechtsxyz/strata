@@ -37,6 +37,8 @@ from .service_exception import (
     FileNotFoundError as PlatformFileNotFoundError,
 )
 
+from .path_exception import PathValidationError
+
 __all__ = [
     # Base exceptions
     "PlatformException",
@@ -60,4 +62,5 @@ __all__ = [
     "ResourceTypeNotFoundError",
     "ServiceLoadError",
     "PlatformFileNotFoundError",
+    "PathValidationError",
 ]
