@@ -43,7 +43,7 @@ from xyz_platform.logger.logger import configure_logging, get_logger
 # from xyz_platform.commands.cli_deploy import deploy
 # from xyz_platform.commands.help.topic_help_command import TopicHelpCommand
 # from xyz_platform.commands.cli_config import config
-# from xyz_platform.commands.cli_validate import validate
+from xyz_platform.commands.cli_validate import validate
 # from xyz_platform.logger import get_logger, configure_logging, shutdown_logging
 # from xyz_platform.utils import system
 
@@ -90,7 +90,7 @@ main.add_command(version_command)
 main.add_command(session)
 main.add_command(tools)
 # main.add_command(config)
-# main.add_command(validate)
+main.add_command(validate)
 # main.add_command(build)
 # main.add_command(deploy)
 

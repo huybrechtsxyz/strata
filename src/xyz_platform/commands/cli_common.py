@@ -214,3 +214,25 @@ def click_work_path(func):
         help="Optional root path of the workspace, if different then PWD (must exist)",
     )(func)
     return func
+
+
+# --file -> Path to a platform artifact file (relative to work-path or absolute)
+def click_file(func):
+    func = click.option(
+        "--file",
+        required=True,
+        type=click.Path(exists=False, file_okay=True, dir_okay=False, path_type=str),
+        help="Path to the platform artifact file (relative to work-path or absolute)",
+    )(func)
+    return func
+
+
+# --no-hooks -> Skip before/after lifecycle hooks
+def click_no_hooks(func):
+    func = click.option(
+        "--no-hooks",
+        is_flag=True,
+        default=False,
+        help="Skip before/after lifecycle hooks",
+    )(func)
+    return func
