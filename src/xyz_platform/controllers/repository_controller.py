@@ -27,7 +27,7 @@ class RepositoryController:
     Controls repository operations for configuration management.
 
     Orchestrates fetching repositories from various sources (gitops, bundled,
-    container) into the build directory based on configuration.spec.repositories.
+    container) into the workspace directory based on configuration.spec.repositories.
 
     Source routing:
     - GITOPS  : clone via GitIntegration (or pull if already on disk)
@@ -73,7 +73,6 @@ class RepositoryController:
     def fetch_all_repositories(
         self,
         work_path: str,
-        build_path: str,
         force: bool = False,
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
     ) -> Tuple[bool, List[str]]:
@@ -82,7 +81,6 @@ class RepositoryController:
 
         Args:
             work_path: Working directory for resolving bundled paths
-            build_path: Base build directory for repositories
             force: If True, re-fetch even if repository already exists on disk
             progress_callback: Optional callback(repo_name, current, total)
                 called before each repository fetch
@@ -117,7 +115,7 @@ class RepositoryController:
             extra={
                 "count": total,
                 "work_path": work_path,
-                "build_path": build_path,
+                "target_base_path": work_path,
                 "force": force,
             },
         )
@@ -134,7 +132,6 @@ class RepositoryController:
                 repo_success = self._fetch_single_repository(
                     work_path=work_path,
                     source=repo,
-                    build_path=build_path,
                     force=force,
                 )
 
@@ -167,12 +164,12 @@ class RepositoryController:
 
         return len(self._errors) == 0, self._errors.copy()
 
-    def get_repository_status(self, build_path: str) -> Dict[str, Dict[str, Any]]:
+    def get_repository_status(self, work_path: str) -> Dict[str, Dict[str, Any]]:
         """
         Get status of all configured repositories.
 
         Args:
-            build_path: Base build directory
+            work_path: Workspace root directory where repositories are materialized
 
         Returns:
             Dict of repository name to status info
@@ -192,7 +189,7 @@ class RepositoryController:
         status: Dict[str, Dict[str, Any]] = {}
 
         for repo in repositories:
-            target_path = Path(build_path) / (repo.deploy_path or "")
+            target_path = self._resolve_target_path(work_path=work_path, source=repo)
             repo_name = repo.name or repo.repository
 
             status[repo_name] = {
@@ -232,17 +229,17 @@ class RepositoryController:
         repositories = self._config_service.model.spec.repositories
         return len(repositories) if repositories else 0
 
-    def validate_repositories(self, build_path: str) -> Tuple[bool, List[str]]:
+    def validate_repositories(self, work_path: str) -> Tuple[bool, List[str]]:
         """
         Validate that all repositories exist on disk.
 
         Args:
-            build_path: Base build directory
+            work_path: Workspace root directory where repositories are materialized
 
         Returns:
             Tuple of (all_exist, list of missing repository names)
         """
-        status = self.get_repository_status(build_path)
+        status = self.get_repository_status(work_path)
         missing = [
             repo_name
             for repo_name, repo_status in status.items()
@@ -265,7 +262,6 @@ class RepositoryController:
         self,
         work_path: str,
         source: RepositoryModel,
-        build_path: str,
         force: bool,
     ) -> bool:
         """
@@ -279,13 +275,12 @@ class RepositoryController:
         Args:
             work_path: Working directory for resolving bundled source paths
             source: RepositoryModel with repository details
-            build_path: Base build directory
             force: If True, remove existing target before re-fetching
 
         Returns:
             True if successful, False otherwise
         """
-        target_path = Path(build_path) / (source.deploy_path or "")
+        target_path = self._resolve_target_path(work_path=work_path, source=source)
         repo_name = source.name or source.repository
 
         self.logger.debug(
@@ -325,6 +320,18 @@ class RepositoryController:
             extra={"repository": repo_name, "type": source.type},
         )
         return False
+
+    def _resolve_target_path(self, work_path: str, source: RepositoryModel) -> Path:
+        """
+        Resolve repository target directory under workspace root.
+
+        Resolution order:
+        1. source.deploy_path
+        2. source.name
+        3. source.repository
+        """
+        target_name = source.deploy_path or source.name or source.repository
+        return Path(work_path) / target_name
 
     def _fetch_gitops(
         self,
@@ -444,7 +451,7 @@ class RepositoryController:
         force: bool,
     ) -> bool:
         """
-        Copy a bundled (local) repository to the build directory.
+        Copy a bundled (local) repository to the workspace directory.
 
         Args:
             work_path: Working directory used to resolve the relative source path
@@ -458,20 +465,37 @@ class RepositoryController:
         repo_name = source.name or source.repository
 
         try:
-            # Resolve source: repository field is relative to work_path
-            if source.repository in (".", "/"):
-                source_dir = Path(work_path)
+            # Resolve bundled source adaptively.
+            # Primary: relative to work_path (typically .app)
+            # Fallback: relative to parent of work_path (monorepo/project root)
+            workspace_root = Path(work_path)
+            repo_ref = source.repository or "."
+
+            base_candidates = []
+            if Path(repo_ref).is_absolute():
+                base_candidates.append(Path(repo_ref))
+            elif repo_ref in (".", "/"):
+                base_candidates.extend([workspace_root, workspace_root.parent])
             else:
-                source_dir = Path(work_path) / source.repository
+                base_candidates.extend(
+                    [workspace_root / repo_ref, workspace_root.parent / repo_ref]
+                )
 
-            if source.source_path:
-                source_dir = source_dir / source.source_path
+            source_candidates = []
+            for base in base_candidates:
+                candidate = base / source.source_path if source.source_path else base
+                source_candidates.append(candidate)
 
-            if not source_dir.exists():
+            source_dir = next((p for p in source_candidates if p.exists()), None)
+
+            if source_dir is None:
                 error_msg = (
                     f"Bundled source path does not exist for '{repo_name}': "
-                    f"{source_dir}"
+                    f"{source_candidates[0]}"
                 )
+                if len(source_candidates) > 1:
+                    tried = ", ".join(str(p) for p in source_candidates)
+                    error_msg = f"{error_msg}. Tried: {tried}"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False

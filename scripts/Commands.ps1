@@ -1,6 +1,34 @@
 <#
 #>
 
+# ============================================================
+# Session command group
+# ============================================================
+
+
+# Temporary app directory for testing
+New-Item -Path .app -ItemType Directory -Force
+
+.\scripts\Run.ps1 -h
+.\scripts\Run.ps1 version --output json
+
+.\scripts\Run.ps1 session init --name platform --work-path .app --editor vscode
+
+.\scripts\Run.ps1 session add --name config --work-path .app --url "../config/xyz" --output text
+
+.\scripts\Run.ps1 session add  --work-path .app --config-file "config/xyz-config.yaml"
+
+.\scripts\Run.ps1 session fetch --work-path .app --dry-run
+.\scripts\Run.ps1 session fetch --work-path .app
+
+# Clean up app directory after testing
+Remove-Item -Path .app -Recurse -Force
+
+
+# ============================================================
+# Basic command group
+# ============================================================
+
 # Main entry point for CLI commands
 .\scripts\Run.ps1 -h
 
@@ -16,12 +44,6 @@
 .\scripts\Run.ps1 help -h
 .\scripts\Run.ps1 help terraform # Show help for terraform topic
 .\scripts\Run.ps1 help tf         # Show topic not found
-
-# Temporary app directory for testing
-New-Item -Path .app -ItemType Directory -Force
-
-# Clean up app directory after testing
-Remove-Item -Path .app -Recurse -Force
 
 # ============================================================
 # Session command group

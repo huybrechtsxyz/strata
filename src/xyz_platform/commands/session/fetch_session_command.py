@@ -168,11 +168,10 @@ class FetchSessionCommand(BaseSessionCommand):
                     )
                     for repo in repositories:
                         name = repo.name or repo.repository
+                        target_dir = repo.deploy_path or name
                         click.echo(
                             f"    • {name}  [{repo.type.value}]"
-                            f"  → {self._work_path / repo.deploy_path}"
-                            if repo.deploy_path
-                            else f"    • {name}  [{repo.type.value}]"
+                            f"  → {self._work_path / target_dir}"
                         )
                     click.echo("")
                 self._fetch_results = [
@@ -192,7 +191,6 @@ class FetchSessionCommand(BaseSessionCommand):
             )
 
             repo_controller = RepositoryController()
-            build_path = workspace_controller.get_workspace_buildpath(self._work_path)
 
             if self._is_console_output():
                 click.echo(f"\n📥  Fetching {len(repositories)} repository(s)...")
@@ -203,7 +201,6 @@ class FetchSessionCommand(BaseSessionCommand):
 
             fetch_success, fetch_errors = repo_controller.fetch_all_repositories(
                 work_path=str(self._work_path),
-                build_path=str(build_path),
                 force=self._force,
                 progress_callback=_progress,
             )

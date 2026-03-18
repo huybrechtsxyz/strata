@@ -35,25 +35,25 @@ spec:
       repository: .
       reference: "1.0.0"
       source_path: config/xyz
-      deploy_path: config
+      deploy_path: xyz_config
     - name: xyz_deploy
       type: bundled
       repository: .
       reference: "1.0.0"
       source_path: deploy/xyz
-      deploy_path: deploy
+      deploy_path: xyz_deploy
     - name: xyz_envs
       type: bundled
       repository: .
       reference: "1.0.0"
       source_path: envs/xyz
-      deploy_path: envs
+      deploy_path: xyz_envs
     - name: xyz_services
       type: bundled
       repository: .
       reference: "1.0.0"
       source_path: services/xyz
-      deploy_path: services
+      deploy_path: xyz_services
   
   # Integrations define external tools and services the platform uses
   integrations:
