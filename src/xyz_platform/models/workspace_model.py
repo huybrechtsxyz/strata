@@ -14,7 +14,6 @@ from enum import Enum
 from pydantic import (
     BaseModel,
     Field,
-    FilePath,
     StringConstraints,
     model_validator,
     field_validator,
@@ -45,14 +44,14 @@ class WorkspaceNamespaceModel(BaseModel):
     """Model for a workspace namespace."""
 
     name: PlatformName = Field(description="Unique namespace name")
-    file: FilePath = Field(description="File reference for the namespace configuration")
+    file: str = Field(description="File reference for the namespace configuration")
 
 
 class WorkspaceFirewallModel(BaseModel):
     """Model for a workspace firewall."""
 
     name: PlatformName = Field(description="Unique firewall name")
-    file: FilePath = Field(description="File reference for the firewall configuration")
+    file: str = Field(description="File reference for the firewall configuration")
 
 
 class WorkspaceVolumeModel(BaseModel):
@@ -68,7 +67,7 @@ class WorkspaceModuleReferenceModel(BaseModel):
     """Module reference for a resource - links code/app to infrastructure."""
 
     name: PlatformName = Field(description="Unique module name within this resource")
-    file: FilePath = Field(
+    file: str = Field(
         description="File reference to the module configuration (module YAML file)"
     )
     slot_type: Optional[str] = Field(
@@ -157,7 +156,7 @@ class WorkspaceResourceModel(BaseModel):
     """Model for workspace resource definition (gluing layer)."""
 
     name: PlatformName = Field(description="Unique resource name")
-    file: FilePath = Field(description="Path to the resource configuration file")
+    file: str = Field(description="Path to the resource configuration file")
     description: Optional[str] = Field(
         None,
         description="Optional description of the resource for documentation purposes",
@@ -259,7 +258,7 @@ class WorkspaceIacModel(BaseModel):
 
 class WorkspaceProviderModel(BaseModel):
     name: PlatformName = Field(description="Unique provider name")
-    file: FilePath = Field(description="Path to the provider configuration file")
+    file: str = Field(description="Path to the provider configuration file")
     description: Optional[str] = Field(
         None,
         description="Optional description of the provider for documentation purposes",

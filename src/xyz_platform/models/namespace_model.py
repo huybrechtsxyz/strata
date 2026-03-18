@@ -15,7 +15,6 @@ from typing import Dict, List, Optional, Annotated, Any
 from pydantic import (
     BaseModel,
     Field,
-    FilePath,
     StringConstraints,
     model_validator,
 )
@@ -59,7 +58,7 @@ class NamespaceModuleModel(BaseModel):
     description: Optional[Annotated[str, StringConstraints(strip_whitespace=True)]] = (
         Field(None, description="Optional description of what this module provides")
     )
-    file: FilePath = Field(
+    file: str = Field(
         description="File reference for the module configuration or script"
     )
 

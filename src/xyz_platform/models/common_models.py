@@ -17,7 +17,6 @@ import warnings
 from pydantic import (
     BaseModel,
     Field,
-    FilePath,
     RootModel,
     StringConstraints,
     field_validator,
@@ -82,7 +81,7 @@ class ProvisionerType(str, Enum):
 class ScriptPathModel(BaseModel):
     """Individual script with scope and execution metadata."""
 
-    file: FilePath = Field(description="Path to script file")
+    file: str = Field(description="Path to script file")
     scope: PlatformKind = Field(
         description="Execution scope - determines how many times script runs (deployment, environment, workspace, provider, resource, module, namespace)"
     )
@@ -123,7 +122,7 @@ class ScriptsModel(BaseModel):
     description: Optional[str] = Field(
         None, description="Optional description for documentation purposes"
     )
-    scripts: Optional[List[FilePath | ScriptPathModel]] = None
+    scripts: Optional[List[str | ScriptPathModel]] = None
 
     @field_validator("scripts")
     @classmethod

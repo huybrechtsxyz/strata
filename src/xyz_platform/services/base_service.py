@@ -13,7 +13,7 @@ import os
 import yaml
 from pathlib import Path
 from pydantic import ValidationError
-from typing import Optional, Tuple, List
+from typing import Dict, Optional, Tuple, List
 from abc import ABC, abstractmethod
 
 from xyz_platform.models.configuration_model import ConfigurationModel
@@ -480,3 +480,39 @@ class BaseService(ABC):
 
         # Return base_dir resolution even if it doesn't exist (let caller handle)
         return str(Path(object_path) / file_path)
+
+    def _validate_file_refs(
+        self,
+        work_path: str,
+        repo_map: Optional[Dict[str, str]],
+        file_refs: List[Tuple[str, str]],
+    ) -> List[str]:
+        """
+        Validate that file references resolve to existing files on disk.
+
+        Handles plain relative/absolute paths and @repo_name/sub/path references.
+        Skips silently when work_path is None.
+
+        Args:
+            work_path: Workspace root path for resolving relative paths
+            repo_map: {repo_name: deploy_path} for resolving @repo_name/... refs
+            file_refs: List of (label, file_str) pairs to check
+
+        Returns:
+            List[str]: Error messages for missing or unresolvable files
+        """
+        if not work_path:
+            return []
+        errors = []
+        for label, file_str in file_refs:
+            if not file_str:
+                continue
+            try:
+                resolved = resolve_path(work_path, file_str, repo_map=repo_map)
+                if not resolved.exists():
+                    errors.append(
+                        f"{label}: file not found: '{file_str}' (resolved: {resolved})"
+                    )
+            except ValueError as exc:
+                errors.append(f"{label}: {exc}")
+        return errors

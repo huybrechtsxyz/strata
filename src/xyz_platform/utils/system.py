@@ -18,7 +18,7 @@ import time
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 from rich.console import Console
 from xyz_platform.logger import get_logger
 
@@ -51,7 +51,8 @@ def normalize_path(path: str) -> str:
 
 
 # Join multiple paths
-def resolve_path(base_path: str, target_path: str = None, *sub_paths: str) -> Path:
+def resolve_path(base_path: str, target_path: str = None, *sub_paths: str,
+                 repo_map: Optional[Dict[str, str]] = None) -> Path:
     """
     Resolve the target path by joining base path, target path, and sub-paths.
     arguments:
@@ -63,6 +64,16 @@ def resolve_path(base_path: str, target_path: str = None, *sub_paths: str) -> Pa
     """
     if base_path is None or base_path == "":
         base_path = os.getcwd()
+
+    # Resolve @repo_name/... cross-repo references
+    if target_path and target_path.startswith("@"):
+        repo_name, _, rest = target_path[1:].partition("/")
+        if repo_map is None or repo_name not in repo_map:
+            raise ValueError(
+                f"Unknown repo reference '@{repo_name}' — "
+                f"no repo_map provided or repo not found"
+            )
+        target_path = repo_map[repo_name] + ("/" + rest if rest else "")
 
     # If target_path is absolute, use it directly
     if target_path is not None and target_path != "":

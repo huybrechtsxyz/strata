@@ -237,7 +237,7 @@ class WorkspaceController:
                 )
 
             # Validate
-            success, errors = config_service.validate()
+            success, errors = config_service.validate(work_path=str(work_path))
             if success:
                 self.logger.info(
                     "Configuration loaded and validated successfully",
@@ -373,7 +373,9 @@ class WorkspaceController:
                 config_service.model = None
 
                 # Validate the merged configuration
-                validation_success, validation_errors = config_service.validate()
+                validation_success, validation_errors = config_service.validate(
+                    work_path=str(work_path)
+                )
                 if not validation_success:
                     error_msg = "Merged configuration validation failed"
                     self.logger.error(error_msg, extra={"errors": validation_errors})

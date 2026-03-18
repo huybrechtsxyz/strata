@@ -236,6 +236,34 @@ class WorkspaceService(BaseService):
                 )
                 errors.extend(config_validation_errors)
 
+        # STEP 5: Validate that all file: references resolve to existing files on disk
+        if work_path:
+            repo_map = {}
+            if configuration_model.spec.repositories:
+                repo_map = {
+                    repo.name: repo.deploy_path
+                    for repo in configuration_model.spec.repositories
+                    if repo.deploy_path
+                }
+            file_refs = []
+            for p in self.model.spec.providers:
+                file_refs.append((f"Provider '{p.name}'", p.file))
+            if self.model.spec.resources:
+                for r in self.model.spec.resources:
+                    file_refs.append((f"Resource '{r.name}'", r.file))
+                    if r.modules:
+                        for m in r.modules:
+                            file_refs.append(
+                                (f"Resource '{r.name}' module '{m.name}'", m.file)
+                            )
+            if self.model.spec.namespaces:
+                for ns in self.model.spec.namespaces:
+                    file_refs.append((f"Namespace '{ns.name}'", ns.file))
+            if self.model.spec.firewalls:
+                for fw in self.model.spec.firewalls:
+                    file_refs.append((f"Firewall '{fw.name}'", fw.file))
+            errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
+
         return len(errors) == 0, errors
 
     def _validate_component_constraints(self, topology, matching_config) -> List[str]:

@@ -89,8 +89,21 @@ class DeploymentService(BaseService):
             )
             errors.extend(security_errors)
 
-        # Note: File path validation is now handled by Pydantic FilePath at model load time
-        # No need to validate sources here since files are validated when model is loaded
+        # Validate that environment and configuration file references exist on disk
+        if work_path:
+            repo_map = {}
+            if configuration_model and configuration_model.spec.repositories:
+                repo_map = {
+                    repo.name: repo.deploy_path
+                    for repo in configuration_model.spec.repositories
+                    if repo.deploy_path
+                }
+            file_refs = []
+            for i, env_path in enumerate(self.model.spec.environments or []):
+                file_refs.append((f"Environment[{i}]", env_path))
+            for cfg in self.model.spec.configurations or []:
+                file_refs.append((f"Configuration '{cfg.name}'", cfg.file))
+            errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
 
         return len(errors) == 0, errors
 

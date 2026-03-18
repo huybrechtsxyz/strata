@@ -169,6 +169,23 @@ class ConfigurationService(BaseService):
                             f"Duplicate component roles in topology '{topology.type}' (merged config): {', '.join(set(duplicates))}"
                         )
 
+        # Validate logging file reference exists on disk
+        if work_path and self.model.spec.logging and self.model.spec.logging.file:
+            repo_map = {}
+            if self.model.spec.repositories:
+                repo_map = {
+                    repo.name: repo.deploy_path
+                    for repo in self.model.spec.repositories
+                    if repo.deploy_path
+                }
+            errors.extend(
+                self._validate_file_refs(
+                    work_path,
+                    repo_map,
+                    [("Logging config", self.model.spec.logging.file)],
+                )
+            )
+
         return len(errors) == 0, errors
 
     # Loading methods

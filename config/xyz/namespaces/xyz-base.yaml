@@ -9,4 +9,4 @@ meta:
 spec:
   modules:
     - name: traefik
-      file: config/xyz/modules/xyz-traefik.yaml
+      file: "@xyz_config/modules/xyz-traefik.yaml"

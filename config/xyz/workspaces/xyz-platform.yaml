@@ -10,7 +10,7 @@ meta:
 spec:
   providers:
     - name: kamatera_eu_fr
-      file: config/xyz/providers/xyz-eu-fr.yaml
+      file: "@xyz_config/providers/xyz-eu-fr.yaml"
 
   provisioners:
     - name: xyz_iac
@@ -42,19 +42,19 @@ spec:
   
   resources:
     - name: xyz_vm_manager
-      file: config/xyz/resources/xyz-vm-manager.yaml
+      file: "@xyz_config/resources/xyz-vm-manager.yaml"
       role: manager
       count: 1
       firewalls:
         - xyz_fw
     - name: xyz_vm_infra
-      file: config/xyz/resources/xyz-vm-infra.yaml
+      file: "@xyz_config/resources/xyz-vm-infra.yaml"
       role: worker
       count: 2
       firewalls:
         - xyz_fw
     - name: xyz_vm_worker
-      file: config/xyz/resources/xyz-vm-worker.yaml
+      file: "@xyz_config/resources/xyz-vm-worker.yaml"
       role: worker
       count: 2
       firewalls:
@@ -62,8 +62,8 @@ spec:
 
   namespaces:
     - name: xyz_base
-      file: config/xyz/namespaces/xyz-base.yaml
+      file: "@xyz_config/namespaces/xyz-base.yaml"
 
   firewalls:
     - name: xyz_fw
-      file: config/xyz/firewalls/xyz-fw.yaml
+      file: "@xyz_config/firewalls/xyz-fw.yaml"

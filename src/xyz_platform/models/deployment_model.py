@@ -14,7 +14,6 @@ from typing import Annotated, List, Dict, Any, Optional, Literal
 from pydantic import (
     BaseModel,
     Field,
-    FilePath,
     StringConstraints,
     model_validator,
 )
@@ -37,8 +36,8 @@ class DeploymentFileReference(BaseModel):
             min_length=1, pattern=r"^[a-z][a-z0-9_]*$", strip_whitespace=True
         ),
     ] = Field(description="Unique reference name")
-    file: FilePath = Field(
-        description="Path to the file (validated to exist at load time)"
+    file: str = Field(
+        description="Path to the file (resolved and validated at load time)"
     )
     description: Optional[str] = Field(
         None, description="Optional description of the referenced file"
@@ -188,7 +187,7 @@ class DeploymentSpecModel(BaseModel):
         description="Name of the associated workspace for this deployment"
     )
     environments: Annotated[
-        List[FilePath],
+        List[str],
         Field(
             min_length=1,
             description="List of environment file paths for this deployment (later files override earlier ones)",

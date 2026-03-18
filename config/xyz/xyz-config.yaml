@@ -10,7 +10,7 @@ meta:
 spec:
   # Logging configuration
   logging:
-    file: "config/xyz/configs/xyz-logging.yaml"
+    file: "@xyz_config/configs/xyz-logging.yaml"
   
   # Deployment hierarchy: simple single-layer structure
   layering:
