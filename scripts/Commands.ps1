@@ -29,6 +29,16 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 tools status --work-path $app
 
 .\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/config/xyz-config.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-dc-eu-fr.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-fw-base.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-md-traefik.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-ns-base.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-rx-vm-infra.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-rx-vm-manager.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-rx-vm-worker.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-ws-platform.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/environments/xyz-env-prd.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml
 
 Remove-Item -Path $app -Recurse -Force
 

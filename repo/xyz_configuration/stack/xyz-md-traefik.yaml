@@ -11,7 +11,7 @@ meta:
 spec:
   source:
     repository: xyz_svc_traefik
-    path: .
+    source_path: .
   properties:
     mounts:
       - name: configuration_files

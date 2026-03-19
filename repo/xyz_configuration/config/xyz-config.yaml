@@ -34,19 +34,19 @@ spec:
       type: bundled
       repository: .
       reference: "1.0.0"
-      source_path: @xyz_configuration
+      source_path: repo/xyz_configuration
       deploy_path: xyz_configuration
     - name: xyz_infrastructure
       type: bundled
       repository: .
       reference: "1.0.0"
-      source_path: @xyz_infrastructure
+      source_path: repo/xyz_infrastructure
       deploy_path: xyz_infrastructure
     - name: xyz_svc_traefik
       type: bundled
       repository: .
       reference: "1.0.0"
-      source_path: @xyz_svc_traefik
+      source_path: repo/xyz_svc_traefik
       deploy_path: xyz_svc_traefik
   
   # Integrations define external tools and services the platform uses

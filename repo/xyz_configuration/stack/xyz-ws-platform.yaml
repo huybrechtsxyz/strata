@@ -15,8 +15,9 @@ spec:
   provisioners:
     - name: xyz_iac
       provisioner: terraform
-      repository: xyz_infrastructure  # Reference to repository defined in xyz-config.yaml
-      path: terraform                 # Relative path within that repository
+      source:
+        repository: xyz_infrastructure
+        source_path: terraform
 
   topology:
     - name: xzy_swarm
