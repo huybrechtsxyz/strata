@@ -23,10 +23,10 @@ spec:
   workspace:
     name: xyz_platform
     description: Huybrechts XYZ Platform Workspace
-    file: "@repo/xyz_configuration/stack/xyz-ws-platform.yaml"
+    file: "@xyz_configuration/stack/xyz-ws-platform.yaml"
 
   environments:
-    - "@repo/xyz_configuration/environments/xyz-env-prd.yaml"
+    - "@xyz_configuration/environments/xyz-env-prd.yaml"
   
   stages:
     # Infrastructure provisioning stage - uses Terraform via convention

@@ -18,13 +18,17 @@ New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 session init   --name platform --work-path $app --editor vscode
 .\scripts\Run.ps1 session add    --name xyz_configuration --work-path $app --url "../repo/xyz_configuration"
-.\scripts\Run.ps1 session add    --work-path $app --config-file "repo/xyz_configuration/config/xyz-config.yaml"
+.\scripts\Run.ps1 session add    --work-path $app --config-file "xyz_configuration/config/xyz-config.yaml"
 .\scripts\Run.ps1 session fetch  --work-path $app --dry-run
 .\scripts\Run.ps1 session fetch  --work-path $app
 .\scripts\Run.ps1 session list   --work-path $app
 .\scripts\Run.ps1 session status --work-path $app
 .\scripts\Run.ps1 session sync   --work-path $app
 .\scripts\Run.ps1 session clean  --work-path $app --dry-run
+
+.\scripts\Run.ps1 tools status --work-path $app
+
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/config/xyz-config.yaml
 
 Remove-Item -Path $app -Recurse -Force
 

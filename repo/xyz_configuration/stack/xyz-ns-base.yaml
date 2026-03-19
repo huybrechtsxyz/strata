@@ -9,4 +9,4 @@ meta:
 spec:
   modules:
     - name: traefik
-      file: "@repo/xyz_configuration/stack/xyz-md-traefik.yaml"
+      file: "@xyz_configuration/stack/xyz-md-traefik.yaml"
