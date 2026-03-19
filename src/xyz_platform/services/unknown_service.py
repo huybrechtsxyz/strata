@@ -53,6 +53,13 @@ class UnknownService(BaseService):
             return True
         return False
 
+    def is_platform_model(self) -> bool:
+        self._ensure_validated()
+        kind = self.get_kind()
+        if kind == PlatformKind.PLATFORM_MODEL:
+            return True
+        return False
+
     def get_service_by_kind(self):
         """Return the appropriate service instance based on the 'kind' field."""
         self._ensure_validated()
@@ -99,6 +106,11 @@ class UnknownService(BaseService):
             from xyz_platform.services.workspace_service import WorkspaceService
 
             return WorkspaceService(self.path)
+
+        elif kind == PlatformKind.PLATFORM_MODEL:
+            from xyz_platform.services.platform_service import PlatformService
+
+            return PlatformService(self.path)
 
         # This method should be overridden in subclasses if needed
         raise ValueError(f"Unsupported workspace kind: {kind}")
