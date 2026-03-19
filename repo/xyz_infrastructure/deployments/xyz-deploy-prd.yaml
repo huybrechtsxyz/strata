@@ -1,7 +1,7 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: deployment
 meta:
-  name: xyz_deploy
+  name: xyz_deploy_prd
   annotations:
     description: Deployment configuration for Huybrechts XYZ Platform
   labels:
@@ -23,13 +23,10 @@ spec:
   workspace:
     name: xyz_platform
     description: Huybrechts XYZ Platform Workspace
-    file: config/xyz/workspaces/xyz-platform.yaml
-  
+    file: "@repo/xyz_configuration/stack/xyz-ws-platform.yaml"
+
   environments:
-    - deploy/xyz/envs/xyz-env-prd.yaml
-  
-  approvals:
-    type: auto
+    - "@repo/xyz_configuration/environments/xyz-env-prd.yaml"
   
   stages:
     # Infrastructure provisioning stage - uses Terraform via convention

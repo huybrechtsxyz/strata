@@ -10,8 +10,8 @@ meta:
   tags: ["traefik", "proxy", "docker-swarm", "kubernetes", "system"]
 spec:
   source:
-    repository: xyz_services
-    path: traefik
+    repository: xyz_svc_traefik
+    path: .
   properties:
     mounts:
       - name: configuration_files

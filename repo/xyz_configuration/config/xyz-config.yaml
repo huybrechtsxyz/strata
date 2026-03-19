@@ -10,7 +10,7 @@ meta:
 spec:
   # Logging configuration
   logging:
-    file: "@xyz_config/configs/xyz-logging.yaml"
+    file: "@repo/xyz_configuration/config/xyz-logging.yaml"
   
   # Deployment hierarchy: simple single-layer structure
   layering:
@@ -30,30 +30,24 @@ spec:
   
   # Required repositories for this configuration (bundled with platform)
   repositories:
-    - name: xyz_config
+    - name: xyz_configuration
       type: bundled
       repository: .
       reference: "1.0.0"
-      source_path: config/xyz
-      deploy_path: xyz_config
-    - name: xyz_deploy
+      source_path: repo/xyz_configuration
+      deploy_path: xyz_configuration
+    - name: xyz_infrastructure
       type: bundled
       repository: .
       reference: "1.0.0"
-      source_path: deploy/xyz
-      deploy_path: xyz_deploy
-    - name: xyz_envs
+      source_path: repo/xyz_infrastructure
+      deploy_path: xyz_infrastructure
+    - name: xyz_svc_traefik
       type: bundled
       repository: .
       reference: "1.0.0"
-      source_path: envs/xyz
-      deploy_path: xyz_envs
-    - name: xyz_services
-      type: bundled
-      repository: .
-      reference: "1.0.0"
-      source_path: services/xyz
-      deploy_path: xyz_services
+      source_path: repo/xyz_svc_traefik
+      deploy_path: xyz_svc_traefik
   
   # Integrations define external tools and services the platform uses
   integrations:

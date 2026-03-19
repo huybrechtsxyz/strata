@@ -1,0 +1,4 @@
+# Backend config for dev environment
+# Used with: terraform init -backend-config=backends/dev.tfbackend
+
+path = "state/dev/terraform.tfstate"
