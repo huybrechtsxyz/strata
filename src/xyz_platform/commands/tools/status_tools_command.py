@@ -381,7 +381,5 @@ class StatusToolsCommand(BaseCommand):
             extra={"command_class": self.__class__.__name__},
         )
 
-        # Call parent last — suppress footer for display commands
-        return super()._finalize(
-            operation="tools_status", success=success, show_footer=False
-        )
+        # Call parent last — let base class decide footer based on output format
+        return super()._finalize(operation="tools_status", success=success)

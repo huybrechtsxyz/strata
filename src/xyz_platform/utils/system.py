@@ -51,8 +51,12 @@ def normalize_path(path: str) -> str:
 
 
 # Join multiple paths
-def resolve_path(base_path: str, target_path: str = None, *sub_paths: str,
-                 repo_map: Optional[Dict[str, str]] = None) -> Path:
+def resolve_path(
+    base_path: str,
+    target_path: str = None,
+    *sub_paths: str,
+    repo_map: Optional[Dict[str, str]] = None,
+) -> Path:
     """
     Resolve the target path by joining base path, target path, and sub-paths.
     arguments:
@@ -64,6 +68,11 @@ def resolve_path(base_path: str, target_path: str = None, *sub_paths: str,
     """
     if base_path is None or base_path == "":
         base_path = os.getcwd()
+
+    # Normalise to str — callers may pass Path objects
+    base_path = str(base_path)
+    if target_path is not None:
+        target_path = str(target_path)
 
     # Resolve @repo_name/... cross-repo references
     if target_path and target_path.startswith("@"):

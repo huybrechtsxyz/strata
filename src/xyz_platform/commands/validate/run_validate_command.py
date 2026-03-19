@@ -18,6 +18,7 @@ from xyz_platform.commands.validate.base_validate_command import BaseValidateCom
 from xyz_platform.controllers.workspace_controller import WorkspaceController
 from xyz_platform.services.base_service import BaseService
 from xyz_platform.services.configuration_service import ConfigurationService
+from xyz_platform.utils.system import resolve_path
 
 
 class RunValidateCommand(BaseValidateCommand):
@@ -162,8 +163,11 @@ class RunValidateCommand(BaseValidateCommand):
         if not super()._before_execute():
             return False
 
-        # File always resolved relative to work_path (where repos are fetched)
-        self._platform_file = self._work_path / self._file_path
+        # File resolved relative to work_path — @repo_name/... refs resolved later
+        # in _perform_validation once the config service is loaded
+        file_path_str = str(self._file_path)
+        if not file_path_str.startswith("@"):
+            self._platform_file = self._work_path / self._file_path
 
         self.logger.debug(
             "Platform file resolved",
@@ -247,11 +251,8 @@ class RunValidateCommand(BaseValidateCommand):
         """
         self.logger.info(
             "Performing validation",
-            extra={"file": str(self._platform_file)},
+            extra={"file": str(self._file_path)},
         )
-
-        if self._is_console_output():
-            click.echo(f"\n🔍  Validating: {self._platform_file}")
 
         # ── Step 1: load merged configuration for deep validation ────────────
         merged_config_file = self._work_path / ".xyz-platform" / "configuration.yaml"
@@ -288,10 +289,41 @@ class RunValidateCommand(BaseValidateCommand):
                     "ℹ️   No session configuration found — shallow validation only"
                 )
 
-        # ── Step 2: load and validate the platform file ──────────────────────
+        # ── Step 2: resolve @repo_name/... reference now that config is loaded ──
+        file_path_str = str(self._file_path)
+        if file_path_str.startswith("@"):
+            repo_map = {}
+            if config_service:
+                config_model = config_service.get_configuration()
+                if (
+                    config_model
+                    and config_model.spec
+                    and config_model.spec.repositories
+                ):
+                    repo_map = {
+                        repo.name: repo.deploy_path
+                        for repo in config_model.spec.repositories
+                        if repo.deploy_path
+                    }
+            try:
+                self._platform_file = resolve_path(
+                    str(self._work_path), file_path_str, repo_map=repo_map
+                )
+            except ValueError as exc:
+                error_msg = str(exc)
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                if self._is_console_output():
+                    click.echo(f"\n❌  {error_msg}")
+                return False
+
+        if self._is_console_output():
+            click.echo(f"\n🔍  Validating: {self._platform_file}")
+
+        # ── Step 3: load and validate the platform file ──────────────────────
         try:
             service, errors = workspace_controller.load_and_validate_file(
-                platform_file=self._file_path,
+                platform_file=self._platform_file,
                 work_path=str(self._work_path),
                 configuration_service=config_service,
             )
@@ -304,7 +336,7 @@ class RunValidateCommand(BaseValidateCommand):
         self.service = service
         self._validation_errors = list(errors) if errors else []
 
-        # ── Step 3: extract detected kind ────────────────────────────────────
+        # ── Step 4: extract detected kind ────────────────────────────────────
         if service:
             try:
                 detected = service.get_kind()
