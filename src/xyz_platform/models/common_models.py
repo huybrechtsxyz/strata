@@ -57,6 +57,7 @@ class PlatformKind(str, Enum):
     FIREWALL = "firewall"
     MODULE = "module"
     NAMESPACE = "namespace"
+    PLATFORM_MODEL = "platform_model"
     PROVIDER = "provider"
     RESOURCE = "resource"
     WORKSPACE = "workspace"
