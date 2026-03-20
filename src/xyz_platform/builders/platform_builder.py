@@ -50,6 +50,7 @@ class PlatformBuilder(BaseBuilder):
         self.logger = get_logger(__name__)
         self.verbose = verbose
         self.configuration_service = None
+        self._last_platform_model: Optional[PlatformModel] = None
 
     # ------------------------------------------------------------------
     # BaseBuilder interface
@@ -61,6 +62,7 @@ class PlatformBuilder(BaseBuilder):
         work_path: Path,
         build_path: Path,
         configuration_service=None,
+        dry_run: bool = False,
     ) -> Tuple[bool, List[str]]:
         """Assemble and persist the platform model.
 
@@ -71,12 +73,16 @@ class PlatformBuilder(BaseBuilder):
             build_path: Root build output directory.
             configuration_service: Optional configuration service used to
                 compute the artifact_path from deployment layers.
+            dry_run: When True, build the model in memory but skip writing
+                output files.  The assembled model is stored in
+                ``self._last_platform_model`` for downstream use.
 
         Returns:
             Tuple[bool, List[str]]: (success, messages).
         """
         messages: List[str] = []
         self.configuration_service = configuration_service
+        self._last_platform_model = None
 
         try:
             platform, build_messages = self._build_platform(deployment_service)
@@ -84,6 +90,18 @@ class PlatformBuilder(BaseBuilder):
 
             if platform is None:
                 return False, messages
+
+            self._last_platform_model = platform
+
+            if dry_run:
+                deployment_build_path = deployment_service.get_build_path(build_path)
+                messages.append(
+                    f"[DRY-RUN] Would write platform model to: {deployment_build_path / 'platform.json'}"
+                )
+                messages.append(
+                    f"[DRY-RUN] Would write platform model to: {deployment_build_path / 'platform.yaml'}"
+                )
+                return True, messages
 
             save_messages = self._save_platform(
                 platform, deployment_service, build_path
@@ -138,20 +156,30 @@ class PlatformBuilder(BaseBuilder):
         deployment_service: DeploymentService,
         work_path: Path,
         build_path: Path,
+        dry_run: bool = False,
     ) -> Tuple[bool, List[str]]:
         """Post-build verification hook.
 
         Confirms that the expected output files were written successfully.
+        When *dry_run* is True file-existence checks are skipped.
 
         Args:
             deployment_service: Deployment service.
             work_path: Working directory path.
             build_path: Build output directory path.
+            dry_run: When True, skip output file existence checks.
 
         Returns:
             Tuple[bool, List[str]]: (success, messages).
         """
         messages: List[str] = []
+
+        if dry_run:
+            if self.verbose:
+                messages.append(
+                    "[DRY-RUN] Skipping platform model file-existence check"
+                )
+            return True, messages
 
         deployment_build_path = deployment_service.get_build_path(build_path)
         json_path = deployment_build_path / "platform.json"

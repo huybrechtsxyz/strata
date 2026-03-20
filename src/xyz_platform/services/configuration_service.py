@@ -436,16 +436,16 @@ class ConfigurationService(BaseService):
         # Try to get from configuration if validated, otherwise use defaults
         if self.is_validated():
             defaults = self.get_configuration_defaults()
-            if defaults and "default_config_path" in defaults:
-                cfg_path = defaults["default_config_path"]
+            if defaults and "default_object_path" in defaults:
+                cfg_path = defaults["default_object_path"]
 
         # Fall back to config constants or hardcoded defaults
         if not cfg_path:
             if (
-                config.DEFAULT_CONFIG_PATH is not None
-                and len(config.DEFAULT_CONFIG_PATH) > 0
+                config.DEFAULT_OBJECT_PATH is not None
+                and len(config.DEFAULT_OBJECT_PATH) > 0
             ):
-                cfg_path = config.DEFAULT_CONFIG_PATH
+                cfg_path = config.DEFAULT_OBJECT_PATH
             else:
                 cfg_path = "build/obj"
 

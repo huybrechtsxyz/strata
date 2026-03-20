@@ -566,10 +566,67 @@ class WorkspaceController:
         expected_kind: Optional[PlatformKind] = None,
         work_path: Optional[str] = None,
     ) -> Tuple[UnknownService, List[str]]:
-        """Load a platform file using UnknownService to detect its kind."""
-        # Resolve the platform file path - pass as target_path (2nd param) not sub_path
-        platform_file = system.resolve_path(work_path, platform_file)
+        """Load a platform file using UnknownService to detect its kind.
+
+        Handles ``@repo_name/...`` cross-repo references automatically by
+        looking up the repo's ``deploy_path`` from the loaded ConfigurationService.
+        """
         errors = []
+
+        # Resolve @repo_name/... cross-repo references using the loaded ConfigurationService
+        file_path_str = str(platform_file) if platform_file else ""
+        if file_path_str.startswith("@"):
+            repo_map = {}
+            config_service = ConfigurationService.get_instance()
+
+            # Auto-load the session merged configuration when the service model is not
+            # yet populated but work_path is known (e.g. build command callers that rely
+            # on the session-written .xyz-platform/configuration.yaml)
+            if work_path and (
+                not config_service or not getattr(config_service, "model", None)
+            ):
+                merged_config_file = (
+                    Path(work_path) / ".xyz-platform" / "configuration.yaml"
+                )
+                if merged_config_file.exists():
+                    try:
+                        self.load_configuration(
+                            work_path=Path(work_path),
+                            file_paths=[str(merged_config_file)],
+                        )
+                        config_service = ConfigurationService.get_instance()
+                        self.logger.debug(
+                            "Auto-loaded session configuration for @repo resolution",
+                            extra={"config": str(merged_config_file)},
+                        )
+                    except Exception as exc:
+                        self.logger.debug(
+                            f"Auto-load of session configuration failed (continuing without): {exc}"
+                        )
+
+            if config_service and getattr(config_service, "model", None):
+                config_model = config_service.model
+                if (
+                    config_model
+                    and getattr(config_model, "spec", None)
+                    and getattr(config_model.spec, "repositories", None)
+                ):
+                    repo_map = {
+                        repo.name: repo.deploy_path
+                        for repo in config_model.spec.repositories
+                        if getattr(repo, "deploy_path", None)
+                    }
+            try:
+                platform_file = system.resolve_path(
+                    work_path, file_path_str, repo_map=repo_map
+                )
+            except ValueError as exc:
+                error_msg = str(exc)
+                self.logger.error(error_msg)
+                return None, [error_msg]
+        else:
+            # Resolve the platform file path - pass as target_path (2nd param) not sub_path
+            platform_file = system.resolve_path(work_path, platform_file)
 
         # Validate file exists
         if not platform_file.exists():
@@ -824,7 +881,7 @@ class WorkspaceController:
         )
 
         related_services, load_success = deployment_service.load_related_services(
-            objects_path=str(objects_path), stage_name=stage_name
+            objects_path=str(objects_path)
         )
 
         if not load_success:

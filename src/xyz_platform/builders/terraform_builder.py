@@ -36,14 +36,23 @@ class TerraformBuilder(BaseBuilder):
         self.secret_refs: Dict[str, Dict[str, Any]] = {}
 
     def build(
-        self, deployment_service: DeploymentService, work_path: Path, build_path: Path
+        self,
+        deployment_service: DeploymentService,
+        work_path: Path,
+        build_path: Path,
+        dry_run: bool = False,
+        platform_model: Optional["PlatformModel"] = None,
     ) -> Tuple[bool, List[str]]:
-        """Build Terraform tfvars files from `platform.json`.
+        """Build Terraform tfvars files from ``platform.json``.
 
         Args:
             deployment_service: Loaded deployment service
             work_path: Working directory path
             build_path: Build output directory path
+            dry_run: When True, build all vars in memory but skip writing
+                output files.  A summary of planned outputs is emitted.
+            platform_model: Pre-assembled PlatformModel (used in dry-run so
+                that the on-disk ``platform.json`` is not required).
 
         Returns:
             Tuple[bool, List[str]]: (success, messages)
@@ -56,24 +65,74 @@ class TerraformBuilder(BaseBuilder):
             self.secret_refs = {}
 
             deployment_build_path = deployment_service.get_build_path(build_path)
-            platform_path = deployment_build_path / "platform.json"
 
-            if not platform_path.exists():
-                messages.append("Platform model not found. Run platform build first.")
-                return False, messages
+            if platform_model is not None:
+                # Caller supplied the model directly (e.g. during dry-run)
+                if self.verbose:
+                    messages.append(
+                        f"Using pre-assembled platform model: {platform_model.meta.name}"
+                    )
+            else:
+                platform_path = deployment_build_path / "platform.json"
 
-            platform_service = PlatformService.load(str(platform_path), validate=True)
-            if not platform_service.is_validated() or not platform_service.model:
-                messages.append("Platform model validation failed")
-                return False, messages
+                if not platform_path.exists():
+                    messages.append(
+                        "Platform model not found. Run platform build first."
+                    )
+                    return False, messages
 
-            platform_model = platform_service.model
-            if self.verbose:
-                messages.append(f"Loaded platform model: {platform_model.meta.name}")
+                platform_service = PlatformService.load(
+                    str(platform_path), validate=True
+                )
+                if not platform_service.is_validated() or not platform_service.model:
+                    messages.append("Platform model validation failed")
+                    return False, messages
+
+                platform_model = platform_service.model
+                if self.verbose:
+                    messages.append(
+                        f"Loaded platform model: {platform_model.meta.name}"
+                    )
 
             terraform_vars = self._build_terraform_vars(
                 platform_model, deployment_service, messages
             )
+
+            if dry_run:
+                terraform_path = deployment_build_path / "terraform"
+                planned = [
+                    "workspace.auto.tfvars.json",
+                    "providers.auto.tfvars.json",
+                    "topologies.auto.tfvars.json",
+                    "modules.auto.tfvars.json",
+                    "tf_required_variables.json",
+                    "tf_required_features.json",
+                    "tf_required_secrets.json",
+                ]
+                for resource_type in terraform_vars.get("resources_by_category", {}):
+                    planned.append(f"resx_{resource_type}.auto.tfvars.json")
+                for filename in planned:
+                    messages.append(
+                        f"[DRY-RUN] Would write: {terraform_path / filename}"
+                    )
+                messages.append(
+                    f"[DRY-RUN] Planned {len(planned)} Terraform artifact file(s)"
+                )
+                variables_count = len(
+                    terraform_vars.get("required_variables", {}).get("variables", [])
+                )
+                features_count = len(
+                    terraform_vars.get("required_features", {}).get("features", [])
+                )
+                secrets_count = len(
+                    terraform_vars.get("required_secrets", {}).get("secrets", [])
+                )
+                if variables_count or features_count or secrets_count:
+                    messages.append(
+                        f"[DRY-RUN] Requires: {variables_count} variable(s), "
+                        f"{features_count} feature(s), {secrets_count} secret(s)"
+                    )
+                return True, messages
 
             messages.extend(
                 self._save_terraform_vars(
@@ -90,7 +149,11 @@ class TerraformBuilder(BaseBuilder):
             return False, messages
 
     def before_build(
-        self, deployment_service: DeploymentService, work_path: Path, build_path: Path
+        self,
+        deployment_service: DeploymentService,
+        work_path: Path,
+        build_path: Path,
+        dry_run: bool = False,
     ) -> Tuple[bool, List[str]]:
         """Hook executed before build starts."""
         messages: List[str] = []
@@ -99,14 +162,15 @@ class TerraformBuilder(BaseBuilder):
             messages.append("Deployment service is not validated")
             return False, messages
 
-        deployment_build_path = deployment_service.get_build_path(build_path)
-        platform_path = deployment_build_path / "platform.json"
+        if not dry_run:
+            deployment_build_path = deployment_service.get_build_path(build_path)
+            platform_path = deployment_build_path / "platform.json"
 
-        if not platform_path.exists():
-            messages.append(
-                f"Platform model not found at: {platform_path}. Run platform build first."
-            )
-            return False, messages
+            if not platform_path.exists():
+                messages.append(
+                    f"Platform model not found at: {platform_path}. Run platform build first."
+                )
+                return False, messages
 
         if self.verbose:
             messages.append("Pre-build validation passed for Terraform artifacts")
@@ -114,10 +178,21 @@ class TerraformBuilder(BaseBuilder):
         return True, messages
 
     def after_build(
-        self, deployment_service: DeploymentService, work_path: Path, build_path: Path
+        self,
+        deployment_service: DeploymentService,
+        work_path: Path,
+        build_path: Path,
+        dry_run: bool = False,
     ) -> Tuple[bool, List[str]]:
         """Hook executed after build completes."""
         messages: List[str] = []
+
+        if dry_run:
+            if self.verbose:
+                messages.append(
+                    "[DRY-RUN] Skipping Terraform artifact file-existence check"
+                )
+            return True, messages
 
         deployment_build_path = deployment_service.get_build_path(build_path)
         terraform_path = deployment_build_path / "terraform"

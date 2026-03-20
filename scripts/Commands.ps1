@@ -40,6 +40,9 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/environments/xyz-env-prd.yaml
 .\scripts\Run.ps1 validate --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml
 
+.\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+.\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --no-hooks
+
 Remove-Item -Path $app -Recurse -Force
 
 # ==============================================================================
@@ -193,3 +196,42 @@ Remove-Item -Path $app -Recurse -Force
 .\scripts\Run.ps1 tools status --work-path $app --output json
 .\scripts\Run.ps1 tools status --work-path $app --output text
 .\scripts\Run.ps1 tools status --work-path $app --verbose
+
+# ==============================================================================
+# [REFERENCE] validate
+# ==============================================================================
+
+.\scripts\Run.ps1 validate -h
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/config/xyz-config.yaml
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-dc-eu-fr.yaml --no-hooks --output json
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-fw-base.yaml --no-hooks --output text
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-md-traefik.yaml --no-hooks --verbose
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-ns-base.yaml --no-hooks --quiet
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-rx-vm-infra.yaml --no-hooks
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-rx-vm-manager.yaml --no-hooks
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-rx-vm-worker.yaml --no-hooks
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/stack/xyz-ws-platform.yaml --no-hooks
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_configuration/environments/xyz-env-prd.yaml --no-hooks
+.\scripts\Run.ps1 validate --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --no-hooks
+
+# ==============================================================================
+# [REFERENCE] build
+# ==============================================================================
+
+.\scripts\Run.ps1 build -h
+
+.\scripts\Run.ps1 build run -h
+.\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+.\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml
+.\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --no-hooks
+.\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --output json
+.\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --output text
+.\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --verbose
+.\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --quiet
+
+.\scripts\Run.ps1 build clean -h
+.\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml
+.\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+.\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --no-logs
+.\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --output json
+.\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --quiet
