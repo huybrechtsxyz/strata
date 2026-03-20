@@ -43,6 +43,9 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
 .\scripts\Run.ps1 build run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --no-hooks
 
+.\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+.\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml
+
 Remove-Item -Path $app -Recurse -Force
 
 # ==============================================================================
@@ -235,3 +238,18 @@ Remove-Item -Path $app -Recurse -Force
 .\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --no-logs
 .\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --output json
 .\scripts\Run.ps1 build clean --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --quiet
+
+# ==============================================================================
+# [REFERENCE] deploy
+# ==============================================================================
+
+.\scripts\Run.ps1 deploy -h
+
+.\scripts\Run.ps1 deploy run -h
+.\scripts\Run.ps1 deploy run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+.\scripts\Run.ps1 deploy run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml
+.\scripts\Run.ps1 deploy run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --no-hooks
+.\scripts\Run.ps1 deploy run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --output json
+.\scripts\Run.ps1 deploy run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --output text
+.\scripts\Run.ps1 deploy run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --verbose
+.\scripts\Run.ps1 deploy run --work-path $app --file @xyz_infrastructure/deployments/xyz-deploy-prd.yaml --quiet
