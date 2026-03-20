@@ -102,11 +102,11 @@ class RunBuildCommand(BaseBuildCommand):
             return False
 
     def _load_related_services(self) -> bool:
-        """Load deployment related services from session-managed object path."""
+        """Load deployment related services from session-managed work path."""
         workspace_controller = WorkspaceController()
         _, load_success = workspace_controller.load_related_services(
             deployment_service=self._deployment_service,
-            objects_path=self._object_path,
+            objects_path=self._work_path,
             stage_name=None,
         )
         if not load_success:

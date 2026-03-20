@@ -483,11 +483,18 @@ class WorkspaceService(BaseService):
         }
         workspace: WorkspaceModel = self.model
 
+        # Build repo_map once for all @repo_name/... path resolutions in this call
+        from xyz_platform.services.configuration_service import ConfigurationService
+
+        repo_map: Dict[str, str] = ConfigurationService.get_instance().get_repo_map()
+
         # Load firewall services from workspace spec firewalls
         if self.model.spec.firewalls:
             self.logger.debug(f"Loading {len(self.model.spec.firewalls)} firewall(s)")
             for firewall_ref in self.model.spec.firewalls:
-                firewall_path = self._resolve_file_path(firewall_ref.file, objects_path)
+                firewall_path = self._resolve_file_path(
+                    firewall_ref.file, objects_path, repo_map
+                )
                 firewall_key = firewall_ref.name
                 try:
                     # Use service cache to avoid re-parsing same files
@@ -529,7 +536,9 @@ class WorkspaceService(BaseService):
         if workspace.spec.providers:
             self.logger.debug(f"Loading {len(workspace.spec.providers)} provider(s)")
             for provider_ref in workspace.spec.providers:
-                provider_path = self._resolve_file_path(provider_ref.file, objects_path)
+                provider_path = self._resolve_file_path(
+                    provider_ref.file, objects_path, repo_map
+                )
                 try:
                     # Use service cache to avoid re-parsing same files
                     service = ProviderService.load(provider_path, validate=True)
@@ -572,7 +581,9 @@ class WorkspaceService(BaseService):
         if workspace.spec.resources:
             self.logger.debug(f"Loading {len(workspace.spec.resources)} resource(s)")
             for resource_ref in workspace.spec.resources:
-                resource_path = self._resolve_file_path(resource_ref.file, objects_path)
+                resource_path = self._resolve_file_path(
+                    resource_ref.file, objects_path, repo_map
+                )
                 resource_key = resource_ref.name
                 if resource_key not in services["resources"]:
                     try:
@@ -670,7 +681,7 @@ class WorkspaceService(BaseService):
                     )
                     for module_ref in resource_ref.modules:
                         module_path = self._resolve_file_path(
-                            module_ref.file, objects_path
+                            module_ref.file, objects_path, repo_map
                         )
                         # Use resource_name:module_name as key to avoid conflicts
                         module_key = f"{resource_ref.name}:{module_ref.name}"
@@ -720,7 +731,7 @@ class WorkspaceService(BaseService):
             self.logger.debug(f"Loading {len(workspace.spec.namespaces)} namespace(s)")
             for namespace_ref in workspace.spec.namespaces:
                 namespace_path = self._resolve_file_path(
-                    namespace_ref.file, objects_path
+                    namespace_ref.file, objects_path, repo_map
                 )
                 try:
                     # Use service cache to avoid re-parsing same files
@@ -773,7 +784,7 @@ class WorkspaceService(BaseService):
                     )
                     for module_ref in namespace_service.model.spec.modules:
                         module_path = self._resolve_file_path(
-                            module_ref.file, objects_path
+                            module_ref.file, objects_path, repo_map
                         )
                         # Use namespace_name:module_name as key to avoid conflicts
                         module_key = f"{namespace_ref.name}:{module_ref.name}"

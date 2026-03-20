@@ -393,11 +393,9 @@ class TerraformBuilder(BaseBuilder):
         if platform.spec.modules:
             for module in platform.spec.modules:
                 modules_dict[module.name] = {
-                    "source_type": module.source.type,
                     "repository": module.source.repository,
-                    "reference": module.source.reference,
                     "source_path": module.source.source_path,
-                    "deploy_path": module.source.deploy_path,
+                    "target_path": module.source.target_path,
                     "description": (
                         module.annotations.get("description", "")
                         if module.annotations

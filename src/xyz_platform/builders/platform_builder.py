@@ -17,6 +17,7 @@ from typing import List, Optional, Tuple
 from xyz_platform.builders.base_builder import BaseBuilder
 from xyz_platform.models.platform_model import (
     PlatformFirewallModel,
+    PlatformLifecycleModel,
     PlatformMetaModel,
     PlatformModel,
     PlatformModuleModel,
@@ -465,12 +466,11 @@ class PlatformBuilder(BaseBuilder):
         # ------------------------------------------------------------------
         # Assemble spec
         # ------------------------------------------------------------------
-        lifecycle_data = None
+        lifecycle_model = None
         if deployment_model.spec.lifecycle:
-            lifecycle_data = {
-                phase_name: phase.model_dump()
-                for phase_name, phase in deployment_model.spec.lifecycle.root.items()
-            }
+            lifecycle_model = PlatformLifecycleModel.model_validate(
+                deployment_model.spec.lifecycle.model_dump()
+            )
 
         return PlatformSpecModel(
             workspace=workspace,
@@ -480,11 +480,11 @@ class PlatformBuilder(BaseBuilder):
             namespaces=namespaces,
             modules=modules,
             firewalls=firewalls,
-            deployment=deployment_model.spec.deployment,
+            deployment=deployment_model.spec.layers,
             artifact_path=artifact_path,
             stages=deployment_model.spec.stages,
             approvals=deployment_model.spec.approvals,
-            lifecycle=lifecycle_data,
+            lifecycle=lifecycle_model,
             properties=deployment_model.spec.properties,
             custom=deployment_model.spec.custom,
             features=all_features,

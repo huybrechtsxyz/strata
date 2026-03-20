@@ -361,6 +361,17 @@ class ConfigurationService(BaseService):
             return self.model.spec.repositories
         return None
 
+    def get_repo_map(self) -> Dict[str, str]:
+        """Return a ``{repo_name: deploy_path}`` mapping for resolving ``@repo_name/...`` references."""
+        repos = self.get_repositories()
+        if not repos:
+            return {}
+        return {
+            repo.name: repo.deploy_path
+            for repo in repos
+            if getattr(repo, "deploy_path", None)
+        }
+
     # Get configuration defaults
 
     def get_configuration_defaults(self) -> Optional[Dict[str, Any]]:

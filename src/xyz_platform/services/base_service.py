@@ -456,24 +456,40 @@ class BaseService(ABC):
             raise ServiceNotValidatedError(self.__class__.__name__)
 
     def _resolve_file_path(
-        self, file_ref: str, object_path: Optional[str] = None
+        self,
+        file_ref: str,
+        object_path: Optional[str] = None,
+        repo_map: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Resolve a file reference to an absolute path.
 
+        Handles plain relative/absolute paths and ``@repo_name/...`` cross-repo
+        references (resolved via the supplied *repo_map*).
+
         Args:
-            file_ref: File reference (relative or absolute path)
+            file_ref: File reference (relative, absolute, or @repo_name/... path)
             object_path: Object directory for resolving relative paths
+            repo_map: Optional ``{repo_name: deploy_path}`` mapping for @-references
 
         Returns:
             Absolute path to the file
         """
+        # Handle @repo_name/... cross-repo references
+        if str(file_ref).startswith("@"):
+            try:
+                resolved = resolve_path(object_path, file_ref, repo_map=repo_map or {})
+                return str(resolved)
+            except ValueError:
+                # repo not found — return as-is so the caller gets a clear file-not-found
+                return str(file_ref)
+
         # If already absolute, return as-is
         file_path = Path(file_ref)
         if file_path.is_absolute():
             return str(file_path)
 
-        # Try relative to platform_dir first
+        # Try relative to object_path
         resolved = resolve_path(object_path, file_ref)
         if resolved.exists():
             return str(resolved)

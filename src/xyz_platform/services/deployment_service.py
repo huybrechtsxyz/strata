@@ -32,6 +32,7 @@ class DeploymentService(BaseService):
         self.model: Optional[DeploymentModel] = None
         self._related_services: Optional[Dict[str, Dict[str, BaseService]]] = None
         self._validation_errors: List[str] = []
+        self._structured_errors: List = []
 
     def _get_model_class(self):
         """Return the DeploymentModel class for validation."""
@@ -323,6 +324,10 @@ class DeploymentService(BaseService):
         # Lazy import to avoid circular dependencies
         from xyz_platform.services.workspace_service import WorkspaceService
         from xyz_platform.services.environment_service import EnvironmentService
+        from xyz_platform.services.configuration_service import ConfigurationService
+
+        # Build repo_map once for all @repo_name/... path resolutions in this call
+        repo_map: Dict[str, str] = ConfigurationService.get_instance().get_repo_map()
 
         # Store workspace and environment services
         # Infrastructure services accessed via workspace delegation
@@ -339,7 +344,9 @@ class DeploymentService(BaseService):
 
             workspace_ref = self.model.spec.workspace
             workspace_name = workspace_ref.name
-            workspace_path = workspace_ref.file
+            workspace_path = self._resolve_file_path(
+                str(workspace_ref.file), objects_path, repo_map
+            )
             self.logger.debug(
                 "Loading workspace",
                 extra={
@@ -390,7 +397,10 @@ class DeploymentService(BaseService):
             )
 
             # Step 3: Load and merge environment files
-            env_paths = [str(env_path) for env_path in self.model.spec.environments]
+            env_paths = [
+                self._resolve_file_path(str(env_path), objects_path, repo_map)
+                for env_path in self.model.spec.environments
+            ]
 
             self.logger.debug(
                 f"Loading deployment environments: {len(env_paths)} file(s)",
