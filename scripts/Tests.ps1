@@ -1,5 +1,5 @@
 <#
-  Commands.ps1  Manual test reference for xyz-platform CLI
+  Tests.ps1  Manual test reference for xyz-platform CLI
   
   Two sections:
     [FLOW]      End-to-end workflow test  run top to bottom to validate the full session lifecycle
