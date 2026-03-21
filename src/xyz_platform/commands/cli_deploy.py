@@ -50,6 +50,12 @@ def deploy():
     default=False,
     help="Validate and plan the deploy without running any provisioners.",
 )
+@click.option(
+    "--destroy",
+    is_flag=True,
+    default=False,
+    help="Destroy provisioned infrastructure (TODO: not yet implemented).",
+)
 @click_no_hooks
 @click_output_format
 @click_output_verbose
@@ -60,6 +66,7 @@ def deploy_run(
     stage: str = None,
     force: bool = False,
     dry_run: bool = False,
+    destroy: bool = False,
     no_hooks: bool = False,
     output: str = None,
     verbose: bool = None,
@@ -72,6 +79,7 @@ def deploy_run(
         stage=stage,
         force=force,
         dry_run=dry_run,
+        destroy=destroy,
         no_hooks=no_hooks,
         output=output,
         verbose=verbose,

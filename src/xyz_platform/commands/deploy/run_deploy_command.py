@@ -15,6 +15,15 @@ import click
 
 from xyz_platform.commands.deploy.base_deploy_command import BaseDeployCommand
 from xyz_platform.controllers.workspace_controller import WorkspaceController
+from xyz_platform.deployers.base_deployer import (
+    STEP_SETUP,
+    STEP_CHECK,
+    STEP_PLAN,
+    STEP_APPLY,
+    STEP_DESTROY,
+)
+from xyz_platform.deployers.terraform_deployer import TerraformDeployer
+from xyz_platform.models.common_models import ProvisionerType
 from xyz_platform.models.deployment_model import DeploymentStageModel
 
 
@@ -28,6 +37,7 @@ class RunDeployCommand(BaseDeployCommand):
         stage: str = None,
         force: bool = False,
         dry_run: bool = False,
+        destroy: bool = False,
         no_hooks: bool = False,
         output: str = None,
         verbose: bool = None,
@@ -44,6 +54,8 @@ class RunDeployCommand(BaseDeployCommand):
         self._stage = stage
         self._force = force
         self._dry_run = dry_run
+        self._destroy = destroy
+        self._resolved_values: Optional[ResolvedValues] = None
 
     # -------------------------------------------------------------------------
     # Public entry point
@@ -69,10 +81,19 @@ class RunDeployCommand(BaseDeployCommand):
                 self._finalize(operation="deploy_run", success=False)
                 return False
 
+            if not self._resolve_values():
+                if self._is_console_output():
+                    click.echo("\n❌  Failed to resolve variables/secrets/features")
+                self._finalize(operation="deploy_run", success=False)
+                return False
+
             if self._dry_run and self._is_console_output():
                 click.echo(
                     "\n[DRY-RUN] Validating and planning deploy — no provisioning will run"
                 )
+
+            if self._destroy and self._is_console_output():
+                click.echo("\n⚠️  --destroy flag: running destroy step per stage.")
 
             if not self._execute_provisioning():
                 if self._is_console_output():
@@ -94,6 +115,7 @@ class RunDeployCommand(BaseDeployCommand):
                     "stage": self._stage,
                     "force": self._force,
                     "dry_run": self._dry_run,
+                    "destroy": self._destroy,
                 }
             )
 
@@ -130,6 +152,41 @@ class RunDeployCommand(BaseDeployCommand):
             self._errors.extend(data_errors)
             return False
 
+        return True
+
+    def _resolve_values(self) -> bool:
+        """Resolve variables, secrets, and feature flags from the environment.
+
+        Populates ``self._resolved_values`` which is later passed to the
+        deployer so it can inject TF_VAR_* env vars around each terraform step.
+
+        Non-strict mode: resolution warnings are logged but do not abort the
+        deploy (missing optional values may be handled by Terraform defaults).
+        """
+        controller = ValueController()
+        ok, resolved, errors = controller.resolve_values(
+            self._deployment_service, strict=False
+        )
+
+        self._resolved_values = resolved
+
+        if errors:
+            for err in errors:
+                self.logger.warning("Value resolution warning: %s", err)
+            if self._is_console_output():
+                click.echo(
+                    f"  ⚠️  {len(errors)} value(s) could not be resolved "
+                    "(see logs for details)."
+                )
+
+        if self._is_console_output() and not resolved.is_empty():
+            click.echo(
+                f"  ✓  Resolved {len(resolved.variables)} variable(s), "
+                f"{len(resolved.secrets)} secret(s), "
+                f"{len(resolved.features)} feature(s)."
+            )
+
+        # ok is always True in non-strict mode — keep going even with warnings
         return True
 
     def _execute_provisioning(self) -> bool:
@@ -169,14 +226,8 @@ class RunDeployCommand(BaseDeployCommand):
                 label = f"[{stage.type}]" + (
                     f" via {stage.provisioner}" if stage.provisioner else ""
                 )
-                click.echo(f"\n  ▶  Stage: {stage.name}  {label}")
-
-            if self._dry_run:
-                click.echo(
-                    f"  [DRY-RUN] Would provision stage '{stage.name}' "
-                    f"(type={stage.type}, scope={stage.scope})"
-                )
-                continue
+                prefix = "[DRY-RUN] " if self._dry_run else ""
+                click.echo(f"\n  ▶  {prefix}Stage: {stage.name}  {label}")
 
             ok = self._execute_stage_provisioning(stage)
             if not ok:
@@ -196,40 +247,120 @@ class RunDeployCommand(BaseDeployCommand):
         return True
 
     def _execute_stage_provisioning(self, stage: DeploymentStageModel) -> bool:
-        """Dispatch a single stage to its provisioner.
+        """Instantiate the deployer for *stage*, validate, then run the step sequence.
 
-        TODO: Provisioners are not yet implemented in this repository.
-              When provisioners are added, replace this stub:
-
-              - Resolve `stage.provisioner` (or fall back to `stage.type`) to
-                a registered provisioner class.
-              - Instantiate it with the relevant service models and paths.
-              - Call `provisioner.run(stage, deployment_service=..., build_path=...)`.
-              - Return the provisioner's success flag.
-
-              Example structure to target:
-                  from xyz_platform.provisioners.factory import ProvisionerFactory
-                  provisioner = ProvisionerFactory.get(stage.provisioner or stage.type)
-                  return provisioner.run(
-                      stage=stage,
-                      deployment_service=self._deployment_service,
-                      configuration_service=self._configuration_service,
-                      build_path=self._build_path,
-                      work_path=self._work_path,
-                      force=self._force,
-                  )
+        Step sequences:
+          dry-run  : setup → check → plan
+          destroy  : setup → destroy  (requires --force for -auto-approve)
+          normal   : setup → check → plan → apply
         """
-        self.logger.warning(
-            "Provisioners not yet implemented — stage skipped",
-            extra={"stage": stage.name, "type": stage.type},
-        )
-        if self._is_console_output():
-            click.echo(
-                f"  ⚠️  Stage '{stage.name}': provisioner not yet implemented — skipped."
+        deployer = self._create_deployer(stage)
+        if deployer is None:
+            self._errors.append(
+                f"Stage '{stage.name}': no deployer available for "
+                f"type='{stage.type}' / provisioner='{stage.provisioner}'. "
+                "Currently supported: infrastructure (terraform)."
             )
-        # Return True so the overall run does not fail on the stub; change to False
-        # once provisioners are wired and the stub should be removed.
+            return False
+
+        # --- pre-flight validation ---
+        for label, validate_fn in (
+            ("workspace", deployer.validate_workspace),
+            ("environment", deployer.validate_environment),
+        ):
+            ok, msgs = validate_fn()
+            self._messages.extend(msgs)
+            if self._is_console_output():
+                for msg in msgs:
+                    click.echo(f"    {msg}")
+            if not ok:
+                self._errors.extend(msgs)
+                return False
+
+        # --- determine step sequence ---
+        if self._destroy:
+            if not self._force:
+                self._errors.append(
+                    f"Stage '{stage.name}': --force is required to run terraform destroy "
+                    "(non-interactive execution needs -auto-approve)."
+                )
+                return False
+            steps_to_run = [STEP_SETUP, STEP_DESTROY]
+        elif self._dry_run:
+            steps_to_run = [STEP_SETUP, STEP_CHECK, STEP_PLAN]
+        else:
+            steps_to_run = [STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY]
+
+        supported = deployer.get_supported_steps()
+
+        # --- execute each step ---
+        for step_name in steps_to_run:
+            if step_name not in supported:
+                self._errors.append(
+                    f"Stage '{stage.name}': step '{step_name}' is not supported "
+                    f"by deployer '{deployer.get_deployer_name()}'."
+                )
+                return False
+
+            if self._is_console_output():
+                prefix = "[DRY-RUN] " if self._dry_run else ""
+                click.echo(f"    {prefix}{step_name}")
+
+            step_fn = getattr(deployer, step_name)
+            ok, msgs = step_fn()
+            self._messages.extend(msgs)
+            if self._is_console_output():
+                for msg in msgs:
+                    click.echo(f"      {msg}")
+            if not ok:
+                self._errors.extend(msgs)
+                return False
+
         return True
+
+    def _create_deployer(self, stage: DeploymentStageModel):
+        """Instantiate and return the deployer for *stage*, or None.
+
+        Type resolution (same logic as old _select_deployer, but now the
+        deployer receives full context via its constructor):
+          stage.provisioner resolves to a terraform IaC entry  → TerraformDeployer
+          stage.type == 'infrastructure' or 'terraform'        → TerraformDeployer
+
+        TODO: extend with additional deployer types as they are implemented.
+        """
+        is_terraform = False
+
+        if stage.provisioner:
+            workspace_service = self._deployment_service.get_workspace_service()
+            if workspace_service:
+                spec = workspace_service.model.spec
+                iac = next(
+                    (
+                        p
+                        for p in (spec.provisioners or [])
+                        if p.name == stage.provisioner
+                    ),
+                    None,
+                )
+                if iac and iac.provisioner == ProvisionerType.TERRAFORM:
+                    is_terraform = True
+
+        if not is_terraform and stage.type in ("infrastructure", "terraform"):
+            is_terraform = True
+
+        if is_terraform:
+            return TerraformDeployer(
+                stage=stage,
+                deployment_service=self._deployment_service,
+                configuration_service=self._configuration_service,
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+                force=self._force,
+                resolved_values=self._resolved_values,
+            )
+
+        return None
 
     def _check_approvals(self, stages_to_run: List[DeploymentStageModel]) -> bool:
         """Check deployment approval gates before executing stages.
