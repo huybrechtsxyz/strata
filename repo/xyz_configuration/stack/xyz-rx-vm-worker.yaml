@@ -6,8 +6,7 @@ meta:
     description: Kamatera Virtual Machine for Docker Swarm worker node
   labels:
     version: 1.0.0
-    environment: production
-  tags: [kamatera, vm, worker, docker-swarm]
+  tags: [xyz, vm, worker]
 spec:
   properties:
     provider_type: kamatera

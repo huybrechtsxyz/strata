@@ -5,9 +5,8 @@ meta:
   annotations:
     description: Deployment configuration for Huybrechts XYZ Platform
   labels:
-    environment: production
     version: "1.0.0"
-  tags: ["platform", "infrastructure", "kamatera"]
+  tags: [xyz, production, deployment]
 spec:
 
   configurations: null

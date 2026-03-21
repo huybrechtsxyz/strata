@@ -6,7 +6,7 @@ meta:
     description: Firewall rules for Docker Swarm
   labels:
     version: "1.0.0"
-  tags: ["docker", "firewall", "security", "network"]
+  tags: [xyz, firewall]
 spec:
   # Reset existing rules
   reset: true

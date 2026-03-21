@@ -1,12 +1,12 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: provider
 meta:
-  name: kamatera_eu_fr
+  name: xyz_dc_eu_fr
   annotations:
     description: Kamatera cloudprovider
   labels:
     version: "1.0.0"
-  tags: [cloudprovider, terraform]
+  tags: [xyz,cloudprovider]
 spec:
   properties:
     type: kamatera

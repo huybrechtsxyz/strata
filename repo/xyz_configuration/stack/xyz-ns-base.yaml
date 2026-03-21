@@ -6,6 +6,7 @@ meta:
     description: Base infrastructure stack for XYZ Platform
   labels:
     version: 1.0.0
+  tags: [xyz,namespace]
 spec:
   modules:
     - name: traefik

@@ -6,7 +6,7 @@ meta:
     description: Platform Workspace on Kamatera
   labels:
     version: "1.0.0"
-  tags: ["platform", "infrastructure", "kamatera"]
+  tags: [xyz, platform]
 spec:
   providers:
     - name: kamatera_eu_fr

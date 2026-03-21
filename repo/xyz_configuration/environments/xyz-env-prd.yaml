@@ -5,9 +5,8 @@ meta:
   annotations:
     description: Production environment for the XYZ Platform workspace on Kamatera
   labels:
-    environment: production
     version: "1.0.0"
-  tags: ["platform", "infrastructure", "kamatera"]
+  tags: [xyz, production]
 spec:
   variables:
     - key: WORKSPACE

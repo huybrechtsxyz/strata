@@ -6,8 +6,7 @@ meta:
     description: Traefik reverse proxy module for routing and load balancing
   labels:
     version: "1.0.0"
-    category: proxy
-  tags: ["traefik", "proxy", "docker-swarm", "kubernetes", "system"]
+  tags: [xyz,traefik]
 spec:
   source:
     repository: xyz_svc_traefik

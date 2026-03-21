@@ -6,7 +6,7 @@ meta:
     description: Kamatera-based platform configuration for Docker Swarm deployments
   labels:
     version: "1.0.0"
-  tags: []
+  tags: [xyz, configuration]
 spec:
   # Logging configuration
   logging:

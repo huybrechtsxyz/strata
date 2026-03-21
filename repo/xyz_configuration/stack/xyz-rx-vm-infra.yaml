@@ -6,8 +6,7 @@ meta:
     description: Kamatera Infrastructure Virtual Machine for platform workloads
   labels:
     version: 1.0.0
-    environment: production
-  tags: [kamatera, vm, infrastructure, docker-swarm]
+  tags: [xyz, vm, infra]
 spec:
   properties:
     provider_type: kamatera
