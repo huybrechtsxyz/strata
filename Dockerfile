@@ -1,21 +1,38 @@
-FROM python:3.11-slim
+# ============================================================
+# Stage 1 – builder: compile source into a wheel
+# ============================================================
+FROM python:3.12-slim AS builder
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+WORKDIR /build
 
-WORKDIR /app
-
-# Copy only what's needed for an install to leverage Docker layer caching
 COPY pyproject.toml .
 COPY src/ src/
 
-# Install system build deps, install the package, then clean up
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential gcc \
-    && pip install --upgrade pip \
-    && pip install --no-cache-dir . \
-    && apt-get purge -y --auto-remove build-essential gcc \
-    && rm -rf /var/lib/apt/lists/*
+RUN pip install --upgrade pip build \
+    && python -m build --wheel --outdir /dist
+
+# ============================================================
+# Stage 2 – final: lean runtime image
+# ============================================================
+FROM python:3.12-slim
+
+ARG VERSION=dev
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_VERSION=${VERSION}
+
+LABEL org.opencontainers.image.title="xyz-platform" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/${GITHUB_REPOSITORY}"
+
+WORKDIR /app
+
+# Install the pre-built wheel from the builder stage
+COPY --from=builder /dist/*.whl /tmp/
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir /tmp/*.whl \
+    && rm /tmp/*.whl
 
 # Run as non-root
 RUN useradd -m appuser
