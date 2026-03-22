@@ -13,7 +13,6 @@ Supports both Azure CLI and direct API authentication.
 """
 
 import json
-import os
 import re
 import urllib.parse
 import urllib.request
@@ -154,7 +153,9 @@ class AzureAppConfigIntegration(StoreIntegration):
             self._info = (
                 f"{self.integration_name} CLI (az) is not installed or not in PATH."
             )
-            logger.warning("Azure CLI not found", extra={"integration_name": self.integration_name})
+            logger.warning(
+                "Azure CLI not found", extra={"integration_name": self.integration_name}
+            )
             return (
                 False,
                 f"{self.integration_name} CLI (az) is not installed or not in PATH. "
@@ -167,7 +168,10 @@ class AzureAppConfigIntegration(StoreIntegration):
             self._info = version_error
             logger.warning(
                 "Azure CLI version validation failed",
-                extra={"integration_name": self.integration_name, "error": version_error},
+                extra={
+                    "integration_name": self.integration_name,
+                    "error": version_error,
+                },
             )
             return False, version_error
 
@@ -215,7 +219,10 @@ class AzureAppConfigIntegration(StoreIntegration):
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Azure App Configuration is available and configured",
-            extra={"integration_name": self.integration_name, "version": self.get_version()},
+            extra={
+                "integration_name": self.integration_name,
+                "version": self.get_version(),
+            },
         )
         return True, ""
 
@@ -584,7 +591,10 @@ class AzureAppConfigIntegration(StoreIntegration):
         except Exception as e:
             logger.warning(
                 "Error getting Azure access token via CLI",
-                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
+                extra={
+                    "error_type": type(e).__name__,
+                    "integration_name": self.integration_name,
+                },
             )
             return None
 
@@ -631,7 +641,10 @@ class AzureAppConfigIntegration(StoreIntegration):
         except Exception as e:
             logger.warning(
                 "Client credentials authentication to Azure App Configuration failed",
-                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
+                extra={
+                    "error_type": type(e).__name__,
+                    "integration_name": self.integration_name,
+                },
             )
             return None
 

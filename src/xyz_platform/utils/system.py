@@ -25,7 +25,7 @@ from xyz_platform.logger import get_logger
 logger = get_logger(__name__)
 
 
-def generate_uuid7() -> str:
+def generate_uuid() -> str:
     """
     Generate a time-ordered UUID.
 
@@ -36,8 +36,8 @@ def generate_uuid7() -> str:
     Returns:
         str: UUID formatted string
     """
-    if hasattr(uuid, "uuid7"):
-        return str(uuid.uuid7())
+    # if hasattr(uuid, "uuid7"):
+    #    return str(uuid.uuid7())
     return str(uuid.uuid4())
 
 
@@ -53,7 +53,7 @@ def normalize_path(path: str) -> str:
 # Join multiple paths
 def resolve_path(
     base_path: str,
-    target_path: str = None,
+    target_path: Optional[str] = None,
     *sub_paths: str,
     repo_map: Optional[Dict[str, str]] = None,
 ) -> Path:
@@ -155,7 +155,7 @@ def get_root_path() -> Path:
 
 
 # Get temporary directory path
-def get_temp_path(base_path: str = None, create: bool = True) -> Path:
+def get_temp_path(base_path: Optional[str] = None, create: bool = True) -> Path:
     """
     Get the temporary directory path for the workspace.
 
@@ -268,9 +268,10 @@ def run_command(
         extra={"command": cmd_display, "cwd": cwd, "timeout": timeout},
     )
     start_time = time.time()
+    console = Console()
 
     if show_output:
-        Console.print(1, f"Running command: [yellow]{cmd_display}[/yellow]")
+        console.print(f"Running command: [yellow]{cmd_display}[/yellow]")
 
     # Auto-detect capture_output if not specified
     if capture_output is None:
@@ -291,9 +292,9 @@ def run_command(
 
         if show_output and capture_output:
             if result.stdout:
-                Console.print(f"[dim]{result.stdout.strip()}[/dim]")
+                console.print(f"[dim]{result.stdout.strip()}[/dim]")
             if result.stderr:
-                Console.print(f"[red]{result.stderr.strip()}[/red]")
+                console.print(f"[red]{result.stderr.strip()}[/red]")
 
         if check and result.returncode != 0:
             duration_ms = (time.time() - start_time) * 1000

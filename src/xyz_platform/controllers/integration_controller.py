@@ -16,8 +16,6 @@ IntegrationController provides:
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-
-from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.integrations.factory import IntegrationFactory
 from xyz_platform.integrations.registry import IntegrationRegistry
 from xyz_platform.logger.logger import get_logger

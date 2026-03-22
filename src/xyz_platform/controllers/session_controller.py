@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from xyz_platform.logger.logger import get_logger, get_active_log_file
-from xyz_platform.utils.system import generate_uuid7
+from xyz_platform.utils.system import generate_uuid
 
 
 class SessionController:
@@ -1127,7 +1127,7 @@ class SessionController:
 
             # Replace placeholders (use as_posix() to avoid backslash issues in JSON on Windows)
             session_content = (
-                template_content.replace("{{session_id}}", generate_uuid7())
+                template_content.replace("{{session_id}}", generate_uuid())
                 .replace("{{workspace_name}}", workspace_name)
                 .replace("{{created_timestamp}}", datetime.now().isoformat())
                 .replace("{{work_path}}", work_path.absolute().as_posix())

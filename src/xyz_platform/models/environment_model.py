@@ -9,7 +9,7 @@ Description   : Pydantic model for environment configuration validation.
 ===============================================================================
 """
 
-from typing import List, Dict, Any, Optional, Annotated
+from typing import List, Dict, Any, Optional
 
 from pydantic import (
     BaseModel,

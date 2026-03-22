@@ -9,7 +9,6 @@ Description   : Tests for service caching functionality.
 ===============================================================================
 """
 
-import pytest
 from xyz_platform.utils.service_cache import (
     get_cache_key,
     get_or_cache,

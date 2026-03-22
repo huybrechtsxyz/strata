@@ -9,7 +9,7 @@ Description   : Module service class for managing modules with source fetching.
 ===============================================================================
 """
 
-from typing import List, Optional, Tuple, Any
+from typing import List, Optional, Tuple
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.module_model import ModuleModel
 from xyz_platform.services.base_service import BaseService

@@ -21,7 +21,6 @@ import yaml
 from xyz_platform.models.platform_model import PlatformModel
 from xyz_platform.services.base_service import BaseService
 from xyz_platform.services.workspace_service import WorkspaceService
-from xyz_platform.logger import get_logger
 
 
 class PlatformService(BaseService):

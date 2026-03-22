@@ -16,7 +16,7 @@ Description   : Pydantic models for platform build output structure.
 ===============================================================================
 """
 
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, RootModel, StringConstraints
 
@@ -49,7 +49,6 @@ from xyz_platform.models.firewall_model import (
     FirewallDefaultsModel,
     FirewallModel as InputFirewallModel,
     FirewallRuleModel,
-    FirewallSpecModel,
 )
 from xyz_platform.models.module_model import (
     ModuleModel,
@@ -72,7 +71,6 @@ from xyz_platform.models.resource_model import (
     ResourceStorageModel,
 )
 from xyz_platform.models.workspace_model import (
-    WorkspaceIacBackendModel,
     WorkspaceIacModel,
     WorkspaceModel,
     WorkspaceTopologyModel,

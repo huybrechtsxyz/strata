@@ -10,7 +10,6 @@ Description   : Command to fetch all repositories declared in the merged
 ===============================================================================
 """
 
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import click

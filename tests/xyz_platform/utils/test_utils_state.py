@@ -13,7 +13,6 @@ import json
 import time
 import pytest
 from datetime import datetime
-from pathlib import Path
 
 from xyz_platform.utils.state import WorkspaceState
 

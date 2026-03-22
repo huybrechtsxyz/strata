@@ -24,7 +24,7 @@ from xyz_platform.controllers.workspace_controller import WorkspaceController
 from xyz_platform.logger.logger import get_logger, reconfigure_logging
 from xyz_platform.logger.context import set_context
 from xyz_platform.utils import system
-from xyz_platform.utils.system import generate_uuid7
+from xyz_platform.utils.system import generate_uuid
 
 
 class BaseCommand:
@@ -201,9 +201,9 @@ class BaseCommand:
 
             # Assign correlation IDs (UUID v7 — time-ordered)
             self.session_id = (
-                self._session_controller.get_session_id() or generate_uuid7()
+                self._session_controller.get_session_id() or generate_uuid()
             )
-            self.execution_id = generate_uuid7()
+            self.execution_id = generate_uuid()
             set_context(
                 {"session_id": self.session_id, "execution_id": self.execution_id}
             )

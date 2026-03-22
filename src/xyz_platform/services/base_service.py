@@ -90,9 +90,9 @@ class BaseService(ABC):
     # Abstract methods for subclasses to implement
 
     @abstractmethod
-    def _get_model_class(self):
+    def _get_model_class(self) -> type:
         """Return the Pydantic model class for validation."""
-        pass
+        raise NotImplementedError("Subclasses must implement _get_model_class()")
 
     @abstractmethod
     def _validate_dynamic(
@@ -267,7 +267,7 @@ class BaseService(ABC):
         except (AttributeError, KeyError, TypeError):
             return None
 
-    def get_lifecycle_phase(self, phase_name: str = None):
+    def get_lifecycle_phase(self, phase_name: Optional[str] = None):
         """
         Get a lifecycle phase model by name from the configuration.
 

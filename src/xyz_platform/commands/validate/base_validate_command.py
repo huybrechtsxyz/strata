@@ -10,7 +10,7 @@ Description   : Base class for validate commands in the XYZ Platform CLI.
 """
 
 from abc import abstractmethod
-from typing import List, Optional
+from typing import List
 
 import click
 

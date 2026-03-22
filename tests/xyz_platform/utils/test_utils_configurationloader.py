@@ -12,7 +12,6 @@ Description   : Tests for ConfigurationLoader class (simplified API v2.0).
 
 import pytest
 import yaml
-from pathlib import Path
 from xyz_platform.utils.configuration_loader import ConfigurationLoader
 
 

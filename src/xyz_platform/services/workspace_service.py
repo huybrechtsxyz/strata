@@ -21,7 +21,7 @@ class WorkspaceService(BaseService):
 
     # Initialization
 
-    def __init__(self, path: str = None, data: dict = None):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the WorkspaceService."""
         super().__init__(path=path, data=data)
         self.model: Optional[WorkspaceModel] = None
@@ -37,7 +37,7 @@ class WorkspaceService(BaseService):
 
     def _validate_dynamic(
         self,
-        configuration_model: ConfigurationModel = None,
+        configuration_model: Optional[ConfigurationModel] = None,
         work_path: Optional[str] = None,
     ) -> Tuple[bool, List[str]]:
         """
@@ -58,7 +58,7 @@ class WorkspaceService(BaseService):
         Returns:
             Tuple[bool, List[str]]: (success, list of error messages)
         """
-        if not configuration_model:
+        if not configuration_model or not self.model:
             return True, []
 
         errors = []
@@ -114,6 +114,7 @@ class WorkspaceService(BaseService):
             ].items():
                 if (
                     hasattr(module_service, "model")
+                    and module_service.model is not None
                     and hasattr(module_service.model, "spec")
                     and hasattr(module_service.model.spec, "source")
                     and module_service.model.spec.source
@@ -214,11 +215,7 @@ class WorkspaceService(BaseService):
                         # Check if additional components are allowed
                         if not additional_components_allowed:
                             # Get component name for error message
-                            component_name = (
-                                component.name
-                                if component.name
-                                else str(component.resource)
-                            )
+                            component_name = component.resource
                             error = InvalidReferenceError(
                                 source_type="Component",
                                 source_name=component_name,

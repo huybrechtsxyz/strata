@@ -47,9 +47,9 @@ class RunValidateCommand(BaseValidateCommand):
         file: Optional[str] = None,
         work_path: Optional[str] = None,
         no_hooks: bool = False,
-        output: str = None,
-        verbose: bool = None,
-        quiet: bool = None,
+        output: Optional[str] = None,
+        verbose: Optional[bool] = None,
+        quiet: Optional[bool] = None,
     ):
         super().__init__(
             file_path=file,

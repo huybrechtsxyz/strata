@@ -13,8 +13,6 @@ from typing import Dict, List, Optional, Any
 from pydantic import (
     BaseModel,
     Field,
-    RootModel,
-    model_validator,
 )
 
 from xyz_platform.models.common_models import (

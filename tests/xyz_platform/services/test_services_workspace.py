@@ -9,7 +9,6 @@ Description   : Tests for WorkspaceService validation
 ===============================================================================
 """
 
-import os
 import pytest
 from pathlib import Path
 

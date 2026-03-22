@@ -9,7 +9,6 @@ Description   : Template processing functionality for files with placeholders.
 ===============================================================================
 """
 
-import os
 import tempfile
 from pathlib import Path
 from xyz_platform.utils.templater import TemplateProcessor

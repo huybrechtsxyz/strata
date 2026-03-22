@@ -156,7 +156,6 @@ class TestRunCommand:
     def test_command_with_cwd(self):
         """Test command with custom working directory."""
         import tempfile
-        import os
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Use Python to print working directory (cross-platform)

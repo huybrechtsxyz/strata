@@ -12,7 +12,7 @@ extend its capabilities. Examples: git, terraform, bitwarden, vault.
 ===============================================================================
 """
 
-from typing import List, Optional, Set
+from typing import Optional, Set
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
