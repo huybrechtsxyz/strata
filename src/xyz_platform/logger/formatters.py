@@ -40,7 +40,7 @@ class JsonFormatter(jsonlogger.JsonFormatter):
 
     def add_fields(
         self,
-        log_record: Dict[str, Any],
+        log_data: Dict[str, Any],
         record: logging.LogRecord,
         message_dict: Dict[str, Any],
     ):
@@ -49,41 +49,41 @@ class JsonFormatter(jsonlogger.JsonFormatter):
 
         Called by pythonjsonlogger to customize the JSON output.
         """
-        super(JsonFormatter, self).add_fields(log_record, record, message_dict)
+        super(JsonFormatter, self).add_fields(log_data, record, message_dict)
 
         # Ensure timestamp is in ISO 8601 format
-        if not log_record.get("timestamp"):
-            log_record["timestamp"] = (
+        if not log_data.get("timestamp"):
+            log_data["timestamp"] = (
                 datetime.utcfromtimestamp(record.created).isoformat() + "Z"
             )
 
         # Always write level (pythonjsonlogger does not include levelname by default
         # unless a format string is provided — set it explicitly from the LogRecord)
-        log_record["level"] = record.levelname
+        log_data["level"] = record.levelname
         # Remove pythonjsonlogger's own levelname if it happened to be included
-        log_record.pop("levelname", None)
+        log_data.pop("levelname", None)
 
         # Rename 'name' to 'logger' for clarity
-        if "name" in log_record:
-            log_record["logger"] = log_record.pop("name")
+        if "name" in log_data:
+            log_data["logger"] = log_data.pop("name")
 
         # Add correlation ID if present
         correlation_id = get_correlation_id()
         if correlation_id:
-            log_record["correlation_id"] = correlation_id
+            log_data["correlation_id"] = correlation_id
 
         # Add context data
         context = get_context()
         if context:
-            log_record["context"] = context
+            log_data["context"] = context
             # Also add important fields at top level for easier Kibana filtering
             if "session_id" in context:
-                log_record["session_id"] = context["session_id"]
+                log_data["session_id"] = context["session_id"]
             if "execution_id" in context:
-                log_record["execution_id"] = context["execution_id"]
+                log_data["execution_id"] = context["execution_id"]
 
         # Add source location
-        log_record["source"] = {
+        log_data["source"] = {
             "file": record.pathname,
             "line": record.lineno,
             "function": record.funcName,

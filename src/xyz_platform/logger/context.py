@@ -48,14 +48,14 @@ def get_correlation_id() -> Optional[str]:
     return _correlation_id.get()
 
 
-def set_context(context: Dict[str, Any]) -> None:
+def set_context(context: Optional[Dict[str, Any]]) -> None:
     """
     Set context data for logging.
     
     Args:
-        context: Dictionary of context data to include in logs.
+        context: Dictionary of context data to include in logs, or None to clear.
     """
-    _log_context.set(context)
+    _log_context.set(context or {})
 
 
 def get_context() -> Dict[str, Any]:

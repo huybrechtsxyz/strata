@@ -14,6 +14,7 @@ Description   : Core logging configuration using standard frameworks
 
 import logging
 import logging.config
+import logging.handlers
 import os
 import sys
 from pathlib import Path

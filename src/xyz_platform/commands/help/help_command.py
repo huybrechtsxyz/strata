@@ -261,6 +261,7 @@ class HelpCommand(BaseCommand):
         # Show content via pager
         click.echo("")
         click.echo_via_pager(content)
+        return 0
 
     # List all available documentation topics
     def _get_helpdoc_list(self) -> list[str]:
