@@ -10,7 +10,6 @@ Description   : Workspace service class
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-from pathlib import Path
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.workspace_model import WorkspaceModel
 from xyz_platform.services.base_service import BaseService

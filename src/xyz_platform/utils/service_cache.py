@@ -9,7 +9,7 @@ Description   : Simple service caching to avoid re-parsing YAML files.
 ===============================================================================
 """
 
-from typing import Dict, Optional, Type, Any
+from typing import Dict, Optional, Type, Any, Callable
 from xyz_platform.logger import get_logger
 
 logger = get_logger(__name__)
@@ -97,7 +97,7 @@ def cache_service(
 
 def get_or_cache(
     key: str,
-    factory: callable,
+    factory: Callable[[], Any],
 ) -> Any:
     """
     Get cached instance or create using factory function.

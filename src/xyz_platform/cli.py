@@ -27,7 +27,6 @@ Usage:
 ===============================================================================
 """
 
-from pathlib import Path
 import sys
 import os
 import click
@@ -108,9 +107,9 @@ if __name__ == "__main__":
             os.environ["PYTHONIOENCODING"] = "utf-8"
             # Reconfigure stdout/stderr for UTF-8
             if hasattr(sys.stdout, "reconfigure"):
-                sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+                sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore
             if hasattr(sys.stderr, "reconfigure"):
-                sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+                sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore
 
         main()
     except click.UsageError as e:
