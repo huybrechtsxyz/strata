@@ -1,0 +1,60 @@
+# ===============================================================================
+# Script Name   : install-python/action.py
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Python Version: 3.12+
+# Description   : This composite GitHub Action installs Python and sets up the environment.
+#                 It adds Python and pip-installed binaries to the PATH, and optionally installs dependencies.
+# ===============================================================================
+
+name: Install Python
+description: Install Python and set up the environment
+
+inputs:
+  python_version:
+    description: Python version to install
+    required: false
+    default: "3.12"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python_version }}
+        cache: "pip"
+        cache-dependency-path: pyproject.toml
+
+    - name: Add to PATH
+      shell: bash
+      run: |
+        # Add Python user base bin to PATH for scripts installed with --user
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+    - name: Upgrade PIP
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        python -m pip install --upgrade build
+
+    - name: Verify Version
+      shell: bash
+      run: |
+        python --version
+        pip --version
+
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        # Prefer project manager if present
+        if command -v pdm >/dev/null 2>&1; then
+          pdm install
+        else
+          if [ -f pyproject.toml ]; then
+            # Try editable dev-install first, fall back to editable install
+            python -m pip install -e '.[dev]' || python -m pip install -e .
+          elif [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          fi
+        fi

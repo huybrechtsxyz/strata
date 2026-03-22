@@ -1,0 +1,55 @@
+# ===============================================================================
+# Script Name   : ci-pullrequest.yaml
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Python Version: 3.12+
+# Description   : Triggered on pull request, runs lint, format-check, build, and pytest
+# ===============================================================================
+
+name: "CI Pull Request"
+
+# Default workflow header: permissions, concurrency, environment and runner defaults
+permissions:
+  contents: read
+
+# Ensure a single run per ref and cancel in-progress runs on updates
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Default shell and environment variables for all jobs
+defaults:
+  run:
+    shell: bash
+
+env:
+  PYTHON_VERSION: 3.12
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  pr:
+    name: PR Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [$PYTHON_VERSION]
+
+    steps:
+      # Checkout the code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install Python
+      - name: Install Python
+        uses: ./.github/actions/install-python
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Test Python
+      - name: Test Python
+        uses: ./.github/actions/test-python
+        with:
+          python-version: ${{ matrix.python-version }}

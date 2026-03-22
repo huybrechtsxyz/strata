@@ -1,0 +1,65 @@
+# ===============================================================================
+# Script Name   : ci-build.yaml
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Python Version: 3.12+
+# Description   : GitHub Actions workflow for CI build: lint, format-check, build, and run pytest.
+#                 Triggered on push to main branch. Uploads dist/ as a GitHub artifact for ci-release.
+# ===============================================================================
+
+name: "CI Build"
+
+# Default workflow header: permissions, concurrency, environment and runner defaults
+permissions:
+  contents: read
+  actions: write   # required to upload artifacts
+
+# Ensure a single run per ref and cancel in-progress runs on updates
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Default shell and environment variables for all jobs
+defaults:
+  run:
+    shell: bash
+
+# Environment variables
+env:
+  PYTHON_VERSION: 3.12
+
+# Trigger on push to main branch
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build and Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    
+    steps:
+      # Checkout the code
+      - name: Checkout
+        uses: actions/checkout@v4 
+
+      # Install Python
+      - name: Install Python
+        uses: ./.github/actions/install-python
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      # Test Python
+      - name: Test Python
+        uses: ./.github/actions/test-python
+
+      # Upload dist artifact for use by ci-release
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7

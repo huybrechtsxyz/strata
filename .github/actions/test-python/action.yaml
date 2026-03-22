@@ -1,0 +1,53 @@
+# ===============================================================================
+# Script Name   : test-python/action.py
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Python Version: 3.12+
+# Description   : Composite action: lint (ruff), format-check (black), build, and pytest
+# ===============================================================================
+
+name: "Test Python"
+description: "Composite action: lint (ruff), format-check (black), build, and run pytest. Requires install-python to run first."
+
+inputs:
+  skip_lint:
+    description: 'Skip ruff linting'
+    required: false
+    default: 'false'
+  skip_format_check:
+    description: 'Skip black format check'
+    required: false
+    default: 'false'
+  skip_build:
+    description: 'Skip building the package'
+    required: false
+    default: 'false'
+  skip_tests:
+    description: 'Skip running pytest'
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Lint (ruff)
+      if: ${{ inputs.skip_lint == 'false' }}
+      shell: bash
+      run: ruff check .
+
+    - name: Format check (black)
+      if: ${{ inputs.skip_format_check == 'false' }}
+      shell: bash
+      run: black --check .
+
+    - name: Build package
+      if: ${{ inputs.skip_build == 'false' }}
+      shell: bash
+      run: python -m build
+
+    - name: Run tests (pytest)
+      if: ${{ inputs.skip_tests == 'false' }}
+      shell: bash
+      run: pytest -q
+
+

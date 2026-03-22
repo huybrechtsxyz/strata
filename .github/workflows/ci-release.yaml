@@ -1,0 +1,90 @@
+# ===============================================================================
+# Script Name   : ci-release.yaml
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Python Version: 3.12+
+# Description   : Creates a GitHub Release from the dist artifact produced by
+#                 ci-build.yaml (artifacts as store pattern).
+#                 Triggered on tag push vX.Y.Z.
+# ===============================================================================
+
+name: "CI Release"
+
+# Restrict to least privilege; contents: write required to create a GitHub Release
+permissions:
+  contents: write
+  actions: read    # required to download artifacts from ci-build
+
+# Never cancel an in-progress release
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# Default shell and environment variables for all jobs
+defaults:
+  run:
+    shell: bash
+
+# Environment variables
+env:
+  CI: 'true'
+
+# Trigger on push of a tag matching vX.Y.Z
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Look up the successful ci-build run for this exact commit so we can
+      # download the dist artifact it produced (artifacts as store).
+      - name: Find ci-build run for this commit
+        id: find-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID=$(gh run list \
+            --workflow=ci-build.yaml \
+            --commit="${{ github.sha }}" \
+            --status=success \
+            --limit=1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "::error::No successful ci-build run found for commit ${{ github.sha }}"
+            exit 1
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Found ci-build run: $RUN_ID"
+
+      # Download the dist/ artifact stored by ci-build
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-run.outputs.run_id }}
+
+      - name: List dist contents
+        run: ls -lh dist/
+
+      # Create the GitHub Release and attach every file from dist/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
