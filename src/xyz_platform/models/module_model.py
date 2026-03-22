@@ -53,7 +53,7 @@ class ModuleReferenceModel(BaseModel):
 class ModuleEndpointModel(BaseModel):
     """Model for a module endpoint configuration."""
 
-    name: PlatformName = Field(None, description="Name of the endpoint")
+    name: Optional[PlatformName] = Field(None, description="Name of the endpoint")
     label: Optional[str] = Field(None, description="Label for the endpoint")
     url: Optional[str] = Field(None, description="URL or address of the endpoint")
     type: Optional[str] = Field(None, description="Type of endpoint (e.g., http, tcp)")
@@ -91,7 +91,7 @@ class ModuleCheckModel(BaseModel):
 class ModuleMountModel(BaseModel):
     """Model for a module mount configuration."""
 
-    name: PlatformName = Field(None, description="Name of the mount")
+    name: Optional[PlatformName] = Field(None, description="Name of the mount")
     type: Optional[str] = Field(
         None, description="Type of the mount (e.g., volume, bind)"
     )

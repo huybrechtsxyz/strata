@@ -16,7 +16,7 @@ Description   : Pydantic models for platform build output structure.
 ===============================================================================
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, RootModel, StringConstraints
 
@@ -319,6 +319,7 @@ class PlatformResourceModel(BaseModel):
             storage=model.spec.storage,
             configuration=model.spec.configuration,
             custom=model.spec.custom,
+            default_tags=None,
             firewalls=firewalls,
             firewall=firewall,
         )
@@ -582,17 +583,30 @@ class PlatformSpecModel(BaseModel):
             PlatformSpecModel pre-populated with deployment fields
         """
         return cls(
-            lifecycle=model.lifecycle,
-            deployment=model.deployment,
+            lifecycle=None,
+            deployment=None,
             artifact_path=artifact_path,
             stages=model.stages,
             approvals=model.approvals,
             properties=model.properties,
             custom=model.custom,
-            features=model.features,
-            variables=model.variables,
-            secrets=model.secrets,
-            workspace=PlatformWorkspaceModel(name="__pending__"),
+            workspace=PlatformWorkspaceModel(
+                name="__pending__",
+                annotations=None,
+                labels=None,
+                tags=None,
+            ),
+            providers=None,
+            provisioners=None,
+            topologies=None,
+            stereotypes=None,
+            resources=None,
+            features=None,
+            variables=None,
+            secrets=None,
+            namespaces=None,
+            modules=None,
+            firewalls=None,
         )
 
 

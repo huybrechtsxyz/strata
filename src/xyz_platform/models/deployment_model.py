@@ -205,10 +205,11 @@ class DeploymentSpecModel(BaseModel):
     def validate_unique_names(self) -> "DeploymentSpecModel":
         """Validate that stage and configuration names are unique."""
         # Validate unique stage names
-        stage_names = [stage.name for stage in self.stages]
-        if len(stage_names) != len(set(stage_names)):
-            duplicates = [name for name in stage_names if stage_names.count(name) > 1]
-            raise ValueError(f"Duplicate stage names found: {set(duplicates)}")
+        if self.stages:
+            stage_names = [stage.name for stage in self.stages]
+            if len(stage_names) != len(set(stage_names)):
+                duplicates = [name for name in stage_names if stage_names.count(name) > 1]
+                raise ValueError(f"Duplicate stage names found: {set(duplicates)}")
 
         if self.configurations:
             config_names = [config.name for config in self.configurations]
@@ -225,6 +226,9 @@ class DeploymentSpecModel(BaseModel):
     @model_validator(mode="after")
     def validate_stage_dependencies(self) -> "DeploymentSpecModel":
         """Validate that stage dependencies form a valid DAG (no cycles, valid references)."""
+        if not self.stages:
+            return self
+
         stage_names = {stage.name for stage in self.stages}
         errors = []
 
@@ -252,7 +256,7 @@ class DeploymentSpecModel(BaseModel):
             rec_stack.add(stage_name)
 
             # Find stage object
-            stage = next((s for s in self.stages if s.name == stage_name), None)
+            stage = next((s for s in self.stages or [] if s.name == stage_name), None)
             if stage and stage.depends_on:
                 for dep in stage.depends_on:
                     if dep not in visited:
