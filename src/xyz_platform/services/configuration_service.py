@@ -171,13 +171,7 @@ class ConfigurationService(BaseService):
 
         # Validate logging file reference exists on disk
         if work_path and self.model.spec.logging and self.model.spec.logging.file:
-            repo_map = {}
-            if self.model.spec.repositories:
-                repo_map = {
-                    repo.name: repo.deploy_path
-                    for repo in self.model.spec.repositories
-                    if repo.deploy_path
-                }
+            repo_map = self.get_repo_map()
             errors.extend(
                 self._validate_file_refs(
                     work_path,
@@ -190,7 +184,9 @@ class ConfigurationService(BaseService):
 
     # Loading methods
 
-    def add_configurations(self, config_files: List[str]) -> Tuple[bool, List[str]]:
+    def add_configurations(
+        self, config_files: List[str | Path]
+    ) -> Tuple[bool, List[str]]:
         """
         Add multiple configuration files to the service.
         Merges all files with existing configuration and replaces the model.
@@ -369,7 +365,7 @@ class ConfigurationService(BaseService):
         return {
             repo.name: repo.deploy_path
             for repo in repos
-            if getattr(repo, "deploy_path", None)
+            if repo.name and repo.deploy_path
         }
 
     # Get configuration defaults
@@ -387,7 +383,7 @@ class ConfigurationService(BaseService):
         self, work_path: str, create_path: bool
     ) -> Optional[Path]:
         """Get the default build path from configuration defaults."""
-        build_path: str = None
+        build_path: Optional[str] = None
         # Try to get from configuration if validated, otherwise use defaults
         if self.is_validated():
             defaults = self.get_configuration_defaults()
@@ -415,7 +411,7 @@ class ConfigurationService(BaseService):
         self, work_path: str, create_path: bool
     ) -> Optional[Path]:
         """Get the default dist path from configuration defaults."""
-        dist_path: str = None
+        dist_path: Optional[str] = None
         # Try to get from configuration if validated, otherwise use defaults
         if self.is_validated():
             defaults = self.get_configuration_defaults()
@@ -443,7 +439,7 @@ class ConfigurationService(BaseService):
         self, work_path: str, create_path: bool
     ) -> Optional[Path]:
         """Get the default config path from configuration defaults."""
-        cfg_path: str = None
+        cfg_path: Optional[str] = None
         # Try to get from configuration if validated, otherwise use defaults
         if self.is_validated():
             defaults = self.get_configuration_defaults()

@@ -981,19 +981,21 @@ class DeploymentService(BaseService):
 
         # Infrastructure services: delegate to workspace
         if service_type in ("providers", "resources", "namespaces", "firewalls"):
-            workspace = self._related_services.get("workspace")
-            if workspace is None:
+            workspace_service: WorkspaceService = self._related_services.get(
+                "workspace"
+            )
+            if workspace_service is None:
                 return None
 
             # Delegate to workspace's accessor method
             if service_type == "providers" and service_name:
-                return workspace.get_provider_service(service_name)
+                return workspace_service.get_provider_service(service_name)
             elif service_type == "resources" and service_name:
-                return workspace.get_resource_service(service_name)
+                return workspace_service.get_resource_service(service_name)
             elif service_type == "namespaces" and service_name:
-                return workspace.get_namespace_service(service_name)
+                return workspace_service.get_namespace_service(service_name)
             elif service_type == "firewalls" and service_name:
-                return workspace.get_firewall_service(service_name)
+                return workspace_service.get_firewall_service(service_name)
 
         return None
 
