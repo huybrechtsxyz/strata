@@ -112,17 +112,17 @@ def get_or_cache(
     # Check cache first
     cached = _service_cache.get(key)
     if cached:
-        logger.debug(f"Cache hit", extra={"key": key})
+        logger.debug("Cache hit", extra={"key": key})
         return cached
 
     # Create new instance using factory
-    logger.debug(f"Cache miss, creating new instance", extra={"key": key})
+    logger.debug("Cache miss, creating new instance", extra={"key": key})
     instance = factory()
 
     # Cache the instance
     _service_cache[key] = instance
     logger.debug(
-        f"Cached instance",
+        "Cached instance",
         extra={"key": key, "cache_size": len(_service_cache)},
     )
 

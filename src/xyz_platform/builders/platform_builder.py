@@ -216,6 +216,8 @@ class PlatformBuilder(BaseBuilder):
 
         try:
             deployment_model = deployment_service.model
+            if deployment_model is None:
+                raise ValueError("Deployment service model is None")
 
             # Derive environment for meta label enrichment
             environment_service = deployment_service.get_environment_service()
@@ -264,8 +266,16 @@ class PlatformBuilder(BaseBuilder):
             PlatformSpecModel.
         """
         deployment_model = deployment_service.model
+        if deployment_model is None:
+            raise ValueError("Deployment service model is None")
+
         workspace_service = deployment_service.get_workspace_service()
+        if workspace_service is None:
+            raise ValueError("Workspace service is not available in deployment service")
+
         workspace_model = workspace_service.model
+        if workspace_model is None:
+            raise ValueError("Workspace model is not available in workspace service")
 
         # ------------------------------------------------------------------
         # Artifact path (optional — requires configuration_model)
@@ -281,19 +291,19 @@ class PlatformBuilder(BaseBuilder):
         # ------------------------------------------------------------------
         workspace = PlatformWorkspaceModel.from_workspace_model(workspace_model)
 
-        # Shorthand for workspace related services
-        ws_related = workspace_service._related_services or {}
-
         # ------------------------------------------------------------------
         # Providers
         # ------------------------------------------------------------------
         providers = None
-        provider_services = ws_related.get("providers", {})
+        provider_services = workspace_service.get_provider_services()
         if provider_services:
             providers = [
                 PlatformProviderModel.from_provider_model(svc.model)
                 for svc in provider_services.values()
+                if svc.model is not None
             ]
+            if self.verbose:
+                self.logger.debug(f"Built {len(providers)} provider(s)")
 
         # ------------------------------------------------------------------
         # Topologies
@@ -313,7 +323,7 @@ class PlatformBuilder(BaseBuilder):
         resources = None
         resource_firewall_map: dict = {}  # {resource_name: merged_fw_name}
 
-        resource_services = ws_related.get("resources", {})
+        resource_services = workspace_service.get_resource_services()
         if resource_services:
             # Map resource names → their workspace firewall reference lists
             resource_to_firewalls: dict = {}
@@ -323,33 +333,33 @@ class PlatformBuilder(BaseBuilder):
                         resource_to_firewalls[res_ref.name] = res_ref.firewalls
 
             resources = [
-                PlatformResourceModel.from_resource_model(
-                    svc.model,
-                    firewalls=resource_to_firewalls.get(svc.get_name()),
-                )
+                PlatformResourceModel.from_resource_model(svc.model)
                 for svc in resource_services.values()
+                if svc.model is not None
             ]
 
         # ------------------------------------------------------------------
         # Namespaces
         # ------------------------------------------------------------------
         namespaces = None
-        namespace_services = ws_related.get("namespaces", {})
+        namespace_services = workspace_service.get_namespace_services()
         if namespace_services:
             namespaces = [
                 PlatformNamespaceModel.from_namespace_model(svc.model)
                 for svc in namespace_services.values()
+                if svc.model is not None
             ]
 
         # ------------------------------------------------------------------
         # Modules (flat dict keyed by name in workspace._related_services)
         # ------------------------------------------------------------------
         modules = None
-        module_services = ws_related.get("modules", {})
+        module_services = workspace_service.get_module_services()
         if module_services:
             all_modules = [
                 PlatformModuleModel.from_module_model(svc.model)
                 for svc in module_services.values()
+                if svc.model is not None
             ]
             if all_modules:
                 modules = all_modules
@@ -362,12 +372,13 @@ class PlatformBuilder(BaseBuilder):
         # ------------------------------------------------------------------
         firewalls_list = []
 
-        firewall_services = ws_related.get("firewalls", {})
+        firewall_services = workspace_service.get_firewall_services()
         if firewall_services:
-            for fw_service in firewall_services.values():
-                firewalls_list.append(
-                    PlatformFirewallModel.from_firewall_model(fw_service.model)
-                )
+            firewalls_list = [
+                PlatformFirewallModel.from_firewall_model(svc.model)
+                for svc in firewall_services.values()
+                if svc.model is not None
+            ]
             self.logger.debug(
                 f"Added {len(firewall_services)} original firewall definition(s)"
             )
@@ -375,18 +386,14 @@ class PlatformBuilder(BaseBuilder):
         # Merged firewalls synthesised from resources with multiple fw refs
         if resource_services:
             for resource_name, resource_service in resource_services.items():
-                if (
-                    hasattr(resource_service, "merged_firewall")
-                    and resource_service.merged_firewall
-                ):
+                merged_fw = resource_service.get_merged_firewall()
+                if merged_fw:
                     merged_fw_name = f"{resource_name}_merged_fw"
                     self.logger.debug(
                         f"Adding merged firewall '{merged_fw_name}' "
                         f"for resource '{resource_name}'"
                     )
-                    merged = PlatformFirewallModel.from_firewall_model(
-                        resource_service.merged_firewall
-                    )
+                    merged = PlatformFirewallModel.from_firewall_model(merged_fw)
                     # model_copy() is Pydantic v2; fall back to direct assignment
                     merged.name = merged_fw_name  # type: ignore[assignment]
                     firewalls_list.append(merged)
@@ -413,55 +420,16 @@ class PlatformBuilder(BaseBuilder):
         # ------------------------------------------------------------------
         # Variables / Secrets / Features  (optional — service may not exist yet)
         # ------------------------------------------------------------------
-        all_variables: Optional[List[VariableStoreModel]] = None
-        all_secrets: Optional[List[SecretStoreModel]] = None
-        all_features: Optional[List[FeatureStoreModel]] = None
-
-        variable_service = (
-            deployment_service.get_variable_service()
-            if hasattr(deployment_service, "get_variable_service")
-            else None
+        environment_service = deployment_service.get_environment_service()
+        all_variables: Optional[List[VariableStoreModel]] = (
+            environment_service.get_variables() if environment_service else None
         )
-        secret_service = (
-            deployment_service.get_secret_service()
-            if hasattr(deployment_service, "get_secret_service")
-            else None
+        all_secrets: Optional[List[SecretStoreModel]] = (
+            environment_service.get_secrets() if environment_service else None
         )
-        feature_service = (
-            deployment_service.get_feature_service()
-            if hasattr(deployment_service, "get_feature_service")
-            else None
+        all_features: Optional[List[FeatureStoreModel]] = (
+            environment_service.get_features() if environment_service else None
         )
-
-        if variable_service:
-            keys = variable_service.get_variable_list()
-            self.logger.debug(f"Found {len(keys)} unique variable key(s)")
-            all_variables = (
-                [VariableStoreModel(**variable_service.get_struct(k)) for k in keys]
-                if keys
-                else None
-            )
-
-        if secret_service:
-            keys = secret_service.get_secret_list()
-            self.logger.debug(f"Found {len(keys)} unique secret key(s)")
-            all_secrets = (
-                [
-                    SecretStoreModel(**secret_service.get_struct(k, resolve=False))
-                    for k in keys
-                ]
-                if keys
-                else None
-            )
-
-        if feature_service:
-            keys = feature_service.get_flag_list()
-            self.logger.debug(f"Found {len(keys)} unique feature key(s)")
-            all_features = (
-                [FeatureStoreModel(**feature_service.get_struct(k)) for k in keys]
-                if keys
-                else None
-            )
 
         # ------------------------------------------------------------------
         # Assemble spec
@@ -490,6 +458,8 @@ class PlatformBuilder(BaseBuilder):
             features=all_features,
             variables=all_variables,
             secrets=all_secrets,
+            provisioners=None,
+            stereotypes=None,
         )
 
     # ------------------------------------------------------------------

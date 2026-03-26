@@ -97,12 +97,24 @@ class AzureAppConfigIntegration(StoreIntegration):
             if self.appconfig_endpoint and not self.appconfig_endpoint.endswith("/"):
                 self.appconfig_endpoint += "/"
 
-        # Get authentication configuration from environment variables
-        self.tenant_id = self._get_env_var("AZURE_TENANT_ID")
-        self.client_id = self._get_env_var("AZURE_CLIENT_ID")
-        self.client_secret = self._get_env_var("AZURE_CLIENT_SECRET")
-        self.subscription_id = self._get_env_var("AZURE_SUBSCRIPTION_ID")
-        self.connection_string = self._get_env_var("APPCONFIG_CONNECTION_STRING")
+        # Get authentication configuration from environment variables.
+        # Field names in oauth2/api_key sub-models are treated as env-var name
+        # references (matching the pattern used throughout AuthenticationModel).
+        self.tenant_id = self._get_env_var(
+            self._get_auth_var_name("tenant_id", "AZURE_TENANT_ID")
+        )
+        self.client_id = self._get_env_var(
+            self._get_auth_var_name("client_id", "AZURE_CLIENT_ID")
+        )
+        self.client_secret = self._get_env_var(
+            self._get_auth_var_name("client_secret", "AZURE_CLIENT_SECRET")
+        )
+        self.subscription_id = self._get_env_var(
+            "AZURE_SUBSCRIPTION_ID"
+        )  # no model equivalent
+        self.connection_string = self._get_env_var(
+            self._get_connection_string_var_name()
+        )
 
         logger.debug(
             "Azure App Configuration integration initialized",
@@ -112,6 +124,35 @@ class AzureAppConfigIntegration(StoreIntegration):
                 "has_connection_string": bool(self.connection_string),
             },
         )
+
+    # Auth helpers
+
+    def _get_auth_var_name(self, field: str, default: str) -> str:
+        """
+        Return the env-var name for an OAuth2 credential field.
+
+        When ``authentication.method == "oauth2"`` the sub-model fields hold
+        env-var name references (e.g. ``oauth2.tenant_id = "AZURE_TENANT_ID"``)
+        rather than literal values.  Falls back to *default* for backward compat.
+        """
+        auth = self.config.authentication
+        if auth and auth.method == "oauth2" and auth.oauth2:
+            val = getattr(auth.oauth2, field, None)
+            if val:
+                return val
+        return default
+
+    def _get_connection_string_var_name(self) -> str:
+        """
+        Return the env-var name for the App Configuration connection string.
+
+        When ``authentication.method == "api_key"`` the ``api_key.api_key``
+        field holds the env-var name.  Defaults to ``APPCONFIG_CONNECTION_STRING``.
+        """
+        auth = self.config.authentication
+        if auth and auth.method == "api_key" and auth.api_key:
+            return auth.api_key.api_key or "APPCONFIG_CONNECTION_STRING"
+        return "APPCONFIG_CONNECTION_STRING"
 
     # Base integration methods
 

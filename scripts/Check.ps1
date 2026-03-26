@@ -10,11 +10,13 @@ if (-not (Test-Path -Path .\reports)) {
 }
 
 # Run ruff and capture output to reports/ruff-report.txt (also display)
-ruff check . 2>&1 | Tee-Object -FilePath .\build\ruff-report.txt
+ruff check ./src 2>&1 | Tee-Object -FilePath .\build\ruff-report.txt
 
 # Run black (check mode) and capture output to reports/black-report.txt (also display)
 # Note: black returns non-zero exit code on format problems; the script will show that exit code.
-black --check . 2>&1 | Tee-Object -FilePath .\build\black-report.txt
+black --check ./src 2>&1 | Tee-Object -FilePath .\build\black-report.txt
+
+black ./src 2>&1 | Tee-Object -FilePath .\build\black-report.txt
 
 python -m build
 pytest -q

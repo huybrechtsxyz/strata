@@ -161,7 +161,11 @@ class IntegrationService:
                 error_msg = f"Failed to load integration '{spec.name}': {str(e)}"
                 logger.error(
                     "Integration load failed",
-                    extra={"integration_name": spec.name, "type": spec.type, "error": str(e)},
+                    extra={
+                        "integration_name": spec.name,
+                        "type": spec.type,
+                        "error": str(e),
+                    },
                     exc_info=True,
                 )
 
@@ -215,12 +219,15 @@ class IntegrationService:
             if not self.registry.is_integration_registered(spec.name):
                 error_msg = f"Required integration '{spec.name}' is not registered"
                 errors.append(error_msg)
-                logger.error("Required integration missing", extra={"integration_name": spec.name})
+                logger.error(
+                    "Required integration missing",
+                    extra={"integration_name": spec.name},
+                )
                 continue
 
             # Check if available
             if not self.registry.is_integration_available(spec.name):
-                integration = self.registry.get_integration(spec.name)
+                # integration = self.registry.get_integration(spec.name)
                 error_msg = (
                     f"Required integration '{spec.name}' is not available. "
                     f"Please install {spec.type} and ensure it's in your PATH."

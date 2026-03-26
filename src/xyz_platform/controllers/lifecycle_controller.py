@@ -85,7 +85,7 @@ class LifecycleController:
         self,
         phase_name: str,
         work_path: Path,
-        context: dict = None,
+        context: Optional[dict] = None,
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
     ) -> Tuple[bool, List[str]]:
         """
@@ -127,7 +127,7 @@ class LifecycleController:
         base_service: BaseService,
         phase_name: str,
         work_path: Path,
-        context: dict = None,
+        context: Optional[dict] = None,
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
         add_config_model: bool = False,
     ) -> Tuple[bool, List[str]]:
@@ -163,7 +163,7 @@ class LifecycleController:
         phase_name: str,
         lifecycle_model: Optional[object],
         work_path: Path,
-        context: dict = None,
+        context: Optional[dict] = None,
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
         add_config_model: bool = False,
         phase_model: Optional[CommonLifecyclePhaseModel] = None,
@@ -199,11 +199,9 @@ class LifecycleController:
             if isinstance(lifecycle_model, CommonLifecycleModel):
                 # New project model: phases stored in RootModel .root dict
                 phase_model = lifecycle_model.root.get(phase_name)
-            elif hasattr(lifecycle_model, "root") and isinstance(
-                lifecycle_model.root, dict
-            ):
+            elif isinstance(getattr(lifecycle_model, "root", None), dict):
                 # Generic RootModel – dict-based phase lookup
-                phase_model = lifecycle_model.root.get(phase_name)
+                phase_model = getattr(lifecycle_model, "root", {}).get(phase_name)
             elif hasattr(lifecycle_model, phase_name):
                 # Legacy / attribute-based lifecycle model
                 phase_model = getattr(lifecycle_model, phase_name)
@@ -231,7 +229,9 @@ class LifecycleController:
                 and getattr(config_phase, "scripts", None)
             ):
                 # Merge: phase_model scripts first (higher priority), config scripts appended
-                merged = list(phase_model.scripts) + list(config_phase.scripts)
+                merged = list(phase_model.scripts or []) + list(
+                    config_phase.scripts or []
+                )
                 phase_model.scripts = merged
                 self.logger.debug(
                     "Merged configuration lifecycle scripts into phase model",
@@ -326,9 +326,9 @@ class LifecycleController:
         if isinstance(lifecycle_model, CommonLifecycleModel):
             phase = lifecycle_model.root.get(phase_name)
         elif hasattr(lifecycle_model, "root") and isinstance(
-            lifecycle_model.root, dict
+            getattr(lifecycle_model, "root", None), dict
         ):
-            phase = lifecycle_model.root.get(phase_name)
+            phase = getattr(lifecycle_model, "root", {}).get(phase_name)
         elif hasattr(lifecycle_model, phase_name):
             phase = getattr(lifecycle_model, phase_name)
         else:
@@ -359,9 +359,9 @@ class LifecycleController:
         if isinstance(lifecycle_model, CommonLifecycleModel):
             phase = lifecycle_model.root.get(phase_name)
         elif hasattr(lifecycle_model, "root") and isinstance(
-            lifecycle_model.root, dict
+            getattr(lifecycle_model, "root", None), dict
         ):
-            phase = lifecycle_model.root.get(phase_name)
+            phase = getattr(lifecycle_model, "root", {}).get(phase_name)
         else:
             phase = getattr(lifecycle_model, phase_name, None)
 
@@ -378,7 +378,7 @@ class LifecycleController:
         script_file: Path,
         script_desc: Optional[str],
         work_path: Path,
-        context: dict = None,
+        context: Optional[dict] = None,
     ) -> Tuple[bool, str]:
         """
         Execute a single lifecycle script.
@@ -656,7 +656,7 @@ class LifecycleController:
                     pass
             return None, None
 
-    def _prepare_environment(self, context: dict = None) -> dict:
+    def _prepare_environment(self, context: Optional[dict] = None) -> dict:
         """
         Build the environment dict for script execution.
 

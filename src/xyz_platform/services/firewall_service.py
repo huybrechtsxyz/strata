@@ -20,7 +20,7 @@ from xyz_platform.services.base_service import BaseService
 class FirewallService(BaseService):
     """Service for handling firewall configurations."""
 
-    def __init__(self, path: str = None, data: dict = None):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the FirewallService."""
         super().__init__(path=path, data=data)
         self.model: Optional[FirewallModel] = None
@@ -197,6 +197,8 @@ class FirewallService(BaseService):
                 )
 
             fw_model = fw_service.get_model()
+            if fw_model is None:
+                raise ValueError(f"Failed to load firewall model from: {fwfile_path}")
 
             # Merge metadata (last wins)
             if fw_model.meta.name:

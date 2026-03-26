@@ -11,10 +11,11 @@ Description   : Click CLI wiring for session command group.
 import click
 import json
 
+from typing import Optional
+
 from xyz_platform.commands.base_command import BaseCommand
 from xyz_platform.commands.cli_common import (
     click_output_format,
-    click_output_quiet,
     click_output_verbose,
 )
 from xyz_platform.utils import system
@@ -23,8 +24,10 @@ from xyz_platform.utils import system
 @click.command()
 @click_output_format
 @click_output_verbose
-@click_output_quiet
-def version_command(output: str = None, verbose: bool = None, quiet: bool = None):
+def version_command(
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+):
     """Show CLI version."""
     version = system.get_cli_version()
 
@@ -39,7 +42,9 @@ def version_command(output: str = None, verbose: bool = None, quiet: bool = None
         return
 
     # If no output format specified, show full console header and footer with version in between
-    command: BaseCommand = BaseCommand(output=output, verbose=verbose, quiet=quiet)
+    command: BaseCommand = BaseCommand(
+        output=output, verbose=verbose or False, quiet=False
+    )
     command.ShowConsoleHeader(work_path=None)  # No work path for version command
     click.echo("")
     click.echo(f"XYZ Platform CLI Version: {version}")

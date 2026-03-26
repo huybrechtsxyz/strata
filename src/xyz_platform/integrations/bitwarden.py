@@ -57,9 +57,13 @@ class BitwardenIntegration(StoreIntegration):
         if not config:
             return "default"
 
-        # Get access token from config
-        if config.authentication and config.authentication.env_vars:
-            access_token = os.getenv(config.authentication.env_vars[0], "")
+        # Get access token from config (api_key.api_key holds the env-var name)
+        if (
+            config.authentication
+            and config.authentication.method == "api_key"
+            and config.authentication.api_key
+        ):
+            access_token = os.getenv(config.authentication.api_key.api_key, "")
             return access_token or "default"
 
         return "default"
@@ -75,10 +79,10 @@ class BitwardenIntegration(StoreIntegration):
         """
         super().__init__(config)
 
-        # Get access token from config
+        # Get access token from config (api_key.api_key holds the env-var name)
         self.access_token = None
-        if self.config.authentication and self.config.authentication.env_vars:
-            token_var = self.config.authentication.env_vars[0]  # BWS_ACCESS_TOKEN
+        token_var = self._get_token_var_name()
+        if token_var:
             self.access_token = self._get_env_var(token_var)
             logger.debug(
                 "Bitwarden access token configuration",
@@ -121,7 +125,8 @@ class BitwardenIntegration(StoreIntegration):
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
             logger.warning(
-                "Bitwarden CLI not found", extra={"integration_name": self.integration_name}
+                "Bitwarden CLI not found",
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -135,17 +140,16 @@ class BitwardenIntegration(StoreIntegration):
             self._info = version_error
             logger.warning(
                 "Bitwarden version validation failed",
-                extra={"integration_name": self.integration_name, "error": version_error},
+                extra={
+                    "integration_name": self.integration_name,
+                    "error": version_error,
+                },
             )
             return False, version_error
 
         # Check access token
         if not self.access_token:
-            token_var = (
-                self.config.authentication.env_vars[0]
-                if self.config.authentication and self.config.authentication.env_vars
-                else "BWS_ACCESS_TOKEN"
-            )
+            token_var = self._get_token_var_name()
             self._info = f"{self.integration_name} access token '{token_var}' not set."
             logger.warning(
                 "Bitwarden access token not configured",
@@ -160,9 +164,31 @@ class BitwardenIntegration(StoreIntegration):
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Bitwarden is available and configured",
-            extra={"integration_name": self.integration_name, "version": self.get_version()},
+            extra={
+                "integration_name": self.integration_name,
+                "version": self.get_version(),
+            },
         )
         return True, ""
+
+    def _get_token_var_name(self) -> str:
+        """
+        Return the env-var name that holds the BWS access token.
+
+        Reads from ``authentication.api_key.api_key`` (the key reference field
+        in the new AuthenticationModel).  Falls back to ``"BWS_ACCESS_TOKEN"``
+        so existing configs that omit authentication still work.
+        """
+        if (
+            self.config.authentication
+            and self.config.authentication.method == "api_key"
+            and self.config.authentication.api_key
+        ):
+            value = self.config.authentication.api_key.api_key
+            if value:
+                return value
+
+        return "BWS_ACCESS_TOKEN"
 
     def get_info(self) -> Dict[str, Any]:
         """
@@ -217,13 +243,7 @@ class BitwardenIntegration(StoreIntegration):
             # Set up environment with access token
             env = {**os.environ}
             if self.access_token:
-                token_var = (
-                    self.config.authentication.env_vars[0]
-                    if self.config.authentication
-                    and self.config.authentication.env_vars
-                    else "BWS_ACCESS_TOKEN"
-                )
-                env[token_var] = self.access_token
+                env[self._get_token_var_name()] = self.access_token
 
             result = self._run_integration(
                 args=["secret", "get", key], timeout=timeout, env=env
@@ -239,7 +259,7 @@ class BitwardenIntegration(StoreIntegration):
                 return data.get("value")
 
             logger.error(
-                "Failed to get secret from Bitwarden",
+                f"Failed to get secret from Bitwarden: {result.stderr}",
                 extra={
                     "secret_id": key,
                     "stderr": result.stderr,
@@ -250,7 +270,7 @@ class BitwardenIntegration(StoreIntegration):
 
         except json.JSONDecodeError as e:
             logger.error(
-                "Failed to parse secret JSON from Bitwarden",
+                f"Failed to parse secret JSON from Bitwarden: {e}",
                 extra={"secret_id": key, "integration_name": self.integration_name},
                 exc_info=True,
             )
@@ -258,7 +278,7 @@ class BitwardenIntegration(StoreIntegration):
 
         except Exception as e:
             logger.error(
-                "Error retrieving secret from Bitwarden",
+                f"Error retrieving secret from Bitwarden: {e}",
                 extra={
                     "secret_id": key,
                     "error_type": type(e).__name__,
@@ -290,19 +310,14 @@ class BitwardenIntegration(StoreIntegration):
 
         try:
             logger.debug(
-                "Listing secrets from Bitwarden", extra={"integration_name": self.integration_name}
+                "Listing secrets from Bitwarden",
+                extra={"integration_name": self.integration_name},
             )
 
             # Set up environment with access token
             env = {**os.environ}
             if self.access_token:
-                token_var = (
-                    self.config.authentication.env_vars[0]
-                    if self.config.authentication
-                    and self.config.authentication.env_vars
-                    else "BWS_ACCESS_TOKEN"
-                )
-                env[token_var] = self.access_token
+                env[self._get_token_var_name()] = self.access_token
 
             result = self._run_integration(
                 args=["secret", "list"], timeout=timeout, env=env
@@ -313,19 +328,25 @@ class BitwardenIntegration(StoreIntegration):
                 secrets = json.loads(result.stdout)
                 logger.info(
                     "Listed secrets from Bitwarden",
-                    extra={"count": len(secrets), "integration_name": self.integration_name},
+                    extra={
+                        "count": len(secrets),
+                        "integration_name": self.integration_name,
+                    },
                 )
                 return secrets
 
             logger.error(
                 "Failed to list secrets from Bitwarden",
-                extra={"stderr": result.stderr, "integration_name": self.integration_name},
+                extra={
+                    "stderr": result.stderr,
+                    "integration_name": self.integration_name,
+                },
             )
             return None
 
         except json.JSONDecodeError as e:
             logger.error(
-                "Failed to parse secrets JSON from Bitwarden",
+                f"Failed to parse secrets JSON from Bitwarden: {e}",
                 extra={"integration_name": self.integration_name},
                 exc_info=True,
             )
@@ -334,7 +355,10 @@ class BitwardenIntegration(StoreIntegration):
         except Exception as e:
             logger.error(
                 "Error listing secrets from Bitwarden",
-                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
+                extra={
+                    "error_type": type(e).__name__,
+                    "integration_name": self.integration_name,
+                },
                 exc_info=True,
             )
             return None

@@ -11,13 +11,16 @@ Description   : Controller for managing XYZ Platform sessions.
 
 import json
 import shutil
+import yaml
+from glob import glob
+
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import yaml
-
+from xyz_platform.utils.configuration_loader import ConfigurationLoader
 from xyz_platform.logger.logger import get_logger, get_active_log_file
+from xyz_platform.services.configuration_service import ConfigurationService
 from xyz_platform.utils.system import generate_uuid
 
 
@@ -32,12 +35,21 @@ class SessionController:
     @staticmethod
     def _session_folder_path(work_path: Path) -> Path:
         """Return the .xyz-platform folder path for a given work_path."""
-        return work_path / ".xyz-platform"
+        config_service = ConfigurationService.get_instance()
+        return config_service.get_default_state_path(
+            work_path=work_path, create_path=False
+        )
 
     @staticmethod
     def _session_file_path(work_path: Path) -> Path:
         """Return the session.json file path for a given work_path."""
-        return work_path / ".xyz-platform" / "session.json"
+        config_service = ConfigurationService.get_instance()
+        temp_path = config_service.get_default_state_path(
+            work_path=work_path, create_path=False
+        )
+        return config_service.get_default_state_file(
+            state_path=temp_path, create_path=False
+        )
 
     # Initialize the controller with empty error and message lists
     def __init__(self):
@@ -89,6 +101,10 @@ class SessionController:
         try:
             session_file = self._session_file_path(work_path)
             if not session_file.exists():
+                self.logger.debug(
+                    "Session file not found (starting with empty session)",
+                    extra={"session_file": str(session_file)},
+                )
                 return False
             with open(session_file, "r", encoding="utf-8") as f:
                 self._session_data = json.load(f)
@@ -242,6 +258,7 @@ class SessionController:
     def merge_config_and_save(
         self,
         work_path: Path,
+        bundled_files: Optional[List[str]] = None,
         extra_config_path: Optional[str] = None,
         extra_config_file: Optional[str] = None,
     ) -> Tuple[bool, List[str]]:
@@ -263,22 +280,12 @@ class SessionController:
         """
         errors: List[str] = []
         try:
-            from glob import glob
-
-            import yaml
-            from xyz_platform.utils.configuration_loader import ConfigurationLoader
-            from xyz_platform.controllers.workspace_controller import (
-                WorkspaceController,
-            )
 
             file_paths: List[str] = []
 
             # 1. Platform bundled config (lowest priority)
-            workspace_controller = WorkspaceController()
-            bundled = workspace_controller.resolve_configuration_files(
-                work_path=work_path
-            )
-            file_paths.extend(bundled)
+            if bundled_files:
+                file_paths.extend(bundled_files)
 
             # 2. Session-registered sources
             for source in self.get_config_sources():
@@ -306,7 +313,9 @@ class SessionController:
                 if extra_file.is_file():
                     file_paths.append(str(extra_file))
 
-            merged_config_file = work_path / ".xyz-platform" / "configuration.yaml"
+            merged_config_file = self._session_file_path(
+                work_path
+            )  # Ensure session file path is initialized for logging context
 
             if not file_paths:
                 # Nothing to merge — remove stale output file if present
@@ -318,8 +327,9 @@ class SessionController:
                 return True, []
 
             loader = ConfigurationLoader()
-            merged = loader.load_and_merge_yaml_files(file_paths)
-
+            # Convert all file paths to Path objects for compatibility
+            file_paths_obj = [Path(p) for p in file_paths]
+            merged = loader.load_and_merge_yaml_files(file_paths_obj)
             merged_config_file.parent.mkdir(parents=True, exist_ok=True)
             with open(merged_config_file, "w", encoding="utf-8") as f:
                 yaml.dump(merged, f, default_flow_style=False, sort_keys=False)
@@ -343,6 +353,7 @@ class SessionController:
     def sync_config_sources(
         self,
         work_path: Path,
+        bundled_files: Optional[List[str]] = None,
         force: bool = False,
     ) -> Tuple[bool, List[str], List[str]]:
         """
@@ -395,7 +406,9 @@ class SessionController:
                 )
 
             # Re-merge regardless (best-effort even when sources are missing)
-            merge_success, merge_errors = self.merge_config_and_save(work_path)
+            merge_success, merge_errors = self.merge_config_and_save(
+                work_path=work_path, bundled_files=bundled_files
+            )
             if not merge_success:
                 errors.extend(merge_errors)
 
@@ -479,6 +492,7 @@ class SessionController:
         self,
         workspace_name: str,
         work_path: Path,
+        data_path: Path,
         editor: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Path]]:
         """
@@ -506,21 +520,21 @@ class SessionController:
             workspace_file = work_path / f"{workspace_name}.code-workspace"
 
             created_paths = {
-                "session_folder": None,
-                "session_file": None,
-                "workspace_file": None,
+                "session_folder": Path(),
+                "session_file": Path(),
+                "workspace_file": Path(),
             }
 
             # Validate work path
             if not self._validate_work_path(work_path):
-                return False, created_paths
+                return False, {}
 
             # Check existing files
             self._check_existing_files(workspace_file, session_folder)
 
             # Create session folder
             if not self._create_session_folder(session_folder):
-                return False, created_paths
+                return False, {}
             created_paths["session_folder"] = session_folder
 
             # Create logs folder in workspace root
@@ -531,7 +545,9 @@ class SessionController:
             # Create workspace file only when VS Code editor integration is requested
             if editor and editor.lower() == "vscode":
                 workspace_created = self._create_workspace_file(
-                    workspace_file, workspace_name
+                    data_path=data_path,
+                    workspace_file=workspace_file,
+                    workspace_name=workspace_name,
                 )
                 if workspace_created:
                     created_paths["workspace_file"] = workspace_file
@@ -542,13 +558,21 @@ class SessionController:
 
             # Create logging configuration
             logging_config_path = session_folder / "logging.yaml"
-            if not self._create_logging_config(logging_config_path, work_path):
+            if not self._create_logging_config(
+                work_path=work_path,
+                data_path=data_path,
+                logging_config_path=logging_config_path,
+            ):
                 return False, created_paths
             created_paths["logging_config"] = logging_config_path
 
             # Create session file
             if not self._create_session_file(
-                session_file, workspace_name, work_path, logging_config_path
+                session_file=session_file,
+                workspace_name=workspace_name,
+                work_path=work_path,
+                data_path=data_path,
+                logging_config_path=logging_config_path,
             ):
                 return False, created_paths
             created_paths["session_file"] = session_file
@@ -564,6 +588,390 @@ class SessionController:
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False, {}
+
+    def clean_session(
+        self,
+        work_path: Path,
+        dry_run: bool = False,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Clean workspace artifacts without modifying session state.
+
+        Args:
+            work_path: Root working directory
+            logs: If True (default), delete files in the logs/ folder
+            dry_run: If True, report what would be deleted without removing anything
+
+        Returns:
+            Tuple[bool, Dict]: Success status and stats dict
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            stats: Dict[str, Any] = {
+                "logs_deleted": 0,
+                "logs_folder": None,
+                "dry_run": dry_run,
+            }
+
+            logs_folder = work_path / "logs"
+            stats["logs_folder"] = str(logs_folder)
+            if logs_folder.exists():
+                deleted = 0
+                skipped = 0
+                for log_file in logs_folder.iterdir():
+                    if log_file.is_file():
+                        if dry_run:
+                            deleted += 1
+                        else:
+                            try:
+                                log_file.unlink()
+                                deleted += 1
+                            except PermissionError:
+                                # File is held open by the logging system; skip it
+                                skipped += 1
+                                self._messages.append(
+                                    f"Skipped locked file: {log_file.name}"
+                                )
+                stats["logs_deleted"] = deleted
+                stats["logs_skipped"] = skipped
+                prefix = "[dry-run] Would delete" if dry_run else "Deleted"
+                self.logger.info(
+                    f"{'[dry-run] ' if dry_run else ''}Cleaned logs folder: {logs_folder} ({deleted} files{',' if not dry_run else ''}{'' if dry_run else f' deleted, {skipped} skipped'})"
+                )
+                self._messages.append(
+                    f"{prefix} {deleted} log file(s) from {logs_folder}"
+                    + (
+                        f" ({skipped} skipped — in use)"
+                        if skipped and not dry_run
+                        else ""
+                    )
+                )
+            else:
+                self._messages.append(f"Logs folder not found (skipped): {logs_folder}")
+
+            return True, stats
+
+        except Exception as e:
+            error_msg = f"Failed to clean session: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    # Integration detection methods
+
+    def get_required_integrations_for_add_repository(
+        self,
+        url: str,
+        repo_type: Optional[str] = None,
+        work_path: Optional[Path] = None,
+    ) -> Dict[str, str]:
+        """
+        Determine required integrations for add-repository operation.
+
+        Args:
+            url: Repository URL or local path
+            repo_type: Repository type (git, local, archive) - auto-detected if None
+            work_path: Root working directory used to resolve relative local paths
+
+        Returns:
+            Dict[str, str]: Required integrations mapped to operation descriptions
+        """
+        detected_type = repo_type or self._detect_repo_type(url, work_path)
+
+        if detected_type == "git":
+            return {"git": "repository clone operations"}
+
+        return {}
+
+    # Repository management methods
+
+    def _check_existing_files(self, workspace_file: Path, session_folder: Path) -> None:
+        """
+        Check for existing workspace files and log warnings.
+
+        Args:
+            workspace_file: Path to workspace file
+            session_folder: Path to session folder
+        """
+        # Check for any existing .code-workspace files
+        existing_workspaces = list(workspace_file.parent.glob("*.code-workspace"))
+        if existing_workspaces:
+            for ws_file in existing_workspaces:
+                warning_msg = f"Found existing workspace file: {ws_file.name}"
+                self.logger.info(warning_msg)
+                self._messages.append(warning_msg)
+
+        # Check if .xyz-platform folder already exists
+        if session_folder.exists():
+            warning_msg = f".xyz-platform folder already exists: {session_folder}"
+            self.logger.info(warning_msg)
+            self._messages.append(warning_msg)
+
+    def _create_session_folder(self, session_folder: Path) -> bool:
+        """
+        Create .xyz-platform folder.
+
+        Args:
+            session_folder: Path to session folder
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            self.logger.info(f"Creating .xyz-platform folder: {session_folder}")
+            session_folder.mkdir(parents=True, exist_ok=True)
+            self._messages.append(f"Created .xyz-platform folder: {session_folder}")
+            return True
+
+        except Exception as e:
+            error_msg = f"Failed to create session folder: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+    def _create_workspace_file(
+        self, data_path: Path, workspace_file: Path, workspace_name: str
+    ) -> bool:
+        """
+        Create VSCode workspace file from template.
+        Skips creation if file already exists.
+
+        Args:
+            workspace_file: Path to workspace file
+            workspace_name: Name of the workspace
+
+        Returns:
+            bool: True if created, False if skipped or error
+        """
+        try:
+            # Skip if already exists
+            if workspace_file.exists():
+                self.logger.info(
+                    f"Workspace file already exists, skipping: {workspace_file}"
+                )
+                return False
+
+            # Load template
+            template_path = self._get_template_path(
+                data_path, "workspace.template.json"
+            )
+            if not template_path.exists():
+                error_msg = f"Workspace template not found: {template_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            # Read and process template
+            with open(template_path, "r", encoding="utf-8") as f:
+                template_content = f.read()
+
+            # Replace placeholders
+            workspace_content = template_content.replace(
+                "{{workspace_name}}", workspace_name
+            )
+
+            # Parse as JSON to validate
+            workspace_data = json.loads(workspace_content)
+
+            # Write workspace file
+            self.logger.info(f"Creating VSCode workspace file: {workspace_file}")
+            with open(workspace_file, "w", encoding="utf-8") as f:
+                json.dump(workspace_data, f, indent=2)
+
+            self._messages.append(f"Created VSCode workspace file: {workspace_file}")
+            return True
+
+        except Exception as e:
+            error_msg = f"Failed to create workspace file: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+    def _create_logging_config(
+        self, work_path: Path, data_path: Path, logging_config_path: Path
+    ) -> bool:
+        """
+        Create logging.yaml configuration file from template.
+        Updates paths to be workspace-specific.
+
+        Args:
+            logging_config_path: Path to logging config file (.xyz-platform/logging.yaml)
+            work_path: Root working directory
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Load template
+            template_path = self._get_template_path(data_path, "logging.yaml")
+            if not template_path.exists():
+                error_msg = f"Logging template not found: {template_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            # Read template as YAML
+            with open(template_path, "r", encoding="utf-8") as f:
+                logging_config = yaml.safe_load(f)
+
+            # Update file handler path to be workspace-specific
+            if "handlers" in logging_config and "file" in logging_config["handlers"]:
+                # Update to absolute path in workspace root
+                log_file_path = work_path / "logs" / "platform.json"
+                logging_config["handlers"]["file"]["filename"] = str(log_file_path)
+
+            # Write updated logging config
+            self.logger.info(f"Creating logging configuration: {logging_config_path}")
+            with open(logging_config_path, "w", encoding="utf-8") as f:
+                yaml.dump(logging_config, f, default_flow_style=False, sort_keys=False)
+
+            self._messages.append(
+                f"Created logging configuration: {logging_config_path}"
+            )
+            return True
+
+        except Exception as e:
+            error_msg = f"Failed to create logging configuration: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+    def _create_session_file(
+        self,
+        session_file: Path,
+        workspace_name: str,
+        work_path: Path,
+        data_path: Path,
+        logging_config_path: Path,
+    ) -> bool:
+        """
+        Create session.json state file from template.
+
+        Args:
+            session_file: Path to session file
+            workspace_name: Name of the workspace
+            work_path: Root working directory
+            logging_config_path: Path to logging configuration file
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Load template
+            template_path = self._get_template_path(data_path, "session.template.json")
+            if not template_path.exists():
+                error_msg = f"Session template not found: {template_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            # Read and process template
+            with open(template_path, "r", encoding="utf-8") as f:
+                template_content = f.read()
+
+            # Define log path
+            log_path = work_path / "logs"
+
+            # Replace placeholders (use as_posix() to avoid backslash issues in JSON on Windows)
+            session_content = (
+                template_content.replace("{{session_id}}", generate_uuid())
+                .replace("{{workspace_name}}", workspace_name)
+                .replace("{{created_timestamp}}", datetime.now().isoformat())
+                .replace("{{work_path}}", work_path.absolute().as_posix())
+                .replace(
+                    "{{logging_config_path}}", logging_config_path.absolute().as_posix()
+                )
+                .replace("{{log_path}}", log_path.absolute().as_posix())
+            )
+
+            # Parse as JSON to validate
+            session_data = json.loads(session_content)
+
+            # Write session file
+            self.logger.info(f"Creating session state file: {session_file}")
+            with open(session_file, "w", encoding="utf-8") as f:
+                json.dump(session_data, f, indent=2)
+
+            # Load into memory so subsequent calls in this run use in-memory data
+            self._session_data = session_data
+            self._session_file = session_file
+
+            self._messages.append(f"Created session state file: {session_file}")
+            return True
+
+        except Exception as e:
+            error_msg = f"Failed to create session file: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+    def _detect_repo_type(self, url: str, work_path: Optional[Path] = None) -> str:
+        """
+        Auto-detect repository type from URL.
+
+        Args:
+            url: Repository URL or path
+            work_path: Root working directory for resolving relative local paths
+
+        Returns:
+            str: Repository type (git, local, or archive)
+        """
+        url_lower = url.lower()
+
+        # Check for git patterns
+        git_patterns = [
+            "https://github.com",
+            "https://gitlab.com",
+            "https://bitbucket.org",
+            "git@",
+            ".git",
+        ]
+        if any(pattern in url_lower for pattern in git_patterns):
+            return "git"
+
+        # Check for archive patterns
+        archive_patterns = [".zip", ".tar.gz", ".tar.bz2", ".tgz"]
+        if any(url_lower.endswith(pattern) for pattern in archive_patterns):
+            return "archive"
+
+        # Check if local path exists
+        local_path = self._resolve_local_source_path(url, work_path)
+        if local_path.exists():
+            return "local"
+
+        # Default to git if no pattern matches
+        self.logger.warning(
+            f"Could not detect repository type for '{url}', defaulting to 'git'"
+        )
+        return "git"
+
+    def _validate_work_path(self, work_path: Path) -> bool:
+        """
+        Validate that work path exists and is a directory.
+
+        Args:
+            work_path: Path to validate
+
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        if not work_path.exists():
+            error_msg = f"Work path does not exist: {work_path}"
+            self.logger.error(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+        if not work_path.is_dir():
+            error_msg = f"Work path is not a directory: {work_path}"
+            self.logger.error(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+        return True
+
+    # >
 
     def add_repository(
         self,
@@ -650,30 +1058,6 @@ class SessionController:
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False, {}
-
-    def get_required_integrations_for_add_repository(
-        self,
-        url: str,
-        repo_type: Optional[str] = None,
-        work_path: Optional[Path] = None,
-    ) -> Dict[str, str]:
-        """
-        Determine required integrations for add-repository operation.
-
-        Args:
-            url: Repository URL or local path
-            repo_type: Repository type (git, local, archive) - auto-detected if None
-            work_path: Root working directory used to resolve relative local paths
-
-        Returns:
-            Dict[str, str]: Required integrations mapped to operation descriptions
-        """
-        detected_type = repo_type or self._detect_repo_type(url, work_path)
-
-        if detected_type == "git":
-            return {"git": "repository clone operations"}
-
-        return {}
 
     def update_last_execution(self, execution_id: str) -> bool:
         """
@@ -779,6 +1163,7 @@ class SessionController:
         self,
         name: str,
         work_path: Path,
+        bundled_files: Optional[List[str]] = None,
         dry_run: bool = False,
     ) -> Tuple[bool, Dict]:
         """
@@ -819,7 +1204,7 @@ class SessionController:
                     f"[dry-run] Would remove config source '{name}' from session"
                 )
                 self._messages.append(
-                    f"[dry-run] Would re-merge remaining config sources"
+                    "[dry-run] Would re-merge remaining config sources"
                 )
                 return True, dict(source_metadata)
 
@@ -831,7 +1216,7 @@ class SessionController:
 
             # Re-merge remaining sources so active configuration stays consistent
             merge_success, merge_errors = self.merge_config_and_save(
-                work_path=work_path
+                work_path=work_path, bundled_files=bundled_files
             )
             if not merge_success:
                 self._errors.extend(merge_errors)
@@ -844,359 +1229,6 @@ class SessionController:
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False, {}
-
-    def clean_session(
-        self,
-        work_path: Path,
-        logs: bool = True,
-        dry_run: bool = False,
-    ) -> Tuple[bool, Dict[str, Any]]:
-        """
-        Clean workspace artifacts without modifying session state.
-
-        Args:
-            work_path: Root working directory
-            logs: If True (default), delete files in the logs/ folder
-            dry_run: If True, report what would be deleted without removing anything
-
-        Returns:
-            Tuple[bool, Dict]: Success status and stats dict
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            stats: Dict[str, Any] = {
-                "logs_deleted": 0,
-                "logs_folder": None,
-                "dry_run": dry_run,
-            }
-
-            if logs:
-                logs_folder = work_path / "logs"
-                stats["logs_folder"] = str(logs_folder)
-                if logs_folder.exists():
-                    deleted = 0
-                    skipped = 0
-                    for log_file in logs_folder.iterdir():
-                        if log_file.is_file():
-                            if dry_run:
-                                deleted += 1
-                            else:
-                                try:
-                                    log_file.unlink()
-                                    deleted += 1
-                                except PermissionError:
-                                    # File is held open by the logging system; skip it
-                                    skipped += 1
-                                    self._messages.append(
-                                        f"Skipped locked file: {log_file.name}"
-                                    )
-                    stats["logs_deleted"] = deleted
-                    stats["logs_skipped"] = skipped
-                    prefix = "[dry-run] Would delete" if dry_run else "Deleted"
-                    self.logger.info(
-                        f"{'[dry-run] ' if dry_run else ''}Cleaned logs folder: {logs_folder} ({deleted} files{',' if not dry_run else ''}{'' if dry_run else f' deleted, {skipped} skipped'})"
-                    )
-                    self._messages.append(
-                        f"{prefix} {deleted} log file(s) from {logs_folder}"
-                        + (
-                            f" ({skipped} skipped — in use)"
-                            if skipped and not dry_run
-                            else ""
-                        )
-                    )
-                else:
-                    self._messages.append(
-                        f"Logs folder not found (skipped): {logs_folder}"
-                    )
-
-            return True, stats
-
-        except Exception as e:
-            error_msg = f"Failed to clean session: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    def _validate_work_path(self, work_path: Path) -> bool:
-        """
-        Validate that work path exists and is a directory.
-
-        Args:
-            work_path: Path to validate
-
-        Returns:
-            bool: True if valid, False otherwise
-        """
-        if not work_path.exists():
-            error_msg = f"Work path does not exist: {work_path}"
-            self.logger.error(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-        if not work_path.is_dir():
-            error_msg = f"Work path is not a directory: {work_path}"
-            self.logger.error(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-        return True
-
-    def _check_existing_files(self, workspace_file: Path, session_folder: Path) -> None:
-        """
-        Check for existing workspace files and log warnings.
-
-        Args:
-            workspace_file: Path to workspace file
-            session_folder: Path to session folder
-        """
-        # Check for any existing .code-workspace files
-        existing_workspaces = list(workspace_file.parent.glob("*.code-workspace"))
-        if existing_workspaces:
-            for ws_file in existing_workspaces:
-                warning_msg = f"Found existing workspace file: {ws_file.name}"
-                self.logger.info(warning_msg)
-                self._messages.append(warning_msg)
-
-        # Check if .xyz-platform folder already exists
-        if session_folder.exists():
-            warning_msg = f".xyz-platform folder already exists: {session_folder}"
-            self.logger.info(warning_msg)
-            self._messages.append(warning_msg)
-
-    def _create_session_folder(self, session_folder: Path) -> bool:
-        """
-        Create .xyz-platform folder.
-
-        Args:
-            session_folder: Path to session folder
-
-        Returns:
-            bool: Success status
-        """
-        try:
-            self.logger.info(f"Creating .xyz-platform folder: {session_folder}")
-            session_folder.mkdir(parents=True, exist_ok=True)
-            self._messages.append(f"Created .xyz-platform folder: {session_folder}")
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to create session folder: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-    def _create_workspace_file(self, workspace_file: Path, workspace_name: str) -> bool:
-        """
-        Create VSCode workspace file from template.
-        Skips creation if file already exists.
-
-        Args:
-            workspace_file: Path to workspace file
-            workspace_name: Name of the workspace
-
-        Returns:
-            bool: True if created, False if skipped or error
-        """
-        try:
-            # Skip if already exists
-            if workspace_file.exists():
-                self.logger.info(
-                    f"Workspace file already exists, skipping: {workspace_file}"
-                )
-                return False
-
-            # Load template
-            template_path = self._get_template_path("workspace.template.json")
-            if not template_path.exists():
-                error_msg = f"Workspace template not found: {template_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            # Read and process template
-            with open(template_path, "r", encoding="utf-8") as f:
-                template_content = f.read()
-
-            # Replace placeholders
-            workspace_content = template_content.replace(
-                "{{workspace_name}}", workspace_name
-            )
-
-            # Parse as JSON to validate
-            workspace_data = json.loads(workspace_content)
-
-            # Write workspace file
-            self.logger.info(f"Creating VSCode workspace file: {workspace_file}")
-            with open(workspace_file, "w", encoding="utf-8") as f:
-                json.dump(workspace_data, f, indent=2)
-
-            self._messages.append(f"Created VSCode workspace file: {workspace_file}")
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to create workspace file: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-    def _create_logging_config(
-        self, logging_config_path: Path, work_path: Path
-    ) -> bool:
-        """
-        Create logging.yaml configuration file from template.
-        Updates paths to be workspace-specific.
-
-        Args:
-            logging_config_path: Path to logging config file (.xyz-platform/logging.yaml)
-            work_path: Root working directory
-
-        Returns:
-            bool: Success status
-        """
-        try:
-            # Load template
-            template_path = self._get_template_path("logging.yaml")
-            if not template_path.exists():
-                error_msg = f"Logging template not found: {template_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            # Read template as YAML
-            with open(template_path, "r", encoding="utf-8") as f:
-                logging_config = yaml.safe_load(f)
-
-            # Update file handler path to be workspace-specific
-            if "handlers" in logging_config and "file" in logging_config["handlers"]:
-                # Update to absolute path in workspace root
-                log_file_path = work_path / "logs" / "platform.json"
-                logging_config["handlers"]["file"]["filename"] = str(log_file_path)
-
-            # Write updated logging config
-            self.logger.info(f"Creating logging configuration: {logging_config_path}")
-            with open(logging_config_path, "w", encoding="utf-8") as f:
-                yaml.dump(logging_config, f, default_flow_style=False, sort_keys=False)
-
-            self._messages.append(
-                f"Created logging configuration: {logging_config_path}"
-            )
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to create logging configuration: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-    def _create_session_file(
-        self,
-        session_file: Path,
-        workspace_name: str,
-        work_path: Path,
-        logging_config_path: Path,
-    ) -> bool:
-        """
-        Create session.json state file from template.
-
-        Args:
-            session_file: Path to session file
-            workspace_name: Name of the workspace
-            work_path: Root working directory
-            logging_config_path: Path to logging configuration file
-
-        Returns:
-            bool: Success status
-        """
-        try:
-            # Load template
-            template_path = self._get_template_path("session.template.json")
-            if not template_path.exists():
-                error_msg = f"Session template not found: {template_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            # Read and process template
-            with open(template_path, "r", encoding="utf-8") as f:
-                template_content = f.read()
-
-            # Define log path
-            log_path = work_path / "logs"
-
-            # Replace placeholders (use as_posix() to avoid backslash issues in JSON on Windows)
-            session_content = (
-                template_content.replace("{{session_id}}", generate_uuid())
-                .replace("{{workspace_name}}", workspace_name)
-                .replace("{{created_timestamp}}", datetime.now().isoformat())
-                .replace("{{work_path}}", work_path.absolute().as_posix())
-                .replace(
-                    "{{logging_config_path}}", logging_config_path.absolute().as_posix()
-                )
-                .replace("{{log_path}}", log_path.absolute().as_posix())
-            )
-
-            # Parse as JSON to validate
-            session_data = json.loads(session_content)
-
-            # Write session file
-            self.logger.info(f"Creating session state file: {session_file}")
-            with open(session_file, "w", encoding="utf-8") as f:
-                json.dump(session_data, f, indent=2)
-
-            # Load into memory so subsequent calls in this run use in-memory data
-            self._session_data = session_data
-            self._session_file = session_file
-
-            self._messages.append(f"Created session state file: {session_file}")
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to create session file: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-    def _detect_repo_type(self, url: str, work_path: Optional[Path] = None) -> str:
-        """
-        Auto-detect repository type from URL.
-
-        Args:
-            url: Repository URL or path
-            work_path: Root working directory for resolving relative local paths
-
-        Returns:
-            str: Repository type (git, local, or archive)
-        """
-        url_lower = url.lower()
-
-        # Check for git patterns
-        git_patterns = [
-            "https://github.com",
-            "https://gitlab.com",
-            "https://bitbucket.org",
-            "git@",
-            ".git",
-        ]
-        if any(pattern in url_lower for pattern in git_patterns):
-            return "git"
-
-        # Check for archive patterns
-        archive_patterns = [".zip", ".tar.gz", ".tar.bz2", ".tgz"]
-        if any(url_lower.endswith(pattern) for pattern in archive_patterns):
-            return "archive"
-
-        # Check if local path exists
-        local_path = self._resolve_local_source_path(url, work_path)
-        if local_path.exists():
-            return "local"
-
-        # Default to git if no pattern matches
-        self.logger.warning(
-            f"Could not detect repository type for '{url}', defaulting to 'git'"
-        )
-        return "git"
 
     def _resolve_local_source_path(
         self, url: str, work_path: Optional[Path] = None
@@ -1418,7 +1450,7 @@ class SessionController:
             self.logger.warning(f"Failed to update VSCode workspace: {str(e)}")
             return True
 
-    def _get_template_path(self, template_name: str) -> Path:
+    def _get_template_path(self, data_path: Path, template_name: str) -> Path:
         """
         Get path to template file in data directory.
 
@@ -1429,9 +1461,7 @@ class SessionController:
             Path: Absolute path to template file
         """
         # Get the package data directory
-        package_dir = Path(__file__).parent.parent
-        template_path = package_dir / "data" / template_name
-        return template_path
+        return data_path / template_name
 
     def _resolve_log_file(self, work_path: Path) -> Optional[Path]:
         """
@@ -1668,10 +1698,10 @@ class SessionController:
             if dt.tzinfo is not None:
                 dt = dt.replace(tzinfo=None)
             return dt
-        except:
+        except (ValueError, TypeError):
             try:
                 # Try common log format
                 return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
-            except:
+            except ValueError:
                 # Return very old date if parsing fails
                 return datetime.min

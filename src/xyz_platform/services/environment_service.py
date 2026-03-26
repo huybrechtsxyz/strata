@@ -18,15 +18,15 @@ from xyz_platform.models.environment_model import (
     EnvironmentModuleOverrideModel,
     EnvironmentProviderOverrideModel,
 )
-from xyz_platform.models.common_models import (
-    PlatformKind,
-    PlatformVersion,
-)
+
 from xyz_platform.models.store_models import (
     validate_store_security_policy,
     VariableStoreModel,
     SecretStoreModel,
     FeatureStoreModel,
+    VariableStoreType,
+    SecretStoreType,
+    FeatureStoreType,
 )
 from xyz_platform.services.base_service import BaseService
 
@@ -43,7 +43,7 @@ class EnvironmentService(BaseService):
     - Environment file merging
     """
 
-    def __init__(self, path: str = None, data: dict = None):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the EnvironmentService."""
         super().__init__(path=path, data=data)
         self.model: Optional[EnvironmentModel] = None
@@ -80,7 +80,10 @@ class EnvironmentService(BaseService):
                 )
 
             env_model = env_service.get_model()
-            if meta is None:
+            if not env_model:
+                continue
+
+            if meta is None and env_model.meta:
                 meta = env_model.meta
 
             # Merge variables (later files override earlier ones)
@@ -98,7 +101,10 @@ class EnvironmentService(BaseService):
                 merged_features = env_model.spec.features
 
         # Build merged EnvironmentModel
-        from xyz_platform.models.environment_model import EnvironmentSpecModel
+        from xyz_platform.models.environment_model import (
+            EnvironmentSpecModel,
+            EnvironmentMetaModel,
+        )
 
         variables = list(merged_vars.values()) if merged_vars else None
         secrets = list(merged_secrets.values()) if merged_secrets else None
@@ -107,12 +113,21 @@ class EnvironmentService(BaseService):
             variables=variables,
             secrets=secrets,
             features=merged_features,
+            lifecycle=None,
+            properties=None,
+            custom=None,
+            overrides=None,
         )
 
+        if meta is None:
+            meta = EnvironmentMetaModel(
+                name="Unknown", annotations=None, labels=None, tags=None
+            )
+
         return EnvironmentModel(
-            apiVersion=PlatformVersion.v1.value,
-            kind=PlatformKind.ENVIRONMENT.value,
-            meta=meta if meta else {"name": "merged"},
+            # apiVersion=PlatformVersion.v1.value, --- IGNORE ---
+            # kind=PlatformKind.ENVIRONMENT.value, --- IGNORE ---
+            meta=meta,
             spec=spec,
         )
 
@@ -142,18 +157,36 @@ class EnvironmentService(BaseService):
         Returns:
             Tuple[bool, List[str]]: (success, list of error messages)
         """
+        if not self.model:
+            return True, []
         spec = self.model.spec
 
         # Validate against security policies if configuration is provided
         if configuration_model and configuration_model.spec.security:
             security = configuration_model.spec.security
+            # Convert string store types to enum values
+            allowed_variable_stores = (
+                [VariableStoreType(s) for s in security.allowed_variable_stores]
+                if security.allowed_variable_stores
+                else None
+            )
+            allowed_secret_stores = (
+                [SecretStoreType(s) for s in security.allowed_secret_stores]
+                if security.allowed_secret_stores
+                else None
+            )
+            allowed_feature_stores = (
+                [FeatureStoreType(s) for s in security.allowed_feature_stores]
+                if security.allowed_feature_stores
+                else None
+            )
             errors = validate_store_security_policy(
                 variables=spec.variables,
                 secrets=spec.secrets,
                 features=spec.features,
-                allowed_variable_stores=security.allowed_variable_stores,
-                allowed_secret_stores=security.allowed_secret_stores,
-                allowed_feature_stores=security.allowed_feature_stores,
+                allowed_variable_stores=allowed_variable_stores,
+                allowed_secret_stores=allowed_secret_stores,
+                allowed_feature_stores=allowed_feature_stores,
             )
             return len(errors) == 0, errors
 
@@ -169,7 +202,7 @@ class EnvironmentService(BaseService):
             List[VariableStoreModel]: List of variable store models
         """
         self._ensure_validated()
-        if self.model.spec and self.model.spec.variables:
+        if self.model and self.model.spec and self.model.spec.variables:
             return self.model.spec.variables
         return []
 
@@ -181,7 +214,7 @@ class EnvironmentService(BaseService):
             List[SecretStoreModel]: List of secret store models
         """
         self._ensure_validated()
-        if self.model.spec and self.model.spec.secrets:
+        if self.model and self.model.spec and self.model.spec.secrets:
             return self.model.spec.secrets
         return []
 
@@ -193,7 +226,7 @@ class EnvironmentService(BaseService):
             List[FeatureStoreModel]: List of feature store models
         """
         self._ensure_validated()
-        if self.model.spec and self.model.spec.features:
+        if self.model and self.model.spec and self.model.spec.features:
             return self.model.spec.features
         return []
 
@@ -202,7 +235,7 @@ class EnvironmentService(BaseService):
     def has_overrides(self) -> bool:
         """Check if environment has any workspace overrides."""
         self._ensure_validated()
-        if not self.model.spec or not self.model.spec.overrides:
+        if not self.model or not self.model.spec or not self.model.spec.overrides:
             return False
 
         overrides = self.model.spec.overrides
@@ -227,7 +260,8 @@ class EnvironmentService(BaseService):
         """
         self._ensure_validated()
         if (
-            not self.model.spec
+            not self.model
+            or not self.model.spec
             or not self.model.spec.overrides
             or not self.model.spec.overrides.resources
         ):
@@ -257,7 +291,8 @@ class EnvironmentService(BaseService):
         """
         self._ensure_validated()
         if (
-            not self.model.spec
+            not self.model
+            or not self.model.spec
             or not self.model.spec.overrides
             or not self.model.spec.overrides.modules
         ):
@@ -287,7 +322,8 @@ class EnvironmentService(BaseService):
         """
         self._ensure_validated()
         if (
-            not self.model.spec
+            not self.model
+            or not self.model.spec
             or not self.model.spec.overrides
             or not self.model.spec.overrides.providers
         ):
@@ -310,7 +346,8 @@ class EnvironmentService(BaseService):
         """
         self._ensure_validated()
         if (
-            not self.model.spec
+            not self.model
+            or not self.model.spec
             or not self.model.spec.overrides
             or not self.model.spec.overrides.resources
         ):
@@ -326,7 +363,8 @@ class EnvironmentService(BaseService):
         """
         self._ensure_validated()
         if (
-            not self.model.spec
+            not self.model
+            or not self.model.spec
             or not self.model.spec.overrides
             or not self.model.spec.overrides.providers
         ):
@@ -342,7 +380,8 @@ class EnvironmentService(BaseService):
         """
         self._ensure_validated()
         if (
-            not self.model.spec
+            not self.model
+            or not self.model.spec
             or not self.model.spec.overrides
             or not self.model.spec.overrides.modules
         ):
@@ -373,12 +412,13 @@ class EnvironmentService(BaseService):
         result = workspace_properties.copy() if workspace_properties else {}
 
         # Merge environment properties
-        if self.model.spec and self.model.spec.properties:
+        if self.model and self.model.spec and self.model.spec.properties:
             result.update(self.model.spec.properties)
 
         # Apply override properties (highest precedence)
         if (
-            self.model.spec
+            self.model
+            and self.model.spec
             and self.model.spec.overrides
             and self.model.spec.overrides.properties
         ):

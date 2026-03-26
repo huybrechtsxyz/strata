@@ -19,7 +19,7 @@ from xyz_platform.services.base_service import BaseService
 class ProviderService(BaseService):
     """Service for handling provider configurations."""
 
-    def __init__(self, path: str = None, data: dict = None):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the ProviderService."""
         super().__init__(path=path, data=data)
         self.model: Optional[ProviderModel] = None
@@ -48,6 +48,9 @@ class ProviderService(BaseService):
         if configuration_model is None:
             # No configuration provided, skip dynamic validation
             return True, []
+
+        if self.model is None:
+            return False, ["Provider model is not initialized"]
 
         errors = []
 
@@ -101,9 +104,13 @@ class ProviderService(BaseService):
     def get_provider_type(self) -> str:
         """Get the provider type."""
         self._ensure_validated()
+        if self.model is None:
+            raise ValueError("Provider model is not initialized")
         return self.model.spec.properties.type
 
     def get_provider_region(self) -> str:
         """Get the provider region."""
         self._ensure_validated()
+        if self.model is None:
+            raise ValueError("Provider model is not initialized")
         return self.model.spec.properties.region

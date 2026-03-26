@@ -94,11 +94,20 @@ class AzureKeyVaultIntegration(StoreIntegration):
             if self.keyvault_url and not self.keyvault_url.endswith("/"):
                 self.keyvault_url += "/"
 
-        # Get authentication configuration from environment variables
-        self.tenant_id = self._get_env_var("AZURE_TENANT_ID")
-        self.client_id = self._get_env_var("AZURE_CLIENT_ID")
-        self.client_secret = self._get_env_var("AZURE_CLIENT_SECRET")
-        self.subscription_id = self._get_env_var("AZURE_SUBSCRIPTION_ID")
+        # Get authentication configuration from environment variables.
+        # Field names in the oauth2 sub-model are env-var name references.
+        self.tenant_id = self._get_env_var(
+            self._get_auth_var_name("tenant_id", "AZURE_TENANT_ID")
+        )
+        self.client_id = self._get_env_var(
+            self._get_auth_var_name("client_id", "AZURE_CLIENT_ID")
+        )
+        self.client_secret = self._get_env_var(
+            self._get_auth_var_name("client_secret", "AZURE_CLIENT_SECRET")
+        )
+        self.subscription_id = self._get_env_var(
+            "AZURE_SUBSCRIPTION_ID"
+        )  # no model equivalent
 
         logger.debug(
             "Azure Key Vault integration initialized",
@@ -107,6 +116,23 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 "has_vault_url": bool(self.keyvault_url),
             },
         )
+
+    # Auth helpers
+
+    def _get_auth_var_name(self, field: str, default: str) -> str:
+        """
+        Return the env-var name for an OAuth2 credential field.
+
+        When ``authentication.method == "oauth2"`` the sub-model fields hold
+        env-var name references (e.g. ``oauth2.client_id = "AZURE_CLIENT_ID"``)
+        rather than literal values.  Falls back to *default* for backward compat.
+        """
+        auth = self.config.authentication
+        if auth and auth.method == "oauth2" and auth.oauth2:
+            val = getattr(auth.oauth2, field, None)
+            if val:
+                return val
+        return default
 
     # Base integration methods
 

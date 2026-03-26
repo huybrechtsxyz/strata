@@ -18,6 +18,7 @@ from xyz_platform.logger import get_logger
 from xyz_platform.integrations.capabilities import IInfrastructureTool
 from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.models.integration_model import IntegrationModel
+from xyz_platform.utils.system import CommandResult
 
 logger = get_logger(__name__)
 
@@ -107,7 +108,8 @@ class TerraformIntegration(BaseIntegration):
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
             logger.warning(
-                "Terraform CLI not found", extra={"integration_name": self.integration_name}
+                "Terraform CLI not found",
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -121,14 +123,20 @@ class TerraformIntegration(BaseIntegration):
             self._info = version_error
             logger.warning(
                 "Terraform version validation failed",
-                extra={"integration_name": self.integration_name, "error": version_error},
+                extra={
+                    "integration_name": self.integration_name,
+                    "error": version_error,
+                },
             )
             return False, version_error
 
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Terraform is available",
-            extra={"integration_name": self.integration_name, "version": self.get_version()},
+            extra={
+                "integration_name": self.integration_name,
+                "version": self.get_version(),
+            },
         )
         return True, ""
 
@@ -172,7 +180,10 @@ class TerraformIntegration(BaseIntegration):
 
         logger.info(
             "Initializing Terraform",
-            extra={"working_dir": working_dir, "integration_name": self.integration_name},
+            extra={
+                "working_dir": working_dir,
+                "integration_name": self.integration_name,
+            },
         )
 
         args = ["init"]
@@ -191,7 +202,10 @@ class TerraformIntegration(BaseIntegration):
             result = self._run_integration(args, cwd=working_dir, timeout=timeout)
             logger.info(
                 "Terraform initialization completed",
-                extra={"working_dir": working_dir, "integration_name": self.integration_name},
+                extra={
+                    "working_dir": working_dir,
+                    "integration_name": self.integration_name,
+                },
             )
             return result
         except Exception as e:
@@ -211,7 +225,7 @@ class TerraformIntegration(BaseIntegration):
         working_dir: str,
         json_output: bool = False,
         timeout: int = 60,
-    ) -> Dict[str, Any]:
+    ) -> CommandResult:
         """
         Validate Terraform configuration files.
 
@@ -232,7 +246,10 @@ class TerraformIntegration(BaseIntegration):
 
         logger.info(
             "Validating Terraform configuration",
-            extra={"working_dir": working_dir, "integration_name": self.integration_name},
+            extra={
+                "working_dir": working_dir,
+                "integration_name": self.integration_name,
+            },
         )
 
         args = ["validate"]
@@ -244,7 +261,10 @@ class TerraformIntegration(BaseIntegration):
             result = self._run_integration(args, cwd=working_dir, timeout=timeout)
             logger.info(
                 "Terraform validation completed",
-                extra={"working_dir": working_dir, "integration_name": self.integration_name},
+                extra={
+                    "working_dir": working_dir,
+                    "integration_name": self.integration_name,
+                },
             )
             return result
         except Exception as e:
@@ -297,7 +317,10 @@ class TerraformIntegration(BaseIntegration):
 
         logger.info(
             "Creating Terraform plan",
-            extra={"working_dir": working_dir, "integration_name": self.integration_name},
+            extra={
+                "working_dir": working_dir,
+                "integration_name": self.integration_name,
+            },
         )
 
         args = ["plan"]
@@ -323,7 +346,10 @@ class TerraformIntegration(BaseIntegration):
             result = self._run_integration(args, cwd=working_dir, timeout=timeout)
             logger.info(
                 "Terraform plan completed",
-                extra={"working_dir": working_dir, "integration_name": self.integration_name},
+                extra={
+                    "working_dir": working_dir,
+                    "integration_name": self.integration_name,
+                },
             )
             return result
         except Exception as e:
@@ -348,7 +374,7 @@ class TerraformIntegration(BaseIntegration):
         target: Optional[List[str]] = None,
         timeout: int = 1800,
         **kwargs,
-    ) -> Any:
+    ) -> CommandResult:
         """
         Apply Terraform configuration changes.
 
@@ -376,7 +402,10 @@ class TerraformIntegration(BaseIntegration):
 
         logger.info(
             "Applying Terraform changes",
-            extra={"working_dir": working_dir, "integration_name": self.integration_name},
+            extra={
+                "working_dir": working_dir,
+                "integration_name": self.integration_name,
+            },
         )
 
         args = ["apply"]
@@ -402,7 +431,10 @@ class TerraformIntegration(BaseIntegration):
             result = self._run_integration(args, cwd=working_dir, timeout=timeout)
             logger.info(
                 "Terraform apply completed",
-                extra={"working_dir": working_dir, "integration_name": self.integration_name},
+                extra={
+                    "working_dir": working_dir,
+                    "integration_name": self.integration_name,
+                },
             )
             return result
         except Exception as e:
@@ -425,7 +457,7 @@ class TerraformIntegration(BaseIntegration):
         auto_approve: bool = False,
         target: Optional[List[str]] = None,
         timeout: int = 1800,
-    ) -> Dict[str, Any]:
+    ) -> CommandResult:
         """
         Destroy Terraform-managed infrastructure.
 
@@ -449,7 +481,10 @@ class TerraformIntegration(BaseIntegration):
 
         logger.warning(
             "Destroying Terraform-managed infrastructure",
-            extra={"working_dir": working_dir, "integration_name": self.integration_name},
+            extra={
+                "working_dir": working_dir,
+                "integration_name": self.integration_name,
+            },
         )
 
         args = ["destroy"]
@@ -472,7 +507,10 @@ class TerraformIntegration(BaseIntegration):
             result = self._run_integration(args, cwd=working_dir, timeout=timeout)
             logger.info(
                 "Terraform destroy completed",
-                extra={"working_dir": working_dir, "integration_name": self.integration_name},
+                extra={
+                    "working_dir": working_dir,
+                    "integration_name": self.integration_name,
+                },
             )
             return result
         except Exception as e:
@@ -494,7 +532,7 @@ class TerraformIntegration(BaseIntegration):
         json_format: bool = False,
         raw: bool = False,
         timeout: int = 60,
-    ) -> Dict[str, Any]:
+    ) -> CommandResult:
         """
         Read Terraform output values.
 
@@ -517,7 +555,10 @@ class TerraformIntegration(BaseIntegration):
 
         logger.debug(
             "Reading Terraform outputs",
-            extra={"working_dir": working_dir, "integration_name": self.integration_name},
+            extra={
+                "working_dir": working_dir,
+                "integration_name": self.integration_name,
+            },
         )
 
         args = ["output"]
@@ -535,7 +576,10 @@ class TerraformIntegration(BaseIntegration):
             result = self._run_integration(args, cwd=working_dir, timeout=timeout)
             logger.debug(
                 "Terraform output completed",
-                extra={"working_dir": working_dir, "integration_name": self.integration_name},
+                extra={
+                    "working_dir": working_dir,
+                    "integration_name": self.integration_name,
+                },
             )
             return result
         except Exception as e:

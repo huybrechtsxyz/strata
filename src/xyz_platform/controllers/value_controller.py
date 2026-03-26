@@ -30,7 +30,7 @@ Description   : Resolves variables, secrets, and feature flags from their
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Dict, Generator, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from xyz_platform.logger import get_logger
 from xyz_platform.models.store_models import (
@@ -42,8 +42,8 @@ from xyz_platform.models.store_models import (
     VariableStoreType,
 )
 
-if TYPE_CHECKING:
-    from xyz_platform.services.deployment_service import DeploymentService
+from xyz_platform.services.integration_service import IntegrationService
+from xyz_platform.services.deployment_service import DeploymentService
 
 logger = get_logger(__name__)
 
@@ -317,7 +317,6 @@ class ValueController:
     @staticmethod
     def _ensure_integrations_initialized() -> None:
         """Lazily initialise integrations (idempotent)."""
-        from xyz_platform.services.integration_service import IntegrationService
 
         svc = IntegrationService.get_instance()
         if not svc.is_initialized():
@@ -334,7 +333,6 @@ class ValueController:
 
         Returns None when no matching integration is registered.
         """
-        from xyz_platform.services.integration_service import IntegrationService
 
         svc = IntegrationService.get_instance()
         for name in svc.list_integrations():

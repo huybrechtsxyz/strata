@@ -24,13 +24,13 @@ _log_context: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
 def set_correlation_id(correlation_id: str) -> None:
     """
     Set correlation ID for the current context.
-    
+
     This ID will be included in all log messages within this context,
     useful for tracing requests across services.
-    
+
     Args:
         correlation_id: Unique identifier for correlation (e.g., request ID).
-    
+
     Example:
         set_correlation_id("req-abc-123")
         logger.info("Processing request")  # Includes correlation_id
@@ -41,7 +41,7 @@ def set_correlation_id(correlation_id: str) -> None:
 def get_correlation_id() -> Optional[str]:
     """
     Get the current correlation ID.
-    
+
     Returns:
         Current correlation ID or None if not set.
     """
@@ -51,7 +51,7 @@ def get_correlation_id() -> Optional[str]:
 def set_context(context: Optional[Dict[str, Any]]) -> None:
     """
     Set context data for logging.
-    
+
     Args:
         context: Dictionary of context data to include in logs, or None to clear.
     """
@@ -61,7 +61,7 @@ def set_context(context: Optional[Dict[str, Any]]) -> None:
 def get_context() -> Dict[str, Any]:
     """
     Get the current logging context.
-    
+
     Returns:
         Current context dictionary.
     """
@@ -77,7 +77,7 @@ def clear_context() -> None:
 class LogContext:
     """
     Context manager for scoped logging context.
-    
+
     Usage:
         with LogContext(user_id=123, tenant="acme"):
             logger.info("User action")  # Includes user_id and tenant in logs
@@ -86,7 +86,7 @@ class LogContext:
     def __init__(self, **kwargs):
         """
         Initialize log context.
-        
+
         Args:
             **kwargs: Key-value pairs to include in logging context.
         """

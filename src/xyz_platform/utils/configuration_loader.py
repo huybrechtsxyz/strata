@@ -12,7 +12,7 @@ Description   : Low-level YAML file loader and merger.
 """
 
 from pathlib import Path
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List
 import yaml
 from xyz_platform.logger import get_logger
 
@@ -55,7 +55,7 @@ class ConfigurationLoader:
         """
         return self.deep_merge(base, overrides)
 
-    def load_yaml_file(self, file_path: Union[str, Path]) -> Dict[str, Any]:
+    def load_yaml_file(self, file_path: Path) -> Dict[str, Any]:
         """
         Load a single YAML file.
 
@@ -70,29 +70,27 @@ class ConfigurationLoader:
             ValueError: If file is not a valid YAML dictionary
             yaml.YAMLError: If YAML parsing fails
         """
-        path = Path(file_path)
-
-        if not path.exists():
+        if not file_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {file_path}")
 
-        if not path.is_file():
+        if not file_path.is_file():
             raise ValueError(f"Path is not a file: {file_path}")
 
-        self._logger.debug("Loading YAML file", extra={"file": str(path)})
+        self._logger.debug("Loading YAML file", extra={"file": str(file_path)})
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f)
         except yaml.YAMLError as e:
             self._logger.error(
                 "YAML parsing failed",
                 exc_info=True,
-                extra={"file": str(path), "error": str(e)},
+                extra={"file": str(file_path), "error": str(e)},
             )
             raise
 
         if config is None:
-            self._logger.debug("YAML file is empty", extra={"file": str(path)})
+            self._logger.debug("YAML file is empty", extra={"file": str(file_path)})
             return {}
 
         if not isinstance(config, dict):
@@ -102,9 +100,7 @@ class ConfigurationLoader:
 
         return config
 
-    def load_yaml_files(
-        self, file_paths: List[Union[str, Path]]
-    ) -> List[Dict[str, Any]]:
+    def load_yaml_files(self, file_paths: List[Path]) -> List[Dict[str, Any]]:
         """
         Load multiple YAML files.
 
@@ -132,9 +128,7 @@ class ConfigurationLoader:
 
         return configs
 
-    def load_and_merge_yaml_files(
-        self, file_paths: List[Union[str, Path]]
-    ) -> Dict[str, Any]:
+    def load_and_merge_yaml_files(self, file_paths: List[Path]) -> Dict[str, Any]:
         """
         Load multiple YAML files and merge them into a single configuration.
 

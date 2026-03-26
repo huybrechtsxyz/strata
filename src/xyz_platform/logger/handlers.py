@@ -21,7 +21,7 @@ class LogstashHandler(logging.Handler):
 
     Sends JSON-formatted logs to Logstash for processing.
     Configure Logstash with a TCP input like:
-    
+
     input {
       tcp {
         port => 5000
@@ -87,27 +87,27 @@ class LogstashHandler(logging.Handler):
 def configure_azure_monitor(connection_string: str):
     """
     Configure Azure Application Insights using OpenTelemetry.
-    
+
     This uses Microsoft's official azure-monitor-opentelemetry package,
     which is the recommended way to integrate with Azure Application Insights.
-    
+
     Args:
         connection_string: Azure Application Insights connection string.
                           Format: InstrumentationKey=xxx;IngestionEndpoint=https://...
-    
+
     Example:
         configure_azure_monitor(
             "InstrumentationKey=12345678-1234-1234-1234-123456789012;"
             "IngestionEndpoint=https://westeurope-1.in.applicationinsights.azure.com/"
         )
-    
+
     Note:
         This function configures OpenTelemetry to send logs, traces, and metrics
         to Azure Application Insights. It integrates with Python's standard logging.
     """
     try:
         from azure.monitor.opentelemetry import configure_azure_monitor as azure_config
-        
+
         # Configure Azure Monitor with OpenTelemetry
         # This automatically sets up logging, tracing, and metrics
         azure_config(
@@ -115,9 +115,9 @@ def configure_azure_monitor(connection_string: str):
             # You can add additional configuration here
             # enable_live_metrics=True,  # Enable live metrics stream
         )
-        
+
         logging.info("Azure Application Insights configured successfully")
-        
+
     except ImportError:
         raise ImportError(
             "azure-monitor-opentelemetry package is required for Azure Application Insights. "

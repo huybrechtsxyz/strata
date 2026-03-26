@@ -9,11 +9,18 @@ Description   : Workspace service class
 ===============================================================================
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.workspace_model import WorkspaceModel
 from xyz_platform.services.base_service import BaseService
 from xyz_platform.exceptions import InvalidReferenceError
+
+from xyz_platform.services.configuration_service import ConfigurationService
+from xyz_platform.services.provider_service import ProviderService
+from xyz_platform.services.resource_service import ResourceService
+from xyz_platform.services.namespace_service import NamespaceService
+from xyz_platform.services.firewall_service import FirewallService
+from xyz_platform.services.module_service import ModuleService
 
 
 class WorkspaceService(BaseService):
@@ -22,7 +29,13 @@ class WorkspaceService(BaseService):
     # Initialization
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
-        """Initialize the WorkspaceService."""
+        """
+        Initialize the WorkspaceService.
+
+        _related_services = {
+            "providers": {"provider_name": ProviderService, ...},
+        }
+        """
         super().__init__(path=path, data=data)
         self.model: Optional[WorkspaceModel] = None
         self._related_services: Optional[Dict[str, Dict[str, BaseService]]] = None
@@ -97,7 +110,7 @@ class WorkspaceService(BaseService):
         # STEP 2: Provisioner validity is already validated by ProvisionerType enum
 
         # STEP 3: Validate module repository references (if modules are defined in resources)
-        if self.model.spec.resources:
+        if self.model and self.model.spec.resources:
             for resource in self.model.spec.resources:
                 if resource.modules:
                     # Note: Modules in workspace are references with file paths.
@@ -184,7 +197,7 @@ class WorkspaceService(BaseService):
                 matching_config is None
                 and not configuration_model.spec.additional_topologies
             ):
-                available_topologies = sorted(topology_config_map.keys())
+                # available_topologies = sorted(topology_config_map.keys())
                 error = InvalidReferenceError(
                     source_type="Topology",
                     source_name=topology.name,
@@ -234,13 +247,7 @@ class WorkspaceService(BaseService):
 
         # STEP 5: Validate that all file: references resolve to existing files on disk
         if work_path:
-            repo_map = {}
-            if configuration_model.spec.repositories:
-                repo_map = {
-                    repo.name: repo.deploy_path
-                    for repo in configuration_model.spec.repositories
-                    if repo.deploy_path
-                }
+            repo_map = configuration_model.get_repo_map() if configuration_model else {}
             file_refs = []
             for p in self.model.spec.providers:
                 file_refs.append((f"Provider '{p.name}'", p.file))
@@ -388,7 +395,7 @@ class WorkspaceService(BaseService):
         Returns:
             WorkspaceResourceModel instance, or None if not found
         """
-        if self.model.spec.resources:
+        if self.model and self.model.spec.resources:
             for resource_ref in self.model.spec.resources:
                 if resource_ref.name == resource_name:
                     return resource_ref
@@ -407,7 +414,7 @@ class WorkspaceService(BaseService):
         # Component only has a resource name reference - look up role from resources
         if isinstance(component.resource, str):
             # Find the resource definition
-            if self.model.spec.resources:
+            if self.model and self.model.spec.resources:
                 for resource_ref in self.model.spec.resources:
                     if resource_ref.name == component.resource:
                         return resource_ref.role
@@ -416,7 +423,11 @@ class WorkspaceService(BaseService):
 
     # Service Methods
 
-    def load_related_services(
+    def get_validation_errors(self) -> List[str]:
+        """Return the list of validation errors after loading related services."""
+        return self._validation_errors
+
+    def load_workspace_services(
         self, objects_path: Optional[str] = None
     ) -> Tuple[Dict[str, Dict[str, BaseService]], bool]:
         """
@@ -451,13 +462,6 @@ class WorkspaceService(BaseService):
         )
         success = True
 
-        # Lazy imports to avoid circular dependencies
-        from xyz_platform.services.provider_service import ProviderService
-        from xyz_platform.services.resource_service import ResourceService
-        from xyz_platform.services.namespace_service import NamespaceService
-        from xyz_platform.services.firewall_service import FirewallService
-        from xyz_platform.services.module_service import ModuleService
-
         # Validate objects_path parameter
         if objects_path is None:
             error_msg = (
@@ -477,15 +481,17 @@ class WorkspaceService(BaseService):
             "firewalls": {},
             "modules": {},
         }
+        if self.model is None:
+            error_msg = "Workspace model is not loaded. Cannot load related services."
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
         workspace: WorkspaceModel = self.model
 
         # Build repo_map once for all @repo_name/... path resolutions in this call
-        from xyz_platform.services.configuration_service import ConfigurationService
-
         repo_map: Dict[str, str] = ConfigurationService.get_instance().get_repo_map()
 
         # Load firewall services from workspace spec firewalls
-        if self.model.spec.firewalls:
+        if self.model and self.model.spec and self.model.spec.firewalls:
             self.logger.debug(f"Loading {len(self.model.spec.firewalls)} firewall(s)")
             for firewall_ref in self.model.spec.firewalls:
                 firewall_path = self._resolve_file_path(
@@ -494,23 +500,22 @@ class WorkspaceService(BaseService):
                 firewall_key = firewall_ref.name
                 try:
                     # Use service cache to avoid re-parsing same files
-                    service = FirewallService.load(firewall_path, validate=True)
-                    if service.is_validated():
-                        services["firewalls"][firewall_key] = service
+                    fw_service: FirewallService = FirewallService.load(
+                        firewall_path, validate=True
+                    )
+                    if fw_service.is_validated():
+                        services["firewalls"][firewall_key] = fw_service
                         self.logger.debug(
                             f"Loaded firewall '{firewall_key}'",
                             extra={"path": firewall_path},
                         )
                     else:
                         success = False
-                        errors = (
-                            service.get_structured_errors()
-                            if hasattr(service, "get_structured_errors")
-                            else []
-                        )
+                        errors = fw_service.get_validation_errors()
                         self._validation_errors.append(
                             f"Firewall '{firewall_ref.name}' validation failed"
                         )
+                        self._validation_errors.extend(errors)
                         self.logger.warning(
                             f"Firewall '{firewall_ref.name}' validation failed",
                             extra={"path": firewall_path, "error_count": len(errors)},
@@ -537,23 +542,22 @@ class WorkspaceService(BaseService):
                 )
                 try:
                     # Use service cache to avoid re-parsing same files
-                    service = ProviderService.load(provider_path, validate=True)
-                    if service.is_validated():
-                        services["providers"][provider_ref.name] = service
+                    pv_service: ProviderService = ProviderService.load(
+                        provider_path, validate=True
+                    )
+                    if pv_service.is_validated():
+                        services["providers"][provider_ref.name] = pv_service
                         self.logger.debug(
                             f"Loaded provider '{provider_ref.name}'",
                             extra={"path": provider_path},
                         )
                     else:
                         success = False
-                        errors = (
-                            service.get_structured_errors()
-                            if hasattr(service, "get_structured_errors")
-                            else []
-                        )
+                        errors = pv_service.get_validation_errors()
                         self._validation_errors.append(
                             f"Provider '{provider_ref.name}' validation failed"
                         )
+                        self._validation_errors.extend(errors)
                         self.logger.warning(
                             f"Provider '{provider_ref.name}' validation failed",
                             extra={"path": provider_path, "error_count": len(errors)},
@@ -584,9 +588,11 @@ class WorkspaceService(BaseService):
                 if resource_key not in services["resources"]:
                     try:
                         # Use service cache to avoid re-parsing same files
-                        service = ResourceService.load(resource_path, validate=True)
-                        if service.is_validated():
-                            services["resources"][resource_key] = service
+                        rx_service: ResourceService = ResourceService.load(
+                            resource_path, validate=True
+                        )
+                        if rx_service.is_validated():
+                            services["resources"][resource_key] = rx_service
                             self.logger.debug(
                                 f"Loaded resource '{resource_key}'",
                                 extra={"path": resource_path},
@@ -595,7 +601,7 @@ class WorkspaceService(BaseService):
                             # Merge multiple firewalls if resource references more than one
                             if (
                                 resource_ref.firewalls
-                                and len(resource_ref.firewalls) > 1
+                                and len(resource_ref.firewalls) > 0
                             ):
                                 self.logger.debug(
                                     f"Merging {len(resource_ref.firewalls)} firewall(s) for resource '{resource_key}'"
@@ -617,8 +623,7 @@ class WorkspaceService(BaseService):
                                                 firewall_services
                                             )
                                         )
-                                        # Store merged firewall in resource service
-                                        service.merged_firewall = merged_firewall
+                                        rx_service.set_merged_firewall(merged_firewall)
                                         self.logger.debug(
                                             f"Successfully merged {len(firewall_services)} firewall(s) for resource '{resource_key}'"
                                         )
@@ -639,14 +644,11 @@ class WorkspaceService(BaseService):
 
                         else:
                             success = False
-                            errors = (
-                                service.get_structured_errors()
-                                if hasattr(service, "get_structured_errors")
-                                else []
-                            )
+                            errors = rx_service.get_validation_errors()
                             self._validation_errors.append(
                                 f"Resource '{resource_ref.name}' validation failed"
                             )
+                            self._validation_errors.extend(errors)
                             self.logger.warning(
                                 f"Resource '{resource_ref.name}' validation failed",
                                 extra={
@@ -669,7 +671,7 @@ class WorkspaceService(BaseService):
                         )
 
         # Load module services referenced by resources
-        if workspace.spec.resources:
+        if workspace and workspace.spec and workspace.spec.resources:
             for resource_ref in workspace.spec.resources:
                 if resource_ref.modules:
                     self.logger.debug(
@@ -683,23 +685,22 @@ class WorkspaceService(BaseService):
                         module_key = f"{resource_ref.name}:{module_ref.name}"
 
                         try:
-                            service = ModuleService.load(module_path, validate=True)
-                            if service.is_validated():
-                                services["modules"][module_key] = service
+                            mod_service: ModuleService = ModuleService.load(
+                                module_path, validate=True
+                            )
+                            if mod_service.is_validated():
+                                services["modules"][module_key] = mod_service
                                 self.logger.debug(
                                     f"Loaded module '{module_ref.name}' for resource '{resource_ref.name}'",
                                     extra={"path": module_path},
                                 )
                             else:
                                 success = False
-                                errors = (
-                                    service.get_structured_errors()
-                                    if hasattr(service, "get_structured_errors")
-                                    else []
-                                )
+                                errors = mod_service.get_validation_errors()
                                 self._validation_errors.append(
                                     f"Module '{module_ref.name}' for resource '{resource_ref.name}' validation failed"
                                 )
+                                self._validation_errors.extend(errors)
                                 self.logger.warning(
                                     f"Module '{module_ref.name}' validation failed",
                                     extra={
@@ -731,23 +732,22 @@ class WorkspaceService(BaseService):
                 )
                 try:
                     # Use service cache to avoid re-parsing same files
-                    service = NamespaceService.load(namespace_path, validate=True)
-                    if service.is_validated():
-                        services["namespaces"][namespace_ref.name] = service
+                    ns_service: NamespaceService = NamespaceService.load(
+                        namespace_path, validate=True
+                    )
+                    if ns_service.is_validated():
+                        services["namespaces"][namespace_ref.name] = ns_service
                         self.logger.debug(
                             f"Loaded namespace '{namespace_ref.name}'",
                             extra={"path": namespace_path},
                         )
                     else:
                         success = False
-                        errors = (
-                            service.get_structured_errors()
-                            if hasattr(service, "get_structured_errors")
-                            else []
-                        )
+                        errors = ns_service.get_validation_errors()
                         self._validation_errors.append(
                             f"Namespace '{namespace_ref.name}' validation failed"
                         )
+                        self._validation_errors.extend(errors)
                         self.logger.warning(
                             f"Namespace '{namespace_ref.name}' validation failed",
                             extra={"path": namespace_path, "error_count": len(errors)},
@@ -786,23 +786,20 @@ class WorkspaceService(BaseService):
                         module_key = f"{namespace_ref.name}:{module_ref.name}"
 
                         try:
-                            service = ModuleService.load(module_path, validate=True)
-                            if service.is_validated():
-                                services["modules"][module_key] = service
+                            mod_service = ModuleService.load(module_path, validate=True)
+                            if mod_service.is_validated():
+                                services["modules"][module_key] = mod_service
                                 self.logger.debug(
                                     f"Loaded module '{module_ref.name}' for namespace '{namespace_ref.name}'",
                                     extra={"path": module_path},
                                 )
                             else:
                                 success = False
-                                errors = (
-                                    service.get_structured_errors()
-                                    if hasattr(service, "get_structured_errors")
-                                    else []
-                                )
+                                errors = mod_service.get_validation_errors()
                                 self._validation_errors.append(
                                     f"Module '{module_ref.name}' for namespace '{namespace_ref.name}' validation failed"
                                 )
+                                self._validation_errors.extend(errors)
                                 self.logger.warning(
                                     f"Module '{module_ref.name}' validation failed",
                                     extra={
@@ -850,36 +847,113 @@ class WorkspaceService(BaseService):
 
         return services, success
 
-    def get_provider_service(self, provider_name: str):
-        """Get a specific provider service by name."""
-        return self._get_related_service("providers", provider_name)
-
-    def get_resource_service(self, resource_name: str):
-        """Get a specific resource service by name."""
-        return self._get_related_service("resources", resource_name)
-
-    def get_namespace_service(self, namespace_name: str):
-        """Get a specific namespace service by name."""
-        return self._get_related_service("namespaces", namespace_name)
-
-    def get_firewall_service(self, firewall_name: str):
+    def get_firewall_services(self) -> Optional[Dict[str, FirewallService]]:
         """Get a specific firewall service by name."""
-        return self._get_related_service("firewalls", firewall_name)
+        value = self._get_workspace_related_services("firewalls", None)
+        if value is not None and isinstance(value, dict):
+            casted = {
+                k: cast(FirewallService, v)
+                for k, v in value.items()
+                if isinstance(v, FirewallService)
+            }
+            return casted
+        return None
 
-    def get_module_service(self, resource_name: str, module_name: str):
+    def get_firewall_service(self, firewall_name: str) -> Optional[FirewallService]:
+        """Get a specific firewall service by name."""
+        value = self._get_workspace_related_services("firewalls", firewall_name)
+        if value is not None and isinstance(value, FirewallService):
+            return cast(FirewallService, value)
+        return None
+
+    def get_module_services(self) -> Optional[Dict[str, ModuleService]]:
+        """Get a specific module service by resource and module name."""
+        value = self._get_workspace_related_services("modules", None)
+        if value is not None and isinstance(value, dict):
+            casted = {
+                k: cast(ModuleService, v)
+                for k, v in value.items()
+                if isinstance(v, ModuleService)
+            }
+            return casted
+        return None
+
+    def get_module_service(
+        self, resource_name: str, module_name: str
+    ) -> Optional[ModuleService]:
         """Get a specific module service by resource and module name."""
         module_key = f"{resource_name}:{module_name}"
-        return self._get_related_service("modules", module_key)
+        value = self._get_workspace_related_services("modules", module_key)
+        if value is not None and isinstance(value, ModuleService):
+            return cast(ModuleService, value)
+        return None
 
-    def get_validation_errors(self) -> List[str]:
-        """Return the list of validation errors after loading related services."""
-        return self._validation_errors
+    def get_namespace_services(
+        self,
+    ) -> Optional[Dict[str, NamespaceService]]:
+        """Get a specific namespace service by name."""
+        value = self._get_workspace_related_services("namespaces", None)
+        if value is not None and isinstance(value, dict):
+            casted = {
+                k: cast(NamespaceService, v)
+                for k, v in value.items()
+                if isinstance(v, NamespaceService)
+            }
+            return casted
+        return None
+
+    def get_namespace_service(self, namespace_name: str) -> Optional[NamespaceService]:
+        """Get a specific namespace service by name."""
+        value = self._get_workspace_related_services("namespaces", namespace_name)
+        if value is not None and isinstance(value, NamespaceService):
+            return cast(NamespaceService, value)
+        return None
+
+    def get_provider_services(self) -> Optional[Dict[str, ProviderService]]:
+        """Get a specific provider service by name."""
+        value = self._get_workspace_related_services("providers", None)
+        if value is not None and isinstance(value, dict):
+            casted = {
+                k: cast(ProviderService, v)
+                for k, v in value.items()
+                if isinstance(v, ProviderService)
+            }
+            return casted
+        return None
+
+    def get_provider_service(self, provider_name: str) -> Optional[ProviderService]:
+        """Get a specific provider service by name."""
+        value = self._get_workspace_related_services("providers", provider_name)
+        if value is not None and isinstance(value, ProviderService):
+            return cast(ProviderService, value)
+        return None
+
+    def get_resource_services(
+        self,
+    ) -> Optional[Dict[str, ResourceService]]:
+        """Get a specific resource service by name."""
+        value = self._get_workspace_related_services("resources", None)
+        if value is not None and isinstance(value, dict):
+            casted = {
+                k: cast(ResourceService, v)
+                for k, v in value.items()
+                if isinstance(v, ResourceService)
+            }
+            return casted
+        return None
+
+    def get_resource_service(self, resource_name: str) -> Optional[ResourceService]:
+        """Get a specific resource service by name."""
+        value = self._get_workspace_related_services("resources", resource_name)
+        if value is not None and isinstance(value, ResourceService):
+            return cast(ResourceService, value)
+        return None
 
     # Helper method to get related services
 
-    def _get_related_service(
+    def _get_workspace_related_services(
         self, service_type: str, service_name: Optional[str] = None
-    ):
+    ) -> Optional[Union[BaseService, Dict[str, BaseService]]]:
         """
         Get a specific related service by type and optionally by name.
 
@@ -896,13 +970,18 @@ class WorkspaceService(BaseService):
         if not hasattr(self, "_related_services") or self._related_services is None:
             return None
 
+        # Check if requested service type is available
         if service_type not in self._related_services:
             return None
 
-        service = self._related_services.get(service_type)
+        # Get the service object for the requested type
+        service_obj = self._related_services.get(service_type)
 
         # If service is a dict and name provided, get specific item
-        if isinstance(service, dict) and service_name:
-            return service.get(service_name)
+        if isinstance(service_obj, dict):
+            if service_name:
+                return service_obj.get(service_name)
+            # No service_name requested → return the full dict
+            return service_obj
 
-        return service
+        return None

@@ -208,7 +208,9 @@ class DeploymentSpecModel(BaseModel):
         if self.stages:
             stage_names = [stage.name for stage in self.stages]
             if len(stage_names) != len(set(stage_names)):
-                duplicates = [name for name in stage_names if stage_names.count(name) > 1]
+                duplicates = [
+                    name for name in stage_names if stage_names.count(name) > 1
+                ]
                 raise ValueError(f"Duplicate stage names found: {set(duplicates)}")
 
         if self.configurations:

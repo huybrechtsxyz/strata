@@ -91,7 +91,7 @@ class TemplateProcessor:
 
         except Exception as e:
             logger.error(
-                "Template processing failed",
+                f"Template processing failed: {e}",
                 extra={"template_dir": str(self.template_dir)},
                 exc_info=True,
             )
@@ -141,7 +141,7 @@ class TemplateProcessor:
 
         except Exception as e:
             logger.error(
-                "Failed to process template",
+                f"Failed to process template: {e}",
                 extra={"template_path": str(template_path)},
                 exc_info=True,
             )
@@ -158,7 +158,7 @@ class TemplateProcessor:
 
         except Exception as e:
             logger.error(
-                "Failed to cleanup template file",
+                f"Failed to cleanup template file: {e}",
                 extra={"template_path": str(template_path)},
                 exc_info=True,
             )

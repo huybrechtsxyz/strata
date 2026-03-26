@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 class ModuleService(BaseService):
     """Service for handling module configurations and source fetching."""
 
-    def __init__(self, path: str = None, data: dict = None):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the ModuleService."""
         super().__init__(path=path, data=data)
         self.model: Optional[ModuleModel] = None

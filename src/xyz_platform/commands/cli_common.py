@@ -131,28 +131,6 @@ def validate_output_quiet_exclusive(ctx, param, value):
     return value
 
 
-# --config-path -> The path to the configuration files
-def click_config_path(func):
-    func = click.option(
-        "--config-path",
-        default=None,
-        type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
-        help="Optional configuration directory path (must exist)",
-    )(func)
-    return func
-
-
-# --config-file -> The path to a specific configuration file
-def click_config_file(func):
-    func = click.option(
-        "--config-file",
-        default=None,
-        type=click.Path(exists=False, file_okay=True, dir_okay=False, path_type=str),
-        help="Optional path to a specific configuration file (must exist)",
-    )(func)
-    return func
-
-
 # --output json -> Returns the output in JSON format
 def click_output_format(func):
     """
@@ -201,6 +179,61 @@ def click_output_quiet(func):
         is_flag=True,
         callback=combined_callback,
         help="Disable any console output",
+    )(func)
+    return func
+
+
+# --env-path -> The path to the environment files (for finding environment-specific configs)
+def click_env_path(func):
+    func = click.option(
+        "--env-path",
+        default=None,
+        type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
+        help="Optional environment directory path for environment-specific configurations (must exist)",
+    )(func)
+    return func
+
+
+# --env-file -> The path to a specific environment file (for finding environment-specific configs)
+def click_env_file(func):
+    func = click.option(
+        "--env-file",
+        default=None,
+        type=click.Path(exists=False, file_okay=True, dir_okay=False, path_type=str),
+        help="Optional path to a specific environment file for environment-specific configurations (must exist)",
+    )(func)
+    return func
+
+
+# --config-path -> The path to the configuration files
+def click_config_path(func):
+    func = click.option(
+        "--config-path",
+        default=None,
+        type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
+        help="Optional configuration directory path (must exist)",
+    )(func)
+    return func
+
+
+# --config-file -> The path to a specific configuration file
+def click_config_file(func):
+    func = click.option(
+        "--config-file",
+        default=None,
+        type=click.Path(exists=False, file_okay=True, dir_okay=False, path_type=str),
+        help="Optional path to a specific configuration file (must exist)",
+    )(func)
+    return func
+
+
+# --data-path -> The path to the data files (for finding templates, etc.)
+def click_data_path(func):
+    func = click.option(
+        "--data-path",
+        default=None,
+        type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=str),
+        help="Optional data directory path for templates and other resources (must exist)",
     )(func)
     return func
 

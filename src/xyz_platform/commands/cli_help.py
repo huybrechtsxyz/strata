@@ -10,6 +10,9 @@ Description   : Click CLI wiring for session command group.
 
 import click
 
+from typing import Optional
+
+from xyz_platform.commands.cli_common import click_data_path
 from xyz_platform.commands.help.help_command import HelpCommand
 
 
@@ -21,12 +24,16 @@ from xyz_platform.commands.help.help_command import HelpCommand
     # help="Name of the help topic to display. If not provided, shows general help.",
 )
 @click.pass_context
-def help_command(ctx, topic_name: str = None):
+@click_data_path
+def help_command(
+    ctx, topic_name: Optional[str] = None, data_path: Optional[str] = None
+):
     """Show help for the topic."""
     # ctx.parent.command is the main group
     # ctx.find_root().command is also the root command
     command: HelpCommand = HelpCommand(
         topic=topic_name,
+        data_path=data_path,
         cli_context=ctx,
     )
     command.execute()

@@ -9,14 +9,12 @@ Description   : Command to display help for a specific topic.
 ===============================================================================
 """
 
-
 from pathlib import Path
 from typing import Optional
 
 import click
 
 from xyz_platform.commands.base_command import BaseCommand
-from xyz_platform.utils import system
 
 
 class HelpCommand(BaseCommand):
@@ -27,7 +25,14 @@ class HelpCommand(BaseCommand):
     platform topics including commands, concepts, and configuration.
     """
 
-    def __init__(self, topic: str = None, cli_context=None):
+    OPERATION = "help_topic"
+
+    def __init__(
+        self,
+        topic: Optional[str] = None,
+        data_path: Optional[str] = None,
+        cli_context=None,
+    ):
         """
         Initialize the topic help command.
 
@@ -35,7 +40,7 @@ class HelpCommand(BaseCommand):
             topic: The help topic to display (e.g., 'deployment', 'workspace', 'build')
             cli_context: Click context object (provides access to main CLI group)
         """
-        super().__init__()
+        super().__init__(data_path=data_path)
 
         self._topic_name = topic
         self._cli_context = cli_context
@@ -52,7 +57,7 @@ class HelpCommand(BaseCommand):
             # Get the root/main command
             root_ctx = self._cli_context.find_root()
             return root_ctx.get_help()
-        return None
+        return ""
 
     # Execute the command
     def execute(self) -> bool:
@@ -64,7 +69,7 @@ class HelpCommand(BaseCommand):
         """
         try:
             # Initialize
-            if not self._initialize():
+            if not self._initialize(require_session=False):
                 self.logger.error(f"Initialization failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Initialization failed")
@@ -121,15 +126,21 @@ class HelpCommand(BaseCommand):
             return False
 
     # Initialize (runs AFTER base)
-    def _initialize(self) -> bool:
+    def _initialize(
+        self, require_session: bool = True, show_header: bool = True
+    ) -> bool:
         """
         Initialize help command - set up documentation paths.
+
+        Args:
+            operation: Optional operation name passed to parent initializer.
+            show_header: Whether to show header when calling parent initializer.
 
         Returns:
             bool: Success status (errors stored in self._errors)
         """
         # Call parent first
-        if not super()._initialize(operation="help_topic"):
+        if not super()._initialize(show_header=show_header):
             return False
 
         self.logger.debug(
@@ -177,7 +188,11 @@ class HelpCommand(BaseCommand):
         return super()._after_execute()
 
     # Finalize the command execution process (runs BEFORE base)
-    def _finalize(self, success: bool) -> bool:
+    def _finalize(
+        self,
+        success: bool = False,
+        show_footer: bool = True,
+    ) -> bool:
         """
         Finalize help command execution.
 
@@ -193,8 +208,8 @@ class HelpCommand(BaseCommand):
             },
         )
 
-        # Call parent last
-        return super()._finalize(operation="help_topic", success=success)
+        # Call parent last — prefer provided operation else use help_topic
+        return super()._finalize(success=success, show_footer=show_footer)
 
     # Show help correct documentation
     def _show_helpdoc(self) -> int:
@@ -275,7 +290,7 @@ class HelpCommand(BaseCommand):
     # Get the documentation path
     def _get_helpdoc_path(self) -> Path:
         """Get the path to the documentation directory."""
-        docs_path = system.get_root_path() / "data"
+        docs_path = self._data_path
         if not docs_path.exists():
             raise FileNotFoundError(
                 f"Help documentation directory not found: {docs_path}"
@@ -293,5 +308,5 @@ class HelpCommand(BaseCommand):
                 return None
 
             return doc_file.read_text(encoding="utf-8")
-        except Exception as e:
+        except Exception:
             return None

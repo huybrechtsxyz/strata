@@ -33,6 +33,8 @@ class StatusToolsCommand(BaseCommand):
     def __init__(
         self,
         work_path: Optional[str] = None,
+        env_path: Optional[str] = None,
+        env_file: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
     ):
@@ -46,8 +48,10 @@ class StatusToolsCommand(BaseCommand):
         """
         super().__init__(
             work_path=work_path,
+            env_path=env_path,
+            env_file=env_file,
             output=output,
-            verbose=verbose,
+            verbose=verbose or False,
         )
         self._tool_results: List[Dict] = []
 
@@ -62,7 +66,7 @@ class StatusToolsCommand(BaseCommand):
         """
         try:
             # Initialize
-            if not self._initialize():
+            if not self._initialize(require_session=False):
                 self.logger.error(f"Initialization failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Initialization failed")
@@ -99,9 +103,18 @@ class StatusToolsCommand(BaseCommand):
                     continue  # Skip service-only integrations (Vault, KeyVault, etc.)
 
                 # Use real config from loaded configuration if available, else stub
+
                 int_config = config_integration_map.get(
                     integration_type,
-                    IntegrationModel(name=integration_type, type=integration_type),
+                    IntegrationModel(
+                        name=integration_type,
+                        type=integration_type,
+                        description="",
+                        validation=None,
+                        authentication=None,
+                        endpoints=None,
+                        lifecycle=None,
+                    ),
                 )
                 integration = integration_class(config=int_config)
 
@@ -122,11 +135,13 @@ class StatusToolsCommand(BaseCommand):
                     version, min_version, max_version
                 )
 
+                integration_command = getattr(integration_class, "COMMAND", None)
+
                 self._tool_results.append(
                     {
                         "name": integration_type,
                         "label": label,
-                        "command": integration_class.COMMAND,
+                        "command": integration_command,
                         "available": available,
                         "version": version,
                         "min_version": min_version,
@@ -175,7 +190,9 @@ class StatusToolsCommand(BaseCommand):
 
     # Initialize (runs AFTER base)
 
-    def _initialize(self) -> bool:
+    def _initialize(
+        self, require_session: bool = True, show_header: bool = True
+    ) -> bool:
         """
         Initialize tools status command.
 
@@ -183,7 +200,7 @@ class StatusToolsCommand(BaseCommand):
             bool: Success status (errors stored in self._errors)
         """
         # Call parent first
-        if not super()._initialize(operation="tools_status"):
+        if not super()._initialize(show_header=show_header):
             return False
 
         self.logger.debug(
@@ -292,50 +309,13 @@ class StatusToolsCommand(BaseCommand):
         # Call parent last
         return super()._after_execute()
 
-    # Version constraint check helper
-
-    def _check_version_constraints(
-        self,
-        version_str: Optional[str],
-        min_version: Optional[str],
-        max_version: Optional[str],
-    ) -> Tuple[bool, str]:
-        """
-        Check whether version_str satisfies min/max constraints.
-
-        Returns:
-            (ok, detail) where detail is an empty string on success or a
-            human-readable reason on failure.
-        """
-        # No constraints defined — always OK
-        if not min_version and not max_version:
-            return True, ""
-
-        # Tool not available — constraint not applicable
-        if not version_str:
-            return False, "version unknown"
-
-        try:
-            from packaging import version as pkg_version
-
-            ver = pkg_version.parse(version_str)
-
-            if min_version:
-                if ver < pkg_version.parse(min_version):
-                    return False, f"below minimum {min_version}"
-
-            if max_version:
-                if ver > pkg_version.parse(max_version):
-                    return False, f"above maximum {max_version}"
-
-            return True, "ok"
-
-        except Exception as e:
-            return False, f"version parse error: {e}"
-
     # Finalize the command execution process (runs BEFORE base)
 
-    def _finalize(self, success: bool) -> bool:
+    def _finalize(
+        self,
+        success: bool = False,
+        show_footer: bool = True,
+    ) -> bool:
         """
         Finalize tools status command execution.
 
@@ -381,5 +361,46 @@ class StatusToolsCommand(BaseCommand):
             extra={"command_class": self.__class__.__name__},
         )
 
-        # Call parent last — let base class decide footer based on output format
-        return super()._finalize(operation="tools_status", success=success)
+        # Call parent last — prefer provided operation else use tools_status
+        return super()._finalize(success=success, show_footer=show_footer)
+
+    # Version constraint check helper
+
+    def _check_version_constraints(
+        self,
+        version_str: Optional[str],
+        min_version: Optional[str],
+        max_version: Optional[str],
+    ) -> Tuple[bool, str]:
+        """
+        Check whether version_str satisfies min/max constraints.
+
+        Returns:
+            (ok, detail) where detail is an empty string on success or a
+            human-readable reason on failure.
+        """
+        # No constraints defined — always OK
+        if not min_version and not max_version:
+            return True, ""
+
+        # Tool not available — constraint not applicable
+        if not version_str:
+            return False, "version unknown"
+
+        try:
+            from packaging import version as pkg_version
+
+            ver = pkg_version.parse(version_str)
+
+            if min_version:
+                if ver < pkg_version.parse(min_version):
+                    return False, f"below minimum {min_version}"
+
+            if max_version:
+                if ver > pkg_version.parse(max_version):
+                    return False, f"above maximum {max_version}"
+
+            return True, "ok"
+
+        except Exception as e:
+            return False, f"version parse error: {e}"

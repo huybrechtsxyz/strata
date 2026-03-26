@@ -12,6 +12,7 @@ Description   : Resource service class
 import re
 from typing import List, Optional, Tuple
 from xyz_platform.models.configuration_model import ConfigurationModel
+from xyz_platform.models.firewall_model import FirewallModel
 from xyz_platform.models.resource_model import ResourceModel
 from xyz_platform.services.base_service import BaseService
 
@@ -19,10 +20,13 @@ from xyz_platform.services.base_service import BaseService
 class ResourceService(BaseService):
     """Service for handling resource configurations."""
 
-    def __init__(self, path: str = None, data: dict = None):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the ResourceService."""
         super().__init__(path=path, data=data)
         # Note: self.model is set during validate(), not in __init__
+
+        # Store merged firewall for this resource after validation
+        self._merged_firewall: Optional[FirewallModel] = None
 
     def on_ready(self) -> None:
         """Called after validation succeeds - populate category/subcategory from configuration."""
@@ -66,8 +70,8 @@ class ResourceService(BaseService):
         Returns:
             Tuple[bool, List[str]]: (success, list of error messages)
         """
-        if configuration_model is None:
-            # No configuration provided, skip dynamic validation
+        if configuration_model is None or self.model is None:
+            # No configuration provided or model not initialized, skip dynamic validation
             return True, []
 
         errors = []
@@ -232,16 +236,22 @@ class ResourceService(BaseService):
     def get_provider_type(self) -> str:
         """Get the provider type."""
         self._ensure_validated()
+        if not self.model or not self.model.spec or not self.model.spec.properties:
+            raise ValueError("Model is not properly initialized or missing properties")
         return self.model.spec.properties.provider_type
 
     def get_resource_type(self) -> str:
         """Get the resource type."""
         self._ensure_validated()
+        if not self.model or not self.model.spec or not self.model.spec.properties:
+            raise ValueError("Model is not properly initialized or missing properties")
         return self.model.spec.properties.resource_type
 
     def get_unit_cost(self) -> Optional[float]:
         """Get the resource unit cost."""
         self._ensure_validated()
+        if not self.model or not self.model.spec or not self.model.spec.properties:
+            raise ValueError("Model is not properly initialized or missing properties")
         return self.model.spec.properties.unit_cost
 
     def get_category_and_subcategory(self) -> Tuple[Optional[str], Optional[str]]:
@@ -254,11 +264,34 @@ class ResourceService(BaseService):
             Tuple[Optional[str], Optional[str]]: (category, subcategory)
         """
         self._ensure_validated()
+        if not self.model or not self.model.spec or not self.model.spec.properties:
+            raise ValueError("Model is not properly initialized or missing properties")
 
         return (
             self.model.spec.properties.category,
             self.model.spec.properties.subcategory,
         )
+
+    def get_merged_firewall(self) -> Optional[FirewallModel]:
+        """Get the merged firewall configuration for this resource.
+
+        This is populated during validation by merging all referenced firewall
+        files together. Returns None if no firewall is defined or if validation
+        has not been completed yet.
+        """
+        self._ensure_validated()
+        return self._merged_firewall
+
+    def set_merged_firewall(self, firewall: FirewallModel) -> None:
+        """Set the merged firewall configuration for this resource.
+
+        This is called during validation to store the merged firewall dict after
+        merging all referenced firewall files together.
+
+        Args:
+            firewall (dict): The merged firewall configuration to store for this resource
+        """
+        self._merged_firewall = firewall
 
     def _populate_category_from_configuration(self):
         """Populate category/subcategory from configuration if empty.

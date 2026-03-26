@@ -22,8 +22,7 @@ from pydantic import (
     field_validator,
 )
 
-# List of valid script file extensions
-VALID_SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1"}
+from xyz_platform.utils.config import SCRIPT_EXTENSIONS
 
 # Reusable resource name type with validation.
 # Must start with lowercase letter, contain only lowercase letters, numbers, and underscores.
@@ -109,7 +108,7 @@ class ScriptPathModel(BaseModel):
             raise ValueError(f"Script does not exist: {v}")
         if not path.is_file():
             raise ValueError(f"Script path is not a file: {v}")
-        if path.suffix not in VALID_SCRIPT_EXTENSIONS:
+        if path.suffix not in SCRIPT_EXTENSIONS:
             raise ValueError(
                 f"Script must have a valid extension (.sh, .bash, .py, .ps1), got: {path.suffix}"
             )
@@ -140,7 +139,7 @@ class ScriptsModel(BaseModel):
                     raise ValueError(f"Script does not exist: {item}")
                 if not path.is_file():
                     raise ValueError(f"Script path is not a file: {item}")
-                if path.suffix not in VALID_SCRIPT_EXTENSIONS:
+                if path.suffix not in SCRIPT_EXTENSIONS:
                     raise ValueError(
                         f"Script must have a valid extension (.sh, .bash, .py, .ps1), got: {path.suffix}"
                     )

@@ -18,6 +18,7 @@ from typing import List, Optional, Tuple
 
 import yaml
 
+from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.platform_model import PlatformModel
 from xyz_platform.services.base_service import BaseService
 from xyz_platform.services.workspace_service import WorkspaceService
@@ -63,7 +64,12 @@ class PlatformService(BaseService):
         """Return the PlatformModel class for Pydantic validation."""
         return PlatformModel
 
-    def _validate_dynamic(self, **kwargs) -> Tuple[bool, List[str]]:
+    def _validate_dynamic(
+        self,
+        configuration_model: Optional[ConfigurationModel] = None,
+        work_path: Optional[str] = None,
+        **kwargs,
+    ) -> Tuple[bool, List[str]]:
         """Phase-2 dynamic validation.
 
         PlatformModel is an output artifact; all structural validation is
@@ -143,7 +149,9 @@ class PlatformService(BaseService):
     # Related-service compatibility stubs
     # ------------------------------------------------------------------
 
-    def load_related_services(self, objects_path: str = None, stage_name: str = None):
+    def load_related_services(
+        self, objects_path: Optional[str] = None, stage_name: Optional[str] = None
+    ):
         """Compatibility stub — PlatformModel is self-contained.
 
         All data is embedded in the model; no external service loading is

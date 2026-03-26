@@ -11,8 +11,11 @@ Description   : Controller for orchestrating workspace hierarchy and configurati
 """
 
 import yaml
+from glob import glob
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional
+import os
+import re
 
 from xyz_platform.logger.logger import get_logger
 from xyz_platform.models.common_models import PlatformKind
@@ -21,6 +24,8 @@ from xyz_platform.services.deployment_service import DeploymentService
 from xyz_platform.services.base_service import BaseService
 from xyz_platform.services.unknown_service import UnknownService
 from xyz_platform.utils import system
+from xyz_platform.utils.configuration_loader import ConfigurationLoader
+from xyz_platform.logger.logger import reconfigure_logging, configure_logging
 
 
 class WorkspaceController:
@@ -51,6 +56,197 @@ class WorkspaceController:
     def clear_messages(self) -> None:
         self._messages.clear()
 
+    # Environment Variable Management
+
+    def load_environment_variables(
+        self,
+        work_path: Path,
+        env_path: Optional[Path] = None,
+        env_file: Optional[Path] = None,
+        overwrite: bool = False,
+    ) -> Tuple[bool, List[str]]:
+        """
+        Discover and load .env-style files into the ConfigurationService in-memory map.
+
+        Precedence (applied in this order, later files override earlier keys
+        in the local merged dict; when calling ConfigurationService the
+        `overwrite` flag controls whether existing in-memory keys are replaced):
+          explicit file (envfile) > .env.local > .env > .xyz-platform/.env
+
+        Args:
+            work_path: Workspace root path
+            envpath: Optional directory to look for env files (absolute or relative to work_path)
+            envfile: Optional explicit env filename to load (highest precedence)
+            overwrite: Whether to overwrite existing keys in ConfigurationService
+
+        Returns:
+            Tuple[bool, List[str]]: (success, list_of_loaded_paths_or_errors)
+        """
+        try:
+            candidates: List[Path] = []
+            config_service = ConfigurationService.get_instance()
+            local_path = config_service.get_default_state_path(
+                work_path, create_path=False
+            )
+
+            if (
+                env_path
+                and env_path.is_absolute()
+                and env_path.is_dir()
+                and not env_path.exists()
+            ):
+                self.logger.warning(
+                    "Env path is invalid",
+                    extra={"env_path": str(env_path)},
+                )
+                return False, [f"Env path is invalid: {env_path}"]
+            elif (
+                env_path
+                and not env_path.is_absolute()
+                and not (work_path / env_path).exists()
+            ):
+                self.logger.warning(
+                    "Env path is invalid (relative path does not exist)",
+                    extra={
+                        "env_path": str(env_path),
+                        "resolved": str(work_path / env_path),
+                    },
+                )
+                return False, [f"Env path is invalid: {env_path}"]
+
+            if (
+                env_file
+                and env_file.is_absolute()
+                and env_file.is_file()
+                and not env_file.exists()
+            ):
+                self.logger.warning(
+                    "Env file is invalid",
+                    extra={"env_file": str(env_file)},
+                )
+                return False, [f"Env file is invalid: {env_file}"]
+            elif (
+                env_file
+                and not env_file.is_absolute()
+                and not (work_path / env_file).exists()
+            ):
+                self.logger.warning(
+                    "Env file is invalid (relative path does not exist)",
+                    extra={
+                        "env_file": str(env_file),
+                        "resolved": str(work_path / env_file),
+                    },
+                )
+                return False, [f"Env file is invalid: {env_file}"]
+
+            if work_path:
+                candidates.append(work_path / ".env")
+            elif local_path:
+                candidates.append(local_path / ".env")
+
+            if env_path:
+                if env_path.is_absolute():
+                    pattern = str(env_path / "*.env")
+                else:
+                    pattern = str(work_path / env_path / "*.env")
+
+                self.logger.debug(
+                    "Resolving env-path pattern",
+                    extra={"pattern": pattern},
+                )
+
+                matches = glob(pattern, recursive=False)
+
+                if matches:
+                    # Sort for consistent ordering and convert to Path objects
+                    candidates.extend([Path(p) for p in sorted(matches)])
+                    self.logger.debug(
+                        "Config-path matched files",
+                        extra={"pattern": pattern, "count": len(matches)},
+                    )
+                else:
+                    self.logger.debug(
+                        "Config-path matched no files",
+                        extra={"pattern": pattern},
+                    )
+
+            if env_file and env_file.is_absolute():
+                candidates.append(env_file)
+            elif env_file:
+                candidates.append(work_path / env_file)
+
+            # Keep only existing files in discovery order
+            found_files: List[Path] = [
+                p for p in candidates if p.exists() and p.is_file()
+            ]
+
+            if not found_files:
+                self.logger.debug(
+                    "No .env files found to load",
+                    extra={"candidates": [str(p) for p in candidates]},
+                )
+                return True, []
+
+            # Seed merged with current process environment so .env files
+            # can override system values. Use a copy to avoid mutating os.environ.
+            merged: Dict[str, str] = dict(os.environ)
+
+            def _parse_and_merge(p: Path, target: Dict[str, str]):
+                text = p.read_text(encoding="utf-8")
+                for raw in text.splitlines():
+                    line = raw.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip()
+                    # Remove surrounding quotes
+                    if (val.startswith('"') and val.endswith('"')) or (
+                        val.startswith("'") and val.endswith("'")
+                    ):
+                        val = val[1:-1]
+
+                    # Expand ${VAR} or $VAR using merged then os.environ
+                    def _exp(m):
+                        name = m.group(1) or m.group(2)
+                        return str(target.get(name) or os.environ.get(name) or "")
+
+                    val = re.sub(r"\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)", _exp, val)
+
+                    # Set into target merged dict (later files will override earlier ones)
+                    target[key] = val
+
+            for p in found_files:
+                try:
+                    _parse_and_merge(p, merged)
+                    self.logger.debug(
+                        "Loaded env file", extra={"path": str(p), "vars": len(merged)}
+                    )
+                except Exception as e:
+                    self.logger.error(
+                        "Failed to parse env file",
+                        extra={"path": str(p), "error": str(e)},
+                    )
+                    return False, [f"Failed to parse env file {p}: {e}"]
+
+            # Push merged vars into ConfigurationService
+            config_svc = ConfigurationService.get_instance()
+            config_svc.add_environment_variables(merged, overwrite=overwrite)
+
+            loaded_paths = [str(p.resolve()) for p in found_files]
+            self._messages.append(f"Loaded environment variables from: {loaded_paths}")
+            return True, loaded_paths
+
+        except Exception as exc:
+            self.logger.error(
+                "Failed to load environment variables",
+                extra={"error": str(exc)},
+                exc_info=True,
+            )
+            return False, [str(exc)]
+
     # Configuration Management
 
     # Get the configuration service instance
@@ -61,6 +257,7 @@ class WorkspaceController:
     def resolve_configuration_files(
         self,
         work_path: Path,
+        data_path: Optional[Path] = None,
         config_file: Optional[str] = None,
         config_path: Optional[str] = None,
     ) -> List[str]:
@@ -97,7 +294,7 @@ class WorkspaceController:
         file_paths = []
 
         # Priority 1 (lowest): Bundled standard configuration from package
-        bundled_config = system.get_root_path() / "data" / "configuration.yaml"
+        bundled_config = system.get_default_config_path(data_path=data_path)
         if bundled_config.exists():
             file_paths.append(str(bundled_config))
             self.logger.debug(
@@ -122,8 +319,6 @@ class WorkspaceController:
                 "Resolving config-path pattern",
                 extra={"pattern": pattern},
             )
-
-            from glob import glob
 
             matches = glob(pattern, recursive=False)
 
@@ -205,10 +400,10 @@ class WorkspaceController:
         config_service = ConfigurationService.get_instance()
 
         try:
-            from xyz_platform.utils.configuration_loader import ConfigurationLoader
-
             loader = ConfigurationLoader()
-            merged_config = loader.load_and_merge_yaml_files(file_paths)
+            merged_config = loader.load_and_merge_yaml_files(
+                [Path(f) for f in file_paths]
+            )
 
             # Update ConfigurationService with merged config
             config_service.data = merged_config
@@ -218,8 +413,9 @@ class WorkspaceController:
 
             # Save merged configuration to temp directory for debugging
             try:
-                temp_path = system.get_temp_path(base_path=work_path, create=True)
-                merged_config_file = temp_path / "configuration.yaml"
+                merged_config_file = config_service.get_temp_configuration_path(
+                    work_path=work_path, create_path=True
+                )
 
                 with open(merged_config_file, "w", encoding="utf-8") as f:
                     yaml.dump(
@@ -343,8 +539,6 @@ class WorkspaceController:
 
         # Load and merge deployment configurations with existing config
         if config_files:
-            from xyz_platform.utils.configuration_loader import ConfigurationLoader
-
             try:
                 loader = ConfigurationLoader()
                 deployment_config = loader.load_and_merge_yaml_files(config_files)
@@ -383,8 +577,9 @@ class WorkspaceController:
 
                 # Save merged configuration to temp directory for debugging
                 try:
-                    temp_path = system.get_temp_path(base_path=work_path, create=True)
-                    merged_config_file = temp_path / "configuration.yaml"
+                    merged_config_file = config_service.get_temp_configuration_path(
+                        work_path=work_path, create_path=True
+                    )
 
                     with open(merged_config_file, "w", encoding="utf-8") as f:
                         yaml.dump(
@@ -451,8 +646,6 @@ class WorkspaceController:
             ...         work_path=Path.cwd()
             ...     )
         """
-        from xyz_platform.logger.logger import reconfigure_logging, configure_logging
-
         config_service = ConfigurationService.get_instance()
 
         try:
@@ -493,32 +686,16 @@ class WorkspaceController:
                 configure_logging(level="INFO", enable_console=True)
             return False
 
-    # Load configuration stores into StoreService
-    def load_configuration_stores(self) -> Tuple[bool, List[str]]:
-        """
-        Load configuration stores from the loaded configuration.
-
-        NOTE: StoreService is not available in this version of the platform.
-        This method is a stub that returns success without performing any action.
-
-        Returns:
-            Tuple[bool, List[str]]: (success status, list of error messages)
-        """
-        self.logger.debug(
-            "load_configuration_stores: StoreService not available in this version - skipping"
-        )
-        return True, []
-
     # Platform Management
 
     # Load and validate a platform file
     def load_and_validate_file(
         self,
-        platform_file: Path | str,
+        platform_file: str,
         expected_kind: Optional[PlatformKind] = None,
         work_path: Optional[str] = None,
         configuration_service: Optional["ConfigurationService"] = None,
-    ) -> Tuple[BaseService, List[str]]:
+    ) -> Tuple[Optional[BaseService], List[str]]:
         """
         Load and validate a platform file.
 
@@ -562,63 +739,26 @@ class WorkspaceController:
     # Load the platform file using UnknownService to detect if its a platform file
     def load_platform_file(
         self,
-        platform_file: Path | str,
+        platform_file: str,
         expected_kind: Optional[PlatformKind] = None,
         work_path: Optional[str] = None,
-    ) -> Tuple[UnknownService, List[str]]:
+    ) -> Tuple[Optional[UnknownService], List[str]]:
         """Load a platform file using UnknownService to detect its kind.
 
         Handles ``@repo_name/...`` cross-repo references automatically by
         looking up the repo's ``deploy_path`` from the loaded ConfigurationService.
         """
-        errors = []
-
         # Resolve @repo_name/... cross-repo references using the loaded ConfigurationService
-        file_path_str = str(platform_file) if platform_file else ""
-        if file_path_str.startswith("@"):
+        platform_path: Path
+        platform_file = str(platform_file) if platform_file else ""
+        if platform_file.startswith("@"):
             repo_map = {}
             config_service = ConfigurationService.get_instance()
+            repo_map = config_service.get_repo_map()
 
-            # Auto-load the session merged configuration when the service model is not
-            # yet populated but work_path is known (e.g. build command callers that rely
-            # on the session-written .xyz-platform/configuration.yaml)
-            if work_path and (
-                not config_service or not getattr(config_service, "model", None)
-            ):
-                merged_config_file = (
-                    Path(work_path) / ".xyz-platform" / "configuration.yaml"
-                )
-                if merged_config_file.exists():
-                    try:
-                        self.load_configuration(
-                            work_path=Path(work_path),
-                            file_paths=[str(merged_config_file)],
-                        )
-                        config_service = ConfigurationService.get_instance()
-                        self.logger.debug(
-                            "Auto-loaded session configuration for @repo resolution",
-                            extra={"config": str(merged_config_file)},
-                        )
-                    except Exception as exc:
-                        self.logger.debug(
-                            f"Auto-load of session configuration failed (continuing without): {exc}"
-                        )
-
-            if config_service and getattr(config_service, "model", None):
-                config_model = config_service.model
-                if (
-                    config_model
-                    and getattr(config_model, "spec", None)
-                    and getattr(config_model.spec, "repositories", None)
-                ):
-                    repo_map = {
-                        repo.name: repo.deploy_path
-                        for repo in config_model.spec.repositories
-                        if getattr(repo, "deploy_path", None)
-                    }
             try:
-                platform_file = system.resolve_path(
-                    work_path, file_path_str, repo_map=repo_map
+                platform_path = system.resolve_path(
+                    str(work_path), platform_file, repo_map=repo_map
                 )
             except ValueError as exc:
                 error_msg = str(exc)
@@ -626,28 +766,28 @@ class WorkspaceController:
                 return None, [error_msg]
         else:
             # Resolve the platform file path - pass as target_path (2nd param) not sub_path
-            platform_file = system.resolve_path(work_path, platform_file)
+            platform_path = system.resolve_path(str(work_path), platform_file)
 
         # Validate file exists
-        if not platform_file.exists():
+        if not platform_path.exists():
             self.logger.error(
                 "Platform file not found", extra={"file": str(platform_file)}
             )
             error = f"Platform file not found: {platform_file}"
             return None, [error]
 
-        if not platform_file.is_file():
+        if not platform_path.is_file():
             self.logger.error("Path is not a file", extra={"file": str(platform_file)})
             error = f"Path is not a file: {platform_file}"
             return None, [error]
 
         # Validate file extension
-        if platform_file.suffix.lower() not in (".yml", ".yaml"):
+        if platform_path.suffix.lower() not in (".yml", ".yaml"):
             self.logger.error(
                 "Invalid file type",
                 extra={
-                    "file": str(platform_file),
-                    "suffix": platform_file.suffix,
+                    "file": platform_file,
+                    "suffix": platform_path.suffix,
                     "expected": ".yml or .yaml",
                 },
             )
@@ -681,7 +821,9 @@ class WorkspaceController:
             detected_kind = unknown_service.get_kind()
             # get_kind() returns a string, not an enum
             detected_kind_str = (
-                detected_kind if isinstance(detected_kind, str) else detected_kind.value
+                detected_kind.value
+                if isinstance(detected_kind, PlatformKind)
+                else detected_kind
             )
             self.logger.debug(
                 "Detected platform kind",
@@ -732,7 +874,9 @@ class WorkspaceController:
         try:
             detected_kind = unknown_service.get_kind()
             detected_kind_str = (
-                detected_kind if isinstance(detected_kind, str) else detected_kind.value
+                detected_kind.value
+                if isinstance(detected_kind, PlatformKind)
+                else detected_kind
             )
             self.logger.info(
                 "Loading service",
@@ -764,7 +908,9 @@ class WorkspaceController:
         except Exception as e:
             detected_kind = unknown_service.get_kind()
             detected_kind_str = (
-                detected_kind if isinstance(detected_kind, str) else detected_kind.value
+                detected_kind.value
+                if isinstance(detected_kind, PlatformKind)
+                else detected_kind
             )
             self.logger.error(
                 "Failed to instantiate service",
@@ -791,7 +937,9 @@ class WorkspaceController:
             # Get the kind string for logging
             detected_kind = known_service.get_kind()
             detected_kind_str = (
-                detected_kind if isinstance(detected_kind, str) else detected_kind.value
+                detected_kind.value
+                if isinstance(detected_kind, PlatformKind)
+                else detected_kind
             )
 
             # Get configuration model for dynamic validation if provided
@@ -837,7 +985,9 @@ class WorkspaceController:
         except Exception as e:
             detected_kind = known_service.get_kind()
             detected_kind_str = (
-                detected_kind if isinstance(detected_kind, str) else detected_kind.value
+                detected_kind.value
+                if isinstance(detected_kind, PlatformKind)
+                else detected_kind
             )
             self.logger.error(
                 "Failed to instantiate service",
@@ -858,7 +1008,7 @@ class WorkspaceController:
         deployment_service: "DeploymentService",
         objects_path: Path | str,
         stage_name: Optional[str] = None,
-    ) -> Tuple[dict, bool]:
+    ) -> bool:
         """
         Load related services for a deployment.
 
@@ -880,7 +1030,7 @@ class WorkspaceController:
             extra={"stage_name": stage_name} if stage_name else {},
         )
 
-        related_services, load_success = deployment_service.load_related_services(
+        load_success = deployment_service.load_deploy_services(
             objects_path=str(objects_path)
         )
 
@@ -895,49 +1045,21 @@ class WorkspaceController:
                 for err in validation_errors:
                     self.logger.error(f"  - {err}")
 
-            return related_services, False
+            return False
 
+        ws_service = deployment_service.get_workspace_service()
+        ws_name = ws_service.get_name() if ws_service is not None else ""
+        env_service = deployment_service.get_environment_service()
+        env_name = env_service.get_name() if env_service is not None else ""
         self.logger.info(
             "Related services loaded successfully",
             extra={
-                "workspace": (
-                    related_services.get("workspace").get_name()
-                    if related_services.get("workspace")
-                    else None
-                ),
-                "environment_count": len(related_services.get("environments", {})),
-                "current_stage": related_services.get("current_stage"),
+                "workspace": ws_name,
+                "environment": env_name,
             },
         )
 
-        return related_services, True
-
-    # Load data for singleton services
-    def load_related_service_data(
-        self,
-        deployment_service: "DeploymentService",
-        stage_name: Optional[str] = None,
-    ) -> Tuple[bool, List[str]]:
-        """
-        Load data for singleton services from the deployment's related services.
-
-        NOTE: VariableService, SecretService and FeatureService are not available in
-        this version of the platform. This method is a stub that logs a warning and
-        returns success without performing any action.
-
-        Args:
-            deployment_service: The deployment service with loaded related services
-            stage_name: Optional stage name. If provided, loads stage-specific data.
-
-        Returns:
-            Tuple of (success bool, list of errors)
-        """
-        self.logger.debug(
-            "load_related_service_data: VariableService / SecretService / FeatureService "
-            "not available in this version - skipping",
-            extra={"stage_name": stage_name} if stage_name else {},
-        )
-        return True, []
+        return True
 
     # Workspace Paths
 
@@ -1000,11 +1122,11 @@ class WorkspaceController:
         return dist_path
 
     # Get the work path based on input or default to current directory
-    def get_workspace_workpath(self, work_path: str) -> Path:
+    def get_workspace_workpath(self, work_path: Path) -> Path:
         """Get the work path for the given workspace."""
         # If work_path is provided, use it directly
         if work_path is not None and work_path != "":
-            work_path = Path(work_path).resolve()
+            work_path = work_path.resolve()
             self.logger.debug(
                 "Target work directory from argument",
                 extra={"work_path": str(work_path)},

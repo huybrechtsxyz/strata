@@ -18,7 +18,7 @@ from xyz_platform.services.base_service import BaseService
 class NamespaceService(BaseService):
     """Service for handling namespace configurations and modules."""
 
-    def __init__(self, path: str = None, data: dict = None):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the NamespaceService."""
         super().__init__(path=path, data=data)
         self.model: Optional[NamespaceModel] = None
@@ -48,16 +48,10 @@ class NamespaceService(BaseService):
         if not work_path:
             return True, []
 
-        repo_map = {}
-        if configuration_model and configuration_model.spec.repositories:
-            repo_map = {
-                repo.name: repo.deploy_path
-                for repo in configuration_model.spec.repositories
-                if repo.deploy_path
-            }
-
         file_refs = []
-        if self.model.spec.modules:
+        repo_map = configuration_model.get_repo_map() if configuration_model else {}
+
+        if self.model and self.model.spec.modules:
             for m in self.model.spec.modules:
                 file_refs.append((f"Module '{m.name}'", m.file))
 

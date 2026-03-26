@@ -29,7 +29,7 @@ from packaging import version
 from typing import Any, Dict, List, Optional, Tuple
 
 from xyz_platform.logger import get_logger
-from xyz_platform.utils.system import run_command
+from xyz_platform.utils.system import CommandResult, run_command
 from xyz_platform.models.integration_model import IntegrationModel
 
 logger = get_logger(__name__)
@@ -174,7 +174,7 @@ class BaseIntegration(ABC):
         # Check for class-level COMMAND attribute first
         # This allows built-in integrations to define their own command
         if hasattr(self.__class__, "COMMAND"):
-            return self.__class__.COMMAND
+            return getattr(self.__class__, "COMMAND")
 
         # For custom integrations, extract from validation.command
         if self.config.validation and self.config.validation.command:
@@ -432,7 +432,7 @@ class BaseIntegration(ABC):
 
     def _run_integration(
         self, args: List[str], cwd: Optional[str] = None, timeout: int = 300, **kwargs
-    ) -> Dict[str, Any]:
+    ) -> CommandResult:
         """
         Run integration command with arguments.
 

@@ -64,12 +64,14 @@ class BaseService(ABC):
                     )
                     # Note: Still return service even if invalid (don't cache)
                     # Caller can check service.is_validated()
+                    service._errors.append(errors)
 
             return service
 
         return get_or_cache(cache_key, create_service)
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
+        self._errors = []
         self.path = path
         self.data = data
         self.model = None
@@ -122,6 +124,10 @@ class BaseService(ABC):
         return True, []
 
     # Validation
+
+    def get_validation_errors(self) -> List[str]:
+        """Return a copy of the accumulated validation error list."""
+        return self._errors.copy()
 
     def validate(
         self,
@@ -234,7 +240,7 @@ class BaseService(ABC):
         """Get the name from meta section."""
         self._ensure_validated()
         try:
-            return self.model.meta.name
+            return self.model.meta.name if self.model else None
         except AttributeError:
             return None
 
@@ -247,7 +253,7 @@ class BaseService(ABC):
         """Get a specific label from meta.labels section."""
         self._ensure_validated()
         try:
-            labels = self.model.meta.labels
+            labels = self.model.meta.labels if self.model and self.model.meta else None
             if isinstance(labels, dict):
                 return labels.get(label_key)
             return getattr(labels, label_key, None)
@@ -260,7 +266,7 @@ class BaseService(ABC):
         try:
             # return self.model.meta.labels.version
             # Works for both dict and object
-            labels = self.model.meta.labels
+            labels = self.model.meta.labels if self.model and self.model.meta else None
             if isinstance(labels, dict):
                 return labels.get("version")
             return getattr(labels, "version", None)
@@ -478,6 +484,8 @@ class BaseService(ABC):
         # Handle @repo_name/... cross-repo references
         if str(file_ref).startswith("@"):
             try:
+                if object_path is None:
+                    return str(file_ref)
                 resolved = resolve_path(object_path, file_ref, repo_map=repo_map or {})
                 return str(resolved)
             except ValueError:
@@ -490,6 +498,8 @@ class BaseService(ABC):
             return str(file_path)
 
         # Try relative to object_path
+        if object_path is None:
+            return str(file_ref)
         resolved = resolve_path(object_path, file_ref)
         if resolved.exists():
             return str(resolved)

@@ -25,7 +25,6 @@ Usage:
 
 from typing import Any, List, Optional, Protocol, runtime_checkable
 
-
 __all__ = [
     # Protocol interfaces
     "IVariableStore",

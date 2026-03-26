@@ -26,13 +26,11 @@ Description   : Abstract base class for IaC deployers (step-based provisioner st
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Tuple
 
-if TYPE_CHECKING:
-    from xyz_platform.models.deployment_model import DeploymentStageModel
-    from xyz_platform.services.configuration_service import ConfigurationService
-    from xyz_platform.services.deployment_service import DeploymentService
-
+from xyz_platform.models.deployment_model import DeploymentStageModel
+from xyz_platform.services.configuration_service import ConfigurationService
+from xyz_platform.services.deployment_service import DeploymentService
 
 # Canonical step name constants — use these in get_supported_steps() and callers.
 STEP_SETUP = "setup"

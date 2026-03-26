@@ -13,7 +13,6 @@ How to load the configuration data:
 ===============================================================================
 """
 
-
 from typing import Dict, List, Optional, Any, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -442,3 +441,14 @@ class ConfigurationModel(BaseModel):
     spec: ConfigurationSpecModel = Field(
         ..., description="Specification for the configuration."
     )
+
+    def get_repo_map(self) -> Dict[str, str]:
+        """Return a ``{repo_name: deploy_path}`` mapping for resolving ``@repo_name/...`` references."""
+        repos = self.spec.repositories if self.spec and self.spec.repositories else {}
+        if not repos or len(repos) == 0:
+            return {}
+        return {
+            repo.name: repo.deploy_path
+            for repo in repos
+            if repo.name and repo.deploy_path
+        }

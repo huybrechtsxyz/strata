@@ -34,7 +34,7 @@ class IntegrationController:
         self._messages: List[str] = []
 
     def _ensure_integration_registered(
-        self, name: str, integration_type: str = None
+        self, name: str, integration_type: Optional[str] = None
     ) -> bool:
         """
         Ensure an integration is registered, creating it if necessary.
@@ -60,6 +60,11 @@ class IntegrationController:
                 type=integration_type,
                 required=False,
                 enabled=True,
+                description="",
+                validation=None,
+                authentication=None,
+                endpoints=None,
+                lifecycle=None,
             )
 
             # Create integration instance using factory
@@ -106,7 +111,7 @@ class IntegrationController:
 
     def get_integration_status(
         self, name: str
-    ) -> Tuple[bool, Optional[Dict[str, any]]]:
+    ) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """
         Get status of a specific integration.
 
@@ -249,7 +254,7 @@ class IntegrationController:
             return False
 
     def ensure_integration_available(
-        self, name: str, operation: str = None
+        self, name: str, operation: Optional[str] = None
     ) -> Tuple[bool, str]:
         """
         Ensure an integration is available and meets requirements.
@@ -354,7 +359,9 @@ class IntegrationController:
         )
         return True, []
 
-    def get_integration(self, name: str, operation: str = None) -> Optional[Any]:
+    def get_integration(
+        self, name: str, operation: Optional[str] = None
+    ) -> Optional[Any]:
         """
         Get a validated integration instance.
 

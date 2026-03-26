@@ -33,19 +33,13 @@ import click
 
 from xyz_platform.commands.cli_help import help_command
 from xyz_platform.commands.cli_version import version_command
-from xyz_platform.commands.cli_session import session
-from xyz_platform.commands.cli_tools import tools
-from xyz_platform.commands.cli_builders import build
+from xyz_platform.commands.cli_tools import tools_command
+from xyz_platform.commands.cli_session import session_command
+
+# from xyz_platform.commands.cli_validate import validate
+# from xyz_platform.commands.cli_builders import build
+# from xyz_platform.commands.cli_deploy import deploy
 from xyz_platform.logger.logger import configure_logging, get_logger
-
-from xyz_platform.commands.cli_deploy import deploy
-
-# from xyz_platform.commands.help.topic_help_command import TopicHelpCommand
-# from xyz_platform.commands.cli_config import config
-from xyz_platform.commands.cli_validate import validate
-
-# from xyz_platform.logger import get_logger, configure_logging, shutdown_logging
-# from xyz_platform.utils import system
 
 logger = get_logger(__name__)
 
@@ -85,14 +79,14 @@ def main():
 # Register command groups so they're available when module is imported
 #
 
-main.add_command(help_command)
 main.add_command(version_command)
-main.add_command(session)
-main.add_command(tools)
+main.add_command(help_command)
+main.add_command(tools_command)
+main.add_command(session_command)
 # main.add_command(config)
-main.add_command(validate)
-main.add_command(build)
-main.add_command(deploy)
+# main.add_command(validate)
+# main.add_command(build)
+# main.add_command(deploy)
 
 
 #
@@ -119,7 +113,7 @@ if __name__ == "__main__":
         exit(2)
     except click.ClickException as e:
         # logger.error(f"CLI error: {e}", exc_info=True)
-        click.echo(f"Unexpected Error:", err=True)
+        click.echo(f"Unexpected Error: {e}", err=True)
         e.show()
         exit(e.exit_code)
     except Exception as e:

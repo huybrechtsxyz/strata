@@ -25,6 +25,7 @@ from xyz_platform.logger import get_logger
 from xyz_platform.integrations.capabilities import IContainerTool
 from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.models.integration_model import IntegrationModel
+from xyz_platform.utils.system import CommandResult
 
 logger = get_logger(__name__)
 
@@ -114,7 +115,8 @@ class DockerIntegration(BaseIntegration):
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
             logger.warning(
-                "Docker CLI not found", extra={"integration_name": self.integration_name}
+                "Docker CLI not found",
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -128,14 +130,20 @@ class DockerIntegration(BaseIntegration):
             self._info = version_error
             logger.warning(
                 "Docker version validation failed",
-                extra={"integration_name": self.integration_name, "error": version_error},
+                extra={
+                    "integration_name": self.integration_name,
+                    "error": version_error,
+                },
             )
             return False, version_error
 
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Docker is available",
-            extra={"integration_name": self.integration_name, "version": self.get_version()},
+            extra={
+                "integration_name": self.integration_name,
+                "version": self.get_version(),
+            },
         )
         return True, ""
 
@@ -150,7 +158,7 @@ class DockerIntegration(BaseIntegration):
         no_cache: bool = False,
         timeout: int = 600,
         **kwargs,
-    ) -> Any:
+    ) -> CommandResult:
         """
         Build a Docker image.
 
@@ -211,7 +219,7 @@ class DockerIntegration(BaseIntegration):
             result = self._run_integration(args, timeout=timeout)
 
             if result.returncode != 0:
-                error_msg = f"Docker build failed: {result['stderr']}"
+                error_msg = f"Docker build failed: {result.stderr}"
                 logger.error(
                     "Docker build failed",
                     extra={
@@ -232,7 +240,11 @@ class DockerIntegration(BaseIntegration):
         except Exception as e:
             logger.error(
                 "Failed to build Docker image",
-                extra={"tag": tag, "error": str(e), "integration_name": self.integration_name},
+                extra={
+                    "tag": tag,
+                    "error": str(e),
+                    "integration_name": self.integration_name,
+                },
                 exc_info=True,
             )
             raise
@@ -326,7 +338,7 @@ class DockerIntegration(BaseIntegration):
             result = self._run_integration(args, timeout=timeout)
 
             if result.returncode != 0:
-                error_msg = f"Docker run failed: {result['stderr']}"
+                error_msg = f"Docker run failed: {result.stderr}"
                 logger.error(
                     "Docker run failed",
                     extra={
@@ -347,7 +359,11 @@ class DockerIntegration(BaseIntegration):
         except Exception as e:
             logger.error(
                 "Failed to run Docker container",
-                extra={"image": image, "error": str(e), "integration_name": self.integration_name},
+                extra={
+                    "image": image,
+                    "error": str(e),
+                    "integration_name": self.integration_name,
+                },
                 exc_info=True,
             )
             raise
@@ -393,7 +409,7 @@ class DockerIntegration(BaseIntegration):
             result = self._run_integration(args, timeout=timeout)
 
             if result.returncode != 0:
-                error_msg = f"Docker push failed: {result['stderr']}"
+                error_msg = f"Docker push failed: {result.stderr}"
                 logger.error(
                     "Docker push failed",
                     extra={
@@ -414,7 +430,11 @@ class DockerIntegration(BaseIntegration):
         except Exception as e:
             logger.error(
                 "Failed to push Docker image",
-                extra={"image": image, "error": str(e), "integration_name": self.integration_name},
+                extra={
+                    "image": image,
+                    "error": str(e),
+                    "integration_name": self.integration_name,
+                },
                 exc_info=True,
             )
             raise
@@ -458,7 +478,7 @@ class DockerIntegration(BaseIntegration):
             result = self._run_integration(args, timeout=timeout)
 
             if result.returncode != 0:
-                error_msg = f"Docker pull failed: {result['stderr']}"
+                error_msg = f"Docker pull failed: {result.stderr}"
                 logger.error(
                     "Docker pull failed",
                     extra={
@@ -479,7 +499,11 @@ class DockerIntegration(BaseIntegration):
         except Exception as e:
             logger.error(
                 "Failed to pull Docker image",
-                extra={"image": image, "error": str(e), "integration_name": self.integration_name},
+                extra={
+                    "image": image,
+                    "error": str(e),
+                    "integration_name": self.integration_name,
+                },
                 exc_info=True,
             )
             raise
@@ -521,10 +545,13 @@ class DockerIntegration(BaseIntegration):
             result = self._run_integration(args, timeout=timeout)
 
             if result.returncode != 0:
-                error_msg = f"Docker ps failed: {result['stderr']}"
+                error_msg = f"Docker ps failed: {result.stderr}"
                 logger.error(
                     "Docker ps failed",
-                    extra={"stderr": result.stderr, "integration_name": self.integration_name},
+                    extra={
+                        "stderr": result.stderr,
+                        "integration_name": self.integration_name,
+                    },
                 )
                 raise RuntimeError(error_msg)
 

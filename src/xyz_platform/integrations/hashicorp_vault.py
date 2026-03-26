@@ -26,6 +26,7 @@ from xyz_platform.integrations.capabilities import (
 )
 from xyz_platform.integrations.store_integration import StoreIntegration
 from xyz_platform.models.integration_model import IntegrationModel
+from xyz_platform.utils.system import CommandResult
 
 logger = get_logger(__name__)
 
@@ -98,15 +99,27 @@ class VaultIntegration(StoreIntegration):
             if self.vault_addr and self.vault_addr.endswith("/"):
                 self.vault_addr = self.vault_addr.rstrip("/")
 
-        # Get authentication configuration from environment variables
-        self.vault_token = self._get_env_var("VAULT_TOKEN")
-        self.vault_namespace = self._get_env_var("VAULT_NAMESPACE")
+        # Get authentication configuration from environment variables.
+        # Fields in api_key / oauth2 sub-models are env-var name references.
+        #   method=api_key  → api_key.api_key  = env-var name for VAULT_TOKEN
+        #   method=oauth2   → oauth2.client_id = env-var name for VAULT_ROLE_ID
+        #                     oauth2.client_secret = env-var name for VAULT_SECRET_ID
+        self.vault_token = self._get_env_var(
+            self._get_auth_var_name("api_key", "VAULT_TOKEN")
+        )
+        self.vault_namespace = self._get_env_var(
+            "VAULT_NAMESPACE"
+        )  # no model equivalent
 
         # AppRole authentication
-        self.vault_role_id = self._get_env_var("VAULT_ROLE_ID")
-        self.vault_secret_id = self._get_env_var("VAULT_SECRET_ID")
+        self.vault_role_id = self._get_env_var(
+            self._get_auth_var_name("client_id", "VAULT_ROLE_ID")
+        )
+        self.vault_secret_id = self._get_env_var(
+            self._get_auth_var_name("client_secret", "VAULT_SECRET_ID")
+        )
 
-        # Kubernetes authentication
+        # Kubernetes authentication (no model equivalent; keep defaults)
         self.vault_k8s_role = self._get_env_var("VAULT_K8S_ROLE")
         self.vault_k8s_jwt_path = self._get_env_var(
             "VAULT_K8S_JWT_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -154,7 +167,8 @@ class VaultIntegration(StoreIntegration):
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
             logger.warning(
-                "HashiCorp Vault CLI not found", extra={"integration_name": self.integration_name}
+                "HashiCorp Vault CLI not found",
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -168,7 +182,10 @@ class VaultIntegration(StoreIntegration):
             self._info = version_error
             logger.warning(
                 "HashiCorp Vault version validation failed",
-                extra={"integration_name": self.integration_name, "error": version_error},
+                extra={
+                    "integration_name": self.integration_name,
+                    "error": version_error,
+                },
             )
             return False, version_error
 
@@ -268,6 +285,28 @@ class VaultIntegration(StoreIntegration):
             path=prefix, prefer_cli=prefer_cli, timeout=timeout
         )
 
+    # Auth helpers
+
+    def _get_auth_var_name(self, field: str, default: str) -> str:
+        """
+        Return the env-var name for a Vault credential field.
+
+        - ``method == "api_key"``  and *field* == ``"api_key"``  → ``api_key.api_key``
+          (env-var holding the Vault token, e.g. ``"VAULT_TOKEN"``)
+        - ``method == "oauth2"``   → ``oauth2.<field>``
+          (env-var holding AppRole ``client_id`` / ``client_secret``)
+        Falls back to *default* for backward compatibility and K8s fields
+        that have no model equivalent.
+        """
+        auth = self.config.authentication
+        if auth and auth.method == "api_key" and auth.api_key and field == "api_key":
+            return auth.api_key.api_key or default
+        if auth and auth.method == "oauth2" and auth.oauth2:
+            val = getattr(auth.oauth2, field, None)
+            if val:
+                return val
+        return default
+
     # Authentication methods
 
     def _get_auth_method(self) -> Optional[str]:
@@ -322,7 +361,10 @@ class VaultIntegration(StoreIntegration):
         except Exception as e:
             logger.warning(
                 "AppRole authentication to HashiCorp Vault failed",
-                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
+                extra={
+                    "error_type": type(e).__name__,
+                    "integration_name": self.integration_name,
+                },
             )
             return None
 
@@ -375,7 +417,10 @@ class VaultIntegration(StoreIntegration):
         except Exception as e:
             logger.warning(
                 "Kubernetes authentication to HashiCorp Vault failed",
-                extra={"error_type": type(e).__name__, "integration_name": self.integration_name},
+                extra={
+                    "error_type": type(e).__name__,
+                    "integration_name": self.integration_name,
+                },
             )
             return None
 
@@ -444,7 +489,10 @@ class VaultIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via CLI",
-                    extra={"secret_path": secret_path, "integration_name": self.integration_name},
+                    extra={
+                        "secret_path": secret_path,
+                        "integration_name": self.integration_name,
+                    },
                 )
                 return result
 
@@ -453,7 +501,10 @@ class VaultIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via API",
-                    extra={"secret_path": secret_path, "integration_name": self.integration_name},
+                    extra={
+                        "secret_path": secret_path,
+                        "integration_name": self.integration_name,
+                    },
                 )
             return result
         else:
@@ -462,7 +513,10 @@ class VaultIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via API",
-                    extra={"secret_path": secret_path, "integration_name": self.integration_name},
+                    extra={
+                        "secret_path": secret_path,
+                        "integration_name": self.integration_name,
+                    },
                 )
                 return result
 
@@ -471,7 +525,10 @@ class VaultIntegration(StoreIntegration):
             if result is not None:
                 logger.info(
                     "Secret retrieved from HashiCorp Vault via CLI",
-                    extra={"secret_path": secret_path, "integration_name": self.integration_name},
+                    extra={
+                        "secret_path": secret_path,
+                        "integration_name": self.integration_name,
+                    },
                 )
             return result
 
@@ -669,7 +726,7 @@ class VaultIntegration(StoreIntegration):
         self,
         args: List[str],
         timeout: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> CommandResult:
         """
         Run integration command with Vault environment variables injected.
 
@@ -697,6 +754,8 @@ class VaultIntegration(StoreIntegration):
         os.environ.update(env)
 
         try:
+            if timeout is None:
+                timeout = 60
             result = self._run_integration(args=args, timeout=timeout)
             return result
         finally:

@@ -19,12 +19,13 @@ Note: Uses subprocess-based approach rather than GitPython for:
 """
 
 import re
-from typing import Dict, List, Optional, Any, Tuple
+from typing import List, Optional, Tuple
 
 from xyz_platform.logger import get_logger
 from xyz_platform.integrations.capabilities import IRepositoryTool
 from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.models.integration_model import IntegrationModel
+from xyz_platform.utils.system import CommandResult
 
 logger = get_logger(__name__)
 
@@ -156,7 +157,7 @@ class GitIntegration(BaseIntegration):
         depth: int = 1,
         timeout: int = 300,
         **kwargs,
-    ) -> Any:
+    ) -> CommandResult:
         """
         Clone a git repository.
 
@@ -253,7 +254,7 @@ class GitIntegration(BaseIntegration):
         branch: Optional[str] = None,
         timeout: int = 180,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> CommandResult:
         """
         Pull latest changes from remote repository.
 

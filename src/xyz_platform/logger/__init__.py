@@ -17,7 +17,14 @@ from .logger import (
     get_active_log_file,
     get_active_log_files,
 )
-from .context import LogContext, set_correlation_id, get_correlation_id, set_context, get_context, clear_context
+from .context import (
+    LogContext,
+    set_correlation_id,
+    get_correlation_id,
+    set_context,
+    get_context,
+    clear_context,
+)
 from .decorators import log_performance, trace_operation
 
 __all__ = [

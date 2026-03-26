@@ -154,31 +154,26 @@ def get_root_path() -> Path:
     return package_root
 
 
-# Get temporary directory path
-def get_temp_path(base_path: Optional[str] = None, create: bool = True) -> Path:
-    """
-    Get the temporary directory path for the workspace.
+# Get the path to the data directory
+def get_data_path() -> Path:
+    """Get the path to the data directory within the package."""
+    return get_root_path() / "data"
 
-    Args:
-        base_path: Base workspace path. If None, uses system temp directory.
-        create: Whether to create the directory if it doesn't exist.
 
-    Returns:
-        Path to temporary directory.
-    """
-    import tempfile
+# Get the path to the default configuration file
+def get_default_config_path(data_path: Optional[Path]) -> Path:
+    """Get the path to the default configuration file."""
+    if data_path is not None:
+        return data_path / "configuration.yaml"
+    return get_data_path() / "configuration.yaml"
 
-    if base_path:
-        # Use workspace-specific temp directory
-        temp_path = Path(base_path) / ".xyz-platform"
-    else:
-        # Use system temp directory
-        temp_path = Path(tempfile.gettempdir()) / "xyz-platform"
 
-    if create:
-        temp_path.mkdir(parents=True, exist_ok=True)
-
-    return temp_path
+# Get the path to the default logging configuration file
+def get_default_logging_path(data_path: Optional[Path]) -> Path:
+    """Get the path to the default logging configuration file."""
+    if data_path is not None:
+        return data_path / "logging.yaml"
+    return get_data_path() / "logging.yaml"
 
 
 # Check if text starts with an emoji

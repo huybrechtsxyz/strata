@@ -96,9 +96,13 @@ class ConsulIntegration(StoreIntegration):
             if self.consul_addr.endswith("/"):
                 self.consul_addr = self.consul_addr.rstrip("/")
 
-        # Get authentication configuration from environment variables
-        self.consul_token = self._get_env_var("CONSUL_HTTP_TOKEN")
-        self.consul_namespace = self._get_env_var("CONSUL_NAMESPACE")
+        # Get authentication configuration from environment variables.
+        # When authentication.method == "api_key", api_key.api_key holds
+        # the env-var name for the ACL token.
+        self.consul_token = self._get_env_var(self._get_token_var_name())
+        self.consul_namespace = self._get_env_var(
+            "CONSUL_NAMESPACE"
+        )  # no model equivalent
 
         logger.debug(
             "HashiCorp Consul integration initialized",
@@ -108,6 +112,20 @@ class ConsulIntegration(StoreIntegration):
                 "has_token": bool(self.consul_token),
             },
         )
+
+    # Auth helpers
+
+    def _get_token_var_name(self) -> str:
+        """
+        Return the env-var name for the Consul ACL token.
+
+        When ``authentication.method == "api_key"`` the ``api_key.api_key``
+        field holds the env-var name.  Defaults to ``CONSUL_HTTP_TOKEN``.
+        """
+        auth = self.config.authentication
+        if auth and auth.method == "api_key" and auth.api_key:
+            return auth.api_key.api_key or "CONSUL_HTTP_TOKEN"
+        return "CONSUL_HTTP_TOKEN"
 
     # Base integration methods
 
@@ -142,7 +160,8 @@ class ConsulIntegration(StoreIntegration):
         if not self.is_available():
             self._info = f"{self.integration_name} CLI is not installed or not in PATH."
             logger.warning(
-                "HashiCorp Consul CLI not found", extra={"integration_name": self.integration_name}
+                "HashiCorp Consul CLI not found",
+                extra={"integration_name": self.integration_name},
             )
             return (
                 False,
@@ -156,7 +175,10 @@ class ConsulIntegration(StoreIntegration):
             self._info = version_error
             logger.warning(
                 "HashiCorp Consul version validation failed",
-                extra={"integration_name": self.integration_name, "error": version_error},
+                extra={
+                    "integration_name": self.integration_name,
+                    "error": version_error,
+                },
             )
             return False, version_error
 
@@ -265,7 +287,11 @@ class ConsulIntegration(StoreIntegration):
 
         logger.debug(
             "Retrieving key from HashiCorp Consul",
-            extra={"key": key, "prefer_cli": prefer_cli, "integration_name": self.integration_name},
+            extra={
+                "key": key,
+                "prefer_cli": prefer_cli,
+                "integration_name": self.integration_name,
+            },
         )
 
         if prefer_cli:

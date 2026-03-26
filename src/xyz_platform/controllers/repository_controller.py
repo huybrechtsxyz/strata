@@ -13,9 +13,10 @@ Description   : Controller for managing configuration repositories.
 
 import shutil
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 from xyz_platform.integrations.factory import IntegrationFactory
+from xyz_platform.integrations.git import GitIntegration
 from xyz_platform.logger.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
 from xyz_platform.models.repository_model import RepositoryModel, RepositoryType
@@ -353,7 +354,15 @@ class RepositoryController:
         repo_name = source.name or source.repository
 
         try:
-            config = IntegrationModel(name="git", type="git")
+            config = IntegrationModel(
+                name="git",
+                type="git",
+                description="Git integration for repository operations",
+                validation=None,
+                authentication=None,
+                endpoints=None,
+                lifecycle=None,
+            )
             git_classes = IntegrationFactory.get_registered_types()
             git_class = git_classes.get("git")
             if not git_class:
@@ -362,7 +371,7 @@ class RepositoryController:
                 self._errors.append(error_msg)
                 return False
 
-            git = git_class(config=config)
+            git = cast(GitIntegration, git_class(config=config))
 
             available, error = git.ensure_available()
             if not available:

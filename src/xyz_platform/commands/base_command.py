@@ -19,10 +19,13 @@ from typing import Any, Dict, List, Optional
 
 import click
 
+from xyz_platform.controllers.integration_controller import IntegrationController
+from xyz_platform.controllers.lifecycle_controller import LifecycleController
 from xyz_platform.controllers.session_controller import SessionController
 from xyz_platform.controllers.workspace_controller import WorkspaceController
 from xyz_platform.logger.logger import get_logger, reconfigure_logging
 from xyz_platform.logger.context import set_context
+from xyz_platform.services.base_service import BaseService
 from xyz_platform.utils import system
 from xyz_platform.utils.system import generate_uuid
 
@@ -32,16 +35,21 @@ class BaseCommand:
 
     _active_logging_config_path: Optional[str] = None
 
+    OPERATION = "base_command"  # Default operation name, subclasses should override this with specific operation names (e.g., 'validate_module', 'deploy_workspace', etc.)
+
     # Initialization parameters common to all commands
 
     def __init__(
         self,
-        file_path: str = None,
-        work_path: str = None,
+        file_path: Optional[str] = None,
+        work_path: Optional[str] = None,
+        data_path: Optional[str] = None,
+        env_path: Optional[str] = None,
+        env_file: Optional[str] = None,
         no_hooks: bool = False,
-        output: str = None,
-        verbose: bool = None,
-        quiet: bool = None,
+        output: Optional[str] = None,
+        verbose: bool = False,
+        quiet: bool = False,
     ):
         """Initialize the base command."""
 
@@ -55,6 +63,9 @@ class BaseCommand:
         # Standard paths
         self._file_path = file_path
         self._work_path = Path(work_path) if work_path else Path.cwd()
+        self._data_path = Path(data_path) if data_path else system.get_data_path()
+        self._env_path = Path(env_path) if env_path else None
+        self._env_file = Path(env_file) if env_file else None
         self._build_path = None
         self._object_path = None
         self._dist_path = None
@@ -76,14 +87,16 @@ class BaseCommand:
         self._output_quiet = quiet or False
 
         # Correlation IDs — set during _initialize()
-        self.session_id: Optional[str] = None
-        self.execution_id: Optional[str] = None
+        self._session_id: str
+        self._execution_id: str
 
         # Session controller — one instance per command run
         self._session_controller = SessionController()
 
         # Integration controller (lazy-loaded)
-        self._integration_controller: Optional[object] = None
+        self._integration_controller: Optional[IntegrationController] = None
+        # Lifecycle controller (lazy-loaded)
+        self._lifecycle_controller: Optional[LifecycleController] = None
 
     # Abstract method to be implemented by subclasses
 
@@ -133,6 +146,7 @@ class BaseCommand:
 
     # Integration requirements declaration — subclasses override this to declare what external tools they need
 
+    @abstractmethod
     def get_required_integrations(self) -> Dict[str, str]:
         """
         Declare required integrations for this command.
@@ -150,7 +164,7 @@ class BaseCommand:
 
     # Console output methods
 
-    def ShowConsoleHeader(self, work_path: str = None):
+    def ShowConsoleHeader(self, work_path: Optional[str] = None) -> None:
         click.echo("=" * 80)
         click.echo(f"🚀 XYZ PLATFORM — CLI (v{system.get_cli_version()})")
         click.echo("=" * 80)
@@ -163,7 +177,7 @@ class BaseCommand:
         if work_path:
             click.echo(f"📁  Work path       : {self._work_path}")
 
-    def ShowConsoleFooter(self):
+    def ShowConsoleFooter(self) -> None:
         click.echo("=" * 80)
         click.echo("✨ Thank you for using XYZ Platform CLI!")
         click.echo("📘 Documentation: https://docs.xyzplatform.com")
@@ -172,7 +186,9 @@ class BaseCommand:
 
     # Lifecycle methods
 
-    def _initialize(self, operation: str = None, show_header: bool = True) -> bool:
+    def _initialize(
+        self, require_session: bool = False, show_header: bool = True
+    ) -> bool:
         """
         Initialize the command before execution.
         Sets up paths, timing, and logging context.
@@ -182,11 +198,15 @@ class BaseCommand:
         """
         try:
             self._configure_session_logging()
-
             self._start_time = datetime.now()
 
             # Load session.json into memory once for this command run
-            self._session_controller.load_session(self._work_path)
+            if not self._session_controller.load_session(self._work_path):
+                if require_session:
+                    error_msg = "No session found. Please run 'xyz session init' first."
+                    self.logger.error(error_msg)
+                    self._errors.append(error_msg)
+                    return False
 
             # Set up work path (default to current directory)
             workspace_controller = WorkspaceController()
@@ -200,29 +220,39 @@ class BaseCommand:
                 return False
 
             # Assign correlation IDs (UUID v7 — time-ordered)
-            self.session_id = (
+            self._session_id = (
                 self._session_controller.get_session_id() or generate_uuid()
             )
-            self.execution_id = generate_uuid()
+            self._execution_id = generate_uuid()
             set_context(
-                {"session_id": self.session_id, "execution_id": self.execution_id}
+                {"session_id": self._session_id, "execution_id": self._execution_id}
             )
 
             # Start session operation if specified
-            if operation:
-                self._start_session_operation(operation=operation)
-
+            self._start_session_operation()
             self.logger.debug(
                 "Initializing command",
                 extra={
                     "command_class": self.__class__.__name__,
-                    "session_id": self.session_id,
-                    "execution_id": self.execution_id,
+                    "session_id": self._session_id,
+                    "execution_id": self._execution_id,
                 },
             )
 
             if show_header and self._is_console_output():
                 self.ShowConsoleHeader()
+
+            success, errors = workspace_controller.load_environment_variables(
+                self._work_path, env_path=self._env_path, env_file=self._env_file
+            )
+            if not success:
+                if errors:
+                    self._errors.extend(errors)
+                return False
+            self.logger.debug(
+                "Environment variables loaded",
+                extra={"command_class": self.__class__.__name__},
+            )
 
             self.logger.debug(
                 "Command initialized successfully",
@@ -236,7 +266,7 @@ class BaseCommand:
             self._errors.append(error_msg)
             return False
 
-    def _before_execute(self, message: str = None) -> bool:
+    def _before_execute(self) -> bool:
         """
         Execute pre-command logic (hooks, validation, etc.).
 
@@ -278,7 +308,9 @@ class BaseCommand:
         return True
 
     def _finalize(
-        self, operation: str = None, success: bool = None, show_footer: bool = True
+        self,
+        success: bool = False,
+        show_footer: bool = True,
     ) -> bool:
         """
         Finalize the command execution (logging, metrics, cleanup).
@@ -291,7 +323,7 @@ class BaseCommand:
             # ── Structured output (--output json / text) ─────────────────────
             envelope = {
                 "success": bool(success),
-                "command": operation or "",
+                "command": self.OPERATION,
                 "data": self._output_data,
                 "messages": self._messages,
                 "errors": self._errors,
@@ -332,7 +364,7 @@ class BaseCommand:
             if self._is_verbose():
                 click.echo("🔍  Verbose logs enabled (see console output for details)")
                 success, log_entries, errors = self._session_controller.get_logs(
-                    work_path=self._work_path, execution_id=self.execution_id
+                    work_path=self._work_path, execution_id=self._execution_id
                 )
 
                 if success and log_entries:
@@ -371,9 +403,7 @@ class BaseCommand:
             )
 
         # Complete the named operation in session state
-        if operation:
-            self._complete_session_operation(operation=operation, success=bool(success))
-
+        self._complete_session_operation(success=success)
         return True
 
     # Output and logging
@@ -433,7 +463,7 @@ class BaseCommand:
 
     # Integration resolution and validation
 
-    def _get_integration_controller(self):
+    def _get_integration_controller(self) -> IntegrationController:
         """
         Get or create the IntegrationController instance (lazy-loaded).
 
@@ -441,13 +471,19 @@ class BaseCommand:
             IntegrationController: The controller instance
         """
         if self._integration_controller is None:
-            # Import here to avoid circular dependencies
-            from xyz_platform.controllers.integration_controller import (
-                IntegrationController,
-            )
-
             self._integration_controller = IntegrationController()
         return self._integration_controller
+
+    def _get_lifecycle_controller(self) -> LifecycleController:
+        """
+        Get or create the LifecycleController instance (lazy-loaded).
+
+        Returns:
+            LifecycleController: The controller instance
+        """
+        if self._lifecycle_controller is None:
+            self._lifecycle_controller = LifecycleController(enable_templating=True)
+        return self._lifecycle_controller
 
     def _validate_requirements(self) -> bool:
         """
@@ -510,7 +546,7 @@ class BaseCommand:
 
     # Session operation helpers
 
-    def _start_session_operation(self, operation: str) -> None:
+    def _start_session_operation(self) -> None:
         """
         Mark the start of a named operation in the session state.
 
@@ -522,22 +558,21 @@ class BaseCommand:
             operation: Name of the operation (e.g., 'tools_status', 'session_init')
         """
         try:
-            self._session_controller.update_last_execution(self.execution_id)
+
+            self._session_controller.update_last_execution(self._execution_id)
             self._session_controller.save_session()
             self.logger.debug(
-                f"Started session operation: {operation}",
-                extra={"operation": operation, "execution_id": self.execution_id},
+                f"Started session operation: {self.OPERATION}",
+                extra={"operation": self.OPERATION, "execution_id": self._execution_id},
             )
         except Exception as e:
             # Session tracking must never block command execution
             self.logger.warning(
-                f"Failed to start session operation '{operation}': {e}",
-                extra={"operation": operation},
+                f"Failed to start session operation '{self.OPERATION}': {e}",
+                extra={"operation": self.OPERATION},
             )
 
-    def _complete_session_operation(
-        self, operation: str, success: bool, flush: bool = True
-    ) -> None:
+    def _complete_session_operation(self, success: bool, flush: bool = True) -> None:
         """
         Mark the completion of a named operation in the session state.
 
@@ -553,13 +588,13 @@ class BaseCommand:
             if flush:
                 self._session_controller.save_session()
             self.logger.debug(
-                f"Completed session operation: {operation}",
-                extra={"operation": operation, "success": success},
+                f"Completed session operation: {self.OPERATION}",
+                extra={"operation": self.OPERATION, "success": success},
             )
         except Exception as e:
             self.logger.warning(
-                f"Failed to complete session operation '{operation}': {e}",
-                extra={"operation": operation},
+                f"Failed to complete session operation '{self.OPERATION}': {e}",
+                extra={"operation": self.OPERATION},
             )
 
     def _resolve_required_integrations(self) -> Dict[str, Any]:
@@ -588,3 +623,101 @@ class BaseCommand:
             raise RuntimeError("Failed to resolve required integrations")
 
         return integrations
+
+    # Lifecycle hooks and validation
+
+    def _execute_config_hooks(
+        self,
+        phase_name: str,
+        context: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Any] = None,
+    ) -> bool:
+        """
+        Execute a list of lifecycle hooks (scripts/commands).
+
+        Args:
+
+        Returns:
+            bool: True if all hooks executed successfully, False otherwise (errors stored in self._errors)
+        """
+        if self._no_hooks:
+            self.logger.debug(
+                "Skipping configuration lifecycle hooks execution (--no-hooks)"
+            )
+            return True
+
+        self.logger.debug(
+            f"Executing configuration lifecycle hooks for phase: {phase_name}",
+            extra={"phase": phase_name},
+        )
+
+        lifecycle_controller = self._get_lifecycle_controller()
+        success, errors = lifecycle_controller.execute_configuration_phase(
+            phase_name=phase_name,
+            work_path=self._work_path,
+            context=context,
+            progress_callback=progress_callback,
+        )
+
+        if not success and errors:
+            self._errors.extend(errors)
+            self.logger.error(
+                f"Configuration lifecycle hooks execution failed for phase: {phase_name}",
+                extra={"phase": phase_name, "errors": errors},
+            )
+        elif success:
+            self.logger.debug(
+                f"Configuration lifecycle hooks executed successfully for phase: {phase_name}",
+                extra={"phase": phase_name},
+            )
+        return success
+
+    def _execute_workspace_hooks(
+        self,
+        base_service: BaseService,
+        phase_name: str,
+        context: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Any] = None,
+        add_config_model: bool = False,
+    ) -> bool:
+        """
+        Execute a list of lifecycle hooks (scripts/commands).
+
+        Args:
+
+        Returns:
+            bool: True if all hooks executed successfully, False otherwise (errors stored in self._errors)
+        """
+        if self._no_hooks:
+            self.logger.debug(
+                "Skipping workspace lifecycle hooks execution (--no-hooks)"
+            )
+            return True
+
+        self.logger.debug(
+            f"Executing workspace lifecycle hooks for phase: {phase_name}",
+            extra={"phase": phase_name},
+        )
+
+        lifecycle_controller = self._get_lifecycle_controller()
+        success, errors = lifecycle_controller.execute_workspace_phase(
+            base_service=base_service,
+            phase_name=phase_name,
+            work_path=self._work_path,
+            context=context,
+            progress_callback=progress_callback,
+            add_config_model=add_config_model,
+        )
+
+        if not success and errors:
+            self._errors.extend(errors)
+            self.logger.error(
+                f"Workspace lifecycle hooks execution failed for phase: {phase_name}",
+                extra={"phase": phase_name, "errors": errors},
+            )
+        elif success:
+            self.logger.debug(
+                f"Workspace lifecycle hooks executed successfully for phase: {phase_name}",
+                extra={"phase": phase_name},
+            )
+        return success

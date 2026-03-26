@@ -13,10 +13,10 @@ from typing import Optional
 
 import click
 
-from xyz_platform.commands.session.base_session_command import BaseSessionCommand
+from xyz_platform.commands.base_command import BaseCommand
 
 
-class CleanSessionCommand(BaseSessionCommand):
+class CleanSessionCommand(BaseCommand):
     """
     Clean workspace artifacts without modifying session state.
 
@@ -24,21 +24,21 @@ class CleanSessionCommand(BaseSessionCommand):
     Session state (session.json, repositories) is untouched.
     """
 
+    OPERATION = "session_clean"
+
     def __init__(
         self,
         work_path: Optional[str] = None,
-        logs: bool = True,
         dry_run: bool = False,
         output: Optional[str] = None,
-        verbose: Optional[bool] = None,
-        quiet: Optional[bool] = None,
+        verbose: bool = False,
+        quiet: bool = False,
     ):
         """
         Initialize the clean command.
 
         Args:
             work_path: Root working directory
-            logs: If True (default), delete files in the logs/ folder
             dry_run: If True, report what would be deleted without removing anything
             output: Output format (json, text)
             verbose: Enable verbose output
@@ -50,7 +50,6 @@ class CleanSessionCommand(BaseSessionCommand):
             verbose=verbose,
             quiet=quiet,
         )
-        self._clean_logs = logs
         self._dry_run = dry_run
         self._clean_stats: dict = {}
 
@@ -62,11 +61,11 @@ class CleanSessionCommand(BaseSessionCommand):
             bool: Success status (errors stored in self._errors)
         """
         try:
-            if not self._initialize(operation="session_clean"):
+            if not self._initialize():
                 self.logger.error(f"Initialization failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Initialization failed")
-                self._finalize(operation="session_clean", success=False)
+                self._finalize(success=False)
                 return False
 
             if not self._before_execute():
@@ -75,12 +74,11 @@ class CleanSessionCommand(BaseSessionCommand):
                 )
                 if self._is_console_output():
                     click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(operation="session_clean", success=False)
+                self._finalize(success=False)
                 return False
 
             success, self._clean_stats = self._session_controller.clean_session(
                 work_path=self._work_path,
-                logs=self._clean_logs,
                 dry_run=self._dry_run,
             )
 
@@ -91,7 +89,7 @@ class CleanSessionCommand(BaseSessionCommand):
                 self.logger.error(f"Clean failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Clean failed")
-                self._finalize(operation="session_clean", success=False)
+                self._finalize(success=False)
                 return False
 
             if not self._after_execute():
@@ -100,10 +98,10 @@ class CleanSessionCommand(BaseSessionCommand):
                 )
                 if self._is_console_output():
                     click.echo("\n❌  Post-execution hook failed")
-                self._finalize(operation="session_clean", success=False)
+                self._finalize(success=False)
                 return False
 
-            if not self._finalize(operation="session_clean", success=True):
+            if not self._finalize(success=True):
                 self.logger.error(f"Finalization failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Finalization failed")
@@ -115,8 +113,28 @@ class CleanSessionCommand(BaseSessionCommand):
             error_msg = f"Failed to clean session: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
-            self._finalize(operation="session_clean", success=False)
+            self._finalize(success=False)
             return False
+
+    def _initialize(
+        self, require_session: bool = True, show_header: bool = True
+    ) -> bool:
+        if not super()._initialize(require_session, show_header):
+            return False
+        self.logger.debug(
+            "CleanSessionCommand initialized",
+            extra={"command_class": self.__class__.__name__},
+        )
+        return True
+
+    def _before_execute(self) -> bool:
+        if not super()._before_execute():
+            return False
+        self.logger.debug(
+            "CleanSessionCommand pre-execution checks passed",
+            extra={"command_class": self.__class__.__name__},
+        )
+        return True
 
     def _after_execute(self) -> bool:
         """Populate output data and render console feedback."""
@@ -132,13 +150,19 @@ class CleanSessionCommand(BaseSessionCommand):
                     else "🧹  Session cleaned:"
                 )
                 click.echo(f"\n{label}")
-                if self._clean_logs:
-                    deleted = self._clean_stats.get("logs_deleted", 0)
-                    folder = self._clean_stats.get("logs_folder", "")
-                    action = "would delete" if self._dry_run else "deleted"
-                    click.echo(f"    • Logs:   {deleted} file(s) {action}")
-                    if folder:
-                        click.echo(f"    • Folder: {folder}")
+                deleted = self._clean_stats.get("logs_deleted", 0)
+                folder = self._clean_stats.get("logs_folder", "")
+                action = "would delete" if self._dry_run else "deleted"
+                click.echo(f"    • Logs:   {deleted} file(s) {action}")
+                if folder:
+                    click.echo(f"    • Folder: {folder}")
                 click.echo("")
 
         return super()._after_execute()
+
+    def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
+        self.logger.debug(
+            "Finalizing CleanSessionCommand",
+            extra={"command_class": self.__class__.__name__, "success": success},
+        )
+        return super()._finalize(success, show_footer)

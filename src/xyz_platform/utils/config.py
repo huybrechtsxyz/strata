@@ -25,3 +25,6 @@ DEFAULT_DIST_PATH = "build/dist"
 # Workspace state management
 DEFAULT_STATE_DIR = ".xyz-platform"  # Hidden state directory in workspace
 DEFAULT_STATE_FILE = "state.json"  # State file name
+
+# List of valid script file extensions
+SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1"}

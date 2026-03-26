@@ -69,9 +69,12 @@ class TerraformBuilder(BaseBuilder):
             if platform_model is not None:
                 # Caller supplied the model directly (e.g. during dry-run)
                 if self.verbose:
-                    messages.append(
-                        f"Using pre-assembled platform model: {platform_model.meta.name}"
+                    model_name = (
+                        platform_model.meta.name
+                        if platform_model and getattr(platform_model, "meta", None)
+                        else "<unknown>"
                     )
+                    messages.append(f"Using pre-assembled platform model: {model_name}")
             else:
                 platform_path = deployment_build_path / "platform.json"
 
@@ -89,10 +92,20 @@ class TerraformBuilder(BaseBuilder):
                     return False, messages
 
                 platform_model = platform_service.model
-                if self.verbose:
+                if (
+                    self.verbose
+                    and platform_model
+                    and getattr(platform_model, "meta", None)
+                ):
                     messages.append(
                         f"Loaded platform model: {platform_model.meta.name}"
                     )
+
+            if platform_model is None:
+                error_msg = "Platform model is None after loading"
+                self.logger.error(error_msg)
+                messages.append(error_msg)
+                return False, messages
 
             terraform_vars = self._build_terraform_vars(
                 platform_model, deployment_service, messages

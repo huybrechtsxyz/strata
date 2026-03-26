@@ -19,7 +19,7 @@ from xyz_platform.services.base_service import BaseService
 class UnknownService(BaseService):
     """Service class for unknown or unsupported kinds."""
 
-    def __init__(self, path: str = None, data: dict = None):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the UnknownService."""
         super().__init__(path=path, data=data)
         self.model: Optional[UnknownModel] = None

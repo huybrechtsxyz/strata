@@ -18,7 +18,7 @@ from xyz_platform.services.base_service import BaseService
 from xyz_platform.utils.configuration_loader import ConfigurationLoader
 from xyz_platform.utils import config
 from xyz_platform.utils.system import resolve_path
-
+from xyz_platform.logger import get_logger
 
 class ConfigurationService(BaseService):
     """Service for handling configuration configurations (Centralized Singleton pattern)."""
@@ -53,10 +53,13 @@ class ConfigurationService(BaseService):
         self.model: Optional[ConfigurationModel] = None
         self._validated = False
         self._validation_errors = []
+        
         # Initialize logger
-        from xyz_platform.logger import get_logger
-
         self.logger = get_logger(self.__class__.__module__)
+        # In-memory environment variables map (key -> value as string)
+        self._env_vars: Dict[str, str] = {}
+        # Lock for env var access
+        self._env_lock = threading.RLock()
         self._initialized = True
 
     @classmethod
@@ -184,9 +187,7 @@ class ConfigurationService(BaseService):
 
     # Loading methods
 
-    def add_configurations(
-        self, config_files: List[str | Path]
-    ) -> Tuple[bool, List[str]]:
+    def add_configurations(self, config_files: List[Path]) -> Tuple[bool, List[str]]:
         """
         Add multiple configuration files to the service.
         Merges all files with existing configuration and replaces the model.
@@ -233,7 +234,7 @@ class ConfigurationService(BaseService):
             )
             return False, [error_msg]
 
-    def add_configuration(self, config_file: str) -> Tuple[bool, List[str]]:
+    def add_configuration(self, config_file: Path) -> Tuple[bool, List[str]]:
         """
         Add a single configuration file to the service.
         Merges with existing configuration and replaces the model.
@@ -368,6 +369,47 @@ class ConfigurationService(BaseService):
             if repo.name and repo.deploy_path
         }
 
+    # Environment variable APIs
+
+    def add_environment_variables(self, env_vars: Dict[str, Any], overwrite: bool = False) -> None:
+        """
+        Add environment variables to the in-memory map.
+
+        Args:
+            env_vars: Mapping of environment variable names to values.
+            overwrite: If True, incoming values overwrite existing keys. If False,
+                existing keys are preserved and new keys are added.
+
+        Returns:
+            None
+        """
+        if not env_vars:
+            return
+
+        with self._env_lock:
+            for k, v in env_vars.items():
+                if v is None:
+                    # skip None values
+                    continue
+                sval = str(v)
+                if overwrite or k not in self._env_vars:
+                    self._env_vars[k] = sval
+                    self.logger.debug("Set env var", extra={"key": k, "value": sval})
+                else:
+                    self.logger.debug(
+                        "Skipped env var (exists and overwrite=False)", extra={"key": k}
+                    )
+
+    def get_environment_variables(self) -> Dict[str, str]:
+        """Return a shallow copy of the in-memory environment variables."""
+        with self._env_lock:
+            return dict(self._env_vars)
+
+    def get_environment_variable(self, varname: str) -> Optional[str]:
+        """Return a single environment variable value or None if not set."""
+        with self._env_lock:
+            return self._env_vars.get(varname)
+
     # Get configuration defaults
 
     def get_configuration_defaults(self) -> Optional[Dict[str, Any]]:
@@ -379,9 +421,7 @@ class ConfigurationService(BaseService):
             else None
         )
 
-    def get_default_build_path(
-        self, work_path: str, create_path: bool
-    ) -> Optional[Path]:
+    def get_default_build_path(self, work_path: Path, create_path: bool) -> Path:
         """Get the default build path from configuration defaults."""
         build_path: Optional[str] = None
         # Try to get from configuration if validated, otherwise use defaults
@@ -401,15 +441,13 @@ class ConfigurationService(BaseService):
                 build_path = "build/app"
 
         # Resolve full path (resolve_path handles absolute vs relative)
-        target_path = resolve_path(work_path, build_path)
+        target_path = resolve_path(str(work_path), build_path)
         if create_path and not target_path.exists():
             target_path.mkdir(parents=True, exist_ok=True)
 
         return target_path
 
-    def get_default_dist_path(
-        self, work_path: str, create_path: bool
-    ) -> Optional[Path]:
+    def get_default_dist_path(self, work_path: Path, create_path: bool) -> Path:
         """Get the default dist path from configuration defaults."""
         dist_path: Optional[str] = None
         # Try to get from configuration if validated, otherwise use defaults
@@ -435,9 +473,7 @@ class ConfigurationService(BaseService):
 
         return target_path
 
-    def get_default_object_path(
-        self, work_path: str, create_path: bool
-    ) -> Optional[Path]:
+    def get_default_object_path(self, work_path: Path, create_path: bool) -> Path:
         """Get the default config path from configuration defaults."""
         cfg_path: Optional[str] = None
         # Try to get from configuration if validated, otherwise use defaults
@@ -462,6 +498,86 @@ class ConfigurationService(BaseService):
             target_path.mkdir(parents=True, exist_ok=True)
 
         return target_path
+
+    def get_default_state_path(self, work_path: Path, create_path: bool) -> Path:
+        """Get the default state path from configuration defaults."""
+
+        state_dir: Optional[str] = None
+        # Try to get from configuration if validated, otherwise use defaults
+        if self.is_validated():
+            defaults = self.get_configuration_defaults()
+            if defaults and "default_state_dir" in defaults:
+                state_dir = defaults["default_state_dir"]
+
+        # Fall back to config constants or hardcoded defaults
+        if not state_dir:
+            if (
+                config.DEFAULT_STATE_DIR is not None
+                and len(config.DEFAULT_STATE_DIR) > 0
+            ):
+                state_dir = config.DEFAULT_STATE_DIR
+            else:
+                state_dir = ".xyz-platform"
+
+        # Resolve full path (resolve_path handles absolute vs relative)
+        target_path = resolve_path(str(work_path), state_dir)
+        if create_path and not target_path.exists():
+            target_path.mkdir(parents=True, exist_ok=True)
+
+        return target_path
+
+    def get_default_state_file(self, state_path: Path, create_path: bool) -> Path:
+        """Get the default state file path from configuration defaults."""
+        state_file: Optional[str] = None
+        # Try to get from configuration if validated, otherwise use defaults
+        if self.is_validated():
+            defaults = self.get_configuration_defaults()
+            if defaults and "default_state_file" in defaults:
+                state_file = defaults["default_state_file"]
+
+        # Fall back to config constants or hardcoded defaults
+        if not state_file:
+            if (
+                config.DEFAULT_STATE_FILE is not None
+                and len(config.DEFAULT_STATE_FILE) > 0
+            ):
+                state_file = config.DEFAULT_STATE_FILE
+            else:
+                state_file = "state.json"
+
+        # Resolve full path (resolve_path handles absolute vs relative)
+        target_path = resolve_path(str(state_path), state_file)
+        if create_path and not target_path.parent.exists():
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        return target_path
+
+    def get_temp_path(self, work_path: Path, create_path: bool) -> Path:
+        """Get a temporary path for intermediate files."""
+        import tempfile
+
+        temp_dir: Optional[Path] = None
+
+        if work_path:
+            temp_dir = work_path
+        else:
+            temp_dir = Path(tempfile.gettempdir())
+
+        temp_dir = self.get_default_state_path(work_path=work_path, create_path=False)
+
+        if create_path and temp_dir and not temp_dir.exists():
+            temp_dir.mkdir(parents=True, exist_ok=True)
+
+        if temp_dir is None or not temp_dir.exists():
+            raise FileNotFoundError(f"Failed to create temp directory at {temp_dir}")
+
+        return temp_dir
+
+    def get_temp_configuration_path(self, work_path: Path, create_path: bool) -> Path:
+        """Get a temporary path for merged configuration files."""
+        temp_path = self.get_temp_path(work_path, create_path)
+        config_temp_path = temp_path / "configuration.yaml"
+        return config_temp_path
 
     def get_logging_configuration(self, work_path: Path) -> Optional[str]:
         """
