@@ -53,6 +53,15 @@ class CleanSessionCommand(BaseCommand):
         self._dry_run = dry_run
         self._clean_stats: dict = {}
 
+    def get_required_integrations(self):
+        """
+        Declare required integrations for this command.
+
+        Returns:
+            Dict[str, str]: Required integrations with operation descriptions
+        """
+        return {}
+
     def execute(self) -> bool:
         """
         Execute the clean command.

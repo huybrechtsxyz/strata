@@ -13,6 +13,8 @@ from typing import Optional
 import click
 
 from xyz_platform.commands.cli_common import (
+    click_env_file,
+    click_env_path,
     click_work_path,
     click_output_format,
     click_output_verbose,
@@ -33,6 +35,9 @@ from xyz_platform.commands.session.remove_source_session_command import (
 )
 from xyz_platform.commands.session.list_source_session_command import (
     ListSourceSessionCommand,
+)
+from xyz_platform.commands.session.add_dotenv_session_command import (
+    AddDotEnvSessionCommand,
 )
 
 # from xyz_platform.commands.session.show_session_command import ShowSessionCommand
@@ -287,14 +292,40 @@ def session_dotenv_command():
     pass
 
 
-# TODO
 @session_dotenv_command.command(
     name="add",
     help="Add an environment variable source (.env file) to the current session workspace.",
 )
-def session_dotenv_add_command():
+@click.option(
+    "--name",
+    required=True,
+    type=str,
+    help="Name of the item (used as identifier for dotenv sources)",
+)
+@click_env_file
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_dotenv_add_command(
+    name: str,
+    env_file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+):
     """Add a session environment variable source (.env file)."""
-    pass
+    command = AddDotEnvSessionCommand(
+        name=name,
+        env_file=env_file,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
 
 
 # TODO

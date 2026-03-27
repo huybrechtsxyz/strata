@@ -62,6 +62,15 @@ class InitSessionCommand(BaseCommand):
         self._editor = editor
         self._created_paths = {}
 
+    def get_required_integrations(self):
+        """
+        Declare required integrations for this command.
+
+        Returns:
+            Dict[str, str]: Required integrations with operation descriptions
+        """
+        return {}
+
     def execute(self) -> bool:
         """
         Execute the session init command - create workspace structure.

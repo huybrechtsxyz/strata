@@ -47,6 +47,15 @@ class ListSourceSessionCommand(BaseCommand):
         )
         self._repositories: list = []
 
+    def get_required_integrations(self):
+        """
+        Declare required integrations for this command.
+
+        Returns:
+            Dict[str, str]: Required integrations with operation descriptions
+        """
+        return {}
+
     def execute(self) -> bool:
         """
         Execute the list command.
