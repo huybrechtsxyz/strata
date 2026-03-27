@@ -106,8 +106,8 @@ class AddSourceSessionCommand(BaseCommand):
             )
 
             # Copy controller errors/messages to command
-            self._errors.extend(self._session_controller.get_errors())
             self._messages.extend(self._session_controller.get_messages())
+            self._errors.extend(self._session_controller.get_errors())
 
             if not success:
                 self.logger.error(f"Item add failed in {self.__class__.__name__}")
@@ -177,7 +177,7 @@ class AddSourceSessionCommand(BaseCommand):
             return False
 
         self.logger.debug(
-            "Add command initialized",
+            "Add session source command initializing",
             extra={
                 "command_class": self.__class__.__name__,
                 "repo_name": self._repo_name,
@@ -200,8 +200,11 @@ class AddSourceSessionCommand(BaseCommand):
             return False
 
         self.logger.debug(
-            "Add pre-execution validation passed",
-            extra={"command_class": self.__class__.__name__},
+            "Add session source pre-execution validating",
+            extra={
+                "command_class": self.__class__.__name__,
+                "repo_name": self._repo_name,
+            },
         )
 
         return True
@@ -214,8 +217,11 @@ class AddSourceSessionCommand(BaseCommand):
             bool: Success status (errors stored in self._errors)
         """
         self.logger.debug(
-            "Add post-execution",
-            extra={"command_class": self.__class__.__name__},
+            "Add session source command post-executing",
+            extra={
+                "command_class": self.__class__.__name__,
+                "repo_name": self._repo_name,
+            },
         )
 
         if not self._is_quiet() and self._added_repo:
@@ -248,8 +254,11 @@ class AddSourceSessionCommand(BaseCommand):
             bool: Success status (errors stored in self._errors)
         """
         self.logger.debug(
-            "Add command finalized",
-            extra={"command_class": self.__class__.__name__},
+            "Add session source command finalizing",
+            extra={
+                "command_class": self.__class__.__name__,
+                "repo_name": self._repo_name,
+            },
         )
 
         # Call parent last

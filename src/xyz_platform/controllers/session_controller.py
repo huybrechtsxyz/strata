@@ -1133,12 +1133,6 @@ class SessionController:
                         )
                 return True, dict(repo_metadata)
 
-            # Remove from in-memory list
-            self._session_data["repositories"] = [
-                r for r in repositories if r["name"] != name
-            ]
-            self._messages.append(f"Removed repository '{name}' from session")
-
             # Optionally delete the folder
             if delete_folder:
                 repo_path = work_path / name
@@ -1150,6 +1144,12 @@ class SessionController:
                     self._messages.append(
                         f"Folder not found on disk (skipped): {repo_path}"
                     )
+
+            # Remove from in-memory list
+            self._session_data["repositories"] = [
+                r for r in repositories if r["name"] != name
+            ]
+            self._messages.append(f"Removing repository '{name}' from session")
 
             return True, repo_metadata
 

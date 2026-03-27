@@ -144,7 +144,7 @@ class HelpCommand(BaseCommand):
             return False
 
         self.logger.debug(
-            "Topic help command initialized",
+            "Topic help command initializing",
             extra={
                 "command_class": self.__class__.__name__,
                 "topic": self._topic_name,
@@ -165,6 +165,14 @@ class HelpCommand(BaseCommand):
         if not super()._before_execute():
             return False
 
+        self.logger.debug(
+            "Topic help command pre-execution validation",
+            extra={
+                "command_class": self.__class__.__name__,
+                "topic": self._topic_name,
+            },
+        )
+
         return True
 
     # After execution (runs BEFORE base)
@@ -177,7 +185,7 @@ class HelpCommand(BaseCommand):
         """
         # Help command-specific post-execution logic
         self.logger.debug(
-            "Topic help command post-execution",
+            "Topic help command post-executing",
             extra={
                 "command_class": self.__class__.__name__,
                 "topic": self._topic_name,
@@ -201,7 +209,7 @@ class HelpCommand(BaseCommand):
         """
         # Log help command metrics
         self.logger.debug(
-            "Topic help command finalized",
+            "Topic help command finalizing",
             extra={
                 "command_class": self.__class__.__name__,
                 "topic_requested": self._topic_name,

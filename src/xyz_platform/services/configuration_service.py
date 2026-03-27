@@ -20,6 +20,7 @@ from xyz_platform.utils import config
 from xyz_platform.utils.system import resolve_path
 from xyz_platform.logger import get_logger
 
+
 class ConfigurationService(BaseService):
     """Service for handling configuration configurations (Centralized Singleton pattern)."""
 
@@ -53,7 +54,7 @@ class ConfigurationService(BaseService):
         self.model: Optional[ConfigurationModel] = None
         self._validated = False
         self._validation_errors = []
-        
+
         # Initialize logger
         self.logger = get_logger(self.__class__.__module__)
         # In-memory environment variables map (key -> value as string)
@@ -371,7 +372,9 @@ class ConfigurationService(BaseService):
 
     # Environment variable APIs
 
-    def add_environment_variables(self, env_vars: Dict[str, Any], overwrite: bool = False) -> None:
+    def add_environment_variables(
+        self, env_vars: Dict[str, Any], overwrite: bool = False
+    ) -> None:
         """
         Add environment variables to the in-memory map.
 

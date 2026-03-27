@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-Script Name   : clean_session_command.py
+Script Name   : remove_source_session_command.py
 Author        : Vincent Huybrechts
 Version       : 1.0.0
 Python Version: 3.12+
-Description   : Command to clean workspace artifacts from an XYZ Platform session.
+Description   : Command to remove an item from the XYZ Platform session.
 ===============================================================================
 """
 
@@ -16,30 +16,33 @@ import click
 from xyz_platform.commands.base_command import BaseCommand
 
 
-class CleanSessionCommand(BaseCommand):
+class RemoveSourceSessionCommand(BaseCommand):
     """
-    Clean workspace artifacts without modifying session state.
+    Remove an item from the XYZ Platform session workspace.
 
-    By default removes all files in the logs/ folder.
-    Session state (session.json, repositories) is untouched.
+    Operates in two modes:
+    - repo mode (default): removes a repository entry from session.json,
+      optionally deletes the repository folder from disk.
+    - config mode (--config): removes a config source entry from session.json
+      and re-merges the active configuration.
     """
 
-    OPERATION = "session_clean"
+    OPERATION = "session_source_remove"
 
     def __init__(
         self,
+        name: str,
         work_path: Optional[str] = None,
-        dry_run: bool = False,
         output: Optional[str] = None,
         verbose: bool = False,
         quiet: bool = False,
     ):
         """
-        Initialize the clean command.
+        Initialize the remove command.
 
         Args:
+            name: Name of the repository or config source to remove
             work_path: Root working directory
-            dry_run: If True, report what would be deleted without removing anything
             output: Output format (json, text)
             verbose: Enable verbose output
             quiet: Suppress all console output
@@ -50,12 +53,15 @@ class CleanSessionCommand(BaseCommand):
             verbose=verbose,
             quiet=quiet,
         )
-        self._dry_run = dry_run
-        self._clean_stats: dict = {}
+        self._item_name = name
+        self._removed_item: dict = {}
+
+        # Keep backward-compatible alias
+        self._repo_name = name
 
     def execute(self) -> bool:
         """
-        Execute the clean command.
+        Execute the remove command.
 
         Returns:
             bool: Success status (errors stored in self._errors)
@@ -77,18 +83,17 @@ class CleanSessionCommand(BaseCommand):
                 self._finalize(success=False)
                 return False
 
-            success, self._clean_stats = self._session_controller.clean_session(
-                work_path=self._work_path,
-                dry_run=self._dry_run,
+            success, self._removed_item = self._session_controller.remove_repository(
+                name=self._item_name, work_path=self._work_path, delete_folder=True
             )
 
             self._messages.extend(self._session_controller.get_messages())
             self._errors.extend(self._session_controller.get_errors())
 
             if not success:
-                self.logger.error(f"Clean failed in {self.__class__.__name__}")
+                self.logger.error(f"Remove failed in {self.__class__.__name__}")
                 if self._is_console_output():
-                    click.echo("\n❌  Clean failed")
+                    click.echo("\n❌  Remove failed")
                 self._finalize(success=False)
                 return False
 
@@ -110,20 +115,19 @@ class CleanSessionCommand(BaseCommand):
             return True
 
         except Exception as e:
-            error_msg = f"Failed to clean session: {str(e)}"
+            error_msg = f"Failed to remove item: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             self._finalize(success=False)
             return False
 
     def _initialize(
-        self, require_session: bool = True, show_header: bool = True
+        self, require_session: bool = False, show_header: bool = True
     ) -> bool:
         if not super()._initialize(require_session, show_header):
             return False
         self.logger.debug(
-            "CleanSessionCommand initialized",
-            extra={"command_class": self.__class__.__name__},
+            f"Initialized {self.__class__.__name__} with item_name={self._item_name}"
         )
         return True
 
@@ -131,38 +135,31 @@ class CleanSessionCommand(BaseCommand):
         if not super()._before_execute():
             return False
         self.logger.debug(
-            "Clean session command pre-execution validat",
-            extra={"command_class": self.__class__.__name__},
+            f"Pre-execution validation passed in {self.__class__.__name__}"
         )
         return True
 
     def _after_execute(self) -> bool:
         """Populate output data and render console feedback."""
-        if not self._is_quiet():
+        if not self._is_quiet() and self._removed_item:
             self._output_data = {
-                k: str(v) for k, v in self._clean_stats.items() if v is not None
+                k: v for k, v in self._removed_item.items() if v is not None
             }
 
             if self._is_console_output():
-                label = (
-                    "🔍  Would clean (dry-run):"
-                    if self._dry_run
-                    else "🧹  Session cleaned:"
-                )
+                label = "🗑️   Removed item:"
                 click.echo(f"\n{label}")
-                deleted = self._clean_stats.get("logs_deleted", 0)
-                folder = self._clean_stats.get("logs_folder", "")
-                action = "would delete" if self._dry_run else "deleted"
-                click.echo(f"    • Logs:   {deleted} file(s) {action}")
-                if folder:
-                    click.echo(f"    • Folder: {folder}")
-                click.echo("")
+                if self._removed_item.get("name"):
+                    click.echo(f"    • Name:   {self._removed_item['name']}")
+                if self._removed_item.get("type"):
+                    click.echo(f"    • Type:   {self._removed_item['type']}")
+                if self._removed_item.get("url"):
+                    click.echo(f"    • URL:    {self._removed_item['url']}")
+                click.echo("    • Folder: deleted from disk")
+            click.echo("")
 
         return super()._after_execute()
 
-    def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
-        self.logger.debug(
-            "Clean session command finalizing",
-            extra={"command_class": self.__class__.__name__, "success": success},
-        )
-        return super()._finalize(success, show_footer)
+    def _finalize(self, success: bool = False, show_footer=True) -> bool:
+        self.logger.debug(f"Finalized {self.__class__.__name__} with success={success}")
+        return super()._finalize(success=success, show_footer=show_footer)

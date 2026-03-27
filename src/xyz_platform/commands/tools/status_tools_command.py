@@ -204,7 +204,7 @@ class StatusToolsCommand(BaseCommand):
             return False
 
         self.logger.debug(
-            "Tools status command initialized",
+            "Tools status command initializing",
             extra={"command_class": self.__class__.__name__},
         )
 
@@ -222,6 +222,11 @@ class StatusToolsCommand(BaseCommand):
         # Call parent first
         if not super()._before_execute():
             return False
+
+        self.logger.debug(
+            "Tools status command pre-execution validating",
+            extra={"command_class": self.__class__.__name__},
+        )
 
         return True
 
@@ -298,7 +303,7 @@ class StatusToolsCommand(BaseCommand):
             click.echo("")
 
         self.logger.debug(
-            "Tools status command post-execution",
+            "Tools status command post-executing",
             extra={
                 "command_class": self.__class__.__name__,
                 "total": len(self._tool_results),
@@ -357,7 +362,7 @@ class StatusToolsCommand(BaseCommand):
                         click.echo(f"error: {err}")
 
         self.logger.debug(
-            "Tools status command finalized",
+            "Tools status command finalizing",
             extra={"command_class": self.__class__.__name__},
         )
 

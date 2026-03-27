@@ -28,6 +28,8 @@ class InitSessionCommand(BaseCommand):
     - Initializing session.yaml state file (from template)
     """
 
+    OPERATION = "session_init"
+
     def __init__(
         self,
         name: str,
@@ -95,8 +97,8 @@ class InitSessionCommand(BaseCommand):
             )
 
             # Copy controller errors/messages to command
-            self._errors.extend(self._session_controller.get_errors())
             self._messages.extend(self._session_controller.get_messages())
+            self._errors.extend(self._session_controller.get_errors())
 
             if not success:
                 self.logger.error(

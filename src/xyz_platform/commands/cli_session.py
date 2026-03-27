@@ -19,13 +19,21 @@ from xyz_platform.commands.cli_common import (
     click_output_quiet,
     # click_config_path,
     # click_config_file,
+    # click_no_hooks,
     handle_command_exit,
 )
+
+from xyz_platform.commands.session.init_session_command import InitSessionCommand
+from xyz_platform.commands.session.clean_session_command import CleanSessionCommand
 from xyz_platform.commands.session.add_source_session_command import (
     AddSourceSessionCommand,
 )
-from xyz_platform.commands.session.init_session_command import InitSessionCommand
-from xyz_platform.commands.session.clean_session_command import CleanSessionCommand
+from xyz_platform.commands.session.remove_source_session_command import (
+    RemoveSourceSessionCommand,
+)
+from xyz_platform.commands.session.list_source_session_command import (
+    ListSourceSessionCommand,
+)
 
 # from xyz_platform.commands.session.show_session_command import ShowSessionCommand
 # from xyz_platform.commands.session.add_session_command import AddSessionCommand
@@ -203,24 +211,59 @@ def session_source_add_command(
     handle_command_exit(command, success)
 
 
-# TODO
 @session_source_command.command(
     name="remove",
     help="Remove a repository from the current session workspace.",
 )
-def session_source_remove_command():
+@click.option(
+    "--name",
+    required=True,
+    type=str,
+    help="Name of the item (used as folder name and identifier for repositories)",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_source_remove_command(
+    name: str,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+):
     """Remove a session source (repository or config)."""
-    pass
+    command = RemoveSourceSessionCommand(
+        name=name,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
 
 
-# TODO
 @session_source_command.command(
     name="list",
     help="List session source repositories.",
 )
-def session_source_list_command():
+@click_work_path
+@click_output_format
+@click_output_verbose
+def session_source_list_command(
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+):
     """List session sources (repositories and configs)."""
-    pass
+    command = ListSourceSessionCommand(
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
 
 
 # TODO

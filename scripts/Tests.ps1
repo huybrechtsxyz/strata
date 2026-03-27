@@ -22,8 +22,15 @@ New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 session init --name platform --work-path $app --editor vscode
 
-
+.\scripts\Run.ps1 session source add --name xyz_git --work-path $app --url "https://github.com/huybrechtsxyz/xyz-platform.git"
+.\scripts\Run.ps1 session source add --name xyz_local --work-path $app --url "../repo/xyz_configuration"
 .\scripts\Run.ps1 session source add --name xyz_configuration --work-path $app --url "../repo/xyz_configuration"
+.\scripts\Run.ps1 session source add --name xyz_infrastructure --work-path $app --url "../repo/xyz_infrastructure"
+
+.\scripts\Run.ps1 session source list --work-path $app
+
+.\scripts\Run.ps1 session source remove --name xyz_local --work-path $app
+.\scripts\Run.ps1 session source remove --name xyz_git --work-path $app
 
 # ==============================================================================
 # [REFERENCE] Basic commands
@@ -90,3 +97,4 @@ New-Item -Path $app -ItemType Directory -Force
 # session add  config-file / config-path mode
 .\scripts\Run.ps1 session source add --work-path $app --config-file "repo/xyz_configuration/config/xyz-config.yaml"
 .\scripts\Run.ps1 session source add --name xyz_configuration --work-path $app --config-file "repo/xyz_configuration/config/xyz-config.yaml"
+.\scripts\Run.ps1 session source add --name xyz_git --work-path $app --url "https://github.com/huybrechtsxyz/xyz-platform.git"
