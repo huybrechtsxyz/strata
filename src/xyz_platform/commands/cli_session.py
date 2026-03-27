@@ -13,6 +13,7 @@ from typing import Optional
 import click
 
 from xyz_platform.commands.cli_common import (
+    click_config_file,
     click_env_file,
     click_work_path,
     click_output_format,
@@ -21,6 +22,9 @@ from xyz_platform.commands.cli_common import (
     handle_command_exit,
 )
 
+from xyz_platform.commands.session.add_config_session_command import (
+    AddConfigSessionCommand,
+)
 from xyz_platform.commands.session.init_session_command import InitSessionCommand
 from xyz_platform.commands.session.clean_session_command import CleanSessionCommand
 from xyz_platform.commands.session.logs_session_command import LogsSessionCommand
@@ -444,6 +448,51 @@ def session_dotenv_list_command(
     handle_command_exit(command, success)
 
 
+# CONFIG Command Group: session config add/remove/list
+
+
+@session_command.group(name="config", help="Manage session configuration sources.")
+def session_config_command():
+    """Session config subcommand group."""
+    pass
+
+
+@session_config_command.command(
+    name="add",
+    help="Add a configuration source (file) to the current session workspace.",
+)
+@click.option(
+    "--name",
+    required=True,
+    type=str,
+    help="Name of the item (used as identifier for config sources)",
+)
+@click_config_file
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_config_add_command(
+    name: str,
+    config_file: str,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+):
+    """Add a session configuration source (file or directory)."""
+    command = AddConfigSessionCommand(
+        name=name,
+        config_file=config_file,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
 #
 #
 #
@@ -473,25 +522,6 @@ def session_dotenv_list_command(
 # )
 # def session_status(work_path, output, verbose):
 #     """Show details of the current session."""
-#     pass
-
-
-# # CONFIG Command Group: session config add/remove/list
-
-
-# @session_command.group(name="config", help="Manage session configuration sources.")
-# def session_config_command():
-#     """Session config subcommand group."""
-#     pass
-
-
-# # TODO
-# @session_config_command.command(
-#     name="add",
-#     help="Add a configuration source (file or directory) to the current session workspace.",
-# )
-# def session_config_add_command():
-#     """Add a session configuration source (file or directory)."""
 #     pass
 
 

@@ -11,6 +11,6 @@
     "log_path": "{{log_path}}"
   },
   "config_files": [],
-  "dotenv_files": [],
+  "dotenv_paths": [],
   "repositories": []
 }

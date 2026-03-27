@@ -164,7 +164,7 @@ class SessionController:
         """Return the dotenvs list from in-memory session data, or [] if not loaded."""
         if self._session_data is None:
             return []
-        return self._session_data.get("dotenv_files", [])
+        return self._session_data.get("dotenv_paths", [])
 
     def get_config_sources(self) -> list:
         """Return the config_sources list from in-memory session data, or [] if not loaded."""
@@ -619,7 +619,7 @@ class SessionController:
             }
 
             # Idempotent: skip duplicate paths
-            existing = self._session_data.setdefault("dotenv_files", [])
+            existing = self._session_data.setdefault("dotenv_paths", [])
             if any(e.get("path") == metadata["path"] for e in existing):
                 self._messages.append(
                     f".env file already registered (skipped): {env_path}"
@@ -659,7 +659,7 @@ class SessionController:
                 self._errors.append(error_msg)
                 return False, {}
 
-            dotenvs = self._session_data.get("dotenv_files", [])
+            dotenvs = self._session_data.get("dotenv_paths", [])
             dotenv_metadata = next((d for d in dotenvs if d["name"] == env_name), None)
 
             if dotenv_metadata is None:
@@ -669,7 +669,7 @@ class SessionController:
                 return False, {}
 
             # Remove from in-memory list
-            self._session_data["dotenv_files"] = [
+            self._session_data["dotenv_paths"] = [
                 d for d in dotenvs if d["name"] != env_name
             ]
             self._messages.append(f"Removed .env entry '{env_name}' from session")
@@ -747,8 +747,7 @@ class SessionController:
             metadata = {
                 "name": name,
                 "path": source_path.as_posix(),
-                "type": source_type,
-                "registered": datetime.now().isoformat(),
+                "created": datetime.now().isoformat(),
             }
 
             # Idempotent: skip duplicate paths

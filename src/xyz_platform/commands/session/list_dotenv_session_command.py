@@ -129,7 +129,7 @@ class ListDotEnvSessionCommand(BaseCommand):
 
     def _after_execute(self) -> bool:
         """Populate output data and render console feedback."""
-        self._output_data = {"dotenv_files": self._dotenv_files}
+        self._output_data = {"dotenv_paths": self._dotenv_files}
 
         if self._is_console_output():
             if not self._dotenv_files:
