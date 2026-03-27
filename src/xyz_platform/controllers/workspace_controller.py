@@ -1147,6 +1147,12 @@ class WorkspaceController:
     def get_workspace_repo_maps(self) -> Dict[str, str]:
         """Get the repository maps from the loaded configuration."""
         config_service = ConfigurationService.get_instance()
+        if not config_service.is_validated():
+            self.logger.warning(
+                "Configuration not validated - repository map may be unavailable or outdated"
+            )
+            return {}
+
         repo_map = config_service.get_repo_map()
         self.logger.debug(
             "Retrieved repository map from configuration",

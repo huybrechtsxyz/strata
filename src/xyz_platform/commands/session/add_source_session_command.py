@@ -244,6 +244,7 @@ class AddSourceSessionCommand(BaseCommand):
                     click.echo(f"    • Path:   {self._added_repo['path']}")
                 if self._added_repo.get("branch"):
                     click.echo(f"    • Branch: {self._added_repo['branch']}")
+                click.echo("")
 
         # Call parent last
         return super()._after_execute()

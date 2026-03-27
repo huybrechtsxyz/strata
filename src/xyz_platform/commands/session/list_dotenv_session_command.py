@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-Script Name   : remove_source_session_command.py
+Script Name   : list_dotenv_session_command.py
 Author        : Vincent Huybrechts
 Version       : 1.0.0
 Python Version: 3.12+
-Description   : Command to remove an item from the XYZ Platform session.
+Description   : Command to list items in an XYZ Platform session.
 ===============================================================================
 """
 
@@ -16,48 +16,36 @@ import click
 from xyz_platform.commands.base_command import BaseCommand
 
 
-class RemoveSourceSessionCommand(BaseCommand):
+class ListDotEnvSessionCommand(BaseCommand):
     """
-    Remove an item from the XYZ Platform session workspace.
+    List items tracked in the XYZ Platform session workspace.
 
-    Operates in two modes:
-    - repo mode (default): removes a repository entry from session.json,
-      optionally deletes the repository folder from disk.
-    - config mode (--config): removes a config source entry from session.json
-      and re-merges the active configuration.
+    Displays all environment files currently registered in session.json,
+    showing their name, type, URL, and branch.
     """
 
-    OPERATION = "session_source_remove"
+    OPERATION_NAME = "session_dotenv_list"
 
     def __init__(
         self,
-        name: str,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
-        quiet: bool = False,
     ):
         """
-        Initialize the remove command.
+        Initialize the list command.
 
         Args:
-            name: Name of the repository or config source to remove
             work_path: Root working directory
             output: Output format (json, text)
             verbose: Enable verbose output
-            quiet: Suppress all console output
         """
         super().__init__(
             work_path=work_path,
             output=output,
             verbose=verbose,
-            quiet=quiet,
         )
-        self._item_name = name
-        self._removed_item: dict = {}
-
-        # Keep backward-compatible alias
-        self._repo_name = name
+        self._dotenv_files: list = []
 
     def get_required_integrations(self):
         """
@@ -70,7 +58,7 @@ class RemoveSourceSessionCommand(BaseCommand):
 
     def execute(self) -> bool:
         """
-        Execute the remove command.
+        Execute the list command.
 
         Returns:
             bool: Success status (errors stored in self._errors)
@@ -92,19 +80,7 @@ class RemoveSourceSessionCommand(BaseCommand):
                 self._finalize(success=False)
                 return False
 
-            success, self._removed_item = self._session_controller.remove_repository(
-                name=self._item_name, work_path=self._work_path, delete_folder=True
-            )
-
-            self._messages.extend(self._session_controller.get_messages())
-            self._errors.extend(self._session_controller.get_errors())
-
-            if not success:
-                self.logger.error(f"Remove failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Remove failed")
-                self._finalize(success=False)
-                return False
+            self._dotenv_files = self._session_controller.get_dotenvs()
 
             if not self._after_execute():
                 self.logger.error(
@@ -124,7 +100,7 @@ class RemoveSourceSessionCommand(BaseCommand):
             return True
 
         except Exception as e:
-            error_msg = f"Failed to remove item: {str(e)}"
+            error_msg = f"Failed to list session items: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             self._finalize(success=False)
@@ -136,63 +112,74 @@ class RemoveSourceSessionCommand(BaseCommand):
         if not super()._initialize(require_session, show_header):
             return False
         self.logger.debug(
-            "Remove session source command initializing",
-            extra={
-                "command_class": self.__class__.__name__,
-                "repo_name": self._repo_name,
-                "work_path": str(self._work_path),
-            },
+            "List dotenv session command initializing",
+            extra={"command_class": self.__class__.__name__},
         )
         return True
 
     def _before_execute(self) -> bool:
+        """Validate session state before execution."""
         if not super()._before_execute():
             return False
         self.logger.debug(
-            "Remove session source pre-execution validation",
-            extra={
-                "command_class": self.__class__.__name__,
-                "repo_name": self._item_name,
-            },
+            "List dotenv session command pre-execution validation",
+            extra={"command_class": self.__class__.__name__},
         )
         return True
 
     def _after_execute(self) -> bool:
         """Populate output data and render console feedback."""
-        self.logger.debug(
-            "Remove session source post-execution validation",
-            extra={
-                "command_class": self.__class__.__name__,
-                "removed_item": self._removed_item,
-            },
-        )
+        self._output_data = {"dotenv_files": self._dotenv_files}
 
-        if not self._is_quiet() and self._removed_item:
-            self._output_data = {
-                k: v for k, v in self._removed_item.items() if v is not None
-            }
-
-            if self._is_console_output():
-                label = "🗑️   Removed item:"
-                click.echo(f"\n{label}")
-                if self._removed_item.get("name"):
-                    click.echo(f"    • Name:   {self._removed_item['name']}")
-                if self._removed_item.get("type"):
-                    click.echo(f"    • Type:   {self._removed_item['type']}")
-                if self._removed_item.get("url"):
-                    click.echo(f"    • URL:    {self._removed_item['url']}")
-                click.echo("    • Folder: deleted from disk")
+        if self._is_console_output():
+            if not self._dotenv_files:
+                click.echo("\n📋  No items in session workspace.\n")
+            else:
+                click.echo(f"\n📋  Session items ({len(self._dotenv_files)}):")
+                for item in self._dotenv_files:
+                    click.echo(f"    • {item.get('name', '—')}")
+                    if item.get("path"):
+                        click.echo(f"      Path:    {item['path']}")
                 click.echo("")
+
+        self.logger.debug(
+            "List dotenv session command post-execution validation",
+            extra={"command_class": self.__class__.__name__},
+        )
 
         return super()._after_execute()
 
-    def _finalize(self, success: bool = False, show_footer=True) -> bool:
+    def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
+        """Override structured output renderer for --output json/text."""
         self.logger.debug(
-            "Remove session source command finalizing",
-            extra={
-                "command_class": self.__class__.__name__,
-                "repo_name": self._repo_name,
-            },
+            "List dotenv session command finalizing",
+            extra={"command_class": self.__class__.__name__, "success": success},
         )
+
+        if self._is_structured_output():
+            if self._output_format == "json":
+                import json
+
+                envelope = {
+                    "success": bool(success),
+                    "repositories": self._dotenv_files,
+                    "messages": self._messages,
+                    "errors": self._errors,
+                }
+                click.echo(json.dumps(envelope, indent=2, default=str))
+            else:  # text
+                for repo in self._dotenv_files:
+                    parts = [
+                        repo.get("name", ""),
+                        repo.get("path", ""),
+                    ]
+                    click.echo("  ".join(p for p in parts if p))
+                if self._errors:
+                    for err in self._errors:
+                        click.echo(f"error: {err}")
+
+            # Suppress _output_format so base _finalize only runs side-effects
+            self._output_format = ""
+            show_footer = False
 
         return super()._finalize(success=success, show_footer=show_footer)

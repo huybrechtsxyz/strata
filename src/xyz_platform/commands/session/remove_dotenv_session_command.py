@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-Script Name   : remove_source_session_command.py
+Script Name   : remove_dotenv_session_command.py
 Author        : Vincent Huybrechts
 Version       : 1.0.0
 Python Version: 3.12+
@@ -16,18 +16,12 @@ import click
 from xyz_platform.commands.base_command import BaseCommand
 
 
-class RemoveSourceSessionCommand(BaseCommand):
+class RemoveDotEnvSessionCommand(BaseCommand):
     """
     Remove an item from the XYZ Platform session workspace.
-
-    Operates in two modes:
-    - repo mode (default): removes a repository entry from session.json,
-      optionally deletes the repository folder from disk.
-    - config mode (--config): removes a config source entry from session.json
-      and re-merges the active configuration.
     """
 
-    OPERATION = "session_source_remove"
+    OPERATION = "session_dotenv_remove"
 
     def __init__(
         self,
@@ -57,7 +51,7 @@ class RemoveSourceSessionCommand(BaseCommand):
         self._removed_item: dict = {}
 
         # Keep backward-compatible alias
-        self._repo_name = name
+        self._item_name = name
 
     def get_required_integrations(self):
         """
@@ -92,8 +86,8 @@ class RemoveSourceSessionCommand(BaseCommand):
                 self._finalize(success=False)
                 return False
 
-            success, self._removed_item = self._session_controller.remove_repository(
-                name=self._item_name, work_path=self._work_path, delete_folder=True
+            success, self._removed_item = self._session_controller.remove_dotenv(
+                env_name=self._item_name
             )
 
             self._messages.extend(self._session_controller.get_messages())
@@ -136,10 +130,10 @@ class RemoveSourceSessionCommand(BaseCommand):
         if not super()._initialize(require_session, show_header):
             return False
         self.logger.debug(
-            "Remove session source command initializing",
+            "Remove session dotenv command initializing",
             extra={
                 "command_class": self.__class__.__name__,
-                "repo_name": self._repo_name,
+                "env_name": self._item_name,
                 "work_path": str(self._work_path),
             },
         )
@@ -149,10 +143,10 @@ class RemoveSourceSessionCommand(BaseCommand):
         if not super()._before_execute():
             return False
         self.logger.debug(
-            "Remove session source pre-execution validation",
+            "Remove session dotenv pre-execution validation",
             extra={
                 "command_class": self.__class__.__name__,
-                "repo_name": self._item_name,
+                "item_name": self._item_name,
             },
         )
         return True
@@ -160,7 +154,7 @@ class RemoveSourceSessionCommand(BaseCommand):
     def _after_execute(self) -> bool:
         """Populate output data and render console feedback."""
         self.logger.debug(
-            "Remove session source post-execution validation",
+            "Remove session dotenv post-execution validation",
             extra={
                 "command_class": self.__class__.__name__,
                 "removed_item": self._removed_item,
@@ -177,21 +171,18 @@ class RemoveSourceSessionCommand(BaseCommand):
                 click.echo(f"\n{label}")
                 if self._removed_item.get("name"):
                     click.echo(f"    • Name:   {self._removed_item['name']}")
-                if self._removed_item.get("type"):
-                    click.echo(f"    • Type:   {self._removed_item['type']}")
-                if self._removed_item.get("url"):
-                    click.echo(f"    • URL:    {self._removed_item['url']}")
-                click.echo("    • Folder: deleted from disk")
-                click.echo("")
+                if self._removed_item.get("path"):
+                    click.echo(f"    • Path:   {self._removed_item['path']}")
+            click.echo("")
 
         return super()._after_execute()
 
     def _finalize(self, success: bool = False, show_footer=True) -> bool:
         self.logger.debug(
-            "Remove session source command finalizing",
+            "Remove session dotenv command finalizing",
             extra={
                 "command_class": self.__class__.__name__,
-                "repo_name": self._repo_name,
+                "item_name": self._item_name,
             },
         )
 

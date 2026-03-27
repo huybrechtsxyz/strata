@@ -57,9 +57,9 @@ class AddDotEnvSessionCommand(BaseCommand):
             quiet=quiet,
         )
 
-        self._env_name = name
-        self._env_path = Path(env_file)
-        self._added_dotenv = {}
+        self._item_name = name
+        self._item_path = Path(env_file)
+        self._added_items = {}
 
     def execute(self) -> bool:
         """
@@ -90,8 +90,8 @@ class AddDotEnvSessionCommand(BaseCommand):
             # Add dotenv to session via controller
             repo_map = self._get_workspace_controller().get_workspace_repo_maps()
             success, self._added_dotenv = self._session_controller.add_dotenv(
-                env_name=self._env_name,
-                env_path=self._env_path,
+                env_name=self._item_name,
+                env_path=self._item_path,
                 work_path=self._work_path,
                 repo_map=repo_map,
             )
@@ -157,8 +157,8 @@ class AddDotEnvSessionCommand(BaseCommand):
         ):
             return False
 
-        if not self._env_path:
-            error_msg = "--env-file for a dotenv source is required"
+        if not self._item_path:
+            error_msg = "--env-file for a .env session source is required"
             self.logger.error(error_msg)
             self._errors.append(error_msg)
             return False
@@ -167,8 +167,8 @@ class AddDotEnvSessionCommand(BaseCommand):
             "Add session dotenv command initializing",
             extra={
                 "command_class": self.__class__.__name__,
-                "env_name": self._env_name,
-                "env_path": self._env_path,
+                "env_name": self._item_name,
+                "env_path": self._item_path,
                 "work_path": str(self._work_path),
             },
         )
@@ -190,7 +190,7 @@ class AddDotEnvSessionCommand(BaseCommand):
             "Add session dotenv command pre-execution validation",
             extra={
                 "command_class": self.__class__.__name__,
-                "env_name": self._env_name,
+                "env_name": self._item_name,
             },
         )
 
@@ -207,7 +207,7 @@ class AddDotEnvSessionCommand(BaseCommand):
             "Add session dotenv command post-executing",
             extra={
                 "command_class": self.__class__.__name__,
-                "env_name": self._env_name,
+                "env_name": self._item_name,
             },
         )
 
@@ -221,8 +221,9 @@ class AddDotEnvSessionCommand(BaseCommand):
                 click.echo("\n📦  Added item:")
                 if self._added_dotenv.get("name"):
                     click.echo(f"    • Name:   {self._added_dotenv['name']}")
-                if self._added_dotenv.get("url"):
-                    click.echo(f"    • Path:    {self._added_dotenv['path']}")
+                if self._added_dotenv.get("path"):
+                    click.echo(f"    • Path:   {self._added_dotenv['path']}")
+                click.echo("")
 
         # Call parent last
         return super()._after_execute()
@@ -238,7 +239,7 @@ class AddDotEnvSessionCommand(BaseCommand):
             "Add session dotenv command finalizing",
             extra={
                 "command_class": self.__class__.__name__,
-                "env_name": self._env_name,
+                "env_name": self._item_name,
             },
         )
 

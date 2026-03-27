@@ -27,6 +27,9 @@ from xyz_platform.commands.session.clean_session_command import CleanSessionComm
 from xyz_platform.commands.session.add_source_session_command import (
     AddSourceSessionCommand,
 )
+from xyz_platform.commands.session.remove_dotenv_session_command import (
+    RemoveDotEnvSessionCommand,
+)
 from xyz_platform.commands.session.remove_source_session_command import (
     RemoveSourceSessionCommand,
 )
@@ -35,6 +38,9 @@ from xyz_platform.commands.session.list_source_session_command import (
 )
 from xyz_platform.commands.session.add_dotenv_session_command import (
     AddDotEnvSessionCommand,
+)
+from xyz_platform.commands.session.list_dotenv_session_command import (
+    ListDotEnvSessionCommand,
 )
 
 # from xyz_platform.commands.session.show_session_command import ShowSessionCommand
@@ -298,6 +304,61 @@ def session_dotenv_add_command(
     handle_command_exit(command, success)
 
 
+@session_dotenv_command.command(
+    name="remove",
+    help="Remove an environment variable source (.env file) from the current session workspace.",
+)
+@click.option(
+    "--name",
+    required=True,
+    type=str,
+    help="Name of the item (used as identifier for dotenv sources)",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_dotenv_remove_command(
+    name: str,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+):
+    """Remove a session environment variable source (.env file)."""
+    command = RemoveDotEnvSessionCommand(
+        name=name,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@session_dotenv_command.command(
+    name="list",
+    help="List environment variable sources (.env files) in the current session workspace.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+def session_dotenv_list_command(
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+):
+    """List session environment variable sources (.env files)."""
+    command = ListDotEnvSessionCommand(
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
 #
 #
 #
@@ -334,36 +395,6 @@ def session_dotenv_add_command(
 # )
 # def session_status(work_path, output, verbose):
 #     """Show details of the current session."""
-#     pass
-
-
-# # TODO
-# @session_source_command.command(
-#     name="fetch",
-#     help="Fetch all repositories declared in the merged platform configuration.",
-# )
-# def session_source_fetch_command():
-#     """Fetch session source repositories."""
-#     pass
-
-
-# # TODO
-# @session_dotenv_command.command(
-#     name="remove",
-#     help="Remove an environment variable source (.env file) from the current session workspace.",
-# )
-# def session_dotenv_remove_command():
-#     """Remove a session environment variable source (.env file)."""
-#     pass
-
-
-# # TODO
-# @session_dotenv_command.command(
-#     name="list",
-#     help="List environment variable sources (.env files) in the current session workspace.",
-# )
-# def session_dotenv_list_command():
-#     """List session environment variable sources (.env files)."""
 #     pass
 
 
