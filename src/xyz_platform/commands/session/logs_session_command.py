@@ -13,16 +13,18 @@ from typing import Optional
 
 import click
 
-from xyz_platform.commands.session.base_session_command import BaseSessionCommand
+from xyz_platform.commands.base_command import BaseCommand
 
 
-class LogsSessionCommand(BaseSessionCommand):
+class LogsSessionCommand(BaseCommand):
     """
     Display session execution logs.
 
     Reads the active log file for the current session and displays
     entries filtered by time window, level, session ID, or execution ID.
     """
+
+    OPERATION_NAME = "session_logs"
 
     def __init__(
         self,
@@ -35,8 +37,8 @@ class LogsSessionCommand(BaseSessionCommand):
         use_current_session: bool = False,
         use_last_execution: bool = False,
         output: Optional[str] = None,
-        verbose: Optional[bool] = None,
-        quiet: Optional[bool] = None,
+        verbose: bool = False,
+        quiet: bool = False,
     ):
         """
         Initialize the session logs command.
@@ -71,6 +73,15 @@ class LogsSessionCommand(BaseSessionCommand):
         # Fetched log entries — shared between _after_execute and _output_data
         self._log_entries = []
 
+    def get_required_integrations(self):
+        """
+        Declare required integrations for this command.
+
+        Returns:
+            Dict[str, str]: Required integrations with operation descriptions
+        """
+        return {}
+
     def execute(self) -> bool:
         """
         Execute the session logs command.
@@ -80,7 +91,7 @@ class LogsSessionCommand(BaseSessionCommand):
         """
         try:
             # Initialize
-            if not self._initialize(operation="session_logs"):
+            if not self._initialize():
                 self.logger.error(f"Initialization failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Initialization failed")
@@ -94,13 +105,13 @@ class LogsSessionCommand(BaseSessionCommand):
                 )
                 if self._is_console_output():
                     click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(operation="session_logs", success=False)
+                self._finalize(success=False)
                 return False
 
             # Resolve --session flag: use current session_id set by _initialize()
             if self._use_current_session and not self._filter_session_id:
-                self._filter_session_id = self.session_id
-                self.logger.debug(f"Using current session ID: {self.session_id}")
+                self._filter_session_id = self._session_id
+                self.logger.debug(f"Using current session ID: {self._session_id}")
 
             # Resolve --last-exec flag: read last_execution_id from in-memory session data
             if self._use_last_execution and not self._filter_execution_id:
@@ -134,7 +145,7 @@ class LogsSessionCommand(BaseSessionCommand):
                 )
                 if self._is_console_output():
                     click.echo("\n❌  Failed to retrieve session logs")
-                self._finalize(operation="session_logs", success=False)
+                self._finalize(success=False)
                 return False
 
             # After
@@ -144,11 +155,11 @@ class LogsSessionCommand(BaseSessionCommand):
                 )
                 if self._is_console_output():
                     click.echo("\n❌  Post-execution hook failed")
-                self._finalize(operation="session_logs", success=False)
+                self._finalize(success=False)
                 return False
 
             # Finalize
-            if not self._finalize(operation="session_logs", success=True):
+            if not self._finalize(success=True):
                 self.logger.error(f"Finalization failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Finalization failed")
@@ -160,7 +171,7 @@ class LogsSessionCommand(BaseSessionCommand):
             error_msg = f"Failed to display session logs: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
-            self._finalize(operation="session_logs", success=False)
+            self._finalize(success=False)
             return False
 
     def _after_execute(self) -> bool:
@@ -245,9 +256,7 @@ class LogsSessionCommand(BaseSessionCommand):
 
         return super()._after_execute()
 
-    def _finalize(
-        self, operation: str = None, success: bool = None, show_footer: bool = True
-    ) -> bool:
+    def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
         """
         Finalize logs command.
 
@@ -262,7 +271,7 @@ class LogsSessionCommand(BaseSessionCommand):
 
                 envelope = {
                     "success": bool(success),
-                    "command": operation or "",
+                    "command": self.OPERATION or "",
                     "total_entries": len(self._log_entries),
                     "filters": self._output_data.get("filters", {}),
                     "log_entries": self._log_entries,
@@ -291,6 +300,4 @@ class LogsSessionCommand(BaseSessionCommand):
             self._output_format = fmt
             return result
 
-        return super()._finalize(
-            operation=operation, success=success, show_footer=show_footer
-        )
+        return super()._finalize(success=success, show_footer=show_footer)

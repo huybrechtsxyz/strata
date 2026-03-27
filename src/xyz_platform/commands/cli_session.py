@@ -23,6 +23,7 @@ from xyz_platform.commands.cli_common import (
 
 from xyz_platform.commands.session.init_session_command import InitSessionCommand
 from xyz_platform.commands.session.clean_session_command import CleanSessionCommand
+from xyz_platform.commands.session.logs_session_command import LogsSessionCommand
 
 from xyz_platform.commands.session.add_source_session_command import (
     AddSourceSessionCommand,
@@ -33,6 +34,8 @@ from xyz_platform.commands.session.remove_dotenv_session_command import (
 from xyz_platform.commands.session.remove_source_session_command import (
     RemoveSourceSessionCommand,
 )
+
+
 from xyz_platform.commands.session.list_source_session_command import (
     ListSourceSessionCommand,
 )
@@ -47,7 +50,7 @@ from xyz_platform.commands.session.list_dotenv_session_command import (
 # from xyz_platform.commands.session.add_session_command import AddSessionCommand
 # from xyz_platform.commands.session.fetch_session_command import FetchSessionCommand
 # from xyz_platform.commands.session.sync_session_command import SyncSessionCommand
-# from xyz_platform.commands.session.logs_session_command import LogsSessionCommand
+
 # from xyz_platform.commands.session.list_session_command import ListSessionCommand
 # from xyz_platform.commands.session.status_session_command import StatusSessionCommand
 # from xyz_platform.commands.session.remove_session_command import RemoveSessionCommand
@@ -135,7 +138,89 @@ def session_clean(
     handle_command_exit(command, success)
 
 
-# # SOURCE Command Group: session source add/remove/list
+@session_command.command(name="logs", help="Display session execution logs.")
+@click.option(
+    "--lines",
+    type=int,
+    default=50,
+    show_default=True,
+    help="Number of log lines to show",
+)
+@click.option(
+    "--minutes",
+    type=int,
+    default=None,
+    help="Show logs from the last N minutes",
+)
+@click.option(
+    "--level",
+    type=click.Choice(
+        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
+    ),
+    default=None,
+    help="Filter by log level",
+)
+@click.option(
+    "--session-id",
+    type=str,
+    default=None,
+    help="Filter by session ID",
+)
+@click.option(
+    "--execution-id",
+    "--exec-id",
+    type=str,
+    default=None,
+    help="Filter by execution ID",
+)
+@click.option(
+    "--session",
+    "use_current_session",
+    is_flag=True,
+    default=False,
+    help="Filter by current session only",
+)
+@click.option(
+    "--last-exec",
+    "--last-execution",
+    "use_last_execution",
+    is_flag=True,
+    default=False,
+    help="Show logs from the last execution",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+def session_logs(
+    lines: int = 50,
+    minutes: Optional[int] = None,
+    level: Optional[str] = None,
+    session_id: Optional[str] = None,
+    execution_id: Optional[str] = None,
+    use_current_session: bool = False,
+    use_last_execution: bool = False,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+):
+    """Display session execution logs."""
+    command = LogsSessionCommand(
+        work_path=work_path,
+        lines=lines,
+        minutes=minutes,
+        level=level,
+        session_id=session_id,
+        execution_id=execution_id,
+        use_current_session=use_current_session,
+        use_last_execution=use_last_execution,
+        output=output,
+        verbose=verbose,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+# SOURCE Command Group: session source add/remove/list
 
 
 @session_command.group(name="source", help="Manage session repository sources.")
@@ -383,13 +468,6 @@ def session_dotenv_list_command(
 
 
 # # TODO
-# @session_command.command(name="logs", help="Show logs for the current session.")
-# def session_logs():
-#     """Show details of the current session."""
-#     pass
-
-
-# # TODO
 # @session_command.command(
 #     name="show", help="Show status and details of the current session."
 # )
@@ -544,88 +622,6 @@ def session_dotenv_list_command(
 #         output=output,
 #         verbose=verbose,
 #         quiet=quiet,
-#     )
-#     success = command.execute()
-#     handle_command_exit(command, success)
-
-
-# @session_command.command(name="logs", help="Display session execution logs.")
-# @click.option(
-#     "--lines",
-#     type=int,
-#     default=50,
-#     show_default=True,
-#     help="Number of log lines to show",
-# )
-# @click.option(
-#     "--minutes",
-#     type=int,
-#     default=None,
-#     help="Show logs from the last N minutes",
-# )
-# @click.option(
-#     "--level",
-#     type=click.Choice(
-#         ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
-#     ),
-#     default=None,
-#     help="Filter by log level",
-# )
-# @click.option(
-#     "--session-id",
-#     type=str,
-#     default=None,
-#     help="Filter by session ID",
-# )
-# @click.option(
-#     "--execution-id",
-#     "--exec-id",
-#     type=str,
-#     default=None,
-#     help="Filter by execution ID",
-# )
-# @click.option(
-#     "--session",
-#     "use_current_session",
-#     is_flag=True,
-#     default=False,
-#     help="Filter by current session only",
-# )
-# @click.option(
-#     "--last-exec",
-#     "--last-execution",
-#     "use_last_execution",
-#     is_flag=True,
-#     default=False,
-#     help="Show logs from the last execution",
-# )
-# @click_work_path
-# @click_output_format
-# @click_output_verbose
-# def session_logs(
-#     lines: int = 50,
-#     minutes: int = None,
-#     level: Optional[str] = None,
-#     session_id: Optional[str] = None,
-#     execution_id: Optional[str] = None,
-#     use_current_session: bool = False,
-#     use_last_execution: bool = False,
-#     work_path: Optional[str] = None,
-#     output: Optional[str] = None,
-#     verbose: bool = False,
-# ):
-#     """Display session execution logs."""
-#     command = LogsSessionCommand(
-#         work_path=work_path,
-#         lines=lines,
-#         minutes=minutes,
-#         level=level,
-#         session_id=session_id,
-#         execution_id=execution_id,
-#         use_current_session=use_current_session,
-#         use_last_execution=use_last_execution,
-#         output=output,
-#         verbose=verbose,
 #     )
 #     success = command.execute()
 #     handle_command_exit(command, success)

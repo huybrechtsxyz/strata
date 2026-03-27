@@ -61,6 +61,15 @@ class AddDotEnvSessionCommand(BaseCommand):
         self._item_path = Path(env_file)
         self._added_items = {}
 
+    def get_required_integrations(self):
+        """
+        Declare required integrations for this command.
+
+        Returns:
+            Dict[str, str]: Required integrations with operation descriptions
+        """
+        return {}
+
     def execute(self) -> bool:
         """
         Execute the add command - add item to session.
@@ -132,15 +141,6 @@ class AddDotEnvSessionCommand(BaseCommand):
             self._errors.append(error_msg)
             self._finalize(success=False)
             return False
-
-    def get_required_integrations(self):
-        """
-        Declare required integrations for this command.
-
-        Returns:
-            Dict[str, str]: Required integrations with operation descriptions
-        """
-        return {}
 
     def _initialize(
         self, require_session: bool = True, show_header: bool = True
