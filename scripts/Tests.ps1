@@ -14,38 +14,20 @@ $app = ".app"
 
 New-Item -Path $app -ItemType Directory -Force
 
-.\scripts\Run.ps1 -h
-
-.\scripts\Run.ps1 version --output text
-
-.\scripts\Run.ps1 tools status
-
-.\scripts\Run.ps1 session init --name platform --work-path $app --editor vscode
-
-.\scripts\Run.ps1 session source add --name xyz_git --work-path $app --url "https://github.com/huybrechtsxyz/xyz-platform.git"
-.\scripts\Run.ps1 session source add --name xyz_local --work-path $app --url "../repo/xyz_configuration"
-.\scripts\Run.ps1 session source add --name xyz_configuration --work-path $app --url "../repo/xyz_configuration"
-.\scripts\Run.ps1 session source add --name xyz_infrastructure --work-path $app --url "../repo/xyz_infrastructure"
-
-.\scripts\Run.ps1 session source list --work-path $app
-
-.\scripts\Run.ps1 session source remove --name xyz_local --work-path $app
-.\scripts\Run.ps1 session source remove --name xyz_git --work-path $app
-
 # ==============================================================================
 # [REFERENCE] Basic commands
 # ==============================================================================
 
 .\scripts\Run.ps1 -h
 
-# version
+# Version info
 .\scripts\Run.ps1 version -h
 .\scripts\Run.ps1 version
 .\scripts\Run.ps1 version --output text
 .\scripts\Run.ps1 version --output json
 .\scripts\Run.ps1 version --output raw
 
-# help
+# Help topics
 .\scripts\Run.ps1 help -h
 .\scripts\Run.ps1 help
 .\scripts\Run.ps1 help terraform
@@ -55,9 +37,10 @@ New-Item -Path $app -ItemType Directory -Force
 # [REFERENCE] tools
 # ==============================================================================
 
+# Tools help
 .\scripts\Run.ps1 tools -h
 
-# tools status
+# Tools status
 .\scripts\Run.ps1 tools status -h
 .\scripts\Run.ps1 tools status
 .\scripts\Run.ps1 tools status --work-path $app
@@ -70,9 +53,10 @@ New-Item -Path $app -ItemType Directory -Force
 # [REFERENCE] session
 # ==============================================================================
 
+# Session help
 .\scripts\Run.ps1 session -h
 
-# session init
+# Session init
 .\scripts\Run.ps1 session init -h
 .\scripts\Run.ps1 session init --name platform --work-path $app
 .\scripts\Run.ps1 session init --name platform --work-path $app --editor vscode
@@ -81,8 +65,7 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 session init --name platform --work-path $app --editor vscode --verbose
 .\scripts\Run.ps1 session init --name platform --work-path $app --editor vscode --quiet
 
-# session clean
-
+# Session clean
 .\scripts\Run.ps1 session clean -h
 .\scripts\Run.ps1 session clean --work-path $app
 .\scripts\Run.ps1 session clean --work-path $app --output json
@@ -90,11 +73,72 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 session clean --work-path $app --verbose
 .\scripts\Run.ps1 session clean --work-path $app --quiet
 
-# session add  url mode
-.\scripts\Run.ps1 session source add -h
-.\scripts\Run.ps1 session source add --name xyz_configuration --work-path $app --url "../repo/xyz_configuration"
+# Session logs
+.\scripts\Run.ps1 session logs -h
+.\scripts\Run.ps1 session logs --work-path $app
+.\scripts\Run.ps1 session logs --work-path $app --lines 100
+.\scripts\Run.ps1 session logs --work-path $app --level ERROR
+.\scripts\Run.ps1 session logs --work-path $app --last-exec
+.\scripts\Run.ps1 session logs --work-path $app --output json
+.\scripts\Run.ps1 session logs --work-path $app --output text
+.\scripts\Run.ps1 session logs --work-path $app --verbose
 
-# session add  config-file / config-path mode
-.\scripts\Run.ps1 session source add --work-path $app --config-file "repo/xyz_configuration/config/xyz-config.yaml"
-.\scripts\Run.ps1 session source add --name xyz_configuration --work-path $app --config-file "repo/xyz_configuration/config/xyz-config.yaml"
-.\scripts\Run.ps1 session source add --name xyz_git --work-path $app --url "https://github.com/huybrechtsxyz/xyz-platform.git"
+# Session source
+.\scripts\Run.ps1 session source -h
+
+# Session Source Add - url mode
+.\scripts\Run.ps1 session source add -h
+.\scripts\Run.ps1 session source add --name xyz_local1 --work-path $app --url "../repo/xyz_configuration"
+.\scripts\Run.ps1 session source add --name xyz_local2 --work-path $app --url "../repo/xyz_configuration" --output json
+.\scripts\Run.ps1 session source add --name xyz_local3 --work-path $app --url "../repo/xyz_configuration" --output text
+.\scripts\Run.ps1 session source add --name xyz_git --work-path $app --url "https://github.com/huybrechtsxyz/xyz-platform.git" --verbose
+
+# Session Source List
+.\scripts\Run.ps1 session source list -h
+.\scripts\Run.ps1 session source list --work-path $app
+.\scripts\Run.ps1 session source list --work-path $app --output json
+.\scripts\Run.ps1 session source list --work-path $app --output text
+.\scripts\Run.ps1 session source list --work-path $app --verbose
+
+# Session Source Remove
+.\scripts\Run.ps1 session source remove -h
+.\scripts\Run.ps1 session source remove --name xyz_local1 --work-path $app
+.\scripts\Run.ps1 session source remove --name xyz_local2 --work-path $app --output json
+.\scripts\Run.ps1 session source remove --name xyz_local3 --work-path $app --output text
+.\scripts\Run.ps1 session source remove --name xyz_git --work-path $app --verbose
+
+# Session Dotenv
+.\scripts\Run.ps1 session dotenv -h
+
+# Session Dotenv Add
+.\scripts\Run.ps1 session dotenv add --name test1 --work-path $app --env-file "../scripts/Tests.env"
+.\scripts\Run.ps1 session dotenv add --name test2 --work-path $app --env-file "../scripts/Tests.env" --output json
+.\scripts\Run.ps1 session dotenv add --name test3 --work-path $app --env-file "../scripts/Tests.env" --output text
+.\scripts\Run.ps1 session dotenv add --name test4 --work-path $app --env-file "../scripts/Tests.env" --verbose
+
+# Session Dotenv List
+.\scripts\Run.ps1 session dotenv list -h
+.\scripts\Run.ps1 session dotenv list --work-path $app
+.\scripts\Run.ps1 session dotenv list --work-path $app --output json
+.\scripts\Run.ps1 session dotenv list --work-path $app --output text
+.\scripts\Run.ps1 session dotenv list --work-path $app --verbose
+
+# Session Dotenv Remove
+.\scripts\Run.ps1 session dotenv remove -h
+.\scripts\Run.ps1 session dotenv remove --name test1 --work-path $app
+.\scripts\Run.ps1 session dotenv remove --name test2 --work-path $app --output json
+.\scripts\Run.ps1 session dotenv remove --name test3 --work-path $app --output text
+.\scripts\Run.ps1 session dotenv remove --name test4 --work-path $app --verbose
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -9,9 +9,10 @@ Description   : Command to display session execution logs.
 ===============================================================================
 """
 
-from typing import Optional
-
 import click
+import json
+
+from typing import Optional
 
 from xyz_platform.commands.base_command import BaseCommand
 
@@ -267,7 +268,6 @@ class LogsSessionCommand(BaseCommand):
         """
         if self._is_structured_output():
             if self._output_format == "json":
-                import json
 
                 envelope = {
                     "success": bool(success),
@@ -293,11 +293,6 @@ class LogsSessionCommand(BaseCommand):
                         click.echo(f"ERROR: {err}")
             # Suppress _output_format so the base _finalize only runs its
             # timing/logging side-effects and does not re-render structured output.
-            fmt, self._output_format = self._output_format, ""
-            result = super()._finalize(
-                operation=operation, success=success, show_footer=False
-            )
-            self._output_format = fmt
-            return result
+            self._output_format = ""
 
         return super()._finalize(success=success, show_footer=show_footer)

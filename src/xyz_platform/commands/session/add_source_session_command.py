@@ -14,8 +14,6 @@ import click
 from typing import Optional
 
 from xyz_platform.commands.base_command import BaseCommand
-from xyz_platform.controllers.workspace_controller import WorkspaceController
-from xyz_platform.services.configuration_service import ConfigurationService
 
 
 class AddSourceSessionCommand(BaseCommand):
