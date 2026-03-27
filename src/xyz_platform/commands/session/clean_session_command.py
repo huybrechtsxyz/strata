@@ -131,7 +131,7 @@ class CleanSessionCommand(BaseCommand):
         if not super()._initialize(require_session, show_header):
             return False
         self.logger.debug(
-            "CleanSessionCommand initialized",
+            "CleanSessionCommand initializing",
             extra={"command_class": self.__class__.__name__},
         )
         return True
@@ -140,13 +140,18 @@ class CleanSessionCommand(BaseCommand):
         if not super()._before_execute():
             return False
         self.logger.debug(
-            "Clean session command pre-execution validat",
+            "Clean session command pre-execution validation",
             extra={"command_class": self.__class__.__name__},
         )
         return True
 
     def _after_execute(self) -> bool:
         """Populate output data and render console feedback."""
+        self.logger.debug(
+            "Clean session command post-execution validation",
+            extra={"command_class": self.__class__.__name__},
+        )
+
         if not self._is_quiet():
             self._output_data = {
                 k: str(v) for k, v in self._clean_stats.items() if v is not None

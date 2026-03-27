@@ -57,8 +57,8 @@ class BaseCommand:
         self.logger = get_logger(self.__class__.__module__)
 
         # Timer attributes
-        self._start_time = None
-        self._end_time = None
+        self._start_time: datetime
+        self._end_time: datetime
 
         # Standard paths
         self._file_path = file_path
@@ -82,7 +82,7 @@ class BaseCommand:
         self._output_data: dict = {}
 
         # Output format and flags
-        self._output_format = output or ""
+        self._output_format = output or "console"
         self._output_verbose = verbose or False
         self._output_quiet = quiet or False
 
@@ -95,8 +95,12 @@ class BaseCommand:
 
         # Integration controller (lazy-loaded)
         self._integration_controller: Optional[IntegrationController] = None
+
         # Lifecycle controller (lazy-loaded)
         self._lifecycle_controller: Optional[LifecycleController] = None
+
+        # Workspace controller (lazy-loaded)
+        self._workspace_controller: Optional[WorkspaceController] = None
 
     # Abstract method to be implemented by subclasses
 
@@ -199,6 +203,20 @@ class BaseCommand:
         try:
             self._configure_session_logging()
             self._start_time = datetime.now()
+            self.logger.debug(
+                "Initializing command",
+                extra={"command_class": self.__class__.__name__},
+            )
+
+            # Set up work path (default to current directory)
+            self._work_path = self._get_workspace_controller().get_workspace_workpath(
+                self._work_path
+            )
+            if not self._work_path.exists():
+                error_msg = f"Work path does not exist: {self._work_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
 
             # Load session.json into memory once for this command run
             if not self._session_controller.load_session(self._work_path):
@@ -207,17 +225,6 @@ class BaseCommand:
                     self.logger.error(error_msg)
                     self._errors.append(error_msg)
                     return False
-
-            # Set up work path (default to current directory)
-            workspace_controller = WorkspaceController()
-            self._work_path = workspace_controller.get_workspace_workpath(
-                self._work_path
-            )
-            if not self._work_path.exists():
-                error_msg = f"Work path does not exist: {self._work_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
 
             # Assign correlation IDs (UUID v7 — time-ordered)
             self._session_id = (
@@ -242,7 +249,10 @@ class BaseCommand:
             if show_header and self._is_console_output():
                 self.ShowConsoleHeader()
 
-            success, errors = workspace_controller.load_environment_variables(
+            (
+                success,
+                errors,
+            ) = self._get_workspace_controller().load_environment_variables(
                 self._work_path, env_path=self._env_path, env_file=self._env_file
             )
             if not success:
@@ -300,7 +310,7 @@ class BaseCommand:
             "Executing post-command logic",
             extra={"command_class": self.__class__.__name__},
         )
-        # Placeholder for post-execution logic (cleanup, notifications, etc.)
+
         self.logger.debug(
             "Post-command logic executed successfully",
             extra={"command_class": self.__class__.__name__},
@@ -392,15 +402,14 @@ class BaseCommand:
             self.ShowConsoleFooter()
 
         self._end_time = datetime.now()
-        if self._start_time and self._end_time:
-            duration = self._end_time - self._start_time
-            self.logger.debug(
-                "Command execution completed",
-                extra={
-                    "command_class": self.__class__.__name__,
-                    "duration_seconds": duration.total_seconds(),
-                },
-            )
+        duration = self._end_time - self._start_time
+        self.logger.debug(
+            "Command execution completed",
+            extra={
+                "command_class": self.__class__.__name__,
+                "duration_seconds": duration.total_seconds(),
+            },
+        )
 
         # Complete the named operation in session state
         self._complete_session_operation(success=success)
@@ -455,11 +464,15 @@ class BaseCommand:
 
     def _is_structured_output(self) -> bool:
         """Return True when --output <format> is active: emit machine-readable data (json, text, etc.)."""
-        return bool(self._output_format)
+        return bool(self._output_format) and self._output_format != "console"
 
     def _is_console_output(self) -> bool:
         """Return True for default human-readable console output (no --quiet, no explicit --output format)."""
-        return not self._output_quiet and not bool(self._output_format)
+        return (
+            not self._output_quiet
+            and not bool(self._output_format)
+            or self._output_format == "console"
+        )
 
     # Integration resolution and validation
 
@@ -484,6 +497,17 @@ class BaseCommand:
         if self._lifecycle_controller is None:
             self._lifecycle_controller = LifecycleController(enable_templating=True)
         return self._lifecycle_controller
+
+    def _get_workspace_controller(self) -> WorkspaceController:
+        """
+        Get or create the WorkspaceController instance (lazy-loaded).
+
+        Returns:
+            WorkspaceController: The controller instance
+        """
+        if self._workspace_controller is None:
+            self._workspace_controller = WorkspaceController()
+        return self._workspace_controller
 
     def _validate_requirements(self) -> bool:
         """
@@ -558,7 +582,6 @@ class BaseCommand:
             operation: Name of the operation (e.g., 'tools_status', 'session_init')
         """
         try:
-
             self._session_controller.update_last_execution(self._execution_id)
             self._session_controller.save_session()
             self.logger.debug(

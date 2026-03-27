@@ -154,11 +154,13 @@ class InitSessionCommand(BaseCommand):
             bool: Success status (errors stored in self._errors)
         """
         # Call parent first
-        if not super()._initialize(show_header=show_header):
+        if not super()._initialize(
+            require_session=require_session, show_header=show_header
+        ):
             return False
 
         self.logger.debug(
-            "Session init command initialized",
+            "Session init command initializing",
             extra={
                 "command_class": self.__class__.__name__,
                 "workspace_name": self._workspace_name,
@@ -181,7 +183,7 @@ class InitSessionCommand(BaseCommand):
             return False
 
         self.logger.debug(
-            "Session init pre-execution validation passed",
+            "Session init pre-execution validation",
             extra={"command_class": self.__class__.__name__},
         )
 
@@ -262,4 +264,4 @@ class InitSessionCommand(BaseCommand):
         )
 
         # Call parent last
-        return super()._finalize(success=success)
+        return super()._finalize(success=success, show_footer=show_footer)

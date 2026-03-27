@@ -101,6 +101,7 @@ def validate_verbose_quiet_exclusive(ctx, param, value):
     return validate_mutually_exclusive_options(ctx, param, value, [exclusive_param])
 
 
+# Validation to ensure --output and --quiet are not used together
 def validate_output_quiet_exclusive(ctx, param, value):
     """
     Callback to ensure --output and --quiet are not used together.
@@ -183,17 +184,6 @@ def click_output_quiet(func):
     return func
 
 
-# --env-path -> The path to the environment files (for finding environment-specific configs)
-def click_env_path(func):
-    func = click.option(
-        "--env-path",
-        default=None,
-        type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
-        help="Optional environment directory path for environment-specific configurations (must exist)",
-    )(func)
-    return func
-
-
 # --env-file -> The path to a specific environment file (for finding environment-specific configs)
 def click_env_file(func):
     func = click.option(
@@ -201,6 +191,31 @@ def click_env_file(func):
         default=None,
         type=click.Path(exists=False, file_okay=True, dir_okay=False, path_type=str),
         help="Optional path to a specific environment file for environment-specific configurations (must exist)",
+    )(func)
+    return func
+
+
+# --work-path -> The path to the root of the workspace if not in pwd
+def click_work_path(func):
+    func = click.option(
+        "--work-path",
+        default=None,
+        type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
+        help="Optional root path of the workspace, if different then PWD (must exist)",
+    )(func)
+    return func
+
+
+# =====================================================================
+
+
+# --env-path -> The path to the environment files (for finding environment-specific configs)
+def click_env_path(func):
+    func = click.option(
+        "--env-path",
+        default=None,
+        type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
+        help="Optional environment directory path for environment-specific configurations (must exist)",
     )(func)
     return func
 
@@ -234,17 +249,6 @@ def click_data_path(func):
         default=None,
         type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=str),
         help="Optional data directory path for templates and other resources (must exist)",
-    )(func)
-    return func
-
-
-# --work-path -> The path to the root of the workspace if not in pwd
-def click_work_path(func):
-    func = click.option(
-        "--work-path",
-        default=None,
-        type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
-        help="Optional root path of the workspace, if different then PWD (must exist)",
     )(func)
     return func
 

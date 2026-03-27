@@ -84,6 +84,110 @@ class SessionController:
         """Clear accumulated messages."""
         self._messages.clear()
 
+    # Session in-memory load / save
+
+    def load_session(self, work_path: Path) -> bool:
+        """
+        Load session.json into memory.
+
+        Called once at the start of every command via BaseCommand._initialize().
+        Silent no-op when the file does not exist yet (e.g. before ``session init``).
+
+        Args:
+            work_path: Working directory containing .xyz-platform/session.json
+
+        Returns:
+            bool: True if loaded successfully, False if file missing or unreadable
+        """
+        try:
+            session_file = self._session_file_path(work_path)
+            if not session_file.exists():
+                self.logger.debug(
+                    "Session file not found (starting with empty session)",
+                    extra={"session_file": str(session_file)},
+                )
+                return False
+            with open(session_file, "r", encoding="utf-8") as f:
+                self._session_data = json.load(f)
+            self._session_file = session_file
+            self.logger.debug(
+                "Session loaded into memory",
+                extra={"session_file": str(session_file)},
+            )
+            return True
+        except Exception as e:
+            self.logger.debug(f"Could not load session: {e}")
+            return False
+
+    def save_session(self) -> bool:
+        """
+        Write in-memory session data back to session.json.
+
+        Called once at the end of every command via BaseCommand._finalize().
+        No-op when session was never loaded (e.g. command ran before ``session init``).
+
+        Returns:
+            bool: True if saved successfully, False otherwise
+        """
+        if self._session_data is None or self._session_file is None:
+            return False
+        try:
+            with open(self._session_file, "w", encoding="utf-8") as f:
+                json.dump(self._session_data, f, indent=2)
+            self.logger.debug(
+                "Session saved to disk",
+                extra={"session_file": str(self._session_file)},
+            )
+            return True
+        except Exception as e:
+            self.logger.debug(f"Could not save session: {e}")
+            return False
+
+    def get_session_id(self) -> Optional[str]:
+        """Return the session_id from in-memory session data, or None if not loaded."""
+        if self._session_data is None:
+            return None
+        return self._session_data.get("session", {}).get("session_id")
+
+    def get_session_data(self) -> Optional[Dict]:
+        """Return the in-memory session data dict, or None if not loaded."""
+        return self._session_data
+
+    def get_repositories(self) -> list:
+        """Return the repositories list from in-memory session data, or [] if not loaded."""
+        if self._session_data is None:
+            return []
+        return self._session_data.get("repositories", [])
+
+    def get_dotenvs(self) -> list:
+        """Return the dotenvs list from in-memory session data, or [] if not loaded."""
+        if self._session_data is None:
+            return []
+        return self._session_data.get("dotenv_files", [])
+
+    def get_config_sources(self) -> list:
+        """Return the config_sources list from in-memory session data, or [] if not loaded."""
+        if self._session_data is None:
+            return []
+        return self._session_data.get("config_files", [])
+
+    def update_last_execution(self, execution_id: str) -> bool:
+        """
+        Update last_execution_id in the in-memory session data.
+
+        The caller is responsible for persisting via save_session().
+
+        Args:
+            execution_id: Execution ID of the completed command
+
+        Returns:
+            bool: True if updated, False if session not loaded
+        """
+        if self._session_data is None:
+            return False
+        self._session_data.setdefault("session", {})["last_execution_id"] = execution_id
+        return True
+
     # Session initialization methods
 
     def initialize_session(
@@ -253,413 +357,6 @@ class SessionController:
 
         except Exception as e:
             error_msg = f"Failed to clean session: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    # Session in-memory load / save
-
-    def load_session(self, work_path: Path) -> bool:
-        """
-        Load session.json into memory.
-
-        Called once at the start of every command via BaseCommand._initialize().
-        Silent no-op when the file does not exist yet (e.g. before ``session init``).
-
-        Args:
-            work_path: Working directory containing .xyz-platform/session.json
-
-        Returns:
-            bool: True if loaded successfully, False if file missing or unreadable
-        """
-        try:
-            session_file = self._session_file_path(work_path)
-            if not session_file.exists():
-                self.logger.debug(
-                    "Session file not found (starting with empty session)",
-                    extra={"session_file": str(session_file)},
-                )
-                return False
-            with open(session_file, "r", encoding="utf-8") as f:
-                self._session_data = json.load(f)
-            self._session_file = session_file
-            self.logger.debug(
-                "Session loaded into memory",
-                extra={"session_file": str(session_file)},
-            )
-            return True
-        except Exception as e:
-            self.logger.debug(f"Could not load session: {e}")
-            return False
-
-    def save_session(self) -> bool:
-        """
-        Write in-memory session data back to session.json.
-
-        Called once at the end of every command via BaseCommand._finalize().
-        No-op when session was never loaded (e.g. command ran before ``session init``).
-
-        Returns:
-            bool: True if saved successfully, False otherwise
-        """
-        if self._session_data is None or self._session_file is None:
-            return False
-        try:
-            with open(self._session_file, "w", encoding="utf-8") as f:
-                json.dump(self._session_data, f, indent=2)
-            self.logger.debug(
-                "Session saved to disk",
-                extra={"session_file": str(self._session_file)},
-            )
-            return True
-        except Exception as e:
-            self.logger.debug(f"Could not save session: {e}")
-            return False
-
-    def get_session_id(self) -> Optional[str]:
-        """Return the session_id from in-memory session data, or None if not loaded."""
-        if self._session_data is None:
-            return None
-        return self._session_data.get("session", {}).get("session_id")
-
-    def get_session_data(self) -> Optional[Dict]:
-        """Return the in-memory session data dict, or None if not loaded."""
-        return self._session_data
-
-    def get_repositories(self) -> list:
-        """Return the repositories list from in-memory session data, or [] if not loaded."""
-        if self._session_data is None:
-            return []
-        return self._session_data.get("repositories", [])
-
-    def get_dotenvs(self) -> list:
-        """Return the dotenvs list from in-memory session data, or [] if not loaded."""
-        if self._session_data is None:
-            return []
-        return self._session_data.get("dotenv_files", [])
-
-    def get_config_sources(self) -> list:
-        """Return the config_sources list from in-memory session data, or [] if not loaded."""
-        if self._session_data is None:
-            return []
-        return self._session_data.get("config_files", [])
-
-    def update_last_execution(self, execution_id: str) -> bool:
-        """
-        Update last_execution_id in the in-memory session data.
-
-        The caller is responsible for persisting via save_session().
-
-        Args:
-            execution_id: Execution ID of the completed command
-
-        Returns:
-            bool: True if updated, False if session not loaded
-        """
-        if self._session_data is None:
-            return False
-        self._session_data.setdefault("session", {})["last_execution_id"] = execution_id
-        return True
-
-    # Repository management methods
-
-    def add_repository(
-        self,
-        name: str,
-        url: str,
-        work_path: Path,
-        repo_type: Optional[str] = None,
-        branch: str = "main",
-        integrations: Optional[Dict[str, Any]] = None,
-        repo_map: Optional[Dict[str, str]] = None,
-    ) -> Tuple[bool, Dict[str, str]]:
-        """
-        Add a repository to the session workspace.
-
-        Args:
-            name: Repository name (folder name)
-            url: Repository URL or local path
-            work_path: Root working directory
-            repo_type: Repository type (git, local, archive) - auto-detected if None
-            branch: Git branch to clone (default: main)
-            integrations: Resolved integration instances keyed by integration name
-
-        Returns:
-            Tuple[bool, Dict]: Success status and repository metadata
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            # Auto-detect repository type if not provided
-            if not repo_type:
-                repo_type = self._detect_repo_type(url, work_path)
-
-            self.logger.info(
-                f"Adding repository '{name}' from '{url}' (type: {repo_type})"
-            )
-
-            # Define repository path
-            repo_path = work_path / name
-
-            # Handle repository based on type
-            if repo_type == "git":
-                git_integration = integrations.get("git") if integrations else None
-                if not self._clone_git_repository(
-                    url, repo_path, branch, git_integration
-                ):
-                    return False, {}
-            elif repo_type == "local":
-                source_path = self._resolve_local_source_path(url, work_path)
-                if not self._copy_local_repository(source_path, repo_path):
-                    return False, {}
-            elif repo_type == "archive":
-                error_msg = "Archive repository type not yet implemented"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-            else:
-                error_msg = f"Unknown repository type: {repo_type}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            # Create repository metadata
-            repo_metadata = {
-                "name": name,
-                "url": url,
-                "path": name,
-                "type": repo_type,
-                "branch": branch if repo_type == "git" else None,
-                "created": datetime.now().isoformat(),
-            }
-
-            # Update session.json
-            if not self._update_session_repositories(work_path, repo_metadata):
-                return False, {}
-
-            # Update VSCode workspace (optional)
-            self._add_to_vscode_workspace(work_path, name)
-
-            self._messages.append(f"Repository '{name}' added successfully")
-
-            return True, repo_metadata
-
-        except Exception as e:
-            error_msg = f"Failed to add repository: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    def remove_repository(
-        self,
-        name: str,
-        work_path: Path,
-        delete_folder: bool = False,
-        dry_run: bool = False,
-    ) -> Tuple[bool, Dict[str, str]]:
-        """
-        Remove a repository from the session.
-
-        Removes the entry from in-memory repositories[] (save_session() persists it).
-        Optionally deletes the repository folder from disk.
-
-        Args:
-            name: Repository name to remove
-            work_path: Root working directory
-            delete_folder: If True, also delete the repository folder on disk
-            dry_run: If True, report what would happen without making any changes
-
-        Returns:
-            Tuple[bool, Dict]: Success status and removed repository metadata
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            repositories = self._session_data.get("repositories", [])
-            repo_metadata = next((r for r in repositories if r["name"] == name), None)
-
-            if repo_metadata is None:
-                error_msg = f"Repository '{name}' not found in session"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            if dry_run:
-                self._messages.append(
-                    f"[dry-run] Would remove repository '{name}' from session"
-                )
-                if delete_folder:
-                    repo_path = work_path / name
-                    if repo_path.exists():
-                        self._messages.append(
-                            f"[dry-run] Would delete folder: {repo_path}"
-                        )
-                    else:
-                        self._messages.append(
-                            f"[dry-run] Folder not found on disk (would skip): {repo_path}"
-                        )
-                return True, dict(repo_metadata)
-
-            # Optionally delete the folder
-            if delete_folder:
-                repo_path = work_path / name
-                if repo_path.exists():
-                    shutil.rmtree(repo_path)
-                    self.logger.info(f"Deleted repository folder: {repo_path}")
-                    self._messages.append(f"Deleted folder: {repo_path}")
-                else:
-                    self._messages.append(
-                        f"Folder not found on disk (skipped): {repo_path}"
-                    )
-
-            # Remove from in-memory list
-            self._session_data["repositories"] = [
-                r for r in repositories if r["name"] != name
-            ]
-            self._messages.append(f"Removing repository '{name}' from session")
-
-            return True, repo_metadata
-
-        except Exception as e:
-            error_msg = f"Failed to remove repository: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    def get_required_integrations_for_add_repository(
-        self,
-        url: str,
-        repo_type: Optional[str] = None,
-        work_path: Optional[Path] = None,
-    ) -> Dict[str, str]:
-        """
-        Determine required integrations for add-repository operation.
-
-        Args:
-            url: Repository URL or local path
-            repo_type: Repository type (git, local, archive) - auto-detected if None
-            work_path: Root working directory used to resolve relative local paths
-
-        Returns:
-            Dict[str, str]: Required integrations mapped to operation descriptions
-        """
-        detected_type = repo_type or self._detect_repo_type(url, work_path)
-
-        if detected_type == "git":
-            return {"git": "repository clone operations"}
-
-        return {}
-
-    # Dotenv file management methods
-
-    def add_dotenv(
-        self, env_name: str, env_path: Path, work_path: Path
-    ) -> Tuple[bool, Dict]:
-        """
-        Add a .env file to the session state.
-
-        Args:
-            env_name: Logical name for the environment (e.g. "development", "production")
-            env_file: Path to the .env file
-        Returns:
-            Tuple[bool, Dict]: (success, metadata dict)
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            # Resolve to absolute path
-            env_path = system.resolve_path(
-                base_path=str(work_path), target_path=str(env_path)
-            )
-
-            # Validate exists
-            if not env_path.is_file():
-                error_msg = f".env file not found: {env_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            metadata = {
-                "name": env_name,
-                "path": env_path.as_posix(),
-                "created": datetime.now().isoformat(),
-            }
-
-            # Idempotent: skip duplicate paths
-            existing = self._session_data.setdefault("dotenv_files", [])
-            if any(e.get("path") == metadata["path"] for e in existing):
-                self._messages.append(
-                    f".env file already registered (skipped): {env_path}"
-                )
-                return True, metadata
-
-            existing.append(metadata)
-            self.logger.info(
-                f"Registered .env file '{env_name}'",
-                extra={"path": str(env_path)},
-            )
-            self._messages.append(f"Registered .env file '{env_name}': {env_path}")
-            return True, metadata
-
-        except Exception as e:
-            error_msg = f"Failed to add .env file: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    def remove_dotenv(self, env_name: str) -> Tuple[bool, Dict]:
-        """
-        Remove a .env file from the session state by name.
-
-        Args:
-            env_name: Logical name of the environment to remove
-        Returns:
-            Tuple[bool, Dict]: (success, metadata dict of removed entry)
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            dotenvs = self._session_data.get("dotenv_files", [])
-            dotenv_metadata = next((d for d in dotenvs if d["name"] == env_name), None)
-
-            if dotenv_metadata is None:
-                error_msg = f".env entry '{env_name}' not found in session"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            # Remove from in-memory list
-            self._session_data["dotenv_files"] = [
-                d for d in dotenvs if d["name"] != env_name
-            ]
-            self._messages.append(f"Removed .env entry '{env_name}' from session")
-
-            return True, dotenv_metadata
-
-        except Exception as e:
-            error_msg = f"Failed to remove .env file: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False, {}
@@ -968,6 +665,317 @@ class SessionController:
             return False
 
         return True
+
+    #
+    #
+    #
+    #
+    #
+    #
+    #
+
+    # Repository management methods
+
+    def add_repository(
+        self,
+        name: str,
+        url: str,
+        work_path: Path,
+        repo_type: Optional[str] = None,
+        branch: str = "main",
+        integrations: Optional[Dict[str, Any]] = None,
+        repo_map: Optional[Dict[str, str]] = None,
+    ) -> Tuple[bool, Dict[str, str]]:
+        """
+        Add a repository to the session workspace.
+
+        Args:
+            name: Repository name (folder name)
+            url: Repository URL or local path
+            work_path: Root working directory
+            repo_type: Repository type (git, local, archive) - auto-detected if None
+            branch: Git branch to clone (default: main)
+            integrations: Resolved integration instances keyed by integration name
+
+        Returns:
+            Tuple[bool, Dict]: Success status and repository metadata
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            # Auto-detect repository type if not provided
+            if not repo_type:
+                repo_type = self._detect_repo_type(url, work_path)
+
+            self.logger.info(
+                f"Adding repository '{name}' from '{url}' (type: {repo_type})"
+            )
+
+            # Define repository path
+            repo_path = work_path / name
+
+            # Handle repository based on type
+            if repo_type == "git":
+                git_integration = integrations.get("git") if integrations else None
+                if not self._clone_git_repository(
+                    url, repo_path, branch, git_integration
+                ):
+                    return False, {}
+            elif repo_type == "local":
+                source_path = self._resolve_local_source_path(url, work_path)
+                if not self._copy_local_repository(source_path, repo_path):
+                    return False, {}
+            elif repo_type == "archive":
+                error_msg = "Archive repository type not yet implemented"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+            else:
+                error_msg = f"Unknown repository type: {repo_type}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Create repository metadata
+            repo_metadata = {
+                "name": name,
+                "url": url,
+                "path": name,
+                "type": repo_type,
+                "branch": branch if repo_type == "git" else None,
+                "created": datetime.now().isoformat(),
+            }
+
+            # Update session.json
+            if not self._update_session_repositories(work_path, repo_metadata):
+                return False, {}
+
+            # Update VSCode workspace (optional)
+            self._add_to_vscode_workspace(work_path, name)
+
+            self._messages.append(f"Repository '{name}' added successfully")
+
+            return True, repo_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to add repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def remove_repository(
+        self,
+        name: str,
+        work_path: Path,
+        delete_folder: bool = False,
+        dry_run: bool = False,
+    ) -> Tuple[bool, Dict[str, str]]:
+        """
+        Remove a repository from the session.
+
+        Removes the entry from in-memory repositories[] (save_session() persists it).
+        Optionally deletes the repository folder from disk.
+
+        Args:
+            name: Repository name to remove
+            work_path: Root working directory
+            delete_folder: If True, also delete the repository folder on disk
+            dry_run: If True, report what would happen without making any changes
+
+        Returns:
+            Tuple[bool, Dict]: Success status and removed repository metadata
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            repositories = self._session_data.get("repositories", [])
+            repo_metadata = next((r for r in repositories if r["name"] == name), None)
+
+            if repo_metadata is None:
+                error_msg = f"Repository '{name}' not found in session"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            if dry_run:
+                self._messages.append(
+                    f"[dry-run] Would remove repository '{name}' from session"
+                )
+                if delete_folder:
+                    repo_path = work_path / name
+                    if repo_path.exists():
+                        self._messages.append(
+                            f"[dry-run] Would delete folder: {repo_path}"
+                        )
+                    else:
+                        self._messages.append(
+                            f"[dry-run] Folder not found on disk (would skip): {repo_path}"
+                        )
+                return True, dict(repo_metadata)
+
+            # Optionally delete the folder
+            if delete_folder:
+                repo_path = work_path / name
+                if repo_path.exists():
+                    shutil.rmtree(repo_path)
+                    self.logger.info(f"Deleted repository folder: {repo_path}")
+                    self._messages.append(f"Deleted folder: {repo_path}")
+                else:
+                    self._messages.append(
+                        f"Folder not found on disk (skipped): {repo_path}"
+                    )
+
+            # Remove from in-memory list
+            self._session_data["repositories"] = [
+                r for r in repositories if r["name"] != name
+            ]
+            self._messages.append(f"Removing repository '{name}' from session")
+
+            return True, repo_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to remove repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def get_required_integrations_for_add_repository(
+        self,
+        url: str,
+        repo_type: Optional[str] = None,
+        work_path: Optional[Path] = None,
+    ) -> Dict[str, str]:
+        """
+        Determine required integrations for add-repository operation.
+
+        Args:
+            url: Repository URL or local path
+            repo_type: Repository type (git, local, archive) - auto-detected if None
+            work_path: Root working directory used to resolve relative local paths
+
+        Returns:
+            Dict[str, str]: Required integrations mapped to operation descriptions
+        """
+        detected_type = repo_type or self._detect_repo_type(url, work_path)
+
+        if detected_type == "git":
+            return {"git": "repository clone operations"}
+
+        return {}
+
+    # Dotenv file management methods
+
+    def add_dotenv(
+        self, env_name: str, env_path: Path, work_path: Path
+    ) -> Tuple[bool, Dict]:
+        """
+        Add a .env file to the session state.
+
+        Args:
+            env_name: Logical name for the environment (e.g. "development", "production")
+            env_file: Path to the .env file
+        Returns:
+            Tuple[bool, Dict]: (success, metadata dict)
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Resolve to absolute path
+            env_path = system.resolve_path(
+                base_path=str(work_path), target_path=str(env_path)
+            )
+
+            # Validate exists
+            if not env_path.is_file():
+                error_msg = f".env file not found: {env_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            metadata = {
+                "name": env_name,
+                "path": env_path.as_posix(),
+                "created": datetime.now().isoformat(),
+            }
+
+            # Idempotent: skip duplicate paths
+            existing = self._session_data.setdefault("dotenv_files", [])
+            if any(e.get("path") == metadata["path"] for e in existing):
+                self._messages.append(
+                    f".env file already registered (skipped): {env_path}"
+                )
+                return True, metadata
+
+            existing.append(metadata)
+            self.logger.info(
+                f"Registered .env file '{env_name}'",
+                extra={"path": str(env_path)},
+            )
+            self._messages.append(f"Registered .env file '{env_name}': {env_path}")
+            return True, metadata
+
+        except Exception as e:
+            error_msg = f"Failed to add .env file: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def remove_dotenv(self, env_name: str) -> Tuple[bool, Dict]:
+        """
+        Remove a .env file from the session state by name.
+
+        Args:
+            env_name: Logical name of the environment to remove
+        Returns:
+            Tuple[bool, Dict]: (success, metadata dict of removed entry)
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            dotenvs = self._session_data.get("dotenv_files", [])
+            dotenv_metadata = next((d for d in dotenvs if d["name"] == env_name), None)
+
+            if dotenv_metadata is None:
+                error_msg = f".env entry '{env_name}' not found in session"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Remove from in-memory list
+            self._session_data["dotenv_files"] = [
+                d for d in dotenvs if d["name"] != env_name
+            ]
+            self._messages.append(f"Removed .env entry '{env_name}' from session")
+
+            return True, dotenv_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to remove .env file: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
 
     #
     #

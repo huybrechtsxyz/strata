@@ -27,18 +27,19 @@ from xyz_platform.commands.cli_common import (
 
 from xyz_platform.commands.session.init_session_command import InitSessionCommand
 from xyz_platform.commands.session.clean_session_command import CleanSessionCommand
-from xyz_platform.commands.session.add_source_session_command import (
-    AddSourceSessionCommand,
-)
-from xyz_platform.commands.session.remove_source_session_command import (
-    RemoveSourceSessionCommand,
-)
-from xyz_platform.commands.session.list_source_session_command import (
-    ListSourceSessionCommand,
-)
-from xyz_platform.commands.session.add_dotenv_session_command import (
-    AddDotEnvSessionCommand,
-)
+
+# from xyz_platform.commands.session.add_source_session_command import (
+#     AddSourceSessionCommand,
+# )
+# from xyz_platform.commands.session.remove_source_session_command import (
+#     RemoveSourceSessionCommand,
+# )
+# from xyz_platform.commands.session.list_source_session_command import (
+#     ListSourceSessionCommand,
+# )
+# from xyz_platform.commands.session.add_dotenv_session_command import (
+#     AddDotEnvSessionCommand,
+# )
 
 # from xyz_platform.commands.session.show_session_command import ShowSessionCommand
 # from xyz_platform.commands.session.add_session_command import AddSessionCommand
@@ -132,258 +133,281 @@ def session_clean(
     handle_command_exit(command, success)
 
 
-# TODO
-@session_command.command(name="logs", help="Show logs for the current session.")
-def session_logs():
-    """Show details of the current session."""
-    pass
+#
+#
+#
+#
+#
+#
+
+#
+#
+#
+#
+#
+#
 
 
-# TODO
-@session_command.command(
-    name="show", help="Show status and details of the current session."
-)
-def session_status(work_path, output, verbose):
-    """Show details of the current session."""
-    pass
+#
+#
+#
+#
+#
+#
 
 
-# SOURCE Command Group: session source add/remove/list
+# # TODO
+# @session_command.command(name="logs", help="Show logs for the current session.")
+# def session_logs():
+#     """Show details of the current session."""
+#     pass
 
 
-@session_command.group(name="source", help="Manage session repository sources.")
-def session_source_command():
-    """Session source subcommand group."""
-    pass
+# # TODO
+# @session_command.command(
+#     name="show", help="Show status and details of the current session."
+# )
+# def session_status(work_path, output, verbose):
+#     """Show details of the current session."""
+#     pass
 
 
-@session_source_command.command(
-    name="add",
-    help="Add a repository to the current session workspace.",
-)
-@click.option(
-    "--name",
-    required=True,
-    type=str,
-    help="Name of the item (used as folder name and identifier for repositories)",
-)
-@click.option(
-    "--url",
-    required=True,
-    type=str,
-    help="URL or path of a repository to add (e.g. git repo URL, local folder path, or archive URL).",
-)
-@click.option(
-    "--type",
-    "item_type",
-    type=click.Choice(["repo", "git", "local", "archive"], case_sensitive=False),
-    help="Item type: repo (auto-detect), git, local, or archive.",
-)
-@click.option(
-    "--branch",
-    type=str,
-    default="main",
-    help="Git branch to clone (default: main, only for git repositories)",
-)
-@click_work_path
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def session_source_add_command(
-    name: str,
-    url: str,
-    item_type: Optional[str] = None,
-    branch: str = "main",
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-    quiet: bool = False,
-):
-    """Add a session source (repository or config)."""
-    # AddSourceSessionCommand handles both repositories and config sources, so we pass all parameters and let it sort out the logic internally.
-    command = AddSourceSessionCommand(
-        name=name,
-        url=url,
-        item_type=item_type,
-        branch=branch,
-        work_path=work_path,
-        output=output,
-        verbose=verbose,
-        quiet=quiet,
-    )
-    success = command.execute()
-    handle_command_exit(command, success)
+# # SOURCE Command Group: session source add/remove/list
 
 
-@session_source_command.command(
-    name="remove",
-    help="Remove a repository from the current session workspace.",
-)
-@click.option(
-    "--name",
-    required=True,
-    type=str,
-    help="Name of the item (used as folder name and identifier for repositories)",
-)
-@click_work_path
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def session_source_remove_command(
-    name: str,
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-    quiet: bool = False,
-):
-    """Remove a session source (repository or config)."""
-    command = RemoveSourceSessionCommand(
-        name=name,
-        work_path=work_path,
-        output=output,
-        verbose=verbose,
-        quiet=quiet,
-    )
-    success = command.execute()
-    handle_command_exit(command, success)
+# @session_command.group(name="source", help="Manage session repository sources.")
+# def session_source_command():
+#     """Session source subcommand group."""
+#     pass
 
 
-@session_source_command.command(
-    name="list",
-    help="List session source repositories.",
-)
-@click_work_path
-@click_output_format
-@click_output_verbose
-def session_source_list_command(
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-):
-    """List session sources (repositories and configs)."""
-    command = ListSourceSessionCommand(
-        work_path=work_path,
-        output=output,
-        verbose=verbose,
-    )
-    success = command.execute()
-    handle_command_exit(command, success)
+# @session_source_command.command(
+#     name="add",
+#     help="Add a repository to the current session workspace.",
+# )
+# @click.option(
+#     "--name",
+#     required=True,
+#     type=str,
+#     help="Name of the item (used as folder name and identifier for repositories)",
+# )
+# @click.option(
+#     "--url",
+#     required=True,
+#     type=str,
+#     help="URL or path of a repository to add (e.g. git repo URL, local folder path, or archive URL).",
+# )
+# @click.option(
+#     "--type",
+#     "item_type",
+#     type=click.Choice(["repo", "git", "local", "archive"], case_sensitive=False),
+#     help="Item type: repo (auto-detect), git, local, or archive.",
+# )
+# @click.option(
+#     "--branch",
+#     type=str,
+#     default="main",
+#     help="Git branch to clone (default: main, only for git repositories)",
+# )
+# @click_work_path
+# @click_output_format
+# @click_output_verbose
+# @click_output_quiet
+# def session_source_add_command(
+#     name: str,
+#     url: str,
+#     item_type: Optional[str] = None,
+#     branch: str = "main",
+#     work_path: Optional[str] = None,
+#     output: Optional[str] = None,
+#     verbose: bool = False,
+#     quiet: bool = False,
+# ):
+#     """Add a session source (repository or config)."""
+#     # AddSourceSessionCommand handles both repositories and config sources, so we pass all parameters and let it sort out the logic internally.
+#     command = AddSourceSessionCommand(
+#         name=name,
+#         url=url,
+#         item_type=item_type,
+#         branch=branch,
+#         work_path=work_path,
+#         output=output,
+#         verbose=verbose,
+#         quiet=quiet,
+#     )
+#     success = command.execute()
+#     handle_command_exit(command, success)
 
 
-# TODO
-@session_source_command.command(
-    name="fetch",
-    help="Fetch all repositories declared in the merged platform configuration.",
-)
-def session_source_fetch_command():
-    """Fetch session source repositories."""
-    pass
+# @session_source_command.command(
+#     name="remove",
+#     help="Remove a repository from the current session workspace.",
+# )
+# @click.option(
+#     "--name",
+#     required=True,
+#     type=str,
+#     help="Name of the item (used as folder name and identifier for repositories)",
+# )
+# @click_work_path
+# @click_output_format
+# @click_output_verbose
+# @click_output_quiet
+# def session_source_remove_command(
+#     name: str,
+#     work_path: Optional[str] = None,
+#     output: Optional[str] = None,
+#     verbose: bool = False,
+#     quiet: bool = False,
+# ):
+#     """Remove a session source (repository or config)."""
+#     command = RemoveSourceSessionCommand(
+#         name=name,
+#         work_path=work_path,
+#         output=output,
+#         verbose=verbose,
+#         quiet=quiet,
+#     )
+#     success = command.execute()
+#     handle_command_exit(command, success)
 
 
-# DOTENV Command Group: session dotenv add/remove/list
+# @session_source_command.command(
+#     name="list",
+#     help="List session source repositories.",
+# )
+# @click_work_path
+# @click_output_format
+# @click_output_verbose
+# def session_source_list_command(
+#     work_path: Optional[str] = None,
+#     output: Optional[str] = None,
+#     verbose: bool = False,
+# ):
+#     """List session sources (repositories and configs)."""
+#     command = ListSourceSessionCommand(
+#         work_path=work_path,
+#         output=output,
+#         verbose=verbose,
+#     )
+#     success = command.execute()
+#     handle_command_exit(command, success)
 
 
-@session_command.group(
-    name="dotenv", help="Manage session environment variable sources."
-)
-def session_dotenv_command():
-    """Session dotenv subcommand group."""
-    pass
+# # TODO
+# @session_source_command.command(
+#     name="fetch",
+#     help="Fetch all repositories declared in the merged platform configuration.",
+# )
+# def session_source_fetch_command():
+#     """Fetch session source repositories."""
+#     pass
 
 
-@session_dotenv_command.command(
-    name="add",
-    help="Add an environment variable source (.env file) to the current session workspace.",
-)
-@click.option(
-    "--name",
-    required=True,
-    type=str,
-    help="Name of the item (used as identifier for dotenv sources)",
-)
-@click_env_file
-@click_work_path
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def session_dotenv_add_command(
-    name: str,
-    env_file: str,
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-    quiet: bool = False,
-):
-    """Add a session environment variable source (.env file)."""
-    command = AddDotEnvSessionCommand(
-        name=name,
-        env_file=env_file,
-        work_path=work_path,
-        output=output,
-        verbose=verbose,
-        quiet=quiet,
-    )
-    success = command.execute()
-    handle_command_exit(command, success)
+# # DOTENV Command Group: session dotenv add/remove/list
 
 
-# TODO
-@session_dotenv_command.command(
-    name="remove",
-    help="Remove an environment variable source (.env file) from the current session workspace.",
-)
-def session_dotenv_remove_command():
-    """Remove a session environment variable source (.env file)."""
-    pass
+# @session_command.group(
+#     name="dotenv", help="Manage session environment variable sources."
+# )
+# def session_dotenv_command():
+#     """Session dotenv subcommand group."""
+#     pass
 
 
-# TODO
-@session_dotenv_command.command(
-    name="list",
-    help="List environment variable sources (.env files) in the current session workspace.",
-)
-def session_dotenv_list_command():
-    """List session environment variable sources (.env files)."""
-    pass
+# @session_dotenv_command.command(
+#     name="add",
+#     help="Add an environment variable source (.env file) to the current session workspace.",
+# )
+# @click.option(
+#     "--name",
+#     required=True,
+#     type=str,
+#     help="Name of the item (used as identifier for dotenv sources)",
+# )
+# @click_env_file
+# @click_work_path
+# @click_output_format
+# @click_output_verbose
+# @click_output_quiet
+# def session_dotenv_add_command(
+#     name: str,
+#     env_file: str,
+#     work_path: Optional[str] = None,
+#     output: Optional[str] = None,
+#     verbose: bool = False,
+#     quiet: bool = False,
+# ):
+#     """Add a session environment variable source (.env file)."""
+#     command = AddDotEnvSessionCommand(
+#         name=name,
+#         env_file=env_file,
+#         work_path=work_path,
+#         output=output,
+#         verbose=verbose,
+#         quiet=quiet,
+#     )
+#     success = command.execute()
+#     handle_command_exit(command, success)
 
 
-# CONFIG Command Group: session config add/remove/list
+# # TODO
+# @session_dotenv_command.command(
+#     name="remove",
+#     help="Remove an environment variable source (.env file) from the current session workspace.",
+# )
+# def session_dotenv_remove_command():
+#     """Remove a session environment variable source (.env file)."""
+#     pass
 
 
-@session_command.group(name="config", help="Manage session configuration sources.")
-def session_config_command():
-    """Session config subcommand group."""
-    pass
+# # TODO
+# @session_dotenv_command.command(
+#     name="list",
+#     help="List environment variable sources (.env files) in the current session workspace.",
+# )
+# def session_dotenv_list_command():
+#     """List session environment variable sources (.env files)."""
+#     pass
 
 
-# TODO
-@session_config_command.command(
-    name="add",
-    help="Add a configuration source (file or directory) to the current session workspace.",
-)
-def session_config_add_command():
-    """Add a session configuration source (file or directory)."""
-    pass
+# # CONFIG Command Group: session config add/remove/list
 
 
-# TODO
-@session_config_command.command(
-    name="remove",
-    help="Remove a configuration source (file or directory) from the current session workspace.",
-)
-def session_config_remove_command():
-    """Remove a session configuration source (file or directory)."""
-    pass
+# @session_command.group(name="config", help="Manage session configuration sources.")
+# def session_config_command():
+#     """Session config subcommand group."""
+#     pass
 
 
-# TODO
-@session_config_command.command(
-    name="list",
-    help="List configuration sources (files or directories) in the current session workspace.",
-)
-def session_config_list_command():
-    """List session configuration sources (files or directories)."""
-    pass
+# # TODO
+# @session_config_command.command(
+#     name="add",
+#     help="Add a configuration source (file or directory) to the current session workspace.",
+# )
+# def session_config_add_command():
+#     """Add a session configuration source (file or directory)."""
+#     pass
+
+
+# # TODO
+# @session_config_command.command(
+#     name="remove",
+#     help="Remove a configuration source (file or directory) from the current session workspace.",
+# )
+# def session_config_remove_command():
+#     """Remove a session configuration source (file or directory)."""
+#     pass
+
+
+# # TODO
+# @session_config_command.command(
+#     name="list",
+#     help="List configuration sources (files or directories) in the current session workspace.",
+# )
+# def session_config_list_command():
+#     """List session configuration sources (files or directories)."""
+#     pass
 
 
 # @session_command.command(name="show", help="Show details of the current session.")

@@ -33,10 +33,9 @@ class StatusToolsCommand(BaseCommand):
     def __init__(
         self,
         work_path: Optional[str] = None,
-        env_path: Optional[str] = None,
         env_file: Optional[str] = None,
         output: Optional[str] = None,
-        verbose: Optional[bool] = None,
+        verbose: bool = False,
     ):
         """
         Initialize the tools status command.
@@ -48,15 +47,23 @@ class StatusToolsCommand(BaseCommand):
         """
         super().__init__(
             work_path=work_path,
-            env_path=env_path,
             env_file=env_file,
             output=output,
-            verbose=verbose or False,
+            verbose=verbose,
         )
         self._tool_results: List[Dict] = []
 
-    # Execute the command
+    # Declare required integrations for this command
+    def get_required_integrations(self):
+        """
+        Declare required integrations for this command.
 
+        Returns:
+            Dict[str, str]: Required integrations with operation descriptions
+        """
+        return {}
+
+    # Execute the command
     def execute(self) -> bool:
         """
         Execute the tools status command.
@@ -103,7 +110,6 @@ class StatusToolsCommand(BaseCommand):
                     continue  # Skip service-only integrations (Vault, KeyVault, etc.)
 
                 # Use real config from loaded configuration if available, else stub
-
                 int_config = config_integration_map.get(
                     integration_type,
                     IntegrationModel(
@@ -117,7 +123,6 @@ class StatusToolsCommand(BaseCommand):
                     ),
                 )
                 integration = integration_class(config=int_config)
-
                 available = integration.is_available()
                 version = integration.get_version() if available else None
                 label = integration_type.replace("-", " ").title()
@@ -134,9 +139,7 @@ class StatusToolsCommand(BaseCommand):
                 version_ok, version_detail = self._check_version_constraints(
                     version, min_version, max_version
                 )
-
                 integration_command = getattr(integration_class, "COMMAND", None)
-
                 self._tool_results.append(
                     {
                         "name": integration_type,
@@ -189,7 +192,6 @@ class StatusToolsCommand(BaseCommand):
             return False
 
     # Initialize (runs AFTER base)
-
     def _initialize(
         self, require_session: bool = True, show_header: bool = True
     ) -> bool:
@@ -200,7 +202,9 @@ class StatusToolsCommand(BaseCommand):
             bool: Success status (errors stored in self._errors)
         """
         # Call parent first
-        if not super()._initialize(show_header=show_header):
+        if not super()._initialize(
+            require_session=require_session, show_header=show_header
+        ):
             return False
 
         self.logger.debug(
@@ -211,7 +215,6 @@ class StatusToolsCommand(BaseCommand):
         return True
 
     # Before execution (runs AFTER base)
-
     def _before_execute(self) -> bool:
         """
         Validate pre-conditions for the tools status command.
@@ -231,7 +234,6 @@ class StatusToolsCommand(BaseCommand):
         return True
 
     # After execution (runs BEFORE base)
-
     def _after_execute(self) -> bool:
         """
         Populate output data and render console feedback.
@@ -315,7 +317,6 @@ class StatusToolsCommand(BaseCommand):
         return super()._after_execute()
 
     # Finalize the command execution process (runs BEFORE base)
-
     def _finalize(
         self,
         success: bool = False,
@@ -370,7 +371,6 @@ class StatusToolsCommand(BaseCommand):
         return super()._finalize(success=success, show_footer=show_footer)
 
     # Version constraint check helper
-
     def _check_version_constraints(
         self,
         version_str: Optional[str],

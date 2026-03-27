@@ -59,6 +59,16 @@ class HelpCommand(BaseCommand):
             return root_ctx.get_help()
         return ""
 
+    # Declare required integrations for this command
+    def get_required_integrations(self):
+        """
+        Declare required integrations for this command.
+
+        Returns:
+            Dict[str, str]: Required integrations with operation descriptions
+        """
+        return {}
+
     # Execute the command
     def execute(self) -> bool:
         """
@@ -140,7 +150,9 @@ class HelpCommand(BaseCommand):
             bool: Success status (errors stored in self._errors)
         """
         # Call parent first
-        if not super()._initialize(show_header=show_header):
+        if not super()._initialize(
+            require_session=require_session, show_header=show_header
+        ):
             return False
 
         self.logger.debug(
@@ -185,7 +197,7 @@ class HelpCommand(BaseCommand):
         """
         # Help command-specific post-execution logic
         self.logger.debug(
-            "Topic help command post-executing",
+            "Topic help command post-executing validation",
             extra={
                 "command_class": self.__class__.__name__,
                 "topic": self._topic_name,
