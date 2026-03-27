@@ -10,7 +10,7 @@ Description   : Common decorators and utilities for XYZ Platform CLI.
 
 import click
 
-OUTPUT_FORMATS = ["", "text", "json"]
+OUTPUT_FORMATS = ["console", "text", "json"]
 
 
 # Exit code handler for commands with validation
@@ -136,14 +136,14 @@ def click_output_format(func):
     """
     Standard output format option for CLI commands.
 
-    Available formats: json, yaml, table, text
+    Available formats: json, text
     Default: text (human-readable, command-specific formatting)
     """
     formats_list = [f for f in OUTPUT_FORMATS if f]  # Exclude blank
     func = click.option(
         "--output",
         type=click.Choice(OUTPUT_FORMATS, case_sensitive=False),
-        default="",
+        default="console",
         callback=validate_output_quiet_exclusive,
         help=f"Output format: {', '.join(formats_list)}",
     )(func)

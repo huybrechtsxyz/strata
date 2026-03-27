@@ -48,7 +48,6 @@ from xyz_platform.commands.session.add_dotenv_session_command import (
 # from xyz_platform.commands.session.list_session_command import ListSessionCommand
 # from xyz_platform.commands.session.status_session_command import StatusSessionCommand
 # from xyz_platform.commands.session.remove_session_command import RemoveSessionCommand
-
 # from xyz_platform.commands.session.schema_session_command import SchemaSessionCommand
 
 
@@ -192,7 +191,7 @@ def session_source_command():
 @click_output_quiet
 def session_source_add_command(
     name: str,
-    url: Optional[str] = None,
+    url: str,
     item_type: Optional[str] = None,
     branch: str = "main",
     work_path: Optional[str] = None,
@@ -309,7 +308,7 @@ def session_dotenv_command():
 @click_output_quiet
 def session_dotenv_add_command(
     name: str,
-    env_file: Optional[str] = None,
+    env_file: str,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,

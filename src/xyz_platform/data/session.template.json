@@ -1,22 +1,16 @@
 {
   "session": {
     "session_id": "{{session_id}}",
-    "last_execution_id": null,
     "name": "{{workspace_name}}",
+    "work_path": "{{work_path}}",
     "created": "{{created_timestamp}}",
-    "work_path": "{{work_path}}"
+    "last_execution_id": null
   },
   "logging": {
     "config_path": "{{logging_config_path}}",
     "log_path": "{{log_path}}"
   },
-  "workspace": {
-    "active": null,
-    "config_path": null
-  },
-  "environment": {
-    "active": null
-  },
-  "config_sources": [],
+  "config_files": [],
+  "dotenv_files": [],
   "repositories": []
 }

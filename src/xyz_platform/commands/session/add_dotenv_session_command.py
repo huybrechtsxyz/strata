@@ -9,6 +9,8 @@ Description   : Command to add items to an XYZ Platform session.
 ===============================================================================
 """
 
+from pathlib import Path
+
 import click
 
 from typing import Optional
@@ -16,7 +18,7 @@ from typing import Optional
 from xyz_platform.commands.base_command import BaseCommand
 
 
-class AddSourceSessionCommand(BaseCommand):
+class AddDotEnvSessionCommand(BaseCommand):
     """
     Add items to an XYZ Platform session.
 
@@ -42,7 +44,7 @@ class AddSourceSessionCommand(BaseCommand):
 
         Args:
             name: name for the item
-            env-file: URL or path to the dotenv
+            env_file: URL or path to the dotenv
             work_path: Root working directory (defaults to current directory)
             output: Output format
             verbose: Enable verbose output
@@ -56,7 +58,7 @@ class AddSourceSessionCommand(BaseCommand):
         )
 
         self._env_name = name
-        self._env_url = env_file
+        self._env_path = Path(env_file)
         self._added_dotenv = {}
 
     def execute(self) -> bool:
@@ -88,14 +90,11 @@ class AddSourceSessionCommand(BaseCommand):
             # Resolve required integrations for dependency injection
             integrations = self._resolve_required_integrations()
 
-            # Add repository
-            success, self._added_repo = self._session_controller.add_repository(
-                name=self._repo_name,
-                url=self._repo_url,
+            # Add dotenv to session via controller
+            success, self._added_dotenv = self._session_controller.add_dotenv(
+                env_name=self._env_name,
+                env_path=self._env_path,
                 work_path=self._work_path,
-                repo_type=self._repo_type,
-                branch=self._repo_branch,
-                integrations=integrations,
             )
 
             # Copy controller errors/messages to command
@@ -142,11 +141,7 @@ class AddSourceSessionCommand(BaseCommand):
         Returns:
             Dict[str, str]: Required integrations with operation descriptions
         """
-        return self._session_controller.get_required_integrations_for_add_repository(
-            url=self._repo_url,
-            repo_type=self._repo_type,
-            work_path=self._work_path,
-        )
+        return {}
 
     def _initialize(
         self, require_session: bool = True, show_header: bool = True
@@ -163,18 +158,18 @@ class AddSourceSessionCommand(BaseCommand):
         ):
             return False
 
-        if not self._repo_url:
-            error_msg = "Either --url (for a repository) or --config-path/--config-file (for a config source) is required"
+        if not self._env_path:
+            error_msg = "--env-file for a dotenv source is required"
             self.logger.error(error_msg)
             self._errors.append(error_msg)
             return False
 
         self.logger.debug(
-            "Add session source command initializing",
+            "Add session dotenv command initializing",
             extra={
                 "command_class": self.__class__.__name__,
-                "repo_name": self._repo_name,
-                "repo_url": self._repo_url,
+                "env_name": self._env_name,
+                "env_path": self._env_path,
                 "work_path": str(self._work_path),
             },
         )
@@ -193,10 +188,10 @@ class AddSourceSessionCommand(BaseCommand):
             return False
 
         self.logger.debug(
-            "Add session source pre-execution validating",
+            "Add session dotenv command pre-execution validation",
             extra={
                 "command_class": self.__class__.__name__,
-                "repo_name": self._repo_name,
+                "env_name": self._env_name,
             },
         )
 
@@ -210,31 +205,25 @@ class AddSourceSessionCommand(BaseCommand):
             bool: Success status (errors stored in self._errors)
         """
         self.logger.debug(
-            "Add session source command post-executing",
+            "Add session dotenv command post-executing",
             extra={
                 "command_class": self.__class__.__name__,
-                "repo_name": self._repo_name,
+                "env_name": self._env_name,
             },
         )
 
-        if not self._is_quiet() and self._added_repo:
+        if not self._is_quiet() and self._added_dotenv:
             # Always populate structured output data
             self._output_data = {
-                k: v for k, v in self._added_repo.items() if v is not None
+                k: v for k, v in self._added_dotenv.items() if v is not None
             }
 
             if self._is_console_output():
                 click.echo("\n📦  Added item:")
-                if self._added_repo.get("name"):
-                    click.echo(f"    • Name:   {self._added_repo['name']}")
-                if self._added_repo.get("type"):
-                    click.echo(f"    • Type:   {self._added_repo['type']}")
-                if self._added_repo.get("url"):
-                    click.echo(f"    • URL:    {self._added_repo['url']}")
-                if self._added_repo.get("path"):
-                    click.echo(f"    • Path:   {self._added_repo['path']}")
-                if self._added_repo.get("branch"):
-                    click.echo(f"    • Branch: {self._added_repo['branch']}")
+                if self._added_dotenv.get("name"):
+                    click.echo(f"    • Name:   {self._added_dotenv['name']}")
+                if self._added_dotenv.get("url"):
+                    click.echo(f"    • Path:    {self._added_dotenv['path']}")
 
         # Call parent last
         return super()._after_execute()
@@ -247,33 +236,12 @@ class AddSourceSessionCommand(BaseCommand):
             bool: Success status (errors stored in self._errors)
         """
         self.logger.debug(
-            "Add session source command finalizing",
+            "Add session dotenv command finalizing",
             extra={
                 "command_class": self.__class__.__name__,
-                "repo_name": self._repo_name,
+                "env_name": self._env_name,
             },
         )
 
         # Call parent last
         return super()._finalize(success=success)
-
-    def _normalize_item_type(self, item_type: Optional[str]) -> Optional[str]:
-        """
-        Normalize CLI item type to repository type expected by controller.
-
-        Args:
-            item_type: Raw CLI item type value
-
-        Returns:
-            Optional[str]: Normalized repository type or None for auto-detect
-        """
-        if not item_type:
-            return None
-
-        normalized = item_type.lower()
-        if normalized == "repo":
-            return None
-        if normalized in ["git", "local", "archive"]:
-            return normalized
-
-        return None
