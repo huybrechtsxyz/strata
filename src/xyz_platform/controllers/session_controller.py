@@ -170,7 +170,7 @@ class SessionController:
         """Return the config_sources list from in-memory session data, or [] if not loaded."""
         if self._session_data is None:
             return []
-        return self._session_data.get("config_files", [])
+        return self._session_data.get("config_paths", [])
 
     def update_last_execution(self, execution_id: str) -> bool:
         """
@@ -682,7 +682,322 @@ class SessionController:
             self._errors.append(error_msg)
             return False, {}
 
+    # Config source management methods
+
+    def add_config_source(
+        self,
+        path: str,
+        source_type: str,
+        name: Optional[str] = None,
+        work_path: Optional[Path] = None,
+    ) -> Tuple[bool, Dict]:
+        """
+        Register a config file or directory as a config source in session state.
+
+        Args:
+            path: Path to config file (source_type='file') or directory (source_type='path')
+            source_type: 'file' for a single YAML file, 'path' for a directory of YAML files
+            name: Optional logical name (derived from filename/dirname if omitted)
+            work_path: Working directory used to resolve relative paths
+
+        Returns:
+            Tuple[bool, Dict]: (success, metadata dict)
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Resolve to absolute path
+            source_path = system.resolve_path(
+                base_path=str(work_path), target_path=path
+            )
+            source_path = source_path.resolve()
+
+            # Validate exists
+            if source_type == "file":
+                if not source_path.is_file():
+                    error_msg = f"Config file not found: {source_path}"
+                    self.logger.error(error_msg)
+                    self._errors.append(error_msg)
+                    return False, {}
+            elif source_type == "path":
+                if not source_path.is_dir():
+                    error_msg = f"Config path not found: {source_path}"
+                    self.logger.error(error_msg)
+                    self._errors.append(error_msg)
+                    return False, {}
+            else:
+                error_msg = (
+                    f"Invalid source_type '{source_type}' — expected 'file' or 'path'"
+                )
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Derive name if not provided
+            if not name:
+                name = source_path.stem if source_type == "file" else source_path.name
+
+            metadata = {
+                "name": name,
+                "path": source_path.as_posix(),
+                "type": source_type,
+                "registered": datetime.now().isoformat(),
+            }
+
+            # Idempotent: skip duplicate paths
+            existing = self._session_data.setdefault("config_paths", [])
+            if any(s.get("path") == metadata["path"] for s in existing):
+                self._messages.append(
+                    f"Config source already registered (skipped): {source_path}"
+                )
+                return True, metadata
+
+            existing.append(metadata)
+            self.logger.info(
+                f"Registered config source '{name}'",
+                extra={"path": str(source_path), "type": source_type},
+            )
+            self._messages.append(f"Registered config source '{name}': {source_path}")
+            return True, metadata
+
+        except Exception as e:
+            error_msg = f"Failed to add config source: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def remove_config_source(
+        self,
+        name: str,
+        work_path: Path,
+        bundled_files: Optional[List[str]] = None,
+        dry_run: bool = False,
+    ) -> Tuple[bool, Dict]:
+        """
+        Remove a config source from the session by name.
+
+        Removes the entry from in-memory config_sources[] and re-merges the
+        remaining sources into the active configuration (save_session() persists it).
+
+        Args:
+            name: Logical name of the config source to remove
+            work_path: Root working directory (used for merge)
+            dry_run: If True, report what would happen without making any changes
+
+        Returns:
+            Tuple[bool, Dict]: Success status and removed config source metadata
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            sources = self._session_data.get("config_paths", [])
+            source_metadata = next((s for s in sources if s["name"] == name), None)
+
+            if source_metadata is None:
+                error_msg = f"Config source '{name}' not found in session"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            if dry_run:
+                self._messages.append(
+                    f"[dry-run] Would remove config source '{name}' from session"
+                )
+                self._messages.append(
+                    "[dry-run] Would re-merge remaining config sources"
+                )
+                return True, dict(source_metadata)
+
+            # Remove from in-memory list
+            self._session_data["config_paths"] = [
+                s for s in sources if s["name"] != name
+            ]
+            self._messages.append(f"Removed config source '{name}' from session")
+
+            # Re-merge remaining sources so active configuration stays consistent
+            merge_success, merge_errors = self.merge_config_and_save(
+                work_path=work_path, bundled_files=bundled_files
+            )
+            if not merge_success:
+                self._errors.extend(merge_errors)
+                return False, source_metadata
+
+            return True, source_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to remove config source: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
     # Internal helper methods
+
+    def _add_to_vscode_workspace(self, work_path: Path, repo_name: str) -> bool:
+        """
+        Add repository folder to VSCode workspace (optional).
+
+        Args:
+            work_path: Root working directory
+            repo_name: Repository name (folder name)
+
+        Returns:
+            bool: Success status (True if workspace updated or doesn't exist)
+        """
+        try:
+            workspace_file = work_path / f"{work_path.name}.code-workspace"
+
+            if not workspace_file.exists():
+                self.logger.debug(
+                    f"Workspace file not found, skipping: {workspace_file}"
+                )
+                return True
+
+            # Read existing workspace data
+            with open(workspace_file, "r", encoding="utf-8") as f:
+                workspace_data = json.load(f)
+
+            # Check if repository already in workspace
+            folders = workspace_data.get("folders", [])
+            if any(folder.get("path") == repo_name for folder in folders):
+                self.logger.debug(f"Repository '{repo_name}' already in workspace")
+                return True
+
+            # Add repository folder
+            folders.append({"path": repo_name})
+            workspace_data["folders"] = folders
+
+            # Write updated workspace data
+            self.logger.info(f"Updating workspace file: {workspace_file}")
+            with open(workspace_file, "w", encoding="utf-8") as f:
+                json.dump(workspace_data, f, indent=2)
+
+            self._messages.append(f"Added '{repo_name}' to VSCode workspace")
+            return True
+
+        except Exception as e:
+            # Workspace update is optional, log warning but don't fail
+            self.logger.warning(f"Failed to update VSCode workspace: {str(e)}")
+            return True
+
+    def _clone_git_repository(
+        self, url: str, repo_path: Path, branch: str, git_integration
+    ) -> bool:
+        """
+        Clone a git repository using GitIntegration.
+
+        Args:
+            url: Git repository URL
+            repo_path: Destination path for repository
+            branch: Branch to clone
+            git_integration: GitIntegration instance from command
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            if repo_path.exists():
+                error_msg = f"Repository path already exists: {repo_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            if not git_integration:
+                error_msg = "Git integration not provided"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            self.logger.info(f"Cloning git repository from '{url}' (branch: {branch})")
+
+            # Execute git clone via integration
+            result = git_integration.clone(
+                repo_url=url,
+                target_dir=str(repo_path),
+                branch=branch,
+                depth=0,  # Full clone (not shallow)
+                timeout=300,  # 5 minute timeout
+            )
+
+            if result.returncode != 0:
+                error_msg = (
+                    f"Git clone failed: {result.stderr.strip() or 'Unknown error'}"
+                )
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            self._messages.append(f"Cloned git repository to {repo_path}")
+            return True
+
+        except RuntimeError as e:
+            # GitIntegration raises RuntimeError on failure
+            error_msg = f"Git clone failed: {str(e)}"
+            self.logger.error(error_msg)
+            self._errors.append(error_msg)
+            return False
+        except Exception as e:
+            error_msg = f"Failed to clone git repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
+
+    def _copy_local_repository(self, source_path: Path, repo_path: Path) -> bool:
+        """
+        Copy a local repository to the workspace.
+
+        Args:
+            source_path: Local repository source path
+            repo_path: Destination path for repository
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            if not source_path.exists():
+                error_msg = f"Local repository not found: {source_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            if repo_path.exists():
+                error_msg = f"Repository path already exists: {repo_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            if not source_path.is_dir():
+                error_msg = f"Local repository is not a directory: {source_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            self.logger.info(f"Copying local repository from '{source_path}'")
+
+            # Copy directory tree
+            shutil.copytree(source_path, repo_path)
+
+            self._messages.append(f"Copied local repository to {repo_path}")
+            return True
+
+        except Exception as e:
+            error_msg = f"Failed to copy local repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
 
     def _check_existing_files(self, workspace_file: Path, session_folder: Path) -> None:
         """
@@ -959,6 +1274,51 @@ class SessionController:
         """
         return system.resolve_path(base_path=str(work_path), target_path=url)
 
+    def _update_session_repositories(
+        self, work_path: Path, repo_metadata: Dict[str, str]
+    ) -> bool:
+        """
+        Update session.json with new repository metadata.
+
+        Args:
+            work_path: Root working directory
+            repo_metadata: Repository metadata dictionary
+
+        Returns:
+            bool: Success status
+        """
+        try:
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            # Check if repository already exists
+            existing_repos = self._session_data.get("repositories", [])
+            if any(repo["name"] == repo_metadata["name"] for repo in existing_repos):
+                error_msg = (
+                    f"Repository '{repo_metadata['name']}' already exists in session"
+                )
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            # Add repository to in-memory list (save_session() will persist it)
+            existing_repos.append(repo_metadata)
+            self._session_data["repositories"] = existing_repos
+
+            self._messages.append(
+                f"Updated session with repository '{repo_metadata['name']}'"
+            )
+            return True
+
+        except Exception as e:
+            error_msg = f"Failed to update session repositories: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False
+
     def _validate_work_path(self, work_path: Path) -> bool:
         """
         Validate that work path exists and is a directory.
@@ -1017,6 +1377,179 @@ class SessionController:
         valid_types = {"git", "local", "archive"}
         return repo_type in valid_types
 
+    def _get_template_path(self, data_path: Path, template_name: str) -> Path:
+        """
+        Get path to template file in data directory.
+
+        Args:
+            template_name: Name of template file
+
+        Returns:
+            Path: Absolute path to template file
+        """
+        # Get the package data directory
+        return data_path / template_name
+
+    def _read_log_entries(self, log_file: Path) -> List[Dict[str, Any]]:
+        """
+        Read and parse JSON log entries from file.
+
+        Args:
+            log_file: Path to log file
+
+        Returns:
+            List of parsed log entry dictionaries
+        """
+        entries = []
+
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        entries.append(entry)
+                    except json.JSONDecodeError:
+                        # Skip malformed lines
+                        self.logger.debug(f"Skipping malformed log line: {line[:100]}")
+                        continue
+        except Exception as e:
+            self.logger.warning(f"Error reading log file: {e}")
+
+        return entries
+
+    def _apply_filters(
+        self,
+        log_entries: List[Dict[str, Any]],
+        minutes: Optional[int] = None,
+        level: Optional[str] = None,
+        session_id: Optional[str] = None,
+        execution_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Apply filters to log entries.
+
+        Args:
+            log_entries: List of log entry dictionaries
+            minutes: Filter logs from last N minutes
+            level: Filter by log level
+            session_id: Filter by session ID
+            execution_id: Filter by execution ID
+
+        Returns:
+            Filtered list of log entries
+        """
+        filtered = log_entries
+
+        # Filter by time
+        if minutes:
+            cutoff_time = datetime.now() - timedelta(minutes=minutes)
+            filtered = [
+                entry
+                for entry in filtered
+                if self._parse_timestamp(entry) >= cutoff_time
+            ]
+
+        # Filter by level
+        if level:
+            level_upper = level.upper()
+            filtered = [
+                entry
+                for entry in filtered
+                if entry.get("level", "").upper() == level_upper
+            ]
+
+        # Filter by session_id
+        if session_id:
+            filtered = [
+                entry for entry in filtered if entry.get("session_id") == session_id
+            ]
+
+        # Filter by execution_id
+        if execution_id:
+            filtered = [
+                entry for entry in filtered if entry.get("execution_id") == execution_id
+            ]
+
+        return filtered
+
+    def _parse_timestamp(self, entry: Dict[str, Any]) -> datetime:
+        """
+        Parse timestamp from log entry.
+
+        Args:
+            entry: Log entry dictionary
+
+        Returns:
+            Parsed datetime object (returns datetime.min if parsing fails)
+        """
+        timestamp_str = entry.get("timestamp", "")
+        try:
+            # Try ISO format first
+            dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            # Make timezone-naive for comparison
+            if dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+            return dt
+        except (ValueError, TypeError):
+            try:
+                # Try common log format
+                return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
+            except ValueError:
+                # Return very old date if parsing fails
+                return datetime.min
+
+    def _resolve_log_file(self, work_path: Path) -> Optional[Path]:
+        """
+        Resolve the active log file for a session.
+
+        Resolution order:
+        1. Active Python logging file handler (fast path)
+        2. ``logging.log_path`` from ``.xyz-platform/session.json`` — scans for
+           the first ``*.log`` file in that directory
+        3. Returns ``None`` if no log file can be found
+
+        Args:
+            work_path: Working directory path used to locate session.json
+
+        Returns:
+            Path to log file, or None if unavailable
+        """
+        # 1. Try global logging handler introspection first
+        log_file = get_active_log_file()
+        if log_file and log_file.exists():
+            return log_file
+
+        # 2. Fall back to session.json log_path
+        try:
+            # Use in-memory data if already loaded, otherwise read from file
+            if self._session_data is not None:
+                session_data = self._session_data
+            else:
+                session_file = self._session_file_path(work_path)
+                if not session_file.exists():
+                    return log_file
+                with open(session_file, "r", encoding="utf-8") as f:
+                    session_data = json.load(f)
+            log_path_str = session_data.get("logging", {}).get("log_path")
+            if log_path_str:
+                log_path = Path(log_path_str)
+                if log_path.exists():
+                    candidates = sorted(log_path.glob("*.log"))
+                    if candidates:
+                        self.logger.debug(
+                            "Resolved log file from session.json",
+                            extra={"log_file": str(candidates[0])},
+                        )
+                        return candidates[0]
+        except Exception as e:
+            self.logger.debug(f"Could not resolve log path from session.json: {e}")
+
+        # 3. Return original result (may be None or a non-existent path)
+        return log_file
+
     #
     #
     #
@@ -1032,95 +1565,6 @@ class SessionController:
     #
     #
     # Config source management
-
-    def add_config_source(
-        self,
-        path: str,
-        source_type: str,
-        name: Optional[str] = None,
-        work_path: Optional[Path] = None,
-    ) -> Tuple[bool, Dict]:
-        """
-        Register a config file or directory as a config source in session state.
-
-        Args:
-            path: Path to config file (source_type='file') or directory (source_type='path')
-            source_type: 'file' for a single YAML file, 'path' for a directory of YAML files
-            name: Optional logical name (derived from filename/dirname if omitted)
-            work_path: Working directory used to resolve relative paths
-
-        Returns:
-            Tuple[bool, Dict]: (success, metadata dict)
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            # Resolve to absolute path
-            source_path = Path(path)
-            if work_path and not source_path.is_absolute():
-                source_path = work_path / source_path
-            source_path = source_path.resolve()
-
-            # Validate exists
-            if source_type == "file":
-                if not source_path.is_file():
-                    error_msg = f"Config file not found: {source_path}"
-                    self.logger.error(error_msg)
-                    self._errors.append(error_msg)
-                    return False, {}
-            elif source_type == "path":
-                if not source_path.is_dir():
-                    error_msg = f"Config path not found: {source_path}"
-                    self.logger.error(error_msg)
-                    self._errors.append(error_msg)
-                    return False, {}
-            else:
-                error_msg = (
-                    f"Invalid source_type '{source_type}' — expected 'file' or 'path'"
-                )
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            # Derive name if not provided
-            if not name:
-                name = source_path.stem if source_type == "file" else source_path.name
-
-            metadata = {
-                "name": name,
-                "path": source_path.as_posix(),
-                "type": source_type,
-                "registered": datetime.now().isoformat(),
-            }
-
-            # Idempotent: skip duplicate paths
-            existing = self._session_data.setdefault("config_sources", [])
-            if any(s.get("path") == metadata["path"] for s in existing):
-                self._messages.append(
-                    f"Config source already registered (skipped): {source_path}"
-                )
-                return True, metadata
-
-            existing.append(metadata)
-            self.logger.info(
-                f"Registered config source '{name}'",
-                extra={"path": str(source_path), "type": source_type},
-            )
-            self._messages.append(f"Registered config source '{name}': {source_path}")
-            return True, metadata
-
-        except Exception as e:
-            error_msg = f"Failed to add config source: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
 
     def merge_config_and_save(
         self,
@@ -1355,337 +1799,6 @@ class SessionController:
 
     # > ================================================================
 
-    def remove_config_source(
-        self,
-        name: str,
-        work_path: Path,
-        bundled_files: Optional[List[str]] = None,
-        dry_run: bool = False,
-    ) -> Tuple[bool, Dict]:
-        """
-        Remove a config source from the session by name.
-
-        Removes the entry from in-memory config_sources[] and re-merges the
-        remaining sources into the active configuration (save_session() persists it).
-
-        Args:
-            name: Logical name of the config source to remove
-            work_path: Root working directory (used for merge)
-            dry_run: If True, report what would happen without making any changes
-
-        Returns:
-            Tuple[bool, Dict]: Success status and removed config source metadata
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            sources = self._session_data.get("config_sources", [])
-            source_metadata = next((s for s in sources if s["name"] == name), None)
-
-            if source_metadata is None:
-                error_msg = f"Config source '{name}' not found in session"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            if dry_run:
-                self._messages.append(
-                    f"[dry-run] Would remove config source '{name}' from session"
-                )
-                self._messages.append(
-                    "[dry-run] Would re-merge remaining config sources"
-                )
-                return True, dict(source_metadata)
-
-            # Remove from in-memory list
-            self._session_data["config_sources"] = [
-                s for s in sources if s["name"] != name
-            ]
-            self._messages.append(f"Removed config source '{name}' from session")
-
-            # Re-merge remaining sources so active configuration stays consistent
-            merge_success, merge_errors = self.merge_config_and_save(
-                work_path=work_path, bundled_files=bundled_files
-            )
-            if not merge_success:
-                self._errors.extend(merge_errors)
-                return False, source_metadata
-
-            return True, source_metadata
-
-        except Exception as e:
-            error_msg = f"Failed to remove config source: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    def _clone_git_repository(
-        self, url: str, repo_path: Path, branch: str, git_integration
-    ) -> bool:
-        """
-        Clone a git repository using GitIntegration.
-
-        Args:
-            url: Git repository URL
-            repo_path: Destination path for repository
-            branch: Branch to clone
-            git_integration: GitIntegration instance from command
-
-        Returns:
-            bool: Success status
-        """
-        try:
-            if repo_path.exists():
-                error_msg = f"Repository path already exists: {repo_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            if not git_integration:
-                error_msg = "Git integration not provided"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            self.logger.info(f"Cloning git repository from '{url}' (branch: {branch})")
-
-            # Execute git clone via integration
-            result = git_integration.clone(
-                repo_url=url,
-                target_dir=str(repo_path),
-                branch=branch,
-                depth=0,  # Full clone (not shallow)
-                timeout=300,  # 5 minute timeout
-            )
-
-            if result.returncode != 0:
-                error_msg = (
-                    f"Git clone failed: {result.stderr.strip() or 'Unknown error'}"
-                )
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            self._messages.append(f"Cloned git repository to {repo_path}")
-            return True
-
-        except RuntimeError as e:
-            # GitIntegration raises RuntimeError on failure
-            error_msg = f"Git clone failed: {str(e)}"
-            self.logger.error(error_msg)
-            self._errors.append(error_msg)
-            return False
-        except Exception as e:
-            error_msg = f"Failed to clone git repository: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-    def _copy_local_repository(self, source_path: Path, repo_path: Path) -> bool:
-        """
-        Copy a local repository to the workspace.
-
-        Args:
-            source_path: Local repository source path
-            repo_path: Destination path for repository
-
-        Returns:
-            bool: Success status
-        """
-        try:
-            if not source_path.exists():
-                error_msg = f"Local repository not found: {source_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            if repo_path.exists():
-                error_msg = f"Repository path already exists: {repo_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            if not source_path.is_dir():
-                error_msg = f"Local repository is not a directory: {source_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            self.logger.info(f"Copying local repository from '{source_path}'")
-
-            # Copy directory tree
-            shutil.copytree(source_path, repo_path)
-
-            self._messages.append(f"Copied local repository to {repo_path}")
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to copy local repository: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-    def _update_session_repositories(
-        self, work_path: Path, repo_metadata: Dict[str, str]
-    ) -> bool:
-        """
-        Update session.json with new repository metadata.
-
-        Args:
-            work_path: Root working directory
-            repo_metadata: Repository metadata dictionary
-
-        Returns:
-            bool: Success status
-        """
-        try:
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            # Check if repository already exists
-            existing_repos = self._session_data.get("repositories", [])
-            if any(repo["name"] == repo_metadata["name"] for repo in existing_repos):
-                error_msg = (
-                    f"Repository '{repo_metadata['name']}' already exists in session"
-                )
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False
-
-            # Add repository to in-memory list (save_session() will persist it)
-            existing_repos.append(repo_metadata)
-            self._session_data["repositories"] = existing_repos
-
-            self._messages.append(
-                f"Updated session with repository '{repo_metadata['name']}'"
-            )
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to update session repositories: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False
-
-    def _add_to_vscode_workspace(self, work_path: Path, repo_name: str) -> bool:
-        """
-        Add repository folder to VSCode workspace (optional).
-
-        Args:
-            work_path: Root working directory
-            repo_name: Repository name (folder name)
-
-        Returns:
-            bool: Success status (True if workspace updated or doesn't exist)
-        """
-        try:
-            workspace_file = work_path / f"{work_path.name}.code-workspace"
-
-            if not workspace_file.exists():
-                self.logger.debug(
-                    f"Workspace file not found, skipping: {workspace_file}"
-                )
-                return True
-
-            # Read existing workspace data
-            with open(workspace_file, "r", encoding="utf-8") as f:
-                workspace_data = json.load(f)
-
-            # Check if repository already in workspace
-            folders = workspace_data.get("folders", [])
-            if any(folder.get("path") == repo_name for folder in folders):
-                self.logger.debug(f"Repository '{repo_name}' already in workspace")
-                return True
-
-            # Add repository folder
-            folders.append({"path": repo_name})
-            workspace_data["folders"] = folders
-
-            # Write updated workspace data
-            self.logger.info(f"Updating workspace file: {workspace_file}")
-            with open(workspace_file, "w", encoding="utf-8") as f:
-                json.dump(workspace_data, f, indent=2)
-
-            self._messages.append(f"Added '{repo_name}' to VSCode workspace")
-            return True
-
-        except Exception as e:
-            # Workspace update is optional, log warning but don't fail
-            self.logger.warning(f"Failed to update VSCode workspace: {str(e)}")
-            return True
-
-    def _get_template_path(self, data_path: Path, template_name: str) -> Path:
-        """
-        Get path to template file in data directory.
-
-        Args:
-            template_name: Name of template file
-
-        Returns:
-            Path: Absolute path to template file
-        """
-        # Get the package data directory
-        return data_path / template_name
-
-    def _resolve_log_file(self, work_path: Path) -> Optional[Path]:
-        """
-        Resolve the active log file for a session.
-
-        Resolution order:
-        1. Active Python logging file handler (fast path)
-        2. ``logging.log_path`` from ``.xyz-platform/session.json`` — scans for
-           the first ``*.log`` file in that directory
-        3. Returns ``None`` if no log file can be found
-
-        Args:
-            work_path: Working directory path used to locate session.json
-
-        Returns:
-            Path to log file, or None if unavailable
-        """
-        # 1. Try global logging handler introspection first
-        log_file = get_active_log_file()
-        if log_file and log_file.exists():
-            return log_file
-
-        # 2. Fall back to session.json log_path
-        try:
-            # Use in-memory data if already loaded, otherwise read from file
-            if self._session_data is not None:
-                session_data = self._session_data
-            else:
-                session_file = self._session_file_path(work_path)
-                if not session_file.exists():
-                    return log_file
-                with open(session_file, "r", encoding="utf-8") as f:
-                    session_data = json.load(f)
-            log_path_str = session_data.get("logging", {}).get("log_path")
-            if log_path_str:
-                log_path = Path(log_path_str)
-                if log_path.exists():
-                    candidates = sorted(log_path.glob("*.log"))
-                    if candidates:
-                        self.logger.debug(
-                            "Resolved log file from session.json",
-                            extra={"log_file": str(candidates[0])},
-                        )
-                        return candidates[0]
-        except Exception as e:
-            self.logger.debug(f"Could not resolve log path from session.json: {e}")
-
-        # 3. Return original result (may be None or a non-existent path)
-        return log_file
-
     # Get logs with filtering options
 
     def get_logs(
@@ -1768,114 +1881,3 @@ class SessionController:
             self.logger.exception(error_msg)
             errors.append(error_msg)
             return False, [], errors
-
-    def _read_log_entries(self, log_file: Path) -> List[Dict[str, Any]]:
-        """
-        Read and parse JSON log entries from file.
-
-        Args:
-            log_file: Path to log file
-
-        Returns:
-            List of parsed log entry dictionaries
-        """
-        entries = []
-
-        try:
-            with open(log_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                        entries.append(entry)
-                    except json.JSONDecodeError:
-                        # Skip malformed lines
-                        self.logger.debug(f"Skipping malformed log line: {line[:100]}")
-                        continue
-        except Exception as e:
-            self.logger.warning(f"Error reading log file: {e}")
-
-        return entries
-
-    def _apply_filters(
-        self,
-        log_entries: List[Dict[str, Any]],
-        minutes: Optional[int] = None,
-        level: Optional[str] = None,
-        session_id: Optional[str] = None,
-        execution_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Apply filters to log entries.
-
-        Args:
-            log_entries: List of log entry dictionaries
-            minutes: Filter logs from last N minutes
-            level: Filter by log level
-            session_id: Filter by session ID
-            execution_id: Filter by execution ID
-
-        Returns:
-            Filtered list of log entries
-        """
-        filtered = log_entries
-
-        # Filter by time
-        if minutes:
-            cutoff_time = datetime.now() - timedelta(minutes=minutes)
-            filtered = [
-                entry
-                for entry in filtered
-                if self._parse_timestamp(entry) >= cutoff_time
-            ]
-
-        # Filter by level
-        if level:
-            level_upper = level.upper()
-            filtered = [
-                entry
-                for entry in filtered
-                if entry.get("level", "").upper() == level_upper
-            ]
-
-        # Filter by session_id
-        if session_id:
-            filtered = [
-                entry for entry in filtered if entry.get("session_id") == session_id
-            ]
-
-        # Filter by execution_id
-        if execution_id:
-            filtered = [
-                entry for entry in filtered if entry.get("execution_id") == execution_id
-            ]
-
-        return filtered
-
-    def _parse_timestamp(self, entry: Dict[str, Any]) -> datetime:
-        """
-        Parse timestamp from log entry.
-
-        Args:
-            entry: Log entry dictionary
-
-        Returns:
-            Parsed datetime object (returns datetime.min if parsing fails)
-        """
-        timestamp_str = entry.get("timestamp", "")
-        try:
-            # Try ISO format first
-            dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-            # Make timezone-naive for comparison
-            if dt.tzinfo is not None:
-                dt = dt.replace(tzinfo=None)
-            return dt
-        except (ValueError, TypeError):
-            try:
-                # Try common log format
-                return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
-            except ValueError:
-                # Return very old date if parsing fails
-                return datetime.min
