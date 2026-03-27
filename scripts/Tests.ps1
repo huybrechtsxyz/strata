@@ -130,15 +130,18 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 session dotenv remove --name test3 --work-path $app --output text
 .\scripts\Run.ps1 session dotenv remove --name test4 --work-path $app --verbose
 
+# Session Config
+.\scripts\Run.ps1 session config -h
 
+# Session Config Add
+.\scripts\Run.ps1 session config add --name test1 --work-path $app --config-file "../scripts/Tests.env"
+.\scripts\Run.ps1 session config add --name test2 --work-path $app --config-file "../scripts/Tests.env" --output json
+.\scripts\Run.ps1 session config add --name test3 --work-path $app --config-file "../scripts/Tests.env" --output text
+.\scripts\Run.ps1 session config add --name test4 --work-path $app --config-file "../scripts/Tests.env" --verbose
 
-
-
-
-
-
-
-
-
-
-
+# Session Config List
+.\scripts\Run.ps1 session config list -h
+.\scripts\Run.ps1 session config list --work-path $app
+.\scripts\Run.ps1 session config list --work-path $app --output json
+.\scripts\Run.ps1 session config list --work-path $app --output text
+.\scripts\Run.ps1 session config list --work-path $app --verbose

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ===============================================================================
-Script Name   : list_dotenv_session_command.py
+Script Name   : list_config_session_command.py
 Author        : Vincent Huybrechts
 Version       : 1.0.0
 Python Version: 3.12+
@@ -16,7 +16,7 @@ import click
 from xyz_platform.commands.base_command import BaseCommand
 
 
-class ListDotEnvSessionCommand(BaseCommand):
+class ListConfigSessionCommand(BaseCommand):
     """
     List items tracked in the XYZ Platform session workspace.
 
@@ -24,7 +24,7 @@ class ListDotEnvSessionCommand(BaseCommand):
     showing their name, type, URL, and branch.
     """
 
-    OPERATION_NAME = "session_dotenv_list"
+    OPERATION_NAME = "session_config_list"
 
     def __init__(
         self,
@@ -45,7 +45,7 @@ class ListDotEnvSessionCommand(BaseCommand):
             output=output,
             verbose=verbose,
         )
-        self._dotenv_files: list = []
+        self._config_files: list = []
 
     def get_required_integrations(self):
         """
@@ -80,7 +80,7 @@ class ListDotEnvSessionCommand(BaseCommand):
                 self._finalize(success=False)
                 return False
 
-            self._dotenv_files = self._session_controller.get_dotenvs()
+            self._config_files = self._session_controller.get_config_sources()
 
             if not self._after_execute():
                 self.logger.error(
@@ -112,7 +112,7 @@ class ListDotEnvSessionCommand(BaseCommand):
         if not super()._initialize(require_session, show_header):
             return False
         self.logger.debug(
-            "List dotenv session command initializing",
+            "List config session command initializing",
             extra={"command_class": self.__class__.__name__},
         )
         return True
@@ -122,28 +122,28 @@ class ListDotEnvSessionCommand(BaseCommand):
         if not super()._before_execute():
             return False
         self.logger.debug(
-            "List dotenv session command pre-execution validation",
+            "List config session command pre-execution validation",
             extra={"command_class": self.__class__.__name__},
         )
         return True
 
     def _after_execute(self) -> bool:
         """Populate output data and render console feedback."""
-        self._output_data = {"dotenv_paths": self._dotenv_files}
+        self._output_data = {"config_paths": self._config_files}
 
         if self._is_console_output():
-            if not self._dotenv_files:
+            if not self._config_files:
                 click.echo("\n📋  No items in session workspace.\n")
             else:
-                click.echo(f"\n📋  Session items ({len(self._dotenv_files)}):")
-                for item in self._dotenv_files:
+                click.echo(f"\n📋  Session items ({len(self._config_files)}):")
+                for item in self._config_files:
                     click.echo(f"    • {item.get('name', '—')}")
                     if item.get("path"):
                         click.echo(f"      Path:    {item['path']}")
                 click.echo("")
 
         self.logger.debug(
-            "List dotenv session command post-execution validation",
+            "List config session command post-execution validation",
             extra={"command_class": self.__class__.__name__},
         )
 
@@ -152,7 +152,7 @@ class ListDotEnvSessionCommand(BaseCommand):
     def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
         """Override structured output renderer for --output json/text."""
         self.logger.debug(
-            "List dotenv session command finalizing",
+            "List config session command finalizing",
             extra={"command_class": self.__class__.__name__, "success": success},
         )
 
@@ -162,13 +162,13 @@ class ListDotEnvSessionCommand(BaseCommand):
 
                 envelope = {
                     "success": bool(success),
-                    "dotenvs": self._dotenv_files,
+                    "repositories": self._config_files,
                     "messages": self._messages,
                     "errors": self._errors,
                 }
                 click.echo(json.dumps(envelope, indent=2, default=str))
             else:  # text
-                for repo in self._dotenv_files:
+                for repo in self._config_files:
                     parts = [
                         repo.get("name", ""),
                         repo.get("path", ""),
