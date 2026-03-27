@@ -14,14 +14,10 @@ import click
 
 from xyz_platform.commands.cli_common import (
     click_env_file,
-    click_env_path,
     click_work_path,
     click_output_format,
     click_output_verbose,
     click_output_quiet,
-    # click_config_path,
-    # click_config_file,
-    # click_no_hooks,
     handle_command_exit,
 )
 
@@ -34,13 +30,12 @@ from xyz_platform.commands.session.add_source_session_command import (
 from xyz_platform.commands.session.remove_source_session_command import (
     RemoveSourceSessionCommand,
 )
-
-# from xyz_platform.commands.session.list_source_session_command import (
-#     ListSourceSessionCommand,
-# )
-# from xyz_platform.commands.session.add_dotenv_session_command import (
-#     AddDotEnvSessionCommand,
-# )
+from xyz_platform.commands.session.list_source_session_command import (
+    ListSourceSessionCommand,
+)
+from xyz_platform.commands.session.add_dotenv_session_command import (
+    AddDotEnvSessionCommand,
+)
 
 # from xyz_platform.commands.session.show_session_command import ShowSessionCommand
 # from xyz_platform.commands.session.add_session_command import AddSessionCommand
@@ -234,6 +229,75 @@ def session_source_remove_command(
     handle_command_exit(command, success)
 
 
+@session_source_command.command(
+    name="list",
+    help="List session source repositories.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+def session_source_list_command(
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+):
+    """List session sources (repositories and configs)."""
+    command = ListSourceSessionCommand(
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+# # DOTENV Command Group: session dotenv add/remove/list
+
+
+@session_command.group(
+    name="dotenv", help="Manage session environment variable sources."
+)
+def session_dotenv_command():
+    """Session dotenv subcommand group."""
+    pass
+
+
+@session_dotenv_command.command(
+    name="add",
+    help="Add an environment variable source (.env file) to the current session workspace.",
+)
+@click.option(
+    "--name",
+    required=True,
+    type=str,
+    help="Name of the item (used as identifier for dotenv sources)",
+)
+@click_env_file
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_dotenv_add_command(
+    name: str,
+    env_file: str,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+):
+    """Add a session environment variable source (.env file)."""
+    command = AddDotEnvSessionCommand(
+        name=name,
+        env_file=env_file,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
 #
 #
 #
@@ -273,28 +337,6 @@ def session_source_remove_command(
 #     pass
 
 
-# @session_source_command.command(
-#     name="list",
-#     help="List session source repositories.",
-# )
-# @click_work_path
-# @click_output_format
-# @click_output_verbose
-# def session_source_list_command(
-#     work_path: Optional[str] = None,
-#     output: Optional[str] = None,
-#     verbose: bool = False,
-# ):
-#     """List session sources (repositories and configs)."""
-#     command = ListSourceSessionCommand(
-#         work_path=work_path,
-#         output=output,
-#         verbose=verbose,
-#     )
-#     success = command.execute()
-#     handle_command_exit(command, success)
-
-
 # # TODO
 # @session_source_command.command(
 #     name="fetch",
@@ -303,53 +345,6 @@ def session_source_remove_command(
 # def session_source_fetch_command():
 #     """Fetch session source repositories."""
 #     pass
-
-
-# # DOTENV Command Group: session dotenv add/remove/list
-
-
-# @session_command.group(
-#     name="dotenv", help="Manage session environment variable sources."
-# )
-# def session_dotenv_command():
-#     """Session dotenv subcommand group."""
-#     pass
-
-
-# @session_dotenv_command.command(
-#     name="add",
-#     help="Add an environment variable source (.env file) to the current session workspace.",
-# )
-# @click.option(
-#     "--name",
-#     required=True,
-#     type=str,
-#     help="Name of the item (used as identifier for dotenv sources)",
-# )
-# @click_env_file
-# @click_work_path
-# @click_output_format
-# @click_output_verbose
-# @click_output_quiet
-# def session_dotenv_add_command(
-#     name: str,
-#     env_file: str,
-#     work_path: Optional[str] = None,
-#     output: Optional[str] = None,
-#     verbose: bool = False,
-#     quiet: bool = False,
-# ):
-#     """Add a session environment variable source (.env file)."""
-#     command = AddDotEnvSessionCommand(
-#         name=name,
-#         env_file=env_file,
-#         work_path=work_path,
-#         output=output,
-#         verbose=verbose,
-#         quiet=quiet,
-#     )
-#     success = command.execute()
-#     handle_command_exit(command, success)
 
 
 # # TODO

@@ -572,6 +572,116 @@ class SessionController:
 
         return {}
 
+    # Dotenv file management methods
+
+    def add_dotenv(
+        self,
+        env_name: str,
+        env_path: Path,
+        work_path: Path,
+        repo_map: Optional[Dict[str, str]] = None,
+    ) -> Tuple[bool, Dict]:
+        """
+        Add a .env file to the session state.
+
+        Args:
+            env_name: Logical name for the environment (e.g. "development", "production")
+            env_file: Path to the .env file
+        Returns:
+            Tuple[bool, Dict]: (success, metadata dict)
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Resolve to absolute path
+            env_path = system.resolve_path(
+                base_path=str(work_path), target_path=str(env_path), repo_map=repo_map
+            )
+
+            # Validate exists
+            if not env_path.is_file():
+                error_msg = f".env file not found: {env_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            metadata = {
+                "name": env_name,
+                "path": env_path.as_posix(),
+                "created": datetime.now().isoformat(),
+            }
+
+            # Idempotent: skip duplicate paths
+            existing = self._session_data.setdefault("dotenv_files", [])
+            if any(e.get("path") == metadata["path"] for e in existing):
+                self._messages.append(
+                    f".env file already registered (skipped): {env_path}"
+                )
+                return True, metadata
+
+            existing.append(metadata)
+            self.logger.info(
+                f"Registered .env file '{env_name}'",
+                extra={"path": str(env_path)},
+            )
+            self._messages.append(f"Registered .env file '{env_name}': {env_path}")
+            return True, metadata
+
+        except Exception as e:
+            error_msg = f"Failed to add .env file: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def remove_dotenv(self, env_name: str) -> Tuple[bool, Dict]:
+        """
+        Remove a .env file from the session state by name.
+
+        Args:
+            env_name: Logical name of the environment to remove
+        Returns:
+            Tuple[bool, Dict]: (success, metadata dict of removed entry)
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            dotenvs = self._session_data.get("dotenv_files", [])
+            dotenv_metadata = next((d for d in dotenvs if d["name"] == env_name), None)
+
+            if dotenv_metadata is None:
+                error_msg = f".env entry '{env_name}' not found in session"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Remove from in-memory list
+            self._session_data["dotenv_files"] = [
+                d for d in dotenvs if d["name"] != env_name
+            ]
+            self._messages.append(f"Removed .env entry '{env_name}' from session")
+
+            return True, dotenv_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to remove .env file: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
     # Internal helper methods
 
     def _check_existing_files(self, workspace_file: Path, session_folder: Path) -> None:
@@ -914,112 +1024,6 @@ class SessionController:
     #
     #
     #
-
-    # Dotenv file management methods
-
-    def add_dotenv(
-        self, env_name: str, env_path: Path, work_path: Path
-    ) -> Tuple[bool, Dict]:
-        """
-        Add a .env file to the session state.
-
-        Args:
-            env_name: Logical name for the environment (e.g. "development", "production")
-            env_file: Path to the .env file
-        Returns:
-            Tuple[bool, Dict]: (success, metadata dict)
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            # Resolve to absolute path
-            env_path = system.resolve_path(
-                base_path=str(work_path), target_path=str(env_path)
-            )
-
-            # Validate exists
-            if not env_path.is_file():
-                error_msg = f".env file not found: {env_path}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            metadata = {
-                "name": env_name,
-                "path": env_path.as_posix(),
-                "created": datetime.now().isoformat(),
-            }
-
-            # Idempotent: skip duplicate paths
-            existing = self._session_data.setdefault("dotenv_files", [])
-            if any(e.get("path") == metadata["path"] for e in existing):
-                self._messages.append(
-                    f".env file already registered (skipped): {env_path}"
-                )
-                return True, metadata
-
-            existing.append(metadata)
-            self.logger.info(
-                f"Registered .env file '{env_name}'",
-                extra={"path": str(env_path)},
-            )
-            self._messages.append(f"Registered .env file '{env_name}': {env_path}")
-            return True, metadata
-
-        except Exception as e:
-            error_msg = f"Failed to add .env file: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    def remove_dotenv(self, env_name: str) -> Tuple[bool, Dict]:
-        """
-        Remove a .env file from the session state by name.
-
-        Args:
-            env_name: Logical name of the environment to remove
-        Returns:
-            Tuple[bool, Dict]: (success, metadata dict of removed entry)
-        """
-        try:
-            self._errors.clear()
-            self._messages.clear()
-
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            dotenvs = self._session_data.get("dotenv_files", [])
-            dotenv_metadata = next((d for d in dotenvs if d["name"] == env_name), None)
-
-            if dotenv_metadata is None:
-                error_msg = f".env entry '{env_name}' not found in session"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            # Remove from in-memory list
-            self._session_data["dotenv_files"] = [
-                d for d in dotenvs if d["name"] != env_name
-            ]
-            self._messages.append(f"Removed .env entry '{env_name}' from session")
-
-            return True, dotenv_metadata
-
-        except Exception as e:
-            error_msg = f"Failed to remove .env file: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
 
     #
     #

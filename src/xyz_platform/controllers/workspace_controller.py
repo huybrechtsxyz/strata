@@ -1142,3 +1142,14 @@ class WorkspaceController:
             "Target work directory (default)", extra={"work_path": str(work_path)}
         )
         return work_path
+
+    # Get the repository maps from the loaded configuration
+    def get_workspace_repo_maps(self) -> Dict[str, str]:
+        """Get the repository maps from the loaded configuration."""
+        config_service = ConfigurationService.get_instance()
+        repo_map = config_service.get_repo_map()
+        self.logger.debug(
+            "Retrieved repository map from configuration",
+            extra={"repo_count": len(repo_map), "repos": list(repo_map.keys())},
+        )
+        return repo_map

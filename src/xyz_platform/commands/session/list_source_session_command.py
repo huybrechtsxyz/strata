@@ -111,14 +111,20 @@ class ListSourceSessionCommand(BaseCommand):
     ) -> bool:
         if not super()._initialize(require_session, show_header):
             return False
-        self.logger.debug("List source session command initializing")
+        self.logger.debug(
+            "List source session command initializing",
+            extra={"command_class": self.__class__.__name__},
+        )
         return True
 
     def _before_execute(self) -> bool:
         """Validate session state before execution."""
         if not super()._before_execute():
             return False
-        self.logger.debug("List source session command pre-execution validation")
+        self.logger.debug(
+            "List source session command pre-execution validation",
+            extra={"command_class": self.__class__.__name__},
+        )
         return True
 
     def _after_execute(self) -> bool:
@@ -140,12 +146,20 @@ class ListSourceSessionCommand(BaseCommand):
                         click.echo(f"      Branch: {repo['branch']}")
                 click.echo("")
 
-        self.logger.debug("List source session command post-execution processing")
+        self.logger.debug(
+            "List source session command post-execution validation",
+            extra={"command_class": self.__class__.__name__},
+        )
 
         return super()._after_execute()
 
     def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
         """Override structured output renderer for --output json/text."""
+        self.logger.debug(
+            "List source session command finalizing",
+            extra={"command_class": self.__class__.__name__, "success": success},
+        )
+
         if self._is_structured_output():
             if self._output_format == "json":
                 import json

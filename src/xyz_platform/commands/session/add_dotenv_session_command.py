@@ -87,14 +87,13 @@ class AddDotEnvSessionCommand(BaseCommand):
                 self._finalize(success=False)
                 return False
 
-            # Resolve required integrations for dependency injection
-            integrations = self._resolve_required_integrations()
-
             # Add dotenv to session via controller
+            repo_map = self._get_workspace_controller().get_workspace_repo_maps()
             success, self._added_dotenv = self._session_controller.add_dotenv(
                 env_name=self._env_name,
                 env_path=self._env_path,
                 work_path=self._work_path,
+                repo_map=repo_map,
             )
 
             # Copy controller errors/messages to command
