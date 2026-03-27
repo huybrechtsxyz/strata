@@ -11,6 +11,7 @@ Description   : Controller for managing XYZ Platform sessions.
 
 import json
 import shutil
+import re
 import yaml
 from glob import glob
 
@@ -361,6 +362,216 @@ class SessionController:
             self._errors.append(error_msg)
             return False, {}
 
+    # Repository management methods
+
+    def add_repository(
+        self,
+        name: str,
+        url: str,
+        work_path: Path,
+        repo_type: Optional[str] = None,
+        branch: str = "main",
+        integrations: Optional[Dict[str, Any]] = None,
+        repo_map: Optional[Dict[str, str]] = None,
+    ) -> Tuple[bool, Dict[str, str]]:
+        """
+        Add a repository to the session workspace.
+
+        Args:
+            name: Repository name (folder name)
+            url: Repository URL or local path
+            work_path: Root working directory
+            repo_type: Repository type (git, local, archive) - auto-detected if None
+            branch: Git branch to clone (default: main)
+            integrations: Resolved integration instances keyed by integration name
+
+        Returns:
+            Tuple[bool, Dict]: Success status and repository metadata
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            # Auto-detect repository type if not provided
+            if not repo_type:
+                repo_type = self._detect_repo_type(url, work_path)
+
+            self.logger.info(
+                f"Adding repository '{name}' from '{url}' (type: {repo_type})"
+            )
+
+            # Validate repository type and name
+            if not self._validate_repository_name(name):
+                error_msg = f"Invalid repository name: '{name}'"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            if not self._validate_repository_type(repo_type):
+                error_msg = f"Unsupported repository type: '{repo_type}'"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Define repository path
+            repo_path = work_path / name
+
+            # Handle repository based on type
+            if repo_type == "git":
+                git_integration = integrations.get("git") if integrations else None
+                if not self._clone_git_repository(
+                    url, repo_path, branch, git_integration
+                ):
+                    return False, {}
+            elif repo_type == "local":
+                source_path = self._resolve_local_source_path(url, work_path)
+                if not self._copy_local_repository(source_path, repo_path):
+                    return False, {}
+            elif repo_type == "archive":
+                error_msg = "Archive repository type not yet implemented"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+            else:
+                error_msg = f"Unknown repository type: {repo_type}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            # Create repository metadata
+            repo_metadata = {
+                "name": name,
+                "url": url,
+                "path": name,
+                "type": repo_type,
+                "branch": branch if repo_type == "git" else None,
+                "created": datetime.now().isoformat(),
+            }
+
+            # Update session.json
+            if not self._update_session_repositories(work_path, repo_metadata):
+                return False, {}
+
+            # Update VSCode workspace (optional)
+            self._add_to_vscode_workspace(work_path, name)
+
+            self._messages.append(f"Repository '{name}' added successfully")
+
+            return True, repo_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to add repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def remove_repository(
+        self,
+        name: str,
+        work_path: Path,
+        delete_folder: bool = False,
+        dry_run: bool = False,
+    ) -> Tuple[bool, Dict[str, str]]:
+        """
+        Remove a repository from the session.
+
+        Removes the entry from in-memory repositories[] (save_session() persists it).
+        Optionally deletes the repository folder from disk.
+
+        Args:
+            name: Repository name to remove
+            work_path: Root working directory
+            delete_folder: If True, also delete the repository folder on disk
+            dry_run: If True, report what would happen without making any changes
+
+        Returns:
+            Tuple[bool, Dict]: Success status and removed repository metadata
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
+
+            if self._session_data is None:
+                error_msg = "Session data not loaded — call load_session() first"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            repositories = self._session_data.get("repositories", [])
+            repo_metadata = next((r for r in repositories if r["name"] == name), None)
+
+            if repo_metadata is None:
+                error_msg = f"Repository '{name}' not found in session"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False, {}
+
+            if dry_run:
+                self._messages.append(
+                    f"[dry-run] Would remove repository '{name}' from session"
+                )
+                if delete_folder:
+                    repo_path = work_path / name
+                    if repo_path.exists():
+                        self._messages.append(
+                            f"[dry-run] Would delete folder: {repo_path}"
+                        )
+                    else:
+                        self._messages.append(
+                            f"[dry-run] Folder not found on disk (would skip): {repo_path}"
+                        )
+                return True, dict(repo_metadata)
+
+            # Optionally delete the folder
+            if delete_folder:
+                repo_path = work_path / name
+                if repo_path.exists():
+                    shutil.rmtree(repo_path)
+                    self.logger.info(f"Deleted repository folder: {repo_path}")
+                    self._messages.append(f"Deleted folder: {repo_path}")
+                else:
+                    self._messages.append(
+                        f"Folder not found on disk (skipped): {repo_path}"
+                    )
+
+            # Remove from in-memory list
+            self._session_data["repositories"] = [
+                r for r in repositories if r["name"] != name
+            ]
+            self._messages.append(f"Removing repository '{name}' from session")
+
+            return True, repo_metadata
+
+        except Exception as e:
+            error_msg = f"Failed to remove repository: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
+
+    def get_required_integrations_for_add_repository(
+        self,
+        url: str,
+        repo_type: Optional[str] = None,
+        work_path: Optional[Path] = None,
+    ) -> Dict[str, str]:
+        """
+        Determine required integrations for add-repository operation.
+
+        Args:
+            url: Repository URL or local path
+            repo_type: Repository type (git, local, archive) - auto-detected if None
+            work_path: Root working directory used to resolve relative local paths
+
+        Returns:
+            Dict[str, str]: Required integrations mapped to operation descriptions
+        """
+        detected_type = repo_type or self._detect_repo_type(url, work_path)
+
+        if detected_type == "git":
+            return {"git": "repository clone operations"}
+
+        return {}
+
     # Internal helper methods
 
     def _check_existing_files(self, workspace_file: Path, session_folder: Path) -> None:
@@ -636,11 +847,7 @@ class SessionController:
         Returns:
             Path: Resolved source path
         """
-        config_service = ConfigurationService().get_instance()
-        repo_map = config_service.get_repo_map()
-        return system.resolve_path(
-            base_path=str(work_path), target_path=url, repo_map=repo_map
-        )
+        return system.resolve_path(base_path=str(work_path), target_path=url)
 
     def _validate_work_path(self, work_path: Path) -> bool:
         """
@@ -666,210 +873,47 @@ class SessionController:
 
         return True
 
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-
-    # Repository management methods
-
-    def add_repository(
-        self,
-        name: str,
-        url: str,
-        work_path: Path,
-        repo_type: Optional[str] = None,
-        branch: str = "main",
-        integrations: Optional[Dict[str, Any]] = None,
-        repo_map: Optional[Dict[str, str]] = None,
-    ) -> Tuple[bool, Dict[str, str]]:
+    def _validate_repository_name(self, name: str) -> bool:
         """
-        Add a repository to the session workspace.
+        Validate repository name (e.g. no special characters, not reserved).
 
         Args:
-            name: Repository name (folder name)
-            url: Repository URL or local path
-            work_path: Root working directory
-            repo_type: Repository type (git, local, archive) - auto-detected if None
-            branch: Git branch to clone (default: main)
-            integrations: Resolved integration instances keyed by integration name
+            name: Repository name to validate
 
         Returns:
-            Tuple[bool, Dict]: Success status and repository metadata
+            bool: True if valid, False otherwise
         """
-        try:
-            self._errors.clear()
-            self._messages.clear()
 
-            # Auto-detect repository type if not provided
-            if not repo_type:
-                repo_type = self._detect_repo_type(url, work_path)
+        if not name or not re.match(r"^[a-z][a-z0-9_-]*$", name):
+            return False
+        reserved_names = {
+            "logs",
+            ".xyz-platform",
+        }
+        if name.lower() in reserved_names:
+            return False
+        return True
 
-            self.logger.info(
-                f"Adding repository '{name}' from '{url}' (type: {repo_type})"
-            )
-
-            # Define repository path
-            repo_path = work_path / name
-
-            # Handle repository based on type
-            if repo_type == "git":
-                git_integration = integrations.get("git") if integrations else None
-                if not self._clone_git_repository(
-                    url, repo_path, branch, git_integration
-                ):
-                    return False, {}
-            elif repo_type == "local":
-                source_path = self._resolve_local_source_path(url, work_path)
-                if not self._copy_local_repository(source_path, repo_path):
-                    return False, {}
-            elif repo_type == "archive":
-                error_msg = "Archive repository type not yet implemented"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-            else:
-                error_msg = f"Unknown repository type: {repo_type}"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            # Create repository metadata
-            repo_metadata = {
-                "name": name,
-                "url": url,
-                "path": name,
-                "type": repo_type,
-                "branch": branch if repo_type == "git" else None,
-                "created": datetime.now().isoformat(),
-            }
-
-            # Update session.json
-            if not self._update_session_repositories(work_path, repo_metadata):
-                return False, {}
-
-            # Update VSCode workspace (optional)
-            self._add_to_vscode_workspace(work_path, name)
-
-            self._messages.append(f"Repository '{name}' added successfully")
-
-            return True, repo_metadata
-
-        except Exception as e:
-            error_msg = f"Failed to add repository: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    def remove_repository(
-        self,
-        name: str,
-        work_path: Path,
-        delete_folder: bool = False,
-        dry_run: bool = False,
-    ) -> Tuple[bool, Dict[str, str]]:
+    def _validate_repository_type(self, repo_type: str) -> bool:
         """
-        Remove a repository from the session.
-
-        Removes the entry from in-memory repositories[] (save_session() persists it).
-        Optionally deletes the repository folder from disk.
+        Validate repository type.
 
         Args:
-            name: Repository name to remove
-            work_path: Root working directory
-            delete_folder: If True, also delete the repository folder on disk
-            dry_run: If True, report what would happen without making any changes
+            repo_type: Repository type to validate
 
         Returns:
-            Tuple[bool, Dict]: Success status and removed repository metadata
+            bool: True if valid, False otherwise
         """
-        try:
-            self._errors.clear()
-            self._messages.clear()
+        valid_types = {"git", "local", "archive"}
+        return repo_type in valid_types
 
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            repositories = self._session_data.get("repositories", [])
-            repo_metadata = next((r for r in repositories if r["name"] == name), None)
-
-            if repo_metadata is None:
-                error_msg = f"Repository '{name}' not found in session"
-                self.logger.error(error_msg)
-                self._errors.append(error_msg)
-                return False, {}
-
-            if dry_run:
-                self._messages.append(
-                    f"[dry-run] Would remove repository '{name}' from session"
-                )
-                if delete_folder:
-                    repo_path = work_path / name
-                    if repo_path.exists():
-                        self._messages.append(
-                            f"[dry-run] Would delete folder: {repo_path}"
-                        )
-                    else:
-                        self._messages.append(
-                            f"[dry-run] Folder not found on disk (would skip): {repo_path}"
-                        )
-                return True, dict(repo_metadata)
-
-            # Optionally delete the folder
-            if delete_folder:
-                repo_path = work_path / name
-                if repo_path.exists():
-                    shutil.rmtree(repo_path)
-                    self.logger.info(f"Deleted repository folder: {repo_path}")
-                    self._messages.append(f"Deleted folder: {repo_path}")
-                else:
-                    self._messages.append(
-                        f"Folder not found on disk (skipped): {repo_path}"
-                    )
-
-            # Remove from in-memory list
-            self._session_data["repositories"] = [
-                r for r in repositories if r["name"] != name
-            ]
-            self._messages.append(f"Removing repository '{name}' from session")
-
-            return True, repo_metadata
-
-        except Exception as e:
-            error_msg = f"Failed to remove repository: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            return False, {}
-
-    def get_required_integrations_for_add_repository(
-        self,
-        url: str,
-        repo_type: Optional[str] = None,
-        work_path: Optional[Path] = None,
-    ) -> Dict[str, str]:
-        """
-        Determine required integrations for add-repository operation.
-
-        Args:
-            url: Repository URL or local path
-            repo_type: Repository type (git, local, archive) - auto-detected if None
-            work_path: Root working directory used to resolve relative local paths
-
-        Returns:
-            Dict[str, str]: Required integrations mapped to operation descriptions
-        """
-        detected_type = repo_type or self._detect_repo_type(url, work_path)
-
-        if detected_type == "git":
-            return {"git": "repository clone operations"}
-
-        return {}
+    #
+    #
+    #
+    #
+    #
+    #
+    #
 
     # Dotenv file management methods
 

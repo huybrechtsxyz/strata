@@ -28,12 +28,13 @@ from xyz_platform.commands.cli_common import (
 from xyz_platform.commands.session.init_session_command import InitSessionCommand
 from xyz_platform.commands.session.clean_session_command import CleanSessionCommand
 
-# from xyz_platform.commands.session.add_source_session_command import (
-#     AddSourceSessionCommand,
-# )
-# from xyz_platform.commands.session.remove_source_session_command import (
-#     RemoveSourceSessionCommand,
-# )
+from xyz_platform.commands.session.add_source_session_command import (
+    AddSourceSessionCommand,
+)
+from xyz_platform.commands.session.remove_source_session_command import (
+    RemoveSourceSessionCommand,
+)
+
 # from xyz_platform.commands.session.list_source_session_command import (
 #     ListSourceSessionCommand,
 # )
@@ -133,6 +134,106 @@ def session_clean(
     handle_command_exit(command, success)
 
 
+# # SOURCE Command Group: session source add/remove/list
+
+
+@session_command.group(name="source", help="Manage session repository sources.")
+def session_source_command():
+    """Session source subcommand group."""
+    pass
+
+
+@session_source_command.command(
+    name="add",
+    help="Add a repository to the current session workspace.",
+)
+@click.option(
+    "--name",
+    required=True,
+    type=str,
+    help="Name of the item (used as folder name and identifier for repositories)",
+)
+@click.option(
+    "--url",
+    required=True,
+    type=str,
+    help="URL or path of a repository to add (e.g. git repo URL, local folder path, or archive URL).",
+)
+@click.option(
+    "--type",
+    "item_type",
+    type=click.Choice(["repo", "git", "local", "archive"], case_sensitive=False),
+    help="Item type: repo (auto-detect), git, local, or archive.",
+)
+@click.option(
+    "--branch",
+    type=str,
+    default="main",
+    help="Git branch to clone (default: main, only for git repositories)",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_source_add_command(
+    name: str,
+    url: str,
+    item_type: Optional[str] = None,
+    branch: str = "main",
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+):
+    """Add a session source (repository or config)."""
+    # AddSourceSessionCommand handles both repositories and config sources, so we pass all parameters and let it sort out the logic internally.
+    command = AddSourceSessionCommand(
+        name=name,
+        url=url,
+        item_type=item_type,
+        branch=branch,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@session_source_command.command(
+    name="remove",
+    help="Remove a repository from the current session workspace.",
+)
+@click.option(
+    "--name",
+    required=True,
+    type=str,
+    help="Name of the item (used as folder name and identifier for repositories)",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def session_source_remove_command(
+    name: str,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+):
+    """Remove a session source (repository or config)."""
+    command = RemoveSourceSessionCommand(
+        name=name,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
 #
 #
 #
@@ -170,106 +271,6 @@ def session_clean(
 # def session_status(work_path, output, verbose):
 #     """Show details of the current session."""
 #     pass
-
-
-# # SOURCE Command Group: session source add/remove/list
-
-
-# @session_command.group(name="source", help="Manage session repository sources.")
-# def session_source_command():
-#     """Session source subcommand group."""
-#     pass
-
-
-# @session_source_command.command(
-#     name="add",
-#     help="Add a repository to the current session workspace.",
-# )
-# @click.option(
-#     "--name",
-#     required=True,
-#     type=str,
-#     help="Name of the item (used as folder name and identifier for repositories)",
-# )
-# @click.option(
-#     "--url",
-#     required=True,
-#     type=str,
-#     help="URL or path of a repository to add (e.g. git repo URL, local folder path, or archive URL).",
-# )
-# @click.option(
-#     "--type",
-#     "item_type",
-#     type=click.Choice(["repo", "git", "local", "archive"], case_sensitive=False),
-#     help="Item type: repo (auto-detect), git, local, or archive.",
-# )
-# @click.option(
-#     "--branch",
-#     type=str,
-#     default="main",
-#     help="Git branch to clone (default: main, only for git repositories)",
-# )
-# @click_work_path
-# @click_output_format
-# @click_output_verbose
-# @click_output_quiet
-# def session_source_add_command(
-#     name: str,
-#     url: str,
-#     item_type: Optional[str] = None,
-#     branch: str = "main",
-#     work_path: Optional[str] = None,
-#     output: Optional[str] = None,
-#     verbose: bool = False,
-#     quiet: bool = False,
-# ):
-#     """Add a session source (repository or config)."""
-#     # AddSourceSessionCommand handles both repositories and config sources, so we pass all parameters and let it sort out the logic internally.
-#     command = AddSourceSessionCommand(
-#         name=name,
-#         url=url,
-#         item_type=item_type,
-#         branch=branch,
-#         work_path=work_path,
-#         output=output,
-#         verbose=verbose,
-#         quiet=quiet,
-#     )
-#     success = command.execute()
-#     handle_command_exit(command, success)
-
-
-# @session_source_command.command(
-#     name="remove",
-#     help="Remove a repository from the current session workspace.",
-# )
-# @click.option(
-#     "--name",
-#     required=True,
-#     type=str,
-#     help="Name of the item (used as folder name and identifier for repositories)",
-# )
-# @click_work_path
-# @click_output_format
-# @click_output_verbose
-# @click_output_quiet
-# def session_source_remove_command(
-#     name: str,
-#     work_path: Optional[str] = None,
-#     output: Optional[str] = None,
-#     verbose: bool = False,
-#     quiet: bool = False,
-# ):
-#     """Remove a session source (repository or config)."""
-#     command = RemoveSourceSessionCommand(
-#         name=name,
-#         work_path=work_path,
-#         output=output,
-#         verbose=verbose,
-#         quiet=quiet,
-#     )
-#     success = command.execute()
-#     handle_command_exit(command, success)
 
 
 # @session_source_command.command(

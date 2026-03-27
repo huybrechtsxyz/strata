@@ -136,7 +136,12 @@ class RemoveSourceSessionCommand(BaseCommand):
         if not super()._initialize(require_session, show_header):
             return False
         self.logger.debug(
-            f"Initialized {self.__class__.__name__} with item_name={self._item_name}"
+            "Remove session source command initializing",
+            extra={
+                "command_class": self.__class__.__name__,
+                "repo_name": self._repo_name,
+                "work_path": str(self._work_path),
+            },
         )
         return True
 
@@ -144,12 +149,24 @@ class RemoveSourceSessionCommand(BaseCommand):
         if not super()._before_execute():
             return False
         self.logger.debug(
-            f"Pre-execution validation passed in {self.__class__.__name__}"
+            "Remove session source pre-execution validation",
+            extra={
+                "command_class": self.__class__.__name__,
+                "repo_name": self._item_name,
+            },
         )
         return True
 
     def _after_execute(self) -> bool:
         """Populate output data and render console feedback."""
+        self.logger.debug(
+            "Remove session source post-execution validation",
+            extra={
+                "command_class": self.__class__.__name__,
+                "removed_item": self._removed_item,
+            },
+        )
+
         if not self._is_quiet() and self._removed_item:
             self._output_data = {
                 k: v for k, v in self._removed_item.items() if v is not None
@@ -170,5 +187,12 @@ class RemoveSourceSessionCommand(BaseCommand):
         return super()._after_execute()
 
     def _finalize(self, success: bool = False, show_footer=True) -> bool:
-        self.logger.debug(f"Finalized {self.__class__.__name__} with success={success}")
+        self.logger.debug(
+            "Remove session source command finalizing",
+            extra={
+                "command_class": self.__class__.__name__,
+                "repo_name": self._repo_name,
+            },
+        )
+
         return super()._finalize(success=success, show_footer=show_footer)

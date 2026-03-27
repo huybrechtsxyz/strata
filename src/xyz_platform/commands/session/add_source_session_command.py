@@ -98,15 +98,6 @@ class AddSourceSessionCommand(BaseCommand):
             integrations = self._resolve_required_integrations()
 
             # Add repository
-            workspace_controller = WorkspaceController()
-            config_service = ConfigurationService().get_instance()
-            repo_map = (
-                config_service.get_repo_map()
-            )  # Ensure repo map is loaded before accessing
-
-            repo_map = workspace_controller.get_re
-            repo_map = session._workspace_controller.get_repo_type_mapping()
-
             success, self._added_repo = self._session_controller.add_repository(
                 name=self._repo_name,
                 url=self._repo_url,
