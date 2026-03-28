@@ -43,7 +43,6 @@ class BaseCommand:
         self,
         file_path: Optional[str] = None,
         work_path: Optional[str] = None,
-        data_path: Optional[str] = None,
         env_path: Optional[str] = None,
         env_file: Optional[str] = None,
         no_hooks: bool = False,
@@ -63,7 +62,6 @@ class BaseCommand:
         # Standard paths
         self._file_path = file_path
         self._work_path = Path(work_path) if work_path else Path.cwd()
-        self._data_path = Path(data_path) if data_path else system.get_data_path()
         self._env_path = Path(env_path) if env_path else None
         self._env_file = Path(env_file) if env_file else None
         self._build_path = None
@@ -87,7 +85,7 @@ class BaseCommand:
         self._output_quiet = quiet or False
 
         # Correlation IDs — set during _initialize()
-        self._session_id: str
+        self._project_id: str
         self._execution_id: str
 
         # Session controller — one instance per command run
@@ -191,7 +189,7 @@ class BaseCommand:
     # Lifecycle methods
 
     def _initialize(
-        self, require_session: bool = False, show_header: bool = True
+        self, require_project: bool = True, show_header: bool = True
     ) -> bool:
         """
         Initialize the command before execution.
@@ -218,21 +216,21 @@ class BaseCommand:
                 self._errors.append(error_msg)
                 return False
 
-            # Load session.json into memory once for this command run
-            if not self._session_controller.load_session(self._work_path):
-                if require_session:
-                    error_msg = "No session found. Please run 'xyz session init' first."
+            # Load state.json into memory once for this command run
+            if not self._session_controller.load_project(self._work_path):
+                if require_project:
+                    error_msg = "No project found. Please run 'xyz project init' first."
                     self.logger.error(error_msg)
                     self._errors.append(error_msg)
                     return False
 
             # Assign correlation IDs (UUID v7 — time-ordered)
-            self._session_id = (
-                self._session_controller.get_session_id() or generate_uuid()
+            self._project_id = (
+                self._session_controller.get_project_id() or generate_uuid()
             )
             self._execution_id = generate_uuid()
             set_context(
-                {"session_id": self._session_id, "execution_id": self._execution_id}
+                {"project_id": self._project_id, "execution_id": self._execution_id}
             )
 
             # Start session operation if specified
@@ -241,7 +239,7 @@ class BaseCommand:
                 "Initializing command",
                 extra={
                     "command_class": self.__class__.__name__,
-                    "session_id": self._session_id,
+                    "project_id": self._project_id,
                     "execution_id": self._execution_id,
                 },
             )

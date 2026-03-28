@@ -5,7 +5,7 @@ Script Name   : session_controller.py
 Author        : Vincent Huybrechts
 Version       : 1.0.0
 Python Version: 3.12+
-Description   : Controller for managing XYZ Platform sessions.
+Description   : Controller for managing XYZ Platform project.
 ===============================================================================
 """
 
@@ -26,16 +26,16 @@ from xyz_platform.services.configuration_service import ConfigurationService
 from xyz_platform.utils.system import generate_uuid
 
 
-class SessionController:
+class ProjectController:
     """
-    Controller for managing XYZ Platform sessions.
+    Controller for managing XYZ Platform projects.
 
-    Handles session initialization, state management, and workspace operations.
-    This is a stateless controller - it does not maintain session state between calls.
+    Handles project initialization, state management, and workspace operations.
+    This is a stateless controller - it does not maintain project state between calls.
     """
 
     @staticmethod
-    def _session_folder_path(work_path: Path) -> Path:
+    def _project_folder_path(work_path: Path) -> Path:
         """Return the .xyz-platform folder path for a given work_path."""
         config_service = ConfigurationService.get_instance()
         return config_service.get_default_state_path(
@@ -43,8 +43,8 @@ class SessionController:
         )
 
     @staticmethod
-    def _session_file_path(work_path: Path) -> Path:
-        """Return the session.json file path for a given work_path."""
+    def _project_file_path(work_path: Path) -> Path:
+        """Return the project.json file path for a given work_path."""
         config_service = ConfigurationService.get_instance()
         temp_path = config_service.get_default_state_path(
             work_path=work_path, create_path=False
@@ -55,13 +55,13 @@ class SessionController:
 
     # Initialize the controller with empty error and message lists
     def __init__(self):
-        """Initialize the session controller."""
+        """Initialize the project controller."""
         self.logger = get_logger(self.__class__.__module__)
         self._errors: List[str] = []
         self._messages: List[str] = []
-        # In-memory session state — loaded once at command start, saved once at end
-        self._session_data: Optional[Dict] = None
-        self._session_file: Optional[Path] = None
+        # In-memory project state — loaded once at command start, saved once at end
+        self._project_data: Optional[Dict] = None
+        self._project_file: Optional[Path] = None
 
     # Error and message handling methods
 
@@ -87,111 +87,111 @@ class SessionController:
 
     # Session in-memory load / save
 
-    def load_session(self, work_path: Path) -> bool:
+    def load_project(self, work_path: Path) -> bool:
         """
-        Load session.json into memory.
+        Load project.json into memory.
 
         Called once at the start of every command via BaseCommand._initialize().
-        Silent no-op when the file does not exist yet (e.g. before ``session init``).
+        Silent no-op when the file does not exist yet (e.g. before ``project init``).
 
         Args:
-            work_path: Working directory containing .xyz-platform/session.json
+            work_path: Working directory containing .xyz-platform/project.json
 
         Returns:
             bool: True if loaded successfully, False if file missing or unreadable
         """
         try:
-            session_file = self._session_file_path(work_path)
-            if not session_file.exists():
+            project_file = self._project_file_path(work_path)
+            if not project_file.exists():
                 self.logger.debug(
-                    "Session file not found (starting with empty session)",
-                    extra={"session_file": str(session_file)},
+                    "Session file not found (starting with empty project)",
+                    extra={"project_file": str(project_file)},
                 )
                 return False
-            with open(session_file, "r", encoding="utf-8") as f:
-                self._session_data = json.load(f)
-            self._session_file = session_file
+            with open(project_file, "r", encoding="utf-8") as f:
+                self._project_data = json.load(f)
+            self._project_file = project_file
             self.logger.debug(
                 "Session loaded into memory",
-                extra={"session_file": str(session_file)},
+                extra={"project_file": str(project_file)},
             )
             return True
         except Exception as e:
-            self.logger.debug(f"Could not load session: {e}")
+            self.logger.debug(f"Could not load project: {e}")
             return False
 
-    def save_session(self) -> bool:
+    def save_project(self) -> bool:
         """
-        Write in-memory session data back to session.json.
+        Write in-memory project data back to project.json.
 
         Called once at the end of every command via BaseCommand._finalize().
-        No-op when session was never loaded (e.g. command ran before ``session init``).
+        No-op when project was never loaded (e.g. command ran before ``project init``).
 
         Returns:
             bool: True if saved successfully, False otherwise
         """
-        if self._session_data is None or self._session_file is None:
+        if self._project_data is None or self._project_file is None:
             return False
         try:
-            with open(self._session_file, "w", encoding="utf-8") as f:
-                json.dump(self._session_data, f, indent=2)
+            with open(self._project_file, "w", encoding="utf-8") as f:
+                json.dump(self._project_data, f, indent=2)
             self.logger.debug(
                 "Session saved to disk",
-                extra={"session_file": str(self._session_file)},
+                extra={"project_file": str(self._project_file)},
             )
             return True
         except Exception as e:
-            self.logger.debug(f"Could not save session: {e}")
+            self.logger.debug(f"Could not save project: {e}")
             return False
 
-    def get_session_id(self) -> Optional[str]:
-        """Return the session_id from in-memory session data, or None if not loaded."""
-        if self._session_data is None:
+    def get_project_id(self) -> Optional[str]:
+        """Return the project_id from in-memory project data, or None if not loaded."""
+        if self._project_data is None:
             return None
-        return self._session_data.get("session", {}).get("session_id")
+        return self._project_data.get("project", {}).get("project_id")
 
-    def get_session_data(self) -> Optional[Dict]:
-        """Return the in-memory session data dict, or None if not loaded."""
-        return self._session_data
+    def get_project_data(self) -> Optional[Dict]:
+        """Return the in-memory project data dict, or None if not loaded."""
+        return self._project_data
 
     def get_repositories(self) -> list:
-        """Return the repositories list from in-memory session data, or [] if not loaded."""
-        if self._session_data is None:
+        """Return the repositories list from in-memory project data, or [] if not loaded."""
+        if self._project_data is None:
             return []
-        return self._session_data.get("repositories", [])
+        return self._project_data.get("repositories", [])
 
     def get_dotenvs(self) -> list:
-        """Return the dotenvs list from in-memory session data, or [] if not loaded."""
-        if self._session_data is None:
+        """Return the dotenvs list from in-memory project data, or [] if not loaded."""
+        if self._project_data is None:
             return []
-        return self._session_data.get("dotenv_paths", [])
+        return self._project_data.get("dotenv_paths", [])
 
     def get_config_sources(self) -> list:
-        """Return the config_sources list from in-memory session data, or [] if not loaded."""
-        if self._session_data is None:
+        """Return the config_sources list from in-memory project data, or [] if not loaded."""
+        if self._project_data is None:
             return []
-        return self._session_data.get("config_paths", [])
+        return self._project_data.get("config_paths", [])
 
     def update_last_execution(self, execution_id: str) -> bool:
         """
-        Update last_execution_id in the in-memory session data.
+        Update last_execution_id in the in-memory project data.
 
-        The caller is responsible for persisting via save_session().
+        The caller is responsible for persisting via save_project().
 
         Args:
             execution_id: Execution ID of the completed command
 
         Returns:
-            bool: True if updated, False if session not loaded
+            bool: True if updated, False if project not loaded
         """
-        if self._session_data is None:
+        if self._project_data is None:
             return False
-        self._session_data.setdefault("session", {})["last_execution_id"] = execution_id
+        self._project_data.setdefault("project", {})["last_execution_id"] = execution_id
         return True
 
     # Session initialization methods
 
-    def initialize_session(
+    def initialize_project(
         self,
         workspace_name: str,
         work_path: Path,
@@ -199,7 +199,7 @@ class SessionController:
         editor: Optional[str] = None,
     ) -> Tuple[bool, Dict[str, Path]]:
         """
-        Initialize a new session workspace.
+        Initialize a new project workspace.
 
         Args:
             workspace_name: Name of the workspace
@@ -208,8 +208,8 @@ class SessionController:
         Returns:
             Tuple[bool, Dict[str, Path]]: Success status and dict of created paths
                 {
-                    "session_folder": Path,
-                    "session_file": Path,
+                    "project_folder": Path,
+                    "project_file": Path,
                     "workspace_file": Path (or None if skipped)
                 }
         """
@@ -218,13 +218,13 @@ class SessionController:
             self._messages.clear()
 
             # Define paths
-            session_folder = self._session_folder_path(work_path)
-            session_file = self._session_file_path(work_path)
+            project_folder = self._project_folder_path(work_path)
+            project_file = self._project_file_path(work_path)
             workspace_file = work_path / f"{workspace_name}.code-workspace"
 
             created_paths = {
-                "session_folder": Path(),
-                "session_file": Path(),
+                "project_folder": Path(),
+                "project_file": Path(),
                 "workspace_file": Path(),
             }
 
@@ -233,12 +233,12 @@ class SessionController:
                 return False, {}
 
             # Check existing files
-            self._check_existing_files(workspace_file, session_folder)
+            self._check_existing_files(workspace_file, project_folder)
 
-            # Create session folder
-            if not self._create_session_folder(session_folder):
+            # Create project folder
+            if not self._create_project_folder(project_folder):
                 return False, {}
-            created_paths["session_folder"] = session_folder
+            created_paths["project_folder"] = project_folder
 
             # Create logs folder in workspace root
             logs_folder = work_path / "logs"
@@ -260,7 +260,7 @@ class SessionController:
                     )
 
             # Create logging configuration
-            logging_config_path = session_folder / "logging.yaml"
+            logging_config_path = project_folder / "logging.yaml"
             if not self._create_logging_config(
                 work_path=work_path,
                 data_path=data_path,
@@ -269,16 +269,16 @@ class SessionController:
                 return False, created_paths
             created_paths["logging_config"] = logging_config_path
 
-            # Create session file
-            if not self._create_session_file(
-                session_file=session_file,
+            # Create project file
+            if not self._create_project_file(
+                project_file=project_file,
                 workspace_name=workspace_name,
                 work_path=work_path,
                 data_path=data_path,
                 logging_config_path=logging_config_path,
             ):
                 return False, created_paths
-            created_paths["session_file"] = session_file
+            created_paths["project_file"] = project_file
 
             self._messages.append(
                 f"Session workspace '{workspace_name}' initialized successfully"
@@ -287,18 +287,18 @@ class SessionController:
             return True, created_paths
 
         except Exception as e:
-            error_msg = f"Failed to initialize session: {str(e)}"
+            error_msg = f"Failed to initialize project: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False, {}
 
-    def clean_session(
+    def clean_project(
         self,
         work_path: Path,
         dry_run: bool = False,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
-        Clean workspace artifacts without modifying session state.
+        Clean workspace artifacts without modifying project state.
 
         Args:
             work_path: Root working directory
@@ -357,7 +357,7 @@ class SessionController:
             return True, stats
 
         except Exception as e:
-            error_msg = f"Failed to clean session: {str(e)}"
+            error_msg = f"Failed to clean project: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False, {}
@@ -375,7 +375,7 @@ class SessionController:
         repo_map: Optional[Dict[str, str]] = None,
     ) -> Tuple[bool, Dict[str, str]]:
         """
-        Add a repository to the session workspace.
+        Add a repository to the project workspace.
 
         Args:
             name: Repository name (folder name)
@@ -448,8 +448,8 @@ class SessionController:
                 "created": datetime.now().isoformat(),
             }
 
-            # Update session.json
-            if not self._update_session_repositories(work_path, repo_metadata):
+            # Update project.json
+            if not self._update_project_repositories(work_path, repo_metadata):
                 return False, {}
 
             # Update VSCode workspace (optional)
@@ -473,9 +473,9 @@ class SessionController:
         dry_run: bool = False,
     ) -> Tuple[bool, Dict[str, str]]:
         """
-        Remove a repository from the session.
+        Remove a repository from the project.
 
-        Removes the entry from in-memory repositories[] (save_session() persists it).
+        Removes the entry from in-memory repositories[] (save_project() persists it).
         Optionally deletes the repository folder from disk.
 
         Args:
@@ -491,24 +491,24 @@ class SessionController:
             self._errors.clear()
             self._messages.clear()
 
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
+            if self._project_data is None:
+                error_msg = "Session data not loaded — call load_project() first"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False, {}
 
-            repositories = self._session_data.get("repositories", [])
+            repositories = self._project_data.get("repositories", [])
             repo_metadata = next((r for r in repositories if r["name"] == name), None)
 
             if repo_metadata is None:
-                error_msg = f"Repository '{name}' not found in session"
+                error_msg = f"Repository '{name}' not found in project"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False, {}
 
             if dry_run:
                 self._messages.append(
-                    f"[dry-run] Would remove repository '{name}' from session"
+                    f"[dry-run] Would remove repository '{name}' from project"
                 )
                 if delete_folder:
                     repo_path = work_path / name
@@ -535,10 +535,10 @@ class SessionController:
                     )
 
             # Remove from in-memory list
-            self._session_data["repositories"] = [
+            self._project_data["repositories"] = [
                 r for r in repositories if r["name"] != name
             ]
-            self._messages.append(f"Removing repository '{name}' from session")
+            self._messages.append(f"Removing repository '{name}' from project")
 
             return True, repo_metadata
 
@@ -582,7 +582,7 @@ class SessionController:
         repo_map: Optional[Dict[str, str]] = None,
     ) -> Tuple[bool, Dict]:
         """
-        Add a .env file to the session state.
+        Add a .env file to the project state.
 
         Args:
             env_name: Logical name for the environment (e.g. "development", "production")
@@ -594,8 +594,8 @@ class SessionController:
             self._errors.clear()
             self._messages.clear()
 
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
+            if self._project_data is None:
+                error_msg = "Session data not loaded — call load_project() first"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False, {}
@@ -619,7 +619,7 @@ class SessionController:
             }
 
             # Idempotent: skip duplicate paths
-            existing = self._session_data.setdefault("dotenv_paths", [])
+            existing = self._project_data.setdefault("dotenv_paths", [])
             if any(e.get("path") == metadata["path"] for e in existing):
                 self._messages.append(
                     f".env file already registered (skipped): {env_path}"
@@ -642,7 +642,7 @@ class SessionController:
 
     def remove_dotenv(self, env_name: str) -> Tuple[bool, Dict]:
         """
-        Remove a .env file from the session state by name.
+        Remove a .env file from the project state by name.
 
         Args:
             env_name: Logical name of the environment to remove
@@ -653,26 +653,26 @@ class SessionController:
             self._errors.clear()
             self._messages.clear()
 
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
+            if self._project_data is None:
+                error_msg = "Session data not loaded — call load_project() first"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False, {}
 
-            dotenvs = self._session_data.get("dotenv_paths", [])
+            dotenvs = self._project_data.get("dotenv_paths", [])
             dotenv_metadata = next((d for d in dotenvs if d["name"] == env_name), None)
 
             if dotenv_metadata is None:
-                error_msg = f".env entry '{env_name}' not found in session"
+                error_msg = f".env entry '{env_name}' not found in project"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False, {}
 
             # Remove from in-memory list
-            self._session_data["dotenv_paths"] = [
+            self._project_data["dotenv_paths"] = [
                 d for d in dotenvs if d["name"] != env_name
             ]
-            self._messages.append(f"Removed .env entry '{env_name}' from session")
+            self._messages.append(f"Removed .env entry '{env_name}' from project")
 
             return True, dotenv_metadata
 
@@ -692,7 +692,7 @@ class SessionController:
         work_path: Optional[Path] = None,
     ) -> Tuple[bool, Dict]:
         """
-        Register a config file or directory as a config source in session state.
+        Register a config file or directory as a config source in project state.
 
         Args:
             path: Path to config file (source_type='file') or directory (source_type='path')
@@ -707,8 +707,8 @@ class SessionController:
             self._errors.clear()
             self._messages.clear()
 
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
+            if self._project_data is None:
+                error_msg = "Session data not loaded — call load_project() first"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False, {}
@@ -751,7 +751,7 @@ class SessionController:
             }
 
             # Idempotent: skip duplicate paths
-            existing = self._session_data.setdefault("config_paths", [])
+            existing = self._project_data.setdefault("config_paths", [])
             if any(s.get("path") == metadata["path"] for s in existing):
                 self._messages.append(
                     f"Config source already registered (skipped): {source_path}"
@@ -780,10 +780,10 @@ class SessionController:
         dry_run: bool = False,
     ) -> Tuple[bool, Dict]:
         """
-        Remove a config source from the session by name.
+        Remove a config source from the project by name.
 
         Removes the entry from in-memory config_sources[] and re-merges the
-        remaining sources into the active configuration (save_session() persists it).
+        remaining sources into the active configuration (save_project() persists it).
 
         Args:
             name: Logical name of the config source to remove
@@ -797,24 +797,24 @@ class SessionController:
             self._errors.clear()
             self._messages.clear()
 
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
+            if self._project_data is None:
+                error_msg = "Session data not loaded — call load_project() first"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False, {}
 
-            sources = self._session_data.get("config_paths", [])
+            sources = self._project_data.get("config_paths", [])
             source_metadata = next((s for s in sources if s["name"] == name), None)
 
             if source_metadata is None:
-                error_msg = f"Config source '{name}' not found in session"
+                error_msg = f"Config source '{name}' not found in project"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False, {}
 
             if dry_run:
                 self._messages.append(
-                    f"[dry-run] Would remove config source '{name}' from session"
+                    f"[dry-run] Would remove config source '{name}' from project"
                 )
                 self._messages.append(
                     "[dry-run] Would re-merge remaining config sources"
@@ -822,10 +822,10 @@ class SessionController:
                 return True, dict(source_metadata)
 
             # Remove from in-memory list
-            self._session_data["config_paths"] = [
+            self._project_data["config_paths"] = [
                 s for s in sources if s["name"] != name
             ]
-            self._messages.append(f"Removed config source '{name}' from session")
+            self._messages.append(f"Removed config source '{name}' from project")
 
             # Re-merge remaining sources so active configuration stays consistent
             merge_success, merge_errors = self.merge_config_and_save(
@@ -998,13 +998,13 @@ class SessionController:
             self._errors.append(error_msg)
             return False
 
-    def _check_existing_files(self, workspace_file: Path, session_folder: Path) -> None:
+    def _check_existing_files(self, workspace_file: Path, project_folder: Path) -> None:
         """
         Check for existing workspace files and log warnings.
 
         Args:
             workspace_file: Path to workspace file
-            session_folder: Path to session folder
+            project_folder: Path to project folder
         """
         # Check for any existing .code-workspace files
         existing_workspaces = list(workspace_file.parent.glob("*.code-workspace"))
@@ -1015,29 +1015,29 @@ class SessionController:
                 self._messages.append(warning_msg)
 
         # Check if .xyz-platform folder already exists
-        if session_folder.exists():
-            warning_msg = f".xyz-platform folder already exists: {session_folder}"
+        if project_folder.exists():
+            warning_msg = f".xyz-platform folder already exists: {project_folder}"
             self.logger.info(warning_msg)
             self._messages.append(warning_msg)
 
-    def _create_session_folder(self, session_folder: Path) -> bool:
+    def _create_project_folder(self, project_folder: Path) -> bool:
         """
         Create .xyz-platform folder.
 
         Args:
-            session_folder: Path to session folder
+            project_folder: Path to project folder
 
         Returns:
             bool: Success status
         """
         try:
-            self.logger.info(f"Creating .xyz-platform folder: {session_folder}")
-            session_folder.mkdir(parents=True, exist_ok=True)
-            self._messages.append(f"Created .xyz-platform folder: {session_folder}")
+            self.logger.info(f"Creating .xyz-platform folder: {project_folder}")
+            project_folder.mkdir(parents=True, exist_ok=True)
+            self._messages.append(f"Created .xyz-platform folder: {project_folder}")
             return True
 
         except Exception as e:
-            error_msg = f"Failed to create session folder: {str(e)}"
+            error_msg = f"Failed to create project folder: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False
@@ -1149,19 +1149,19 @@ class SessionController:
             self._errors.append(error_msg)
             return False
 
-    def _create_session_file(
+    def _create_project_file(
         self,
-        session_file: Path,
+        project_file: Path,
         workspace_name: str,
         work_path: Path,
         data_path: Path,
         logging_config_path: Path,
     ) -> bool:
         """
-        Create session.json state file from template.
+        Create project.json state file from template.
 
         Args:
-            session_file: Path to session file
+            project_file: Path to project file
             workspace_name: Name of the workspace
             work_path: Root working directory
             logging_config_path: Path to logging configuration file
@@ -1171,7 +1171,7 @@ class SessionController:
         """
         try:
             # Load template
-            template_path = self._get_template_path(data_path, "session.template.json")
+            template_path = self._get_template_path(data_path, "project.template.json")
             if not template_path.exists():
                 error_msg = f"Session template not found: {template_path}"
                 self.logger.error(error_msg)
@@ -1186,8 +1186,8 @@ class SessionController:
             log_path = work_path / "logs"
 
             # Replace placeholders (use as_posix() to avoid backslash issues in JSON on Windows)
-            session_content = (
-                template_content.replace("{{session_id}}", generate_uuid())
+            project_content = (
+                template_content.replace("{{project_id}}", generate_uuid())
                 .replace("{{workspace_name}}", workspace_name)
                 .replace("{{created_timestamp}}", datetime.now().isoformat())
                 .replace("{{work_path}}", work_path.absolute().as_posix())
@@ -1198,22 +1198,22 @@ class SessionController:
             )
 
             # Parse as JSON to validate
-            session_data = json.loads(session_content)
+            project_data = json.loads(project_content)
 
-            # Write session file
-            self.logger.info(f"Creating session state file: {session_file}")
-            with open(session_file, "w", encoding="utf-8") as f:
-                json.dump(session_data, f, indent=2)
+            # Write project file
+            self.logger.info(f"Creating project state file: {project_file}")
+            with open(project_file, "w", encoding="utf-8") as f:
+                json.dump(project_data, f, indent=2)
 
             # Load into memory so subsequent calls in this run use in-memory data
-            self._session_data = session_data
-            self._session_file = session_file
+            self._project_data = project_data
+            self._project_file = project_file
 
-            self._messages.append(f"Created session state file: {session_file}")
+            self._messages.append(f"Created project state file: {project_file}")
             return True
 
         except Exception as e:
-            error_msg = f"Failed to create session file: {str(e)}"
+            error_msg = f"Failed to create project file: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False
@@ -1273,11 +1273,11 @@ class SessionController:
         """
         return system.resolve_path(base_path=str(work_path), target_path=url)
 
-    def _update_session_repositories(
+    def _update_project_repositories(
         self, work_path: Path, repo_metadata: Dict[str, str]
     ) -> bool:
         """
-        Update session.json with new repository metadata.
+        Update project.json with new repository metadata.
 
         Args:
             work_path: Root working directory
@@ -1287,33 +1287,33 @@ class SessionController:
             bool: Success status
         """
         try:
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
+            if self._project_data is None:
+                error_msg = "Session data not loaded — call load_project() first"
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False
 
             # Check if repository already exists
-            existing_repos = self._session_data.get("repositories", [])
+            existing_repos = self._project_data.get("repositories", [])
             if any(repo["name"] == repo_metadata["name"] for repo in existing_repos):
                 error_msg = (
-                    f"Repository '{repo_metadata['name']}' already exists in session"
+                    f"Repository '{repo_metadata['name']}' already exists in project"
                 )
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False
 
-            # Add repository to in-memory list (save_session() will persist it)
+            # Add repository to in-memory list (save_project() will persist it)
             existing_repos.append(repo_metadata)
-            self._session_data["repositories"] = existing_repos
+            self._project_data["repositories"] = existing_repos
 
             self._messages.append(
-                f"Updated session with repository '{repo_metadata['name']}'"
+                f"Updated project with repository '{repo_metadata['name']}'"
             )
             return True
 
         except Exception as e:
-            error_msg = f"Failed to update session repositories: {str(e)}"
+            error_msg = f"Failed to update project repositories: {str(e)}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
             return False
@@ -1424,7 +1424,7 @@ class SessionController:
         log_entries: List[Dict[str, Any]],
         minutes: Optional[int] = None,
         level: Optional[str] = None,
-        session_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         execution_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -1434,7 +1434,7 @@ class SessionController:
             log_entries: List of log entry dictionaries
             minutes: Filter logs from last N minutes
             level: Filter by log level
-            session_id: Filter by session ID
+            project_id: Filter by project ID
             execution_id: Filter by execution ID
 
         Returns:
@@ -1460,10 +1460,10 @@ class SessionController:
                 if entry.get("level", "").upper() == level_upper
             ]
 
-        # Filter by session_id
-        if session_id:
+        # Filter by project_id
+        if project_id:
             filtered = [
-                entry for entry in filtered if entry.get("session_id") == session_id
+                entry for entry in filtered if entry.get("project_id") == project_id
             ]
 
         # Filter by execution_id
@@ -1502,16 +1502,16 @@ class SessionController:
 
     def _resolve_log_file(self, work_path: Path) -> Optional[Path]:
         """
-        Resolve the active log file for a session.
+        Resolve the active log file for a project.
 
         Resolution order:
         1. Active Python logging file handler (fast path)
-        2. ``logging.log_path`` from ``.xyz-platform/session.json`` — scans for
+        2. ``logging.log_path`` from ``.xyz-platform/project.json`` — scans for
            the first ``*.log`` file in that directory
         3. Returns ``None`` if no log file can be found
 
         Args:
-            work_path: Working directory path used to locate session.json
+            work_path: Working directory path used to locate project.json
 
         Returns:
             Path to log file, or None if unavailable
@@ -1521,30 +1521,30 @@ class SessionController:
         if log_file and log_file.exists():
             return log_file
 
-        # 2. Fall back to session.json log_path
+        # 2. Fall back to project.json log_path
         try:
             # Use in-memory data if already loaded, otherwise read from file
-            if self._session_data is not None:
-                session_data = self._session_data
+            if self._project_data is not None:
+                project_data = self._project_data
             else:
-                session_file = self._session_file_path(work_path)
-                if not session_file.exists():
+                project_file = self._project_file_path(work_path)
+                if not project_file.exists():
                     return log_file
-                with open(session_file, "r", encoding="utf-8") as f:
-                    session_data = json.load(f)
-            log_path_str = session_data.get("logging", {}).get("log_path")
+                with open(project_file, "r", encoding="utf-8") as f:
+                    project_data = json.load(f)
+            log_path_str = project_data.get("logging", {}).get("log_path")
             if log_path_str:
                 log_path = Path(log_path_str)
                 if log_path.exists():
                     candidates = sorted(log_path.glob("*.log"))
                     if candidates:
                         self.logger.debug(
-                            "Resolved log file from session.json",
+                            "Resolved log file from project.json",
                             extra={"log_file": str(candidates[0])},
                         )
                         return candidates[0]
         except Exception as e:
-            self.logger.debug(f"Could not resolve log path from session.json: {e}")
+            self.logger.debug(f"Could not resolve log path from project.json: {e}")
 
         # 3. Return original result (may be None or a non-existent path)
         return log_file
@@ -1582,8 +1582,8 @@ class SessionController:
 
         Args:
             work_path: Root working directory
-            extra_config_path: Optional extra config directory not yet persisted in session
-            extra_config_file: Optional extra config file not yet persisted in session
+            extra_config_path: Optional extra config directory not yet persisted in project
+            extra_config_file: Optional extra config file not yet persisted in project
 
         Returns:
             Tuple[bool, List[str]]: (success, list of error messages)
@@ -1623,9 +1623,9 @@ class SessionController:
                 if extra_file.is_file():
                     file_paths.append(str(extra_file))
 
-            merged_config_file = self._session_file_path(
+            merged_config_file = self._project_file_path(
                 work_path
-            )  # Ensure session file path is initialized for logging context
+            )  # Ensure project file path is initialized for logging context
 
             if not file_paths:
                 # Nothing to merge — remove stale output file if present
@@ -1670,11 +1670,11 @@ class SessionController:
         Validate all registered config sources and re-merge configuration.
 
         Reports missing sources as errors. With force=True, removes missing
-        sources from session state before re-merging.
+        sources from project state before re-merging.
 
         Args:
             work_path: Root working directory
-            force: If True, remove missing config sources from session state
+            force: If True, remove missing config sources from project state
 
         Returns:
             Tuple[bool, List[str], List[str]]: (success, errors, warnings)
@@ -1683,8 +1683,8 @@ class SessionController:
         warnings: List[str] = []
 
         try:
-            if self._session_data is None:
-                error_msg = "Session data not loaded — call load_session() first"
+            if self._project_data is None:
+                error_msg = "Session data not loaded — call load_project() first"
                 self._errors.append(error_msg)
                 return False, [error_msg], []
 
@@ -1708,7 +1708,7 @@ class SessionController:
                         errors.append(f"Config source missing: {label}")
 
             if missing and force:
-                self._session_data["config_sources"] = [
+                self._project_data["config_sources"] = [
                     s for s in sources if s not in missing
                 ]
                 self._messages.append(
@@ -1732,11 +1732,11 @@ class SessionController:
             self._errors.append(error_msg)
             return False, [error_msg], []
 
-    def get_session_status(self, work_path: Path) -> List[Dict]:
+    def get_project_status(self, work_path: Path) -> List[Dict]:
         """
         Check on-disk status of each registered repository.
 
-        For each repository compares what is registered in session.json against
+        For each repository compares what is registered in project.json against
         what is actually on disk.  Git repos also report their current branch.
 
         Args:
@@ -1806,7 +1806,7 @@ class SessionController:
         lines: int = 50,
         minutes: Optional[int] = None,
         level: Optional[str] = None,
-        session_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         execution_id: Optional[str] = None,
     ) -> tuple[bool, List[Dict[str, Any]], List[str]]:
         """
@@ -1817,7 +1817,7 @@ class SessionController:
             lines: Number of log lines to return (default: 50)
             minutes: Filter logs from last N minutes
             level: Filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-            session_id: Filter by session ID
+            project_id: Filter by project ID
             execution_id: Filter by execution ID
 
         Returns:
@@ -1826,12 +1826,12 @@ class SessionController:
         errors = []
 
         try:
-            # Resolve log file: active handler → session.json log_path fallback
+            # Resolve log file: active handler → project.json log_path fallback
             log_file = self._resolve_log_file(work_path)
 
             if not log_file:
                 self.logger.debug(
-                    "No log file found (no active handler and no session.json log_path)"
+                    "No log file found (no active handler and no project.json log_path)"
                 )
                 return True, [], []
 
@@ -1852,12 +1852,12 @@ class SessionController:
                 log_entries,
                 minutes=minutes,
                 level=level,
-                session_id=session_id,
+                project_id=project_id,
                 execution_id=execution_id,
             )
 
-            # Limit to last N lines (unless filtering by session_id or execution_id)
-            if not session_id and not execution_id and len(log_entries) > lines:
+            # Limit to last N lines (unless filtering by project_id or execution_id)
+            if not project_id and not execution_id and len(log_entries) > lines:
                 log_entries = log_entries[-lines:]
 
             self.logger.debug(
@@ -1867,7 +1867,7 @@ class SessionController:
                     "filters": {
                         "minutes": minutes,
                         "level": level,
-                        "session_id": session_id,
+                        "project_id": project_id,
                         "execution_id": execution_id,
                     },
                 },

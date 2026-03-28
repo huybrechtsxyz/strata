@@ -15,6 +15,7 @@ from typing import Optional
 import click
 
 from xyz_platform.commands.base_command import BaseCommand
+from xyz_platform.utils import system
 
 
 class HelpCommand(BaseCommand):
@@ -30,7 +31,6 @@ class HelpCommand(BaseCommand):
     def __init__(
         self,
         topic: Optional[str] = None,
-        data_path: Optional[str] = None,
         cli_context=None,
     ):
         """
@@ -40,8 +40,7 @@ class HelpCommand(BaseCommand):
             topic: The help topic to display (e.g., 'deployment', 'workspace', 'build')
             cli_context: Click context object (provides access to main CLI group)
         """
-        super().__init__(data_path=data_path)
-
+        super().__init__()
         self._topic_name = topic
         self._cli_context = cli_context
 
@@ -310,7 +309,7 @@ class HelpCommand(BaseCommand):
     # Get the documentation path
     def _get_helpdoc_path(self) -> Path:
         """Get the path to the documentation directory."""
-        docs_path = self._data_path
+        docs_path = system.get_data_path()
         if not docs_path.exists():
             raise FileNotFoundError(
                 f"Help documentation directory not found: {docs_path}"
