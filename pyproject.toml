@@ -1,0 +1,141 @@
+[build-system]
+requires = ["setuptools>=70.3.0", "wheel>=0.43.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xyz-platform"
+authors = [
+    {name = "OMP", email = "support@omp.com"},
+]
+description = "platform"
+readme = "README.md"
+requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = []
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION.txt"}
+
+[[tool.uv.index]]
+name = "proget"
+url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-Free/simple"
+publish-url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-Free/legacy"
+explicit = true
+
+[dependency-groups]
+dev = ["ruff",
+       "mypy",
+       "nox",
+       "pytest",
+       "pytest-asyncio==0.21.2",
+       "pytest-cov",
+       "yamllint",
+       "pyyaml > 3.13",
+]
+
+doc = ["sphinx",
+       "sphinx-autoapi",
+       "sphinx-toggleprompt",
+       "sphinx-copybutton",
+       "sphinx-toolbox",
+       "sphinx-rtd-theme",
+       "myst_parser",
+       "coverage-badge",
+       "anybadge",
+       ]
+[tool.ruff]
+exclude = [
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".nox",
+    ".env",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "build",
+    "dist",
+    "site-packages",
+    "venv",
+]
+line-length = 120
+indent-width = 4
+target-version = "py311"
+extend-include = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B", "I", "N"]
+ignore = ["E402","F841","E203","E302","E305", "E501"]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+norecursedirs = [
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".ipynb_checkpoints",
+  ".mypy_cache",
+  ".nox",
+  ".pyenv",
+  ".pytest_cache",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".nox",
+  ".env",
+  ".venv",
+  ".vscode",
+  "__pypackages__",
+  "build",
+  "dist",
+  "site-packages",
+  "venv",
+]
+addopts = "--cov-report term-missing --cov=src"
+asyncio_mode = 'auto'
+
+[tool.mypy]
+exclude = [
+   ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".nox",
+    ".env",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "build",
+    "dist",
+    "site-packages",
+    "venv",
+]
+ignore_missing_imports = true
+
+[project.scripts]
+xyz-platform = "xyz_platform:main"

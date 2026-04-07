@@ -1,29 +1,37 @@
-# Makefile for infrastructure setup
-include src/develop.env
-export
+SPHINXOPTS    ?=
+SPHINXBUILD   ?= sphinx-build
+DOCSDIR       ?= docs/
+BUILDDIR      ?= documentation_build
+TARGETDIR     ?= html_docs
+VENVDIR		  ?= ./.doc_venv
 
-export TF_VAR_api_key := $(KAMATERA_API_KEY)
-export TF_VAR_api_secret := $(KAMATERA_API_SECRET)
-export TF_VAR_workspace := $(WORKSPACE)
-export TF_VAR_password := $(KAMATERA_ROOT_PASSWORD)
-export TF_TOKEN_app_terraform_io := $(TF_API_SECRET)
+.PHONY: all
 
-init:
-	terraform -chdir=deploy/terraform init
+all: clean build
 
-plan:
-	terraform -chdir=deploy/terraform plan 
+build: make_doc_venv badges build_docs move_to_target clean_build
 
-apply:
-	terraform -chdir=deploy/terraform apply
+make_doc_venv:
+	@uv venv "$(VENVDIR)"
+	@. "$(VENVDIR)"/bin/activate && uv pip install . --group dev --group doc
 
-destroy:
-	terraform -chdir=deploy/terraform destroy
+badges:
+	@"$(VENVDIR)"/bin/coverage-badge > "$(DOCSDIR)"/_static/coverage.svg || (echo "Error: pytest coverage information is not found, please run pytest"; exit 1)
+	@"$(VENVDIR)"/bin/python -m anybadge --value=`cat VERSION.txt` --color=blue --file="$(DOCSDIR)"/_static/version.svg -l python
+	
+build_docs:	
+	@pandoc README.md -o "$(DOCSDIR)"/README.rst
+	@"$(VENVDIR)"/bin/$(SPHINXBUILD) -M html "$(DOCSDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(0)
 
-# Convenience target to show all commands
-help:
-	@echo "Available commands:"
-	@echo "  make init      Initialize Terraform"
-	@echo "  make plan      Show Terraform plan"
-	@echo "  make apply     Apply Terraform changes"
-	@echo "  make destroy   Destroy infrastructure"
+move_to_target:
+	@mv "$(BUILDDIR)/html" "$(TARGETDIR)"
+	
+clean_build:	
+	@rm -Rf "$(BUILDDIR)"
+
+clean:
+	@rm -Rf "$(TARGETDIR)"
+	@rm -f "$(DOCSDIR)"/_static/coverage.svg
+	@rm -f "$(DOCSDIR)"/_static/version.svg
+	@rm -f "$(DOCSDIR)"/README.rst
+	@rm -Rf "$(VENVDIR)"

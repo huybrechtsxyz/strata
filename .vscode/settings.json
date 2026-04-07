@@ -1,3 +1,20 @@
 {
-    "makefile.configureOnOpen": false
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+        }
+    },
+    "ruff.organizeImports": true,
+    "ruff.fixAll": true,
+    "editor.formatOnSave": true,
+    "files.exclude": {
+        "**/.git": true,
+        ".ruff_cache": true,
+        ".mypy_cache": true,
+        ".nox": true,
+        ".pytest_cache": true,
+        ".coverage": true
+    }
 }
