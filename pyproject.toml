@@ -4,20 +4,50 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xyz-platform"
-authors = [
-    {name = "OMP", email = "support@omp.com"},
-]
-description = "platform"
+authors = [{ name = "Vincent Huybrechts", email = "vincent@huybrechts.xyz" }]
+license = { text = "AGPL-3.0-or-later" }
+description = "Python infrastructure platform for managing VM workspaces and clusters to deploy and maintain an automated container orchestration platform."
 readme = "README.md"
+keywords = [
+    "infrastructure",
+    "platform",
+    "orchestration",
+    "containers",
+    "automation",
+]
+urls = { Homepage = "https://github.com/huybrechtsxzy/xyz-platform", Repository = "https://github.com/huybrechtsxzy/xyz-platform", Issues = "https://github.com/huybrechtsxzy/xyz-platform/issues" }
 requires-python = ">=3.13"
 classifiers = [
     "Programming Language :: Python :: 3.13",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Operating System :: OS Independent",
 ]
-dependencies = []
+dependencies = [
+    "pydantic>=2.4",
+    "pyyaml>=6.0",
+    "click>=8.0",
+    "rich>=13.0",
+    "requests>=2.31",
+    "paramiko>=3.0",
+    "scp>=0.14",
+    # Logging - Standard libraries
+    "python-json-logger>=2.0",          # Standard JSON logging for ELK
+    "opentelemetry-api>=1.20",          # OpenTelemetry API
+    "opentelemetry-sdk>=1.20",          # OpenTelemetry SDK
+    "azure-monitor-opentelemetry>=1.0", # Azure Application Insights
+]
 dynamic = ["version"]
 
 [tool.setuptools.dynamic]
-version = {file = "VERSION.txt"}
+version = { file = "VERSION.txt" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"xyz_platform.data" = ["*.yaml", "*.txt"]
 
 [[tool.uv.index]]
 name = "proget"
@@ -26,26 +56,28 @@ publish-url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-Free/legac
 explicit = true
 
 [dependency-groups]
-dev = ["ruff",
-       "mypy",
-       "nox",
-       "pytest",
-       "pytest-asyncio==0.21.2",
-       "pytest-cov",
-       "yamllint",
-       "pyyaml > 3.13",
+dev = [
+    "ruff",
+    "mypy",
+    "nox",
+    "pytest",
+    "pytest-asyncio==0.21.2",
+    "pytest-cov",
+    "yamllint",
+    "pyyaml > 3.13",
 ]
 
-doc = ["sphinx",
-       "sphinx-autoapi",
-       "sphinx-toggleprompt",
-       "sphinx-copybutton",
-       "sphinx-toolbox",
-       "sphinx-rtd-theme",
-       "myst_parser",
-       "coverage-badge",
-       "anybadge",
-       ]
+doc = [
+    "sphinx",
+    "sphinx-autoapi",
+    "sphinx-toggleprompt",
+    "sphinx-copybutton",
+    "sphinx-toolbox",
+    "sphinx-rtd-theme",
+    "myst_parser",
+    "coverage-badge",
+    "anybadge",
+]
 [tool.ruff]
 exclude = [
     ".eggs",
@@ -76,7 +108,7 @@ extend-include = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "B", "I", "N"]
-ignore = ["E402","F841","E203","E302","E305", "E501"]
+ignore = ["E402", "F841", "E203", "E302", "E305", "E501"]
 fixable = ["ALL"]
 unfixable = []
 
@@ -88,33 +120,47 @@ line-ending = "auto"
 
 [tool.pytest.ini_options]
 norecursedirs = [
-  ".eggs",
-  ".git",
-  ".git-rewrite",
-  ".ipynb_checkpoints",
-  ".mypy_cache",
-  ".nox",
-  ".pyenv",
-  ".pytest_cache",
-  ".pytype",
-  ".ruff_cache",
-  ".svn",
-  ".nox",
-  ".env",
-  ".venv",
-  ".vscode",
-  "__pypackages__",
-  "build",
-  "dist",
-  "site-packages",
-  "venv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".nox",
+    ".env",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "build",
+    "dist",
+    "site-packages",
+    "venv",
 ]
-addopts = "--cov-report term-missing --cov=src"
-asyncio_mode = 'auto'
+pythonpath = ["src"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --cov-report term-missing --cov=src"
+asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "unit: marks tests as unit tests",
+]
+filterwarnings = [
+    "ignore:Field name \"validate\" in \"ProviderLifecycleModel\".*:UserWarning",
+    "ignore:Field name \"validate\" in \"ResourceLifecycleModel\".*:UserWarning",
+    "ignore:Field name \"validate\" in \"WorkspaceLifecycleModel\".*:UserWarning",
+]
 
 [tool.mypy]
 exclude = [
-   ".eggs",
+    ".eggs",
     ".git",
     ".git-rewrite",
     ".ipynb_checkpoints",
