@@ -1,7 +1,7 @@
-from .utils.version import get_version
+"""XYZ Platform — Python infrastructure platform for workspace and cluster management."""
+
+from xyz_platform.utils.version import get_version
 
 __version__ = get_version()
 
-
-def main() -> None:
-    pass
+__all__ = ["__version__"]
