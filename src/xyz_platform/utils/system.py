@@ -218,7 +218,9 @@ def run_command(
 
     logger.debug(
         "Executing command",
-        extra={"command": cmd_display, "cwd": cwd, "timeout": timeout},
+        command=cmd_display,
+        cwd=cwd,
+        timeout=timeout,
     )
     start_time = time.time()
     console = Console()
@@ -253,12 +255,10 @@ def run_command(
             duration_ms = (time.time() - start_time) * 1000
             logger.error(
                 "Command failed",
-                extra={
-                    "command": cmd_display,
-                    "returncode": result.returncode,
-                    "duration_ms": round(duration_ms, 2),
-                    "stderr": result.stderr.strip() if result.stderr else "",
-                },
+                command=cmd_display,
+                returncode=result.returncode,
+                duration_ms=round(duration_ms, 2),
+                stderr=result.stderr.strip() if result.stderr else "",
             )
             raise subprocess.CalledProcessError(
                 result.returncode, cmd_display, result.stdout, result.stderr
@@ -267,11 +267,9 @@ def run_command(
         duration_ms = (time.time() - start_time) * 1000
         logger.debug(
             "Command completed",
-            extra={
-                "command": cmd_display,
-                "returncode": result.returncode,
-                "duration_ms": round(duration_ms, 2),
-            },
+            command=cmd_display,
+            returncode=result.returncode,
+            duration_ms=round(duration_ms, 2),
         )
 
         return CommandResult(
@@ -290,7 +288,8 @@ def run_command(
         duration_ms = (time.time() - start_time) * 1000
         logger.debug(
             "Command not found in PATH",
-            extra={"command": cmd_display, "error": str(e)},
+            command=cmd_display,
+            error=str(e),
         )
         return CommandResult(
             returncode=127,  # Standard "command not found" exit code

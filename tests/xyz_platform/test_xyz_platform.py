@@ -1,12 +1,12 @@
 import pytest
 
 import xyz_platform
-from xyz_platform.version import get_version
+from xyz_platform.utils.version import get_version
 
 
 @pytest.fixture
 def version_from_file() -> str:
-    with open("../VERSION.txt") as f:
+    with open("../../VERSION.txt") as f:
         return f.read()
 
 

@@ -5,7 +5,7 @@ import pytest
 
 
 def get_test_dir() -> str:
-    return pathlib.Path(__file__).parent.name
+    return str(pathlib.Path(__file__).parent)
 
 
 @pytest.fixture(scope="session", autouse=True)

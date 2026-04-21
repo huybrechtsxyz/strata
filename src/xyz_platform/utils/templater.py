@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Template processing for files with placeholders."""
 
 import os
@@ -50,7 +49,7 @@ class TemplateProcessor:
         try:
             logger.debug(
                 "Searching for template files",
-                extra={"template_dir": str(self.template_dir)},
+                template_dir=str(self.template_dir),
             )
 
             # Look for .template.* files in the terraform directory
@@ -59,7 +58,7 @@ class TemplateProcessor:
             if not template_files:
                 logger.debug(
                     "No template files found",
-                    extra={"template_dir": str(self.template_dir)},
+                    template_dir=str(self.template_dir),
                 )
                 return True
 
@@ -68,23 +67,22 @@ class TemplateProcessor:
                 if not success:
                     logger.warning(
                         "Skipping further processing due to template error",
-                        extra={"failed_template": str(template_file)},
+                        failed_template=str(template_file),
                     )
                     return False
 
             logger.info(
                 "Template processing completed",
-                extra={
-                    "processed_count": len(template_files),
-                    "template_dir": str(self.template_dir),
-                },
+                processed_count=len(template_files),
+                template_dir=str(self.template_dir),
             )
             return True
 
         except Exception as e:
             logger.error(
-                f"Template processing failed: {e}",
-                extra={"template_dir": str(self.template_dir)},
+                "Template processing failed",
+                template_dir=str(self.template_dir),
+                error=str(e),
                 exc_info=True,
             )
             return False
@@ -95,12 +93,13 @@ class TemplateProcessor:
             if not template_path.exists():
                 logger.error(
                     "Template file not found",
-                    extra={"template_path": str(template_path)},
+                    template_path=str(template_path),
                 )
                 return False
 
             logger.debug(
-                "Processing template", extra={"template_file": template_path.name}
+                "Processing template",
+                template_file=template_path.name,
             )
 
             # Read template content
@@ -124,17 +123,16 @@ class TemplateProcessor:
 
             logger.debug(
                 "Generated output from template",
-                extra={
-                    "template_file": template_path.name,
-                    "output_file": output_path.name,
-                },
+                template_file=template_path.name,
+                output_file=output_path.name,
             )
             return True
 
         except Exception as e:
             logger.error(
-                f"Failed to process template: {e}",
-                extra={"template_path": str(template_path)},
+                "Failed to process template",
+                template_path=str(template_path),
+                error=str(e),
                 exc_info=True,
             )
             return False
@@ -143,15 +141,17 @@ class TemplateProcessor:
         """Remove template files after processing to avoid Terraform conflicts."""
         try:
             logger.debug(
-                "Cleaning up template file", extra={"template_file": template_path.name}
+                "Cleaning up template file",
+                template_file=template_path.name,
             )
             template_path.unlink()
             return True
 
         except Exception as e:
             logger.error(
-                f"Failed to cleanup template file: {e}",
-                extra={"template_path": str(template_path)},
+                "Failed to cleanup template file",
+                template_path=str(template_path),
+                error=str(e),
                 exc_info=True,
             )
             return False
@@ -166,12 +166,13 @@ class TemplateProcessor:
             if env_value is None:
                 logger.warning(
                     "Environment variable not found, keeping placeholder",
-                    extra={"variable_name": var_name},
+                    variable_name=var_name,
                 )
                 return match.group(0)  # Return original placeholder
 
             logger.debug(
-                "Substituted environment variable", extra={"variable_name": var_name}
+                "Substituted environment variable",
+                variable_name=var_name,
             )
             return env_value
 

@@ -58,7 +58,9 @@ def get_cached_service(
 
     if service:
         logger.debug(
-            f"Cache hit for {service_class.__name__}", extra={"file_path": file_path}
+            "Cache hit",
+            service=service_class.__name__,
+            file_path=file_path,
         )
 
     return service
@@ -82,8 +84,10 @@ def cache_service(
     cache_key = get_cache_key(service_class, file_path, **kwargs)
     _service_cache[cache_key] = service_instance
     logger.debug(
-        f"Cached {service_class.__name__}",
-        extra={"file_path": file_path, "cache_size": len(_service_cache)},
+        "Cached service",
+        service=service_class.__name__,
+        file_path=file_path,
+        cache_size=len(_service_cache),
     )
 
 
@@ -104,18 +108,19 @@ def get_or_cache(
     # Check cache first
     cached = _service_cache.get(key)
     if cached:
-        logger.debug("Cache hit", extra={"key": key})
+        logger.debug("Cache hit", key=key)
         return cached
 
     # Create new instance using factory
-    logger.debug("Cache miss, creating new instance", extra={"key": key})
+    logger.debug("Cache miss, creating new instance", key=key)
     instance = factory()
 
     # Cache the instance
     _service_cache[key] = instance
     logger.debug(
         "Cached instance",
-        extra={"key": key, "cache_size": len(_service_cache)},
+        key=key,
+        cache_size=len(_service_cache),
     )
 
     return instance
@@ -125,7 +130,7 @@ def clear_cache() -> None:
     """Clear all cached services."""
     count = len(_service_cache)
     _service_cache.clear()
-    logger.info("Cleared service cache", extra={"cleared_count": count})
+    logger.info("Cleared service cache", cleared_count=count)
 
 
 def get_cache_stats() -> Dict[str, Any]:

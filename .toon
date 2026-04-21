@@ -1,0 +1,74 @@
+### [2025-07-22] - services/workspace_service.py
+- **Decision**: Clean banner header, convert all stdlib logger `extra={}` calls to structlog kwargs, remove dead `workspace and workspace.spec and` guards
+- **Rationale**: Consistent with structlog migration across all other service files. Static event strings + kwargs are the structlog idiomatic pattern. Dead guards removed since `workspace = self.model` is already assigned after the `if self.model is None: raise` check above.
+- **Implications**: All services are now fully migrated to structlog. `configuration_service.py` is a pre-existing missing file — imported by workspace_service.py and resource_service.py but not present in the repository.
+
+### [2025-07-22] - integrations/base_integration.py
+- **Decision**: Clean banner header, convert extra={} logger calls to structlog kwargs
+- **Rationale**: 13 extra={} conversions. Module-level logger is correct (class does not extend BaseService). No f-strings or dead code present.
+- **Implications**: Pattern established for remaining integration files.
+
+### [2025-07-22] - services/unknown_service.py
+- **Decision**: Clean banner header, add UnsupportedKindError import, simplify redundant if/return patterns, replace ValueError with UnsupportedKindError
+- **Rationale**: The `if kind == X: return True; return False` pattern is dead code — the if-branch is the only path that returns True, so the whole thing reduces to `return kind == X`. ValueError replaced with the platform-specific UnsupportedKindError to be consistent with the rest of the codebase.
+- **Implications**: get_service_by_kind() now raises a typed exception that callers can catch specifically.
+
+### [2025-07-22] - services/project_service.py
+- **Decision**: Clean banner header, fix stale import alias, merge duplicate typing import, convert f-string log events to static strings
+- **Rationale**: The `FileNotFoundError as PlatformFileNotFoundError` alias was left over from before the exception rename. The `from typing import Any` was a second separate import block. Log event in save_to_json said 'Saved platform model' (copy-paste from platform_service.py) — corrected to 'Saved project model to JSON'.
+- **Implications**: Import is now correct and consistent with rest of codebase.
+
+### [2025-07-22] - services/platform_service.py
+- **Decision**: Clean banner header, convert f-string log events to static strings with kwargs
+- **Rationale**: All log calls are gated by self.verbose — no extra={} patterns present. 8 f-string conversions across load_from_json, load_from_yaml, save_to_json, save_to_yaml.
+- **Implications**: No logic changes; verbose-gated logging preserved as-is.
+
+### [2025-07-22] - services/integration_service.py
+- **Decision**: Clean banner header to PEP 257 module docstring, convert extra={} logger calls to structlog kwargs, remove local error_msg variable
+- **Rationale**: IntegrationService does NOT extend BaseService — module-level logger is correct (kept). 13 extra={} conversions. error_msg was used in two places that were both refactored, so variable became dead code.
+- **Implications**: All service files are now fully migrated to structlog.
+
+### [2025-07-22] - services/deployment_service.py
+- **Decision**: Clean banner header, convert extra={} logger calls to structlog kwargs, convert f-string log events to static strings
+- **Rationale**: Consistent with structlog migration across all service files. 25 logger call conversions across _validate_deployment_layers, apply_environment_overrides, load_deploy_services, and validate_related_services.
+- **Implications**: All service files are now fully migrated to structlog.
+
+### [2025-07-22] - services/environment_service.py
+- **Decision**: Clean banner header only
+- **Rationale**: No logger calls exist in the file. Logic and structure are correct as-is.
+- **Implications**: Nothing further required for this file.
+
+### [2025-07-22] - services/configuration_service.py
+- **Decision**: Clean banner header, convert extra={} logger calls to structlog kwargs, remove dead isinstance(region, dict) branch, fix get_temp_path dead code, replace FileNotFoundError with PlatformFileNotFoundError
+- **Rationale**: Consistent with structlog migration. Dict branch for regions was dead code (provider.regions is typed, same fix as provider_service.py). get_temp_path first two lines set temp_dir then immediately overwrote it — removed the dead assignments and unused `import tempfile`.
+- **Implications**: All service files are now fully migrated to structlog and cleaned of dead code.
+
+### [2025-07-22] - services/ folder audit
+- **Decision**: No additional service files exist beyond the 7 reviewed (base, firewall, module, namespace, provider, resource, workspace).
+- **Rationale**: `list_dir` on services/ confirms only those 7 .py files exist.
+- **Implications**: `configuration_service.py` referenced in imports is a future/external component. Both workspace_service.py and resource_service.py import it — so it must be implemented before these services can fully run.
+
+### [2026-04-08] - integrations/hashicorp_consul.py
+- **Decision**: Clean banner header, convert all extra={} logger calls to structlog kwargs, use name= for integration_name
+- **Rationale**: 12 extra={} conversions. Affected methods: __init__, ensure_available (4 calls), get_keyvalue (6 calls including 4 info calls in prefer_cli/API branches). Static event strings preserved throughout — no f-string log events.
+- **Implications**: Consistent with established integration logging pattern. No logic changes.
+
+### [2026-04-08] - integrations/hashicorp_vault.py
+- **Decision**: Clean banner header, convert all extra={} logger calls to structlog kwargs, use name= for integration_name
+- **Rationale**: 20 extra={} conversions. Affected methods: __init__, ensure_available (5 calls), _get_token_via_approle (3 calls), _get_token_via_kubernetes (4 calls), _get_secretvalue (7 calls including 4 info calls in prefer_cli/API branches). Static event strings preserved throughout — no f-string log events.
+- **Implications**: Consistent with established integration logging pattern. No logic changes.
+
+### [2026-04-08] - integrations/terraform.py
+- **Decision**: Clean banner header, convert all extra={} logger calls to structlog kwargs, use name= for integration_name
+- **Rationale**: 23 extra={} conversions across __init__, ensure_available, and all IInfrastructureTool methods (init, validate, plan, apply, destroy, output). Each method has error/error/completed trio of logger calls. exc_info=True preserved as direct kwarg on all logger.error calls — valid structlog pattern.
+- **Implications**: Consistent with established integration logging pattern. No logic changes.
+
+### [2026-04-08] - integrations/git.py
+- **Decision**: Clean banner header, convert all extra={} logger calls to structlog kwargs, use name= for integration_name
+- **Rationale**: 15 extra={} conversions. Affected methods: __init__, ensure_available (4 calls), clone (5 calls including matched returncode branch handling), pull (4 calls), get_current_branch (2 calls). exc_info=True preserved on clone and pull exception handlers.
+- **Implications**: No logic changes.
+
+### [2026-04-08] - integrations/docker.py
+- **Decision**: Clean banner header, convert all extra={} logger calls to structlog kwargs, use name= for integration_name
+- **Rationale**: 27 extra={} conversions across __init__, ensure_available, build, run, push, pull, ps. Each IContainerTool method follows the same warn-before/debug-start/error-on-fail/info-on-success/error-on-exception pattern. exc_info=True preserved on all exception handlers.
+- **Implications**: All integration files are now fully migrated to structlog. No logic changes.

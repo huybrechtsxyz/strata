@@ -141,10 +141,8 @@ class BitwardenIntegration(StoreIntegration):
         self._info = f"{self.integration_name} {self.get_version()} is available"
         logger.debug(
             "Bitwarden is available and configured",
-            extra={
-                "integration_name": self.integration_name,
-                "version": self.get_version(),
-            },
+            integration_name=self.integration_name,
+            version=self.get_version(),
         )
         return True, ""
 

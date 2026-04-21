@@ -351,7 +351,8 @@ class IntegrationRegistry:
         self._requirements[operation].update(integrations)
         logger.debug(
             "Integration requirements registered",
-            extra={"operation": operation, "integrations": integrations},
+            operation=operation,
+            integrations=integrations,
         )
 
     def get_requirements(self, operation: str) -> Set[str]:

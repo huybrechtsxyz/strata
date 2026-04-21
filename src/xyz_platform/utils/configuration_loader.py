@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Low-level YAML file loader and merger.
 
 Handles file I/O and data merging only.
@@ -70,7 +69,7 @@ class ConfigurationLoader:
         if not file_path.is_file():
             raise ValueError(f"Path is not a file: {file_path}")
 
-        self._logger.debug("Loading YAML file", extra={"file": str(file_path)})
+        self._logger.debug("Loading YAML file", file=str(file_path))
 
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -79,12 +78,13 @@ class ConfigurationLoader:
             self._logger.error(
                 "YAML parsing failed",
                 exc_info=True,
-                extra={"file": str(file_path), "error": str(e)},
+                file=str(file_path),
+                error=str(e),
             )
             raise
 
         if config is None:
-            self._logger.debug("YAML file is empty", extra={"file": str(file_path)})
+            self._logger.debug("YAML file is empty", file=str(file_path))
             return {}
 
         if not isinstance(config, dict):
@@ -117,7 +117,7 @@ class ConfigurationLoader:
 
         self._logger.debug(
             "Loaded YAML files",
-            extra={"file_count": len(configs)},
+            file_count=len(configs),
         )
 
         return configs
@@ -173,7 +173,8 @@ class ConfigurationLoader:
             return configs[0].copy()
 
         self._logger.debug(
-            "Merging configurations", extra={"config_count": len(configs)}
+            "Merging configurations",
+            config_count=len(configs),
         )
 
         # Start with empty dict
@@ -184,7 +185,8 @@ class ConfigurationLoader:
             merged = self.deep_merge(merged, config)
 
         self._logger.debug(
-            "Configurations merged successfully", extra={"config_count": len(configs)}
+            "Configurations merged successfully",
+            config_count=len(configs),
         )
 
         return merged
