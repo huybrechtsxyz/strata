@@ -57,6 +57,7 @@ explicit = true
 
 [dependency-groups]
 dev = [
+    "debugpy",
     "ruff",
     "mypy",
     "nox",

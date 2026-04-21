@@ -1,0 +1,37 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run: xyz-platform",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "xyz_platform",
+            "args": [
+                "--help"
+            ],
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "console": "internalConsole",
+            "justMyCode": true
+        },
+        {
+            "name": "Debug: xyz-platform",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "xyz_platform",
+            "args": [
+                "--help"
+            ],
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "console": "internalConsole",
+            "justMyCode": false
+        }
+    ]
+}

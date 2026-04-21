@@ -50,6 +50,7 @@
       "packageManager": "ms-python.python:uv"
     }
   ],
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
   "python.testing.cwd": "${workspaceFolder}",
   "python.testing.pytestArgs": [
     "tests"
