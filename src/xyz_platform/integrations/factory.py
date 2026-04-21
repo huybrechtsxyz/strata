@@ -161,8 +161,8 @@ def _auto_register_builtin_integrations():
             "xyz_platform.integrations.azure_appconfig",
             "AzureAppConfigIntegration",
         ),
-        ("consul", "xyz_platform.integrations.consul", "ConsulIntegration"),
-        ("vault", "xyz_platform.integrations.vault", "VaultIntegration"),
+        ("consul", "xyz_platform.integrations.hashicorp_consul", "ConsulIntegration"),
+        ("vault", "xyz_platform.integrations.hashicorp_vault", "VaultIntegration"),
         # Add more as they are implemented
     ]
 
