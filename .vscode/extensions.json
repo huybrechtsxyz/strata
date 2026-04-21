@@ -9,7 +9,7 @@
     "ms-python.python", // Core Python extension
     "ms-python.debugpy", // Python debugger
     "ms-python.vscode-pylance", // Type checking and IntelliSense
-    "ms-python.vscode-python-envs", // Python environment management
+    // "ms-python.vscode-python-envs", // Python environment management experimental extension
     "charliermarsh.ruff", // Ruff linter and formatter
     // PowerShell
     "ms-vscode.powershell", // PowerShell language support
