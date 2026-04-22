@@ -1,0 +1,42 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: xyz_vm_infra
+  annotations:
+    description: Kamatera Infrastructure Virtual Machine for platform workloads
+  labels:
+    version: 1.0.0
+  tags: [xyz, vm, infra]
+spec:
+  properties:
+    provider_type: kamatera
+    resource_type: virtualmachine
+    unit_cost: 11.00 # USD per month
+  configuration:
+    os_name: "Ubuntu"
+    os_code: "24.04 64bit"
+    cpu_type: "A"
+    cpu_cores: 1
+    ram_mb: 4096
+    billing: "hourly"
+    disk_size: 40
+  storage:
+    install_path: /opt/install/app
+    disks:
+      - size: 20
+        label: vm-infra-os
+        mount: /mnt/data1
+      - size: 40
+        label: vm-infra-data
+        mount: /mnt/data2
+    volumes:
+      - name: config
+        path: /mnt/data2/etc/app
+      - name: docs
+        path: /mnt/data2/var/docs/app
+      - name: data
+        path: /mnt/data2/var/data/app
+      - name: logs
+        path: /mnt/data2/var/logs/app
+      - name: serve
+        path: /mnt/data2/var/serve

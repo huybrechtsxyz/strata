@@ -1,0 +1,36 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: xyz_deploy_prd
+  annotations:
+    description: Deployment configuration for Huybrechts XYZ Platform
+  labels:
+    version: "1.0.0"
+  tags: [xyz, production, deployment]
+spec:
+
+  configurations: null
+  
+  lifecycle: null
+
+  layers:
+    environment: prd
+  
+  properties:
+    environment: prd
+  
+  workspace:
+    name: xyz_platform
+    description: Huybrechts XYZ Platform Workspace
+    file: "@xyz_configuration/stack/xyz-ws-platform.yaml"
+
+  environments:
+    - "@xyz_configuration/environments/xyz-env-prd.yaml"
+  
+  stages:
+    # Infrastructure provisioning stage - uses Terraform via convention
+    - name: infrastructure
+      type: infrastructure  # Convention: auto-selects Terraform provisioner
+      scope: all
+      depends_on: null
+      on_failure: stop

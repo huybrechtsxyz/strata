@@ -1,0 +1,56 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: module
+meta:
+  name: xyz_traefik
+  annotations:
+    description: Traefik reverse proxy module for routing and load balancing
+  labels:
+    version: "1.0.0"
+  tags: [xyz,traefik]
+spec:
+  source:
+    repository: xyz_svc_traefik
+    source_path: .
+  properties:
+    mounts:
+      - name: configuration_files
+        type: config
+        target_path: ${TRAEFIK_PATH_CONFIG}
+        chmod: "0644"
+        source_path: config
+        description: Traefik static configuration
+      - name: certificates
+        type: config
+        chmod: "0600"
+        target_path: ${TRAEFIK_PATH_CERTS}
+        description: TLS certificates
+      - name: documentation
+        type: docs
+        chmod: "0644"
+        target_path: ${TRAEFIK_PATH_DOCS}
+        source_path: docs/traefik
+        description: Module documentation
+      - name: datafiles
+        type: data
+        chmod: "0600"
+        target_path: ${TRAEFIK_PATH_DATA}
+        description: Certificate storage (ACME)
+      - name: logging
+        type: logs
+        chmod: "0644"
+        target_path: ${TRAEFIK_PATH_LOGS}
+        description: Access and error logs
+    checks:
+      - name: traefik_http_check
+        label: Traefik HTTP Health Check
+        target: consul
+        type: http
+        endpoint: http://traefik:8080/ping
+        interval: 60s
+        timeout: 5s
+        retries: 3
+    endpoints:
+      - name: traefik_dashboard
+        label: Traefik Dashboard
+        url: http://localhost:8080/dashboard/
+        description: Access the Traefik web dashboard

@@ -1,0 +1,58 @@
+# ===============================================================================
+# Production Logging Configuration - ELK + Azure
+# ===============================================================================
+# Production configuration with:
+# - Logstash for ELK stack
+# - Azure Application Insights via OpenTelemetry
+# - JSON formatted logs only (no console)
+# ===============================================================================
+
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  json:
+    (): xyz_platform.logger.formatters.JsonFormatter
+
+handlers:
+  # Logstash for ELK stack
+  logstash:
+    (): xyz_platform.logger.handlers.LogstashHandler
+    level: INFO
+    formatter: json
+    host: ${LOGSTASH_HOST:localhost}
+    port: ${LOGSTASH_PORT:5000}
+    timeout: 5
+
+  # Rotating file backup
+  file:
+    class: logging.handlers.RotatingFileHandler
+    level: INFO
+    formatter: json
+    filename: /var/log/xyz-platform/application.json
+    maxBytes: 52428800  # 50MB
+    backupCount: 10
+    encoding: utf8
+
+loggers:
+  xyz_platform:
+    level: INFO
+    handlers: [logstash, file]
+    propagate: false
+
+  # Reduce third-party noise
+  urllib3:
+    level: ERROR
+  requests:
+    level: ERROR
+  paramiko:
+    level: ERROR
+
+root:
+  level: WARNING
+  handlers: [logstash, file]
+
+# Azure Application Insights
+azure:
+  enabled: true
+  # Use environment variable: APPLICATIONINSIGHTS_CONNECTION_STRING

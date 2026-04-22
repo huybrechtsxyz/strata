@@ -1,0 +1,39 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: xyz_vm_manager
+  annotations:
+    description: Kamatera Virtual Machine for Docker Swarm manager node
+  labels:
+    version: 1.0.0
+  tags: [xyz, vm, manager]
+spec:
+  lifecycle: null
+  properties:
+    provider_type: kamatera
+    resource_type: virtualmachine
+    unit_cost: 5.00 # USD per month
+  configuration:
+    os_name: "Ubuntu"
+    os_code: "24.04 64bit"
+    cpu_type: "A"
+    cpu_cores: 1
+    ram_mb: 1024
+    billing: "hourly"
+  storage:
+    install_path: /opt/install/app
+    disks:
+      - size: 20
+        label: vm-manager-os
+        mount: /mnt/data1
+    volumes:
+      - name: config
+        path: /mnt/data1/etc/app
+      - name: docs
+        path: /mnt/data1/var/docs/app
+      - name: data
+        path: /mnt/data1/var/data/app
+      - name: logs
+        path: /mnt/data1/var/logs/app
+      - name: serve
+        path: /mnt/data1/var/serve
