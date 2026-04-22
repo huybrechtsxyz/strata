@@ -72,3 +72,8 @@
 - **Decision**: Clean banner header, convert all extra={} logger calls to structlog kwargs, use name= for integration_name
 - **Rationale**: 27 extra={} conversions across __init__, ensure_available, build, run, push, pull, ps. Each IContainerTool method follows the same warn-before/debug-start/error-on-fail/info-on-success/error-on-exception pattern. exc_info=True preserved on all exception handlers.
 - **Implications**: All integration files are now fully migrated to structlog. No logic changes.
+
+### [2026-04-22] - Build/Deploy pipeline gap analysis (Basher review)
+- **Decision**: Documented the full gap between what's built (YAML loading, validation, integration primitives, env override merging) and what's missing (BuildController, DeployController, stage dispatch, Terraform var-file generation, CLI entry points for `xyz build` and `xyz deploy`).
+- **Rationale**: Vincent requested a concrete gap analysis before starting build/deploy implementation. This establishes the baseline.
+- **Implications**: Next work items are: (1) `BuildController` that assembles Terraform source from workspace model into `<work_path>/.build/<deployment>-<version>/`, (2) `DeployController` that iterates stages and dispatches to the right integration, (3) CLI commands `cli_builders.py` and `cli_deploy.py`, (4) uncomment `main.add_command(build)` and `main.add_command(deploy)` in `cli.py`.
