@@ -371,7 +371,7 @@ class LifecycleController(BaseController):
         env = self._prepare_environment(context)
 
         # Optional template substitution — writes processed copy to a temp dir
-        script_to_execute = script_path
+        script_to_execute: Optional[Path] = script_path
         temp_dir: Optional[Path] = None
 
         if self.enable_templating:
@@ -382,7 +382,7 @@ class LifecycleController(BaseController):
                 return False
 
         try:
-            cmd = self._build_command(script_to_execute)
+            cmd = self._build_command(script_to_execute or script_path)
             result = subprocess.run(
                 cmd,
                 cwd=work_path,

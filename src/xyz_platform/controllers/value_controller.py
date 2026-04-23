@@ -15,9 +15,8 @@ from xyz_platform.models.store_models import (
     VariableStoreModel,
     VariableStoreType,
 )
-
-from xyz_platform.services.integration_service import IntegrationService
 from xyz_platform.services.deployment_service import DeploymentService
+from xyz_platform.services.integration_service import IntegrationService
 
 logger = get_logger(__name__)
 
@@ -128,10 +127,7 @@ class ValueController(BaseController):
 
         environment_service = deployment_service.get_environment_service()
         if environment_service is None:
-            logger.warning(
-                "No environment service attached to deployment — "
-                "no variables/secrets/features to resolve."
-            )
+            logger.warning("No environment service attached to deployment — no variables/secrets/features to resolve.")
             return True, resolved, []
 
         # Lazy-init integrations once (idempotent; no-op if already done).
@@ -148,24 +144,24 @@ class ValueController(BaseController):
                 resolved.variables[item.key] = val
 
         # --- secrets ---
-        for item in environment_service.get_secrets():
-            val, err = self._resolve_secret(item)
+        for secret_item in environment_service.get_secrets():
+            val, err = self._resolve_secret(secret_item)
             if err:
                 resolved.errors.append(err)
                 if strict:
                     return False, resolved, resolved.errors
             else:
-                resolved.secrets[item.key] = val
+                resolved.secrets[secret_item.key] = val
 
         # --- features ---
-        for item in environment_service.get_features():
-            val, err = self._resolve_feature(item)
+        for feature_item in environment_service.get_features():
+            val, err = self._resolve_feature(feature_item)
             if err:
                 resolved.errors.append(err)
                 if strict:
                     return False, resolved, resolved.errors
             else:
-                resolved.features[item.key] = val
+                resolved.features[feature_item.key] = val
 
         logger.debug(
             "Value resolution complete",
@@ -180,9 +176,7 @@ class ValueController(BaseController):
 
     # Per-type resolvers
 
-    def _resolve_variable(
-        self, item: VariableStoreModel
-    ) -> Tuple[Optional[Any], Optional[str]]:
+    def _resolve_variable(self, item: VariableStoreModel) -> Tuple[Optional[Any], Optional[str]]:
         """Resolve a single variable.  Returns (value, error_or_None)."""
         store = item.store
 
@@ -192,29 +186,19 @@ class ValueController(BaseController):
         if store == VariableStoreType.ENVIRONMENT:
             env_val = os.environ.get(str(item.value))
             if env_val is None:
-                return None, (
-                    f"Variable '{item.key}': env var '{item.value}' is not set."
-                )
+                return None, (f"Variable '{item.key}': env var '{item.value}' is not set.")
             return env_val, None
 
         # Integration-backed store
         integration = self._get_integration_by_type(store.value)
         if integration is None:
-            return None, (
-                f"Variable '{item.key}': no integration registered for "
-                f"store type '{store.value}'."
-            )
+            return None, (f"Variable '{item.key}': no integration registered for store type '{store.value}'.")
         val = integration.get_variable(str(item.value))
         if val is None:
-            return None, (
-                f"Variable '{item.key}': key '{item.value}' not found in "
-                f"'{store.value}' store."
-            )
+            return None, (f"Variable '{item.key}': key '{item.value}' not found in '{store.value}' store.")
         return val, None
 
-    def _resolve_secret(
-        self, item: SecretStoreModel
-    ) -> Tuple[Optional[Any], Optional[str]]:
+    def _resolve_secret(self, item: SecretStoreModel) -> Tuple[Optional[Any], Optional[str]]:
         """Resolve a single secret.  Returns (value, error_or_None)."""
         store = item.store
 
@@ -224,28 +208,18 @@ class ValueController(BaseController):
         if store == SecretStoreType.ENVIRONMENT:
             env_val = os.environ.get(str(item.value))
             if env_val is None:
-                return None, (
-                    f"Secret '{item.key}': env var '{item.value}' is not set."
-                )
+                return None, (f"Secret '{item.key}': env var '{item.value}' is not set.")
             return env_val, None
 
         integration = self._get_integration_by_type(store.value)
         if integration is None:
-            return None, (
-                f"Secret '{item.key}': no integration registered for "
-                f"store type '{store.value}'."
-            )
+            return None, (f"Secret '{item.key}': no integration registered for store type '{store.value}'.")
         val = integration.get_secret(str(item.value))
         if val is None:
-            return None, (
-                f"Secret '{item.key}': key '{item.value}' not found in "
-                f"'{store.value}' store."
-            )
+            return None, (f"Secret '{item.key}': key '{item.value}' not found in '{store.value}' store.")
         return val, None
 
-    def _resolve_feature(
-        self, item: FeatureStoreModel
-    ) -> Tuple[Optional[bool], Optional[str]]:
+    def _resolve_feature(self, item: FeatureStoreModel) -> Tuple[Optional[bool], Optional[str]]:
         """Resolve a single feature flag.  Returns (value, error_or_None)."""
         store = item.store
 
@@ -253,31 +227,20 @@ class ValueController(BaseController):
             try:
                 return bool(item.value), None
             except (TypeError, ValueError):
-                return None, (
-                    f"Feature '{item.key}': cannot convert constant value "
-                    f"'{item.value}' to bool."
-                )
+                return None, (f"Feature '{item.key}': cannot convert constant value '{item.value}' to bool.")
 
         if store == FeatureStoreType.ENVIRONMENT:
             env_val = os.environ.get(str(item.value))
             if env_val is None:
-                return None, (
-                    f"Feature '{item.key}': env var '{item.value}' is not set."
-                )
+                return None, (f"Feature '{item.key}': env var '{item.value}' is not set.")
             return env_val.lower() not in ("0", "false", "no", "off"), None
 
         integration = self._get_integration_by_type(store.value)
         if integration is None:
-            return None, (
-                f"Feature '{item.key}': no integration registered for "
-                f"store type '{store.value}'."
-            )
+            return None, (f"Feature '{item.key}': no integration registered for store type '{store.value}'.")
         val = integration.get_feature(str(item.value))
         if val is None:
-            return None, (
-                f"Feature '{item.key}': flag '{item.value}' not found in "
-                f"'{store.value}' store."
-            )
+            return None, (f"Feature '{item.key}': flag '{item.value}' not found in '{store.value}' store.")
         return val, None
 
     # Helpers
@@ -292,7 +255,9 @@ class ValueController(BaseController):
             if not ok:
                 logger.warning(
                     "Integration initialisation had errors",
-                errors=errors,
+                    errors=errors,
+                )
+
     @staticmethod
     def _get_integration_by_type(store_type: str):
         """Return the first registered integration whose type matches *store_type*.
@@ -303,9 +268,6 @@ class ValueController(BaseController):
         svc = IntegrationService.get_instance()
         for name in svc.list_integrations():
             integration = svc.get_integration(name)
-            if (
-                integration is not None
-                and getattr(integration, "integration_type", None) == store_type
-            ):
+            if integration is not None and getattr(integration, "integration_type", None) == store_type:
                 return integration
         return None
