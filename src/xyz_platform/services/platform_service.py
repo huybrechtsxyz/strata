@@ -12,7 +12,7 @@ from xyz_platform.services.base_service import BaseService
 from xyz_platform.services.workspace_service import WorkspaceService
 
 
-class PlatformService(BaseService):
+class PlatformService(BaseService["PlatformModel"]):
     """Service for managing platform model I/O operations."""
 
     def __init__(self, path=None, data=None):
@@ -26,7 +26,7 @@ class PlatformService(BaseService):
             data: Optional pre-loaded data dictionary.
         """
         super().__init__(path, data)
-        self.model: Optional[PlatformModel] = None
+        self.model = None
         self.verbose: bool = False
         self._workspace_service: Optional[WorkspaceService] = None
 
@@ -42,9 +42,7 @@ class PlatformService(BaseService):
         passed directly to save_*).
         """
         if self.path is None and self.data is None:
-            self.logger.debug(
-                "No path or data provided — service created for saving only"
-            )
+            self.logger.debug("No path or data provided — service created for saving only")
             return
         super()._load_data()
 
@@ -69,9 +67,7 @@ class PlatformService(BaseService):
         """
         return True, []
 
-    def validate(
-        self, configuration_model=None, work_path=None
-    ) -> Tuple[bool, List[str]]:
+    def validate(self, configuration_model=None, work_path=None) -> Tuple[bool, List[str]]:
         """Validate the platform model.
 
         When the service is used solely for saving (no path or data was
@@ -137,9 +133,7 @@ class PlatformService(BaseService):
     # Related-service compatibility stubs
     # ------------------------------------------------------------------
 
-    def load_related_services(
-        self, objects_path: Optional[str] = None, stage_name: Optional[str] = None
-    ):
+    def load_related_services(self, objects_path: Optional[str] = None, stage_name: Optional[str] = None):
         """Compatibility stub — PlatformModel is self-contained.
 
         All data is embedded in the model; no external service loading is
@@ -163,11 +157,7 @@ class PlatformService(BaseService):
             WorkspaceService or None if model is not loaded.
         """
         if self._workspace_service is None and self.model and self.model.spec:
-            workspace_data = (
-                self.model.spec.workspace.model_dump()
-                if self.model.spec.workspace
-                else {}
-            )
+            workspace_data = self.model.spec.workspace.model_dump() if self.model.spec.workspace else {}
             self._workspace_service = WorkspaceService(data=workspace_data)
         return self._workspace_service
 
@@ -237,9 +227,7 @@ class PlatformService(BaseService):
     # I/O — save
     # ------------------------------------------------------------------
 
-    def save_to_json(
-        self, platform: PlatformModel, path: Path, indent: int = 2
-    ) -> None:
+    def save_to_json(self, platform: PlatformModel, path: Path, indent: int = 2) -> None:
         """Serialise a PlatformModel to a JSON file.
 
         Args:
@@ -282,9 +270,7 @@ class PlatformService(BaseService):
         if self.verbose:
             self.logger.info("Saved platform model to YAML", name=platform.meta.name)
 
-    def save_both_formats(
-        self, platform: PlatformModel, json_path: Path, yaml_path: Path
-    ) -> None:
+    def save_both_formats(self, platform: PlatformModel, json_path: Path, yaml_path: Path) -> None:
         """Serialise a PlatformModel to both JSON and YAML.
 
         Args:

@@ -2,19 +2,19 @@
 
 from typing import Optional
 
-from xyz_platform.models.unknown_model import UnknownModel
-from xyz_platform.models.common_models import PlatformKind
-from xyz_platform.services.base_service import BaseService
 from xyz_platform.exceptions.model_exception import UnsupportedKindError
+from xyz_platform.models.common_models import PlatformKind
+from xyz_platform.models.unknown_model import UnknownModel
+from xyz_platform.services.base_service import BaseService
 
 
-class UnknownService(BaseService):
+class UnknownService(BaseService["UnknownModel"]):
     """Service class for unknown or unsupported kinds."""
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the UnknownService."""
         super().__init__(path=path, data=data)
-        self.model: Optional[UnknownModel] = None
+        self.model = None
 
     def _get_model_class(self):
         """Return a generic model class for unknown kinds."""

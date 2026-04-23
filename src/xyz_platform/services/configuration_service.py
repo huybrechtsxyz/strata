@@ -2,22 +2,24 @@
 
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from xyz_platform.exceptions import PlatformFileNotFoundError
+from xyz_platform.logger import get_logger
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.repository_model import RepositoryModel
 from xyz_platform.services.base_service import BaseService
-from xyz_platform.utils.configuration_loader import ConfigurationLoader
 from xyz_platform.utils import config
+from xyz_platform.utils.configuration_loader import ConfigurationLoader
 from xyz_platform.utils.system import resolve_path
-from xyz_platform.logger import get_logger
-from xyz_platform.exceptions import PlatformFileNotFoundError
 
 
-class ConfigurationService(BaseService):
+class ConfigurationService(BaseService["ConfigurationModel"]):
     """Service for handling configuration configurations (Centralized Singleton pattern)."""
 
     _instances: Dict[str, "ConfigurationService"] = {}
     _lock = threading.Lock()
+    _initialized: bool
 
     @classmethod
     def _get_instance_key_static(cls, class_ref, *args, **kwargs) -> str:
@@ -36,16 +38,17 @@ class ConfigurationService(BaseService):
                 cls._instances[full_key] = instance
             return cls._instances[full_key]
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize configuration service with blank config (only once)."""
         if self._initialized:
             return
+
         # Initialize with empty data - no loading on init
         self.path = None  # ConfigurationService doesn't load from a single path
         self.data = {}
-        self.model: Optional[ConfigurationModel] = None
+        self.model = None
         self._validated = False
-        self._validation_errors = []
+        self._validation_errors: List[str] = []
 
         # Initialize logger
         self.logger = get_logger(self.__class__.__module__)
@@ -105,25 +108,16 @@ class ConfigurationService(BaseService):
         # Validate unique provider names across merged configuration
         if self.model.spec.providers:
             provider_names = [p.name for p in self.model.spec.providers]
-            duplicates = [
-                name for name in provider_names if provider_names.count(name) > 1
-            ]
+            duplicates = [name for name in provider_names if provider_names.count(name) > 1]
             if duplicates:
-                errors.append(
-                    f"Duplicate provider names in merged configuration: {', '.join(set(duplicates))}"
-                )
+                errors.append(f"Duplicate provider names in merged configuration: {', '.join(set(duplicates))}")
 
             # Validate unique regions and resources within each provider
             for provider in self.model.spec.providers:
                 # Check unique regions
                 if provider.regions:
-                    region_names = [
-                        r if isinstance(r, str) else r.name
-                        for r in provider.regions
-                    ]
-                    duplicates = [
-                        name for name in region_names if region_names.count(name) > 1
-                    ]
+                    region_names = [r if isinstance(r, str) else r.get("name", str(r)) for r in provider.regions]
+                    duplicates = [name for name in region_names if region_names.count(name) > 1]
                     if duplicates:
                         errors.append(
                             f"Duplicate regions in provider '{provider.name}' (merged config): {', '.join(set(duplicates))}"
@@ -132,11 +126,7 @@ class ConfigurationService(BaseService):
                 # Check unique resources
                 if provider.resources:
                     resource_names = [res.name for res in provider.resources]
-                    duplicates = [
-                        name
-                        for name in resource_names
-                        if resource_names.count(name) > 1
-                    ]
+                    duplicates = [name for name in resource_names if resource_names.count(name) > 1]
                     if duplicates:
                         errors.append(
                             f"Duplicate resources in provider '{provider.name}' (merged config): {', '.join(set(duplicates))}"
@@ -145,13 +135,9 @@ class ConfigurationService(BaseService):
         # Validate unique topology types across merged configuration
         if self.model.spec.topologies:
             topology_types = [t.type for t in self.model.spec.topologies]
-            duplicates = [
-                ttype for ttype in topology_types if topology_types.count(ttype) > 1
-            ]
+            duplicates = [ttype for ttype in topology_types if topology_types.count(ttype) > 1]
             if duplicates:
-                errors.append(
-                    f"Duplicate topology types in merged configuration: {', '.join(set(duplicates))}"
-                )
+                errors.append(f"Duplicate topology types in merged configuration: {', '.join(set(duplicates))}")
 
             # Validate unique component roles within each topology
             for topology in self.model.spec.topologies:
@@ -295,7 +281,7 @@ class ConfigurationService(BaseService):
                 return False, [error_msg]
 
             # Load and merge all files
-            merged = loader.load_and_merge_yaml_files(file_paths)
+            merged = loader.load_and_merge_yaml_files([Path(fp) for fp in file_paths])
 
             # Merge with existing data if present
             if self.data:
@@ -309,7 +295,9 @@ class ConfigurationService(BaseService):
             self._validation_errors = []
             self.model = None
 
-            self.logger.debug("Configurations loaded from patterns", pattern_count=len(patterns), file_count=len(file_paths))
+            self.logger.debug(
+                "Configurations loaded from patterns", pattern_count=len(patterns), file_count=len(file_paths)
+            )
 
             # Validate the merged configuration
             success, errors = self.validate()
@@ -343,17 +331,11 @@ class ConfigurationService(BaseService):
         repos = self.get_repositories()
         if not repos:
             return {}
-        return {
-            repo.name: repo.deploy_path
-            for repo in repos
-            if repo.name and repo.deploy_path
-        }
+        return {repo.name: repo.deploy_path for repo in repos if repo.name and repo.deploy_path}
 
     # Environment variable APIs
 
-    def add_environment_variables(
-        self, env_vars: Dict[str, Any], overwrite: bool = False
-    ) -> None:
+    def add_environment_variables(self, env_vars: Dict[str, Any], overwrite: bool = False) -> None:
         """
         Add environment variables to the in-memory map.
 
@@ -396,9 +378,7 @@ class ConfigurationService(BaseService):
         """Get configuration defaults from the configuration spec."""
         self._ensure_validated()
         return (
-            self.model.spec.configuration
-            if self.model and self.model.spec and self.model.spec.configuration
-            else None
+            self.model.spec.configuration if self.model and self.model.spec and self.model.spec.configuration else None
         )
 
     def get_default_build_path(self, work_path: Path, create_path: bool) -> Path:
@@ -412,10 +392,7 @@ class ConfigurationService(BaseService):
 
         # Fall back to config constants or hardcoded defaults
         if not build_path:
-            if (
-                config.DEFAULT_BUILD_PATH is not None
-                and len(config.DEFAULT_BUILD_PATH) > 0
-            ):
+            if config.DEFAULT_BUILD_PATH is not None and len(config.DEFAULT_BUILD_PATH) > 0:
                 build_path = config.DEFAULT_BUILD_PATH
             else:
                 build_path = "build/app"
@@ -438,10 +415,7 @@ class ConfigurationService(BaseService):
 
         # Fall back to config constants or hardcoded defaults
         if not dist_path:
-            if (
-                config.DEFAULT_DIST_PATH is not None
-                and len(config.DEFAULT_DIST_PATH) > 0
-            ):
+            if config.DEFAULT_DIST_PATH is not None and len(config.DEFAULT_DIST_PATH) > 0:
                 dist_path = config.DEFAULT_DIST_PATH
             else:
                 dist_path = "build/dist"
@@ -464,10 +438,7 @@ class ConfigurationService(BaseService):
 
         # Fall back to config constants or hardcoded defaults
         if not cfg_path:
-            if (
-                config.DEFAULT_OBJECT_PATH is not None
-                and len(config.DEFAULT_OBJECT_PATH) > 0
-            ):
+            if config.DEFAULT_OBJECT_PATH is not None and len(config.DEFAULT_OBJECT_PATH) > 0:
                 cfg_path = config.DEFAULT_OBJECT_PATH
             else:
                 cfg_path = "build/obj"
@@ -491,10 +462,7 @@ class ConfigurationService(BaseService):
 
         # Fall back to config constants or hardcoded defaults
         if not state_dir:
-            if (
-                config.DEFAULT_STATE_DIR is not None
-                and len(config.DEFAULT_STATE_DIR) > 0
-            ):
+            if config.DEFAULT_STATE_DIR is not None and len(config.DEFAULT_STATE_DIR) > 0:
                 state_dir = config.DEFAULT_STATE_DIR
             else:
                 state_dir = ".xyz-platform"
@@ -517,10 +485,7 @@ class ConfigurationService(BaseService):
 
         # Fall back to config constants or hardcoded defaults
         if not state_file:
-            if (
-                config.DEFAULT_STATE_FILE is not None
-                and len(config.DEFAULT_STATE_FILE) > 0
-            ):
+            if config.DEFAULT_STATE_FILE is not None and len(config.DEFAULT_STATE_FILE) > 0:
                 state_file = config.DEFAULT_STATE_FILE
             else:
                 state_file = "state.json"

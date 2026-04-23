@@ -3,9 +3,9 @@
 import re
 from typing import List, Optional, Tuple
 
-from xyz_platform.logger import get_logger
-from xyz_platform.integrations.capabilities import IRepositoryTool
 from xyz_platform.integrations.base_integration import BaseIntegration
+from xyz_platform.integrations.capabilities import IRepositoryTool
+from xyz_platform.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
 from xyz_platform.utils.system import CommandResult
 
@@ -302,9 +302,7 @@ class GitIntegration(BaseIntegration):
             return None
 
         try:
-            result = self._run_integration(
-                ["branch", "--show-current"], cwd=working_dir, timeout=timeout
-            )
+            result = self._run_integration(["branch", "--show-current"], cwd=working_dir, timeout=timeout)
 
             if result.returncode == 0:
                 branch = result.stdout.strip()

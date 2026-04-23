@@ -5,8 +5,10 @@ No knowledge of schemas, validation, or file selection strategy.
 """
 
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 import yaml
+
 from xyz_platform.logger import get_logger
 
 
@@ -31,9 +33,7 @@ class ConfigurationLoader:
         """Initialize the configuration loader."""
         self._logger = get_logger(__name__)
 
-    def apply_overrides(
-        self, base: Dict[str, Any], overrides: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def apply_overrides(self, base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
         """
         Apply overrides to a base configuration (alias for deep_merge for clarity).
 
@@ -178,7 +178,7 @@ class ConfigurationLoader:
         )
 
         # Start with empty dict
-        merged = {}
+        merged: Dict[str, Any] = {}
 
         # Merge each config in order (later configs override earlier ones)
         for config in configs:
@@ -191,9 +191,7 @@ class ConfigurationLoader:
 
         return merged
 
-    def deep_merge(
-        self, base: Dict[str, Any], override: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def deep_merge(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
         """
         Recursively merge override dictionary into base dictionary.
 

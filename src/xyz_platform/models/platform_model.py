@@ -11,6 +11,9 @@ from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, RootModel, StringConstraints
 
+# Input models (consumed by from_*_model classmethods)
+from xyz_platform.models.auth_models import AuthenticationModel
+
 # Core shared types
 from xyz_platform.models.common_models import (
     CommonLifecycleModel,
@@ -20,16 +23,6 @@ from xyz_platform.models.common_models import (
     ScriptsModel,
     SourceModel,
 )
-
-# Store models (variables, secrets, features)
-from xyz_platform.models.store_models import (
-    FeatureStoreModel,
-    SecretStoreModel,
-    VariableStoreModel,
-)
-
-# Input models (consumed by from_*_model classmethods)
-from xyz_platform.models.auth_models import AuthenticationModel
 from xyz_platform.models.deployment_model import (
     DeploymentApprovalModel,
     DeploymentMetaModel,
@@ -38,8 +31,10 @@ from xyz_platform.models.deployment_model import (
 )
 from xyz_platform.models.firewall_model import (
     FirewallDefaultsModel,
-    FirewallModel as InputFirewallModel,
     FirewallRuleModel,
+)
+from xyz_platform.models.firewall_model import (
+    FirewallModel as InputFirewallModel,
 )
 from xyz_platform.models.module_model import (
     ModuleModel,
@@ -60,6 +55,13 @@ from xyz_platform.models.resource_model import (
     ResourcePropertiesModel,
     ResourceReferencesModel,
     ResourceStorageModel,
+)
+
+# Store models (variables, secrets, features)
+from xyz_platform.models.store_models import (
+    FeatureStoreModel,
+    SecretStoreModel,
+    VariableStoreModel,
 )
 from xyz_platform.models.workspace_model import (
     WorkspaceIacModel,
@@ -83,9 +85,7 @@ class PlatformFirewallModel(BaseModel):
         None,
         description="Optional labels (key-value pairs for classification/filtering).",
     )
-    tags: Optional[List[Any]] = Field(
-        None, description="Optional list of tags for the firewall resource."
-    )
+    tags: Optional[List[Any]] = Field(None, description="Optional list of tags for the firewall resource.")
     reset: Optional[bool] = Field(
         None,
         description="Whether to reset/clear all existing firewall rules before applying these rules",
@@ -134,18 +134,14 @@ class PlatformModuleModel(BaseModel):
     )
     tags: Optional[List[Any]] = Field(None, description="Optional list of tags")
     source: SourceModel = Field(description="Module source location")
-    lifecycle: Optional[CommonLifecycleModel] = Field(
-        None, description="Module-specific lifecycle hooks"
-    )
+    lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Module-specific lifecycle hooks")
     properties: Optional[ModulePropertiesModel] = Field(
         None, description="Module-specific properties and configurations"
     )
     references: Optional[ModuleReferenceModel] = Field(
         None, description="Module references for variable and secret injection"
     )
-    configuration: Optional[Dict[str, Any]] = Field(
-        None, description="Module-specific configuration data"
-    )
+    configuration: Optional[Dict[str, Any]] = Field(None, description="Module-specific configuration data")
 
     @classmethod
     def from_module_model(cls, model: ModuleModel) -> "PlatformModuleModel":
@@ -186,18 +182,14 @@ class PlatformNamespaceModel(BaseModel):
         description="Optional labels (key-value pairs for classification/filtering)",
     )
     tags: Optional[List[Any]] = Field(None, description="Optional list of tags")
-    lifecycle: Optional[CommonLifecycleModel] = Field(
-        None, description="Namespace lifecycle phases"
-    )
+    lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Namespace lifecycle phases")
     modules: Optional[List[PlatformNamespaceModuleModel]] = Field(
         None,
         description="List of modules that belong to this namespace. Each module must match the name of a module defined in the modules section.",
     )
 
     @classmethod
-    def from_namespace_model(
-        cls, model: InputNamespaceModel
-    ) -> "PlatformNamespaceModel":
+    def from_namespace_model(cls, model: InputNamespaceModel) -> "PlatformNamespaceModel":
         """Create from input NamespaceModel (merges meta + spec)."""
         return cls(
             name=model.meta.name,
@@ -206,10 +198,7 @@ class PlatformNamespaceModel(BaseModel):
             tags=model.meta.tags,
             lifecycle=model.spec.lifecycle,
             modules=(
-                [
-                    PlatformNamespaceModuleModel(module=m.name)
-                    for m in model.spec.modules
-                ]
+                [PlatformNamespaceModuleModel(module=m.name) for m in model.spec.modules]
                 if model.spec.modules
                 else None
             ),
@@ -236,32 +225,22 @@ class PlatformResourceModel(BaseModel):
         None,
         description="Optional labels (key-value pairs for classification/filtering)",
     )
-    tags: Optional[List[Any]] = Field(
-        None, description="Optional tags (list of values for categorization)"
-    )
+    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
     lifecycle: Optional[CommonLifecycleModel] = Field(
         None,
         description="IaC workflow lifecycle phases",
     )
-    references: Optional[ResourceReferencesModel] = Field(
-        None, description="Variable, and secret references"
-    )
+    references: Optional[ResourceReferencesModel] = Field(None, description="Variable, and secret references")
     properties: ResourcePropertiesModel = Field(
         description="Configuration properties (provider, resources, disks, volumes)"
     )
-    dependencies: Optional[List[ResourceDependencyModel]] = Field(
-        None, description="List of resource dependencies"
-    )
-    storage: Optional[ResourceStorageModel] = Field(
-        None, description="Virtual machine specific configuration"
-    )
+    dependencies: Optional[List[ResourceDependencyModel]] = Field(None, description="List of resource dependencies")
+    storage: Optional[ResourceStorageModel] = Field(None, description="Virtual machine specific configuration")
     configuration: Optional[Dict[str, Any]] = Field(
         None,
         description="Additional configuration block for resource-specific settings",
     )
-    custom: Optional[Dict[str, Any]] = Field(
-        None, description="Custom user-defined data for scripts or extensions"
-    )
+    custom: Optional[Dict[str, Any]] = Field(None, description="Custom user-defined data for scripts or extensions")
     default_tags: Optional[Dict[str, str]] = Field(
         None,
         description="Default tags to apply to all resources created by this provider (ignored if provider doesn't support tagging)",
@@ -335,9 +314,7 @@ class PlatformStereotypeResourceModel(BaseModel):
 class PlatformStereotypeModel(BaseModel):
     """Model representing a list of resources grouped by their type."""
 
-    type: str = Field(
-        description="Type of the stereotype (e.g. virtualmachine, database, kubernetes_cluster)"
-    )
+    type: str = Field(description="Type of the stereotype (e.g. virtualmachine, database, kubernetes_cluster)")
     category: Optional[str] = Field(
         None,
         description="Optional category for the stereotype (e.g. compute, storage, network)",
@@ -393,9 +370,7 @@ class PlatformProviderModel(BaseModel):
         None,
         description="Optional labels (key-value pairs for classification/filtering)",
     )
-    tags: Optional[List[Any]] = Field(
-        None, description="Optional tags (list of values for categorization)"
-    )
+    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
     lifecycle: Optional[CommonLifecycleModel] = Field(
         None,
         description="IaC workflow lifecycle phases (setup, validate, plan, apply, output, destroy)",
@@ -416,11 +391,7 @@ class PlatformProviderModel(BaseModel):
         """Create from input ProviderModel (merges meta + spec)."""
         return cls(
             name=model.meta.name,
-            description=(
-                model.meta.annotations.get("description")
-                if model.meta.annotations
-                else None
-            ),
+            description=(model.meta.annotations.get("description") if model.meta.annotations else None),
             annotations=model.meta.annotations,
             labels=model.meta.labels,
             tags=model.meta.tags,
@@ -447,9 +418,7 @@ class PlatformWorkspaceModel(BaseModel):
         None,
         description="Optional labels (key-value pairs for classification/filtering)",
     )
-    tags: Optional[List[Any]] = Field(
-        None, description="Optional tags (list of values for categorization)"
-    )
+    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
     @classmethod
     def from_workspace_model(cls, model: WorkspaceModel) -> "PlatformWorkspaceModel":
@@ -513,15 +482,11 @@ class PlatformSpecModel(BaseModel):
         None,
         description="Deployment approval configuration (auto or manual approval gates)",
     )
-    properties: Optional[Dict[str, Any]] = Field(
-        None, description="Deployment-specific properties and configurations"
-    )
+    properties: Optional[Dict[str, Any]] = Field(None, description="Deployment-specific properties and configurations")
     custom: Optional[Dict[str, Any]] = Field(
         None, description="Deployment-specific custom properties and configurations"
     )
-    workspace: PlatformWorkspaceModel = Field(
-        description="Core workspace configuration for the deployment"
-    )
+    workspace: PlatformWorkspaceModel = Field(description="Core workspace configuration for the deployment")
     providers: Optional[List[PlatformProviderModel]] = Field(
         None, description="List of cloud providers and their configurations"
     )
@@ -537,21 +502,13 @@ class PlatformSpecModel(BaseModel):
     resources: Optional[List[PlatformResourceModel]] = Field(
         None, description="List of resources and their configurations"
     )
-    features: Optional[List[FeatureStoreModel]] = Field(
-        None, description="Deployment-specific features and flags"
-    )
-    variables: Optional[List[VariableStoreModel]] = Field(
-        None, description="List of deployment variables"
-    )
-    secrets: Optional[List[SecretStoreModel]] = Field(
-        None, description="List of deployment secrets"
-    )
+    features: Optional[List[FeatureStoreModel]] = Field(None, description="Deployment-specific features and flags")
+    variables: Optional[List[VariableStoreModel]] = Field(None, description="List of deployment variables")
+    secrets: Optional[List[SecretStoreModel]] = Field(None, description="List of deployment secrets")
     namespaces: Optional[List[PlatformNamespaceModel]] = Field(
         None, description="List of namespaces and their configurations"
     )
-    modules: Optional[List[PlatformModuleModel]] = Field(
-        None, description="List of modules and their configurations"
-    )
+    modules: Optional[List[PlatformModuleModel]] = Field(None, description="List of modules and their configurations")
     firewalls: Optional[List[PlatformFirewallModel]] = Field(
         None, description="List of firewalls and their configurations"
     )
@@ -619,9 +576,7 @@ class PlatformMetaModel(BaseModel):
         None,
         description="Optional labels (key-value pairs for classification/filtering)",
     )
-    tags: Optional[List[Any]] = Field(
-        None, description="Optional tags (list of values for categorization)"
-    )
+    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
     @classmethod
     def from_deployment_meta(
@@ -644,11 +599,7 @@ class PlatformMetaModel(BaseModel):
 
         # If deployment doesn't carry an environment label, pull it from the
         # environment service model when available.
-        if (
-            environment_service
-            and isinstance(labels, dict)
-            and "environment" not in labels
-        ):
+        if environment_service and isinstance(labels, dict) and "environment" not in labels:
             environment_model = getattr(environment_service, "model", None)
             if environment_model and hasattr(environment_model, "meta"):
                 env_labels = getattr(environment_model.meta, "labels", None)

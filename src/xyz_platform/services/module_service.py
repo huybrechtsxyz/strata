@@ -2,18 +2,19 @@
 """Service for loading and validating module configurations."""
 
 from typing import List, Optional, Tuple
+
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.module_model import ModuleModel
 from xyz_platform.services.base_service import BaseService
 
 
-class ModuleService(BaseService):
+class ModuleService(BaseService["ModuleModel"]):
     """Service for handling module configurations and source fetching."""
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the ModuleService."""
         super().__init__(path=path, data=data)
-        self.model: Optional[ModuleModel] = None
+        self.model = None
 
     def _get_model_class(self):
         """Return the ModuleModel class for validation."""

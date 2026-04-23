@@ -2,25 +2,26 @@
 """Service for loading, validating, and merging firewall configurations."""
 
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+from xyz_platform.exceptions import ModelValidationError, PlatformFileNotFoundError
+from xyz_platform.models.common_models import PlatformKind, PlatformVersion
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.firewall_model import (
-    FirewallModel,
     FirewallMetaModel,
+    FirewallModel,
     FirewallSpecModel,
 )
-from xyz_platform.models.common_models import PlatformVersion, PlatformKind
 from xyz_platform.services.base_service import BaseService
-from xyz_platform.exceptions import ModelValidationError, PlatformFileNotFoundError
 
 
-class FirewallService(BaseService):
+class FirewallService(BaseService["FirewallModel"]):
     """Service for handling firewall configurations."""
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the FirewallService."""
         super().__init__(path=path, data=data)
-        self.model: Optional[FirewallModel] = None
+        self.model = None
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -61,7 +62,14 @@ class FirewallService(BaseService):
                 merged_defaults[default.direction] = default
 
         def _rule_key(rule):
-            return (rule.direction, rule.proto, str(rule.port) if rule.port else None, rule.from_, rule.to, rule.interface)
+            return (
+                rule.direction,
+                rule.proto,
+                str(rule.port) if rule.port else None,
+                rule.from_,
+                rule.to,
+                rule.interface,
+            )
 
         if fw_model.spec.allow:
             for rule in fw_model.spec.allow:
@@ -101,9 +109,7 @@ class FirewallService(BaseService):
     # ------------------------------------------------------------------
 
     @classmethod
-    def merge_firewalls(
-        cls, firewalls: List[Union[FirewallModel, "FirewallService"]]
-    ) -> FirewallModel:
+    def merge_firewalls(cls, firewalls: List[Union[FirewallModel, "FirewallService"]]) -> FirewallModel:
         """
         Merge multiple firewall models or services into a single FirewallModel.
 
@@ -124,8 +130,13 @@ class FirewallService(BaseService):
         if not firewalls:
             raise ValueError("Cannot merge empty firewall list")
 
-        merged_allow, merged_deny, merged_defaults = {}, {}, {}
-        merged_name, merged_annotations, merged_labels, merged_tags = ["merged"], {}, {}, []
+        merged_allow: Dict[Any, Any] = {}
+        merged_deny: Dict[Any, Any] = {}
+        merged_defaults: Dict[Any, Any] = {}
+        merged_name: List[str] = ["merged"]
+        merged_annotations: Dict[Any, Any] = {}
+        merged_labels: Dict[Any, Any] = {}
+        merged_tags: List[Any] = []
         reset = [False]
 
         for fw in firewalls:
@@ -136,11 +147,36 @@ class FirewallService(BaseService):
             else:
                 raise ModelValidationError(
                     model_name="FirewallService",
-                    validation_errors=[{"field": "firewalls", "message": f"Expected FirewallModel or FirewallService, got {type(fw).__name__}", "type": "type_error"}],
+                    validation_errors=[
+                        {
+                            "field": "firewalls",
+                            "message": f"Expected FirewallModel or FirewallService, got {type(fw).__name__}",
+                            "type": "type_error",
+                        }
+                    ],
                 )
-            cls._merge_into(fw, fw_model, merged_allow, merged_deny, merged_defaults, merged_name, merged_annotations, merged_labels, merged_tags, reset)
+            cls._merge_into(
+                fw_model,
+                merged_allow,
+                merged_deny,
+                merged_defaults,
+                merged_name,
+                merged_annotations,
+                merged_labels,
+                merged_tags,
+                reset,
+            )
 
-        return cls._build_merged_model(merged_allow, merged_deny, merged_defaults, merged_name[0], merged_annotations, merged_labels, merged_tags, reset[0])
+        return cls._build_merged_model(
+            merged_allow,
+            merged_deny,
+            merged_defaults,
+            merged_name[0],
+            merged_annotations,
+            merged_labels,
+            merged_tags,
+            reset[0],
+        )
 
     @classmethod
     def merge_fwfiles(cls, fwfiles: List[str], work_path: Path) -> FirewallModel:
@@ -160,8 +196,13 @@ class FirewallService(BaseService):
             PlatformFileNotFoundError: If a file does not exist.
             ModelValidationError: If a file fails validation.
         """
-        merged_allow, merged_deny, merged_defaults = {}, {}, {}
-        merged_name, merged_annotations, merged_labels, merged_tags = ["merged"], {}, {}, []
+        merged_allow: Dict[Any, Any] = {}
+        merged_deny: Dict[Any, Any] = {}
+        merged_defaults: Dict[Any, Any] = {}
+        merged_name: List[str] = ["merged"]
+        merged_annotations: Dict[Any, Any] = {}
+        merged_labels: Dict[Any, Any] = {}
+        merged_tags: List[Any] = []
         reset = [False]
 
         for fwfile_path in fwfiles:
@@ -174,12 +215,33 @@ class FirewallService(BaseService):
             if not is_valid:
                 raise ModelValidationError(
                     model_name="FirewallModel",
-                    validation_errors=[{"field": str(fwfile_path), "message": e, "type": "value_error"} for e in errors],
+                    validation_errors=[
+                        {"field": str(fwfile_path), "message": e, "type": "value_error"} for e in errors
+                    ],
                 )
 
-            cls._merge_into(fw_service.get_model(), merged_allow, merged_deny, merged_defaults, merged_name, merged_annotations, merged_labels, merged_tags, reset)
+            cls._merge_into(
+                fw_service.get_model(),
+                merged_allow,
+                merged_deny,
+                merged_defaults,
+                merged_name,
+                merged_annotations,
+                merged_labels,
+                merged_tags,
+                reset,
+            )
 
-        return cls._build_merged_model(merged_allow, merged_deny, merged_defaults, merged_name[0], merged_annotations, merged_labels, merged_tags, reset[0])
+        return cls._build_merged_model(
+            merged_allow,
+            merged_deny,
+            merged_defaults,
+            merged_name[0],
+            merged_annotations,
+            merged_labels,
+            merged_tags,
+            reset[0],
+        )
 
     # ------------------------------------------------------------------
     # BaseService implementation

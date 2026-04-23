@@ -6,9 +6,9 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
-from xyz_platform.logger import get_logger
 from xyz_platform.integrations.capabilities import ISecretStore
 from xyz_platform.integrations.store_integration import StoreIntegration
+from xyz_platform.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
 
 logger = get_logger(__name__)
@@ -84,18 +84,10 @@ class AzureKeyVaultIntegration(StoreIntegration):
 
         # Get authentication configuration from environment variables.
         # Field names in the oauth2 sub-model are env-var name references.
-        self.tenant_id = self._get_env_var(
-            self._get_auth_var_name("tenant_id", "AZURE_TENANT_ID")
-        )
-        self.client_id = self._get_env_var(
-            self._get_auth_var_name("client_id", "AZURE_CLIENT_ID")
-        )
-        self.client_secret = self._get_env_var(
-            self._get_auth_var_name("client_secret", "AZURE_CLIENT_SECRET")
-        )
-        self.subscription_id = self._get_env_var(
-            "AZURE_SUBSCRIPTION_ID"
-        )  # no model equivalent
+        self.tenant_id = self._get_env_var(self._get_auth_var_name("tenant_id", "AZURE_TENANT_ID"))
+        self.client_id = self._get_env_var(self._get_auth_var_name("client_id", "AZURE_CLIENT_ID"))
+        self.client_secret = self._get_env_var(self._get_auth_var_name("client_secret", "AZURE_CLIENT_SECRET"))
+        self.subscription_id = self._get_env_var("AZURE_SUBSCRIPTION_ID")  # no model equivalent
 
         logger.debug(
             "Azure Key Vault integration initialized",
@@ -157,9 +149,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
         """
         # Check integration availability
         if not self.is_available():
-            self._info = (
-                f"{self.integration_name} CLI (az) is not installed or not in PATH."
-            )
+            self._info = f"{self.integration_name} CLI (az) is not installed or not in PATH."
             logger.warning("Azure CLI not found", name=self.integration_name)
             return (
                 False,
@@ -200,7 +190,9 @@ class AzureKeyVaultIntegration(StoreIntegration):
             )
 
         self._info = f"{self.integration_name} {self.get_version()} is available"
-        logger.debug("Azure Key Vault is available and configured", name=self.integration_name, version=self.get_version())
+        logger.debug(
+            "Azure Key Vault is available and configured", name=self.integration_name, version=self.get_version()
+        )
         return True, ""
 
     def get_info(self) -> Dict[str, Any]:
@@ -212,19 +204,13 @@ class AzureKeyVaultIntegration(StoreIntegration):
         """
         info = super().get_info()
         info["keyvault_url"] = self.keyvault_url
-        info["has_oidc"] = bool(
-            self.tenant_id and self.client_id and self.subscription_id
-        )
-        info["has_secret"] = bool(
-            self.tenant_id and self.client_id and self.client_secret
-        )
+        info["has_oidc"] = bool(self.tenant_id and self.client_id and self.subscription_id)
+        info["has_secret"] = bool(self.tenant_id and self.client_id and self.client_secret)
         return info
 
     # Secret management methods (ISecretStore implementation)
 
-    def get_secret(
-        self, key: str, prefer_cli: bool = True, timeout: int = 60, **kwargs
-    ) -> Optional[str]:
+    def get_secret(self, key: str, prefer_cli: bool = True, timeout: int = 60, **kwargs) -> Optional[str]:
         """
         Retrieve a secret from Azure Key Vault.
 
@@ -255,37 +241,57 @@ class AzureKeyVaultIntegration(StoreIntegration):
             # Try Azure CLI first
             result = self._get_secret_via_cli(key, timeout)
             if result:
-                logger.info("Secret retrieved from Azure Key Vault via CLI", name=self.integration_name, secret_name=key)
+                logger.info(
+                    "Secret retrieved from Azure Key Vault via CLI", name=self.integration_name, secret_name=key
+                )
                 return result
 
             # Fall back to API with CLI token
             result = self._get_secret_via_api(key, use_cli_token=True)
             if result:
-                logger.info("Secret retrieved from Azure Key Vault via API (CLI token)", name=self.integration_name, secret_name=key)
+                logger.info(
+                    "Secret retrieved from Azure Key Vault via API (CLI token)",
+                    name=self.integration_name,
+                    secret_name=key,
+                )
                 return result
 
             # Fall back to API with client credentials
             result = self._get_secret_via_api(key, use_cli_token=False)
             if result:
-                logger.info("Secret retrieved from Azure Key Vault via API (client credentials)", name=self.integration_name, secret_name=key)
+                logger.info(
+                    "Secret retrieved from Azure Key Vault via API (client credentials)",
+                    name=self.integration_name,
+                    secret_name=key,
+                )
             return result
         else:
             # Try API with client credentials first
             result = self._get_secret_via_api(key, use_cli_token=False)
             if result:
-                logger.info("Secret retrieved from Azure Key Vault via API (client credentials)", name=self.integration_name, secret_name=key)
+                logger.info(
+                    "Secret retrieved from Azure Key Vault via API (client credentials)",
+                    name=self.integration_name,
+                    secret_name=key,
+                )
                 return result
 
             # Fall back to API with CLI token
             result = self._get_secret_via_api(key, use_cli_token=True)
             if result:
-                logger.info("Secret retrieved from Azure Key Vault via API (CLI token)", name=self.integration_name, secret_name=key)
+                logger.info(
+                    "Secret retrieved from Azure Key Vault via API (CLI token)",
+                    name=self.integration_name,
+                    secret_name=key,
+                )
                 return result
 
             # Fall back to Azure CLI
             result = self._get_secret_via_cli(key, timeout)
             if result:
-                logger.info("Secret retrieved from Azure Key Vault via CLI", name=self.integration_name, secret_name=key)
+                logger.info(
+                    "Secret retrieved from Azure Key Vault via CLI", name=self.integration_name, secret_name=key
+                )
             return result
 
     def list_secrets(self, prefix: str = "", **kwargs) -> List[str]:
@@ -323,7 +329,12 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 # Filter by prefix
                 if prefix:
                     result = [s for s in result if s.startswith(prefix)]
-                logger.info("Secrets listed from Azure Key Vault via CLI", name=self.integration_name, count=len(result), prefix=prefix)
+                logger.info(
+                    "Secrets listed from Azure Key Vault via CLI",
+                    name=self.integration_name,
+                    count=len(result),
+                    prefix=prefix,
+                )
                 return result
 
             # Fall back to API with CLI token
@@ -332,7 +343,12 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 # Filter by prefix
                 if prefix:
                     result = [s for s in result if s.startswith(prefix)]
-                logger.info("Secrets listed from Azure Key Vault via API (CLI token)", name=self.integration_name, count=len(result), prefix=prefix)
+                logger.info(
+                    "Secrets listed from Azure Key Vault via API (CLI token)",
+                    name=self.integration_name,
+                    count=len(result),
+                    prefix=prefix,
+                )
                 return result
 
             # Fall back to API with client credentials
@@ -340,7 +356,12 @@ class AzureKeyVaultIntegration(StoreIntegration):
             # Filter by prefix
             if prefix:
                 result = [s for s in result if s.startswith(prefix)]
-            logger.info("Secrets listed from Azure Key Vault via API (client credentials)", name=self.integration_name, count=len(result), prefix=prefix)
+            logger.info(
+                "Secrets listed from Azure Key Vault via API (client credentials)",
+                name=self.integration_name,
+                count=len(result),
+                prefix=prefix,
+            )
             return result
         else:
             # Try API with client credentials first
@@ -349,7 +370,12 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 # Filter by prefix
                 if prefix:
                     result = [s for s in result if s.startswith(prefix)]
-                logger.info("Secrets listed from Azure Key Vault via API (client credentials)", name=self.integration_name, count=len(result), prefix=prefix)
+                logger.info(
+                    "Secrets listed from Azure Key Vault via API (client credentials)",
+                    name=self.integration_name,
+                    count=len(result),
+                    prefix=prefix,
+                )
                 return result
 
             # Fall back to API with CLI token
@@ -358,7 +384,12 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 # Filter by prefix
                 if prefix:
                     result = [s for s in result if s.startswith(prefix)]
-                logger.info("Secrets listed from Azure Key Vault via API (CLI token)", name=self.integration_name, count=len(result), prefix=prefix)
+                logger.info(
+                    "Secrets listed from Azure Key Vault via API (CLI token)",
+                    name=self.integration_name,
+                    count=len(result),
+                    prefix=prefix,
+                )
                 return result
 
             # Fall back to Azure CLI
@@ -366,7 +397,12 @@ class AzureKeyVaultIntegration(StoreIntegration):
             # Filter by prefix
             if prefix:
                 result = [s for s in result if s.startswith(prefix)]
-            logger.info("Secrets listed from Azure Key Vault via CLI", name=self.integration_name, count=len(result), prefix=prefix)
+            logger.info(
+                "Secrets listed from Azure Key Vault via CLI",
+                name=self.integration_name,
+                count=len(result),
+                prefix=prefix,
+            )
             return result
 
     # Authentication methods
@@ -401,7 +437,9 @@ class AzureKeyVaultIntegration(StoreIntegration):
             return None
 
         except Exception as e:
-            logger.warning("Error getting Azure access token via CLI", name=self.integration_name, error_type=type(e).__name__)
+            logger.warning(
+                "Error getting Azure access token via CLI", name=self.integration_name, error_type=type(e).__name__
+            )
             return None
 
     def _get_access_token_via_api(self) -> Optional[str]:
@@ -417,9 +455,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
 
         try:
             logger.debug("Authenticating to Azure Key Vault using client credentials", name=self.integration_name)
-            token_url = (
-                f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
-            )
+            token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
             data = urllib.parse.urlencode(
                 {
                     "grant_type": "client_credentials",
@@ -436,10 +472,17 @@ class AzureKeyVaultIntegration(StoreIntegration):
                 token_response = json.loads(response.read().decode("utf-8"))
                 token = token_response.get("access_token")
                 if token:
-                    logger.info("Successfully authenticated to Azure Key Vault using client credentials", name=self.integration_name)
+                    logger.info(
+                        "Successfully authenticated to Azure Key Vault using client credentials",
+                        name=self.integration_name,
+                    )
                 return token
         except Exception as e:
-            logger.warning("Client credentials authentication to Azure Key Vault failed", name=self.integration_name, error_type=type(e).__name__)
+            logger.warning(
+                "Client credentials authentication to Azure Key Vault failed",
+                name=self.integration_name,
+                error_type=type(e).__name__,
+            )
             return None
 
     # Internal secret methods
@@ -484,9 +527,7 @@ class AzureKeyVaultIntegration(StoreIntegration):
         except Exception:
             return None
 
-    def _get_secret_via_api(
-        self, secret_name: str, use_cli_token: bool = False
-    ) -> Optional[str]:
+    def _get_secret_via_api(self, secret_name: str, use_cli_token: bool = False) -> Optional[str]:
         """
         Retrieve a secret from Azure Key Vault using HTTPS API call.
 

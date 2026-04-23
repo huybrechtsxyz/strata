@@ -5,8 +5,9 @@ Used for forward compatibility, debugging malformed configurations,
 or parsing YAML that doesn't match any known PlatformKind.
 """
 
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Dict, Optional, Any
 
 
 class UnknownMetaModel(BaseModel):
@@ -18,15 +19,9 @@ class UnknownMetaModel(BaseModel):
     """
 
     name: str = Field(..., description="Name of the unknown resource")
-    annotations: Optional[Dict[str, Any]] = Field(
-        None, description="Annotations for the model"
-    )
-    labels: Optional[Dict[str, Any]] = Field(
-        None, description="Key-value pairs for labeling the model"
-    )
-    tags: Optional[List[Any]] = Field(
-        None, description="List of tags associated with the model"
-    )
+    annotations: Optional[Dict[str, Any]] = Field(None, description="Annotations for the model")
+    labels: Optional[Dict[str, Any]] = Field(None, description="Key-value pairs for labeling the model")
+    tags: Optional[List[Any]] = Field(None, description="List of tags associated with the model")
 
     @field_validator("name")
     @classmethod

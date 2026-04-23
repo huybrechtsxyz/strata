@@ -2,8 +2,8 @@
 """Pydantic model for namespace configuration validation."""
 
 import warnings
+from typing import Annotated, Any, Dict, List, Optional
 
-from typing import Dict, List, Optional, Annotated, Any
 from pydantic import (
     BaseModel,
     Field,

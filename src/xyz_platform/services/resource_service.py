@@ -3,29 +3,37 @@
 
 import re
 from typing import List, Optional, Tuple
+
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.firewall_model import FirewallModel
 from xyz_platform.models.resource_model import ResourceModel
 from xyz_platform.services.base_service import BaseService
 
 
-class ResourceService(BaseService):
+class ResourceService(BaseService["ResourceModel"]):
     """Service for handling resource configurations."""
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the ResourceService."""
         super().__init__(path=path, data=data)
-        # Note: self.model is set during validate(), not in __init__
+        self.model = None
 
         # Store merged firewall for this resource after validation
         self._merged_firewall: Optional[FirewallModel] = None
 
+    def on_init(self) -> None:
+        """Lifecycle hook: called after __init__ completes."""
+        pass
+
     def on_ready(self) -> None:
         """Called after validation succeeds - populate category/subcategory from configuration."""
-        super().on_ready()
         # Now model is loaded and validated, populate category/subcategory
         if self.model and self.model.spec and self.model.spec.properties:
             self._populate_category_from_configuration()
+
+    def on_shutdown(self) -> None:
+        """Lifecycle hook: called before cleanup/destruction."""
+        pass
 
     def _get_model_class(self):
         """Return the ResourceModel class for validation."""
@@ -115,9 +123,7 @@ class ResourceService(BaseService):
 
         return len(errors) == 0, errors
 
-    def _validate_configuration_schema(
-        self, config_provider, resource_type: str, configuration: dict
-    ) -> List[str]:
+    def _validate_configuration_schema(self, config_provider, resource_type: str, configuration: dict) -> List[str]:
         """
         Validate configuration fields against schema patterns defined in provider resource.
 
@@ -135,9 +141,7 @@ class ResourceService(BaseService):
         Returns:
             List[str]: List of validation error messages
         """
-        errors = []
-
-        # Find the resource definition in the provider configuration
+        errors: List[str] = []
         config_resource = None
         if config_provider.resources:
             for res in config_provider.resources:
@@ -171,12 +175,11 @@ class ResourceService(BaseService):
                 pattern = schema_def
             elif isinstance(schema_def, dict):
                 # Structured field with pattern and required flag
-                pattern = schema_def.get("pattern")
-                if not pattern:
-                    errors.append(
-                        f"Configuration field '{field_name}' schema is missing 'pattern' property"
-                    )
+                raw_pattern = schema_def.get("pattern")
+                if not raw_pattern:
+                    errors.append(f"Configuration field '{field_name}' schema is missing 'pattern' property")
                     continue
+                pattern = str(raw_pattern)
             else:
                 # ConfigurationSchemaField model instance
                 pattern = schema_def.pattern
@@ -193,8 +196,7 @@ class ResourceService(BaseService):
                     )
             except re.error as e:
                 errors.append(
-                    f"Invalid regex pattern '{pattern}' for field '{field_name}' in "
-                    f"configuration schema: {str(e)}"
+                    f"Invalid regex pattern '{pattern}' for field '{field_name}' in configuration schema: {str(e)}"
                 )
 
         # Check for required fields (fields in schema but not in configuration)
@@ -228,16 +230,19 @@ class ResourceService(BaseService):
     def get_provider_type(self) -> str:
         """Get the provider type."""
         self._ensure_validated()
+        assert self.model is not None
         return self.model.spec.properties.provider_type
 
     def get_resource_type(self) -> str:
         """Get the resource type."""
         self._ensure_validated()
+        assert self.model is not None
         return self.model.spec.properties.resource_type
 
     def get_unit_cost(self) -> Optional[float]:
         """Get the resource unit cost."""
         self._ensure_validated()
+        assert self.model is not None
         return self.model.spec.properties.unit_cost
 
     def get_category_and_subcategory(self) -> Tuple[Optional[str], Optional[str]]:
@@ -247,6 +252,7 @@ class ResourceService(BaseService):
         if they were empty at load time.
         """
         self._ensure_validated()
+        assert self.model is not None
         return (
             self.model.spec.properties.category,
             self.model.spec.properties.subcategory,

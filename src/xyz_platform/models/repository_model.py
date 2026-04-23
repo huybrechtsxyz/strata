@@ -60,27 +60,19 @@ class RepositoryModel(BaseModel):
         - deploy_path: Optional path to deployment artifacts
     """
 
-    name: Optional[PlatformName] = Field(
-        None, description="Optional name for the source configuration"
+    name: Optional[PlatformName] = Field(None, description="Optional name for the source configuration")
+    type: RepositoryType = Field(description="Source type: bundled (platform-bundled) or gitops (Git repository)")
+    repository: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description="Source repository or image for the deployment"
     )
-    type: RepositoryType = Field(
-        description="Source type: bundled (platform-bundled) or gitops (Git repository)"
+    reference: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description="Version/tag/branch or image tag/digest for the deployment"
     )
-    repository: Annotated[
-        str, StringConstraints(min_length=1, strip_whitespace=True)
-    ] = Field(description="Source repository or image for the deployment")
-    reference: Annotated[
-        str, StringConstraints(min_length=1, strip_whitespace=True)
-    ] = Field(description="Version/tag/branch or image tag/digest for the deployment")
-    source_path: Optional[
-        Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
-    ] = Field(
+    source_path: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
         description="Path to the module configuration or script (not applicable for container type)",
     )
-    deploy_path: Optional[str] = Field(
-        None, description="Path to deployment artifacts (if applicable)"
-    )
+    deploy_path: Optional[str] = Field(None, description="Path to deployment artifacts (if applicable)")
 
     @staticmethod
     def _validate_relative_path(v: str, field_name: str) -> str:
@@ -111,9 +103,7 @@ class RepositoryModel(BaseModel):
 
         # Reject Windows drive letters (C:\, X:\, etc.)
         if re.match(r"^[A-Za-z]:[/\\]", v):
-            raise ValueError(
-                f"{field_name} must be relative, found Windows drive letter: {v}"
-            )
+            raise ValueError(f"{field_name} must be relative, found Windows drive letter: {v}")
 
         # Reject UNC paths (\\\\server\\share)
         if v.startswith("\\\\"):
@@ -156,9 +146,7 @@ class RepositoryModel(BaseModel):
             # Container: validate registry/image format
             # Examples: docker.io/library/nginx, ghcr.io/org/image, myregistry.azurecr.io/namespace/image
             if not re.match(r"^[a-zA-Z0-9.\-_:/]+$", v):
-                raise ValueError(
-                    f"Container repository must be a valid image path: {v}"
-                )
+                raise ValueError(f"Container repository must be a valid image path: {v}")
 
         return v
 
@@ -176,16 +164,12 @@ class RepositoryModel(BaseModel):
         elif deployment_type == RepositoryType.GITOPS:
             # Git: must be a valid branch/tag/commit
             if not re.match(r"^[a-zA-Z0-9.\-_/]+$", v):
-                raise ValueError(
-                    f"Git reference must be a valid branch, tag, or commit hash: {v}"
-                )
+                raise ValueError(f"Git reference must be a valid branch, tag, or commit hash: {v}")
         elif deployment_type == RepositoryType.CONTAINER:
             # Container: can be tag (v1.0.0, latest) or digest (sha256:abc123...)
             # Allow alphanumeric, dots, dashes, underscores, and sha256: prefix
             if not re.match(r"^(sha256:[a-f0-9]{64}|[a-zA-Z0-9.\-_]+)$", v):
-                raise ValueError(
-                    f"Container reference must be a valid tag or digest: {v}"
-                )
+                raise ValueError(f"Container reference must be a valid tag or digest: {v}")
 
         return v
 
@@ -221,16 +205,13 @@ class RepositoryModel(BaseModel):
         # BUNDLED and GITOPS require source_path
         if self.type in [RepositoryType.BUNDLED, RepositoryType.GITOPS]:
             if not self.source_path:
-                raise ValueError(
-                    f"source_path is required for {self.type.value} source type"
-                )
+                raise ValueError(f"source_path is required for {self.type.value} source type")
 
         # CONTAINER type should not use source_path
         if self.type == RepositoryType.CONTAINER:
             if self.source_path is not None:
                 raise ValueError(
-                    "source_path is not applicable for container source type. "
-                    "Container images are self-contained."
+                    "source_path is not applicable for container source type. Container images are self-contained."
                 )
 
         return self

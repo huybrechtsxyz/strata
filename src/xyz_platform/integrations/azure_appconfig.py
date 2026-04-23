@@ -6,9 +6,9 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
-from xyz_platform.logger import get_logger
 from xyz_platform.integrations.capabilities import IFeatureStore, IVariableStore
 from xyz_platform.integrations.store_integration import StoreIntegration
+from xyz_platform.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
 
 logger = get_logger(__name__)
@@ -79,30 +79,18 @@ class AzureAppConfigIntegration(StoreIntegration):
         # Get endpoint from config
         self.appconfig_endpoint = ""
         if self.config.endpoints and self.config.endpoints.address:
-            self.appconfig_endpoint = self._resolve_env_vars(
-                self.config.endpoints.address
-            )
+            self.appconfig_endpoint = self._resolve_env_vars(self.config.endpoints.address)
             if self.appconfig_endpoint and not self.appconfig_endpoint.endswith("/"):
                 self.appconfig_endpoint += "/"
 
         # Get authentication configuration from environment variables.
         # Field names in oauth2/api_key sub-models are treated as env-var name
         # references (matching the pattern used throughout AuthenticationModel).
-        self.tenant_id = self._get_env_var(
-            self._get_auth_var_name("tenant_id", "AZURE_TENANT_ID")
-        )
-        self.client_id = self._get_env_var(
-            self._get_auth_var_name("client_id", "AZURE_CLIENT_ID")
-        )
-        self.client_secret = self._get_env_var(
-            self._get_auth_var_name("client_secret", "AZURE_CLIENT_SECRET")
-        )
-        self.subscription_id = self._get_env_var(
-            "AZURE_SUBSCRIPTION_ID"
-        )  # no model equivalent
-        self.connection_string = self._get_env_var(
-            self._get_connection_string_var_name()
-        )
+        self.tenant_id = self._get_env_var(self._get_auth_var_name("tenant_id", "AZURE_TENANT_ID"))
+        self.client_id = self._get_env_var(self._get_auth_var_name("client_id", "AZURE_CLIENT_ID"))
+        self.client_secret = self._get_env_var(self._get_auth_var_name("client_secret", "AZURE_CLIENT_SECRET"))
+        self.subscription_id = self._get_env_var("AZURE_SUBSCRIPTION_ID")  # no model equivalent
+        self.connection_string = self._get_env_var(self._get_connection_string_var_name())
 
         logger.debug(
             "Azure App Configuration integration initialized",
@@ -177,9 +165,7 @@ class AzureAppConfigIntegration(StoreIntegration):
         """
         # Check integration availability
         if not self.is_available():
-            self._info = (
-                f"{self.integration_name} CLI (az) is not installed or not in PATH."
-            )
+            self._info = f"{self.integration_name} CLI (az) is not installed or not in PATH."
             logger.warning("Azure CLI not found", name=self.integration_name)
             return (
                 False,
@@ -227,7 +213,11 @@ class AzureAppConfigIntegration(StoreIntegration):
             )
 
         self._info = f"{self.integration_name} {self.get_version()} is available"
-        logger.debug("Azure App Configuration is available and configured", name=self.integration_name, version=self.get_version())
+        logger.debug(
+            "Azure App Configuration is available and configured",
+            name=self.integration_name,
+            version=self.get_version(),
+        )
         return True, ""
 
     def get_info(self) -> Dict[str, Any]:
@@ -240,12 +230,8 @@ class AzureAppConfigIntegration(StoreIntegration):
         info = super().get_info()
         info["appconfig_endpoint"] = self.appconfig_endpoint
         info["has_connection_string"] = bool(self.connection_string)
-        info["has_oidc"] = bool(
-            self.tenant_id and self.client_id and self.subscription_id
-        )
-        info["has_secret"] = bool(
-            self.tenant_id and self.client_id and self.client_secret
-        )
+        info["has_oidc"] = bool(self.tenant_id and self.client_id and self.subscription_id)
+        info["has_secret"] = bool(self.tenant_id and self.client_id and self.client_secret)
         return info
 
     # Unified Store Interface Implementation (IVariableStore)
@@ -319,9 +305,7 @@ class AzureAppConfigIntegration(StoreIntegration):
         label = kwargs.get("label")
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
-        result = self._get_flag(
-            key, label=label, prefer_cli=prefer_cli, timeout=timeout
-        )
+        result = self._get_flag(key, label=label, prefer_cli=prefer_cli, timeout=timeout)
         if result is None:
             return None
         # Extract enabled status from feature flag data
@@ -381,7 +365,9 @@ class AzureAppConfigIntegration(StoreIntegration):
         """
         available, error = self.ensure_available()
         if not available:
-            logger.warning("Cannot retrieve value from Azure App Configuration", name=self.integration_name, error=error)
+            logger.warning(
+                "Cannot retrieve value from Azure App Configuration", name=self.integration_name, error=error
+            )
             return None
 
         logger.debug(
@@ -402,25 +388,41 @@ class AzureAppConfigIntegration(StoreIntegration):
             # Fall back to API with CLI token
             result = self._get_value_via_api(key, label, use_cli_token=True)
             if result:
-                logger.info("Value retrieved from Azure App Configuration via API (CLI token)", name=self.integration_name, key=key)
+                logger.info(
+                    "Value retrieved from Azure App Configuration via API (CLI token)",
+                    name=self.integration_name,
+                    key=key,
+                )
                 return result
 
             # Fall back to API with client credentials
             result = self._get_value_via_api(key, label, use_cli_token=False)
             if result:
-                logger.info("Value retrieved from Azure App Configuration via API (client credentials)", name=self.integration_name, key=key)
+                logger.info(
+                    "Value retrieved from Azure App Configuration via API (client credentials)",
+                    name=self.integration_name,
+                    key=key,
+                )
             return result
         else:
             # Try API with client credentials first
             result = self._get_value_via_api(key, label, use_cli_token=False)
             if result:
-                logger.info("Value retrieved from Azure App Configuration via API (client credentials)", name=self.integration_name, key=key)
+                logger.info(
+                    "Value retrieved from Azure App Configuration via API (client credentials)",
+                    name=self.integration_name,
+                    key=key,
+                )
                 return result
 
             # Fall back to API with CLI token
             result = self._get_value_via_api(key, label, use_cli_token=True)
             if result:
-                logger.info("Value retrieved from Azure App Configuration via API (CLI token)", name=self.integration_name, key=key)
+                logger.info(
+                    "Value retrieved from Azure App Configuration via API (CLI token)",
+                    name=self.integration_name,
+                    key=key,
+                )
                 return result
 
             # Fall back to Azure CLI
@@ -509,9 +511,7 @@ class AzureAppConfigIntegration(StoreIntegration):
             # Fall back to Azure CLI
             return self._list_keys_via_cli(key_filter, label, timeout)
 
-    def _list_flags(
-        self, label: Optional[str] = None, prefer_cli: bool = True, timeout: int = 60
-    ) -> List[str]:
+    def _list_flags(self, label: Optional[str] = None, prefer_cli: bool = True, timeout: int = 60) -> List[str]:
         """
         List all feature flag names in the App Configuration store.
 
@@ -564,7 +564,9 @@ class AzureAppConfigIntegration(StoreIntegration):
             return None
 
         except Exception as e:
-            logger.warning("Error getting Azure access token via CLI", name=self.integration_name, error_type=type(e).__name__)
+            logger.warning(
+                "Error getting Azure access token via CLI", name=self.integration_name, error_type=type(e).__name__
+            )
             return None
 
     def _get_access_token_via_api(self) -> Optional[str]:
@@ -579,10 +581,10 @@ class AzureAppConfigIntegration(StoreIntegration):
             return None
 
         try:
-            logger.debug("Authenticating to Azure App Configuration using client credentials", name=self.integration_name)
-            token_url = (
-                f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+            logger.debug(
+                "Authenticating to Azure App Configuration using client credentials", name=self.integration_name
             )
+            token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
             data = urllib.parse.urlencode(
                 {
                     "grant_type": "client_credentials",
@@ -599,17 +601,22 @@ class AzureAppConfigIntegration(StoreIntegration):
                 token_response = json.loads(response.read().decode("utf-8"))
                 token = token_response.get("access_token")
                 if token:
-                    logger.info("Successfully authenticated to Azure App Configuration using client credentials", name=self.integration_name)
+                    logger.info(
+                        "Successfully authenticated to Azure App Configuration using client credentials",
+                        name=self.integration_name,
+                    )
                 return token
         except Exception as e:
-            logger.warning("Client credentials authentication to Azure App Configuration failed", name=self.integration_name, error_type=type(e).__name__)
+            logger.warning(
+                "Client credentials authentication to Azure App Configuration failed",
+                name=self.integration_name,
+                error_type=type(e).__name__,
+            )
             return None
 
     # Configuration key-value methods
 
-    def _get_value_via_cli(
-        self, key: str, label: Optional[str] = None, timeout: int = 60
-    ) -> Optional[str]:
+    def _get_value_via_cli(self, key: str, label: Optional[str] = None, timeout: int = 60) -> Optional[str]:
         """
         Retrieve a value from Azure App Configuration using the Azure CLI.
 
@@ -636,11 +643,7 @@ class AzureAppConfigIntegration(StoreIntegration):
                 ]
             else:
                 # Extract appconfig name from endpoint
-                appconfig_name = (
-                    self.appconfig_endpoint.replace("https://", "")
-                    .replace(".azconfig.io", "")
-                    .rstrip("/")
-                )
+                appconfig_name = self.appconfig_endpoint.replace("https://", "").replace(".azconfig.io", "").rstrip("/")
                 args = [
                     "appconfig",
                     "kv",
@@ -669,9 +672,7 @@ class AzureAppConfigIntegration(StoreIntegration):
         except Exception:
             return None
 
-    def _get_value_via_api(
-        self, key: str, label: Optional[str] = None, use_cli_token: bool = False
-    ) -> Optional[str]:
+    def _get_value_via_api(self, key: str, label: Optional[str] = None, use_cli_token: bool = False) -> Optional[str]:
         """
         Retrieve a value from Azure App Configuration using HTTPS API call.
 
@@ -736,11 +737,7 @@ class AzureAppConfigIntegration(StoreIntegration):
                     self.connection_string,
                 ]
             else:
-                appconfig_name = (
-                    self.appconfig_endpoint.replace("https://", "")
-                    .replace(".azconfig.io", "")
-                    .rstrip("/")
-                )
+                appconfig_name = self.appconfig_endpoint.replace("https://", "").replace(".azconfig.io", "").rstrip("/")
                 args = [
                     "appconfig",
                     "kv",

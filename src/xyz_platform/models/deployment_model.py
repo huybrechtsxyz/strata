@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic model for deployment configuration validation."""
 
-from typing import Annotated, List, Dict, Any, Optional, Literal
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -24,16 +24,10 @@ class DeploymentFileReference(BaseModel):
 
     name: Annotated[
         str,
-        StringConstraints(
-            min_length=1, pattern=r"^[a-z][a-z0-9_]*$", strip_whitespace=True
-        ),
+        StringConstraints(min_length=1, pattern=r"^[a-z][a-z0-9_]*$", strip_whitespace=True),
     ] = Field(description="Unique reference name")
-    file: str = Field(
-        description="Path to the file (resolved and validated at load time)"
-    )
-    description: Optional[str] = Field(
-        None, description="Optional description of the referenced file"
-    )
+    file: str = Field(description="Path to the file (resolved and validated at load time)")
+    description: Optional[str] = Field(None, description="Optional description of the referenced file")
 
 
 class DeploymentConfigurationModel(DeploymentFileReference):
@@ -73,9 +67,7 @@ class DeploymentApprovalModel(BaseModel):
     def validate_manual_approval(self) -> "DeploymentApprovalModel":
         """Validate that manual approvals have approvers defined."""
         if self.type == "manual" and not self.approvers:
-            raise ValueError(
-                "Manual approval requires 'approvers' to be specified (list of approver identifiers)"
-            )
+            raise ValueError("Manual approval requires 'approvers' to be specified (list of approver identifiers)")
         return self
 
 
@@ -159,9 +151,7 @@ class DeploymentSpecModel(BaseModel):
     configurations: Optional[List[DeploymentConfigurationModel]] = Field(
         None, description="Optional configuration list"
     )
-    lifecycle: Optional[CommonLifecycleModel] = Field(
-        None, description="Deployment lifecycle phases"
-    )
+    lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Deployment lifecycle phases")
     properties: Optional[Dict[str, Any]] = Field(
         None,
         description="Deployment-specific properties and configurations. "
@@ -175,9 +165,7 @@ class DeploymentSpecModel(BaseModel):
         description="Deployment layer values (keys must match configuration.spec.layering[].name). "
         "Defines the artifact path location for this deployment.",
     )
-    workspace: DeploymentWorkspaceModel = Field(
-        description="Name of the associated workspace for this deployment"
-    )
+    workspace: DeploymentWorkspaceModel = Field(description="Name of the associated workspace for this deployment")
     environments: Annotated[
         List[str],
         Field(
@@ -185,9 +173,7 @@ class DeploymentSpecModel(BaseModel):
             description="List of environment file paths for this deployment (later files override earlier ones)",
         ),
     ]
-    approvals: Optional[DeploymentApprovalModel] = Field(
-        None, description="Approval configuration for this deployment"
-    )
+    approvals: Optional[DeploymentApprovalModel] = Field(None, description="Approval configuration for this deployment")
     stages: Optional[List[DeploymentStageModel]] = Field(
         None,
         description="Optional deployment stages for multi-step execution (if not specified, single-step execution)",
@@ -200,20 +186,14 @@ class DeploymentSpecModel(BaseModel):
         if self.stages:
             stage_names = [stage.name for stage in self.stages]
             if len(stage_names) != len(set(stage_names)):
-                duplicates = [
-                    name for name in stage_names if stage_names.count(name) > 1
-                ]
+                duplicates = [name for name in stage_names if stage_names.count(name) > 1]
                 raise ValueError(f"Duplicate stage names found: {set(duplicates)}")
 
         if self.configurations:
             config_names = [config.name for config in self.configurations]
             if len(config_names) != len(set(config_names)):
-                duplicates = [
-                    name for name in config_names if config_names.count(name) > 1
-                ]
-                raise ValueError(
-                    f"Duplicate configuration names found: {set(duplicates)}"
-                )
+                duplicates = [name for name in config_names if config_names.count(name) > 1]
+                raise ValueError(f"Duplicate configuration names found: {set(duplicates)}")
 
         return self
 
@@ -231,9 +211,7 @@ class DeploymentSpecModel(BaseModel):
             if stage.depends_on:
                 for dep in stage.depends_on:
                     if dep not in stage_names:
-                        errors.append(
-                            f"Stage '{stage.name}' depends on undefined stage '{dep}'"
-                        )
+                        errors.append(f"Stage '{stage.name}' depends on undefined stage '{dep}'")
                     if dep == stage.name:
                         errors.append(f"Stage '{stage.name}' cannot depend on itself")
 
@@ -265,9 +243,7 @@ class DeploymentSpecModel(BaseModel):
         for stage in self.stages:
             if stage.name not in visited:
                 if has_cycle(stage.name):
-                    raise ValueError(
-                        f"Circular dependency detected in stages involving '{stage.name}'"
-                    )
+                    raise ValueError(f"Circular dependency detected in stages involving '{stage.name}'")
 
         return self
 
@@ -283,9 +259,7 @@ class DeploymentMetaModel(BaseModel):
         None,
         description="Optional labels (key-value pairs for classification/filtering)",
     )
-    tags: Optional[List[Any]] = Field(
-        None, description="Optional tags (list of values for categorization)"
-    )
+    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
 
 class DeploymentModel(BaseModel):
@@ -301,9 +275,5 @@ class DeploymentModel(BaseModel):
         frozen=True,
         description="Platform kind (always 'Deployment')",
     )
-    meta: DeploymentMetaModel = Field(
-        description="Deployment metadata (name, annotations, labels, tags)"
-    )
-    spec: DeploymentSpecModel = Field(
-        description="Deployment specification (properties, workspace, environment)"
-    )
+    meta: DeploymentMetaModel = Field(description="Deployment metadata (name, annotations, labels, tags)")
+    spec: DeploymentSpecModel = Field(description="Deployment specification (properties, workspace, environment)")

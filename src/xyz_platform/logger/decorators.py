@@ -40,7 +40,12 @@ def log_performance(func: Callable) -> Callable:
             log.info("performance", function=func.__name__, duration_ms=round((time.perf_counter() - start) * 1000, 2))
             return result
         except Exception:
-            log.error("performance_error", function=func.__name__, duration_ms=round((time.perf_counter() - start) * 1000, 2), exc_info=True)
+            log.error(
+                "performance_error",
+                function=func.__name__,
+                duration_ms=round((time.perf_counter() - start) * 1000, 2),
+                exc_info=True,
+            )
             raise
 
     @functools.wraps(func)
@@ -52,7 +57,12 @@ def log_performance(func: Callable) -> Callable:
             log.info("performance", function=func.__name__, duration_ms=round((time.perf_counter() - start) * 1000, 2))
             return result
         except Exception:
-            log.error("performance_error", function=func.__name__, duration_ms=round((time.perf_counter() - start) * 1000, 2), exc_info=True)
+            log.error(
+                "performance_error",
+                function=func.__name__,
+                duration_ms=round((time.perf_counter() - start) * 1000, 2),
+                exc_info=True,
+            )
             raise
 
     return async_wrapper if asyncio.iscoroutinefunction(func) else wrapper

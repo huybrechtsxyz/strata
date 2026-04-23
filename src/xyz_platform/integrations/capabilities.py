@@ -134,9 +134,7 @@ class IRepositoryTool(Protocol):
     Examples: Git, Mercurial, SVN
     """
 
-    def clone(
-        self, repo_url: str, target_dir: str, branch: Optional[str] = None, **kwargs
-    ) -> Any:
+    def clone(self, repo_url: str, target_dir: str, branch: Optional[str] = None, **kwargs) -> Any:
         """Clone a repository."""
         ...
 
@@ -333,7 +331,4 @@ def validate_integration_type(integration_type: str, registered_types: set) -> b
     Returns:
         True if type is valid (custom or registered)
     """
-    return (
-        integration_type in CUSTOM_INTEGRATION_TYPES
-        or integration_type in registered_types
-    )
+    return integration_type in CUSTOM_INTEGRATION_TYPES or integration_type in registered_types

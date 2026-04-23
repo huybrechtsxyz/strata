@@ -2,27 +2,27 @@
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.environment_model import (
     EnvironmentModel,
-    EnvironmentResourceOverrideModel,
     EnvironmentModuleOverrideModel,
     EnvironmentProviderOverrideModel,
+    EnvironmentResourceOverrideModel,
 )
-
 from xyz_platform.models.store_models import (
-    validate_store_security_policy,
-    VariableStoreModel,
-    SecretStoreModel,
     FeatureStoreModel,
-    VariableStoreType,
-    SecretStoreType,
     FeatureStoreType,
+    SecretStoreModel,
+    SecretStoreType,
+    VariableStoreModel,
+    VariableStoreType,
+    validate_store_security_policy,
 )
 from xyz_platform.services.base_service import BaseService
 
 
-class EnvironmentService(BaseService):
+class EnvironmentService(BaseService["EnvironmentModel"]):
     """
     Service for handling environment configurations.
 
@@ -37,7 +37,19 @@ class EnvironmentService(BaseService):
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the EnvironmentService."""
         super().__init__(path=path, data=data)
-        self.model: Optional[EnvironmentModel] = None
+        self.model = None
+
+    def on_init(self) -> None:
+        """Lifecycle hook: called after __init__ completes."""
+        pass
+
+    def on_ready(self) -> None:
+        """Lifecycle hook: called after validation succeeds."""
+        pass
+
+    def on_shutdown(self) -> None:
+        """Lifecycle hook: called before cleanup/destruction."""
+        pass
 
     @classmethod
     def merge_envfiles(cls, envfiles: List[str], work_path: Path) -> EnvironmentModel:
@@ -66,9 +78,7 @@ class EnvironmentService(BaseService):
             env_service = cls(str(work_path / envfile_path))
             is_valid, errors = env_service.validate()
             if not is_valid:
-                raise ValueError(
-                    f"Invalid environment file: {envfile_path}\nErrors: {errors}"
-                )
+                raise ValueError(f"Invalid environment file: {envfile_path}\nErrors: {errors}")
 
             env_model = env_service.get_model()
             if not env_model:
@@ -93,8 +103,8 @@ class EnvironmentService(BaseService):
 
         # Build merged EnvironmentModel
         from xyz_platform.models.environment_model import (
-            EnvironmentSpecModel,
             EnvironmentMetaModel,
+            EnvironmentSpecModel,
         )
 
         variables = list(merged_vars.values()) if merged_vars else None
@@ -111,9 +121,7 @@ class EnvironmentService(BaseService):
         )
 
         if meta is None:
-            meta = EnvironmentMetaModel(
-                name="Unknown", annotations=None, labels=None, tags=None
-            )
+            meta = EnvironmentMetaModel(name="Unknown", annotations=None, labels=None, tags=None)
 
         return EnvironmentModel(
             # apiVersion=PlatformVersion.v1.value, --- IGNORE ---
@@ -162,9 +170,7 @@ class EnvironmentService(BaseService):
                 else None
             )
             allowed_secret_stores = (
-                [SecretStoreType(s) for s in security.allowed_secret_stores]
-                if security.allowed_secret_stores
-                else None
+                [SecretStoreType(s) for s in security.allowed_secret_stores] if security.allowed_secret_stores else None
             )
             allowed_feature_stores = (
                 [FeatureStoreType(s) for s in security.allowed_feature_stores]
@@ -230,16 +236,9 @@ class EnvironmentService(BaseService):
             return False
 
         overrides = self.model.spec.overrides
-        return bool(
-            overrides.resources
-            or overrides.modules
-            or overrides.providers
-            or overrides.properties
-        )
+        return bool(overrides.resources or overrides.modules or overrides.providers or overrides.properties)
 
-    def get_resource_override(
-        self, resource_name: str
-    ) -> Optional[EnvironmentResourceOverrideModel]:
+    def get_resource_override(self, resource_name: str) -> Optional[EnvironmentResourceOverrideModel]:
         """
         Get resource override by name.
 
@@ -258,11 +257,7 @@ class EnvironmentService(BaseService):
         ):
             return None
         return next(
-            (
-                r
-                for r in self.model.spec.overrides.resources
-                if r.resource == resource_name
-            ),
+            (r for r in self.model.spec.overrides.resources if r.resource == resource_name),
             None,
         )
 
@@ -292,16 +287,12 @@ class EnvironmentService(BaseService):
             (
                 m
                 for m in self.model.spec.overrides.modules
-                if m.resource == resource_name
-                and m.module == module_name
-                and (m.slot_type or "main") == slot_type
+                if m.resource == resource_name and m.module == module_name and (m.slot_type or "main") == slot_type
             ),
             None,
         )
 
-    def get_provider_override(
-        self, provider_name: str
-    ) -> Optional[EnvironmentProviderOverrideModel]:
+    def get_provider_override(self, provider_name: str) -> Optional[EnvironmentProviderOverrideModel]:
         """
         Get provider override by name.
 
@@ -320,11 +311,7 @@ class EnvironmentService(BaseService):
         ):
             return None
         return next(
-            (
-                p
-                for p in self.model.spec.overrides.providers
-                if p.provider == provider_name
-            ),
+            (p for p in self.model.spec.overrides.providers if p.provider == provider_name),
             None,
         )
 
@@ -377,14 +364,9 @@ class EnvironmentService(BaseService):
             or not self.model.spec.overrides.modules
         ):
             return set()
-        return {
-            (m.resource, m.module, m.slot_type or "main")
-            for m in self.model.spec.overrides.modules
-        }
+        return {(m.resource, m.module, m.slot_type or "main") for m in self.model.spec.overrides.modules}
 
-    def get_merged_properties(
-        self, workspace_properties: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    def get_merged_properties(self, workspace_properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Merge environment properties with workspace properties.
 
@@ -407,12 +389,7 @@ class EnvironmentService(BaseService):
             result.update(self.model.spec.properties)
 
         # Apply override properties (highest precedence)
-        if (
-            self.model
-            and self.model.spec
-            and self.model.spec.overrides
-            and self.model.spec.overrides.properties
-        ):
+        if self.model and self.model.spec and self.model.spec.overrides and self.model.spec.overrides.properties:
             result.update(self.model.spec.overrides.properties)
 
         return result

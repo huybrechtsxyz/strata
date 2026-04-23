@@ -2,18 +2,19 @@
 """Service for loading and validating namespace configurations."""
 
 from typing import List, Optional, Tuple
+
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.namespace_model import NamespaceModel
 from xyz_platform.services.base_service import BaseService
 
 
-class NamespaceService(BaseService):
+class NamespaceService(BaseService["NamespaceModel"]):
     """Service for handling namespace configurations and modules."""
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the NamespaceService."""
         super().__init__(path=path, data=data)
-        self.model: Optional[NamespaceModel] = None
+        self.model = None
 
     def _get_model_class(self):
         """Return the NamespaceModel class for validation."""

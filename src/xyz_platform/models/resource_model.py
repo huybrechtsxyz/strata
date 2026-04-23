@@ -3,6 +3,8 @@
 
 import re
 from pathlib import PurePosixPath
+from typing import Annotated, Any, Dict, List, Optional
+
 from pydantic import (
     BaseModel,
     Field,
@@ -10,12 +12,12 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing import Annotated, List, Dict, Optional, Any
+
 from xyz_platform.models.common_models import (
     CommonLifecycleModel,
     FeatureRefs,
-    PlatformName,
     PlatformKind,
+    PlatformName,
     PlatformVersion,
     SecretRefs,
     VariableRefs,
@@ -39,29 +41,19 @@ class ResourceDependencyModel(BaseModel):
           → Satisfied by Azure Private DNS, Route53, or Cloud DNS
     """
 
-    category: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = (
-        Field(
-            description="Resource category required (e.g., networking, compute, database, storage, security)"
-        )
+    category: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description="Resource category required (e.g., networking, compute, database, storage, security)"
     )
-    subcategory: Optional[
-        Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
-    ] = Field(
+    subcategory: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
         description="Optional subcategory for more specific requirements (e.g., virtual_network, private_dns, nosql, blob)",
     )
-    resource_type: Optional[
-        Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
-    ] = Field(
+    resource_type: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
         description="Optional specific resource type for even more granular matching (e.g., cosmosdb_account, storage_account)",
     )
-    description: Optional[str] = Field(
-        None, description="Human-readable explanation of why this dependency exists"
-    )
-    optional: bool = Field(
-        False, description="If True, workspace can deploy without this dependency"
-    )
+    description: Optional[str] = Field(None, description="Human-readable explanation of why this dependency exists")
+    optional: bool = Field(False, description="If True, workspace can deploy without this dependency")
 
     @model_validator(mode="after")
     def validate_specificity(self) -> "ResourceDependencyModel":
@@ -78,8 +70,8 @@ class ResourceVolumesModel(BaseModel):
     """
 
     name: Optional[PlatformName] = Field(None, description="Volume name")
-    path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = (
-        Field(description="Mount path for the volume")
+    path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description="Mount path for the volume"
     )
 
 
@@ -91,11 +83,11 @@ class ResourceDiskModel(BaseModel):
 
     name: Optional[PlatformName] = None
     size: Annotated[int, Field(gt=0, description="Disk size must be greater than 0 GB")]
-    label: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = (
-        Field(description="Disk label for identification")
+    label: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description="Disk label for identification"
     )
-    mount: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = (
-        Field(description="Mount path for the disk")
+    mount: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description="Mount path for the disk"
     )
 
     @field_validator("label")
@@ -107,9 +99,7 @@ class ResourceDiskModel(BaseModel):
 
         for param in params:
             if param != ".name":
-                raise ValueError(
-                    f"Unsupported parameter '${{{param}}}' in label. Only '${{.name}}' is supported."
-                )
+                raise ValueError(f"Unsupported parameter '${{{param}}}' in label. Only '${{.name}}' is supported.")
 
         # Check that the label would still be valid after parameter substitution
         # Replace ${.name} with a placeholder to validate the overall structure
@@ -163,7 +153,7 @@ class ResourceDiskModel(BaseModel):
         except Exception as e:
             if isinstance(e, ValueError):
                 raise e
-            raise ValueError(f"Invalid mount path format: {v}")
+            raise ValueError(f"Invalid mount path format: {v}") from e
 
         return v
 
@@ -180,15 +170,11 @@ class ResourceStorageModel(BaseModel):
         - Storage Account: Containers + file shares + queues
     """
 
-    install_path: Optional[
-        Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
-    ] = Field(None, description="Installation directory inside the VM")
-    disks: Optional[List[ResourceDiskModel]] = Field(
-        None, description="List of disk configurations"
+    install_path: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
+        None, description="Installation directory inside the VM"
     )
-    volumes: Optional[List[ResourceVolumesModel]] = Field(
-        None, description="List of volume mounts"
-    )
+    disks: Optional[List[ResourceDiskModel]] = Field(None, description="List of disk configurations")
+    volumes: Optional[List[ResourceVolumesModel]] = Field(None, description="List of volume mounts")
     parameters: Optional[Dict[str, Any]] = Field(
         None, description="Optional parameters (key-value pairs for scripting)"
     )
@@ -208,26 +194,20 @@ class ResourceStorageModel(BaseModel):
             # Validate unique disk labels
             disk_labels = [disk.label for disk in self.disks]
             if len(disk_labels) != len(set(disk_labels)):
-                duplicates = [
-                    label for label in disk_labels if disk_labels.count(label) > 1
-                ]
+                duplicates = [label for label in disk_labels if disk_labels.count(label) > 1]
                 errors.append(f"Duplicate disk labels found: {set(duplicates)}")
 
             # Validate unique disk mount points
             disk_mounts = [disk.mount for disk in self.disks]
             if len(disk_mounts) != len(set(disk_mounts)):
-                duplicates = [
-                    mount for mount in disk_mounts if disk_mounts.count(mount) > 1
-                ]
+                duplicates = [mount for mount in disk_mounts if disk_mounts.count(mount) > 1]
                 errors.append(f"Duplicate disk mount points found: {set(duplicates)}")
 
         # Validate unique volume names
         if self.volumes:
-            volume_names = [vol.name for vol in self.volumes]
+            volume_names = [vol.name for vol in self.volumes if vol.name is not None]
             if len(volume_names) != len(set(volume_names)):
-                duplicates = [
-                    name for name in volume_names if volume_names.count(name) > 1
-                ]
+                duplicates = [name for name in volume_names if volume_names.count(name) > 1]
                 errors.append(f"Duplicate volume names found: {set(duplicates)}")
 
             # Validate volumes are mounted under disk mount points
@@ -235,9 +215,7 @@ class ResourceStorageModel(BaseModel):
                 disk_mounts = [disk.mount for disk in self.disks]
                 for volume in self.volumes:
                     # Check if volume path starts with any disk mount
-                    is_under_disk = any(
-                        volume.path.startswith(mount) for mount in disk_mounts
-                    )
+                    is_under_disk = any(volume.path.startswith(mount) for mount in disk_mounts)
                     if not is_under_disk:
                         errors.append(
                             f"Volume '{volume.name}' path '{volume.path}' is not under any disk mount point. "
@@ -259,21 +237,15 @@ class ResourcePropertiesModel(BaseModel):
         ...,
         description="Cloud/infrastructure provider. Must be a known provider string matching PlatformName pattern.",
     )
-    resource_type: Annotated[
-        str, StringConstraints(min_length=1, strip_whitespace=True)
-    ] = Field(description="Type of the resource")
-    unit_cost: Optional[float] = Field(
-        default=0.0, description="Unit cost for the resource"
+    resource_type: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description="Type of the resource"
     )
-    category: Optional[
-        Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
-    ] = Field(
+    unit_cost: Optional[float] = Field(default=0.0, description="Unit cost for the resource")
+    category: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
         description="Resource category for organization (e.g., networking, compute, database, storage)",
     )
-    subcategory: Optional[
-        Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
-    ] = Field(
+    subcategory: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
         description="Resource subcategory for finer classification (e.g., vnet, nosql, blob)",
     )
@@ -308,9 +280,7 @@ class ResourceReferencesModel(BaseModel):
         None,
         description="List of variable keys this resource requires from environment",
     )
-    secrets: SecretRefs = Field(
-        None, description="List of secret keys this resource requires from environment"
-    )
+    secrets: SecretRefs = Field(None, description="List of secret keys this resource requires from environment")
     features: FeatureRefs = Field(
         None,
         description="List of feature flag keys this resource requires from environment",
@@ -326,25 +296,17 @@ class ResourceSpecModel(BaseModel):
         None,
         description="IaC workflow lifecycle phases",
     )
-    references: Optional[ResourceReferencesModel] = Field(
-        None, description="Variable, and secret references"
-    )
+    references: Optional[ResourceReferencesModel] = Field(None, description="Variable, and secret references")
     properties: ResourcePropertiesModel = Field(
         description="Configuration properties (provider, resources, disks, volumes)"
     )
-    dependencies: Optional[List[ResourceDependencyModel]] = Field(
-        None, description="List of resource dependencies"
-    )
-    storage: Optional[ResourceStorageModel] = Field(
-        None, description="Virtual machine specific configuration"
-    )
+    dependencies: Optional[List[ResourceDependencyModel]] = Field(None, description="List of resource dependencies")
+    storage: Optional[ResourceStorageModel] = Field(None, description="Virtual machine specific configuration")
     configuration: Optional[Dict[str, Any]] = Field(
         None,
         description="Additional configuration block for resource-specific settings",
     )
-    custom: Optional[Dict[str, Any]] = Field(
-        None, description="Custom user-defined data for scripts or extensions"
-    )
+    custom: Optional[Dict[str, Any]] = Field(None, description="Custom user-defined data for scripts or extensions")
 
     @model_validator(mode="after")
     def validate_configuration_schema(self) -> "ResourceSpecModel":
@@ -370,9 +332,7 @@ class ResourceMetaModel(BaseModel):
         None,
         description="Optional labels (key-value pairs for classification/filtering)",
     )
-    tags: Optional[List[Any]] = Field(
-        None, description="Optional tags (list of values for categorization)"
-    )
+    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
 
 class ResourceModel(BaseModel):
@@ -391,9 +351,5 @@ class ResourceModel(BaseModel):
         frozen=True,
         description="Platform kind (always 'Resource')",
     )
-    meta: ResourceMetaModel = Field(
-        description="Resource metadata (name, annotations, labels, tags)"
-    )
-    spec: ResourceSpecModel = Field(
-        description="Resource specification (properties, lifecycle, ...)"
-    )
+    meta: ResourceMetaModel = Field(description="Resource metadata (name, annotations, labels, tags)")
+    spec: ResourceSpecModel = Field(description="Resource specification (properties, lifecycle, ...)")

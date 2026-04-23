@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Simple service cache to avoid re-parsing YAML files."""
 
-from typing import Dict, Optional, Type, Any, Callable
+from typing import Any, Callable, Dict, Optional, Type
+
 from xyz_platform.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,9 +40,7 @@ def get_cache_key(service_class: Type, file_path: Optional[str], **kwargs) -> st
     return ":".join(key_parts)
 
 
-def get_cached_service(
-    service_class: Type, file_path: Optional[str] = None, **kwargs
-) -> Optional[Any]:
+def get_cached_service(service_class: Type, file_path: Optional[str] = None, **kwargs) -> Optional[Any]:
     """
     Get cached service instance if it exists.
 

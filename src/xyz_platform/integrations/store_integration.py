@@ -2,8 +2,8 @@
 
 from typing import Any, List, Optional
 
-from xyz_platform.logger import get_logger
 from xyz_platform.integrations.base_integration import BaseIntegration
+from xyz_platform.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
 
 logger = get_logger(__name__)
@@ -68,7 +68,9 @@ class StoreIntegration(BaseIntegration):
         Returns:
             Variable value or None if not supported/not found
         """
-        logger.debug("Store does not support variable operations", name=self.integration_name, operation="get_variable", key=key)
+        logger.debug(
+            "Store does not support variable operations", name=self.integration_name, operation="get_variable", key=key
+        )
         return None
 
     def set_variable(self, key: str, value: Any, **kwargs) -> bool:
@@ -85,7 +87,9 @@ class StoreIntegration(BaseIntegration):
         Returns:
             True if successful, False if not supported/failed
         """
-        logger.debug("Store does not support variable operations", name=self.integration_name, operation="set_variable", key=key)
+        logger.debug(
+            "Store does not support variable operations", name=self.integration_name, operation="set_variable", key=key
+        )
         return False
 
     def list_variables(self, prefix: str = "", **kwargs) -> List[str]:
@@ -101,7 +105,12 @@ class StoreIntegration(BaseIntegration):
         Returns:
             List of variable keys, empty list if not supported/failed
         """
-        logger.debug("Store does not support listing variables", name=self.integration_name, operation="list_variables", prefix=prefix)
+        logger.debug(
+            "Store does not support listing variables",
+            name=self.integration_name,
+            operation="list_variables",
+            prefix=prefix,
+        )
         return []
 
     # Secret operations
@@ -119,7 +128,9 @@ class StoreIntegration(BaseIntegration):
         Returns:
             Secret value or None if not supported/not found
         """
-        logger.debug("Store does not support secret operations", name=self.integration_name, operation="get_secret", key=key)
+        logger.debug(
+            "Store does not support secret operations", name=self.integration_name, operation="get_secret", key=key
+        )
         return None
 
     def set_secret(self, key: str, value: str, **kwargs) -> bool:
@@ -136,7 +147,9 @@ class StoreIntegration(BaseIntegration):
         Returns:
             True if successful, False if not supported/failed
         """
-        logger.debug("Store does not support secret operations", name=self.integration_name, operation="set_secret", key=key)
+        logger.debug(
+            "Store does not support secret operations", name=self.integration_name, operation="set_secret", key=key
+        )
         return False
 
     def list_secrets(self, prefix: str = "", **kwargs) -> List[str]:
@@ -152,7 +165,12 @@ class StoreIntegration(BaseIntegration):
         Returns:
             List of secret keys, empty list if not supported/failed
         """
-        logger.debug("Store does not support listing secrets", name=self.integration_name, operation="list_secrets", prefix=prefix)
+        logger.debug(
+            "Store does not support listing secrets",
+            name=self.integration_name,
+            operation="list_secrets",
+            prefix=prefix,
+        )
         return []
 
     # Feature flag operations
@@ -170,7 +188,12 @@ class StoreIntegration(BaseIntegration):
         Returns:
             Feature flag value (bool) or None if not supported/not found
         """
-        logger.debug("Store does not support feature flag operations", name=self.integration_name, operation="get_feature", key=key)
+        logger.debug(
+            "Store does not support feature flag operations",
+            name=self.integration_name,
+            operation="get_feature",
+            key=key,
+        )
         return None
 
     def set_feature(self, key: str, value: bool, **kwargs) -> bool:
@@ -187,7 +210,12 @@ class StoreIntegration(BaseIntegration):
         Returns:
             True if successful, False if not supported/failed
         """
-        logger.debug("Store does not support feature flag operations", name=self.integration_name, operation="set_feature", key=key)
+        logger.debug(
+            "Store does not support feature flag operations",
+            name=self.integration_name,
+            operation="set_feature",
+            key=key,
+        )
         return False
 
     def list_features(self, prefix: str = "", **kwargs) -> List[str]:
@@ -203,7 +231,12 @@ class StoreIntegration(BaseIntegration):
         Returns:
             List of feature flag keys, empty list if not supported/failed
         """
-        logger.debug("Store does not support listing feature flags", name=self.integration_name, operation="list_features", prefix=prefix)
+        logger.debug(
+            "Store does not support listing feature flags",
+            name=self.integration_name,
+            operation="list_features",
+            prefix=prefix,
+        )
         return []
 
     # Key-value operations (generic)
@@ -221,7 +254,9 @@ class StoreIntegration(BaseIntegration):
         Returns:
             Value or None if not supported/not found
         """
-        logger.debug("Store does not support key-value operations", name=self.integration_name, operation="get_kv", key=key)
+        logger.debug(
+            "Store does not support key-value operations", name=self.integration_name, operation="get_kv", key=key
+        )
         return None
 
     def set_kv(self, key: str, value: Any, **kwargs) -> bool:
@@ -238,7 +273,9 @@ class StoreIntegration(BaseIntegration):
         Returns:
             True if successful, False if not supported/failed
         """
-        logger.debug("Store does not support key-value operations", name=self.integration_name, operation="set_kv", key=key)
+        logger.debug(
+            "Store does not support key-value operations", name=self.integration_name, operation="set_kv", key=key
+        )
         return False
 
     def list_kv(self, prefix: str = "", **kwargs) -> List[str]:
@@ -254,5 +291,10 @@ class StoreIntegration(BaseIntegration):
         Returns:
             List of keys, empty list if not supported/failed
         """
-        logger.debug("Store does not support key-value operations", name=self.integration_name, operation="list_kv", prefix=prefix)
+        logger.debug(
+            "Store does not support key-value operations",
+            name=self.integration_name,
+            operation="list_kv",
+            prefix=prefix,
+        )
         return []

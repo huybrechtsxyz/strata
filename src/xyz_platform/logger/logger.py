@@ -16,12 +16,14 @@ Sink matrix:
 """
 
 import logging
+import logging.config
 import os
 import sys
 from pathlib import Path
 from typing import Optional
 
 import structlog
+import yaml
 
 from .formatters import SHARED_PROCESSORS, make_console_formatter, make_json_formatter
 
@@ -63,6 +65,7 @@ def configure_logging(
     logstash_host: Optional[str] = None,
     logstash_port: int = 5000,
     azure_connection_string: Optional[str] = None,
+    config_path: Optional[str] = None,
 ) -> None:
     """
     Configure logging for the platform.
@@ -98,6 +101,12 @@ def configure_logging(
         )
     """
     global _configured
+
+    # If config file provided, load it (Serilog-style dictConfig)
+    if config_path and Path(config_path).exists():
+        _configure_from_yaml(config_path)
+        _configured = True
+        return
 
     log_level = getattr(logging, level.upper(), logging.INFO)
 
@@ -153,9 +162,7 @@ def configure_logging(
         try:
             from .handlers import configure_azure_monitor
 
-            conn_str = azure_connection_string or os.getenv(
-                "APPLICATIONINSIGHTS_CONNECTION_STRING"
-            )
+            conn_str = azure_connection_string or os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
             if conn_str:
                 configure_azure_monitor(conn_str)
             else:
@@ -164,6 +171,67 @@ def configure_logging(
             logging.warning("Failed to configure Azure Application Insights: %s", exc)
 
     _configured = True
+
+
+def _configure_from_yaml(config_path: str) -> None:
+    """
+    Configure logging from a YAML file (Serilog-style).
+
+    Expects standard Python ``logging.config.dictConfig`` format.
+    Custom classes (``ConsoleFormatter``, ``JsonFormatter``, ``LogstashHandler``)
+    are resolved automatically — use their short names in the ``()`` key.
+
+    Azure Application Insights is handled separately via an optional top-level
+    ``azure:`` section::
+
+        azure:
+          enabled: true
+          connection_string: "InstrumentationKey=..."
+    """
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+
+        from .handlers import LogstashHandler
+
+        # Resolve custom formatter factories referenced by short name
+        if "formatters" in config:
+            for formatter_config in config["formatters"].values():
+                if "()" in formatter_config:
+                    class_path = formatter_config["()"]
+                    if "JsonFormatter" in class_path:
+                        formatter_config["()"] = make_json_formatter
+                    elif "ConsoleFormatter" in class_path:
+                        formatter_config["()"] = make_console_formatter
+
+        # Resolve custom handler classes referenced by short name
+        if "handlers" in config:
+            for handler_config in config["handlers"].values():
+                if "()" in handler_config:
+                    class_path = handler_config["()"]
+                    if "LogstashHandler" in class_path:
+                        handler_config["()"] = LogstashHandler
+
+        logging.config.dictConfig(config)
+
+        # Azure Monitor requires separate setup (OpenTelemetry integration)
+        if "azure" in config and config["azure"].get("enabled"):
+            from .handlers import configure_azure_monitor
+
+            connection_string = config["azure"].get("connection_string") or os.getenv(
+                "APPLICATIONINSIGHTS_CONNECTION_STRING"
+            )
+            if connection_string:
+                configure_azure_monitor(connection_string)
+            else:
+                logging.warning("Azure enabled in config but no connection string provided")
+
+    except Exception as exc:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
+        logging.error("Failed to configure logging from %s: %s", config_path, exc)
 
 
 def reconfigure_logging(**kwargs) -> None:
@@ -185,9 +253,7 @@ def shutdown_logging() -> None:
 def get_active_log_files() -> list[str]:
     """Return absolute paths of all active file-based log sinks."""
     return [
-        handler.baseFilename
-        for handler in logging.getLogger().handlers
-        if isinstance(handler, logging.FileHandler)
+        handler.baseFilename for handler in logging.getLogger().handlers if isinstance(handler, logging.FileHandler)
     ]
 
 

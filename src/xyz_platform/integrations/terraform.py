@@ -3,9 +3,9 @@
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from xyz_platform.logger import get_logger
-from xyz_platform.integrations.capabilities import IInfrastructureTool
 from xyz_platform.integrations.base_integration import BaseIntegration
+from xyz_platform.integrations.capabilities import IInfrastructureTool
+from xyz_platform.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
 from xyz_platform.utils.system import CommandResult
 

@@ -2,24 +2,27 @@
 """Base class for platform services with YAML loading and Pydantic validation."""
 
 import os
-import yaml
-from pathlib import Path
-from pydantic import ValidationError
-from typing import Dict, Optional, Tuple, List
 from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar, cast
 
-from xyz_platform.models.configuration_model import ConfigurationModel
-from xyz_platform.utils.system import resolve_path
+import yaml
+from pydantic import BaseModel, ValidationError
+
 from xyz_platform.exceptions import (
-    PlatformConfigurationError,
-    ServiceNotValidatedError,
     ModelValidationError,
+    PlatformConfigurationError,
     PlatformFileNotFoundError,
+    ServiceNotValidatedError,
 )
 from xyz_platform.logger import get_logger
+from xyz_platform.models.configuration_model import ConfigurationModel
+from xyz_platform.utils.system import resolve_path
+
+ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
-class BaseService(ABC):
+class BaseService(ABC, Generic[ModelT]):
     """Base class for all platform services."""
 
     # Initialization
@@ -35,7 +38,7 @@ class BaseService(ABC):
         Returns:
             Service instance (cached or new)
         """
-        from xyz_platform.utils.service_cache import get_or_cache, get_cache_key
+        from xyz_platform.utils.service_cache import get_cache_key, get_or_cache
 
         # Generate cache key
         cache_key = get_cache_key(cls, path)
@@ -65,11 +68,11 @@ class BaseService(ABC):
         return get_or_cache(cache_key, create_service)
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
-        self._errors = []
-        self._validation_exception = None
+        self._errors: List[str] = []
+        self._validation_exception: Optional[ModelValidationError] = None
         self.path = path
         self.data = data
-        self.model = None
+        self.model: Optional[ModelT] = None
         self._validated = False
         self.logger = get_logger(self.__class__.__module__)
         self._load_data()
@@ -87,7 +90,7 @@ class BaseService(ABC):
     # Abstract methods for subclasses to implement
 
     @abstractmethod
-    def _get_model_class(self) -> type:
+    def _get_model_class(self) -> Type[BaseModel]:
         """Return the Pydantic model class for validation."""
         raise NotImplementedError("Subclasses must implement _get_model_class()")
 
@@ -150,8 +153,8 @@ class BaseService(ABC):
                 "Validating service data",
                 service_class=self.__class__.__name__,
             )
-            model_class = self._get_model_class()
-            self.model = model_class.model_validate(self.data)
+            model_class: Type[BaseModel] = self._get_model_class()
+            self.model = cast(ModelT, model_class.model_validate(self.data))
 
             if configuration_model:
                 # Pass both configuration_model and work_path to _validate_dynamic
@@ -227,13 +230,14 @@ class BaseService(ABC):
     def get_kind(self) -> Optional[str]:
         """Get the kind from root section."""
         self._ensure_validated()
-        return self.model.kind if self.model else None
+        return getattr(self.model, "kind", None) if self.model else None
 
     def get_name(self) -> Optional[str]:
         """Get the name from meta section."""
         self._ensure_validated()
         try:
-            return self.model.meta.name if self.model else None
+            meta = getattr(self.model, "meta", None) if self.model else None
+            return meta.name if meta else None
         except AttributeError:
             return None
 
@@ -246,7 +250,8 @@ class BaseService(ABC):
         """Get a specific label from meta.labels section."""
         self._ensure_validated()
         try:
-            labels = self.model.meta.labels if self.model and self.model.meta else None
+            meta = getattr(self.model, "meta", None) if self.model else None
+            labels = getattr(meta, "labels", None) if meta else None
             if isinstance(labels, dict):
                 return labels.get(label_key)
             return getattr(labels, label_key, None)
@@ -259,7 +264,8 @@ class BaseService(ABC):
         try:
             # return self.model.meta.labels.version
             # Works for both dict and object
-            labels = self.model.meta.labels if self.model and self.model.meta else None
+            meta = getattr(self.model, "meta", None) if self.model else None
+            labels = getattr(meta, "labels", None) if meta else None
             if isinstance(labels, dict):
                 return labels.get("version")
             return getattr(labels, "version", None)
@@ -279,18 +285,19 @@ class BaseService(ABC):
         if not self.model:
             return None
 
-        if not hasattr(self.model.spec, "lifecycle") or not self.model.spec.lifecycle:
+        spec = getattr(self.model, "spec", None)
+        if not spec:
+            return None
+
+        lifecycle = getattr(spec, "lifecycle", None)
+        if not lifecycle:
             return None
 
         if phase_name is None:
-            return self.model.spec.lifecycle
+            return lifecycle
 
-        return (
-            self.model.spec.lifecycle.root.get(phase_name)
-            if self.model.spec.lifecycle.root
-            and phase_name in self.model.spec.lifecycle.root
-            else None
-        )
+        root = getattr(lifecycle, "root", None)
+        return root.get(phase_name) if root and phase_name in root else None
 
     def get_data(self) -> Optional[dict]:
         """
@@ -356,14 +363,12 @@ class BaseService(ABC):
 
         # Validate if requested
         if validate:
-            return self.validate(
-                configuration_model=configuration_model, work_path=work_path
-            )
+            return self.validate(configuration_model=configuration_model, work_path=work_path)
 
         return True, []
 
     # Lifecycle Hooks Section
-
+    @abstractmethod
     def on_init(self) -> None:
         """
         Lifecycle hook: Called after __init__ completes.
@@ -378,6 +383,7 @@ class BaseService(ABC):
         """
         pass
 
+    @abstractmethod
     def on_ready(self) -> None:
         """
         Lifecycle hook: Called after validation succeeds.
@@ -392,6 +398,7 @@ class BaseService(ABC):
         """
         pass
 
+    @abstractmethod
     def on_shutdown(self) -> None:
         """
         Lifecycle hook: Called before cleanup/destruction.
@@ -430,14 +437,10 @@ class BaseService(ABC):
     def _load_data(self):
         """Load YAML data from the specified path."""
         if self.data is not None:
-            self.logger.debug(
-                "Using provided data", service_class=self.__class__.__name__
-            )
+            self.logger.debug("Using provided data", service_class=self.__class__.__name__)
             return  # Data already provided
         if self.path is None:
-            raise PlatformConfigurationError(
-                "Either path or data must be provided to load the service."
-            )
+            raise PlatformConfigurationError("Either path or data must be provided to load the service.")
 
         if os.path.exists(self.path):
             self.logger.debug("Loading YAML data", path=self.path)
@@ -529,9 +532,7 @@ class BaseService(ABC):
             try:
                 resolved = resolve_path(work_path, file_str, repo_map=repo_map)
                 if not resolved.exists():
-                    errors.append(
-                        f"{label}: file not found: '{file_str}' (resolved: {resolved})"
-                    )
+                    errors.append(f"{label}: file not found: '{file_str}' (resolved: {resolved})")
             except ValueError as exc:
                 errors.append(f"{label}: {exc}")
         return errors

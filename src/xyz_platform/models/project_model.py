@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Pydantic models for project file validation."""
 
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Dict, Optional, Any
 
 from xyz_platform.models.common_models import PlatformName
 
@@ -18,9 +19,7 @@ class ProjectSpecProfileConfigModel(BaseModel):
         None,
         description="Type of the configuration (e.g., config, dotenv, data, secret)",
     )
-    created: Optional[str] = Field(
-        None, description="Creation timestamp of the configuration path"
-    )
+    created: Optional[str] = Field(None, description="Creation timestamp of the configuration path")
 
 
 class ProjectSpecProfileModel(BaseModel):
@@ -30,9 +29,7 @@ class ProjectSpecProfileModel(BaseModel):
 
     name: PlatformName = Field(..., description="Name of the profile")
     active: bool = Field(..., description="Whether the profile is active")
-    created: Optional[str] = Field(
-        None, description="Creation timestamp of the profile"
-    )
+    created: Optional[str] = Field(None, description="Creation timestamp of the profile")
     config_paths: Optional[List[ProjectSpecProfileConfigModel]] = Field(
         None, description="List of configuration paths associated with the profile"
     )
@@ -57,9 +54,7 @@ class ProjectSpecRepositoriesModel(BaseModel):
     path: str = Field(..., description="Path to the repository")
     type: str = Field(..., description="Type of the repository")
     branch: str = Field(..., description="Branch of the repository")
-    created: Optional[str] = Field(
-        None, description="Creation timestamp of the repository"
-    )
+    created: Optional[str] = Field(None, description="Creation timestamp of the repository")
 
 
 class ProjectSpecModel(BaseModel):
@@ -84,15 +79,9 @@ class ProjectMetaModel(BaseModel):
     """
 
     name: str = Field(..., description="Name of the unknown resource")
-    annotations: Optional[Dict[str, Any]] = Field(
-        None, description="Annotations for the model"
-    )
-    labels: Optional[Dict[str, Any]] = Field(
-        None, description="Key-value pairs for labeling the model"
-    )
-    tags: Optional[List[Any]] = Field(
-        None, description="List of tags associated with the model"
-    )
+    annotations: Optional[Dict[str, Any]] = Field(None, description="Annotations for the model")
+    labels: Optional[Dict[str, Any]] = Field(None, description="Key-value pairs for labeling the model")
+    tags: Optional[List[Any]] = Field(None, description="List of tags associated with the model")
 
     @field_validator("name")
     @classmethod
@@ -111,9 +100,7 @@ class ProjectModel(BaseModel):
     apiVersion: str = Field(..., description="API version of the unknown model")
     kind: str = Field(..., description="Kind of the unknown model")
     meta: ProjectMetaModel = Field(..., description="Metadata for the unknown model")
-    spec: ProjectSpecModel = Field(
-        ..., description="Specification can be any structure"
-    )
+    spec: ProjectSpecModel = Field(..., description="Specification can be any structure")
 
     @field_validator("apiVersion", "kind")
     @classmethod

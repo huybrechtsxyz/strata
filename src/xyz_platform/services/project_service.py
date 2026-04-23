@@ -3,18 +3,18 @@
 import json
 import threading
 from pathlib import Path
-from typing import Any, Optional, Dict
+from typing import Any, Dict, Optional
 
-from xyz_platform.models.project_model import ProjectModel
-from xyz_platform.services.base_service import BaseService
+from xyz_platform.exceptions.model_exception import ModelValidationError
 from xyz_platform.exceptions.service_exception import (
     PlatformFileNotFoundError,
     ServiceLoadError,
 )
-from xyz_platform.exceptions.model_exception import ModelValidationError
+from xyz_platform.models.project_model import ProjectModel
+from xyz_platform.services.base_service import BaseService
 
 
-class ProjectService(BaseService):
+class ProjectService(BaseService["ProjectModel"]):
     """Service class for project kinds (Centralized Singleton pattern)."""
 
     _instances: Dict[str, "ProjectService"] = {}
@@ -43,7 +43,7 @@ class ProjectService(BaseService):
             return
 
         super().__init__(path=path, data=data)
-        self.model: Optional[ProjectModel] = None
+        self.model = None
 
         # Mark initialized to avoid re-running __init__ on singleton
         self._initialized = True

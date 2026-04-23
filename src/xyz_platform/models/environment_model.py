@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic model for environment configuration validation."""
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import (
     BaseModel,
@@ -21,9 +21,9 @@ from xyz_platform.models.store_models import (
     FeatureStoreModel,
     SecretStoreModel,
     VariableStoreModel,
-    validate_unique_variable_keys,
-    validate_unique_secret_keys,
     validate_unique_feature_keys,
+    validate_unique_secret_keys,
+    validate_unique_variable_keys,
 )
 
 
@@ -35,9 +35,7 @@ class EnvironmentResourceOverrideModel(BaseModel):
     Values are merged with workspace resource configuration.
     """
 
-    resource: PlatformName = Field(
-        description="Resource name to override (must match a resource in the workspace)"
-    )
+    resource: PlatformName = Field(description="Resource name to override (must match a resource in the workspace)")
     description: Optional[str] = Field(
         None,
         description="Override resource description",
@@ -50,12 +48,8 @@ class EnvironmentResourceOverrideModel(BaseModel):
         None,
         description="Override conditional expression for resource inclusion",
     )
-    role: Optional[PlatformName] = Field(
-        None, description="Override role of the resource"
-    )
-    count: Optional[int] = Field(
-        None, ge=1, le=100, description="Override resource instance count"
-    )
+    role: Optional[PlatformName] = Field(None, description="Override role of the resource")
+    count: Optional[int] = Field(None, ge=1, le=100, description="Override resource instance count")
     depends_on: Optional[List[str]] = Field(
         None,
         description="Override resource dependencies",
@@ -72,9 +66,7 @@ class EnvironmentResourceOverrideModel(BaseModel):
         None,
         description="Environment-specific configuration overrides (merged with workspace configuration)",
     )
-    custom: Optional[Dict[str, Any]] = Field(
-        None, description="Environment-specific custom properties"
-    )
+    custom: Optional[Dict[str, Any]] = Field(None, description="Environment-specific custom properties")
     labels: Optional[Dict[str, Any]] = Field(
         None,
         description="Override resource labels",
@@ -121,9 +113,7 @@ class EnvironmentProviderOverrideModel(BaseModel):
     Note: Provider configuration is in the provider file itself, not in workspace.
     """
 
-    provider: PlatformName = Field(
-        description="Provider name to override (must match a provider in the workspace)"
-    )
+    provider: PlatformName = Field(description="Provider name to override (must match a provider in the workspace)")
     description: Optional[str] = Field(
         None,
         description="Override provider description",
@@ -144,9 +134,7 @@ class EnvironmentOverridesModel(BaseModel):
     providers: Optional[List[EnvironmentProviderOverrideModel]] = Field(
         None, description="Provider-specific overrides (description)"
     )
-    properties: Optional[Dict[str, Any]] = Field(
-        None, description="Override workspace properties for this environment"
-    )
+    properties: Optional[Dict[str, Any]] = Field(None, description="Override workspace properties for this environment")
 
     @model_validator(mode="after")
     def validate_unique_overrides(self) -> "EnvironmentOverridesModel":
@@ -156,36 +144,23 @@ class EnvironmentOverridesModel(BaseModel):
         # Validate unique resource override names
         if self.resources:
             resource_names = [res.resource for res in self.resources]
-            duplicates = [
-                name for name in resource_names if resource_names.count(name) > 1
-            ]
+            duplicates = [name for name in resource_names if resource_names.count(name) > 1]
             if duplicates:
-                errors.append(
-                    f"Duplicate resource overrides found: {', '.join(set(duplicates))}"
-                )
+                errors.append(f"Duplicate resource overrides found: {', '.join(set(duplicates))}")
 
         # Validate unique module overrides (resource+module+slot_type combination)
         if self.modules:
-            module_keys = [
-                f"{mod.resource}:{mod.module}:{mod.slot_type or 'main'}"
-                for mod in self.modules
-            ]
+            module_keys = [f"{mod.resource}:{mod.module}:{mod.slot_type or 'main'}" for mod in self.modules]
             duplicates = [key for key in module_keys if module_keys.count(key) > 1]
             if duplicates:
-                errors.append(
-                    f"Duplicate module overrides found: {', '.join(set(duplicates))}"
-                )
+                errors.append(f"Duplicate module overrides found: {', '.join(set(duplicates))}")
 
         # Validate unique provider override names
         if self.providers:
             provider_names = [prov.provider for prov in self.providers]
-            duplicates = [
-                name for name in provider_names if provider_names.count(name) > 1
-            ]
+            duplicates = [name for name in provider_names if provider_names.count(name) > 1]
             if duplicates:
-                errors.append(
-                    f"Duplicate provider overrides found: {', '.join(set(duplicates))}"
-                )
+                errors.append(f"Duplicate provider overrides found: {', '.join(set(duplicates))}")
 
         if errors:
             raise ValueError("; ".join(errors))
@@ -196,12 +171,8 @@ class EnvironmentOverridesModel(BaseModel):
 class EnvironmentSpecModel(BaseModel):
     """Model for environment specification with workspace overrides."""
 
-    lifecycle: Optional[CommonLifecycleModel] = Field(
-        None, description="Environment lifecycle phases"
-    )
-    properties: Optional[Dict[str, Any]] = Field(
-        None, description="Environment-specific properties and configurations"
-    )
+    lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Environment lifecycle phases")
+    properties: Optional[Dict[str, Any]] = Field(None, description="Environment-specific properties and configurations")
     custom: Optional[Dict[str, Any]] = Field(
         None, description="Environment-specific custom properties and configurations"
     )
@@ -241,9 +212,7 @@ class EnvironmentMetaModel(BaseModel):
     labels: Optional[Dict[str, Any]] = Field(
         description="Labels for classification/filtering",
     )
-    tags: Optional[List[Any]] = Field(
-        None, description="Optional tags (list of values for categorization)"
-    )
+    tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
 
 class EnvironmentModel(BaseModel):
@@ -259,9 +228,5 @@ class EnvironmentModel(BaseModel):
         frozen=True,
         description="Platform kind (always 'environment')",
     )
-    meta: EnvironmentMetaModel = Field(
-        description="Environment metadata (name, annotations, labels, tags)"
-    )
-    spec: EnvironmentSpecModel = Field(
-        description="Environment specification (properties, workspace, environment)"
-    )
+    meta: EnvironmentMetaModel = Field(description="Environment metadata (name, annotations, labels, tags)")
+    spec: EnvironmentSpecModel = Field(description="Environment specification (properties, workspace, environment)")

@@ -1,7 +1,7 @@
 """Registry for managing and querying registered integration instances by name and capability."""
 
-from typing import Any, Dict, List, Optional, Set, Tuple, Type
 import threading
+from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 from xyz_platform.integrations.capabilities import (
     CAPABILITY_REGISTRY,
@@ -76,9 +76,7 @@ class IntegrationRegistry:
             integration_instance: Integration instance (must have is_available() method)
         """
         if not hasattr(integration_instance, "is_available"):
-            raise ValueError(
-                f"Integration instance for '{name}' must have is_available() method"
-            )
+            raise ValueError(f"Integration instance for '{name}' must have is_available() method")
         self._integrations[name] = integration_instance
         logger.debug("Integration registered", name=name)
 
@@ -150,31 +148,15 @@ class IntegrationRegistry:
         for name, integration in self._integrations.items():
             status[name] = {
                 "registered": True,
-                "name": (
-                    integration.integration_name
-                    if hasattr(integration, "integration_name")
-                    else name
-                ),
-                "type": (
-                    integration.integration_type
-                    if hasattr(integration, "integration_type")
-                    else "unknown"
-                ),
+                "name": (integration.integration_name if hasattr(integration, "integration_name") else name),
+                "type": (integration.integration_type if hasattr(integration, "integration_type") else "unknown"),
                 "available": integration.is_available(),
-                "version": (
-                    integration.get_version()
-                    if hasattr(integration, "get_version")
-                    else None
-                ),
-                "info": (
-                    integration.get_info() if hasattr(integration, "get_info") else {}
-                ),
+                "version": (integration.get_version() if hasattr(integration, "get_version") else None),
+                "info": (integration.get_info() if hasattr(integration, "get_info") else {}),
             }
         return status
 
-    def validate_integrations(
-        self, integration_names: List[str]
-    ) -> Tuple[bool, List[str]]:
+    def validate_integrations(self, integration_names: List[str]) -> Tuple[bool, List[str]]:
         """
         Validate that specific integrations are available.
 
@@ -188,16 +170,12 @@ class IntegrationRegistry:
 
         for integration_name in integration_names:
             if not self.is_integration_registered(integration_name):
-                errors.append(
-                    f"Integration '{integration_name}' is not registered in registry"
-                )
+                errors.append(f"Integration '{integration_name}' is not registered in registry")
                 continue
 
             if not self.is_integration_available(integration_name):
                 integration = self._integrations[integration_name]
-                integration_display = getattr(
-                    integration, "integration_name", integration_name
-                )
+                integration_display = getattr(integration, "integration_name", integration_name)
                 errors.append(
                     f"Integration '{integration_display}' is not available. "
                     f"Please install it and ensure it's in your PATH."
@@ -242,15 +220,9 @@ class IntegrationRegistry:
         Returns:
             List of integration names supporting the capability
         """
-        return [
-            name
-            for name in self._integrations.keys()
-            if self.supports_capability(name, capability)
-        ]
+        return [name for name in self._integrations.keys() if self.supports_capability(name, capability)]
 
-    def get_integrations_with_capabilities(
-        self, capabilities: List[Type], match_all: bool = True
-    ) -> List[str]:
+    def get_integrations_with_capabilities(self, capabilities: List[Type], match_all: bool = True) -> List[str]:
         """
         Get integrations that support multiple capabilities.
 
@@ -314,10 +286,7 @@ class IntegrationRegistry:
         Returns:
             Dictionary mapping integration names to lists of capability names
         """
-        return {
-            name: self.get_integration_capabilities(name)
-            for name in self._integrations.keys()
-        }
+        return {name: self.get_integration_capabilities(name) for name in self._integrations.keys()}
 
     def list_capabilities(self) -> List[Dict[str, Any]]:
         """
@@ -381,10 +350,7 @@ class IntegrationRegistry:
 
         # Check if operation is registered
         if operation not in self._requirements:
-            errors.append(
-                f"Operation '{operation}' is not registered. "
-                f"This is likely a configuration error"
-            )
+            errors.append(f"Operation '{operation}' is not registered. This is likely a configuration error")
             return False, errors
 
         required_integrations = self.get_requirements(operation)
@@ -395,19 +361,13 @@ class IntegrationRegistry:
 
         for integration_name in required_integrations:
             if not self.is_integration_registered(integration_name):
-                errors.append(
-                    f"Integration '{integration_name}' is required but not registered in registry"
-                )
+                errors.append(f"Integration '{integration_name}' is required but not registered in registry")
                 continue
 
             if not self.is_integration_available(integration_name):
                 integration = self._integrations[integration_name]
-                integration_display = getattr(
-                    integration, "integration_name", integration_name
-                )
-                errors.append(
-                    f"Integration '{integration_display}' is required but not available"
-                )
+                integration_display = getattr(integration, "integration_name", integration_name)
+                errors.append(f"Integration '{integration_display}' is required but not available")
 
         return len(errors) == 0, errors
 

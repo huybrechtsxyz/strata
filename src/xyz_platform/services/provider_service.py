@@ -8,13 +8,13 @@ from xyz_platform.models.provider_model import ProviderModel
 from xyz_platform.services.base_service import BaseService
 
 
-class ProviderService(BaseService):
+class ProviderService(BaseService["ProviderModel"]):
     """Service for handling provider configurations."""
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         """Initialize the ProviderService."""
         super().__init__(path=path, data=data)
-        self.model: Optional[ProviderModel] = None
+        self.model = None
 
     def _get_model_class(self):
         """Return the ProviderModel class for validation."""
@@ -57,7 +57,9 @@ class ProviderService(BaseService):
                     break
 
         if config_provider is None:
-            available = [p.name for p in configuration_model.spec.providers] if configuration_model.spec.providers else []
+            available = (
+                [p.name for p in configuration_model.spec.providers] if configuration_model.spec.providers else []
+            )
             return False, [f"Provider type '{provider_type}' not found in configuration. Available: {available}"]
 
         # Validate region when the provider does not allow arbitrary regions
@@ -68,7 +70,10 @@ class ProviderService(BaseService):
                     f"and additional_regions is False"
                 ]
 
-            valid_regions = [r if isinstance(r, str) else r.name for r in config_provider.regions]
+            valid_regions = [
+                r if isinstance(r, str) else r.get("name", str(r)) if isinstance(r, dict) else str(r)
+                for r in config_provider.regions
+            ]
 
             if provider_region not in valid_regions:
                 return False, [
@@ -83,9 +88,11 @@ class ProviderService(BaseService):
     def get_provider_type(self) -> str:
         """Get the provider type."""
         self._ensure_validated()
+        assert self.model is not None
         return self.model.spec.properties.type
 
     def get_provider_region(self) -> str:
         """Get the provider region."""
         self._ensure_validated()
+        assert self.model is not None
         return self.model.spec.properties.region

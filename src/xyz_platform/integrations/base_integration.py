@@ -3,12 +3,13 @@
 import os
 import threading
 from abc import ABC, abstractmethod
-from packaging import version
 from typing import Any, Dict, List, Optional, Tuple
 
+from packaging import version
+
 from xyz_platform.logger import get_logger
-from xyz_platform.utils.system import CommandResult, run_command
 from xyz_platform.models.integration_model import IntegrationModel
+from xyz_platform.utils.system import CommandResult, run_command
 
 logger = get_logger(__name__)
 
@@ -150,7 +151,7 @@ class BaseIntegration(ABC):
         # Check for class-level COMMAND attribute first
         # This allows built-in integrations to define their own command
         if hasattr(self.__class__, "COMMAND"):
-            return getattr(self.__class__, "COMMAND")
+            return self.__class__.COMMAND
 
         # For custom integrations, extract from validation.command
         if self.config.validation and self.config.validation.command:

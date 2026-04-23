@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Common models, enums, and reusable types for XYZ Platform."""
 
+import re
+import warnings
 from enum import Enum
 from pathlib import Path
-import re
-from typing import Dict, List, Annotated, Optional
-import warnings
+from typing import Annotated, Dict, List, Optional
+
 from pydantic import (
     BaseModel,
     Field,
@@ -87,9 +88,7 @@ class ScriptPathModel(BaseModel):
         None,
         description="Optional target filter (e.g., 'vm-*', 'azure-*', 'production')",
     )
-    description: Optional[str] = Field(
-        None, description="Optional description for documentation purposes"
-    )
+    description: Optional[str] = Field(None, description="Optional description for documentation purposes")
 
     @field_validator("file")
     @classmethod
@@ -101,9 +100,7 @@ class ScriptPathModel(BaseModel):
         if not path.is_file():
             raise ValueError(f"Script path is not a file: {v}")
         if path.suffix not in SCRIPT_EXTENSIONS:
-            raise ValueError(
-                f"Script must have a valid extension (.sh, .bash, .py, .ps1), got: {path.suffix}"
-            )
+            raise ValueError(f"Script must have a valid extension (.sh, .bash, .py, .ps1), got: {path.suffix}")
         return v
 
 
@@ -111,9 +108,7 @@ class ScriptPathModel(BaseModel):
 class ScriptsModel(BaseModel):
     """Model for validating script paths with scope-aware execution."""
 
-    description: Optional[str] = Field(
-        None, description="Optional description for documentation purposes"
-    )
+    description: Optional[str] = Field(None, description="Optional description for documentation purposes")
     scripts: Optional[List[str | ScriptPathModel]] = None
 
     @field_validator("scripts")
@@ -132,9 +127,7 @@ class ScriptsModel(BaseModel):
                 if not path.is_file():
                     raise ValueError(f"Script path is not a file: {item}")
                 if path.suffix not in SCRIPT_EXTENSIONS:
-                    raise ValueError(
-                        f"Script must have a valid extension (.sh, .bash, .py, .ps1), got: {path.suffix}"
-                    )
+                    raise ValueError(f"Script must have a valid extension (.sh, .bash, .py, .ps1), got: {path.suffix}")
                 # Will be converted to ScriptModel with scope inferred from context during build
                 normalized.append(item)
             else:
@@ -175,23 +168,15 @@ class SourceModel(BaseModel):
           target_path: build/vpc
     """
 
-    repository: PlatformName = Field(
-        description="Name of the repository from configuration's repositories list"
-    )
-    source_path: Annotated[
-        str, StringConstraints(min_length=1, strip_whitespace=True)
-    ] = Field(
+    repository: PlatformName = Field(description="Name of the repository from configuration's repositories list")
+    source_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         description="Path to the source artifacts within the repository (relative path)"
     )
-    target_path: Optional[
-        Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
-    ] = Field(
+    target_path: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
         description="Target path where artifacts should be built/deployed (relative to build/deploy directory)",
     )
-    description: Optional[str] = Field(
-        None, description="Optional description for documentation purposes"
-    )
+    description: Optional[str] = Field(None, description="Optional description for documentation purposes")
 
     @field_validator("source_path", "target_path")
     @classmethod
@@ -221,9 +206,7 @@ class SourceModel(BaseModel):
 
         # Check for parent directory references
         if ".." in path_str:
-            raise ValueError(
-                f"Path cannot contain parent directory references (..). Got: {path_str}"
-            )
+            raise ValueError(f"Path cannot contain parent directory references (..). Got: {path_str}")
 
         # Normalize to forward slashes
         normalized = path_str.replace("\\", "/")
@@ -283,7 +266,7 @@ def validate_slot_type(value: Optional[str]) -> Optional[str]:
     try:
         validate_platform_name(value)
     except ValueError as e:
-        raise ValueError(f"slot_type must follow PlatformName rules: {e}")
+        raise ValueError(f"slot_type must follow PlatformName rules: {e}") from e
 
     # Warn if not a standard slot type
     if value not in STANDARD_SLOT_TYPES:

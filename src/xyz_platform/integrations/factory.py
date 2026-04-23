@@ -2,9 +2,9 @@
 
 from typing import Dict, Type
 
-from xyz_platform.models.integration_model import IntegrationModel
 from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.logger import get_logger
+from xyz_platform.models.integration_model import IntegrationModel
 
 logger = get_logger(__name__)
 
@@ -22,9 +22,7 @@ class IntegrationFactory:
     _type_mapping: Dict[str, Type[BaseIntegration]] = {}
 
     @classmethod
-    def register_type(
-        cls, integration_type: str, integration_class: Type[BaseIntegration]
-    ):
+    def register_type(cls, integration_type: str, integration_class: Type[BaseIntegration]):
         """
         Register an integration type mapping.
 
@@ -180,9 +178,13 @@ def _auto_register_builtin_integrations():
             logger.debug("Built-in integration auto-registered", type=integration_type, cls=class_name)
 
         except ImportError as e:
-            logger.debug("Built-in integration not available (not yet implemented)", type=integration_type, error=str(e))
+            logger.debug(
+                "Built-in integration not available (not yet implemented)", type=integration_type, error=str(e)
+            )
         except Exception as e:
-            logger.warning("Failed to auto-register built-in integration", type=integration_type, error=str(e), exc_info=True)
+            logger.warning(
+                "Failed to auto-register built-in integration", type=integration_type, error=str(e), exc_info=True
+            )
 
 
 # Run auto-registration on module import

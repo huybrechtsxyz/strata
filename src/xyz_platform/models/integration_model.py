@@ -9,8 +9,8 @@ from typing import Optional, Set
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from xyz_platform.models.common_models import CommonLifecycleModel
 from xyz_platform.models.auth_models import AuthenticationModel
+from xyz_platform.models.common_models import CommonLifecycleModel
 
 
 class IntegrationValidationSpecModel(BaseModel):
@@ -20,12 +20,8 @@ class IntegrationValidationSpecModel(BaseModel):
         ...,
         description="Command to check integration availability (e.g., 'git --version')",
     )
-    min_version: Optional[str] = Field(
-        None, description="Minimum required version (e.g., '2.30.0')"
-    )
-    max_version: Optional[str] = Field(
-        None, description="Maximum supported version (e.g., '2.40.0')"
-    )
+    min_version: Optional[str] = Field(None, description="Minimum required version (e.g., '2.30.0')")
+    max_version: Optional[str] = Field(None, description="Maximum supported version (e.g., '2.40.0')")
 
 
 class IntegrationEndpointsSpecModel(BaseModel):
@@ -58,9 +54,7 @@ class IntegrationModel(BaseModel):
             address: https://bitwarden.com/api
     """
 
-    name: str = Field(
-        ..., description="Unique integration name (used for registry lookup)"
-    )
+    name: str = Field(..., description="Unique integration name (used for registry lookup)")
     type: str = Field(
         ...,
         description="Integration type (maps to integration class: git, terraform, bitwarden, vault, etc.)",
@@ -69,9 +63,7 @@ class IntegrationModel(BaseModel):
         default_factory=set,
         description="Set of capabilities this integration provides: repository, infrastructure, secrets, variables, features, keyvalue, api",
     )
-    description: Optional[str] = Field(
-        None, description="Human-readable description of the integration"
-    )
+    description: Optional[str] = Field(None, description="Human-readable description of the integration")
     required: bool = Field(
         default=False,
         description="Whether this integration is required for platform operation",
@@ -108,8 +100,7 @@ class IntegrationModel(BaseModel):
         invalid = v - VALID_CAPABILITY_NAMES
         if invalid:
             raise ValueError(
-                f"Invalid capability names: {invalid}. "
-                f"Valid capabilities are: {sorted(VALID_CAPABILITY_NAMES)}"
+                f"Invalid capability names: {invalid}. Valid capabilities are: {sorted(VALID_CAPABILITY_NAMES)}"
             )
         return v
 

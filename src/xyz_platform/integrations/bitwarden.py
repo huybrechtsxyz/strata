@@ -3,11 +3,11 @@
 import json
 import os
 import re
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from xyz_platform.logger import get_logger
 from xyz_platform.integrations.capabilities import ISecretStore
 from xyz_platform.integrations.store_integration import StoreIntegration
+from xyz_platform.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
 
 logger = get_logger(__name__)
@@ -49,11 +49,7 @@ class BitwardenIntegration(StoreIntegration):
             return "default"
 
         # Get access token from config (api_key.api_key holds the env-var name)
-        if (
-            config.authentication
-            and config.authentication.method == "api_key"
-            and config.authentication.api_key
-        ):
+        if config.authentication and config.authentication.method == "api_key" and config.authentication.api_key:
             access_token = os.getenv(config.authentication.api_key.api_key, "")
             return access_token or "default"
 
@@ -134,8 +130,7 @@ class BitwardenIntegration(StoreIntegration):
             logger.warning("Bitwarden access token not configured", name=self.integration_name, env_var=token_var)
             return (
                 False,
-                f"{token_var} environment variable not set. "
-                f"Set it with your Bitwarden Secrets Manager access token.",
+                f"{token_var} environment variable not set. Set it with your Bitwarden Secrets Manager access token.",
             )
 
         self._info = f"{self.integration_name} {self.get_version()} is available"
@@ -214,9 +209,7 @@ class BitwardenIntegration(StoreIntegration):
             if self.access_token:
                 env[self._get_token_var_name()] = self.access_token
 
-            result = self._run_integration(
-                args=["secret", "get", key], timeout=timeout, env=env
-            )
+            result = self._run_integration(args=["secret", "get", key], timeout=timeout, env=env)
 
             if result.returncode == 0 and result.stdout:
                 # Parse JSON output
@@ -233,11 +226,23 @@ class BitwardenIntegration(StoreIntegration):
             return None
 
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse secret JSON from Bitwarden", name=self.integration_name, secret_id=key, error=str(e), exc_info=True)
+            logger.error(
+                "Failed to parse secret JSON from Bitwarden",
+                name=self.integration_name,
+                secret_id=key,
+                error=str(e),
+                exc_info=True,
+            )
             return None
 
         except Exception as e:
-            logger.error("Error retrieving secret from Bitwarden", name=self.integration_name, secret_id=key, error_type=type(e).__name__, exc_info=True)
+            logger.error(
+                "Error retrieving secret from Bitwarden",
+                name=self.integration_name,
+                secret_id=key,
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
             return None
 
     def _list_secrets_full(self, timeout: int = 60) -> Optional[List[Dict[str, Any]]]:
@@ -265,9 +270,7 @@ class BitwardenIntegration(StoreIntegration):
             if self.access_token:
                 env[self._get_token_var_name()] = self.access_token
 
-            result = self._run_integration(
-                args=["secret", "list"], timeout=timeout, env=env
-            )
+            result = self._run_integration(args=["secret", "list"], timeout=timeout, env=env)
 
             if result.returncode == 0 and result.stdout:
                 # Parse JSON output - returns array of secrets
@@ -279,11 +282,18 @@ class BitwardenIntegration(StoreIntegration):
             return None
 
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse secrets JSON from Bitwarden", name=self.integration_name, error=str(e), exc_info=True)
+            logger.error(
+                "Failed to parse secrets JSON from Bitwarden", name=self.integration_name, error=str(e), exc_info=True
+            )
             return None
 
         except Exception as e:
-            logger.error("Error listing secrets from Bitwarden", name=self.integration_name, error_type=type(e).__name__, exc_info=True)
+            logger.error(
+                "Error listing secrets from Bitwarden",
+                name=self.integration_name,
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
             return None
 
     def list_secrets(self, prefix: str = "", **kwargs) -> List[str]:
@@ -312,6 +322,8 @@ class BitwardenIntegration(StoreIntegration):
         if prefix:
             secret_ids = [sid for sid in secret_ids if sid.startswith(prefix)]
 
-        logger.debug("Listed secret IDs from Bitwarden", name=self.integration_name, count=len(secret_ids), prefix=prefix)
+        logger.debug(
+            "Listed secret IDs from Bitwarden", name=self.integration_name, count=len(secret_ids), prefix=prefix
+        )
 
         return secret_ids

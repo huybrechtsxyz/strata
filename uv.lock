@@ -589,6 +589,23 @@ wheels = [
 ]
 
 [[package]]
+name = "debugpy"
+version = "1.8.20"
+source = { registry = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple" }
+sdist = { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20.tar.gz", hash = "sha256:55bc8701714969f1ab89a6d5f2f3d40c36f91b2cbe2f65d98bf8196f6a6a2c33" }
+wheels = [
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20-cp313-cp313-macosx_15_0_universal2.whl", hash = "sha256:5dff4bb27027821fdfcc9e8f87309a28988231165147c31730128b1c983e282a" },
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20-cp313-cp313-manylinux_2_34_x86_64.whl", hash = "sha256:84562982dd7cf5ebebfdea667ca20a064e096099997b175fe204e86817f64eaf" },
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20-cp313-cp313-win32.whl", hash = "sha256:da11dea6447b2cadbf8ce2bec59ecea87cc18d2c574980f643f2d2dfe4862393" },
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20-cp313-cp313-win_amd64.whl", hash = "sha256:eb506e45943cab2efb7c6eafdd65b842f3ae779f020c82221f55aca9de135ed7" },
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20-cp314-cp314-macosx_15_0_universal2.whl", hash = "sha256:9c74df62fc064cd5e5eaca1353a3ef5a5d50da5eb8058fcef63106f7bebe6173" },
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20-cp314-cp314-manylinux_2_34_x86_64.whl", hash = "sha256:077a7447589ee9bc1ff0cdf443566d0ecf540ac8aa7333b775ebcb8ce9f4ecad" },
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20-cp314-cp314-win32.whl", hash = "sha256:352036a99dd35053b37b7803f748efc456076f929c6a895556932eaf2d23b07f" },
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20-cp314-cp314-win_amd64.whl", hash = "sha256:a98eec61135465b062846112e5ecf2eebb855305acc1dfbae43b72903b8ab5be" },
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/debugpy/1.8.20/debugpy-1.8.20-py2.py3-none-any.whl", hash = "sha256:5be9bed9ae3be00665a06acaa48f8329d2b9632f15fd09f6a9a8c8d9907e54d7" },
+]
+
+[[package]]
 name = "dependency-groups"
 version = "1.3.1"
 source = { registry = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple" }
@@ -2047,6 +2064,15 @@ wheels = [
 ]
 
 [[package]]
+name = "types-pyyaml"
+version = "6.0.12.20260408"
+source = { registry = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple" }
+sdist = { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/types-pyyaml/6.0.12.20260408/types_pyyaml-6.0.12.20260408.tar.gz", hash = "sha256:92a73f2b8d7f39ef392a38131f76b970f8c66e4c42b3125ae872b7c93b556307" }
+wheels = [
+    { url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/download/types-PyYAML/6.0.12.20260408/types_pyyaml-6.0.12.20260408-py3-none-any.whl", hash = "sha256:fbc42037d12159d9c801ebfcc79ebd28335a7c13b08a4cfbc6916df78fee9384" },
+]
+
+[[package]]
 name = "typing-extensions"
 version = "4.15.0"
 source = { registry = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple" }
@@ -2158,6 +2184,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "debugpy" },
     { name = "mypy" },
     { name = "nox" },
     { name = "pytest" },
@@ -2165,6 +2192,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pyyaml" },
     { name = "ruff" },
+    { name = "types-pyyaml" },
     { name = "yamllint" },
 ]
 doc = [
@@ -2196,6 +2224,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "debugpy" },
     { name = "mypy" },
     { name = "nox" },
     { name = "pytest" },
@@ -2203,6 +2232,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pyyaml", specifier = ">3.13" },
     { name = "ruff" },
+    { name = "types-pyyaml" },
     { name = "yamllint" },
 ]
 doc = [

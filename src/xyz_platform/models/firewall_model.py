@@ -3,19 +3,19 @@
 
 import ipaddress
 import re
-
 from enum import Enum
+from typing import Annotated, Any, Dict, List, Optional, Union
+
 from pydantic import (
     BaseModel,
     Field,
     field_validator,
     model_validator,
 )
-from typing import Dict, List, Optional, Annotated, Union, Any
 
 from xyz_platform.models.common_models import (
-    PlatformName,
     PlatformKind,
+    PlatformName,
     PlatformVersion,
 )
 
@@ -49,9 +49,7 @@ class FirewallRuleModel(BaseModel):
     Validates IP/CIDR, port formats, and interface names.
     """
 
-    direction: FirewallDirection = Field(
-        ..., description="Direction of traffic: 'in' for inbound, 'out' for outbound."
-    )
+    direction: FirewallDirection = Field(..., description="Direction of traffic: 'in' for inbound, 'out' for outbound.")
     proto: Optional[FirewallProtocol] = Field(
         None, description="Protocol for the rule: 'tcp', 'udp', or 'icmp'. Optional."
     )
@@ -63,9 +61,7 @@ class FirewallRuleModel(BaseModel):
             ),
         ]
     ] = None
-    interface: Optional[str] = Field(
-        None, description="Network interface name (e.g., 'eth0', 'lo'). Optional."
-    )
+    interface: Optional[str] = Field(None, description="Network interface name (e.g., 'eth0', 'lo'). Optional.")
     from_: Optional[str] = Field(
         None,
         alias="from",
@@ -75,9 +71,7 @@ class FirewallRuleModel(BaseModel):
         None,
         description="Destination IP address or CIDR (for outbound rules). Optional.",
     )
-    comment: Optional[str] = Field(
-        None, description="Optional comment or documentation for the rule."
-    )
+    comment: Optional[str] = Field(None, description="Optional comment or documentation for the rule.")
 
     @field_validator("from_", "to")
     @classmethod
@@ -140,15 +134,9 @@ class FirewallDefaultsModel(BaseModel):
     Used to set baseline allow/deny behavior for inbound/outbound traffic.
     """
 
-    direction: FirewallDirection = Field(
-        ..., description="Direction of traffic for the default rule: 'in' or 'out'."
-    )
-    permission: FirewallPermission = Field(
-        ..., description="Permission for the default rule: 'allow' or 'deny'."
-    )
-    comment: Optional[str] = Field(
-        None, description="Optional comment or documentation for the default rule."
-    )
+    direction: FirewallDirection = Field(..., description="Direction of traffic for the default rule: 'in' or 'out'.")
+    permission: FirewallPermission = Field(..., description="Permission for the default rule: 'allow' or 'deny'.")
+    comment: Optional[str] = Field(None, description="Optional comment or documentation for the default rule.")
 
 
 class FirewallSpecModel(BaseModel):
@@ -165,20 +153,14 @@ class FirewallSpecModel(BaseModel):
         None,
         description="List of default rules (baseline allow/deny for each direction).",
     )
-    deny: Optional[List[FirewallRuleModel]] = Field(
-        None, description="List of explicit deny rules."
-    )
-    allow: Optional[List[FirewallRuleModel]] = Field(
-        None, description="List of explicit allow rules."
-    )
+    deny: Optional[List[FirewallRuleModel]] = Field(None, description="List of explicit deny rules.")
+    allow: Optional[List[FirewallRuleModel]] = Field(None, description="List of explicit allow rules.")
 
     # Validate direction is unique across defaults
     @model_validator(mode="after")
     def validate_unique_directions(self) -> "FirewallSpecModel":
         if self.defaults:
-            directions = [
-                default.direction for default in self.defaults if default.direction
-            ]
+            directions = [default.direction for default in self.defaults if default.direction]
             if len(directions) != len(set(directions)):
                 raise ValueError("Default rules must have unique directions.")
         return self
@@ -188,18 +170,12 @@ class FirewallSpecModel(BaseModel):
     def validate_no_conflicting_rules(self) -> "FirewallSpecModel":
         if self.allow and self.deny:
             allow_directions = {
-                (rule.direction, rule.proto, str(rule.port), rule.from_, rule.to)
-                for rule in self.allow
+                (rule.direction, rule.proto, str(rule.port), rule.from_, rule.to) for rule in self.allow
             }
-            deny_directions = {
-                (rule.direction, rule.proto, str(rule.port), rule.from_, rule.to)
-                for rule in self.deny
-            }
+            deny_directions = {(rule.direction, rule.proto, str(rule.port), rule.from_, rule.to) for rule in self.deny}
             conflicts = allow_directions.intersection(deny_directions)
             if conflicts:
-                raise ValueError(
-                    f"Conflicting rules found between allow and deny: {conflicts}"
-                )
+                raise ValueError(f"Conflicting rules found between allow and deny: {conflicts}")
         return self
 
 
@@ -208,18 +184,12 @@ class FirewallMetaModel(BaseModel):
     Model for firewall resource metadata (name, annotations, labels, tags).
     """
 
-    name: PlatformName = Field(
-        ..., description="Unique name for the firewall resource."
-    )
+    name: PlatformName = Field(..., description="Unique name for the firewall resource.")
     annotations: Optional[Dict[str, Any]] = Field(
         None, description="Optional annotations (key-value pairs for documentation)"
     )
-    labels: Optional[Dict[str, Any]] = Field(
-        ..., description="Labels for categorization and filtering."
-    )
-    tags: Optional[List[Any]] = Field(
-        None, description="Optional list of tags for the firewall resource."
-    )
+    labels: Optional[Dict[str, Any]] = Field(..., description="Labels for categorization and filtering.")
+    tags: Optional[List[Any]] = Field(None, description="Optional list of tags for the firewall resource.")
 
 
 class FirewallModel(BaseModel):
@@ -238,9 +208,5 @@ class FirewallModel(BaseModel):
         frozen=True,
         description="Resource kind: always 'firewall'.",
     )
-    meta: FirewallMetaModel = Field(
-        ..., description="Metadata for the firewall resource."
-    )
-    spec: FirewallSpecModel = Field(
-        ..., description="Specification for the firewall ruleset."
-    )
+    meta: FirewallMetaModel = Field(..., description="Metadata for the firewall resource.")
+    spec: FirewallSpecModel = Field(..., description="Specification for the firewall ruleset.")

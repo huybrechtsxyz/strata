@@ -2,28 +2,40 @@
 
 import re
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+from xyz_platform.exceptions import ServiceLoadError, ServiceNotValidatedError
 from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.models.deployment_model import DeploymentModel
 from xyz_platform.services.base_service import BaseService
-from xyz_platform.exceptions import ServiceLoadError, ServiceNotValidatedError
-from xyz_platform.services.workspace_service import WorkspaceService
-from xyz_platform.services.environment_service import EnvironmentService
 from xyz_platform.services.configuration_service import ConfigurationService
+from xyz_platform.services.environment_service import EnvironmentService
+from xyz_platform.services.workspace_service import WorkspaceService
 
 
-class DeploymentService(BaseService):
+class DeploymentService(BaseService["DeploymentModel"]):
     """Service for handling deployment configurations."""
 
-    def __init__(self, path=None, data=None):
+    def __init__(self, path=None, data=None) -> None:
         super().__init__(path, data)
-        self.model: Optional[DeploymentModel] = None
+        self.model = None
         # self._related_services: Optional[Dict[str, Optional[BaseService]]] = None
         self._environment_service: Optional[EnvironmentService] = None
         self._workspace_service: Optional[WorkspaceService] = None
         self._validation_errors: List[str] = []
         self._structured_errors: List = []
+
+    def on_init(self) -> None:
+        """Lifecycle hook: called after __init__ completes."""
+        pass
+
+    def on_ready(self) -> None:
+        """Lifecycle hook: called after validation succeeds."""
+        pass
+
+    def on_shutdown(self) -> None:
+        """Lifecycle hook: called before cleanup/destruction."""
+        pass
 
     def _get_model_class(self):
         """Return the DeploymentModel class for validation."""
@@ -63,9 +75,7 @@ class DeploymentService(BaseService):
 
         # Validate deployment properties against configuration schema
         if configuration_model and configuration_model.spec.deployment:
-            properties_errors = self._validate_deployment_properties(
-                configuration_model
-            )
+            properties_errors = self._validate_deployment_properties(configuration_model)
             errors.extend(properties_errors)
 
         # Validate that environment and configuration file references exist on disk
@@ -80,9 +90,7 @@ class DeploymentService(BaseService):
 
         return len(errors) == 0, errors
 
-    def _validate_deployment_layers(
-        self, configuration_model: ConfigurationModel
-    ) -> List[str]:
+    def _validate_deployment_layers(self, configuration_model: ConfigurationModel) -> List[str]:
         """
         Validate deployment layer values against configuration layering definition.
 
@@ -92,7 +100,7 @@ class DeploymentService(BaseService):
         Returns:
             List[str]: List of validation error messages
         """
-        errors = []
+        errors: List[str] = []
 
         # No validation if no layering configured
         if not configuration_model.spec.layering:
@@ -115,23 +123,16 @@ class DeploymentService(BaseService):
         # Validate all required layers are provided
         for layer in configuration_model.spec.layering:
             if layer.required and layer.name not in deployment_values:
-                errors.append(
-                    f"Required layer '{layer.name}' not provided in deployment"
-                )
+                errors.append(f"Required layer '{layer.name}' not provided in deployment")
 
             # Validate pattern if value exists and pattern is defined
             if layer.name in deployment_values and layer.pattern:
                 value = deployment_values[layer.name]
                 try:
                     if not re.match(layer.pattern, value):
-                        errors.append(
-                            f"Layer '{layer.name}' value '{value}' does not match "
-                            f"pattern '{layer.pattern}'"
-                        )
+                        errors.append(f"Layer '{layer.name}' value '{value}' does not match pattern '{layer.pattern}'")
                 except re.error as e:
-                    errors.append(
-                        f"Invalid regex pattern for layer '{layer.name}': {layer.pattern} - {e}"
-                    )
+                    errors.append(f"Invalid regex pattern for layer '{layer.name}': {layer.pattern} - {e}")
 
         # CRITICAL: Validate environment is provided (last layer must always have a value)
         if "environment" not in deployment_values:
@@ -145,9 +146,7 @@ class DeploymentService(BaseService):
 
         return errors
 
-    def _validate_deployment_properties(
-        self, configuration_model: ConfigurationModel
-    ) -> List[str]:
+    def _validate_deployment_properties(self, configuration_model: ConfigurationModel) -> List[str]:
         """
         Validate deployment properties against configuration schema.
 
@@ -163,14 +162,10 @@ class DeploymentService(BaseService):
         Returns:
             List[str]: List of validation error messages
         """
-        errors = []
+        errors: List[str] = []
 
         # No validation if no deployment schema configured
-        if (
-            not self.model
-            or not self.model.spec
-            or not configuration_model.spec.deployment
-        ):
+        if not self.model or not self.model.spec or not configuration_model.spec.deployment:
             return errors
 
         deployment_config = configuration_model.spec.deployment
@@ -199,9 +194,7 @@ class DeploymentService(BaseService):
                 # Structured field with pattern and required flag
                 pattern = schema_def.get("pattern")
                 if not pattern:
-                    errors.append(
-                        f"Deployment property '{field_name}' schema is missing 'pattern' property"
-                    )
+                    errors.append(f"Deployment property '{field_name}' schema is missing 'pattern' property")
                     continue
             else:
                 # ConfigurationSchemaField model instance
@@ -219,8 +212,7 @@ class DeploymentService(BaseService):
                     )
             except re.error as e:
                 errors.append(
-                    f"Invalid regex pattern '{pattern}' for property '{field_name}' in "
-                    f"deployment schema: {str(e)}"
+                    f"Invalid regex pattern '{pattern}' for property '{field_name}' in deployment schema: {str(e)}"
                 )
 
         # Check for required fields (fields in schema but not in properties)
@@ -244,16 +236,11 @@ class DeploymentService(BaseService):
                 else:
                     pattern = schema_def.pattern
 
-                errors.append(
-                    f"Required deployment property '{schema_field}' is missing. "
-                    f"Pattern: {pattern}"
-                )
+                errors.append(f"Required deployment property '{schema_field}' is missing. Pattern: {pattern}")
 
         return errors
 
-    def get_artifact_path(
-        self, configuration_model: Optional["ConfigurationModel"] = None
-    ) -> str:
+    def get_artifact_path(self, configuration_model: Optional["ConfigurationModel"] = None) -> str:
         """
         Construct artifact path from deployment layer values.
 
@@ -283,11 +270,7 @@ class DeploymentService(BaseService):
         if not configuration_model or not configuration_model.spec.layering:
             return ""
 
-        if (
-            self.model is None
-            or self.model.spec is None
-            or self.model.spec.layers is None
-        ):
+        if self.model is None or self.model.spec is None or self.model.spec.layers is None:
             return ""
 
         deployment_values = self.model.spec.layers or {}
@@ -397,23 +380,13 @@ class DeploymentService(BaseService):
 
             # Get the workspace resource model
             workspace_resource = None
-            if (
-                workspace.model
-                and workspace.model.spec
-                and workspace.model.spec.resources
-            ):
+            if workspace.model and workspace.model.spec and workspace.model.spec.resources:
                 workspace_resource = next(
-                    (
-                        r
-                        for r in workspace.model.spec.resources
-                        if r.name == resource_name
-                    ),
+                    (r for r in workspace.model.spec.resources if r.name == resource_name),
                     None,
                 )
             if not workspace_resource:
-                errors.append(
-                    f"Resource override for non-existent resource '{resource_name}' (skipped)"
-                )
+                errors.append(f"Resource override for non-existent resource '{resource_name}' (skipped)")
                 self.logger.warning("Skipping override for non-existent resource", resource=resource_name)
                 continue
 
@@ -441,9 +414,7 @@ class DeploymentService(BaseService):
             if resource_override.configuration is not None:
                 # Deep merge configuration (override wins)
                 if workspace_resource.configuration:
-                    workspace_resource.configuration.update(
-                        resource_override.configuration
-                    )
+                    workspace_resource.configuration.update(resource_override.configuration)
                 else:
                     workspace_resource.configuration = resource_override.configuration
             if resource_override.custom is not None:
@@ -470,32 +441,24 @@ class DeploymentService(BaseService):
             else:
                 continue
 
-            module_override = environment.get_module_override(
-                resource_name, module_name, slot_type or "main"
-            )
+            module_override = environment.get_module_override(resource_name, module_name, slot_type or "main")
             if not module_override:
                 continue
 
             # Get the workspace resource
             workspace_resource = None
-            if (
-                workspace.model
-                and workspace.model.spec
-                and workspace.model.spec.resources
-            ):
+            if workspace.model and workspace.model.spec and workspace.model.spec.resources:
                 workspace_resource = next(
-                    (
-                        r
-                        for r in workspace.model.spec.resources
-                        if r.name == resource_name
-                    ),
+                    (r for r in workspace.model.spec.resources if r.name == resource_name),
                     None,
                 )
             if not workspace_resource or not workspace_resource.modules:
                 errors.append(
                     f"Module override for '{resource_name}.{module_name}' (resource has no modules - skipped)"
                 )
-                self.logger.warning("Skipping module override — resource has no modules", resource=resource_name, module=module_name)
+                self.logger.warning(
+                    "Skipping module override — resource has no modules", resource=resource_name, module=module_name
+                )
                 continue
 
             # Find the module to override
@@ -503,16 +466,17 @@ class DeploymentService(BaseService):
                 (
                     m
                     for m in workspace_resource.modules
-                    if m.name == module_name
-                    and (m.slot_type or "main") == (slot_type or "main")
+                    if m.name == module_name and (m.slot_type or "main") == (slot_type or "main")
                 ),
                 None,
             )
             if not target_module:
-                errors.append(
-                    f"Module override for '{resource_name}.{module_name}' (module not found - skipped)"
+                errors.append(f"Module override for '{resource_name}.{module_name}' (module not found - skipped)")
+                self.logger.warning(
+                    "Skipping module override — module not found in workspace",
+                    resource=resource_name,
+                    module=module_name,
                 )
-                self.logger.warning("Skipping module override — module not found in workspace", resource=resource_name, module=module_name)
                 continue
 
             # Apply module overrides
@@ -537,23 +501,13 @@ class DeploymentService(BaseService):
 
             # Get the workspace provider model
             workspace_provider = None
-            if (
-                workspace.model
-                and workspace.model.spec
-                and workspace.model.spec.providers
-            ):
+            if workspace.model and workspace.model.spec and workspace.model.spec.providers:
                 workspace_provider = next(
-                    (
-                        p
-                        for p in workspace.model.spec.providers
-                        if p.name == provider_name
-                    ),
+                    (p for p in workspace.model.spec.providers if p.name == provider_name),
                     None,
                 )
             if not workspace_provider:
-                errors.append(
-                    f"Provider override for non-existent provider '{provider_name}' (skipped)"
-                )
+                errors.append(f"Provider override for non-existent provider '{provider_name}' (skipped)")
                 self.logger.warning("Skipping override for non-existent provider", provider=provider_name)
                 continue
 
@@ -603,10 +557,7 @@ class DeploymentService(BaseService):
             workspace service delegation, not stored here.
         """
         # Return cached services if already loaded
-        if (
-            self._workspace_service is not None
-            and self._environment_service is not None
-        ):
+        if self._workspace_service is not None and self._environment_service is not None:
             self.logger.debug("Returning cached related services")
             return True
 
@@ -630,27 +581,21 @@ class DeploymentService(BaseService):
 
             workspace_ref = self.model.spec.workspace
             workspace_name = workspace_ref.name
-            workspace_path = self._resolve_file_path(
-                str(workspace_ref.file), objects_path, repo_map
+            workspace_path = self._resolve_file_path(str(workspace_ref.file), objects_path, repo_map)
+            self.logger.debug(
+                "Loading workspace", workspace_name=str(workspace_name), workspace_path=str(workspace_path)
             )
-            self.logger.debug("Loading workspace", workspace_name=str(workspace_name), workspace_path=str(workspace_path))
 
             # Use BaseService.load() which has caching built-in
-            workspace_service: WorkspaceService = WorkspaceService.load(
-                str(workspace_path), validate=True
-            )
+            workspace_service: WorkspaceService = WorkspaceService.load(str(workspace_path), validate=True)
 
             if not workspace_service.is_validated():
                 self.logger.error("Workspace validation failed", workspace_name=workspace_name)
-                self._validation_errors.extend(
-                    workspace_service.get_validation_errors()
-                )
+                self._validation_errors.extend(workspace_service.get_validation_errors())
                 return False
 
             # Step 2: Load workspace infrastructure services
-            related_services, rel_success = workspace_service.load_workspace_services(
-                objects_path=objects_path
-            )
+            related_services, rel_success = workspace_service.load_workspace_services(objects_path=objects_path)
 
             if not rel_success or workspace_service is None or related_services is None:
                 success = False
@@ -708,7 +653,9 @@ class DeploymentService(BaseService):
 
             except Exception as e:
                 success = False
-                self.logger.error("Failed to load deployment environments", paths=env_paths, error=str(e), exc_info=True)
+                self.logger.error(
+                    "Failed to load deployment environments", paths=env_paths, error=str(e), exc_info=True
+                )
 
         except Exception as e:
             success = False
@@ -745,7 +692,7 @@ class DeploymentService(BaseService):
             self._workspace_service = None
         return success
 
-    def get_firewall_services(self) -> Optional[Dict[str, BaseService]]:
+    def get_firewall_services(self) -> Optional[Dict[str, Any]]:
         """
         Get a specific firewall service by name (delegates to workspace).
 
@@ -759,9 +706,7 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
         return self._workspace_service.get_firewall_services()
 
     def get_firewall_service(self, firewall_name: str) -> Optional[BaseService]:
@@ -778,12 +723,10 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
         return self._workspace_service.get_firewall_service(firewall_name)
 
-    def get_module_services(self) -> Optional[Dict[str, BaseService]]:
+    def get_module_services(self) -> Optional[Dict[str, Any]]:
         """
         Get a specific module service by name (delegates to workspace).
 
@@ -797,14 +740,10 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
         return self._workspace_service.get_module_services()
 
-    def get_module_service(
-        self, resource_name: str, module_name: str
-    ) -> Optional[BaseService]:
+    def get_module_service(self, resource_name: str, module_name: str) -> Optional[BaseService]:
         """
         Get a specific module service by name (delegates to workspace).
 
@@ -818,14 +757,10 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
-        return self._workspace_service.get_module_service(
-            resource_name=resource_name, module_name=module_name
-        )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
+        return self._workspace_service.get_module_service(resource_name=resource_name, module_name=module_name)
 
-    def get_namespace_services(self) -> Optional[Dict[str, BaseService]]:
+    def get_namespace_services(self) -> Optional[Dict[str, Any]]:
         """
         Get a specific namespace service by name (delegates to workspace).
 
@@ -839,14 +774,10 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
         return self._workspace_service.get_namespace_services()
 
-    def get_namespace_service(
-        self, namespace_name: str
-    ) -> Optional[Union[BaseService, Dict[str, BaseService]]]:
+    def get_namespace_service(self, namespace_name: str) -> Optional[Union[BaseService, Dict[str, BaseService]]]:
         """
         Get a specific namespace service by name (delegates to workspace).
 
@@ -860,12 +791,10 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
         return self._workspace_service.get_namespace_service(namespace_name)
 
-    def get_provider_services(self) -> Optional[Dict[str, BaseService]]:
+    def get_provider_services(self) -> Optional[Dict[str, Any]]:
         """
         Get a specific provider service by name (delegates to workspace).
 
@@ -879,9 +808,7 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
         return self._workspace_service.get_provider_services()
 
     def get_provider_service(self, provider_name: str) -> Optional[BaseService]:
@@ -898,12 +825,10 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
         return self._workspace_service.get_provider_service(provider_name)
 
-    def get_resource_services(self) -> Optional[Dict[str, BaseService]]:
+    def get_resource_services(self) -> Optional[Dict[str, Any]]:
         """
         Get a specific resource service by name (delegates to workspace).
 
@@ -917,9 +842,7 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
         return self._workspace_service.get_resource_services()
 
     def get_resource_service(self, resource_name: str) -> Optional[BaseService]:
@@ -936,9 +859,7 @@ class DeploymentService(BaseService):
             ServiceNotValidatedError: If load_related_services() hasn't been called
         """
         if self._workspace_service is None:
-            raise ServiceNotValidatedError(
-                "Workspace service not loaded. Call load_deploy_services() first."
-            )
+            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
         return self._workspace_service.get_resource_service(resource_name)
 
     def get_environment_service(self) -> Optional[EnvironmentService]:
@@ -1006,9 +927,7 @@ class DeploymentService(BaseService):
 
         # Can't validate without workspace
         if not workspace:
-            errors.append(
-                "Workspace service not loaded, cannot validate cross-references"
-            )
+            errors.append("Workspace service not loaded, cannot validate cross-references")
             return False, errors
 
         # Get workspace infrastructure for validation
@@ -1023,16 +942,12 @@ class DeploymentService(BaseService):
             # Check resource overrides
             for resource_name in environment.get_overridden_resource_names():
                 if resource_name not in resources:
-                    errors.append(
-                        f"Environment overrides non-existent resource '{resource_name}'"
-                    )
+                    errors.append(f"Environment overrides non-existent resource '{resource_name}'")
 
             # Check provider overrides
             for provider_name in environment.get_overridden_provider_names():
                 if provider_name not in providers:
-                    errors.append(
-                        f"Environment overrides non-existent provider '{provider_name}'"
-                    )
+                    errors.append(f"Environment overrides non-existent provider '{provider_name}'")
 
             # Check module overrides (modules are within resources)
             for module_key in environment.get_overridden_module_keys():
@@ -1040,9 +955,7 @@ class DeploymentService(BaseService):
                 if isinstance(module_key, tuple) and len(module_key) >= 2:
                     resource_name, _ = module_key[0], module_key[1]
                     if resource_name not in resources:
-                        errors.append(
-                            f"Environment overrides module in non-existent resource '{resource_name}'"
-                        )
+                        errors.append(f"Environment overrides module in non-existent resource '{resource_name}'")
                     # Note: Can't validate module exists without loading resource details
 
         # Validation 2: Stage provisioner/topology references

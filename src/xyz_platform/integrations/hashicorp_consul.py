@@ -7,9 +7,9 @@ import re
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
-from xyz_platform.logger import get_logger
 from xyz_platform.integrations.capabilities import IKVStore, IVariableStore
 from xyz_platform.integrations.store_integration import StoreIntegration
+from xyz_platform.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
 
 logger = get_logger(__name__)
@@ -88,9 +88,7 @@ class ConsulIntegration(StoreIntegration):
         # When authentication.method == "api_key", api_key.api_key holds
         # the env-var name for the ACL token.
         self.consul_token = self._get_env_var(self._get_token_var_name())
-        self.consul_namespace = self._get_env_var(
-            "CONSUL_NAMESPACE"
-        )  # no model equivalent
+        self.consul_namespace = self._get_env_var("CONSUL_NAMESPACE")  # no model equivalent
 
         logger.debug(
             "HashiCorp Consul integration initialized",
@@ -316,9 +314,7 @@ class ConsulIntegration(StoreIntegration):
                 )
             return result
 
-    def list_keys(
-        self, prefix: str, prefer_cli: bool = True, timeout: int = 60
-    ) -> List[str]:
+    def list_keys(self, prefix: str, prefer_cli: bool = True, timeout: int = 60) -> List[str]:
         """
         List keys at a given prefix.
 
@@ -437,9 +433,7 @@ class ConsulIntegration(StoreIntegration):
             )
 
             if result.returncode == 0 and result.stdout:
-                return [
-                    k.strip() for k in result.stdout.strip().split("\n") if k.strip()
-                ]
+                return [k.strip() for k in result.stdout.strip().split("\n") if k.strip()]
 
             return None
 

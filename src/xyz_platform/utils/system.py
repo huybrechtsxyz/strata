@@ -4,14 +4,15 @@
 import os
 import re
 import subprocess
+import time
 import unicodedata
 import uuid
-import time
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Union
+
 from rich.console import Console
+
 from xyz_platform.logger import get_logger
 
 logger = get_logger(__name__)
@@ -70,10 +71,7 @@ def resolve_path(
     if target_path and target_path.startswith("@"):
         repo_name, _, rest = target_path[1:].partition("/")
         if repo_map is None or repo_name not in repo_map:
-            raise ValueError(
-                f"Unknown repo reference '@{repo_name}' — "
-                f"no repo_map provided or repo not found"
-            )
+            raise ValueError(f"Unknown repo reference '@{repo_name}' — no repo_map provided or repo not found")
         target_path = repo_map[repo_name] + ("/" + rest if rest else "")
 
     # If target_path is absolute, use it directly
@@ -97,8 +95,7 @@ def resolve_path(
         sub_path_obj = Path(sub_path)
         if sub_path_obj.is_absolute():
             raise ValueError(
-                f"Absolute path not allowed in sub_paths: {sub_path}. "
-                f"Use target_path parameter for absolute paths."
+                f"Absolute path not allowed in sub_paths: {sub_path}. Use target_path parameter for absolute paths."
             )
 
     full_path = a_path.joinpath(*sub_paths)  # .resolve() ?
@@ -141,13 +138,10 @@ def has_emoji_prefix(text: str) -> bool:
     first = text[0]
     # Check for common emoji/icon Unicode ranges
     return (
-        "\U0001f300"
-        <= first
-        <= "\U0001faff"  # Misc symbols and pictographs, emoticons, transport, etc.
+        "\U0001f300" <= first <= "\U0001faff"  # Misc symbols and pictographs, emoticons, transport, etc.
         or "\u2600" <= first <= "\u26ff"  # Misc symbols
         or "\u2700" <= first <= "\u27bf"  # Dingbats
-        or unicodedata.category(first)
-        in {"So", "Sk"}  # Symbol, other; Symbol, modifier
+        or unicodedata.category(first) in {"So", "Sk"}  # Symbol, other; Symbol, modifier
     )
 
 
@@ -260,9 +254,7 @@ def run_command(
                 duration_ms=round(duration_ms, 2),
                 stderr=result.stderr.strip() if result.stderr else "",
             )
-            raise subprocess.CalledProcessError(
-                result.returncode, cmd_display, result.stdout, result.stderr
-            )
+            raise subprocess.CalledProcessError(result.returncode, cmd_display, result.stdout, result.stderr)
 
         duration_ms = (time.time() - start_time) * 1000
         logger.debug(

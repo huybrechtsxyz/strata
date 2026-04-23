@@ -6,6 +6,7 @@ Store type enums map to integration types registered in IntegrationFactory.
 
 from enum import Enum
 from typing import Annotated, Any, List, Optional
+
 from pydantic import BaseModel, Field, StringConstraints
 
 
@@ -97,9 +98,7 @@ class SecretStoreModel(BaseModel):
         None,
         description="Optional version for store-based secrets (supported by some integrations)",
     )
-    description: Optional[str] = Field(
-        None, description="Optional description for documentation purposes"
-    )
+    description: Optional[str] = Field(None, description="Optional description for documentation purposes")
 
 
 # Model for variable definitions.
@@ -125,9 +124,7 @@ class VariableStoreModel(BaseModel):
         None,
         description="Optional version for store-based variables (supported by some integrations)",
     )
-    description: Optional[str] = Field(
-        None, description="Optional description for documentation purposes"
-    )
+    description: Optional[str] = Field(None, description="Optional description for documentation purposes")
 
 
 # Model for feature flag definitions.
@@ -143,9 +140,7 @@ class FeatureStoreModel(BaseModel):
     key: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         description="Feature flag key name for referencing in configurations"
     )
-    store: FeatureStoreType = Field(
-        description="Feature store type: constant, environment, or azure-appconfig"
-    )
+    store: FeatureStoreType = Field(description="Feature store type: constant, environment, or azure-appconfig")
     value: Any = Field(
         description="Feature flag identifier: literal value for constant, env var name for environment, flag name/key for integration stores"
     )
@@ -153,9 +148,7 @@ class FeatureStoreModel(BaseModel):
         None,
         description="Optional version for store-based feature flags (supported by some integrations)",
     )
-    description: Optional[str] = Field(
-        None, description="Optional description for documentation purposes"
-    )
+    description: Optional[str] = Field(None, description="Optional description for documentation purposes")
 
 
 # Validation helper functions for variables, secrets, and features

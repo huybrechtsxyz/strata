@@ -6,13 +6,13 @@ import re
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
-from xyz_platform.logger import get_logger
 from xyz_platform.integrations.capabilities import (
     IKVStore,
     ISecretStore,
     IVariableStore,
 )
 from xyz_platform.integrations.store_integration import StoreIntegration
+from xyz_platform.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
 from xyz_platform.utils.system import CommandResult
 
@@ -92,20 +92,12 @@ class VaultIntegration(StoreIntegration):
         #   method=api_key  → api_key.api_key  = env-var name for VAULT_TOKEN
         #   method=oauth2   → oauth2.client_id = env-var name for VAULT_ROLE_ID
         #                     oauth2.client_secret = env-var name for VAULT_SECRET_ID
-        self.vault_token = self._get_env_var(
-            self._get_auth_var_name("api_key", "VAULT_TOKEN")
-        )
-        self.vault_namespace = self._get_env_var(
-            "VAULT_NAMESPACE"
-        )  # no model equivalent
+        self.vault_token = self._get_env_var(self._get_auth_var_name("api_key", "VAULT_TOKEN"))
+        self.vault_namespace = self._get_env_var("VAULT_NAMESPACE")  # no model equivalent
 
         # AppRole authentication
-        self.vault_role_id = self._get_env_var(
-            self._get_auth_var_name("client_id", "VAULT_ROLE_ID")
-        )
-        self.vault_secret_id = self._get_env_var(
-            self._get_auth_var_name("client_secret", "VAULT_SECRET_ID")
-        )
+        self.vault_role_id = self._get_env_var(self._get_auth_var_name("client_id", "VAULT_ROLE_ID"))
+        self.vault_secret_id = self._get_env_var(self._get_auth_var_name("client_secret", "VAULT_SECRET_ID"))
 
         # Kubernetes authentication (no model equivalent; keep defaults)
         self.vault_k8s_role = self._get_env_var("VAULT_K8S_ROLE")
@@ -201,9 +193,7 @@ class VaultIntegration(StoreIntegration):
                 "VAULT_TOKEN, VAULT_ROLE_ID+VAULT_SECRET_ID, or VAULT_K8S_ROLE",
             )
 
-        self._info = (
-            f"{self.integration_name} {self.get_version()} is available ({auth_method})"
-        )
+        self._info = f"{self.integration_name} {self.get_version()} is available ({auth_method})"
         logger.debug(
             "HashiCorp Vault is available and configured",
             name=self.integration_name,
@@ -244,9 +234,7 @@ class VaultIntegration(StoreIntegration):
         field = kwargs.get("field")
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
-        return self._get_secretvalue(
-            secret_path=key, field=field, prefer_cli=prefer_cli, timeout=timeout
-        )
+        return self._get_secretvalue(secret_path=key, field=field, prefer_cli=prefer_cli, timeout=timeout)
 
     def list_secrets(self, prefix: str = "", **kwargs) -> List[str]:
         """
@@ -263,9 +251,7 @@ class VaultIntegration(StoreIntegration):
         """
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
-        return self._list_secretkeys(
-            path=prefix, prefer_cli=prefer_cli, timeout=timeout
-        )
+        return self._list_secretkeys(path=prefix, prefer_cli=prefer_cli, timeout=timeout)
 
     # Auth helpers
 
@@ -322,9 +308,7 @@ class VaultIntegration(StoreIntegration):
                 name=self.integration_name,
             )
             auth_url = f"{self.vault_addr}/v1/auth/approle/login"
-            data = json.dumps(
-                {"role_id": self.vault_role_id, "secret_id": self.vault_secret_id}
-            ).encode("utf-8")
+            data = json.dumps({"role_id": self.vault_role_id, "secret_id": self.vault_secret_id}).encode("utf-8")
 
             req = urllib.request.Request(auth_url, data=data, method="POST")
             req.add_header("Content-Type", "application/json")
@@ -499,9 +483,7 @@ class VaultIntegration(StoreIntegration):
                 )
             return result
 
-    def _get_secret_via_cli(
-        self, secret_path: str, field: Optional[str] = None, timeout: int = 60
-    ) -> Optional[str]:
+    def _get_secret_via_cli(self, secret_path: str, field: Optional[str] = None, timeout: int = 60) -> Optional[str]:
         """
         Retrieve a secret from HashiCorp Vault using the Vault CLI.
 
@@ -540,9 +522,7 @@ class VaultIntegration(StoreIntegration):
         except Exception:
             return None
 
-    def _get_secret_via_api(
-        self, secret_path: str, field: Optional[str] = None
-    ) -> Optional[str]:
+    def _get_secret_via_api(self, secret_path: str, field: Optional[str] = None) -> Optional[str]:
         """
         Retrieve a secret from HashiCorp Vault using HTTPS API call.
 
@@ -561,9 +541,7 @@ class VaultIntegration(StoreIntegration):
 
             # Build secret URL
             # Handle both KV v1 and v2 paths
-            if "/data/" not in secret_path and not secret_path.startswith(
-                "secret/data/"
-            ):
+            if "/data/" not in secret_path and not secret_path.startswith("secret/data/"):
                 # Assume KV v2 and insert /data/ if not present
                 parts = secret_path.split("/", 1)
                 if len(parts) == 2:
@@ -591,9 +569,7 @@ class VaultIntegration(StoreIntegration):
 
     # List secrets methods
 
-    def _list_secretkeys(
-        self, path: str, prefer_cli: bool = True, timeout: int = 60
-    ) -> List[str]:
+    def _list_secretkeys(self, path: str, prefer_cli: bool = True, timeout: int = 60) -> List[str]:
         """
         List secrets at a given path.
 
@@ -626,9 +602,7 @@ class VaultIntegration(StoreIntegration):
             # Fall back to Vault CLI
             return self._list_secrets_via_cli(path, timeout) or []
 
-    def _list_secrets_via_cli(
-        self, path: str, timeout: int = 60
-    ) -> Optional[List[str]]:
+    def _list_secrets_via_cli(self, path: str, timeout: int = 60) -> Optional[List[str]]:
         """
         List secrets at a given path using Vault CLI.
 

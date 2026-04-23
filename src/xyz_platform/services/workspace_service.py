@@ -1,20 +1,21 @@
 """Service for loading and validating workspace configurations."""
 
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
+
+from xyz_platform.exceptions import InvalidReferenceError
 from xyz_platform.models.configuration_model import ConfigurationModel
+from xyz_platform.models.firewall_model import FirewallModel
 from xyz_platform.models.workspace_model import WorkspaceModel
 from xyz_platform.services.base_service import BaseService
-from xyz_platform.exceptions import InvalidReferenceError
-
 from xyz_platform.services.configuration_service import ConfigurationService
-from xyz_platform.services.provider_service import ProviderService
-from xyz_platform.services.resource_service import ResourceService
-from xyz_platform.services.namespace_service import NamespaceService
 from xyz_platform.services.firewall_service import FirewallService
 from xyz_platform.services.module_service import ModuleService
+from xyz_platform.services.namespace_service import NamespaceService
+from xyz_platform.services.provider_service import ProviderService
+from xyz_platform.services.resource_service import ResourceService
 
 
-class WorkspaceService(BaseService):
+class WorkspaceService(BaseService["WorkspaceModel"]):
     """Service for handling workspace configurations."""
 
     # Initialization
@@ -28,10 +29,24 @@ class WorkspaceService(BaseService):
         }
         """
         super().__init__(path=path, data=data)
-        self.model: Optional[WorkspaceModel] = None
+        self.model = None
         self._related_services: Optional[Dict[str, Dict[str, BaseService]]] = None
         self._validation_errors: List[str] = []
         self._structured_errors: List[InvalidReferenceError] = []
+
+    # Lifecycle hooks
+
+    def on_init(self) -> None:
+        """Lifecycle hook: called after __init__ completes."""
+        pass
+
+    def on_ready(self) -> None:
+        """Lifecycle hook: called after validation succeeds."""
+        pass
+
+    def on_shutdown(self) -> None:
+        """Lifecycle hook: called before cleanup/destruction."""
+        pass
 
     # Abstract methods
 
@@ -73,16 +88,12 @@ class WorkspaceService(BaseService):
         workspace_provider_names = {p.name for p in self.model.spec.providers}
 
         # Get workspace provisioner types
-        workspace_provisioner_types = {
-            p.provisioner for p in self.model.spec.provisioners
-        }
+        workspace_provisioner_types = {p.provisioner for p in self.model.spec.provisioners}
 
         # Build repository map from configuration
         config_repository_names = set()
         if configuration_model.spec.repositories:
-            config_repository_names = {
-                repo.name for repo in configuration_model.spec.repositories
-            }
+            config_repository_names = {repo.name for repo in configuration_model.spec.repositories}
 
         # STEP 1: Validate provisioner repository references
         # Check that each provisioner's source.repository exists in configuration
@@ -113,9 +124,7 @@ class WorkspaceService(BaseService):
 
         # Validate module repository references from loaded module services (if available)
         if self._related_services and "modules" in self._related_services:
-            for module_name, module_service in self._related_services[
-                "modules"
-            ].items():
+            for module_name, module_service in self._related_services["modules"].items():
                 if (
                     hasattr(module_service, "model")
                     and module_service.model is not None
@@ -143,8 +152,8 @@ class WorkspaceService(BaseService):
                 topology_config_map[topo_config.type] = topo_config
                 # Build roles map
                 if topo_config.components:
-                    valid_roles = {comp.role for comp in topo_config.components}
-                    topology_roles_map[topo_config.type] = valid_roles
+                    topo_roles: Set[str] = {comp.role for comp in topo_config.components}
+                    topology_roles_map[topo_config.type] = topo_roles
 
         # Validate topology provider, provisioner, and component role references
         for topology in self.model.spec.topology:
@@ -174,7 +183,7 @@ class WorkspaceService(BaseService):
             topology_type_normalized = topology.type.lower().replace("-", "_")
 
             # Find matching configuration topology (with normalization)
-            valid_roles = None
+            valid_roles: Optional[Set[str]] = None
             matching_config = None
             for config_type, topo_config in topology_config_map.items():
                 config_type_normalized = config_type.lower().replace("-", "_")
@@ -184,10 +193,7 @@ class WorkspaceService(BaseService):
                     break
 
             # Check if topology type is allowed (additional_topologies validation)
-            if (
-                matching_config is None
-                and not configuration_model.spec.additional_topologies
-            ):
+            if matching_config is None and not configuration_model.spec.additional_topologies:
                 # available_topologies = sorted(topology_config_map.keys())
                 error = InvalidReferenceError(
                     source_type="Topology",
@@ -201,9 +207,7 @@ class WorkspaceService(BaseService):
 
             # If topology type is defined in configuration, validate component roles
             if valid_roles:
-                additional_components_allowed = (
-                    matching_config.additional_components if matching_config else True
-                )
+                additional_components_allowed = matching_config.additional_components if matching_config else True
 
                 for component in topology.components:
                     # Resolve role from component or resource reference
@@ -211,9 +215,7 @@ class WorkspaceService(BaseService):
                     if not component_role:
                         continue  # Skip components without role
                     component_role_normalized = component_role.lower().replace("-", "_")
-                    valid_roles_normalized = {
-                        r.lower().replace("-", "_") for r in valid_roles
-                    }
+                    valid_roles_normalized = {r.lower().replace("-", "_") for r in valid_roles}
 
                     if component_role_normalized not in valid_roles_normalized:
                         # Check if additional components are allowed
@@ -231,9 +233,7 @@ class WorkspaceService(BaseService):
 
             # Validate component constraints from configuration (min/max count, required, uses_module)
             if matching_config and matching_config.components:
-                config_validation_errors = self._validate_component_constraints(
-                    topology, matching_config
-                )
+                config_validation_errors = self._validate_component_constraints(topology, matching_config)
                 errors.extend(config_validation_errors)
 
         # STEP 5: Validate that all file: references resolve to existing files on disk
@@ -247,9 +247,7 @@ class WorkspaceService(BaseService):
                     file_refs.append((f"Resource '{r.name}'", r.file))
                     if r.modules:
                         for m in r.modules:
-                            file_refs.append(
-                                (f"Resource '{r.name}' module '{m.name}'", m.file)
-                            )
+                            file_refs.append((f"Resource '{r.name}' module '{m.name}'", m.file))
             if self.model.spec.namespaces:
                 for ns in self.model.spec.namespaces:
                     file_refs.append((f"Namespace '{ns.name}'", ns.file))
@@ -281,23 +279,19 @@ class WorkspaceService(BaseService):
 
         # Build a map of component roles to their instances in the workspace topology
         # Count both full definitions and simple resource references by resolving roles
-        component_role_counts = {}
-        component_role_modules = {}
+        component_role_counts: Dict[str, int] = {}
+        component_role_modules: Dict[str, List[str]] = {}
         for component in topology.components:
             # Resolve role from component or resource reference
             component_role = self._get_component_role(component)
             if not component_role:
                 continue  # Skip components without role
             role_normalized = component_role.lower().replace("-", "_")
-            component_role_counts[role_normalized] = (
-                component_role_counts.get(role_normalized, 0) + 1
-            )
+            component_role_counts[role_normalized] = component_role_counts.get(role_normalized, 0) + 1
             # Check if resource has modules (component is just a reference)
             resource = self._get_resource_by_name(component.resource)
             if resource and resource.modules:
-                component_role_modules.setdefault(role_normalized, []).append(
-                    component.resource
-                )
+                component_role_modules.setdefault(role_normalized, []).append(component.resource)
 
         # Validate each component configuration constraint
         for config_comp in matching_config.components:
@@ -334,11 +328,7 @@ class WorkspaceService(BaseService):
                 errors.append(str(error))
 
             # Validate max_count constraint (0 means unlimited)
-            if (
-                config_comp.max_count
-                and config_comp.max_count > 0
-                and actual_count > config_comp.max_count
-            ):
+            if config_comp.max_count and config_comp.max_count > 0 and actual_count > config_comp.max_count:
                 error = InvalidReferenceError(
                     source_type="Topology",
                     source_name=topology.name,
@@ -359,9 +349,7 @@ class WorkspaceService(BaseService):
                     comp_role_normalized = comp_role.lower().replace("-", "_")
                     # Check if resource has modules (component is just a reference)
                     resource = self._get_resource_by_name(component.resource)
-                    if comp_role_normalized == role_normalized and (
-                        not resource or not resource.modules
-                    ):
+                    if comp_role_normalized == role_normalized and (not resource or not resource.modules):
                         components_without_module.append(component.resource)
 
                 if components_without_module:
@@ -465,7 +453,7 @@ class WorkspaceService(BaseService):
             )
             raise ValueError(error_msg)
 
-        services = {
+        services: Dict[str, Dict[str, BaseService]] = {
             "providers": {},
             "resources": {},
             "namespaces": {},
@@ -484,25 +472,19 @@ class WorkspaceService(BaseService):
         # Load firewall services from workspace spec firewalls
         if workspace.spec.firewalls:
             self.logger.debug("Loading firewalls", count=len(workspace.spec.firewalls))
-            for firewall_ref in self.model.spec.firewalls:
-                firewall_path = self._resolve_file_path(
-                    firewall_ref.file, objects_path, repo_map
-                )
+            for firewall_ref in workspace.spec.firewalls:
+                firewall_path = self._resolve_file_path(firewall_ref.file, objects_path, repo_map)
                 firewall_key = firewall_ref.name
                 try:
                     # Use service cache to avoid re-parsing same files
-                    fw_service: FirewallService = FirewallService.load(
-                        firewall_path, validate=True
-                    )
+                    fw_service = cast(FirewallService, FirewallService.load(firewall_path, validate=True))
                     if fw_service.is_validated():
                         services["firewalls"][firewall_key] = fw_service
                         self.logger.debug("Loaded firewall", name=firewall_key, path=firewall_path)
                     else:
                         success = False
                         errors = fw_service.get_validation_errors()
-                        self._validation_errors.append(
-                            f"Firewall '{firewall_ref.name}' validation failed"
-                        )
+                        self._validation_errors.append(f"Firewall '{firewall_ref.name}' validation failed")
                         self._validation_errors.extend(errors)
                         self.logger.warning(
                             "Firewall validation failed",
@@ -512,7 +494,9 @@ class WorkspaceService(BaseService):
                         )
                 except Exception as e:
                     success = False
-                    self._validation_errors.append(f"Failed to load firewall '{firewall_ref.name}' from {firewall_path}: {str(e)}")
+                    self._validation_errors.append(
+                        f"Failed to load firewall '{firewall_ref.name}' from {firewall_path}: {str(e)}"
+                    )
                     self.logger.error(
                         "Failed to load firewall",
                         name=firewall_ref.name,
@@ -524,23 +508,17 @@ class WorkspaceService(BaseService):
         if workspace.spec.providers:
             self.logger.debug("Loading providers", count=len(workspace.spec.providers))
             for provider_ref in workspace.spec.providers:
-                provider_path = self._resolve_file_path(
-                    provider_ref.file, objects_path, repo_map
-                )
+                provider_path = self._resolve_file_path(provider_ref.file, objects_path, repo_map)
                 try:
                     # Use service cache to avoid re-parsing same files
-                    pv_service: ProviderService = ProviderService.load(
-                        provider_path, validate=True
-                    )
+                    pv_service: ProviderService = ProviderService.load(provider_path, validate=True)
                     if pv_service.is_validated():
                         services["providers"][provider_ref.name] = pv_service
                         self.logger.debug("Loaded provider", name=provider_ref.name, path=provider_path)
                     else:
                         success = False
                         errors = pv_service.get_validation_errors()
-                        self._validation_errors.append(
-                            f"Provider '{provider_ref.name}' validation failed"
-                        )
+                        self._validation_errors.append(f"Provider '{provider_ref.name}' validation failed")
                         self._validation_errors.extend(errors)
                         self.logger.warning(
                             "Provider validation failed",
@@ -550,7 +528,9 @@ class WorkspaceService(BaseService):
                         )
                 except Exception as e:
                     success = False
-                    self._validation_errors.append(f"Failed to load provider '{provider_ref.name}' from {provider_path}: {str(e)}")
+                    self._validation_errors.append(
+                        f"Failed to load provider '{provider_ref.name}' from {provider_path}: {str(e)}"
+                    )
                     self.logger.error(
                         "Failed to load provider",
                         name=provider_ref.name,
@@ -564,46 +544,47 @@ class WorkspaceService(BaseService):
         if workspace.spec.resources:
             self.logger.debug("Loading resources", count=len(workspace.spec.resources))
             for resource_ref in workspace.spec.resources:
-                resource_path = self._resolve_file_path(
-                    resource_ref.file, objects_path, repo_map
-                )
+                resource_path = self._resolve_file_path(resource_ref.file, objects_path, repo_map)
                 resource_key = resource_ref.name
                 if resource_key not in services["resources"]:
                     try:
                         # Use service cache to avoid re-parsing same files
-                        rx_service: ResourceService = ResourceService.load(
-                            resource_path, validate=True
-                        )
+                        rx_service: ResourceService = ResourceService.load(resource_path, validate=True)
                         if rx_service.is_validated():
                             services["resources"][resource_key] = rx_service
                             self.logger.debug("Loaded resource", name=resource_key, path=resource_path)
 
                             # Merge multiple firewalls if resource references more than one
-                            if (
-                                resource_ref.firewalls
-                                and len(resource_ref.firewalls) > 0
-                            ):
-                                self.logger.debug("Merging firewalls for resource", resource=resource_key, count=len(resource_ref.firewalls))
-                                firewall_services = []
+                            if resource_ref.firewalls and len(resource_ref.firewalls) > 0:
+                                self.logger.debug(
+                                    "Merging firewalls for resource",
+                                    resource=resource_key,
+                                    count=len(resource_ref.firewalls),
+                                )
+                                firewall_services: List[Union[FirewallModel, FirewallService]] = []
                                 for fw_name in resource_ref.firewalls:
-                                    fw_service = services["firewalls"].get(fw_name)
-                                    if fw_service:
-                                        firewall_services.append(fw_service)
+                                    fw_service_raw = services["firewalls"].get(fw_name)
+                                    if fw_service_raw:
+                                        firewall_services.append(cast(FirewallService, fw_service_raw))
                                     else:
-                                        self.logger.warning("Firewall not found for resource", firewall=fw_name, resource=resource_key)
+                                        self.logger.warning(
+                                            "Firewall not found for resource", firewall=fw_name, resource=resource_key
+                                        )
 
                                 if firewall_services:
                                     try:
-                                        merged_firewall = (
-                                            FirewallService.merge_firewalls(
-                                                firewall_services
-                                            )
-                                        )
+                                        merged_firewall = FirewallService.merge_firewalls(firewall_services)
                                         rx_service.set_merged_firewall(merged_firewall)
-                                        self.logger.debug("Merged firewalls for resource", resource=resource_key, count=len(firewall_services))
+                                        self.logger.debug(
+                                            "Merged firewalls for resource",
+                                            resource=resource_key,
+                                            count=len(firewall_services),
+                                        )
                                     except Exception as e:
                                         success = False
-                                        self._validation_errors.append(f"Failed to merge firewalls for resource '{resource_key}': {str(e)}")
+                                        self._validation_errors.append(
+                                            f"Failed to merge firewalls for resource '{resource_key}': {str(e)}"
+                                        )
                                         self.logger.error(
                                             "Failed to merge firewalls for resource",
                                             resource=resource_key,
@@ -614,9 +595,7 @@ class WorkspaceService(BaseService):
                         else:
                             success = False
                             errors = rx_service.get_validation_errors()
-                            self._validation_errors.append(
-                                f"Resource '{resource_ref.name}' validation failed"
-                            )
+                            self._validation_errors.append(f"Resource '{resource_ref.name}' validation failed")
                             self._validation_errors.extend(errors)
                             self.logger.warning(
                                 "Resource validation failed",
@@ -627,7 +606,9 @@ class WorkspaceService(BaseService):
 
                     except Exception as e:
                         success = False
-                        self._validation_errors.append(f"Failed to load resource '{resource_ref.name}' from {resource_path}: {str(e)}")
+                        self._validation_errors.append(
+                            f"Failed to load resource '{resource_ref.name}' from {resource_path}: {str(e)}"
+                        )
                         self.logger.error(
                             "Failed to load resource",
                             name=resource_ref.name,
@@ -639,21 +620,24 @@ class WorkspaceService(BaseService):
         if workspace.spec.resources:
             for resource_ref in workspace.spec.resources:
                 if resource_ref.modules:
-                    self.logger.debug("Loading modules for resource", resource=resource_ref.name, count=len(resource_ref.modules))
+                    self.logger.debug(
+                        "Loading modules for resource", resource=resource_ref.name, count=len(resource_ref.modules)
+                    )
                     for module_ref in resource_ref.modules:
-                        module_path = self._resolve_file_path(
-                            module_ref.file, objects_path, repo_map
-                        )
+                        module_path = self._resolve_file_path(module_ref.file, objects_path, repo_map)
                         # Use resource_name:module_name as key to avoid conflicts
                         module_key = f"{resource_ref.name}:{module_ref.name}"
 
                         try:
-                            mod_service: ModuleService = ModuleService.load(
-                                module_path, validate=True
-                            )
+                            mod_service: ModuleService = ModuleService.load(module_path, validate=True)
                             if mod_service.is_validated():
                                 services["modules"][module_key] = mod_service
-                                self.logger.debug("Loaded module for resource", module=module_ref.name, resource=resource_ref.name, path=module_path)
+                                self.logger.debug(
+                                    "Loaded module for resource",
+                                    module=module_ref.name,
+                                    resource=resource_ref.name,
+                                    path=module_path,
+                                )
                             else:
                                 success = False
                                 errors = mod_service.get_validation_errors()
@@ -670,7 +654,9 @@ class WorkspaceService(BaseService):
                                 )
                         except Exception as e:
                             success = False
-                            self._validation_errors.append(f"Failed to load module '{module_ref.name}' for resource '{resource_ref.name}' from {module_path}: {str(e)}")
+                            self._validation_errors.append(
+                                f"Failed to load module '{module_ref.name}' for resource '{resource_ref.name}' from {module_path}: {str(e)}"
+                            )
                             self.logger.error(
                                 "Failed to load module for resource",
                                 module=module_ref.name,
@@ -683,23 +669,17 @@ class WorkspaceService(BaseService):
         if workspace.spec.namespaces:
             self.logger.debug("Loading namespaces", count=len(workspace.spec.namespaces))
             for namespace_ref in workspace.spec.namespaces:
-                namespace_path = self._resolve_file_path(
-                    namespace_ref.file, objects_path, repo_map
-                )
+                namespace_path = self._resolve_file_path(namespace_ref.file, objects_path, repo_map)
                 try:
                     # Use service cache to avoid re-parsing same files
-                    ns_service: NamespaceService = NamespaceService.load(
-                        namespace_path, validate=True
-                    )
+                    ns_service: NamespaceService = NamespaceService.load(namespace_path, validate=True)
                     if ns_service.is_validated():
                         services["namespaces"][namespace_ref.name] = ns_service
                         self.logger.debug("Loaded namespace", name=namespace_ref.name, path=namespace_path)
                     else:
                         success = False
                         errors = ns_service.get_validation_errors()
-                        self._validation_errors.append(
-                            f"Namespace '{namespace_ref.name}' validation failed"
-                        )
+                        self._validation_errors.append(f"Namespace '{namespace_ref.name}' validation failed")
                         self._validation_errors.extend(errors)
                         self.logger.warning(
                             "Namespace validation failed",
@@ -709,7 +689,9 @@ class WorkspaceService(BaseService):
                         )
                 except Exception as e:
                     success = False
-                    self._validation_errors.append(f"Failed to load namespace '{namespace_ref.name}' from {namespace_path}: {str(e)}")
+                    self._validation_errors.append(
+                        f"Failed to load namespace '{namespace_ref.name}' from {namespace_path}: {str(e)}"
+                    )
                     self.logger.error(
                         "Failed to load namespace",
                         name=namespace_ref.name,
@@ -722,16 +704,16 @@ class WorkspaceService(BaseService):
             for namespace_ref in workspace.spec.namespaces:
                 # First ensure the namespace service is loaded
                 namespace_service = services["namespaces"].get(namespace_ref.name)
-                if (
-                    namespace_service
-                    and hasattr(namespace_service.model.spec, "modules")
-                    and namespace_service.model.spec.modules
-                ):
-                    self.logger.debug("Loading modules for namespace", namespace=namespace_ref.name, count=len(namespace_service.model.spec.modules))
-                    for module_ref in namespace_service.model.spec.modules:
-                        module_path = self._resolve_file_path(
-                            module_ref.file, objects_path, repo_map
-                        )
+                ns_model = getattr(namespace_service, "model", None) if namespace_service else None
+                ns_spec = getattr(ns_model, "spec", None) if ns_model else None
+                if namespace_service and ns_spec and hasattr(ns_spec, "modules") and ns_spec.modules:
+                    self.logger.debug(
+                        "Loading modules for namespace",
+                        namespace=namespace_ref.name,
+                        count=len(ns_spec.modules),
+                    )
+                    for module_ref in ns_spec.modules:
+                        module_path = self._resolve_file_path(module_ref.file, objects_path, repo_map)
                         # Use namespace_name:module_name as key to avoid conflicts
                         module_key = f"{namespace_ref.name}:{module_ref.name}"
 
@@ -739,7 +721,12 @@ class WorkspaceService(BaseService):
                             mod_service = ModuleService.load(module_path, validate=True)
                             if mod_service.is_validated():
                                 services["modules"][module_key] = mod_service
-                                self.logger.debug("Loaded module for namespace", module=module_ref.name, namespace=namespace_ref.name, path=module_path)
+                                self.logger.debug(
+                                    "Loaded module for namespace",
+                                    module=module_ref.name,
+                                    namespace=namespace_ref.name,
+                                    path=module_path,
+                                )
                             else:
                                 success = False
                                 errors = mod_service.get_validation_errors()
@@ -756,7 +743,9 @@ class WorkspaceService(BaseService):
                                 )
                         except Exception as e:
                             success = False
-                            self._validation_errors.append(f"Failed to load module '{module_ref.name}' for namespace '{namespace_ref.name}' from {module_path}: {str(e)}")
+                            self._validation_errors.append(
+                                f"Failed to load module '{module_ref.name}' for namespace '{namespace_ref.name}' from {module_path}: {str(e)}"
+                            )
                             self.logger.error(
                                 "Failed to load module for namespace",
                                 module=module_ref.name,
@@ -790,11 +779,7 @@ class WorkspaceService(BaseService):
         """Get a specific firewall service by name."""
         value = self._get_workspace_related_services("firewalls", None)
         if value is not None and isinstance(value, dict):
-            casted = {
-                k: cast(FirewallService, v)
-                for k, v in value.items()
-                if isinstance(v, FirewallService)
-            }
+            casted = {k: cast(FirewallService, v) for k, v in value.items() if isinstance(v, FirewallService)}
             return casted
         return None
 
@@ -809,17 +794,11 @@ class WorkspaceService(BaseService):
         """Get a specific module service by resource and module name."""
         value = self._get_workspace_related_services("modules", None)
         if value is not None and isinstance(value, dict):
-            casted = {
-                k: cast(ModuleService, v)
-                for k, v in value.items()
-                if isinstance(v, ModuleService)
-            }
+            casted = {k: cast(ModuleService, v) for k, v in value.items() if isinstance(v, ModuleService)}
             return casted
         return None
 
-    def get_module_service(
-        self, resource_name: str, module_name: str
-    ) -> Optional[ModuleService]:
+    def get_module_service(self, resource_name: str, module_name: str) -> Optional[ModuleService]:
         """Get a specific module service by resource and module name."""
         module_key = f"{resource_name}:{module_name}"
         value = self._get_workspace_related_services("modules", module_key)
@@ -833,11 +812,7 @@ class WorkspaceService(BaseService):
         """Get a specific namespace service by name."""
         value = self._get_workspace_related_services("namespaces", None)
         if value is not None and isinstance(value, dict):
-            casted = {
-                k: cast(NamespaceService, v)
-                for k, v in value.items()
-                if isinstance(v, NamespaceService)
-            }
+            casted = {k: cast(NamespaceService, v) for k, v in value.items() if isinstance(v, NamespaceService)}
             return casted
         return None
 
@@ -852,11 +827,7 @@ class WorkspaceService(BaseService):
         """Get a specific provider service by name."""
         value = self._get_workspace_related_services("providers", None)
         if value is not None and isinstance(value, dict):
-            casted = {
-                k: cast(ProviderService, v)
-                for k, v in value.items()
-                if isinstance(v, ProviderService)
-            }
+            casted = {k: cast(ProviderService, v) for k, v in value.items() if isinstance(v, ProviderService)}
             return casted
         return None
 
@@ -873,11 +844,7 @@ class WorkspaceService(BaseService):
         """Get a specific resource service by name."""
         value = self._get_workspace_related_services("resources", None)
         if value is not None and isinstance(value, dict):
-            casted = {
-                k: cast(ResourceService, v)
-                for k, v in value.items()
-                if isinstance(v, ResourceService)
-            }
+            casted = {k: cast(ResourceService, v) for k, v in value.items() if isinstance(v, ResourceService)}
             return casted
         return None
 
