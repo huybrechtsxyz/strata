@@ -17,6 +17,11 @@
 - **Rationale:** Validate the core workflow before multiplying surfaces
 - **Implications:** No web server, no websocket, no VS Code API dependencies in the codebase
 
+### 2026-04-23 — CLI surface for solution management: `xyz solution <verb>`
+- **Decision:** Use `xyz solution init` (and future `xyz solution add`, `xyz solution status`, etc.) — "solution" as a top-level Click noun-group.
+- **Rationale:** Mirrors the existing `session` noun-group pattern already established in `cli.py`. All solution lifecycle verbs (`init`, `add`, `remove`, `list`, `status`) have a single coherent home. Option 2 (`xyz init solution`) creates a split home; Option 3 (`xyz init`) collapses the noun and blocks future extensibility.
+- **Implications:** Register `@click.group(name="solution")` in `cli.py`. Each sub-command is a `BaseCommand` subclass in `commands/`. Short alias `xyz sln` deferred until there is an explicit request.
+
 ## Governance
 
 - All meaningful architectural changes require a decision entry here

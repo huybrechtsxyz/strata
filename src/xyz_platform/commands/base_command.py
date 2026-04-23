@@ -1,15 +1,15 @@
 """Base command class for XYZ Platform CLI commands."""
 
-from abc import ABC, abstractmethod
-from datetime import datetime
 import os
 import sys
+from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Dict, List, Optional
 
 import click
 
 from xyz_platform.logger import get_logger
-from xyz_platform.utils import system
+from xyz_platform.utils.version import get_version
 
 
 class BaseCommand(ABC):
@@ -23,7 +23,7 @@ class BaseCommand(ABC):
         output: Optional[str] = None,
         verbose: bool = False,
         quiet: bool = False,
-    ):
+    ) -> None:
         """Initialize the base command."""
         # Paths
         self._work_path: str = work_path or os.getcwd()
@@ -46,8 +46,8 @@ class BaseCommand(ABC):
         self._output_quiet = quiet or False
 
         # Message and error accumulation
-        self._messages = []
-        self._errors = []
+        self._messages: List[str] = []
+        self._errors: List[str] = []
 
     @abstractmethod
     def execute(self, *args, **kwargs):
@@ -108,20 +108,18 @@ class BaseCommand(ABC):
 
     # Console output methods
 
-    def ShowConsoleHeader(self, work_path: Optional[str] = None) -> None:
+    def show_console_header(self, work_path: Optional[str] = None) -> None:
         click.echo("=" * 80)
-        click.echo(f"🚀 XYZ PLATFORM — CLI (v{system.get_cli_version()})")
+        click.echo(f"🚀 XYZ PLATFORM — CLI (v{get_version()})")
         click.echo("=" * 80)
         click.echo("Automates workspace preparation, configuration, and deployment.")
-        click.echo(
-            f"⏱️   Timestamp       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
+        click.echo(f"⏱️   Timestamp       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         click.echo(f"📜  Entry point     : {' '.join(sys.argv)}")
         click.echo(f"📂  Current dir     : {os.getcwd()}")
         if work_path:
             click.echo(f"📁  Work path       : {self._work_path}")
 
-    def ShowConsoleFooter(self) -> None:
+    def show_console_Footer(self) -> None:
         click.echo("=" * 80)
         click.echo("✨ Thank you for using XYZ Platform CLI!")
         click.echo("📘 Documentation: https://docs.xyzplatform.com")
@@ -130,7 +128,7 @@ class BaseCommand(ABC):
 
     # Lifecycle methods
 
-    def _Initialize(self) -> bool:
+    def _initialize(self) -> bool:
         """
         Initialize the command before execution.
         Sets up paths, timing, and logging context.
@@ -150,15 +148,15 @@ class BaseCommand(ABC):
             self._errors.append(f"Failed to initialize command: {e}")
             return False
 
-    def _BeforeExecute(self) -> bool:
+    def _before_execute(self) -> bool:
         """Optional steps before main execution."""
         return True
 
-    def _AfterExecute(self) -> bool:
+    def _after_execute(self) -> bool:
         """Optional steps after main execution."""
         return True
 
-    def _Finalize(self) -> bool:
+    def _finalize(self) -> bool:
         """Optional finalization after execution."""
         return True
 
@@ -178,7 +176,4 @@ class BaseCommand(ABC):
 
     def _is_console_output(self) -> bool:
         """Return True for default human-readable console output (no --quiet, no explicit --output format)."""
-        return not self._output_quiet and (
-            not bool(self._output_format) or self._output_format == "console"
-        )
-
+        return not self._output_quiet and (not bool(self._output_format) or self._output_format == "console")

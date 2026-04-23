@@ -48,6 +48,7 @@ utils/        ← Pure utilities (no business logic, no service imports)
 - Every controller extends `BaseController` (`controllers/base_controller.py`).
 - Controllers accumulate errors/messages via `self._add_error()` / `self._add_message()`.
 - Controllers orchestrate; services validate. No YAML loading inside controllers.
+- **Controllers never import or instantiate other controllers.** Inter-controller dependencies are forbidden. If a workflow requires the output of multiple controllers, the **command** layer is responsible for instantiating each controller, calling them in order, and passing outputs between them. Controllers are unaware of each other.
 
 ---
 

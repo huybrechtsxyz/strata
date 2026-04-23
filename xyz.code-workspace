@@ -20,6 +20,7 @@
       "**/.DS_Store": true,
       "**/bin": true,
       "**/obj": true,
+      "**/node_modules": true,
       "**/*.egg-info": true,
       ".pytest_cache": true,
       "**/__pycache__": true,

@@ -1,4 +1,4 @@
-"""Service for managing project model I/O operations."""
+"""Service for managing solution model I/O operations."""
 
 import json
 import threading
@@ -10,14 +10,14 @@ from xyz_platform.exceptions.service_exception import (
     PlatformFileNotFoundError,
     ServiceLoadError,
 )
-from xyz_platform.models.project_model import ProjectModel
+from xyz_platform.models.solution_model import SolutionModel
 from xyz_platform.services.base_service import BaseService
 
 
-class ProjectService(BaseService["ProjectModel"]):
-    """Service class for project kinds (Centralized Singleton pattern)."""
+class SolutionService(BaseService["SolutionModel"]):
+    """Service class for solution kinds (Centralized Singleton pattern)."""
 
-    _instances: Dict[str, "ProjectService"] = {}
+    _instances: Dict[str, "SolutionService"] = {}
     _lock = threading.Lock()
 
     @classmethod
@@ -38,7 +38,7 @@ class ProjectService(BaseService["ProjectModel"]):
             return cls._instances[full_key]
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
-        """Initialize the ProjectService (only once per singleton instance)."""
+        """Initialize the SolutionService (only once per singleton instance)."""
         if getattr(self, "_initialized", False):
             return
 
@@ -49,7 +49,7 @@ class ProjectService(BaseService["ProjectModel"]):
         self._initialized = True
 
     @classmethod
-    def get_instance(cls) -> "ProjectService":
+    def get_instance(cls) -> "SolutionService":
         """Get singleton instance."""
         return cls()
 
@@ -60,69 +60,67 @@ class ProjectService(BaseService["ProjectModel"]):
             cls._instances.clear()
 
     def _get_model_class(self):
-        """Return a generic model class for project kinds."""
-        return ProjectModel  # A generic empty model
+        """Return the model class for solution kinds."""
+        return SolutionModel
 
     def _validate_dynamic(self, configuration_model=None, work_path=None):
-        """Project services have no dynamic validation."""
+        """Solution services have no dynamic validation."""
         return True, []
 
-    def load_from_json(self, path: Path) -> ProjectModel:
-        """Load a ProjectModel from a JSON file.
+    def load_from_json(self, path: Path) -> SolutionModel:
+        """Load a SolutionModel from a JSON file.
 
         Args:
             path: Path to JSON file.
 
         Returns:
-            ProjectModel instance.
+            SolutionModel instance.
 
         Raises:
-            FileNotFoundError: If the file does not exist.
-            ValidationError: If the JSON does not match ProjectModel.
+            PlatformFileNotFoundError: If the file does not exist.
+            ModelValidationError: If the JSON does not match SolutionModel.
+            ServiceLoadError: For JSON parsing or other I/O errors.
         """
-        self.logger.debug("Loading project model from JSON", path=str(path))
+        self.logger.debug("Loading solution model from JSON", path=str(path))
 
         if not path.exists():
-            raise PlatformFileNotFoundError(str(path), file_type="project.json")
+            raise PlatformFileNotFoundError(str(path), file_type="solution.json")
 
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            # Validate/construct model; model_validate may raise validation errors
-            self.model = ProjectModel.model_validate(data)
+            self.model = SolutionModel.model_validate(data)
 
-            self.logger.debug("Loaded project model", name=getattr(self.model.meta, "name", "<unknown>"))
+            self.logger.debug("Loaded solution model", name=getattr(self.model.meta, "name", "<unknown>"))
 
             return self.model
 
         except Exception as e:
-            # Convert pydantic/model validation errors into our ModelValidationError
             validation_errors: Any = getattr(e, "errors", None)
             if validation_errors is not None:
                 raise ModelValidationError(
-                    model_name="ProjectModel",
+                    model_name="SolutionModel",
                     validation_errors=validation_errors,
                     message=str(e),
                 ) from e
 
-            # JSON parsing or other IO errors -> service load error
-            raise ServiceLoadError("ProjectService", str(e), cause=e) from e
+            raise ServiceLoadError("SolutionService", str(e), cause=e) from e
 
-    def save_to_json(self, project: ProjectModel, path: Path, indent: int = 2) -> None:
-        """Serialise a PlatformModel to a JSON file.
+    def save_to_json(self, solution: SolutionModel, path: Path, indent: int = 2) -> None:
+        """Serialise a SolutionModel to a JSON file.
 
         Args:
-            platform: PlatformModel to serialise.
+            solution: SolutionModel to serialise.
             path: Destination path.
             indent: JSON indentation level (default 2).
         """
-        self.logger.debug("Saving project model to JSON", path=str(path))
+        self.logger.debug("Saving solution model to JSON", path=str(path))
 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            project.model_dump_json(indent=indent, exclude_none=True),
+            solution.model_dump_json(indent=indent, exclude_none=True),
             encoding="utf-8",
         )
 
-        self.logger.debug("Saved project model to JSON", name=project.meta.name)
+        self.logger.debug("Saved solution model to JSON", name=solution.meta.name)

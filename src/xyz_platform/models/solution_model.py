@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pydantic models for project file validation."""
+"""Pydantic models for solution file validation."""
 
 from typing import Any, Dict, List, Optional
 
@@ -8,9 +8,9 @@ from pydantic import BaseModel, Field, field_validator
 from xyz_platform.models.common_models import PlatformName
 
 
-class ProjectSpecProfileConfigModel(BaseModel):
+class SolutionSpecProfileConfigModel(BaseModel):
     """
-    Model for configuration paths in the project specification profiles.
+    Model for configuration paths in the solution specification profiles.
     """
 
     name: PlatformName = Field(..., description="Name of the configuration path")
@@ -22,63 +22,60 @@ class ProjectSpecProfileConfigModel(BaseModel):
     created: Optional[str] = Field(None, description="Creation timestamp of the configuration path")
 
 
-class ProjectSpecProfileModel(BaseModel):
+class SolutionSpecProfileModel(BaseModel):
     """
-    Model for profiles in the project specification.
+    Model for profiles in the solution specification.
     """
 
     name: PlatformName = Field(..., description="Name of the profile")
     active: bool = Field(..., description="Whether the profile is active")
     created: Optional[str] = Field(None, description="Creation timestamp of the profile")
-    config_paths: Optional[List[ProjectSpecProfileConfigModel]] = Field(
+    config_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
         None, description="List of configuration paths associated with the profile"
     )
-    dotenv_paths: Optional[List[ProjectSpecProfileConfigModel]] = Field(
+    dotenv_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
         None, description="List of dotenv paths associated with the profile"
     )
-    data_paths: Optional[List[ProjectSpecProfileConfigModel]] = Field(
+    data_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
         None, description="List of data paths associated with the profile"
     )
-    secret_paths: Optional[List[ProjectSpecProfileConfigModel]] = Field(
+    secret_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
         None, description="List of secret paths associated with the profile"
     )
 
 
-class ProjectSpecRepositoriesModel(BaseModel):
+class SolutionSpecRepositoryModel(BaseModel):
     """
-    Model for repositories in the project specification.
+    Model for a repository entry in the solution specification.
     """
 
     name: PlatformName = Field(..., description="Name of the repository")
     url: str = Field(..., description="URL of the repository")
-    path: str = Field(..., description="Path to the repository")
+    path: str = Field(..., description="Local path to the repository")
     type: str = Field(..., description="Type of the repository")
     branch: str = Field(..., description="Branch of the repository")
     created: Optional[str] = Field(None, description="Creation timestamp of the repository")
 
 
-class ProjectSpecModel(BaseModel):
+class SolutionSpecModel(BaseModel):
     """
-    Specification model for project resource types.
+    Specification model for solution resource types.
     """
 
-    # Define any specific fields for the spec here, or keep it flexible
-    # For example, you can add a field like:
-    # config: Optional[Dict[str, Any]] = Field(None, description="Configuration for the project")
-    repositories: Optional[List[ProjectSpecRepositoriesModel]] = Field(
-        None, description="List of repositories associated with the project"
+    repositories: Optional[List[SolutionSpecRepositoryModel]] = Field(
+        None, description="List of repositories associated with the solution"
     )
-    profiles: Optional[List[ProjectSpecProfileModel]] = Field(
-        None, description="List of profiles associated with the project"
+    profiles: Optional[List[SolutionSpecProfileModel]] = Field(
+        None, description="List of profiles associated with the solution"
     )
 
 
-class ProjectMetaModel(BaseModel):
+class SolutionMetaModel(BaseModel):
     """
-    Metadata model for project resource types.
+    Metadata model for solution resource types.
     """
 
-    name: str = Field(..., description="Name of the unknown resource")
+    name: str = Field(..., description="Name of the solution")
     annotations: Optional[Dict[str, Any]] = Field(None, description="Annotations for the model")
     labels: Optional[Dict[str, Any]] = Field(None, description="Key-value pairs for labeling the model")
     tags: Optional[List[Any]] = Field(None, description="List of tags associated with the model")
@@ -92,15 +89,19 @@ class ProjectMetaModel(BaseModel):
         return v.strip()
 
 
-class ProjectModel(BaseModel):
+class SolutionModel(BaseModel):
     """
-    Generic model for project resource types.
+    Model for solution resource types.
+
+    A solution groups a collection of related repositories together and provides
+    the source of truth for ``xyz init <name>``, including the VS Code workspace
+    definition, shared profiles, and per-repo metadata.
     """
 
-    apiVersion: str = Field(..., description="API version of the unknown model")
-    kind: str = Field(..., description="Kind of the unknown model")
-    meta: ProjectMetaModel = Field(..., description="Metadata for the unknown model")
-    spec: ProjectSpecModel = Field(..., description="Specification can be any structure")
+    apiVersion: str = Field(..., description="API version of the solution model")
+    kind: str = Field(..., description="Kind of the solution model")
+    meta: SolutionMetaModel = Field(..., description="Metadata for the solution")
+    spec: SolutionSpecModel = Field(..., description="Specification for the solution")
 
     @field_validator("apiVersion", "kind")
     @classmethod

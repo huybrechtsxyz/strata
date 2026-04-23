@@ -23,19 +23,12 @@ def handle_command_exit(command, success: bool) -> None:
         click.exceptions.Exit: With appropriate exit code
     """
     # Mark as failure if there are validation errors
-    if (
-        success
-        and hasattr(command, "has_validation_errors")
-        and command.has_validation_errors()
-    ):
+    if success and hasattr(command, "has_validation_errors") and command.has_validation_errors():
         success = False
 
     if not success:
         # Check if failure was due to validation errors vs system errors
-        if (
-            hasattr(command, "has_validation_errors")
-            and command.has_validation_errors()
-        ):
+        if hasattr(command, "has_validation_errors") and command.has_validation_errors():
             # File didn't validate - exit code 3
             raise click.exceptions.Exit(3)
         else:
@@ -66,9 +59,7 @@ def validate_mutually_exclusive_options(ctx, param, value, exclusive_params):
         # Check if any of the exclusive parameters are also set
         for exclusive_param in exclusive_params:
             if ctx.params.get(exclusive_param):
-                raise click.UsageError(
-                    f"Illegal usage: --{param.name} and --{exclusive_param} are mutually exclusive."
-                )
+                raise click.UsageError(f"Illegal usage: --{param.name} and --{exclusive_param} are mutually exclusive.")
     return value
 
 
@@ -112,15 +103,11 @@ def validate_output_quiet_exclusive(ctx, param, value):
     if param.name == "output":
         # For --output: check if quiet is set and output value is non-empty
         if value and ctx.params.get("quiet"):
-            raise click.UsageError(
-                "Illegal usage: --output and --quiet are mutually exclusive."
-            )
+            raise click.UsageError("Illegal usage: --output and --quiet are mutually exclusive.")
     elif param.name == "quiet":
         # For --quiet: check if output is set with non-empty value
         if value and ctx.params.get("output"):
-            raise click.UsageError(
-                "Illegal usage: --quiet and --output are mutually exclusive."
-            )
+            raise click.UsageError("Illegal usage: --quiet and --output are mutually exclusive.")
     return value
 
 
