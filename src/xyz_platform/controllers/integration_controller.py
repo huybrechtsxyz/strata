@@ -1,6 +1,7 @@
 """Controller for managing external integrations — availability, validation, and registration."""
 
 from typing import Any, Dict, List, Optional, Tuple
+
 from xyz_platform.controllers.base_controller import BaseController
 from xyz_platform.integrations.factory import IntegrationFactory
 from xyz_platform.integrations.registry import IntegrationRegistry
@@ -10,15 +11,13 @@ from xyz_platform.models.integration_model import IntegrationModel
 class IntegrationController(BaseController):
     """Controller for managing external integrations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the integration controller."""
         super().__init__()
         self._registry = IntegrationRegistry.get_instance()
         self._factory = IntegrationFactory
 
-    def _ensure_integration_registered(
-        self, name: str, integration_type: Optional[str] = None
-    ) -> bool:
+    def _ensure_integration_registered(self, name: str, integration_type: Optional[str] = None) -> bool:
         """
         Ensure an integration is registered, creating it if necessary.
 
@@ -75,9 +74,7 @@ class IntegrationController(BaseController):
 
     # Integration status methods
 
-    def get_integration_status(
-        self, name: str
-    ) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    def get_integration_status(self, name: str) -> Tuple[bool, Dict[str, Any]]:
         """
         Get status of a specific integration.
 
@@ -106,12 +103,19 @@ class IntegrationController(BaseController):
                     integration=name,
                 )
                 self._errors.append(error_msg)
-                return False, None
+                return False, {
+                    "name": name,
+                    "available": False,
+                    "version": None,
+                    "info": error_msg,
+                    "required": False,
+                    "enabled": False,
+                }
 
             # Get integration info
-            info_dict = integration.get_info()
+            info_dict = integration.get_info() or {}
 
-            status = {
+            status: Dict[str, Any] = {
                 "name": info_dict.get("name", name),
                 "available": info_dict.get("available", False),
                 "version": info_dict.get("version"),
@@ -138,7 +142,14 @@ class IntegrationController(BaseController):
                 exc_info=True,
             )
             self._errors.append(error_msg)
-            return False, None
+            return False, {
+                "name": name,
+                "available": False,
+                "version": None,
+                "info": error_msg,
+                "required": False,
+                "enabled": False,
+            }
 
     def get_all_integrations_status(self) -> Tuple[bool, Dict[str, Dict]]:
         """
@@ -167,7 +178,7 @@ class IntegrationController(BaseController):
         try:
             integrations = self._registry.get_all_integrations()
 
-            for name, integration in integrations.items():
+            for name, _ in integrations.items():
                 try:
                     success, integration_status = self.get_integration_status(name)
                     if success:
@@ -183,9 +194,7 @@ class IntegrationController(BaseController):
                         errors.extend(self._errors)
 
                 except Exception as e:
-                    error_msg = (
-                        f"Failed to get status for integration '{name}': {str(e)}"
-                    )
+                    error_msg = f"Failed to get status for integration '{name}': {str(e)}"
                     self.logger.warning(
                         "Failed to get integration status",
                         integration=name,
@@ -234,9 +243,7 @@ class IntegrationController(BaseController):
             )
             return False
 
-    def ensure_integration_available(
-        self, name: str, operation: Optional[str] = None
-    ) -> Tuple[bool, str]:
+    def ensure_integration_available(self, name: str, operation: Optional[str] = None) -> Tuple[bool, str]:
         """
         Ensure an integration is available and meets requirements.
 
@@ -340,9 +347,7 @@ class IntegrationController(BaseController):
         errors = []
 
         for integration_name in required_integrations:
-            success, error = self.ensure_integration_available(
-                integration_name, operation
-            )
+            success, error = self.ensure_integration_available(integration_name, operation)
             if not success:
                 errors.append(error)
 
@@ -362,9 +367,7 @@ class IntegrationController(BaseController):
         )
         return True, []
 
-    def get_integration(
-        self, name: str, operation: Optional[str] = None
-    ) -> Optional[Any]:
+    def get_integration(self, name: str, operation: Optional[str] = None) -> Optional[Any]:
         """
         Get a validated integration instance.
 
@@ -408,11 +411,7 @@ class IntegrationController(BaseController):
         for integration_name, operation in required_integrations.items():
             integration = self.get_integration(integration_name, operation)
             if integration is None:
-                error_msg = (
-                    self._errors[-1]
-                    if self._errors
-                    else f"Failed to resolve integration '{integration_name}'"
-                )
+                error_msg = self._errors[-1] if self._errors else f"Failed to resolve integration '{integration_name}'"
                 errors.append(error_msg)
                 continue
 
@@ -461,9 +460,7 @@ class IntegrationController(BaseController):
         Returns:
             Tuple[bool, str]: (is_available, error_message)
         """
-        return self.ensure_integration_available(
-            "terraform", "infrastructure provisioning"
-        )
+        return self.ensure_integration_available("terraform", "infrastructure provisioning")
 
     def check_bitwarden_available(self) -> Tuple[bool, str]:
         """
@@ -481,9 +478,7 @@ class IntegrationController(BaseController):
         Returns:
             Tuple[bool, str]: (is_available, error_message)
         """
-        return self.ensure_integration_available(
-            "azure-keyvault", "Azure secret management"
-        )
+        return self.ensure_integration_available("azure-keyvault", "Azure secret management")
 
     def check_azure_appconfig_available(self) -> Tuple[bool, str]:
         """
@@ -492,9 +487,7 @@ class IntegrationController(BaseController):
         Returns:
             Tuple[bool, str]: (is_available, error_message)
         """
-        return self.ensure_integration_available(
-            "azure-appconfig", "Azure configuration management"
-        )
+        return self.ensure_integration_available("azure-appconfig", "Azure configuration management")
 
     def check_consul_available(self) -> Tuple[bool, str]:
         """
@@ -503,9 +496,7 @@ class IntegrationController(BaseController):
         Returns:
             Tuple[bool, str]: (is_available, error_message)
         """
-        return self.ensure_integration_available(
-            "consul", "service discovery and configuration"
-        )
+        return self.ensure_integration_available("consul", "service discovery and configuration")
 
     def check_vault_available(self) -> Tuple[bool, str]:
         """

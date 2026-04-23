@@ -8,7 +8,7 @@ from xyz_platform.logger import get_logger
 class BaseController:
     """Base controller providing shared error/message accumulation and logging."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = get_logger(self.__class__.__module__)
         self._errors: List[str] = []
         self._messages: List[str] = []

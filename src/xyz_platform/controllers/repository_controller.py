@@ -25,7 +25,7 @@ class RepositoryController(BaseController):
     - CONTAINER: logged as unsupported (pull/run not in scope here)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the repository controller."""
         super().__init__()
         self._config_service = ConfigurationService.get_instance()
@@ -156,9 +156,7 @@ class RepositoryController(BaseController):
                 "deploy_path": repo.deploy_path,
                 "target_path": str(target_path),
                 "exists": target_path.exists(),
-                "is_git": (
-                    (target_path / ".git").exists() if target_path.exists() else False
-                ),
+                "is_git": ((target_path / ".git").exists() if target_path.exists() else False),
             }
 
         self.logger.debug(
@@ -195,11 +193,7 @@ class RepositoryController(BaseController):
             Tuple of (all_exist, list of missing repository names)
         """
         status = self.get_repository_status(work_path)
-        missing = [
-            repo_name
-            for repo_name, repo_status in status.items()
-            if not repo_status["exists"]
-        ]
+        missing = [repo_name for repo_name, repo_status in status.items() if not repo_status["exists"]]
 
         if missing:
             self.logger.warning(
@@ -358,9 +352,7 @@ class RepositoryController(BaseController):
                     branch=source.reference,
                 )
                 if result.returncode != 0:
-                    error_msg = (
-                        f"Git pull failed for '{repo_name}': {result.stderr.strip()}"
-                    )
+                    error_msg = f"Git pull failed for '{repo_name}': {result.stderr.strip()}"
                     self.logger.error(
                         "Git pull failed",
                         repository=repo_name,
@@ -385,9 +377,7 @@ class RepositoryController(BaseController):
                     branch=source.reference,
                 )
                 if result.returncode != 0:
-                    error_msg = (
-                        f"Git clone failed for '{repo_name}': {result.stderr.strip()}"
-                    )
+                    error_msg = f"Git clone failed for '{repo_name}': {result.stderr.strip()}"
                     self.logger.error(
                         "Git clone failed",
                         repository=repo_name,
@@ -448,9 +438,7 @@ class RepositoryController(BaseController):
             elif repo_ref in (".", "/"):
                 base_candidates.extend([workspace_root, workspace_root.parent])
             else:
-                base_candidates.extend(
-                    [workspace_root / repo_ref, workspace_root.parent / repo_ref]
-                )
+                base_candidates.extend([workspace_root / repo_ref, workspace_root.parent / repo_ref])
 
             source_candidates = []
             for base in base_candidates:
@@ -460,10 +448,7 @@ class RepositoryController(BaseController):
             source_dir = next((p for p in source_candidates if p.exists()), None)
 
             if source_dir is None:
-                error_msg = (
-                    f"Bundled source path does not exist for '{repo_name}': "
-                    f"{source_candidates[0]}"
-                )
+                error_msg = f"Bundled source path does not exist for '{repo_name}': {source_candidates[0]}"
                 if len(source_candidates) > 1:
                     tried = ", ".join(str(p) for p in source_candidates)
                     error_msg = f"{error_msg}. Tried: {tried}"

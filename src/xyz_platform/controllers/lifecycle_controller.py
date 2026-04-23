@@ -31,7 +31,7 @@ class LifecycleController(BaseController):
     list of ScriptPathModel / FilePath entries.
     """
 
-    def __init__(self, enable_templating: bool = True):
+    def __init__(self, enable_templating: bool = True) -> None:
         """
         Initialize the lifecycle controller.
 
@@ -190,20 +190,14 @@ class LifecycleController(BaseController):
                 and getattr(config_phase, "scripts", None)
             ):
                 # Merge: phase_model scripts first (higher priority), config scripts appended
-                merged = list(phase_model.scripts or []) + list(
-                    config_phase.scripts or []
-                )
+                merged = list(phase_model.scripts or []) + list(config_phase.scripts or [])
                 phase_model.scripts = merged
                 self.logger.debug(
                     "Merged configuration lifecycle scripts into phase model",
                     phase=phase_name,
                     total_scripts=len(merged),
                 )
-            elif (
-                not getattr(phase_model, "scripts", None)
-                and config_phase
-                and getattr(config_phase, "scripts", None)
-            ):
+            elif not getattr(phase_model, "scripts", None) and config_phase and getattr(config_phase, "scripts", None):
                 # Phase has no scripts — use config phase entirely
                 self.logger.debug(
                     "Using configuration phase model (phase_model has no scripts)",
@@ -279,9 +273,7 @@ class LifecycleController(BaseController):
 
         if isinstance(lifecycle_model, CommonLifecycleModel):
             phase = lifecycle_model.root.get(phase_name)
-        elif hasattr(lifecycle_model, "root") and isinstance(
-            getattr(lifecycle_model, "root", None), dict
-        ):
+        elif hasattr(lifecycle_model, "root") and isinstance(getattr(lifecycle_model, "root", None), dict):
             phase = getattr(lifecycle_model, "root", {}).get(phase_name)
         elif hasattr(lifecycle_model, phase_name):
             phase = getattr(lifecycle_model, phase_name)
@@ -294,9 +286,7 @@ class LifecycleController(BaseController):
         scripts = getattr(phase, "scripts", None)
         return bool(scripts)
 
-    def get_phase_script_count(
-        self, lifecycle_model: Optional[object], phase_name: str
-    ) -> int:
+    def get_phase_script_count(self, lifecycle_model: Optional[object], phase_name: str) -> int:
         """
         Get the number of scripts in a lifecycle phase.
 
@@ -312,9 +302,7 @@ class LifecycleController(BaseController):
 
         if isinstance(lifecycle_model, CommonLifecycleModel):
             phase = lifecycle_model.root.get(phase_name)
-        elif hasattr(lifecycle_model, "root") and isinstance(
-            getattr(lifecycle_model, "root", None), dict
-        ):
+        elif hasattr(lifecycle_model, "root") and isinstance(getattr(lifecycle_model, "root", None), dict):
             phase = getattr(lifecycle_model, "root", {}).get(phase_name)
         else:
             phase = getattr(lifecycle_model, phase_name, None)
@@ -352,9 +340,7 @@ class LifecycleController(BaseController):
         script_path = work_path / script_file
 
         if not script_path.exists():
-            error_msg = (
-                f"Lifecycle script not found: {script_file} (phase: {phase_name})"
-            )
+            error_msg = f"Lifecycle script not found: {script_file} (phase: {phase_name})"
             self.logger.error(
                 "Lifecycle script not found",
                 phase=phase_name,
@@ -365,9 +351,7 @@ class LifecycleController(BaseController):
             return False
 
         if not script_path.is_file():
-            error_msg = (
-                f"Lifecycle script is not a file: {script_file} (phase: {phase_name})"
-            )
+            error_msg = f"Lifecycle script is not a file: {script_file} (phase: {phase_name})"
             self.logger.error(
                 "Lifecycle script is not a file",
                 phase=phase_name,
@@ -381,7 +365,7 @@ class LifecycleController(BaseController):
             "Executing lifecycle script",
             phase=phase_name,
             script=str(script_file),
-            description=script_desc or "",
+            description=log_desc or "",
         )
 
         env = self._prepare_environment(context)
@@ -391,15 +375,11 @@ class LifecycleController(BaseController):
         temp_dir: Optional[Path] = None
 
         if self.enable_templating:
-            script_to_execute, temp_dir = self._process_script_template(
-                script_path, env, phase_name
-            )
+            script_to_execute, temp_dir = self._process_script_template(script_path, env, phase_name)
             if script_to_execute is None:
-                error_msg = (
-                    f"Failed to process template for script: {script_file} "
-                    f"(phase: {phase_name})"
-                )
-                return False, error_msg
+                error_msg = f"Failed to process template for script: {script_file} (phase: {phase_name})"
+                self._errors.append(error_msg)
+                return False
 
         try:
             cmd = self._build_command(script_to_execute)
@@ -426,15 +406,10 @@ class LifecycleController(BaseController):
                         script=str(script_file),
                         output=result.stdout,
                     )
-                self._messages.append(
-                    f"Lifecycle script executed: {script_file} (phase: {phase_name})"
-                )
+                self._messages.append(f"Lifecycle script executed: {script_file} (phase: {phase_name})")
                 return True
 
-            error_msg = (
-                f"Lifecycle script failed: {script_file} "
-                f"(phase: {phase_name}, exit code: {result.returncode})"
-            )
+            error_msg = f"Lifecycle script failed: {script_file} (phase: {phase_name}, exit code: {result.returncode})"
             if result.stderr:
                 error_msg += f"\nError output: {result.stderr.strip()}"
             self.logger.error(
@@ -449,9 +424,7 @@ class LifecycleController(BaseController):
             return False
 
         except subprocess.TimeoutExpired:
-            error_msg = (
-                f"Lifecycle script timed out: {script_file} (phase: {phase_name})"
-            )
+            error_msg = f"Lifecycle script timed out: {script_file} (phase: {phase_name})"
             self.logger.error(
                 "Lifecycle script timed out",
                 phase=phase_name,
