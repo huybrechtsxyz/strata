@@ -20,6 +20,7 @@ import sys
 
 import click
 
+from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
 
@@ -65,7 +66,7 @@ def main():
 # Register command groups so they're available when module is imported
 #
 
-# main.add_command(deploy)
+main.add_command(version_command)
 
 
 #

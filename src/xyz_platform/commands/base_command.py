@@ -70,6 +70,28 @@ class BaseCommand(ABC):
         """
         return {}
 
+    # Console output methods
+
+    @classmethod
+    def show_console_header(cls, work_path: Optional[str] = None) -> None:
+        click.echo("=" * 80)
+        click.echo(f"🚀 XYZ PLATFORM — CLI (v{get_version()})")
+        click.echo("=" * 80)
+        click.echo("Automates workspace preparation, configuration, and deployment.")
+        click.echo(f"⏱️   Timestamp       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        click.echo(f"📜  Entry point     : {' '.join(sys.argv)}")
+        click.echo(f"📂  Current dir     : {os.getcwd()}")
+        if work_path:
+            click.echo(f"📁  Work path       : {work_path}")
+
+    @classmethod
+    def show_console_footer(cls) -> None:
+        click.echo("=" * 80)
+        click.echo("✨ Thank you for using XYZ Platform CLI!")
+        click.echo("📘 Documentation: https://docs.xyzplatform.com")
+        click.echo("💬 Support: https://support.xyzplatform.com")
+        click.echo("=" * 80)
+
     # Message and error handling methods
 
     def has_errors(self) -> bool:
@@ -105,26 +127,6 @@ class BaseCommand(ABC):
     def clear_messages(self) -> None:
         """Clear accumulated messages."""
         self._messages.clear()
-
-    # Console output methods
-
-    def show_console_header(self, work_path: Optional[str] = None) -> None:
-        click.echo("=" * 80)
-        click.echo(f"🚀 XYZ PLATFORM — CLI (v{get_version()})")
-        click.echo("=" * 80)
-        click.echo("Automates workspace preparation, configuration, and deployment.")
-        click.echo(f"⏱️   Timestamp       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        click.echo(f"📜  Entry point     : {' '.join(sys.argv)}")
-        click.echo(f"📂  Current dir     : {os.getcwd()}")
-        if work_path:
-            click.echo(f"📁  Work path       : {self._work_path}")
-
-    def show_console_Footer(self) -> None:
-        click.echo("=" * 80)
-        click.echo("✨ Thank you for using XYZ Platform CLI!")
-        click.echo("📘 Documentation: https://docs.xyzplatform.com")
-        click.echo("💬 Support: https://support.xyzplatform.com")
-        click.echo("=" * 80)
 
     # Lifecycle methods
 
