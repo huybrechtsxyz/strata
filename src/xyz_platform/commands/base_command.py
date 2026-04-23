@@ -4,11 +4,15 @@ import os
 import sys
 from abc import ABC, abstractmethod
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import click
 
+from xyz_platform.controllers.solution_controller import SolutionController
 from xyz_platform.logger import get_logger
+from xyz_platform.logger.logger import reconfigure_logging
+from xyz_platform.utils.system import resolve_path
 from xyz_platform.utils.version import get_version
 
 
@@ -25,17 +29,18 @@ class BaseCommand(ABC):
         quiet: bool = False,
     ) -> None:
         """Initialize the base command."""
-        # Paths
-        self._work_path: str = work_path or os.getcwd()
-
         # Timer attributes
         self._start_time: datetime
         self._end_time: datetime
 
+        # Paths
+        self._work_path: Path = self._get_current_workpath(work_path)
+
         # Logging context
-        self.logger = get_logger(self.__class__.__module__)
+        self._configure_session_logging()
 
         # Correlation IDs — set during _initialize()
+        self._solution_controller: SolutionController = SolutionController(self._work_path)
         self._project_id: str
         self._execution_id: str
 
@@ -140,6 +145,30 @@ class BaseCommand(ABC):
         """
         try:
             self._start_time = datetime.now()
+            self._configure_session_logging()
+
+            self.logger.debug(
+                "Initializing command",
+                extra={"command_class": self.__class__.__name__},
+            )
+
+            if not self._work_path.exists():
+                error_msg = f"Work path does not exist: {self._work_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            # Try to load — but don't fail hard if solution.json doesn't exist yet
+            # (e.g. during `xyz solution init` itself)
+            solution_path = SolutionController.get_solution_json_path(self._work_path)
+            if solution_path.exists():
+                self._solution_controller.load()
+
+            # Assign correlation IDs (UUID v7 — time-ordered)
+            self._project_id = self._session_controller.get_project_id() or generate_uuid()
+            self._execution_id = generate_uuid()
+            set_context({"project_id": self._project_id, "execution_id": self._execution_id})
+
             return True
         except Exception as e:
             self.logger.error(
@@ -179,3 +208,61 @@ class BaseCommand(ABC):
     def _is_console_output(self) -> bool:
         """Return True for default human-readable console output (no --quiet, no explicit --output format)."""
         return not self._output_quiet and (not bool(self._output_format) or self._output_format == "console")
+
+    # Internal helper methods
+
+    def _configure_session_logging(self) -> None:
+        """
+        Auto-configure logging from session-specific YAML if available.
+
+        Looks for ``.platform/logging.yaml`` under ``self._work_path``.
+        Reconfigures logging only when the discovered config path changes.
+        """
+        try:
+            logging_config = SolutionController.get_logging_config_path(self._work_path)
+            if logging_config is None:
+                return
+
+            if not logging_config.exists():
+                return
+
+            config_path = resolve_path(str(logging_config))
+            reconfigure_logging(config_path=config_path)
+
+            # Refresh logger after reconfiguration
+            self.logger = get_logger(self.__class__.__module__)
+            self.logger.debug(
+                "Session logging configuration loaded",
+                extra={
+                    "command_class": self.__class__.__name__,
+                    "logging_config_path": config_path,
+                },
+            )
+
+        except Exception as e:
+            # Logging configuration should not block command execution
+            self.logger.warning(
+                f"Failed to auto-configure session logging: {str(e)}",
+                extra={"command_class": self.__class__.__name__},
+            )
+
+    # Get the work path based on input or default to current directory
+    def _get_current_workpath(self, work_path: Optional[str]) -> Path:
+        """Get the work path for the given workspace."""
+        work_path_obj: Path
+        # If work_path is provided, use it directly
+        if work_path is not None and work_path != "":
+            work_path_obj = Path(work_path).resolve()
+            self.logger.debug(
+                "Target work directory from argument",
+                extra={"work_path": str(work_path_obj)},
+            )
+            return work_path_obj
+
+        # Use current working directory as default
+        if Path.cwd().is_absolute():
+            work_path_obj = Path.cwd()
+        else:
+            work_path_obj = Path.cwd().resolve()
+        self.logger.debug("Target work directory (default)", extra={"work_path": str(work_path)})
+        return work_path_obj

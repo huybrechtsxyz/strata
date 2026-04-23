@@ -1,11 +1,19 @@
 """Controller for solution lifecycle operations."""
 
+import json
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 from xyz_platform.controllers.base_controller import BaseController
 from xyz_platform.models.solution_model import SolutionModel, SolutionSpecRepositoryModel
 from xyz_platform.services.solution_service import SolutionService
+from xyz_platform.utils.config import (
+    SOLUTION_CONFIGURATION_FILE,
+    SOLUTION_DIR,
+    SOLUTION_FILE,
+    SOLUTION_LOGGING_FILE,
+    SOLUTION_WORKSPACE_SUFFIX,
+)
 
 
 class SolutionController(BaseController):
@@ -13,21 +21,16 @@ class SolutionController(BaseController):
     Controller for solution-level operations.
 
     Responsibilities:
-    - Initialise a new solution (``xyz init <name>``)
+    - Initialise a new solution (``xyz solution init <name>``)
     - Load and validate an existing solution from disk
     - Add / remove repositories from a solution
     - Generate the VS Code ``.code-workspace`` file from solution state
     - Persist solution changes back to ``solution.json``
     """
 
-    # Path conventions
-    WORKSPACE_FILE_SUFFIX = ".code-workspace"
-    XYZ_SOLUTION_FILE = "solution.json"
-    XYZ_SOLUTION_DIR = ".platform"
-
     def __init__(self, work_path: Path) -> None:
         super().__init__()
-        self.work_path = work_path
+        self._work_path = work_path
         self._service = SolutionService.get_instance()
         self._solution: Optional[SolutionModel] = None
 
@@ -45,7 +48,7 @@ class SolutionController(BaseController):
     # ------------------------------------------------------------------
 
     def load(self) -> Tuple[bool, List[str]]:
-        """Load the solution model from ``<work_path>/.xyz_platform/solution.json``.
+        """Load the solution model from ``<work_path>/.platform/solution.json``.
 
         Returns:
             (success, errors)
@@ -87,7 +90,7 @@ class SolutionController(BaseController):
     def init(self, name: str) -> Tuple[bool, List[str]]:
         """Initialise a new solution workspace.
 
-        Creates the ``.xyz_platform/`` state directory, an empty
+        Creates the ``.platform/`` state directory, an empty
         ``solution.json``, and a ``<name>.code-workspace`` file in
         *work_path*.
 
@@ -97,8 +100,7 @@ class SolutionController(BaseController):
         Returns:
             (success, errors)
         """
-        state_dir = self.work_path / self.XYZ_SOLUTION_DIR
-        state_dir.mkdir(parents=True, exist_ok=True)
+        SolutionController.get_state_dir(self._work_path).mkdir(parents=True, exist_ok=True)
 
         self._solution = SolutionModel(
             apiVersion="platform.huybrechts.xyz/v1",
@@ -115,7 +117,7 @@ class SolutionController(BaseController):
         if not ok:
             return ok, errors
 
-        self._add_message(f"Solution '{name}' initialised at {self.work_path}")
+        self._add_message(f"Solution '{name}' initialised at {self._work_path}")
         return True, []
 
     # ------------------------------------------------------------------
@@ -188,12 +190,10 @@ class SolutionController(BaseController):
             self._add_error("No solution loaded — cannot generate workspace.")
             return False, self.get_errors()
 
-        import json
-
         name = self._solution.meta.name
         repos = self._solution.spec.repositories or []
 
-        folders = [{"path": "."}]  # always include the solution root
+        folders: List[dict] = [{"path": "."}]  # always include the solution root
         for repo in repos:
             folders.append({"path": repo.path, "name": repo.name})
 
@@ -202,7 +202,7 @@ class SolutionController(BaseController):
             "settings": {},
         }
 
-        workspace_path = self.work_path / f"{name}{self.WORKSPACE_FILE_SUFFIX}"
+        workspace_path = self._work_path / f"{name}{SOLUTION_WORKSPACE_SUFFIX}"
         try:
             workspace_path.write_text(
                 json.dumps(workspace_data, indent=2),
@@ -217,11 +217,35 @@ class SolutionController(BaseController):
             return False, self.get_errors()
 
     # ------------------------------------------------------------------
+    # Static path helpers  (no instance needed — safe to call from anywhere)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_logging_config_path(work_path: Path) -> Path:
+        """Return the path to the solution logging config file."""
+        return work_path / SOLUTION_DIR / SOLUTION_LOGGING_FILE
+
+    @staticmethod
+    def get_configuration_path(work_path: Path) -> Path:
+        """Return the path to the solution configuration file."""
+        return work_path / SOLUTION_DIR / SOLUTION_CONFIGURATION_FILE
+
+    @staticmethod
+    def get_solution_json_path(work_path: Path) -> Path:
+        """Return the path to solution.json."""
+        return work_path / SOLUTION_DIR / SOLUTION_FILE
+
+    @staticmethod
+    def get_state_dir(work_path: Path) -> Path:
+        """Return the path to the solution state directory."""
+        return work_path / SOLUTION_DIR
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _solution_path(self) -> Path:
-        return self.work_path / self.XYZ_SOLUTION_DIR / self.XYZ_SOLUTION_FILE
+        return SolutionController.get_solution_json_path(self._work_path)
 
     def _add_error(self, message: str) -> None:
         self.logger.error(message)
