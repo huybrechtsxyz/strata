@@ -15,17 +15,11 @@ Exit Codes:
     3  : Validation failure - file processed but invalid
 """
 
-import sys
 import os
+import sys
+
 import click
 
-# from xyz_platform.commands.cli_version import version_command
-# from xyz_platform.commands.cli_help import help_command
-# from xyz_platform.commands.cli_tools import tools_command
-# from xyz_platform.commands.cli_session import session_command
-# from xyz_platform.commands.cli_validate import validate
-# from xyz_platform.commands.cli_builders import build
-# from xyz_platform.commands.cli_deploy import deploy
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
 
@@ -39,8 +33,7 @@ logger = get_logger(__name__)
 @click.group(
     name="main",
     help=(
-        "XYZ Platform CLI.\n\n"
-        "Automates workspace preparation, configuration, and deployment for the XYZ Platform.\n\n"
+        "XYZ Platform CLI.\n\nAutomates workspace preparation, configuration, and deployment for the XYZ Platform.\n\n"
         # "Typical flow:\n\n"
         # "  1) xyz session init --work-path <wp>\n\n"
         # "  2) xyz session add --url <repo-url> --name <repo> --work-path <wp>\n\n"
@@ -72,13 +65,6 @@ def main():
 # Register command groups so they're available when module is imported
 #
 
-# main.add_command(version_command)
-# main.add_command(help_command)
-# main.add_command(tools_command)
-# main.add_command(session_command)
-# main.add_command(config)
-# main.add_command(validate)
-# main.add_command(build)
 # main.add_command(deploy)
 
 

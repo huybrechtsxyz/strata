@@ -21,9 +21,9 @@ class SolutionController(BaseController):
     """
 
     # Path conventions
-    SOLUTION_FILE = "solution.json"
     WORKSPACE_FILE_SUFFIX = ".code-workspace"
-    XYZ_STATE_DIR = ".xyz_platform"
+    XYZ_SOLUTION_FILE = "solution.json"
+    XYZ_SOLUTION_DIR = ".platform"
 
     def __init__(self, work_path: Path) -> None:
         super().__init__()
@@ -97,7 +97,7 @@ class SolutionController(BaseController):
         Returns:
             (success, errors)
         """
-        state_dir = self.work_path / self.XYZ_STATE_DIR
+        state_dir = self.work_path / self.XYZ_SOLUTION_DIR
         state_dir.mkdir(parents=True, exist_ok=True)
 
         self._solution = SolutionModel(
@@ -221,7 +221,7 @@ class SolutionController(BaseController):
     # ------------------------------------------------------------------
 
     def _solution_path(self) -> Path:
-        return self.work_path / self.XYZ_STATE_DIR / self.SOLUTION_FILE
+        return self.work_path / self.XYZ_SOLUTION_DIR / self.XYZ_SOLUTION_FILE
 
     def _add_error(self, message: str) -> None:
         self.logger.error(message)
