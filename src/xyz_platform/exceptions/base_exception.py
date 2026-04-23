@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Base exception classes for xyz-platform."""
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 
-class PlatformException(Exception):
+class PlatformError(Exception):
     """Base exception for all xyz-platform errors."""
 
     def __init__(
@@ -41,25 +41,25 @@ class PlatformException(Exception):
         return " | ".join(parts)
 
 
-class PlatformConfigurationError(PlatformException):
+class PlatformConfigurationError(PlatformError):
     """Raised when platform configuration is invalid or missing."""
 
     pass
 
 
-class PlatformNotFoundError(PlatformException):
+class PlatformNotFoundError(PlatformError):
     """Raised when a requested resource is not found."""
 
     pass
 
 
-class PlatformValidationError(PlatformException):
+class PlatformValidationError(PlatformError):
     """Raised when validation fails."""
 
     pass
 
 
-class PlatformStateError(PlatformException):
+class PlatformStateError(PlatformError):
     """Raised when an operation is attempted in an invalid state."""
 
     pass

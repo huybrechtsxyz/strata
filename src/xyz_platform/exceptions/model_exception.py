@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Model and schema validation exceptions."""
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from .base_exception import PlatformValidationError
 
 
@@ -50,10 +51,7 @@ class InvalidReferenceError(PlatformValidationError):
         reference_type: str,
         reference_value: str,
     ):
-        msg = (
-            f"{source_type} '{source_name}' references unknown "
-            f"{reference_type} '{reference_value}'"
-        )
+        msg = f"{source_type} '{source_name}' references unknown {reference_type} '{reference_value}'"
         super().__init__(
             message=msg,
             error_code="INVALID_REFERENCE",
@@ -85,10 +83,7 @@ class SchemaVersionError(PlatformValidationError):
     """Raised when resource schema version is incompatible."""
 
     def __init__(self, actual_version: str, expected_version: str):
-        msg = (
-            f"Schema version mismatch: got '{actual_version}', "
-            f"expected '{expected_version}'"
-        )
+        msg = f"Schema version mismatch: got '{actual_version}', expected '{expected_version}'"
         super().__init__(
             message=msg,
             error_code="SCHEMA_VERSION_MISMATCH",

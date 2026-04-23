@@ -2,38 +2,35 @@
 """Custom exceptions for xyz-platform."""
 
 from .base_exception import (
-    PlatformException,
     PlatformConfigurationError,
+    PlatformError,
     PlatformNotFoundError,
-    PlatformValidationError,
     PlatformStateError,
+    PlatformValidationError,
 )
-
 from .model_exception import (
-    ModelValidationError,
     DuplicateNameError,
     InvalidReferenceError,
-    UnsupportedKindError,
+    ModelValidationError,
     SchemaVersionError,
+    UnsupportedKindError,
 )
-
+from .path_exception import PathValidationError
 from .service_exception import (
-    ServiceNotAvailableError,
-    ServiceNotValidatedError,
-    WorkspaceNotFoundError,
-    DeploymentNotFoundError,
     ConfigurationNotFoundError,
+    DeploymentNotFoundError,
+    PlatformFileNotFoundError,
     ProviderNotFoundError,
     ResourceTypeNotFoundError,
     ServiceLoadError,
-    PlatformFileNotFoundError,
+    ServiceNotAvailableError,
+    ServiceNotValidatedError,
+    WorkspaceNotFoundError,
 )
-
-from .path_exception import PathValidationError
 
 __all__ = [
     # Base exceptions
-    "PlatformException",
+    "PlatformError",
     "PlatformConfigurationError",
     "PlatformNotFoundError",
     "PlatformValidationError",

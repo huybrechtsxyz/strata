@@ -96,9 +96,9 @@ class BaseIntegration(ABC):
         self.integration_type = config.type
         self.command = self._get_command_from_config()
 
-        self._is_available = None
-        self._version = None
-        self._info = None
+        self._is_available: Optional[bool] = None
+        self._version: Optional[str] = None
+        self._info: Optional[str] = None
         self._initialized = True
 
         logger.debug(
@@ -162,17 +162,38 @@ class BaseIntegration(ABC):
         # Fallback to integration type
         return self.config.type
 
-    def _get_env_var(self, var_name: str) -> Optional[str]:
+    def _get_env_var(self, var_name: str, default: Optional[str] = None) -> Optional[str]:
         """
         Get environment variable value.
 
         Args:
             var_name: Environment variable name
+            default: Default value if not set
 
         Returns:
-            Environment variable value or None
+            Environment variable value or default
         """
-        return os.getenv(var_name)
+        return os.getenv(var_name, default)
+
+    def _resolve_env_vars(self, value: str) -> str:
+        """
+        Resolve environment variable references in a string.
+
+        Replaces ``${VAR}`` and ``$VAR`` patterns with their environment values.
+
+        Args:
+            value: String potentially containing env-var references
+
+        Returns:
+            String with env-var references replaced by their values
+        """
+        import re as _re
+
+        def _replace(match: "_re.Match[str]") -> str:
+            var = match.group(1) or match.group(2)
+            return os.getenv(var, match.group(0))
+
+        return _re.sub(r"\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)", _replace, value)
 
     # Abstract methods to implement in subclasses
 
@@ -210,7 +231,7 @@ class BaseIntegration(ABC):
         """
         if not self.is_available():
             self._info = f"{self.integration_name} is not installed or not in PATH"
-            return False, self._info
+            return False, self._info or ""
 
         # Validate version if requirements are specified
         version_valid, version_error = self.validate_version()

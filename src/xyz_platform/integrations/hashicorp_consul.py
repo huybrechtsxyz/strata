@@ -11,6 +11,7 @@ from xyz_platform.integrations.capabilities import IKVStore, IVariableStore
 from xyz_platform.integrations.store_integration import StoreIntegration
 from xyz_platform.logger import get_logger
 from xyz_platform.models.integration_model import IntegrationModel
+from xyz_platform.utils.system import CommandResult
 
 logger = get_logger(__name__)
 
@@ -471,7 +472,7 @@ class ConsulIntegration(StoreIntegration):
         self,
         args: List[str],
         timeout: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> CommandResult:
         """
         Run integration command with Consul environment variables injected.
 
@@ -499,7 +500,7 @@ class ConsulIntegration(StoreIntegration):
         os.environ.update(env)
 
         try:
-            result = self._run_integration(args=args, timeout=timeout)
+            result = self._run_integration(args=args, timeout=timeout if timeout is not None else 300)
             return result
         finally:
             # Restore original environment

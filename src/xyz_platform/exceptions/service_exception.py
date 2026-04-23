@@ -2,14 +2,14 @@
 """Service layer exceptions."""
 
 from typing import List, Optional
+
 from .base_exception import (
-    PlatformException,
     PlatformNotFoundError,
     PlatformStateError,
 )
 
 
-class ServiceNotAvailableError(PlatformException):
+class ServiceNotAvailableError(PlatformError):
     """Raised when a required service is not available."""
 
     def __init__(self, service_name: str, reason: Optional[str] = None):
@@ -35,12 +35,10 @@ class ServiceNotValidatedError(PlatformStateError):
         )
 
 
-class ServiceLoadError(PlatformException):
+class ServiceLoadError(PlatformError):
     """Raised when a service fails to load."""
 
-    def __init__(
-        self, service_name: str, reason: str, cause: Optional[Exception] = None
-    ):
+    def __init__(self, service_name: str, reason: str, cause: Optional[Exception] = None):
         super().__init__(
             message=f"Failed to load {service_name}: {reason}",
             error_code="SERVICE_LOAD_ERROR",

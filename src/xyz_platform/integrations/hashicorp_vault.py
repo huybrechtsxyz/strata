@@ -348,7 +348,8 @@ class VaultIntegration(StoreIntegration):
                 name=self.integration_name,
             )
             # Read Kubernetes service account JWT
-            if not os.path.exists(self.vault_k8s_jwt_path):
+            jwt_path = self.vault_k8s_jwt_path or ""
+            if not jwt_path or not os.path.exists(jwt_path):
                 logger.warning(
                     "Kubernetes JWT not found",
                     jwt_path=self.vault_k8s_jwt_path,
@@ -356,7 +357,7 @@ class VaultIntegration(StoreIntegration):
                 )
                 return None
 
-            with open(self.vault_k8s_jwt_path, "r") as f:
+            with open(jwt_path, "r") as f:
                 jwt = f.read().strip()
 
             auth_url = f"{self.vault_addr}/v1/auth/kubernetes/login"

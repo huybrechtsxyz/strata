@@ -105,7 +105,7 @@ Never pass `work_path` as a constructor arg or function parameter chain — read
 
 ## Exceptions
 
-- All exceptions extend `PlatformException` (`exceptions/base_exception.py`).
+- All exceptions extend `PlatformError` (`exceptions/base_exception.py`).
 - Use domain-specific subclasses: `ModelValidationError`, `PlatformFileNotFoundError`, `ServiceNotValidatedError`, `InvalidReferenceError`.
 - Always include `message`, optionally `error_code` and `details`.
 - Never raise bare `Exception` or `ValueError` in business logic — use the platform exception hierarchy.
