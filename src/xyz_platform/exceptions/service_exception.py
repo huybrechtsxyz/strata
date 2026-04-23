@@ -3,7 +3,8 @@
 
 from typing import List, Optional
 
-from .base_exception import (
+from xyz_platform.exceptions.base_exception import (
+    PlatformError,
     PlatformNotFoundError,
     PlatformStateError,
 )
