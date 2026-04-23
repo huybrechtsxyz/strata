@@ -25,7 +25,7 @@ def version_command(
 
     # Output handling based on --output option
     if output == "json":
-        click.echo(json.dumps({"version": "1.0.0"}))
+        click.echo(json.dumps({"version": version}))
         return
 
     # Default to text output if no format specified or if --output text

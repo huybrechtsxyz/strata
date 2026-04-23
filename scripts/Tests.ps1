@@ -22,3 +22,10 @@ New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 -h
 .\scripts\Run.ps1
+
+.\scripts\Run.ps1 version -h
+.\scripts\Run.ps1 version
+.\scripts\Run.ps1 version --output console
+.\scripts\Run.ps1 version --output json
+.\scripts\Run.ps1 version --output text
+
