@@ -12,8 +12,28 @@ Configuration
 - Ensure `bws` is in your `PATH` and verify with `bws --version`.
 - Set access token in environment: `BWS_ACCESS_TOKEN="your-access-token"` (machine account token)
 
-Environment Variables
-- `BWS_ACCESS_TOKEN`: Bitwarden Secrets Manager access token (required)
+Connection parameters
+
+- Required:
+	- `BWS_ACCESS_TOKEN` — Bitwarden Secrets Manager access token (default env var name). The integration also supports overriding the env-var name in the integration YAML (see example).
+
+- How xyz-platform uses it:
+	- The integration looks for an API key/env-var name in `authentication.api_key.api_key` in the integration YAML. If omitted, it falls back to `BWS_ACCESS_TOKEN`.
+
+Example — integration YAML override
+
+```yaml
+integration:
+	name: bitwarden
+	type: bitwarden
+	authentication:
+		method: api_key
+		api_key:
+			api_key: "MY_BWS_TOKEN_ENV"
+```
+
+Notes
+- Ensure `bws` CLI is installed and the access token has necessary permissions to list/get secrets.
 
 Usage
 - Get secret: `bws secret get <secret-id>`

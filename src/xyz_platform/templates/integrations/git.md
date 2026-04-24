@@ -7,6 +7,19 @@ Prerequisites
 - `git` CLI installed
 - Credentials configured for remote (SSH key or credential helper)
 
+Connection parameters
+
+- Required:
+	- `git` CLI available in `PATH`.
+
+- Common environment variables used by `git` operations (optional):
+	- `GIT_SSH_COMMAND` — custom SSH command (e.g., `ssh -i /path/to/key`)
+	- `GIT_ASKPASS` — helper program for interactive credential prompts in non-interactive CI
+	- `GIT_CONFIG` / `GIT_DIR` — alternative config or repo directory locations
+
+How xyz-platform connects
+- xyz-platform calls `git` commands from the process environment. Ensure the user or service account running the platform has appropriate credentials (SSH key or PAT) and that the shell environment exposes any custom `GIT_*` variables needed for authentication.
+
 Common Commands
 - Clone: `git clone <repo-url>`
 - Branch: `git checkout -b squad/123-fix-thing`

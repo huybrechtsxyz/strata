@@ -13,6 +13,32 @@ Configuration
   - Kubernetes: configure Kubernetes auth and role
 - Optional: set `VAULT_NAMESPACE` for Vault Enterprise
 
+Connection parameters
+
+- Required (one of):
+  - `VAULT_ADDR` — Vault server address (or set `endpoints.address` in integration YAML)
+  - Authentication (one of):
+    - `VAULT_TOKEN` — direct token
+    - `VAULT_ROLE_ID` and `VAULT_SECRET_ID` — AppRole credentials
+    - `VAULT_K8S_ROLE` (and accessible JWT) — Kubernetes auth
+
+Examples — integration YAML overrides
+
+```yaml
+integration:
+  name: vault
+  type: hashicorp-vault
+  endpoints:
+    address: ${VAULT_ADDR}
+  authentication:
+    method: api_key
+    api_key:
+      api_key: "MY_VAULT_TOKEN_ENV"
+```
+
+Notes
+- The integration reads `api_key.api_key` or `oauth2` fields in the YAML as env-var names if provided. Otherwise it falls back to standard env var names shown above.
+
 Common Commands
 - `vault status`
 - Read secret: `vault kv get secret/myapp`

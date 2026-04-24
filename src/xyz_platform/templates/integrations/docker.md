@@ -13,6 +13,19 @@ Configuration
 - `DOCKER_HOST` (optional) if using remote daemon
 - `DOCKER_TLS_VERIFY` and certs for secure remote daemons
 
+Connection parameters
+
+- Required:
+	- `docker` CLI available in `PATH`.
+
+- Optional environment variables that affect connectivity:
+	- `DOCKER_HOST` — remote daemon endpoint (e.g., `tcp://192.168.1.100:2376`)
+	- `DOCKER_TLS_VERIFY` — enable TLS verification for remote daemon (`1`/`0`)
+	- `DOCKER_CERT_PATH` — path to TLS certificates when using TLS
+
+How xyz-platform connects
+- xyz-platform invokes the `docker` CLI under the current environment. Configure the environment variables above or the Docker daemon so `docker` commands succeed from the shell that runs the platform.
+
 Commands
 - Build: `docker build -t myrepo/myimage:tag .`
 - Run: `docker run --rm -p 8080:80 myrepo/myimage:tag`
