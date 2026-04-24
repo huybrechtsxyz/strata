@@ -1,0 +1,19 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "charliermarsh.ruff",
+    "ms-vscode.powershell",
+    "ms-vscode-remote.remote-containers",
+    "redhat.vscode-yaml",
+    "hashicorp.terraform",
+    "streetsidesoftware.code-spell-checker",
+    "eamodio.gitlens",
+    "vscode-icons-team.vscode-icons",
+    "EditorConfig.EditorConfig"
+  ],
+  "unwantedRecommendations": [
+    "ms-python.black-formatter",
+    "ms-python.isort"
+  ]
+}

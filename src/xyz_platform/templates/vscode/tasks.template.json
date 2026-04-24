@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run: ${SOLUTION_NAME}",
+      "type": "shell",
+      "command": "uv run xyz-platform ${input:cliArgs}",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Check: lint + format + types",
+      "type": "shell",
+      "command": "scripts/Check.ps1",
+      "options": {
+        "shell": {
+          "executable": "pwsh",
+          "args": ["-NoProfile", "-File"]
+        }
+      },
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "cliArgs",
+      "type": "promptString",
+      "description": "CLI arguments (e.g. version, deploy platform.yaml)",
+      "default": "version"
+    }
+  ]
+}

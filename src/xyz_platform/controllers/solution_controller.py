@@ -1,6 +1,7 @@
 """Controller for solution lifecycle operations."""
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,6 +20,7 @@ from xyz_platform.utils.config import (
     SOLUTION_WORKSPACE_SUFFIX,
 )
 from xyz_platform.utils.system import generate_uuid, get_pkg_templates_path
+from xyz_platform.utils.templater import TemplateProcessor
 
 
 class SolutionController(BaseController):
@@ -340,6 +342,215 @@ class SolutionController(BaseController):
             )
             self.logger.info("VS Code workspace written", path=str(workspace_path))
             self._add_message(f"Workspace file written: {workspace_path.name}")
+
+            # Create a small `.vscode/` scaffold. Prefer rendering templates from
+            # package templates/vscode/*.template.* when available; fall
+            # back to the inline scaffold if templates are missing.
+            try:
+                vscode_dir = self._work_path / ".vscode"
+                vscode_dir.mkdir(parents=True, exist_ok=True)
+
+                templates_vscode = get_pkg_templates_path() / "vscode"
+                if templates_vscode.exists() and templates_vscode.is_dir():
+                    # Render template files into the workspace .vscode directory.
+                    processor = TemplateProcessor(templates_vscode, cleanup_templates=False)
+                    # Temporarily expose solution name to the template processor
+                    prev = os.environ.get("SOLUTION_NAME")
+                    os.environ["SOLUTION_NAME"] = name
+                    try:
+                        for tpl in templates_vscode.iterdir():
+                            if not tpl.is_file() or ".template." not in tpl.name:
+                                continue
+                            try:
+                                content = tpl.read_text(encoding="utf-8")
+                                processed = processor._substitute_environment_variables(content)
+                                out_name = tpl.name.replace(".template.", ".")
+                                out_path = vscode_dir / out_name
+                                if not out_path.exists():
+                                    out_path.write_text(processed, encoding="utf-8")
+                                    self._add_message(f"Created: {out_path.relative_to(self._work_path)}")
+                                else:
+                                    self.logger.debug(".vscode template output exists — skipping", path=str(out_path))
+                            except Exception as e:
+                                self.logger.warning(
+                                    "Failed to render vscode template", extra={"template": str(tpl), "error": str(e)}
+                                )
+                    finally:
+                        # restore environment
+                        if prev is None:
+                            del os.environ["SOLUTION_NAME"]
+                        else:
+                            os.environ["SOLUTION_NAME"] = prev
+                else:
+                    # No templates available; fall back to inline scaffolding (non-destructive)
+                    extensions = {
+                        "recommendations": [
+                            "ms-python.python",
+                            "ms-python.vscode-pylance",
+                            "charliermarsh.ruff",
+                            "ms-vscode.powershell",
+                            "ms-vscode-remote.remote-containers",
+                            "redhat.vscode-yaml",
+                            "hashicorp.terraform",
+                            "streetsidesoftware.code-spell-checker",
+                            "eamodio.gitlens",
+                            "vscode-icons-team.vscode-icons",
+                            "EditorConfig.EditorConfig",
+                        ],
+                        "unwantedRecommendations": [
+                            "ms-python.black-formatter",
+                            "ms-python.isort",
+                        ],
+                    }
+                    ext_file = vscode_dir / "extensions.json"
+                    if not ext_file.exists():
+                        ext_file.write_text(json.dumps(extensions, indent=2), encoding="utf-8")
+                        self._add_message(f"Created: {ext_file.relative_to(self._work_path)}")
+                    else:
+                        self.logger.debug(".vscode/extensions.json already exists — skipping", path=str(ext_file))
+
+                    settings = {
+                        "[python]": {
+                            "editor.insertSpaces": True,
+                            "editor.tabSize": 4,
+                            "editor.defaultFormatter": "charliermarsh.ruff",
+                            "editor.formatOnSave": True,
+                            "editor.codeActionsOnSave": {
+                                "source.fixAll.ruff": "explicit",
+                                "source.organizeImports.ruff": "explicit",
+                            },
+                        },
+                        "[yaml]": {
+                            "editor.insertSpaces": True,
+                            "editor.tabSize": 2,
+                            "editor.defaultFormatter": "redhat.vscode-yaml",
+                            "editor.formatOnSave": True,
+                        },
+                        "python.testing.pytestEnabled": True,
+                        "python.testing.pytestArgs": ["tests"],
+                        "python.envFile": "${workspaceFolder}/.env",
+                        "python.testing.cwd": "${workspaceFolder}",
+                        "editor.formatOnSave": True,
+                        "files.eol": "\n",
+                        "files.exclude": {
+                            "**/.git": True,
+                            ".ruff_cache": True,
+                            ".mypy_cache": True,
+                            ".nox": True,
+                            ".pytest_cache": True,
+                            ".coverage": True,
+                        },
+                    }
+                    settings_file = vscode_dir / "settings.json"
+                    if not settings_file.exists():
+                        settings_file.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+                        self._add_message(f"Created: {settings_file.relative_to(self._work_path)}")
+                    else:
+                        self.logger.debug(".vscode/settings.json already exists — skipping", path=str(settings_file))
+
+                    launch = {
+                        "version": "0.2.0",
+                        "configurations": [
+                            {
+                                "name": f"Run: {name}",
+                                "type": "debugpy",
+                                "request": "launch",
+                                "program": "${workspaceFolder}/src/xyz_platform/__main__.py",
+                                "args": "${input:cliArgs}",
+                                "cwd": "${workspaceFolder}",
+                                "env": {"PYTHONPATH": "${workspaceFolder}/src"},
+                                "console": "integratedTerminal",
+                                "justMyCode": True,
+                            },
+                            {
+                                "name": f"Debug: {name}",
+                                "type": "debugpy",
+                                "request": "launch",
+                                "program": "${workspaceFolder}/src/xyz_platform/__main__.py",
+                                "args": "${input:cliArgs}",
+                                "cwd": "${workspaceFolder}",
+                                "env": {"PYTHONPATH": "${workspaceFolder}/src"},
+                                "console": "integratedTerminal",
+                                "justMyCode": False,
+                            },
+                        ],
+                        "inputs": [
+                            {
+                                "id": "cliArgs",
+                                "type": "promptString",
+                                "description": "CLI arguments (e.g. --help, version, deploy platform.yaml)",
+                                "default": "--help",
+                            }
+                        ],
+                    }
+                    launch_file = vscode_dir / "launch.json"
+                    if not launch_file.exists():
+                        launch_file.write_text(json.dumps(launch, indent=2), encoding="utf-8")
+                        self._add_message(f"Created: {launch_file.relative_to(self._work_path)}")
+                    else:
+                        self.logger.debug(".vscode/launch.json already exists — skipping", path=str(launch_file))
+
+                    tasks = {
+                        "version": "2.0.0",
+                        "tasks": [
+                            {
+                                "label": f"Run: {name}",
+                                "type": "shell",
+                                "command": "uv run xyz-platform ${input:cliArgs}",
+                                "group": "build",
+                                "presentation": {
+                                    "echo": True,
+                                    "reveal": "always",
+                                    "focus": True,
+                                    "panel": "shared",
+                                    "clear": True,
+                                },
+                                "problemMatcher": [],
+                            },
+                            {
+                                "label": "Check: lint + format + types",
+                                "type": "shell",
+                                "command": "scripts/Check.ps1",
+                                "options": {"shell": {"executable": "pwsh", "args": ["-NoProfile", "-File"]}},
+                                "group": "build",
+                                "presentation": {
+                                    "echo": True,
+                                    "reveal": "always",
+                                    "focus": True,
+                                    "panel": "shared",
+                                    "clear": True,
+                                },
+                                "problemMatcher": [],
+                            },
+                        ],
+                        "inputs": [
+                            {
+                                "id": "cliArgs",
+                                "type": "promptString",
+                                "description": "CLI arguments (e.g. version, deploy platform.yaml)",
+                                "default": "version",
+                            }
+                        ],
+                    }
+                    tasks_file = vscode_dir / "tasks.json"
+                    if not tasks_file.exists():
+                        tasks_file.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
+                        self._add_message(f"Created: {tasks_file.relative_to(self._work_path)}")
+                    else:
+                        self.logger.debug(".vscode/tasks.json already exists — skipping", path=str(tasks_file))
+
+                    readme_file = vscode_dir / "README.md"
+                    if not readme_file.exists():
+                        readme_file.write_text(
+                            "# VS Code workspace settings\n\nThis folder contains recommended extensions, settings, tasks and launch configurations for this workspace.\n",
+                            encoding="utf-8",
+                        )
+                        self._add_message(f"Created: {readme_file.relative_to(self._work_path)}")
+                    else:
+                        self.logger.debug(".vscode/README.md already exists — skipping", path=str(readme_file))
+            except Exception as e:
+                self.logger.warning("Failed to write .vscode scaffolding", extra={"error": str(e)})
+
             return True, []
         except Exception as e:
             msg = f"Failed to write workspace file: {e}"

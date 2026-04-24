@@ -184,3 +184,16 @@ STATUS: All extra={} patterns eliminated across entire codebase. Zero remaining.
 - solution_controller.py: _scaffold_platform_dir() now substitutes absolute log path into logging.yaml when copying the template
 - solution_controller.py: init() checks if solution.json already exists; if so, loads it and preserves the solution_id (re-init is now fully idempotent)
 - solution_controller.py: add_repository() def line was missing (accidentally dropped); restored method signature
+
+[2026-04-24 12:53] solution_controller.py: generate_workspace now writes `.vscode/` scaffold for new solution workspaces: `extensions.json`, `settings.json`, `launch.json`, `tasks.json`, `README.md`.
+- **Decision**: Automatically populate `.vscode/` on `xyz solution init` to give users a working IDE experience.
+- **Rationale**: New solution workspaces benefit from recommended extensions, consistent editor settings, preconfigured debug and task entries.
+- **Files changed**: src/xyz_platform/controllers/solution_controller.py
+- **Next steps**: Consider adding user-editable templates under `templates/solution/` for customization.
+
+[2026-04-24 12:58] templates/solution/vscode added + SolutionController template support
+- **Decision**: Move `.vscode` scaffold into package templates and render on `xyz solution init`.
+- **Rationale**: Templates are easier to maintain and allow future customization.
+- **Files added**: src/xyz_platform/templates/solution/vscode/extensions.template.json, settings.template.json, launch.template.json, tasks.template.json, README.template.md
+- **Files changed**: src/xyz_platform/controllers/solution_controller.py
+- **Next steps**: Consider supporting a user template override path (e.g., `.platform/templates/vscode/`) and exposing additional template variables.
