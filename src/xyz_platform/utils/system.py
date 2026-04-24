@@ -102,6 +102,40 @@ def resolve_path(
     return full_path
 
 
+def resolve_work_path(explicit: Optional[str] = None) -> Path:
+    """
+    Resolve the workspace root using a three-level priority chain.
+
+    1. *explicit* — a path supplied directly by the caller (``--work-path`` or
+       ``XYZ_WORK_PATH`` env var).  Returned as-is (resolved to absolute).
+    2. Upward walk — starting from ``Path.cwd()``, walk up through parent
+       directories until a ``.platform/`` directory is found.  The directory
+       that contains ``.platform/`` is returned as the workspace root.
+    3. CWD — fallback when no ``.platform/`` ancestor can be found.
+
+    Args:
+        explicit: Optional explicit path string.  Pass ``None`` or ``""`` to
+                  trigger automatic discovery.
+
+    Returns:
+        Resolved :class:`pathlib.Path` for the workspace root.
+    """
+    if explicit:
+        return Path(explicit).resolve()
+
+    # Walk up from CWD looking for .platform/
+    candidate = Path.cwd().resolve()
+    while True:
+        if (candidate / ".platform").is_dir():
+            return candidate
+        parent = candidate.parent
+        if parent == candidate:
+            break
+        candidate = parent
+
+    return Path.cwd().resolve()
+
+
 # Get the root path of the package
 def get_pkg_root_path() -> Path:
     """Get the root path of the xyz-platform package."""

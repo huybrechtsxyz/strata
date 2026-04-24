@@ -15,7 +15,7 @@ from xyz_platform.controllers.solution_controller import SolutionController
 from xyz_platform.logger import get_logger
 from xyz_platform.logger.context import set_context
 from xyz_platform.logger.logger import reconfigure_logging
-from xyz_platform.utils.system import generate_uuid, resolve_path
+from xyz_platform.utils.system import generate_uuid, resolve_path, resolve_work_path
 from xyz_platform.utils.version import get_version
 
 
@@ -380,24 +380,13 @@ class BaseCommand(ABC):
 
     # Get the work path based on input or default to current directory
     def _get_current_workpath(self, work_path: Optional[str]) -> Path:
-        """Get the work path for the given workspace."""
-        work_path_obj: Path
-        # If work_path is provided, use it directly
-        if work_path is not None and work_path != "":
-            work_path_obj = Path(work_path).resolve()
-            self.logger.debug(
-                "Target work directory from argument",
-                extra={"work_path": str(work_path_obj)},
-            )
-            return work_path_obj
-
-        # Use current working directory as default
-        if Path.cwd().is_absolute():
-            work_path_obj = Path.cwd()
-        else:
-            work_path_obj = Path.cwd().resolve()
-        self.logger.debug("Target work directory (default)", extra={"work_path": str(work_path)})
-        return work_path_obj
+        """Resolve the workspace root — delegates to ``utils.system.resolve_work_path``."""
+        resolved = resolve_work_path(work_path or None)
+        self.logger.debug(
+            "Target work directory resolved",
+            extra={"work_path": str(resolved)},
+        )
+        return resolved
 
     # Print log lines for the current execution when --verbose is active
     def _print_verbose_logs(self) -> None:

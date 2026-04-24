@@ -19,13 +19,41 @@ import os
 import sys
 
 import click
+import yaml
 
 from xyz_platform.commands.cli_solution import solution_command
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
+from xyz_platform.utils.config import SOLUTION_DIR
+from xyz_platform.utils.system import resolve_work_path
 
 logger = get_logger(__name__)
+
+_CONFIG_FILE = "config.yaml"
+_DEFAULT_MAP_KEYS = ("output", "verbose", "quiet", "work_path")
+
+
+def _load_workspace_defaults(work_path: Path) -> dict:
+    """
+    Load persistent CLI defaults from ``<work_path>/.platform/config.yaml``.
+
+    Returns an empty dict when the file is absent or unreadable, so the
+    caller can always safely pass the result to Click's ``default_map``.
+    """
+    config_path = work_path / SOLUTION_DIR / _CONFIG_FILE
+    if not config_path.exists():
+        return {}
+    try:
+        with open(config_path, "r", encoding="utf-8") as fh:
+            raw = yaml.safe_load(fh) or {}
+        defaults = raw.get("defaults", {})
+        # Only keep keys that map to actual CLI options
+        return {k: v for k, v in defaults.items() if k in _DEFAULT_MAP_KEYS}
+    except Exception as exc:
+        logger.debug(f"Could not load workspace config defaults: {exc}")
+        return {}
+
 
 #
 # MAIN CLI GROUP
@@ -36,30 +64,34 @@ logger = get_logger(__name__)
     name="main",
     help=(
         "XYZ Platform CLI.\n\nAutomates workspace preparation, configuration, and deployment for the XYZ Platform.\n\n"
-        # "Typical flow:\n\n"
-        # "  1) xyz session init --work-path <wp>\n\n"
-        # "  2) xyz session add --url <repo-url> --name <repo> --work-path <wp>\n\n"
-        # "  3) xyz session add --config-file <cfg-file> --work-path <wp>\n\n"
-        # "  4) xyz session sync --work-path <wp>\n\n"
-        # "  5) xyz session fetch --work-path <wp>\n\n"
-        # "  6) xyz validate --work-path <wp> --file <def-file>\n\n"
-        # "  7) xyz build --work-path <wp> --file <dep-file>\n\n"
-        # "  8) xyz deploy --work-path <wp> --file <dep-file>\n\n"
     ),
-    context_settings={"help_option_names": ["-h", "--help"]},
+    context_settings={
+        "help_option_names": ["-h", "--help"],
+        "auto_envvar_prefix": "XYZ",
+    },
 )
-def main():
+@click.pass_context
+def main(ctx: click.Context) -> None:
     """XYZ Platform CLI entry point."""
     # Fallback to WARNING level console logging
-    # INFO/DEBUG logs only shown when commands use --verbose flag
     logging_config = system.get_pkg_logging_path()
     if logging_config.exists():
         configure_logging(config_path=str(logging_config))
-        logger.debug("Loaded logging configuration", config_path=str(logging_config))
     else:
         configure_logging(level="WARNING", enable_console=True)
-        logger.debug("Using default WARNING level console logging")
-    logger.debug("XYZ Platform CLI initialized")
+
+    # Load workspace defaults from config.yaml and apply as Click default_map.
+    # Resolution order: explicit flag > XYZ_* env var > config.yaml > built-in default.
+    work_path = resolve_work_path(os.environ.get("XYZ_WORK_PATH"))
+    workspace_defaults = _load_workspace_defaults(work_path)
+    if workspace_defaults:
+        # Merge into every subcommand's default_map
+        ctx.ensure_object(dict)
+        existing = ctx.default_map or {}
+        for cmd_name in ctx.command.commands:  # type: ignore[attr-defined]
+            existing.setdefault(cmd_name, {}).update(workspace_defaults)
+        ctx.default_map = existing
+        logger.debug("Workspace defaults loaded", defaults=workspace_defaults)
 
 
 #
