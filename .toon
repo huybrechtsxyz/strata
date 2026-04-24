@@ -92,3 +92,8 @@ Files changed:
 - configuration_service.py: converted file_paths list[str] to list[Path]
 - environment_service.py: added on_init/on_ready/on_shutdown
 - deployment_service.py: added Any import, on_init/on_ready/on_shutdown, errors: List[str] annotation, widened 5 return types to Dict[str, Any]
+
+### 2026-04-24 09:07:13 - SolutionController.init()
+- **Decision**: Set solution_id to generate_uuid() when creating a new solution in SolutionController.init()
+- **Rationale**: SolutionSpecModel.solution_id is a required field; without it the model validation fails. A UUID ensures each solution has a unique, time-ordered identifier from day one.
+- **Implications**: generate_uuid is now imported in solution_controller.py. Any new solution will always have a stable unique ID from creation.
