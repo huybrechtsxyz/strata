@@ -7,13 +7,20 @@
 #>
 
 
-# ==============================================================================
+# ------------------------------------------------------------------------------
 # [FLOW] End-to-end session lifecycle
-# ==============================================================================
+# [FLOW] Optional: set env vars to test the resolution order
+#   Explicit flag > XYZ_* env var > .platform/config.yaml > built-in default
+# ------------------------------------------------------------------------------
+# $env:XYZ_WORK_PATH  = (Resolve-Path $app).Path   # auto-resolve work path
+# $env:XYZ_OUTPUT     = "json"                      # default output format
+# $env:XYZ_VERBOSE    = "true"                      # enable verbose log replay
+# $env:XYZ_QUIET      = "true"                      # suppress all output
 
 $app = ".app"
 
 New-Item -Path $app -ItemType Directory -Force
+
 
 
 # ==============================================================================
@@ -29,3 +36,8 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 version --output json
 .\scripts\Run.ps1 version --output text
 
+.\scripts\Run.ps1 solution -h
+.\scripts\Run.ps1 solution
+.\scripts\Run.ps1 sln
+.\scripts\Run.ps1 solution init -h
+.\scripts\Run.ps1 solution init --name "test-solution" --work-path $app

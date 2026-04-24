@@ -42,8 +42,19 @@ class SolutionService(BaseService["SolutionModel"]):
         if getattr(self, "_initialized", False):
             return
 
-        super().__init__(path=path, data=data)
+        # SolutionService is an I/O factory — it is not bound to a single file
+        # at construction time.  Skip the base _load_data() call that would
+        # require path/data to be provided up-front.
+        self._errors: list = []
+        self._validation_exception = None
+        self.path = path
+        self.data = data
         self.model = None
+        self._validated = False
+        from xyz_platform.logger import get_logger
+
+        self.logger = get_logger(self.__class__.__module__)
+        self.on_init()
 
         # Mark initialized to avoid re-running __init__ on singleton
         self._initialized = True
@@ -66,6 +77,15 @@ class SolutionService(BaseService["SolutionModel"]):
     def _validate_dynamic(self, configuration_model=None, work_path=None):
         """Solution services have no dynamic validation."""
         return True, []
+
+    def on_init(self) -> None:
+        """No-op lifecycle hook."""
+
+    def on_ready(self) -> None:
+        """No-op lifecycle hook."""
+
+    def on_shutdown(self) -> None:
+        """No-op lifecycle hook."""
 
     def load_from_json(self, path: Path) -> SolutionModel:
         """Load a SolutionModel from a JSON file.

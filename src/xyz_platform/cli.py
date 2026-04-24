@@ -17,6 +17,7 @@ Exit Codes:
 
 import os
 import sys
+from pathlib import Path
 
 import click
 import yaml
@@ -101,6 +102,7 @@ def main(ctx: click.Context) -> None:
 
 main.add_command(version_command)
 main.add_command(solution_command)
+main.add_command(solution_command, name="sln")
 
 
 #

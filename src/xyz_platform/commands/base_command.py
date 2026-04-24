@@ -381,12 +381,7 @@ class BaseCommand(ABC):
     # Get the work path based on input or default to current directory
     def _get_current_workpath(self, work_path: Optional[str]) -> Path:
         """Resolve the workspace root — delegates to ``utils.system.resolve_work_path``."""
-        resolved = resolve_work_path(work_path or None)
-        self.logger.debug(
-            "Target work directory resolved",
-            extra={"work_path": str(resolved)},
-        )
-        return resolved
+        return resolve_work_path(work_path or None)
 
     # Print log lines for the current execution when --verbose is active
     def _print_verbose_logs(self) -> None:

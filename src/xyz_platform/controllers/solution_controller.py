@@ -102,8 +102,9 @@ class SolutionController(BaseController):
             (success, errors)
         """
         if self._solution is None:
-            self._add_error("No solution loaded — cannot update last execution.")
-            return False, self.get_errors()
+            # Not an error — solution may not be loaded yet (e.g. during `init`)
+            self.logger.debug("update_last_execution skipped — no solution loaded")
+            return False, []
 
         self._solution.spec.last_execution_id = execution_id
         self._solution.spec.last_execution_on = datetime.now(timezone.utc).isoformat()
