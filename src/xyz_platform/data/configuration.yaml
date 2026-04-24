@@ -1,0 +1,14 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: configuration
+  annotations:
+    description: Standard configuration of the platform
+  labels:
+    version: "1.0.0"
+  tags: []
+spec:
+  configuration:
+    default_build_path: "build/app"
+    default_object_path: "build/objects"
+    default_dist_path: "build/dist"

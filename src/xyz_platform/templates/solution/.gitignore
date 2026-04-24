@@ -1,0 +1,19 @@
+# XYZ Platform — .platform/ gitignore
+#
+# Commit:   solution.json, config.yaml, logging.yaml
+# Ignore:   local logs, temp files, local-only overrides
+
+# Log output
+logs/
+*.log
+*.json.log
+
+# Local-only config overrides (never commit secrets or machine-specific paths)
+local.*.yaml
+*.local.yaml
+.env
+.env.*
+
+# Python cache
+__pycache__/
+*.pyc

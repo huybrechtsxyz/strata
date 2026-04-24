@@ -143,6 +143,12 @@ def get_pkg_root_path() -> Path:
     return package_root
 
 
+# Get the path to the templates directory
+def get_pkg_templates_path() -> Path:
+    """Get the path to the package templates directory."""
+    return get_pkg_root_path() / "templates"
+
+
 # Get the path to the data directory
 def get_pkg_data_path() -> Path:
     """Get the path to the data directory within the package."""

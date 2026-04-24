@@ -177,3 +177,10 @@ STATUS: All extra={} patterns eliminated across entire codebase. Zero remaining.
 [2026-04-23 15:47] Fixed all remaining mypy errors in integrations folder (53 total across 8 files). Final fix: guard vault_k8s_jwt_path Optional[str] before os.path.exists/open in hashicorp_vault.py. All 13 integration source files now pass mypy --ignore-missing-imports.
 
 [2026-04-24 09:07:13] Set solution_id to generate_uuid() in SolutionController.init() — imported generate_uuid from xyz_platform.utils.system into solution_controller.py and populated spec with solution_id on new solution creation.
+
+[2026-04-24T12:44:55Z] Fixed logging.yaml formatter names + init() idempotency
+- templates/solution/logging.yaml: use xyz_platform.logger.formatters.make_console_formatter / make_json_formatter (not ConsoleFormatter/JsonFormatter which don't exist)
+- templates/solution/logging.yaml: log filename is now rendered to absolute path at scaffold time (prevents RotatingFileHandler failing on relative path from wrong CWD)
+- solution_controller.py: _scaffold_platform_dir() now substitutes absolute log path into logging.yaml when copying the template
+- solution_controller.py: init() checks if solution.json already exists; if so, loads it and preserves the solution_id (re-init is now fully idempotent)
+- solution_controller.py: add_repository() def line was missing (accidentally dropped); restored method signature

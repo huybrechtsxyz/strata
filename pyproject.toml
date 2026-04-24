@@ -48,6 +48,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "xyz_platform.data" = ["*.yaml", "*.txt"]
+"xyz_platform.templates" = ["*.yaml", "*.json", "*.md", "*.txt"]
+"xyz_platform.templates.solution" = ["*.yaml", "*.md", "*"]
+"xyz_platform.templates.integrations" = ["*.md"]
 
 [[tool.uv.index]]
 name = "proget"

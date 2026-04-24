@@ -10,13 +10,15 @@ from xyz_platform.logger.logger import get_active_log_file
 from xyz_platform.models.solution_model import SolutionModel, SolutionSpecRepositoryModel
 from xyz_platform.services.solution_service import SolutionService
 from xyz_platform.utils.config import (
+    SOLUTION_CONFIG_FILE,
     SOLUTION_CONFIGURATION_FILE,
     SOLUTION_DIR,
     SOLUTION_FILE,
+    SOLUTION_GITIGNORE_FILE,
     SOLUTION_LOGGING_FILE,
     SOLUTION_WORKSPACE_SUFFIX,
 )
-from xyz_platform.utils.system import generate_uuid
+from xyz_platform.utils.system import generate_uuid, get_pkg_templates_path
 
 
 class SolutionController(BaseController):
@@ -134,14 +136,26 @@ class SolutionController(BaseController):
         """
         SolutionController.get_state_dir(self._work_path).mkdir(parents=True, exist_ok=True)
 
-        self._solution = SolutionModel(
-            apiVersion="platform.huybrechts.xyz/v1",
-            kind="solution",
-            meta={"name": name},  # type: ignore[arg-type]
-            spec={"solution_id": generate_uuid()},  # type: ignore[arg-type]
-        )
+        existing_path = self._solution_path()
+        if existing_path.exists():
+            ok, errors = self.load()
+            if not ok:
+                return ok, errors
+            if self._solution is not None:
+                self._solution.meta.name = name  # type: ignore[assignment]
+        else:
+            self._solution = SolutionModel(
+                apiVersion="platform.huybrechts.xyz/v1",
+                kind="solution",
+                meta={"name": name},  # type: ignore[arg-type]
+                spec={"solution_id": generate_uuid()},  # type: ignore[arg-type]
+            )
 
         ok, errors = self.save()
+        if not ok:
+            return ok, errors
+
+        ok, errors = self._scaffold_platform_dir()
         if not ok:
             return ok, errors
 
@@ -150,6 +164,90 @@ class SolutionController(BaseController):
             return ok, errors
 
         self._add_message(f"Solution '{name}' initialised at {self._work_path}")
+        return True, []
+
+    # ------------------------------------------------------------------
+    # Scaffold
+    # ------------------------------------------------------------------
+
+    def _scaffold_platform_dir(self) -> Tuple[bool, List[str]]:
+        """Write scaffold files into ``.platform/`` that don't exist yet.
+
+        Files written (skipped if already present — idempotent):
+        - logging.yaml  — dev logging profile (console + rotating file)
+        - config.yaml   — CLI preferences stub
+        - .gitignore    — what to commit vs. ignore
+        - logs/         — log output directory (empty)
+        """
+        state_dir = SolutionController.get_state_dir(self._work_path)
+        templates_dir = get_pkg_templates_path() / "solution"
+
+        scaffold = [
+            (SOLUTION_LOGGING_FILE, "logging.yaml"),
+            (SOLUTION_CONFIG_FILE, "config.yaml"),
+            (SOLUTION_GITIGNORE_FILE, ".gitignore"),
+        ]
+
+        for dest_name, src_name in scaffold:
+            dest = state_dir / dest_name
+            if dest.exists():
+                self.logger.debug("Scaffold file already exists — skipping", path=str(dest))
+                continue
+            src = templates_dir / src_name
+            if not src.exists():
+                self.logger.warning("Scaffold template not found", template=str(src))
+                continue
+            try:
+                content = src.read_text(encoding="utf-8")
+                if dest_name == SOLUTION_LOGGING_FILE:
+                    log_file = (state_dir / "logs" / "application.json").as_posix()
+                    content = content.replace(".platform/logs/application.json", log_file)
+                dest.write_text(content, encoding="utf-8")
+                self.logger.info("Scaffold file written", path=str(dest))
+                self._add_message(f"Created: {dest.relative_to(self._work_path)}")
+            except Exception as e:
+                msg = f"Failed to write scaffold file {dest_name}: {e}"
+                self._add_error(msg)
+                return False, self.get_errors()
+
+        # Ensure logs directory exists
+        logs_dir = state_dir / "logs"
+        logs_dir.mkdir(exist_ok=True)
+
+        # Copy integration help templates from templates/integrations/
+        integrations_src = get_pkg_templates_path() / "integrations"
+        if integrations_src.exists() and integrations_src.is_dir():
+            integrations_dest = state_dir / "integrations"
+            integrations_dest.mkdir(exist_ok=True)
+            for src_file in integrations_src.iterdir():
+                if not src_file.is_file():
+                    continue
+                dest_file = integrations_dest / src_file.name
+                if dest_file.exists():
+                    self.logger.debug("Integration template already exists — skipping", path=str(dest_file))
+                    continue
+                try:
+                    dest_file.write_text(src_file.read_text(encoding="utf-8"), encoding="utf-8")
+                    self.logger.info("Integration template written", path=str(dest_file))
+                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
+                except Exception as e:
+                    msg = f"Failed to write integration template {src_file.name}: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
+
+        # Copy workspace README from templates/solution/README.md
+        readme_src = templates_dir / "README.md"
+        dest_readme = state_dir / "README.md"
+        if readme_src.exists() and not dest_readme.exists():
+            try:
+                dest_readme.write_text(readme_src.read_text(encoding="utf-8"), encoding="utf-8")
+                self.logger.info("Workspace README written", path=str(dest_readme))
+                self._add_message(f"Created: {dest_readme.relative_to(self._work_path)}")
+            except Exception as e:
+                msg = f"Failed to write workspace README: {e}"
+                self._add_error(msg)
+                return False, self.get_errors()
+
         return True, []
 
     # ------------------------------------------------------------------
