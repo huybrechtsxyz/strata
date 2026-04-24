@@ -20,6 +20,7 @@ import sys
 
 import click
 
+from xyz_platform.commands.cli_solution import solution_command
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
@@ -67,6 +68,7 @@ def main():
 #
 
 main.add_command(version_command)
+main.add_command(solution_command)
 
 
 #
