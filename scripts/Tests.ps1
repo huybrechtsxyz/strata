@@ -21,6 +21,7 @@ $app = ".app"
 
 New-Item -Path $app -ItemType Directory -Force
 
+.\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
 
 
 # ==============================================================================
@@ -41,7 +42,6 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 sln
 .\scripts\Run.ps1 solution init -h
 .\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
-
 
 # ==============================================================================
 # [REFERENCE] set — persist a workspace default into .platform/cli.yaml

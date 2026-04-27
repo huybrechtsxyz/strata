@@ -15,12 +15,12 @@ from xyz_platform.commands.solution.init_solution_command import InitSolutionCom
 
 
 @click.group(name="solution", help="Manage XYZ Platform solutions.")
-def solution_command():
+def solution_group():
     """Solution command group."""
     pass
 
 
-@solution_command.command(name="init", help="Initialize a new XYZ Platform solution workspace.")
+@solution_group.command(name="init", help="Initialize a new XYZ Platform solution workspace.")
 @click.option(
     "--name",
     required=True,

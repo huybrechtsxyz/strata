@@ -164,7 +164,7 @@ class TemplateProcessor:
             env_value = os.environ.get(var_name)
 
             if env_value is None:
-                logger.warning(
+                logger.debug(
                     "Environment variable not found, keeping placeholder",
                     variable_name=var_name,
                 )

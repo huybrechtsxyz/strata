@@ -23,7 +23,7 @@ import click
 import yaml
 
 from xyz_platform.commands.cli_set import set_command
-from xyz_platform.commands.cli_solution import solution_command
+from xyz_platform.commands.cli_solution import solution_group
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
@@ -102,8 +102,8 @@ def main(ctx: click.Context) -> None:
 #
 
 main.add_command(version_command)
-main.add_command(solution_command)
-main.add_command(solution_command, name="sln")
+main.add_command(solution_group)
+# main.add_command(solution_group, name="sln")
 main.add_command(set_command)
 
 

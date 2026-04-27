@@ -17,6 +17,7 @@ class InitSolutionCommand(BaseCommand):
     """
 
     OPERATION = "solution_init"
+    INIT_REQUIRED = False  # Allow running even if no existing solution is detected, since this command is for initializing a new solution
 
     def __init__(
         self,
@@ -45,28 +46,30 @@ class InitSolutionCommand(BaseCommand):
     def execute(self) -> bool:
         try:
             if not self._initialize():
+                self.logger.error(f"Initialization failed in {self.__class__.__name__}")
+                if self._is_console_output():
+                    click.echo("\n❌  Initialization failed")
                 self._finalize(success=False)
                 return False
 
             if not self._before_execute():
+                self.logger.error(f"Pre-execution validation failed in {self.__class__.__name__}")
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-execution validation failed")
                 self._finalize(success=False)
                 return False
 
-            ok, errors = self._solution_controller.init(self._solution_name)
-            self._messages.extend(self._solution_controller.get_messages())
-            self._errors.extend(errors)
-
-            if not ok:
+            if not self._run_execution():
+                self.logger.error(f"Execution failed in {self.__class__.__name__}")
+                if self._is_console_output():
+                    click.echo("\n❌  Execution failed")
                 self._finalize(success=False)
                 return False
-
-            self._output_data = {
-                "solution_name": self._solution_name,
-                "solution_id": self._solution_controller.get_solution_id(),
-                "work_path": str(self._work_path),
-            }
 
             if not self._after_execute():
+                self.logger.error(f"Post-execution processing failed in {self.__class__.__name__}")
+                if self._is_console_output():
+                    click.echo("\n❌  Post-execution processing failed")
                 self._finalize(success=False)
                 return False
 
@@ -98,6 +101,24 @@ class InitSolutionCommand(BaseCommand):
 
     def _before_execute(self) -> bool:
         return super()._before_execute()
+
+    def _run_execution(self) -> bool:
+        """Run the main execution logic for initializing the solution workspace."""
+        ok, errors = self._solution_controller.init(self._solution_name)
+        self._messages.extend(self._solution_controller.get_messages())
+        self._errors.extend(errors)
+
+        if not ok:
+            self._finalize(success=False)
+            return False
+
+        self._output_data = {
+            "solution_name": self._solution_name,
+            "solution_id": self._solution_controller.get_solution_id(),
+            "work_path": str(self._work_path),
+        }
+
+        return True
 
     def _after_execute(self) -> bool:
         if not super()._after_execute():

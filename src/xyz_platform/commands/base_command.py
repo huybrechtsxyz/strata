@@ -23,6 +23,7 @@ class BaseCommand(ABC):
     """Base command class for XYZ Platform CLI commands."""
 
     OPERATION = "base_command"
+    INIT_REQUIRED = True  # By default, commands require an initialized solution (solution.json)
 
     def __init__(
         self,
@@ -183,6 +184,11 @@ class BaseCommand(ABC):
             if solution_path.exists():
                 self._solution_controller.load()
                 solution_id = self._solution_controller.get_solution_id()
+            elif self.INIT_REQUIRED:
+                error_msg = f"Solution configuration not found at {solution_path}. This command requires an initialized solution. Please run 'xyz solution init' first."
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
 
             set_context({"solution_id": solution_id, "execution_id": self._execution_id})
 
