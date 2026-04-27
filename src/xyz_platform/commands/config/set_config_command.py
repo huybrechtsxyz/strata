@@ -53,9 +53,9 @@ class SetConfigCommand(BaseCommand):
             controller = ConfigurationController(self._work_path)
 
             if self._action == "list":
-                defaults = controller.list_defaults()
-                self._output_data = {"defaults": defaults}
-                self._messages.append("Workspace defaults loaded")
+                values = controller.list_cli_values()
+                self._output_data = {"values": values}
+                self._messages.append("Workspace values loaded")
                 self._finalize(success=True)
                 return True
 
@@ -64,7 +64,7 @@ class SetConfigCommand(BaseCommand):
                     self._errors.append("Key required for unset")
                     self._finalize(success=False)
                     return False
-                ok, errs = controller.unset_default(self._key)
+                ok, errs = controller.unset_cli_value(self._key)
                 self._messages.extend(controller.get_messages())
                 self._errors.extend(errs)
                 self._output_data = {"unset": self._key}
@@ -98,7 +98,7 @@ class SetConfigCommand(BaseCommand):
                     return False
                 val = self._value
 
-            ok, errs = controller.set_default(key, val)
+            ok, errs = controller.set_cli_value(key, val)
             self._messages.extend(controller.get_messages())
             self._errors.extend(errs)
             self._output_data = {"set": {key: val}}

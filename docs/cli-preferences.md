@@ -73,7 +73,7 @@ xyz set unset output       # remove the override, fall back to built-in default
 Stored in `.xyz_platform/cli.yaml`:
 
 ```yaml
-defaults:
+values:
   output: json
   verbose: false
   quiet: false

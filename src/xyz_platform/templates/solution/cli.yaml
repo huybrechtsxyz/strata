@@ -1,7 +1,7 @@
 # ===============================================================================
 # XYZ Platform — Workspace CLI Preferences
 # ===============================================================================
-# Set persistent defaults for this workspace.
+# Set persistent values for this workspace.
 # Use `xyz set <key> <value>` to update from the CLI.
 #
 # Resolution order (highest to lowest priority):
@@ -11,7 +11,7 @@
 #   Built-in CLI default
 # ===============================================================================
 
-defaults:
+values:
   output: console # console | json | text
   # verbose: false      # set to true to show execution log lines after each command
   # quiet: false        # set to true to suppress all console output

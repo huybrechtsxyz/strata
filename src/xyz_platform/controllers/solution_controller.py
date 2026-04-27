@@ -115,8 +115,8 @@ class SolutionController(BaseController):
             from xyz_platform.controllers.configuration_controller import ConfigurationController
 
             cfg = ConfigurationController(self._work_path)
-            ok1, errs1 = cfg.set_default("last_execution_id", execution_id)
-            ok2, errs2 = cfg.set_default("last_execution_on", ts)
+            ok1, errs1 = cfg.set_cli_value("last_execution_id", execution_id)
+            ok2, errs2 = cfg.set_cli_value("last_execution_on", ts)
             if not ok1 or not ok2:
                 errors: List[str] = []
                 errors.extend(errs1 or [])

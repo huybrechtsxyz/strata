@@ -22,7 +22,7 @@ from pathlib import Path
 import click
 import yaml
 
-from xyz_platform.commands.cli_set import config_group, set_command
+from xyz_platform.commands.cli_set import set_command
 from xyz_platform.commands.cli_solution import solution_command
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
@@ -49,9 +49,9 @@ def _load_workspace_defaults(work_path: Path) -> dict:
     try:
         with open(config_path, "r", encoding="utf-8") as fh:
             raw = yaml.safe_load(fh) or {}
-        defaults = raw.get("defaults", {})
+        values = raw.get("values", {})
         # Only keep keys that map to actual CLI options
-        return {k: v for k, v in defaults.items() if k in _DEFAULT_MAP_KEYS}
+        return {k: v for k, v in values.items() if k in _DEFAULT_MAP_KEYS}
     except Exception as exc:
         logger.debug(f"Could not load workspace config defaults: {exc}")
         return {}
@@ -93,7 +93,7 @@ def main(ctx: click.Context) -> None:
         for cmd_name in ctx.command.commands:  # type: ignore[attr-defined]
             existing.setdefault(cmd_name, {}).update(workspace_defaults)
         ctx.default_map = existing
-        logger.debug("Workspace defaults loaded", defaults=workspace_defaults)
+        logger.debug("Workspace values loaded", values=workspace_defaults)
 
 
 #
@@ -105,7 +105,6 @@ main.add_command(version_command)
 main.add_command(solution_command)
 main.add_command(solution_command, name="sln")
 main.add_command(set_command)
-main.add_command(config_group)
 
 
 #
