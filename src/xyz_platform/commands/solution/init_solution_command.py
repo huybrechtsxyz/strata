@@ -97,6 +97,13 @@ class InitSolutionCommand(BaseCommand):
                 "work_path": str(self._work_path),
             },
         )
+        self.logger.debug(
+            "InitSolutionCommand initialized successfully",
+            extra={
+                "solution_name": self._solution_name,
+                "work_path": str(self._work_path),
+            },
+        )
         return True
 
     def _before_execute(self) -> bool:

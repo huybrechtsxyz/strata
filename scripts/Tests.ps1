@@ -22,7 +22,7 @@ $app = ".app"
 New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
-
+.\scripts\Run.ps1 set --work-path $app output json
 
 # ==============================================================================
 # [REFERENCE] Basic commands
@@ -48,6 +48,7 @@ New-Item -Path $app -ItemType Directory -Force
 # ==============================================================================
 
 .\scripts\Run.ps1 set -h
+.\scripts\Run.ps1 set
 .\scripts\Run.ps1 set --work-path $app output json
 .\scripts\Run.ps1 set --work-path $app output console
 .\scripts\Run.ps1 set --work-path $app output text
@@ -56,6 +57,13 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 set --work-path $app quiet true
 .\scripts\Run.ps1 set --work-path $app quiet false
 
+# ==============================================================================
+# [REFERENCE] unset — unset workspace defaults
+# ==============================================================================
+
+.\scripts\Run.ps1 unset -h
+.\scripts\Run.ps1 unset
+.\scripts\Run.ps1 unset --work-path $app output
 
 # ==============================================================================
 # [REFERENCE] config — list / unset workspace defaults

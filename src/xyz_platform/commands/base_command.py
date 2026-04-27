@@ -194,21 +194,17 @@ class BaseCommand(ABC):
 
             # Start session operation if specified
             self._start_session_operation()
-            self.logger.debug(
-                "Initializing command",
-                extra={
-                    "command_class": self.__class__.__name__,
-                    "solution_id": solution_id,
-                    "execution_id": self._execution_id,
-                },
-            )
 
             if show_header and self._is_console_output():
                 self.show_console_header()
 
             self.logger.debug(
                 "Command initialized successfully",
-                extra={"command_class": self.__class__.__name__},
+                extra={
+                    "command_class": self.__class__.__name__,
+                    "solution_id": solution_id,
+                    "execution_id": self._execution_id,
+                },
             )
 
             return True
@@ -268,6 +264,11 @@ class BaseCommand(ABC):
         Returns:
             bool: Success status (errors stored in self._errors)
         """
+        self.logger.debug(
+            "Finalizing command execution",
+            extra={"command_class": self.__class__.__name__, "success": success},
+        )
+
         if self._is_structured_output():
             # ── Structured output (--output json / text) ─────────────────────
             envelope: Dict[str, Any] = {
