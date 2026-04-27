@@ -22,22 +22,23 @@ from pathlib import Path
 import click
 import yaml
 
+from xyz_platform.commands.cli_set import config_group, set_command
 from xyz_platform.commands.cli_solution import solution_command
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
-from xyz_platform.utils.config import SOLUTION_DIR
+from xyz_platform.utils.config import SOLUTION_CONFIG_FILE, SOLUTION_DIR
 from xyz_platform.utils.system import resolve_work_path
 
 logger = get_logger(__name__)
 
-_CONFIG_FILE = "config.yaml"
+_CONFIG_FILE = SOLUTION_CONFIG_FILE
 _DEFAULT_MAP_KEYS = ("output", "verbose", "quiet", "work_path")
 
 
 def _load_workspace_defaults(work_path: Path) -> dict:
     """
-    Load persistent CLI defaults from ``<work_path>/.platform/config.yaml``.
+    Load persistent CLI defaults from ``<work_path>/.platform/cli.yaml``.
 
     Returns an empty dict when the file is absent or unreadable, so the
     caller can always safely pass the result to Click's ``default_map``.
@@ -81,8 +82,8 @@ def main(ctx: click.Context) -> None:
     else:
         configure_logging(level="WARNING", enable_console=True)
 
-    # Load workspace defaults from config.yaml and apply as Click default_map.
-    # Resolution order: explicit flag > XYZ_* env var > config.yaml > built-in default.
+    # Load workspace defaults from cli.yaml and apply as Click default_map.
+    # Resolution order: explicit flag > XYZ_* env var > cli.yaml > built-in default.
     work_path = resolve_work_path(os.environ.get("XYZ_WORK_PATH"))
     workspace_defaults = _load_workspace_defaults(work_path)
     if workspace_defaults:
@@ -103,6 +104,8 @@ def main(ctx: click.Context) -> None:
 main.add_command(version_command)
 main.add_command(solution_command)
 main.add_command(solution_command, name="sln")
+main.add_command(set_command)
+main.add_command(config_group)
 
 
 #

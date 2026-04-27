@@ -5,7 +5,7 @@ This `.platform` folder contains workspace state and helper files created by the
 Included files:
 
 - `logging.yaml` — development logging configuration for local runs
-- `config.yaml` — CLI preference defaults for the workspace
+- `cli.yaml` — CLI preference defaults for the workspace
 - `.gitignore` — files to ignore from the `.platform` folder
 - `integrations/` — per-integration help documents (one markdown file per integration)
 

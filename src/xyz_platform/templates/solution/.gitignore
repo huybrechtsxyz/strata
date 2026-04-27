@@ -1,6 +1,6 @@
 # XYZ Platform — .platform/ gitignore
 #
-# Commit:   solution.json, config.yaml, logging.yaml
+# Commit:   solution.json, cli.yaml, logging.yaml
 # Ignore:   local logs, temp files, local-only overrides
 
 # Log output

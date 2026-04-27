@@ -177,7 +177,7 @@ class SolutionController(BaseController):
 
         Files written (skipped if already present — idempotent):
         - logging.yaml  — dev logging profile (console + rotating file)
-        - config.yaml   — CLI preferences stub
+        - cli.yaml      — CLI preferences stub
         - .gitignore    — what to commit vs. ignore
         - logs/         — log output directory (empty)
         """
@@ -186,7 +186,7 @@ class SolutionController(BaseController):
 
         scaffold = [
             (SOLUTION_LOGGING_FILE, "logging.yaml"),
-            (SOLUTION_CONFIG_FILE, "config.yaml"),
+            (SOLUTION_CONFIG_FILE, SOLUTION_CONFIG_FILE),
             (SOLUTION_GITIGNORE_FILE, ".gitignore"),
         ]
 

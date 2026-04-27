@@ -58,7 +58,7 @@ Cons:
 
 ## Option B: Workspace Config (`xyz set`)
 
-> **Requires:** `xyz init` to have been run — writes to `.xyz_platform/config.yaml`.
+> **Requires:** `xyz init` to have been run — writes to `.xyz_platform/cli.yaml`.
 
 Store preferences in the workspace itself. Because `.xyz_platform/` is workspace-scoped, different
 workspaces can have different defaults.
@@ -70,7 +70,7 @@ xyz set list               # show current workspace defaults
 xyz set unset output       # remove the override, fall back to built-in default
 ```
 
-Stored in `.xyz_platform/config.yaml`:
+Stored in `.xyz_platform/cli.yaml`:
 
 ```yaml
 defaults:
@@ -97,7 +97,7 @@ Cons:
 ```
 --flag explicitly passed
   └─ XYZ_* environment variable
-       └─ .xyz_platform/config.yaml (xyz set)
+      └─ .xyz_platform/cli.yaml (xyz set)
             └─ built-in default (hardcoded in CLI)
 ```
 

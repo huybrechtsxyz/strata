@@ -22,7 +22,7 @@
 - CLI workflow: `xyz project init` → `xyz project add <repo>` → `xyz build` → `xyz deploy`
 - Workspace state lives in `.xyz_platform/` folder (created by `xyz project init`)
 - Work-path resolution: `--work-path` flag > `XYZ_WORK_PATH` env var > directory walk from CWD
-- Configuration preferences stored in `.xyz_platform/config.yaml` (via `xyz set`)
+-- Configuration preferences stored in `.xyz_platform/cli.yaml` (via `xyz set`)
 - Models live in `src/xyz_platform/models/` — Pydantic-based YAML-driven config
 - Services in `src/xyz_platform/services/`, controllers in `src/xyz_platform/controllers/`
 - Exit codes: 0=success, 1=system failure, 2=usage error (Click), 3=validation failure

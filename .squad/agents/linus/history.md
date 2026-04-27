@@ -11,13 +11,8 @@ Key paths: `src/xyz_platform/cli.py`, `commands/cli_common.py`, `models/`, `serv
 ### 2026-04-22 — CLI/models code review
 
 **cli.py**
-- `main()` has NO `@click.pass_context`, NO `ctx.obj`, NO `default_map` loading, NO `--work-path` flag. Every command group import is commented out. The CLI literally runs nothing beyond logging init.
-- The "typical flow" comment block (xyz session init / add / sync / validate / build / deploy) is also commented out from the help text — useful breadcrumb of intended surface.
-- `get_cli_version()` is called in `base_command.py:113` (`system.get_cli_version()`) but that function does NOT exist in `utils/system.py`. The real function in `utils/version.py` is `get_version()`. Runtime AttributeError if `ShowConsoleHeader()` is ever called.
 
 **commands/base_command.py**
-- ABC pattern with `execute()` and `get_required_integrations()` as abstractmethods is solid.
-- Lifecycle scaffold (`_Initialize`, `_BeforeExecute`, `AfterExecute`, `_Finalize`) present but empty → subclasses must wire these themselves.
 - `_Initialize()` only records `_start_time`; `_project_id` and `_execution_id` are declared but never assigned.
 - PascalCase on `ShowConsoleHeader` / `ShowConsoleFooter` / `_Initialize` / `_BeforeExecute` — inconsistent with Python convention; rest of codebase uses snake_case. Minor but worth standardising.
 - `work_path` stored in `self._work_path` in the command — per decisions it should come from `ctx.obj`, not be a constructor arg.
@@ -47,5 +42,5 @@ Key paths: `src/xyz_platform/cli.py`, `commands/cli_common.py`, `models/`, `serv
 - Service is ready as a persistence layer (load/save JSON) but has zero business logic methods.
 
 **Context wiring gap**
-- `main()` in `cli.py` has no `@click.pass_context`, no `ctx.obj = {}`, no `--work-path` option, and no `.xyz_platform/config.yaml` loading into `default_map`. This gap is total — zero of the three decisions are implemented in `main()`.
-- To wire up per decisions: add `@click.pass_context`, accept `--work-path` with env var fallback `XYZ_WORK_PATH`, implement CWD-walk for `.xyz_platform/` sentinel, load `.xyz_platform/config.yaml` into `ctx.default_map`, store resolved path in `ctx.obj['work_path']`.
+- `main()` in `cli.py` has no `@click.pass_context`, no `ctx.obj = {}`, no `--work-path` option, and no `.xyz_platform/cli.yaml` loading into `default_map`. This gap is total — zero of the three decisions are implemented in `main()`.
+- To wire up per decisions: add `@click.pass_context`, accept `--work-path` with env var fallback `XYZ_WORK_PATH`, implement CWD-walk for `.xyz_platform/` sentinel, load `.xyz_platform/cli.yaml` into `ctx.default_map`, store resolved path in `ctx.obj['work_path']`.

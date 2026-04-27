@@ -8,9 +8,9 @@
 - **Implications:** All commands receive `work_path` via `ctx.obj` — never pass it as an argument between services
 
 ### 2026-04-22 — CLI preferences stored in workspace config
-- **Decision:** Preferences (output format, verbosity) stored in `.xyz_platform/config.yaml` via `xyz set`. Env vars (`XYZ_OUTPUT`, etc.) override. Explicit flags override those.
+-- **Decision:** Preferences (output format, verbosity) stored in `.xyz_platform/cli.yaml` via `xyz set`. Env vars (`XYZ_OUTPUT`, etc.) override. Explicit flags override those.
 - **Rationale:** Workspace-scoped defaults are more ergonomic than global user config; CI/CD uses env vars
-- **Implications:** `main()` loads `.xyz_platform/config.yaml` into Click `default_map` before any subcommand runs
+-- **Implications:** `main()` loads `.xyz_platform/cli.yaml` into Click `default_map` before any subcommand runs
 
 ### 2026-04-22 — Python CLI only (no extension/service yet)
 - **Decision:** Build the Python CLI first. VS Code extension and service variants are out of scope.

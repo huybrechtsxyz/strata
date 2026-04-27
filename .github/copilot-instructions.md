@@ -99,7 +99,7 @@ Never pass `work_path` as a constructor arg or function parameter chain — read
 
 - The `.xyz_platform/` folder in the workspace root is the state directory.
 - `project.json` — the project registry (`ProjectModel`), managed by `ProjectService`.
-- `config.yaml` — user preferences loaded at startup into Click's `default_map`.
+-- `cli.yaml` — user preferences loaded at startup into Click's `default_map`.
 - `platform.json` — the build output artifact (`PlatformModel`), written by `BuildController`.
 
 ---

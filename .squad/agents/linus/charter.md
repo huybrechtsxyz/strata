@@ -14,7 +14,7 @@
 - YAML parsing and Pydantic model validation
 - CLI option decorators in `cli_common.py`
 - `resolve_work_path()` and workspace context wiring via Click `ctx.obj`
-- `xyz set` command and `.xyz_platform/config.yaml` loading into `default_map`
+-- `xyz set` command and `.xyz_platform/cli.yaml` loading into `default_map`
 - Module structure under `src/xyz_platform/`
 
 ## Domain Knowledge

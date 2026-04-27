@@ -10,7 +10,7 @@
 # ------------------------------------------------------------------------------
 # [FLOW] End-to-end session lifecycle
 # [FLOW] Optional: set env vars to test the resolution order
-#   Explicit flag > XYZ_* env var > .platform/config.yaml > built-in default
+#   Explicit flag > XYZ_* env var > .platform/cli.yaml > built-in default
 # ------------------------------------------------------------------------------
 # $env:XYZ_WORK_PATH  = (Resolve-Path $app).Path   # auto-resolve work path
 # $env:XYZ_OUTPUT     = "json"                      # default output format
@@ -41,3 +41,46 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 sln
 .\scripts\Run.ps1 solution init -h
 .\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
+
+
+# ==============================================================================
+# [REFERENCE] set — persist a workspace default into .platform/cli.yaml
+# ==============================================================================
+
+.\scripts\Run.ps1 set -h
+.\scripts\Run.ps1 set --work-path $app output json
+.\scripts\Run.ps1 set --work-path $app output console
+.\scripts\Run.ps1 set --work-path $app output text
+.\scripts\Run.ps1 set --work-path $app verbose true
+.\scripts\Run.ps1 set --work-path $app verbose false
+.\scripts\Run.ps1 set --work-path $app quiet true
+.\scripts\Run.ps1 set --work-path $app quiet false
+
+
+# ==============================================================================
+# [REFERENCE] config — list / unset workspace defaults
+# ==============================================================================
+
+.\scripts\Run.ps1 config -h
+
+# list — show all current defaults
+.\scripts\Run.ps1 config --work-path $app list
+.\scripts\Run.ps1 config --work-path $app --output json list
+.\scripts\Run.ps1 config --work-path $app --output text list
+
+# unset — remove a specific default
+.\scripts\Run.ps1 config --work-path $app unset output
+.\scripts\Run.ps1 config --work-path $app unset verbose
+.\scripts\Run.ps1 config --work-path $app unset quiet
+.\scripts\Run.ps1 config --work-path $app unset work_path
+
+
+# ==============================================================================
+# [FLOW] set → list → unset lifecycle
+# ==============================================================================
+
+.\scripts\Run.ps1 set --work-path $app output json
+.\scripts\Run.ps1 config --work-path $app --output json list
+.\scripts\Run.ps1 config --work-path $app unset output
+.\scripts\Run.ps1 config --work-path $app --output json list
+
