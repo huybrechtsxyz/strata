@@ -105,19 +105,37 @@ class SolutionController(BaseController):
         Returns:
             (success, errors)
         """
-        if self._solution is None:
-            # Not an error — solution may not be loaded yet (e.g. during `init`)
-            self.logger.debug("update_last_execution skipped — no solution loaded")
-            return False, []
+        # Store last-execution metadata as CLI-level state (in `cli.yaml`),
+        # not inside the solution model. This ensures the values are scoped
+        # to the user's CLI preferences rather than the solution resource.
+        ts = datetime.now(timezone.utc).isoformat()
 
-        self._solution.spec.last_execution_id = execution_id
-        self._solution.spec.last_execution_on = datetime.now(timezone.utc).isoformat()
-        self.logger.info(
-            "Last execution updated",
-            execution_id=execution_id,
-            last_execution_on=self._solution.spec.last_execution_on,
-        )
-        return self.save()
+        try:
+            # Import here to avoid potential circular imports at module import time
+            from xyz_platform.controllers.configuration_controller import ConfigurationController
+
+            cfg = ConfigurationController(self._work_path)
+            ok1, errs1 = cfg.set_default("last_execution_id", execution_id)
+            ok2, errs2 = cfg.set_default("last_execution_on", ts)
+            if not ok1 or not ok2:
+                errors: List[str] = []
+                errors.extend(errs1 or [])
+                errors.extend(errs2 or [])
+                if not errors:
+                    errors = self.get_errors()
+                self._add_error("Failed to update cli.yaml with last execution metadata")
+                return False, errors
+
+            # Do NOT persist these values into solution.json — they belong to cli.yaml
+            self.logger.info(
+                "Last execution updated (stored in cli.yaml)",
+                execution_id=execution_id,
+                last_execution_on=ts,
+            )
+            return True, []
+        except Exception as e:
+            self._add_error(f"Failed to persist last execution metadata: {e}")
+            return False, self.get_errors()
 
     # ------------------------------------------------------------------
     # Initialise

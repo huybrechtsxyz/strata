@@ -64,9 +64,9 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 config -h
 
 # list — show all current defaults
-.\scripts\Run.ps1 config --work-path $app list
-.\scripts\Run.ps1 config --work-path $app --output json list
-.\scripts\Run.ps1 config --work-path $app --output text list
+.\scripts\Run.ps1 config list --work-path $app
+.\scripts\Run.ps1 config list --work-path $app --output json
+.\scripts\Run.ps1 config list --work-path $app --output text
 
 # unset — remove a specific default
 .\scripts\Run.ps1 config --work-path $app unset output

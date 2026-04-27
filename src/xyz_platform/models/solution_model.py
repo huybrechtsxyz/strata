@@ -63,12 +63,6 @@ class SolutionSpecModel(BaseModel):
     """
 
     solution_id: str = Field(..., description="Unique identifier for the solution")
-    last_execution_id: Optional[str] = Field(
-        None, description="Execution ID of the last run associated with the solution"
-    )
-    last_execution_on: Optional[str] = Field(
-        None, description="Timestamp of the last execution associated with the solution"
-    )
     repositories: Optional[List[SolutionSpecRepositoryModel]] = Field(
         None, description="List of repositories associated with the solution"
     )
