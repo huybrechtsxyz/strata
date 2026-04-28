@@ -22,7 +22,7 @@ from pathlib import Path
 import click
 import yaml
 
-from xyz_platform.commands.cli_set import list_command, set_command, unset_command
+from xyz_platform.commands.cli_config import config_group
 from xyz_platform.commands.cli_solution import solution_group
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
@@ -101,12 +101,9 @@ def main(ctx: click.Context) -> None:
 # Register command groups so they're available when module is imported
 #
 
-main.add_command(version_command)
-main.add_command(solution_group)
-# main.add_command(solution_group, name="sln")
-main.add_command(set_command)
-main.add_command(unset_command)
-main.add_command(list_command)
+main.add_command(version_command, name="version")
+main.add_command(solution_group, name="solution")
+main.add_command(config_group, name="config")
 
 #
 # ENTRY POINT

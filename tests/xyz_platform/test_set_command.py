@@ -12,7 +12,7 @@ def test_set_and_list(tmp_path: Path):
     work_path = tmp_path
 
     # Set output to json
-    result = runner.invoke(main, ["set", "--work-path", str(work_path), "output", "json"])
+    result = runner.invoke(main, ["config", "set", "--work-path", str(work_path), "output", "json"])
     assert result.exit_code == 0, result.output
 
     cfg_path = work_path / ".platform" / "cli.yaml"
@@ -21,7 +21,7 @@ def test_set_and_list(tmp_path: Path):
     assert cfg.get("values", {}).get("output") == "json"
 
     # List defaults with structured JSON output
-    result = runner.invoke(main, ["config", "--work-path", str(work_path), "--output", "json", "list"])
+    result = runner.invoke(main, ["config", "list", "--work-path", str(work_path), "--output", "json"])
     assert result.exit_code == 0, result.output
     # The command outputs a JSON envelope when --output json is used
     data = json.loads(result.output)
@@ -34,10 +34,10 @@ def test_unset(tmp_path: Path):
     work_path = tmp_path
 
     # Set and then unset
-    result = runner.invoke(main, ["set", "--work-path", str(work_path), "output", "json"])
+    result = runner.invoke(main, ["config", "set", "--work-path", str(work_path), "output", "json"])
     assert result.exit_code == 0
 
-    result = runner.invoke(main, ["config", "--work-path", str(work_path), "unset", "output"])
+    result = runner.invoke(main, ["config", "unset", "--work-path", str(work_path), "output"])
     assert result.exit_code == 0, result.output
 
     cfg_path = work_path / ".platform" / "cli.yaml"

@@ -20,6 +20,7 @@ class SetConfigCommand(BaseCommand):
     """
 
     OPERATION = "config_set"
+    INIT_REQUIRED = False
 
     ALLOWED_KEYS = ("output", "verbose", "quiet", "work_path")
 
@@ -109,7 +110,7 @@ class SetConfigCommand(BaseCommand):
     def _run_execution(self) -> bool:
         controller = ConfigurationController(self._work_path)
 
-        if self._action == "list":
+        if self._action == "info":
             values = controller.list_cli_values()
             self._output_data = {"values": values}
             self._messages.append("Workspace values loaded")

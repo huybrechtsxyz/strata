@@ -21,8 +21,10 @@ $app = ".app"
 
 New-Item -Path $app -ItemType Directory -Force
 
-.\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
-.\scripts\Run.ps1 set --work-path $app output json
+cd $app
+..\scripts\Run.ps1 solution init --name "test-solution"
+
+.\scripts\Run.ps1 config set --work-path $app output json
 
 # ==============================================================================
 # [REFERENCE] Basic commands
@@ -39,56 +41,39 @@ New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 solution -h
 .\scripts\Run.ps1 solution
-.\scripts\Run.ps1 sln
 .\scripts\Run.ps1 solution init -h
 .\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
 
 # ==============================================================================
-# [REFERENCE] set — persist a workspace default into .platform/cli.yaml
-# ==============================================================================
-
-.\scripts\Run.ps1 set -h
-.\scripts\Run.ps1 set
-.\scripts\Run.ps1 set --work-path $app output json
-.\scripts\Run.ps1 set --work-path $app output console
-.\scripts\Run.ps1 set --work-path $app output text
-.\scripts\Run.ps1 set --work-path $app verbose true
-.\scripts\Run.ps1 set --work-path $app verbose false
-.\scripts\Run.ps1 set --work-path $app quiet true
-.\scripts\Run.ps1 set --work-path $app quiet false
-
-# ==============================================================================
-# [REFERENCE] unset — unset workspace defaults
-# ==============================================================================
-
-.\scripts\Run.ps1 unset -h
-.\scripts\Run.ps1 unset
-.\scripts\Run.ps1 unset --work-path $app output
-
-# ==============================================================================
-# [REFERENCE] config — list / unset workspace defaults
+# [REFERENCE] config — persist workspace defaults into .platform/cli.yaml
 # ==============================================================================
 
 .\scripts\Run.ps1 config -h
+.\scripts\Run.ps1 config
 
-# list — show all current defaults
-.\scripts\Run.ps1 config list --work-path $app
-.\scripts\Run.ps1 config list --work-path $app --output json
-.\scripts\Run.ps1 config list --work-path $app --output text
+# set — define a default value for the current workspace
+.\scripts\Run.ps1 config set -h
+.\scripts\Run.ps1 config set
+.\scripts\Run.ps1 config set --work-path $app output json
+.\scripts\Run.ps1 config set --work-path $app output console
+.\scripts\Run.ps1 config set --work-path $app output text
+.\scripts\Run.ps1 config set --work-path $app verbose true
+.\scripts\Run.ps1 config set --work-path $app verbose false
+.\scripts\Run.ps1 config set --work-path $app quiet true
+.\scripts\Run.ps1 config set --work-path $app quiet false
 
-# unset — remove a specific default
-.\scripts\Run.ps1 config --work-path $app unset output
-.\scripts\Run.ps1 config --work-path $app unset verbose
-.\scripts\Run.ps1 config --work-path $app unset quiet
-.\scripts\Run.ps1 config --work-path $app unset work_path
+# info — show all current defaults
+.\scripts\Run.ps1 config info --work-path $app
+.\scripts\Run.ps1 config info --work-path $app --output json
+.\scripts\Run.ps1 config info --work-path $app --output text
 
-
-# ==============================================================================
-# [FLOW] set → list → unset lifecycle
-# ==============================================================================
-
-.\scripts\Run.ps1 set --work-path $app output json
-.\scripts\Run.ps1 config --work-path $app --output json list
-.\scripts\Run.ps1 config --work-path $app unset output
-.\scripts\Run.ps1 config --work-path $app --output json list
-
+# unset - remove a specific default (revert to built-in or env var value)
+.\scripts\Run.ps1 config unset -h
+.\scripts\Run.ps1 config unset
+.\scripts\Run.ps1 config unset --work-path $app output json
+.\scripts\Run.ps1 config unset --work-path $app output console
+.\scripts\Run.ps1 config unset --work-path $app output text
+.\scripts\Run.ps1 config unset --work-path $app verbose true
+.\scripts\Run.ps1 config unset --work-path $app verbose false
+.\scripts\Run.ps1 config unset --work-path $app quiet true
+.\scripts\Run.ps1 config unset --work-path $app quiet false

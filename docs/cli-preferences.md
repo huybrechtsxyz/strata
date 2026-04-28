@@ -123,3 +123,18 @@ This means:
 ```
 
 In CI/CD pipelines the checkout directory is rarely predictable, so always set `XYZ_WORK_PATH` or `--work-path` explicitly there.
+
+## Keyword Reference
+
+The following keywords are common CLI verbs and their typical meaning. Use `--output json` for automation when appropriate.
+
+| Keyword             | Use                                                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `list`              | Enumerate multiple items (short summary). Example: `xyz config list` — shows keys and brief values.              |
+| `show` / `get`      | Display a single resource's content or value; include source with `--source`. Example: `xyz config show output`. |
+| `dump` / `view`     | Output the full merged config or raw file (machine-friendly). Example: `xyz config dump --output json`.          |
+| `info` / `describe` | Human-friendly overview or summary of workspace state (counts, last run, repos). Example: `xyz workspace info`.  |
+| `status`            | Operational or sync state for resources (repos, deployments). Example: `xyz repo status <name>`.                 |
+| `show-file`         | Explicitly show raw file content (alias of `show` for files). Example: `xyz config show cli.yaml`.               |
+| `source`            | Show origin of a value (env, `cli.yaml`, builtin). Example: `xyz config show output --source`.                   |
+
