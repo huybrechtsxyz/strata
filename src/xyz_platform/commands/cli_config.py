@@ -97,10 +97,6 @@ def list_config_command(
         if not quiet:
             quiet = parent.params.get("quiet") or False
 
-    command = SetConfigCommand(action="info", work_path=work_path, output=output, verbose=verbose, quiet=quiet)
+    command = SetConfigCommand(action="list", work_path=work_path, output=output, verbose=verbose, quiet=quiet)
     success = command.execute()
     handle_command_exit(command, success)
-
-
-# Add an alias so users can run either `xyz config list` or `xyz config info`.
-config_group.add_command(list_config_command, name="info")

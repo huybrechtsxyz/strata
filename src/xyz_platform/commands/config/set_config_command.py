@@ -110,7 +110,7 @@ class SetConfigCommand(BaseCommand):
     def _run_execution(self) -> bool:
         controller = ConfigurationController(self._work_path)
 
-        if self._action == "info":
+        if self._action == "list":
             values = controller.list_cli_values()
             self._output_data = {"values": values}
             self._messages.append("Workspace values loaded")
