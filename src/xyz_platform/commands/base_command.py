@@ -357,6 +357,15 @@ class BaseCommand(ABC):
         Looks for ``.platform/logging.yaml`` under ``self._work_path``.
         Reconfigures logging only when the discovered config path changes.
         """
+        # Ensure a logger exists even when no session logging config is present
+        try:
+            self.logger = get_logger(self.__class__.__module__)
+        except Exception:
+            # Fallback to the standard logging module if get_logger fails
+            import logging
+
+            self.logger = logging.getLogger(self.__class__.__module__)
+
         try:
             logging_config = SolutionController.get_logging_config_path(self._work_path)
             if logging_config is None:
@@ -380,10 +389,14 @@ class BaseCommand(ABC):
 
         except Exception as e:
             # Logging configuration should not block command execution
-            self.logger.warning(
-                f"Failed to auto-configure session logging: {str(e)}",
-                extra={"command_class": self.__class__.__name__},
-            )
+            try:
+                self.logger.warning(
+                    f"Failed to auto-configure session logging: {str(e)}",
+                    extra={"command_class": self.__class__.__name__},
+                )
+            except Exception:
+                # Best-effort only; never raise from logging setup
+                pass
 
     # Get the work path based on input or default to current directory
     def _get_current_workpath(self, work_path: Optional[str]) -> Path:

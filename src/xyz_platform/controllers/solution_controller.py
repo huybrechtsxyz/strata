@@ -186,89 +186,70 @@ class SolutionController(BaseController):
         self._add_message(f"Solution '{name}' initialised at {self._work_path}")
         return True, []
 
-    # ------------------------------------------------------------------
-    # Scaffold
-    # ------------------------------------------------------------------
-
-    def _scaffold_platform_dir(self) -> Tuple[bool, List[str]]:
-        """Write scaffold files into ``.platform/`` that don't exist yet.
-
-        Files written (skipped if already present — idempotent):
-        - logging.yaml  — dev logging profile (console + rotating file)
-        - cli.yaml      — CLI preferences stub
-        - .gitignore    — what to commit vs. ignore
-        - logs/         — log output directory (empty)
+    def clean_solution(
+        self,
+        work_path: Path,
+        dry_run: bool = False,
+    ) -> Tuple[bool, Dict[str, Any]]:
         """
-        state_dir = SolutionController.get_state_dir(self._work_path)
-        templates_dir = get_pkg_templates_path() / "solution"
+        Clean workspace artifacts without modifying project state.
 
-        scaffold = [
-            (SOLUTION_LOGGING_FILE, "logging.yaml"),
-            (SOLUTION_CONFIG_FILE, SOLUTION_CONFIG_FILE),
-            (SOLUTION_GITIGNORE_FILE, ".gitignore"),
-        ]
+        Args:
+            work_path: Root working directory
+            logs: If True (default), delete files in the logs/ folder
+            dry_run: If True, report what would be deleted without removing anything
 
-        for dest_name, src_name in scaffold:
-            dest = state_dir / dest_name
-            if dest.exists():
-                self.logger.debug("Scaffold file already exists — skipping", path=str(dest))
-                continue
-            src = templates_dir / src_name
-            if not src.exists():
-                self.logger.warning("Scaffold template not found", template=str(src))
-                continue
-            try:
-                content = src.read_text(encoding="utf-8")
-                if dest_name == SOLUTION_LOGGING_FILE:
-                    log_file = (state_dir / "logs" / "application.json").as_posix()
-                    content = content.replace(".platform/logs/application.json", log_file)
-                dest.write_text(content, encoding="utf-8")
-                self.logger.info("Scaffold file written", path=str(dest))
-                self._add_message(f"Created: {dest.relative_to(self._work_path)}")
-            except Exception as e:
-                msg = f"Failed to write scaffold file {dest_name}: {e}"
-                self._add_error(msg)
-                return False, self.get_errors()
+        Returns:
+            Tuple[bool, Dict]: Success status and stats dict
+        """
+        try:
+            self._errors.clear()
+            self._messages.clear()
 
-        # Ensure logs directory exists
-        logs_dir = state_dir / "logs"
-        logs_dir.mkdir(exist_ok=True)
+            stats: Dict[str, Any] = {
+                "logs_deleted": 0,
+                "logs_folder": None,
+                "dry_run": dry_run,
+            }
 
-        # Copy integration help templates from templates/integrations/
-        integrations_src = get_pkg_templates_path() / "integrations"
-        if integrations_src.exists() and integrations_src.is_dir():
-            integrations_dest = state_dir / "integrations"
-            integrations_dest.mkdir(exist_ok=True)
-            for src_file in integrations_src.iterdir():
-                if not src_file.is_file():
-                    continue
-                dest_file = integrations_dest / src_file.name
-                if dest_file.exists():
-                    self.logger.debug("Integration template already exists — skipping", path=str(dest_file))
-                    continue
-                try:
-                    dest_file.write_text(src_file.read_text(encoding="utf-8"), encoding="utf-8")
-                    self.logger.info("Integration template written", path=str(dest_file))
-                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
-                except Exception as e:
-                    msg = f"Failed to write integration template {src_file.name}: {e}"
-                    self._add_error(msg)
-                    return False, self.get_errors()
+            # Logs are stored in the solution state directory (`.platform/logs`)
+            logs_folder = SolutionController.get_state_dir(work_path) / "logs"
+            stats["logs_folder"] = str(logs_folder)
+            if logs_folder.exists():
+                deleted = 0
+                skipped = 0
+                for log_file in logs_folder.iterdir():
+                    if log_file.is_file():
+                        if dry_run:
+                            deleted += 1
+                        else:
+                            try:
+                                log_file.unlink()
+                                deleted += 1
+                            except PermissionError:
+                                # File is held open by the logging system; skip it
+                                skipped += 1
+                                self._messages.append(f"Skipped locked file: {log_file.name}")
+                stats["logs_deleted"] = deleted
+                stats["logs_skipped"] = skipped
+                prefix = "[dry-run] Would delete" if dry_run else "Deleted"
+                self.logger.info(
+                    f"{'[dry-run] ' if dry_run else ''}Cleaned logs folder: {logs_folder} ({deleted} files{',' if not dry_run else ''}{'' if dry_run else f' deleted, {skipped} skipped'})"
+                )
+                self._messages.append(
+                    f"{prefix} {deleted} log file(s) from {logs_folder}"
+                    + (f" ({skipped} skipped — in use)" if skipped and not dry_run else "")
+                )
+            else:
+                self._messages.append(f"Logs folder not found (skipped): {logs_folder}")
 
-        # Copy workspace README from templates/solution/README.md
-        readme_src = templates_dir / "README.md"
-        dest_readme = state_dir / "README.md"
-        if readme_src.exists() and not dest_readme.exists():
-            try:
-                dest_readme.write_text(readme_src.read_text(encoding="utf-8"), encoding="utf-8")
-                self.logger.info("Workspace README written", path=str(dest_readme))
-                self._add_message(f"Created: {dest_readme.relative_to(self._work_path)}")
-            except Exception as e:
-                msg = f"Failed to write workspace README: {e}"
-                self._add_error(msg)
-                return False, self.get_errors()
+            return True, stats
 
-        return True, []
+        except Exception as e:
+            error_msg = f"Failed to clean project: {str(e)}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            return False, {}
 
     # ------------------------------------------------------------------
     # Repository management
@@ -680,6 +661,90 @@ class SolutionController(BaseController):
     def get_state_dir(work_path: Path) -> Path:
         """Return the path to the solution state directory."""
         return work_path / SOLUTION_DIR
+
+    # ------------------------------------------------------------------
+    # Scaffold
+    # ------------------------------------------------------------------
+
+    def _scaffold_platform_dir(self) -> Tuple[bool, List[str]]:
+        """Write scaffold files into ``.platform/`` that don't exist yet.
+
+        Files written (skipped if already present — idempotent):
+        - logging.yaml  — dev logging profile (console + rotating file)
+        - cli.yaml      — CLI preferences stub
+        - .gitignore    — what to commit vs. ignore
+        - logs/         — log output directory (empty)
+        """
+        state_dir = SolutionController.get_state_dir(self._work_path)
+        templates_dir = get_pkg_templates_path() / "solution"
+
+        scaffold = [
+            (SOLUTION_LOGGING_FILE, "logging.yaml"),
+            (SOLUTION_CONFIG_FILE, SOLUTION_CONFIG_FILE),
+            (SOLUTION_GITIGNORE_FILE, ".gitignore"),
+        ]
+
+        for dest_name, src_name in scaffold:
+            dest = state_dir / dest_name
+            if dest.exists():
+                self.logger.debug("Scaffold file already exists — skipping", path=str(dest))
+                continue
+            src = templates_dir / src_name
+            if not src.exists():
+                self.logger.warning("Scaffold template not found", template=str(src))
+                continue
+            try:
+                content = src.read_text(encoding="utf-8")
+                if dest_name == SOLUTION_LOGGING_FILE:
+                    log_file = (state_dir / "logs" / "application.json").as_posix()
+                    content = content.replace(".platform/logs/application.json", log_file)
+                dest.write_text(content, encoding="utf-8")
+                self.logger.info("Scaffold file written", path=str(dest))
+                self._add_message(f"Created: {dest.relative_to(self._work_path)}")
+            except Exception as e:
+                msg = f"Failed to write scaffold file {dest_name}: {e}"
+                self._add_error(msg)
+                return False, self.get_errors()
+
+        # Ensure logs directory exists
+        logs_dir = state_dir / "logs"
+        logs_dir.mkdir(exist_ok=True)
+
+        # Copy integration help templates from templates/integrations/
+        integrations_src = get_pkg_templates_path() / "integrations"
+        if integrations_src.exists() and integrations_src.is_dir():
+            integrations_dest = state_dir / "integrations"
+            integrations_dest.mkdir(exist_ok=True)
+            for src_file in integrations_src.iterdir():
+                if not src_file.is_file():
+                    continue
+                dest_file = integrations_dest / src_file.name
+                if dest_file.exists():
+                    self.logger.debug("Integration template already exists — skipping", path=str(dest_file))
+                    continue
+                try:
+                    dest_file.write_text(src_file.read_text(encoding="utf-8"), encoding="utf-8")
+                    self.logger.info("Integration template written", path=str(dest_file))
+                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
+                except Exception as e:
+                    msg = f"Failed to write integration template {src_file.name}: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
+
+        # Copy workspace README from templates/solution/README.md
+        readme_src = templates_dir / "README.md"
+        dest_readme = state_dir / "README.md"
+        if readme_src.exists() and not dest_readme.exists():
+            try:
+                dest_readme.write_text(readme_src.read_text(encoding="utf-8"), encoding="utf-8")
+                self.logger.info("Workspace README written", path=str(dest_readme))
+                self._add_message(f"Created: {dest_readme.relative_to(self._work_path)}")
+            except Exception as e:
+                msg = f"Failed to write workspace README: {e}"
+                self._add_error(msg)
+                return False, self.get_errors()
+
+        return True, []
 
     # ------------------------------------------------------------------
     # Internal helpers
