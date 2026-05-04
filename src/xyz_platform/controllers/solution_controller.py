@@ -8,7 +8,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from xyz_platform.controllers.base_controller import BaseController
 from xyz_platform.logger.logger import get_active_log_file
-from xyz_platform.models.solution_model import SolutionModel, SolutionSpecRepositoryModel
+from xyz_platform.models.solution_model import (
+    SolutionModel,
+    SolutionSpecProfileConfigModel,
+    SolutionSpecProfileModel,
+    SolutionSpecRepositoryModel,
+)
 from xyz_platform.services.solution_service import SolutionService
 from xyz_platform.utils.config import (
     SOLUTION_CONFIG_FILE,
@@ -325,6 +330,258 @@ class SolutionController(BaseController):
                 return [], [f"Repository '{name}' not found in solution."]
 
         return list(repos), []
+
+    # ------------------------------------------------------------------
+    # Profile management
+    # ------------------------------------------------------------------
+
+    def add_profile(self, profile: SolutionSpecProfileModel) -> Tuple[bool, List[str]]:
+        """Add a profile to the solution.
+
+        Args:
+            profile: Profile model to add.
+
+        Returns:
+            (success, errors)
+        """
+        if self._solution is None:
+            self._add_error("No solution loaded.")
+            return False, self.get_errors()
+
+        if self._solution.spec.profiles is None:
+            self._solution.spec.profiles = []
+
+        existing = [p.name for p in self._solution.spec.profiles]
+        if profile.name in existing:
+            self._add_error(f"Profile '{profile.name}' already exists in solution.")
+            return False, self.get_errors()
+
+        # If first profile, set active
+        if len(self._solution.spec.profiles) == 0:
+            profile.active = True
+
+        self._solution.spec.profiles.append(profile)
+        self.logger.info("Profile added to solution", profile=str(profile.name))
+        return True, []
+
+    def remove_profile(self, name: str) -> Tuple[bool, List[str]]:
+        """Remove a profile from the solution by name.
+
+        Args:
+            name: Profile name to remove.
+
+        Returns:
+            (success, errors)
+        """
+        if self._solution is None:
+            self._add_error("No solution loaded.")
+            return False, self.get_errors()
+
+        profiles = self._solution.spec.profiles or []
+        target = [p for p in profiles if str(p.name) == name]
+
+        if not target:
+            self._add_error(f"Profile '{name}' not found in solution.")
+            return False, self.get_errors()
+
+        if target[0].active:
+            self._add_error(f"Profile '{name}' is currently active. Activate another profile first.")
+            return False, self.get_errors()
+
+        updated = [p for p in profiles if str(p.name) != name]
+        self._solution.spec.profiles = updated
+        self.logger.info("Profile removed from solution", profile=name)
+        return True, []
+
+    def get_profiles(self, name: Optional[str] = None) -> Tuple[List[SolutionSpecProfileModel], List[str]]:
+        """Return profiles from the loaded solution, optionally filtered by name.
+
+        Args:
+            name: If given, return only the profile with this name.
+
+        Returns:
+            (profiles, errors)
+        """
+        if self._solution is None:
+            return [], ["No solution loaded."]
+
+        profiles = self._solution.spec.profiles or []
+
+        if name:
+            profiles = [p for p in profiles if str(p.name) == name]
+            if not profiles:
+                return [], [f"Profile '{name}' not found in solution."]
+
+        return list(profiles), []
+
+    def activate_profile(self, name: str) -> Tuple[bool, List[str]]:
+        """Activate a profile by name, deactivating all others.
+
+        Args:
+            name: Profile name to activate.
+
+        Returns:
+            (success, errors)
+        """
+        if self._solution is None:
+            self._add_error("No solution loaded.")
+            return False, self.get_errors()
+
+        profiles = self._solution.spec.profiles or []
+        target = [p for p in profiles if str(p.name) == name]
+
+        if not target:
+            self._add_error(f"Profile '{name}' not found in solution.")
+            return False, self.get_errors()
+
+        for p in profiles:
+            p.active = str(p.name) == name
+
+        self.logger.info("Profile activated", profile=name)
+        return True, []
+
+    def get_active_profile(self) -> Tuple[Optional[SolutionSpecProfileModel], List[str]]:
+        """Return the currently active profile, if any.
+
+        Returns:
+            (profile_or_none, errors)
+        """
+        if self._solution is None:
+            return None, ["No solution loaded."]
+
+        profiles = self._solution.spec.profiles or []
+        active = [p for p in profiles if p.active]
+
+        if not active:
+            return None, []
+
+        return active[0], []
+
+    def add_profile_path(
+        self, profile_name: str, path_type: str, config: SolutionSpecProfileConfigModel
+    ) -> Tuple[bool, List[str]]:
+        """Add a configuration path to a profile.
+
+        Args:
+            profile_name: Name of the profile.
+            path_type: Type of path (config, dotenv, data, secret).
+            config: Configuration path model to add.
+
+        Returns:
+            (success, errors)
+        """
+        if self._solution is None:
+            self._add_error("No solution loaded.")
+            return False, self.get_errors()
+
+        profiles = self._solution.spec.profiles or []
+        target = [p for p in profiles if str(p.name) == profile_name]
+
+        if not target:
+            self._add_error(f"Profile '{profile_name}' not found in solution.")
+            return False, self.get_errors()
+
+        profile = target[0]
+        type_map = {
+            "config": "config_paths",
+            "dotenv": "dotenv_paths",
+            "data": "data_paths",
+            "secret": "secret_paths",
+        }
+
+        attr = type_map.get(path_type)
+        if not attr:
+            self._add_error(f"Invalid path type '{path_type}'. Must be one of: config, dotenv, data, secret.")
+            return False, self.get_errors()
+
+        paths: Optional[List[SolutionSpecProfileConfigModel]] = getattr(profile, attr)
+        if paths is None:
+            paths = []
+            setattr(profile, attr, paths)
+
+        existing = [c.name for c in paths]
+        if config.name in existing:
+            self._add_error(f"Path '{config.name}' already exists in {path_type} paths for profile '{profile_name}'.")
+            return False, self.get_errors()
+
+        paths.append(config)
+        self.logger.info("Profile path added", profile=profile_name, path_type=path_type, path_name=str(config.name))
+        return True, []
+
+    def remove_profile_path(self, profile_name: str, path_type: str, path_name: str) -> Tuple[bool, List[str]]:
+        """Remove a configuration path from a profile.
+
+        Args:
+            profile_name: Name of the profile.
+            path_type: Type of path (config, dotenv, data, secret).
+            path_name: Name of the path to remove.
+
+        Returns:
+            (success, errors)
+        """
+        if self._solution is None:
+            self._add_error("No solution loaded.")
+            return False, self.get_errors()
+
+        profiles = self._solution.spec.profiles or []
+        target = [p for p in profiles if str(p.name) == profile_name]
+
+        if not target:
+            self._add_error(f"Profile '{profile_name}' not found in solution.")
+            return False, self.get_errors()
+
+        profile = target[0]
+        type_map = {
+            "config": "config_paths",
+            "dotenv": "dotenv_paths",
+            "data": "data_paths",
+            "secret": "secret_paths",
+        }
+
+        attr = type_map.get(path_type)
+        if not attr:
+            self._add_error(f"Invalid path type '{path_type}'. Must be one of: config, dotenv, data, secret.")
+            return False, self.get_errors()
+
+        paths: Optional[List[SolutionSpecProfileConfigModel]] = getattr(profile, attr)
+        if not paths:
+            self._add_error(f"Path '{path_name}' not found in {path_type} paths for profile '{profile_name}'.")
+            return False, self.get_errors()
+
+        updated = [c for c in paths if str(c.name) != path_name]
+        if len(updated) == len(paths):
+            self._add_error(f"Path '{path_name}' not found in {path_type} paths for profile '{profile_name}'.")
+            return False, self.get_errors()
+
+        setattr(profile, attr, updated)
+        self.logger.info("Profile path removed", profile=profile_name, path_type=path_type, path_name=path_name)
+        return True, []
+
+    def get_profile_paths(self, profile_name: str) -> Tuple[Dict[str, List[SolutionSpecProfileConfigModel]], List[str]]:
+        """Return all configuration paths for a profile, grouped by type.
+
+        Args:
+            profile_name: Name of the profile.
+
+        Returns:
+            (paths_dict, errors)
+        """
+        if self._solution is None:
+            return {}, ["No solution loaded."]
+
+        profiles = self._solution.spec.profiles or []
+        target = [p for p in profiles if str(p.name) == profile_name]
+
+        if not target:
+            return {}, [f"Profile '{profile_name}' not found in solution."]
+
+        profile = target[0]
+        return {
+            "config": profile.config_paths or [],
+            "dotenv": profile.dotenv_paths or [],
+            "data": profile.data_paths or [],
+            "secret": profile.secret_paths or [],
+        }, []
 
     # ------------------------------------------------------------------
     # VS Code workspace generation

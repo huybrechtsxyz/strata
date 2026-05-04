@@ -29,6 +29,18 @@ New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 solution repo sync --name traefik --force --work-path $app
 
+.\scripts\Run.ps1 solution profile add production --work-path $app
+
+.\scripts\Run.ps1 solution profile add development --work-path $app
+
+.\scripts\Run.ps1 solution profile path add production dotenv base "@traefik/environments/base.env" --work-path $app
+
+.\scripts\Run.ps1 solution profile activate development --work-path $app
+
+.\scripts\Run.ps1 solution profile list --work-path $app
+
+.\scripts\Run.ps1 solution profile path list production --work-path $app
+
 Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 
 
@@ -198,6 +210,85 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 
 # sync a name that doesn't exist — should return an error
 .\scripts\Run.ps1 solution repo sync --name no-such-repo --work-path $app
+
+# ==============================================================================
+# [REFERENCE] solution profile — manage profiles in the solution
+# ==============================================================================
+
+.\scripts\Run.ps1 solution profile -h
+.\scripts\Run.ps1 solution profile
+
+# profile add — create a new profile (first profile auto-activates)
+.\scripts\Run.ps1 solution profile add -h
+.\scripts\Run.ps1 solution profile add production --work-path $app
+.\scripts\Run.ps1 solution profile add development --work-path $app
+.\scripts\Run.ps1 solution profile add staging --work-path $app
+.\scripts\Run.ps1 solution profile add production --work-path $app --output json
+.\scripts\Run.ps1 solution profile add production --work-path $app --output text
+
+# duplicate name should fail
+.\scripts\Run.ps1 solution profile add production --work-path $app
+
+# profile list — show all profiles with active marker
+.\scripts\Run.ps1 solution profile list -h
+.\scripts\Run.ps1 solution profile list --work-path $app --output console
+.\scripts\Run.ps1 solution profile list --work-path $app --output json
+.\scripts\Run.ps1 solution profile list --work-path $app --output text
+.\scripts\Run.ps1 solution profile list --name production --work-path $app
+.\scripts\Run.ps1 solution profile list --name no-such-profile --work-path $app
+
+# profile activate — switch active profile
+.\scripts\Run.ps1 solution profile activate -h
+.\scripts\Run.ps1 solution profile activate development --work-path $app
+.\scripts\Run.ps1 solution profile activate development --work-path $app --output json
+.\scripts\Run.ps1 solution profile activate production --work-path $app --output json
+.\scripts\Run.ps1 solution profile activate no-such-profile --work-path $app
+
+# profile remove — delete a profile (refuses if active)
+.\scripts\Run.ps1 solution profile remove -h
+.\scripts\Run.ps1 solution profile remove development --work-path $app
+.\scripts\Run.ps1 solution profile remove production --work-path $app --output json
+
+# remove active profile should fail — must activate another first
+.\scripts\Run.ps1 solution profile remove production --work-path $app
+
+# remove non-existent profile should fail
+.\scripts\Run.ps1 solution profile remove no-such-profile --work-path $app
+
+# ==============================================================================
+# [REFERENCE] solution profile path — manage paths within a profile
+# ==============================================================================
+
+.\scripts\Run.ps1 solution profile path -h
+.\scripts\Run.ps1 solution profile path
+
+# path add — register a path entry (type: config|dotenv|data|secret)
+.\scripts\Run.ps1 solution profile path add -h
+.\scripts\Run.ps1 solution profile path add production config main config/app.yaml --work-path $app
+.\scripts\Run.ps1 solution profile path add production dotenv base "@infra/environments/base.env" --work-path $app
+.\scripts\Run.ps1 solution profile path add production data seed data/seed.sql --work-path $app
+.\scripts\Run.ps1 solution profile path add production secret vault "@infra/secrets/vault.yaml" --work-path $app
+.\scripts\Run.ps1 solution profile path add production config main config/app.yaml --work-path $app --output json
+
+# duplicate path name should fail
+.\scripts\Run.ps1 solution profile path add production config main config/other.yaml --work-path $app
+
+# path list — show all paths for a profile grouped by type
+.\scripts\Run.ps1 solution profile path list -h
+.\scripts\Run.ps1 solution profile path list production --work-path $app
+.\scripts\Run.ps1 solution profile path list production --work-path $app --output json
+.\scripts\Run.ps1 solution profile path list production --work-path $app --output text
+
+# path list for non-existent profile should fail
+.\scripts\Run.ps1 solution profile path list no-such-profile --work-path $app
+
+# path remove — unregister a path entry
+.\scripts\Run.ps1 solution profile path remove -h
+.\scripts\Run.ps1 solution profile path remove production dotenv base --work-path $app
+.\scripts\Run.ps1 solution profile path remove production config main --work-path $app --output json
+
+# remove non-existent path should fail
+.\scripts\Run.ps1 solution profile path remove production config no-such-path --work-path $app
 
 # ==============================================================================
 # [REFERENCE] log — view execution logs and manage logging configuration
