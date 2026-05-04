@@ -21,8 +21,7 @@ $app = ".app"
 
 New-Item -Path $app -ItemType Directory -Force
 
-cd $app
-..\scripts\Run.ps1 solution init --name "test-solution"
+.\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
 
 .\scripts\Run.ps1 config set --work-path $app output json
 

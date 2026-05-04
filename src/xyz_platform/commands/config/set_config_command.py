@@ -20,7 +20,7 @@ class SetConfigCommand(BaseCommand):
     """
 
     OPERATION = "config_set"
-    INIT_REQUIRED = False
+    INIT_REQUIRED = True
 
     ALLOWED_KEYS = ("output", "verbose", "quiet", "work_path")
 
@@ -161,6 +161,57 @@ class SetConfigCommand(BaseCommand):
         return ok
 
     def _after_execute(self) -> bool:
+        """Render output for the executed action.
+
+        Supports three modes:
+        - Console (human-friendly)
+        - Structured output handled by BaseCommand (JSON / text)
+        - Plain text is produced by BaseCommand when `--output text` is used
+        """
+
+        # Derive output data that was populated during _run_execution
+        data = self._output_data or {}
+
+        # LIST action: show all values
+        if self._action == "list":
+            values = data.get("values", {})
+            if self._is_console_output():
+                click.echo("")
+                click.echo("💬  Workspace values:")
+                if values:
+                    for k, v in values.items():
+                        click.echo(f"    • {k}: {v}")
+                else:
+                    click.echo("    (no values set)")
+                click.echo("")
+
+            # structured/plain-text output will be handled by BaseCommand using _output_data
+            return super()._after_execute()
+
+        # UNSET action: indicate which key was removed
+        if self._action == "unset":
+            key = data.get("unset") or self._key
+            if self._is_console_output():
+                click.echo("")
+                click.echo(f"💬  Unset workspace default: {key}")
+                click.echo("")
+            return super()._after_execute()
+
+        # Default: SET action
+        set_map = data.get("set") or {}
+        if set_map:
+            k = next(iter(set_map))
+            v = set_map.get(k)
+        else:
+            k = getattr(self, "_key", None)
+            v = getattr(self, "_value", None)
+
+        if self._is_console_output():
+            click.echo("")
+            click.echo(f"💬  Setting workspace default: {k} = {v}")
+            click.echo("")
+
+        # For structured/plain output, BaseCommand._finalize will use self._output_data
         return super()._after_execute()
 
     def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:

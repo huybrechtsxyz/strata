@@ -128,13 +128,12 @@ class InitSolutionCommand(BaseCommand):
         return True
 
     def _after_execute(self) -> bool:
-        if not super()._after_execute():
-            return False
         if self._is_console_output():
             click.echo(f"\n✅  Solution '{self._solution_name}' initialised")
             click.echo(f"    • Work path    : {self._work_path}")
             click.echo(f"    • Solution ID  : {self._output_data.get('solution_id', '')}")
-        return True
+            click.echo("")
+        return super()._after_execute()
 
     def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
         return super()._finalize(success=success, show_footer=show_footer)
