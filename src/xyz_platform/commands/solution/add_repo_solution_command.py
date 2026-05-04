@@ -1,0 +1,174 @@
+"""Command to add a repository to an XYZ Platform solution."""
+
+from datetime import datetime, timezone
+from typing import Dict, Optional
+
+import click
+
+from xyz_platform.commands.base_command import BaseCommand
+from xyz_platform.models.solution_model import SolutionSpecRepositoryModel
+
+
+class AddRepoSolutionCommand(BaseCommand):
+    """Register a repository entry in the current solution.
+
+    Adds the repository to ``solution.json`` only — cloning is deferred to
+    ``xyz solution sync`` (not yet implemented).
+    """
+
+    OPERATION = "solution_repo_add"
+    INIT_REQUIRED = True
+
+    def __init__(
+        self,
+        name: str,
+        url: str,
+        branch: str = "main",
+        path: Optional[str] = None,
+        work_path: Optional[str] = None,
+        output: Optional[str] = None,
+        verbose: bool = False,
+        quiet: bool = False,
+    ) -> None:
+        super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
+        self._repo_name = name
+        self._repo_url = url
+        self._repo_branch = branch
+        # Default local path: repos/<name> relative to work_path
+        self._repo_path = path if path else f"repos/{name}"
+        self._added_repo: Dict = {}
+
+    def get_required_integrations(self) -> Dict[str, str]:
+        return {"git": "repository registration"}
+
+    def execute(self) -> bool:
+        try:
+            if not self._initialize():
+                self.logger.error(f"Initialization failed in {self.__class__.__name__}")
+                if self._is_console_output():
+                    click.echo("\n❌  Initialization failed")
+                self._finalize(success=False)
+                return False
+
+            if not self._before_execute():
+                self.logger.error(f"Pre-execution validation failed in {self.__class__.__name__}")
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-execution validation failed")
+                self._finalize(success=False)
+                return False
+
+            if not self._run_execution():
+                self.logger.error(f"Execution failed in {self.__class__.__name__}")
+                if self._is_console_output():
+                    click.echo("\n❌  Execution failed")
+                self._finalize(success=False)
+                return False
+
+            if not self._after_execute():
+                self.logger.error(f"Post-execution processing failed in {self.__class__.__name__}")
+                if self._is_console_output():
+                    click.echo("\n❌  Post-execution processing failed")
+                self._finalize(success=False)
+                return False
+
+            self._finalize(success=True)
+            return True
+
+        except Exception as e:
+            error_msg = f"Failed to add repository: {e}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            self._finalize(success=False)
+            return False
+
+    def _initialize(self, show_header: bool = True) -> bool:
+        if not super()._initialize(show_header=show_header):
+            return False
+        self.logger.debug(
+            "AddRepoSolutionCommand initializing",
+            extra={
+                "repo_name": self._repo_name,
+                "repo_url": self._repo_url,
+                "work_path": str(self._work_path),
+            },
+        )
+        return True
+
+    def _before_execute(self) -> bool:
+        if not super()._before_execute():
+            return False
+        if not self._repo_name:
+            self._errors.append("Repository name is required.")
+            return False
+        if not self._repo_url:
+            self._errors.append("Repository URL is required.")
+            return False
+        self.logger.debug(
+            "AddRepoSolutionCommand pre-execution validated",
+            extra={"repo_name": self._repo_name},
+        )
+        return True
+
+    def _run_execution(self) -> bool:
+        """Load solution, register the repo, and persist."""
+        ok, errors = self._solution_controller.load()
+        if not ok:
+            self._errors.extend(errors)
+            return False
+
+        repo = SolutionSpecRepositoryModel(
+            name=self._repo_name,
+            url=self._repo_url,
+            path=self._repo_path,
+            branch=self._repo_branch,
+            type="gitops",
+            created=datetime.now(timezone.utc).isoformat(),
+        )
+
+        ok, errors = self._solution_controller.add_repository(repo)
+        self._messages.extend(self._solution_controller.get_messages())
+        self._errors.extend(errors)
+        if not ok:
+            return False
+
+        ok, errors = self._solution_controller.save()
+        self._errors.extend(errors)
+        if not ok:
+            return False
+
+        self._added_repo = {
+            "name": self._repo_name,
+            "url": self._repo_url,
+            "path": self._repo_path,
+            "branch": self._repo_branch,
+            "type": "gitops",
+        }
+        self._output_data = {k: v for k, v in self._added_repo.items() if v is not None}
+        return True
+
+    def _after_execute(self) -> bool:
+        self.logger.debug(
+            "AddRepoSolutionCommand post-executing",
+            extra={"repo_name": self._repo_name},
+        )
+
+        if not self._is_quiet() and self._added_repo:
+            if self._is_console_output():
+                click.echo("\n📦  Repository registered:")
+                click.echo(f"    • Name:   {self._added_repo['name']}")
+                click.echo(f"    • URL:    {self._added_repo['url']}")
+                click.echo(f"    • Branch: {self._added_repo['branch']}")
+                click.echo(f"    • Path:   {self._added_repo['path']}")
+                click.echo(f"    • Type:   {self._added_repo['type']}")
+                click.echo("")
+                click.echo("💡  Run 'xyz solution sync' to clone the repository.")
+                click.echo("")
+
+        return super()._after_execute()
+
+    def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
+        self.logger.debug(
+            "AddRepoSolutionCommand finalizing",
+            extra={"repo_name": self._repo_name, "success": success},
+        )
+        return super()._finalize(success=success, show_footer=show_footer)

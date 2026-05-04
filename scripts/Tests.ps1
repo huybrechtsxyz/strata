@@ -25,6 +25,9 @@ New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 config set --work-path $app output json
 
+.\scripts\Run.ps1 solution repo add my-repo https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+
+
 # ==============================================================================
 # [REFERENCE] Basic commands
 # ==============================================================================
@@ -72,4 +75,47 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 config unset --work-path $app output
 .\scripts\Run.ps1 config unset --work-path $app verbose
 .\scripts\Run.ps1 config unset --work-path $app quiet 
+
+# ==============================================================================
+# [REFERENCE] solution — Solution lifecycle management
+# ==============================================================================
+
+# solution clean - remove workspace artifacts without touching state
+
+.\scripts\Run.ps1 solution clean -h
+.\scripts\Run.ps1 solution clean --work-path $app --dry-run
+.\scripts\Run.ps1 solution clean --work-path $app
+.\scripts\Run.ps1 solution clean --work-path $app --output json
+
+# solution repo — manage repositories registered in the solution
+
+.\scripts\Run.ps1 solution repo -h
+.\scripts\Run.ps1 solution repo
+
+# solution repo add — register a repository (no cloning; clone deferred to xyz solution sync)
+.\scripts\Run.ps1 solution repo add -h
+.\scripts\Run.ps1 solution repo add
+.\scripts\Run.ps1 solution repo add my-repo https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+.\scripts\Run.ps1 solution repo add my-repo-branch https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --work-path $app
+.\scripts\Run.ps1 solution repo add my-repo-path https://github.com/huybrechtsxyz/xyz-traefik.git --path repos/custom --work-path $app
+.\scripts\Run.ps1 solution repo add my-repo-all https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --path repos/custom --work-path $app
+
+# add — structured output
+.\scripts\Run.ps1 solution repo add json-repo https://github.com/org/json-repo.git --work-path $app --output json
+.\scripts\Run.ps1 solution repo add text-repo https://github.com/org/text-repo.git --work-path $app --output text
+
+# add — duplicate name should fail
+.\scripts\Run.ps1 solution repo add my-repo https://github.com/org/my-repo.git --work-path $app
+
+# ==============================================================================
+# [FLOW] End-to-end: fresh init + add multiple repos
+# ==============================================================================
+
+Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
+New-Item  -Path $app -ItemType Directory -Force
+
+.\scripts\Run.ps1 solution init --name "e2e-solution" --work-path $app
+.\scripts\Run.ps1 solution repo add xyz-platform https://github.com/org/xyz-platform.git --work-path $app
+.\scripts\Run.ps1 solution repo add xyz-infra     https://github.com/org/xyz-infra.git    --branch main --path repos/infra --work-path $app
+.\scripts\Run.ps1 solution repo add xyz-config    https://github.com/org/xyz-config.git   --branch develop --work-path $app
 
