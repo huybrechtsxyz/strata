@@ -100,7 +100,7 @@ scripts\Run.ps1 solution repo -h
 .\scripts\Run.ps1 solution repo add -h
 .\scripts\Run.ps1 solution repo add
 .\scripts\Run.ps1 solution repo add my-repo https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
-.\scripts\Run.ps1 solution repo add my-repo-branch https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --work-path $app
+.\scripts\Run.ps1 solution repo add my-repo-branch https://github.com/huybrechtsxyz/xyz-traefik.git --branch main --work-path $app
 .\scripts\Run.ps1 solution repo add my-repo-path https://github.com/huybrechtsxyz/xyz-traefik.git --path repos/custom --work-path $app
 .\scripts\Run.ps1 solution repo add my-repo-all https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --path repos/custom --work-path $app
 
