@@ -114,6 +114,20 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 # solution repo add — duplicate name should fail
 .\scripts\Run.ps1 solution repo add my-repo https://github.com/org/my-repo.git --work-path $app
 
+# solution repo list — show repositories registered in the solution
+.\scripts\Run.ps1 solution repo list -h
+.\scripts\Run.ps1 solution repo list
+.\scripts\Run.ps1 solution repo list --work-path $app --output console
+.\scripts\Run.ps1 solution repo list --work-path $app --output json
+.\scripts\Run.ps1 solution repo list --work-path $app --output text
+
+# list a single repo by name
+.\scripts\Run.ps1 solution repo list --name my-repo --work-path $app
+.\scripts\Run.ps1 solution repo list --name my-repo --work-path $app --output json
+
+# list a name that doesn't exist — should return an error
+.\scripts\Run.ps1 solution repo list --name no-such-repo --work-path $app
+
 # solution repo remove — unregister a repository from the solution
 .\scripts\Run.ps1 solution repo remove -h
 .\scripts\Run.ps1 solution repo remove

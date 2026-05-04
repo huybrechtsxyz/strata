@@ -14,6 +14,7 @@ from xyz_platform.commands.cli_common import (
 from xyz_platform.commands.solution.add_repo_solution_command import AddRepoSolutionCommand
 from xyz_platform.commands.solution.clean_solution_command import CleanSolutionCommand
 from xyz_platform.commands.solution.init_solution_command import InitSolutionCommand
+from xyz_platform.commands.solution.list_repo_solution_command import ListRepoSolutionCommand
 from xyz_platform.commands.solution.remove_repo_solution_command import RemoveRepoSolutionCommand
 from xyz_platform.commands.solution.sync_repo_solution_command import SyncRepoSolutionCommand
 
@@ -131,6 +132,35 @@ def solution_repo_add(
         url=url,
         branch=branch,
         path=path,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@repo_group.command(name="list", help="List repositories registered in the current solution.")
+@click.option(
+    "--name",
+    default=None,
+    help="Show only this repository (default: show all).",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def solution_repo_list(
+    name: Optional[str] = None,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """List repository entries registered in the solution."""
+    command = ListRepoSolutionCommand(
+        name=name,
         work_path=work_path,
         output=output,
         verbose=verbose,
