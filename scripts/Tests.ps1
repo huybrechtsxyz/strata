@@ -78,6 +78,40 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 .\scripts\Run.ps1 config unset --work-path $app quiet 
 
 # ==============================================================================
+# [REFERENCE] config env — manage env-file sources loaded at startup
+# ==============================================================================
+
+.\scripts\Run.ps1 config env -h
+.\scripts\Run.ps1 config env
+
+# add — register an env-file source with load order
+.\scripts\Run.ps1 config env add -h
+.\scripts\Run.ps1 config env add base environments/base.env --order 10 --work-path $app
+.\scripts\Run.ps1 config env add production "@my-repo/environments/prd.env" --order 20 --work-path $app
+.\scripts\Run.ps1 config env add local .env.local --order 30 --work-path $app
+.\scripts\Run.ps1 config env add local .env.local --work-path $app  # duplicate — should fail
+
+# add — structured output
+.\scripts\Run.ps1 config env add json-test envs/test.env --work-path $app --output json
+.\scripts\Run.ps1 config env add text-test envs/test2.env --work-path $app --output text
+
+# list — show registered sources with load order
+.\scripts\Run.ps1 config env list -h
+.\scripts\Run.ps1 config env list --work-path $app
+.\scripts\Run.ps1 config env list --work-path $app --output json
+.\scripts\Run.ps1 config env list --work-path $app --output text
+
+# show — resolve all sources and display merged key=value result
+.\scripts\Run.ps1 config env show -h
+.\scripts\Run.ps1 config env show --work-path $app
+.\scripts\Run.ps1 config env show --work-path $app --output json
+
+# remove — unregister a source
+.\scripts\Run.ps1 config env remove -h
+.\scripts\Run.ps1 config env remove base --work-path $app
+.\scripts\Run.ps1 config env remove no-such-source --work-path $app  # should fail
+
+# ==============================================================================
 # [REFERENCE] solution — Solution lifecycle management
 # ==============================================================================
 

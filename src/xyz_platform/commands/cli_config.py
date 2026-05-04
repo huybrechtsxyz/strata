@@ -11,6 +11,7 @@ from xyz_platform.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
+from xyz_platform.commands.config.env_config_command import EnvConfigCommand
 from xyz_platform.commands.config.set_config_command import SetConfigCommand
 
 
@@ -98,5 +99,122 @@ def list_config_command(
             quiet = parent.params.get("quiet") or False
 
     command = SetConfigCommand(action="list", work_path=work_path, output=output, verbose=verbose, quiet=quiet)
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+# ==============================================================================
+# config env  (subgroup)
+# ==============================================================================
+
+
+@config_group.group(name="env", help="Manage env-file sources loaded at command startup.")
+def config_env_group():
+    """Environment variable source management."""
+    pass
+
+
+@config_env_group.command(name="add", help="Register an env-file source.")
+@click.argument("name")
+@click.argument("path")
+@click.option(
+    "--order",
+    default=50,
+    show_default=True,
+    type=int,
+    help="Load order (ascending; higher overrides lower).",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def config_env_add(
+    name: str,
+    path: str,
+    order: int = 50,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    command = EnvConfigCommand(
+        action="add",
+        name=name,
+        path=path,
+        order=order,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@config_env_group.command(name="remove", help="Unregister an env-file source.")
+@click.argument("name")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def config_env_remove(
+    name: str,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    command = EnvConfigCommand(
+        action="remove",
+        name=name,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@config_env_group.command(name="list", help="Show registered env-file sources and their load order.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def config_env_list(
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    command = EnvConfigCommand(
+        action="list",
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@config_env_group.command(name="show", help="Resolve all sources and display the merged environment.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def config_env_show(
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    command = EnvConfigCommand(
+        action="show",
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
     success = command.execute()
     handle_command_exit(command, success)

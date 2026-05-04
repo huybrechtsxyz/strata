@@ -192,6 +192,9 @@ class BaseCommand(ABC):
 
             set_context({"solution_id": solution_id, "execution_id": self._execution_id})
 
+            # Load env-file sources from cli.yaml and inject into os.environ
+            self._load_env_sources()
+
             # Start session operation if specified
             self._start_session_operation()
 
@@ -464,6 +467,35 @@ class BaseCommand(ABC):
                 f"Failed to start session operation '{self.OPERATION}': {e}",
                 extra={"operation": self.OPERATION},
             )
+
+    # Load env-file sources from cli.yaml and inject into os.environ
+    def _load_env_sources(self) -> None:
+        """Load registered env-file sources and inject into ``os.environ``.
+
+        Runs after solution load so ``@repo_name/…`` paths can be resolved.
+        Non-fatal — missing files produce debug warnings, never block execution.
+        """
+        try:
+            from xyz_platform.controllers.env_controller import EnvController
+
+            ctrl = EnvController(self._work_path)
+            sources = ctrl.list_sources()
+            if not sources:
+                return
+
+            # Build repo_map from solution repositories
+            repo_map: Dict[str, str] = {}
+            repos, _ = self._solution_controller.get_repositories()
+            for r in repos:
+                repo_map[str(r.name)] = str(self._work_path / r.path)
+
+            warnings = ctrl.inject(repo_map=repo_map)
+            for w in warnings:
+                self.logger.debug(f"Env source warning: {w}")
+
+        except Exception as e:
+            # Env loading must never block command execution
+            self.logger.debug(f"Failed to load env sources: {e}")
 
     # Validate declared integration requirements (e.g., check if 'git' is available for 'repository clone operations')
     def _validate_requirements(self) -> bool:
