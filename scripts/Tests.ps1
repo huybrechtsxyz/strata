@@ -23,11 +23,11 @@ New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
 
-.\scripts\Run.ps1 config set --work-path $app output json
+.\scripts\Run.ps1 config set --work-path $app output console
 
-.\scripts\Run.ps1 solution repo add my-repo https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+.\scripts\Run.ps1 solution repo add traefik https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
 
-.\scripts\Run.ps1 solution repo sync --name my-repo --force --work-path $app
+.\scripts\Run.ps1 solution repo sync --name traefik --force --work-path $app
 
 Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -44,11 +44,6 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 .\scripts\Run.ps1 version --output console
 .\scripts\Run.ps1 version --output json
 .\scripts\Run.ps1 version --output text
-
-.\scripts\Run.ps1 solution -h
-.\scripts\Run.ps1 solution
-.\scripts\Run.ps1 solution init -h
-.\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
 
 # ==============================================================================
 # [REFERENCE] config — persist workspace defaults into .platform/cli.yaml
@@ -69,6 +64,8 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 .\scripts\Run.ps1 config set --work-path $app quiet false
 
 # info — show all current defaults
+.\scripts\Run.ps1 config list -h
+.\scripts\Run.ps1 config list
 .\scripts\Run.ps1 config list --work-path $app
 .\scripts\Run.ps1 config list --work-path $app --output json
 .\scripts\Run.ps1 config list --work-path $app --output text
@@ -84,16 +81,22 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 # [REFERENCE] solution — Solution lifecycle management
 # ==============================================================================
 
+.\scripts\Run.ps1 solution -h
+.\scripts\Run.ps1 solution
+.\scripts\Run.ps1 solution init -h
+.\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
+
 # solution clean - remove workspace artifacts without touching state
 
 .\scripts\Run.ps1 solution clean -h
+.\scripts\Run.ps1 solution clean
 .\scripts\Run.ps1 solution clean --work-path $app --dry-run
 .\scripts\Run.ps1 solution clean --work-path $app
 .\scripts\Run.ps1 solution clean --work-path $app --output json
 
 # solution repo — manage repositories registered in the solution
 
-scripts\Run.ps1 solution repo -h
+.\scripts\Run.ps1 solution repo -h
 .\scripts\Run.ps1 solution repo
 
 # solution repo add — register a repository (no cloning; clone deferred to xyz solution sync)
@@ -110,6 +113,22 @@ scripts\Run.ps1 solution repo -h
 
 # solution repo add — duplicate name should fail
 .\scripts\Run.ps1 solution repo add my-repo https://github.com/org/my-repo.git --work-path $app
+
+# solution repo remove — unregister a repository from the solution
+.\scripts\Run.ps1 solution repo remove -h
+.\scripts\Run.ps1 solution repo remove
+
+# remove from registry only (leaves the local folder on disk)
+.\scripts\Run.ps1 solution repo remove my-repo --work-path $app
+.\scripts\Run.ps1 solution repo remove my-repo --work-path $app --output json
+.\scripts\Run.ps1 solution repo remove my-repo --work-path $app --output text
+
+# remove and delete the local clone from disk
+.\scripts\Run.ps1 solution repo remove my-repo --work-path $app --purge
+.\scripts\Run.ps1 solution repo remove my-repo --work-path $app --purge --output json
+
+# remove a name that doesn't exist — should return an error
+.\scripts\Run.ps1 solution repo remove no-such-repo --work-path $app
 
 # solution repo sync — clone or update registered repositories
 .\scripts\Run.ps1 solution repo sync -h

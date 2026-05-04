@@ -14,6 +14,7 @@ from xyz_platform.commands.cli_common import (
 from xyz_platform.commands.solution.add_repo_solution_command import AddRepoSolutionCommand
 from xyz_platform.commands.solution.clean_solution_command import CleanSolutionCommand
 from xyz_platform.commands.solution.init_solution_command import InitSolutionCommand
+from xyz_platform.commands.solution.remove_repo_solution_command import RemoveRepoSolutionCommand
 from xyz_platform.commands.solution.sync_repo_solution_command import SyncRepoSolutionCommand
 
 
@@ -130,6 +131,39 @@ def solution_repo_add(
         url=url,
         branch=branch,
         path=path,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@repo_group.command(name="remove", help="Remove a repository from the current solution.")
+@click.argument("name")
+@click.option(
+    "--purge",
+    is_flag=True,
+    default=False,
+    help="Also delete the local clone directory from disk.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def solution_repo_remove(
+    name: str,
+    purge: bool = False,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Remove a repository entry from the solution."""
+    command = RemoveRepoSolutionCommand(
+        name=name,
+        purge=purge,
         work_path=work_path,
         output=output,
         verbose=verbose,
