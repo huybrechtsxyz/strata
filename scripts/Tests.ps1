@@ -166,6 +166,58 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 .\scripts\Run.ps1 solution repo sync --name no-such-repo --work-path $app
 
 # ==============================================================================
+# [REFERENCE] log — view execution logs and manage logging configuration
+# ==============================================================================
+
+.\scripts\Run.ps1 log -h
+.\scripts\Run.ps1 log
+
+# log show — display execution log entries
+.\scripts\Run.ps1 log show -h
+.\scripts\Run.ps1 log show --work-path $app
+.\scripts\Run.ps1 log show --work-path $app --lines 20
+.\scripts\Run.ps1 log show --work-path $app --level WARNING
+.\scripts\Run.ps1 log show --work-path $app --level DEBUG
+.\scripts\Run.ps1 log show --work-path $app --minutes 10
+.\scripts\Run.ps1 log show --work-path $app --last
+
+# structured output
+.\scripts\Run.ps1 log show --work-path $app --output json
+.\scripts\Run.ps1 log show --work-path $app --output text
+
+# log config — manage .platform/logging.yaml
+.\scripts\Run.ps1 log config -h
+.\scripts\Run.ps1 log config
+
+# list — show full logging.yaml content
+.\scripts\Run.ps1 log config list -h
+.\scripts\Run.ps1 log config list --work-path $app
+.\scripts\Run.ps1 log config list --work-path $app --output json
+.\scripts\Run.ps1 log config list --work-path $app --output text
+
+# get — retrieve a value by dot-notation key
+.\scripts\Run.ps1 log config get -h
+.\scripts\Run.ps1 log config get level --work-path $app
+.\scripts\Run.ps1 log config get handlers.console.level --work-path $app
+.\scripts\Run.ps1 log config get loggers.xyz_platform.level --work-path $app
+
+# set — write a value; 'level' shorthand sets handler + logger level at once
+.\scripts\Run.ps1 log config set -h
+.\scripts\Run.ps1 log config set level DEBUG --work-path $app
+.\scripts\Run.ps1 log config set level INFO --work-path $app
+.\scripts\Run.ps1 log config set level WARNING --work-path $app
+.\scripts\Run.ps1 log config set handlers.console.level ERROR --work-path $app
+
+# unset — remove a key from logging.yaml
+.\scripts\Run.ps1 log config unset -h
+.\scripts\Run.ps1 log config unset level --work-path $app
+.\scripts\Run.ps1 log config unset handlers.console.level --work-path $app
+
+# reset — restore to package default
+.\scripts\Run.ps1 log config reset -h
+.\scripts\Run.ps1 log config reset --work-path $app
+
+# ==============================================================================
 # End of reference commands
 # ==============================================================================
 

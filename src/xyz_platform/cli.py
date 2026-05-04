@@ -23,6 +23,7 @@ import click
 import yaml
 
 from xyz_platform.commands.cli_config import config_group
+from xyz_platform.commands.cli_log import log_group
 from xyz_platform.commands.cli_solution import solution_group
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
@@ -142,6 +143,7 @@ def main(ctx: click.Context) -> None:
 main.add_command(version_command, name="version")
 main.add_command(solution_group, name="solution")
 main.add_command(config_group, name="config")
+main.add_command(log_group, name="log")
 
 #
 # ENTRY POINT
