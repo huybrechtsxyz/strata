@@ -288,7 +288,23 @@ class BaseCommand(ABC):
                 click.echo(f"success: {envelope['success']}")
                 click.echo(f"command: {envelope['command']}")
                 for k, v in envelope["data"].items():
-                    click.echo(f"{k}: {v}")
+                    if isinstance(v, list):
+                        click.echo(f"{k}:")
+                        for item in v:
+                            if isinstance(item, dict):
+                                first = True
+                                for ik, iv in item.items():
+                                    prefix = "  - " if first else "    "
+                                    click.echo(f"{prefix}{ik}: {iv}")
+                                    first = False
+                            else:
+                                click.echo(f"  - {item}")
+                    elif isinstance(v, dict):
+                        click.echo(f"{k}:")
+                        for dk, dv in v.items():
+                            click.echo(f"  {dk}: {dv}")
+                    else:
+                        click.echo(f"{k}: {v}")
                 if envelope["messages"]:
                     click.echo("messages:")
                     for m in envelope["messages"]:
