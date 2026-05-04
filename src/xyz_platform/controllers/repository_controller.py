@@ -9,6 +9,7 @@ from xyz_platform.integrations.factory import IntegrationFactory
 from xyz_platform.integrations.git import GitIntegration
 from xyz_platform.models.integration_model import IntegrationModel
 from xyz_platform.models.repository_model import RepositoryModel, RepositoryType
+from xyz_platform.models.solution_model import SolutionSpecRepositoryModel
 from xyz_platform.services.configuration_service import ConfigurationService
 
 
@@ -28,7 +29,14 @@ class RepositoryController(BaseController):
     def __init__(self) -> None:
         """Initialize the repository controller."""
         super().__init__()
-        self._config_service = ConfigurationService.get_instance()
+        self._config_service_instance: Optional[ConfigurationService] = None
+
+    @property
+    def _config_service(self) -> ConfigurationService:
+        """Lazy accessor — only instantiated when config-layer methods need it."""
+        if self._config_service_instance is None:
+            self._config_service_instance = ConfigurationService.get_instance()
+        return self._config_service_instance
 
     # Public API
 
@@ -204,6 +212,59 @@ class RepositoryController(BaseController):
 
         return len(missing) == 0, missing
 
+    def sync_solution_repos(
+        self,
+        work_path: str,
+        repos: List[SolutionSpecRepositoryModel],
+        force: bool = False,
+    ) -> Tuple[bool, List[Dict[str, Any]]]:
+        """Clone or pull repositories registered in a solution.
+
+        For each repo: clones if the local path has no ``.git/``, otherwise
+        pulls the tracked branch.  A dirty working tree without ``force``
+        is skipped (not an error).
+
+        Args:
+            work_path: Workspace root (repo paths resolved relative to it).
+            repos: Solution repository entries to sync.
+            force: When True, pull even over dirty trees.
+
+        Returns:
+            ``(all_ok, results)`` where *results* is a list of per-repo dicts::
+
+                {name, url, path, branch, action, status, error}
+        """
+        self._errors.clear()
+        self._messages.clear()
+
+        git = self._get_git_integration()
+        if git is None:
+            return False, []
+
+        results: List[Dict[str, Any]] = []
+
+        for repo in repos:
+            abs_path = Path(work_path) / repo.path
+            result = self._clone_or_pull(
+                git=git,
+                name=str(repo.name),
+                url=repo.url,
+                branch=repo.branch,
+                target_path=abs_path,
+                force=force,
+            )
+            results.append(result)
+            if result["status"] == "failed":
+                self._errors.append(result["error"] or f"Sync failed for '{repo.name}'")
+
+        all_ok = len(self._errors) == 0
+        self.logger.info(
+            "Solution repository sync completed",
+            total=len(repos),
+            failed=len(self._errors),
+        )
+        return all_ok, results
+
     # Private helpers
 
     def _fetch_single_repository(
@@ -212,22 +273,7 @@ class RepositoryController(BaseController):
         source: RepositoryModel,
         force: bool,
     ) -> bool:
-        """
-        Fetch a single repository based on its type.
-
-        Routing:
-        - GITOPS  : clone (new) or pull (existing) via GitIntegration
-        - BUNDLED : copy local path with shutil
-        - CONTAINER: not supported at this stage — logged, skipped
-
-        Args:
-            work_path: Working directory for resolving bundled source paths
-            source: RepositoryModel with repository details
-            force: If True, remove existing target before re-fetching
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Fetch a single repository based on its type."""
         target_path = self._resolve_target_path(work_path=work_path, source=source)
         repo_name = source.name or source.repository
 
@@ -240,65 +286,28 @@ class RepositoryController(BaseController):
         )
 
         if source.type == RepositoryType.GITOPS:
-            return self._fetch_gitops(
-                source=source,
-                target_path=target_path,
-                force=force,
-            )
+            return self._fetch_gitops(source=source, target_path=target_path, force=force)
 
         if source.type == RepositoryType.BUNDLED:
-            return self._fetch_bundled(
-                work_path=work_path,
-                source=source,
-                target_path=target_path,
-                force=force,
-            )
+            return self._fetch_bundled(work_path=work_path, source=source, target_path=target_path, force=force)
 
         if source.type == RepositoryType.CONTAINER:
-            self.logger.warning(
-                "Container repository type not supported",
-                repository=repo_name,
-            )
-            return True  # Non-fatal — caller decides whether to error
+            self.logger.warning("Container repository type not supported", repository=repo_name)
+            return True
 
-        self.logger.error(
-            "Unknown repository type",
-            repository=repo_name,
-            type=source.type,
-        )
+        self.logger.error("Unknown repository type", repository=repo_name, type=source.type)
         return False
 
     def _resolve_target_path(self, work_path: str, source: RepositoryModel) -> Path:
-        """
-        Resolve repository target directory under workspace root.
-
-        Resolution order:
-        1. source.deploy_path
-        2. source.name
-        3. source.repository
-        """
+        """Resolve repository target directory under workspace root."""
         target_name = source.deploy_path or source.name or source.repository
         return Path(work_path) / target_name
 
-    def _fetch_gitops(
-        self,
-        source: RepositoryModel,
-        target_path: Path,
-        force: bool,
-    ) -> bool:
+    def _get_git_integration(self) -> Optional[GitIntegration]:
+        """Build and validate a GitIntegration instance.
+
+        Returns the instance on success, or None (with an error appended) on failure.
         """
-        Clone or pull a GitOps repository via GitIntegration.
-
-        Args:
-            source: RepositoryModel for the repository
-            target_path: Resolved target directory
-            force: Re-clone if target already exists
-
-        Returns:
-            True if successful, False otherwise
-        """
-        repo_name = source.name or source.repository
-
         try:
             config = IntegrationModel(
                 name="git",
@@ -312,97 +321,138 @@ class RepositoryController(BaseController):
             git_classes = IntegrationFactory.get_registered_types()
             git_class = git_classes.get("git")
             if not git_class:
-                self.logger.error("Git integration is not registered", repository=repo_name)
                 self._errors.append("Git integration is not registered")
-                return False
+                self.logger.error("Git integration is not registered")
+                return None
 
             git = cast(GitIntegration, git_class(config=config))
-
             available, error = git.ensure_available()
             if not available:
-                error_msg = f"Git is not available: {error}"
-                self.logger.error(
-                    "Git is not available",
-                    repository=repo_name,
-                    error=error,
-                )
-                self._errors.append(error_msg)
-                return False
+                self._errors.append(f"Git is not available: {error}")
+                self.logger.error("Git is not available", error=error)
+                return None
 
-            git_dir = target_path / ".git"
+            return git
 
-            # Force: remove existing directory before re-cloning
-            if force and target_path.exists():
-                self.logger.debug(
-                    "Removing existing repository for force re-fetch",
-                    repository=repo_name,
-                    target_path=str(target_path),
-                )
-                shutil.rmtree(target_path, ignore_errors=True)
+        except Exception as e:
+            self._errors.append(f"Failed to initialise Git integration: {e}")
+            self.logger.error("Failed to initialise Git integration", exc_info=True)
+            return None
 
+    def _clone_or_pull(
+        self,
+        git: GitIntegration,
+        name: str,
+        url: str,
+        branch: Optional[str],
+        target_path: Path,
+        force: bool,
+    ) -> Dict[str, Any]:
+        """Clone or pull a single git repository.
+
+        Shared logic used by both configuration-layer fetch and solution-layer sync.
+
+        Returns a per-repo result dict with keys:
+        ``name, url, path, branch, action, status, error``.
+        """
+        git_dir = target_path / ".git"
+
+        entry: Dict[str, Any] = {
+            "name": name,
+            "url": url,
+            "path": str(target_path),
+            "branch": branch,
+            "action": None,
+            "status": "ok",
+            "error": None,
+        }
+
+        try:
             if target_path.exists() and git_dir.exists():
-                # Repository already checked out — pull updates
-                self.logger.debug(
-                    "Repository exists, pulling updates",
-                    repository=repo_name,
-                    target_path=str(target_path),
-                )
-                result = git.pull(
-                    working_dir=str(target_path),
-                    branch=source.reference,
-                )
-                if result.returncode != 0:
-                    error_msg = f"Git pull failed for '{repo_name}': {result.stderr.strip()}"
-                    self.logger.error(
-                        "Git pull failed",
-                        repository=repo_name,
-                        stderr=result.stderr.strip(),
-                    )
-                    self._errors.append(error_msg)
-                    return False
+                # Repo already on disk — check for dirty tree
+                status_result = git._run_integration(["status", "--porcelain"], cwd=str(target_path), timeout=30)
+                is_dirty = status_result.returncode == 0 and bool(status_result.stdout.strip())
 
+                if is_dirty and not force:
+                    self.logger.warning(
+                        "Skipping dirty repository (use --force to override)",
+                        repo=name,
+                        path=str(target_path),
+                    )
+                    entry["action"] = "skipped"
+                    entry["error"] = "Working tree is dirty — use --force to override"
+                    return entry
+
+                result = git.pull(working_dir=str(target_path), branch=branch)
+                entry["action"] = "pull"
+                if result.returncode != 0:
+                    entry["status"] = "failed"
+                    entry["error"] = result.stderr.strip() or "git pull failed"
+                    self.logger.error("Git pull failed", repo=name, stderr=result.stderr.strip())
             else:
                 # Clone fresh
                 target_path.parent.mkdir(parents=True, exist_ok=True)
-                self.logger.debug(
-                    "Cloning repository",
-                    repository=repo_name,
-                    url=source.repository,
-                    reference=source.reference,
-                    target_path=str(target_path),
-                )
                 result = git.clone(
-                    repo_url=source.repository,
+                    repo_url=url,
                     target_dir=str(target_path),
-                    branch=source.reference,
+                    branch=branch,
                 )
+                entry["action"] = "clone"
                 if result.returncode != 0:
-                    error_msg = f"Git clone failed for '{repo_name}': {result.stderr.strip()}"
-                    self.logger.error(
-                        "Git clone failed",
-                        repository=repo_name,
-                        stderr=result.stderr.strip(),
-                    )
-                    self._errors.append(error_msg)
-                    return False
-
-            self.logger.debug(
-                "GitOps repository fetched successfully",
-                repository=repo_name,
-                path=str(target_path),
-            )
-            return True
+                    entry["status"] = "failed"
+                    entry["error"] = result.stderr.strip() or "git clone failed"
+                    self.logger.error("Git clone failed", repo=name, url=url, stderr=result.stderr.strip())
 
         except Exception as e:
-            error_msg = f"GitOps fetch failed for '{repo_name}': {str(e)}"
-            self.logger.error(
-                "GitOps fetch failed",
+            entry["action"] = entry.get("action") or "unknown"
+            entry["status"] = "failed"
+            entry["error"] = str(e)
+            self.logger.error("Sync exception", repo=name, error_type=type(e).__name__, exc_info=True)
+
+        return entry
+
+    def _fetch_gitops(
+        self,
+        source: RepositoryModel,
+        target_path: Path,
+        force: bool,
+    ) -> bool:
+        """Clone or pull a GitOps repository via GitIntegration."""
+        repo_name = source.name or source.repository
+
+        git = self._get_git_integration()
+        if git is None:
+            return False
+
+        # Force: remove existing directory before re-cloning
+        if force and target_path.exists():
+            self.logger.debug(
+                "Removing existing repository for force re-fetch",
                 repository=repo_name,
-                error_type=type(e).__name__,
-                exc_info=True,
+                target_path=str(target_path),
             )
+            shutil.rmtree(target_path, ignore_errors=True)
+
+        result = self._clone_or_pull(
+            git=git,
+            name=str(repo_name),
+            url=source.repository,
+            branch=source.reference,
+            target_path=target_path,
+            force=force,
+        )
+
+        if result["status"] == "failed":
+            error_msg = result["error"] or f"GitOps fetch failed for '{repo_name}'"
             self._errors.append(error_msg)
             return False
+
+        self.logger.debug(
+            "GitOps repository fetched successfully",
+            repository=repo_name,
+            path=str(target_path),
+        )
+        return True
 
     def _fetch_bundled(
         self,

@@ -304,6 +304,28 @@ class SolutionController(BaseController):
         self.logger.info("Repository removed from solution", repo=name)
         return True, []
 
+    def get_repositories(self, name: Optional[str] = None) -> Tuple[List[SolutionSpecRepositoryModel], List[str]]:
+        """Return repositories from the loaded solution, optionally filtered by name.
+
+        Args:
+            name: If given, return only the repository with this name.
+                  Returns an error if no match is found.
+
+        Returns:
+            ``(repos, errors)`` — *repos* is an empty list on error.
+        """
+        if self._solution is None:
+            return [], ["No solution loaded."]
+
+        repos = self._solution.spec.repositories or []
+
+        if name:
+            repos = [r for r in repos if str(r.name) == name]
+            if not repos:
+                return [], [f"Repository '{name}' not found in solution."]
+
+        return list(repos), []
+
     # ------------------------------------------------------------------
     # VS Code workspace generation
     # ------------------------------------------------------------------

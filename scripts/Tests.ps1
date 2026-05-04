@@ -27,6 +27,10 @@ New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 solution repo add my-repo https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
 
+.\scripts\Run.ps1 solution repo sync --name my-repo --force --work-path $app
+
+Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
+
 
 # ==============================================================================
 # [REFERENCE] Basic commands
@@ -89,7 +93,7 @@ New-Item -Path $app -ItemType Directory -Force
 
 # solution repo — manage repositories registered in the solution
 
-.\scripts\Run.ps1 solution repo -h
+scripts\Run.ps1 solution repo -h
 .\scripts\Run.ps1 solution repo
 
 # solution repo add — register a repository (no cloning; clone deferred to xyz solution sync)
@@ -100,22 +104,37 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 solution repo add my-repo-path https://github.com/huybrechtsxyz/xyz-traefik.git --path repos/custom --work-path $app
 .\scripts\Run.ps1 solution repo add my-repo-all https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --path repos/custom --work-path $app
 
-# add — structured output
+# solution repo add — structured output
 .\scripts\Run.ps1 solution repo add json-repo https://github.com/org/json-repo.git --work-path $app --output json
 .\scripts\Run.ps1 solution repo add text-repo https://github.com/org/text-repo.git --work-path $app --output text
 
-# add — duplicate name should fail
+# solution repo add — duplicate name should fail
 .\scripts\Run.ps1 solution repo add my-repo https://github.com/org/my-repo.git --work-path $app
 
+# solution repo sync — clone or update registered repositories
+.\scripts\Run.ps1 solution repo sync -h
+.\scripts\Run.ps1 solution repo sync
+.\scripts\Run.ps1 solution repo sync --work-path $app
+
+# sync all repos
+.\scripts\Run.ps1 solution repo sync --work-path $app
+.\scripts\Run.ps1 solution repo sync --work-path $app --output json
+.\scripts\Run.ps1 solution repo sync --work-path $app --output text
+
+# sync a single repo by name
+.\scripts\Run.ps1 solution repo sync --name my-repo --work-path $app
+.\scripts\Run.ps1 solution repo sync --name my-repo --work-path $app --output json
+
+# force — pull even when the working tree has uncommitted changes
+.\scripts\Run.ps1 solution repo sync --work-path $app --force
+.\scripts\Run.ps1 solution repo sync --name my-repo --work-path $app --force
+
+# sync a name that doesn't exist — should return an error
+.\scripts\Run.ps1 solution repo sync --name no-such-repo --work-path $app
+
 # ==============================================================================
-# [FLOW] End-to-end: fresh init + add multiple repos
+# End of reference commands
 # ==============================================================================
 
 Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
-New-Item  -Path $app -ItemType Directory -Force
-
-.\scripts\Run.ps1 solution init --name "e2e-solution" --work-path $app
-.\scripts\Run.ps1 solution repo add xyz-platform https://github.com/org/xyz-platform.git --work-path $app
-.\scripts\Run.ps1 solution repo add xyz-infra     https://github.com/org/xyz-infra.git    --branch main --path repos/infra --work-path $app
-.\scripts\Run.ps1 solution repo add xyz-config    https://github.com/org/xyz-config.git   --branch develop --work-path $app
 

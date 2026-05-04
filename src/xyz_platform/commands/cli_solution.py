@@ -14,6 +14,7 @@ from xyz_platform.commands.cli_common import (
 from xyz_platform.commands.solution.add_repo_solution_command import AddRepoSolutionCommand
 from xyz_platform.commands.solution.clean_solution_command import CleanSolutionCommand
 from xyz_platform.commands.solution.init_solution_command import InitSolutionCommand
+from xyz_platform.commands.solution.sync_repo_solution_command import SyncRepoSolutionCommand
 
 
 @click.group(name="solution", help="Manage XYZ Platform solutions.")
@@ -129,6 +130,43 @@ def solution_repo_add(
         url=url,
         branch=branch,
         path=path,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@repo_group.command(name="sync", help="Clone or pull repositories registered in the solution.")
+@click.option(
+    "--name",
+    default=None,
+    help="Sync only this repository (default: sync all).",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Hard-reset dirty working trees instead of skipping them.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def solution_repo_sync(
+    name: Optional[str] = None,
+    force: bool = False,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Clone or pull all (or one) repositories registered in the solution."""
+    command = SyncRepoSolutionCommand(
+        name=name,
+        force=force,
         work_path=work_path,
         output=output,
         verbose=verbose,
