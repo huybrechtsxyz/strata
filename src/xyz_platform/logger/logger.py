@@ -134,7 +134,7 @@ def configure_logging(
     # Sinks
     # ------------------------------------------------------------------
     if enable_console:
-        handler = logging.StreamHandler(sys.stdout)
+        handler = logging.StreamHandler(sys.stderr)
         handler.setLevel(log_level)
         handler.setFormatter(make_console_formatter())
         root_logger.addHandler(handler)

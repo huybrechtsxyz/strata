@@ -57,6 +57,48 @@ def _load_workspace_defaults(work_path: Path) -> dict:
         return {}
 
 
+def _resolve_work_path_early() -> Path:
+    """Resolve work_path before Click finishes parsing subcommand options.
+
+    Click's ``main()`` callback fires before subcommand options are parsed, so
+    ``--work-path`` values on leaf commands are not yet available via the context.
+    We peek at ``sys.argv`` directly so that workspace defaults are loaded from
+    the correct ``.platform/cli.yaml`` regardless of where ``--work-path`` appears
+    in the command line.
+
+    Resolution order (first match wins):
+    1. ``--work-path <value>`` or ``--work-path=<value>`` anywhere in sys.argv
+    2. ``XYZ_WORK_PATH`` environment variable
+    3. Walk up from CWD (``resolve_work_path`` default)
+    """
+    args = sys.argv[1:]
+    for i, arg in enumerate(args):
+        if arg in ("--work-path",) and i + 1 < len(args):
+            return resolve_work_path(args[i + 1])
+        if arg.startswith("--work-path="):
+            return resolve_work_path(arg.split("=", 1)[1])
+    return resolve_work_path(os.environ.get("XYZ_WORK_PATH"))
+
+
+def _build_default_map(command: click.Command, defaults: dict) -> dict:
+    """Recursively build a Click default_map that reaches every leaf command.
+
+    Click only applies ``default_map`` values to the *current* command's
+    options.  For nested groups (e.g. ``solution repo add``) the map must be
+    nested two levels deep.  This helper walks the full command tree and
+    injects ``defaults`` at every level so leaf options are always covered.
+    """
+    result: dict = {}
+    commands = getattr(command, "commands", {})
+    for name, sub in commands.items():
+        entry: dict = dict(defaults)  # apply defaults at this level too
+        sub_commands = getattr(sub, "commands", {})
+        if sub_commands:
+            entry.update(_build_default_map(sub, defaults))
+        result[name] = entry
+    return result
+
+
 #
 # MAIN CLI GROUP
 #
@@ -84,15 +126,11 @@ def main(ctx: click.Context) -> None:
 
     # Load workspace defaults from cli.yaml and apply as Click default_map.
     # Resolution order: explicit flag > XYZ_* env var > cli.yaml > built-in default.
-    work_path = resolve_work_path(os.environ.get("XYZ_WORK_PATH"))
+    work_path = _resolve_work_path_early()
     workspace_defaults = _load_workspace_defaults(work_path)
     if workspace_defaults:
-        # Merge into every subcommand's default_map
         ctx.ensure_object(dict)
-        existing = ctx.default_map or {}
-        for cmd_name in ctx.command.commands:  # type: ignore[attr-defined]
-            existing.setdefault(cmd_name, {}).update(workspace_defaults)
-        ctx.default_map = existing
+        ctx.default_map = _build_default_map(ctx.command, workspace_defaults)
         logger.debug("Workspace values loaded", values=workspace_defaults)
 
 

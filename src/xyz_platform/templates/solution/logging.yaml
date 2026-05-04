@@ -23,7 +23,7 @@ handlers:
     class: logging.StreamHandler
     level: WARNING
     formatter: console
-    stream: ext://sys.stdout
+    stream: ext://sys.stderr
 
   file:
     class: logging.handlers.RotatingFileHandler
