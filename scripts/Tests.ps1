@@ -21,25 +21,25 @@ $app = ".app"
 
 New-Item -Path $app -ItemType Directory -Force
 
-.\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
+.\scripts\Run.ps1 init --name "test-solution" --work-path $app
 
 .\scripts\Run.ps1 config set --work-path $app output console
 
-.\scripts\Run.ps1 solution repo add traefik https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+.\scripts\Run.ps1 repo add traefik https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
 
-.\scripts\Run.ps1 solution repo sync --name traefik --force --work-path $app
+.\scripts\Run.ps1 repo sync --name traefik --force --work-path $app
 
-.\scripts\Run.ps1 solution profile add production --work-path $app
+.\scripts\Run.ps1 profile add production --work-path $app
 
-.\scripts\Run.ps1 solution profile add development --work-path $app
+.\scripts\Run.ps1 profile add development --work-path $app
 
-.\scripts\Run.ps1 solution profile path add production dotenv base "@traefik/environments/base.env" --work-path $app
+.\scripts\Run.ps1 ref envfile add base "@traefik/environments/base.env" --profile production --work-path $app
 
-.\scripts\Run.ps1 solution profile activate development --work-path $app
+.\scripts\Run.ps1 profile activate development --work-path $app
 
-.\scripts\Run.ps1 solution profile list --work-path $app
+.\scripts\Run.ps1 profile list --work-path $app
 
-.\scripts\Run.ps1 solution profile path list production --work-path $app
+.\scripts\Run.ps1 profile show production --work-path $app
 
 Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -58,6 +58,24 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 .\scripts\Run.ps1 version --output text
 
 # ==============================================================================
+# [REFERENCE] init — initialize a new solution workspace
+# ==============================================================================
+
+.\scripts\Run.ps1 init -h
+.\scripts\Run.ps1 init --name "test-solution" --work-path $app
+.\scripts\Run.ps1 init --name "test-solution" --work-path $app --output json
+.\scripts\Run.ps1 init --name "test-solution" --work-path $app --output text
+
+# ==============================================================================
+# [REFERENCE] clean — remove workspace artifacts (logs, temp files)
+# ==============================================================================
+
+.\scripts\Run.ps1 clean -h
+.\scripts\Run.ps1 clean --work-path $app --dry-run
+.\scripts\Run.ps1 clean --work-path $app
+.\scripts\Run.ps1 clean --work-path $app --output json
+
+# ==============================================================================
 # [REFERENCE] config — persist workspace defaults into .platform/cli.yaml
 # ==============================================================================
 
@@ -66,7 +84,6 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 
 # set — define a default value for the current workspace
 .\scripts\Run.ps1 config set -h
-.\scripts\Run.ps1 config set
 .\scripts\Run.ps1 config set --work-path $app output json
 .\scripts\Run.ps1 config set --work-path $app output console
 .\scripts\Run.ps1 config set --work-path $app output text
@@ -75,220 +92,156 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 .\scripts\Run.ps1 config set --work-path $app quiet true
 .\scripts\Run.ps1 config set --work-path $app quiet false
 
-# info — show all current defaults
+# list — show all current defaults
 .\scripts\Run.ps1 config list -h
-.\scripts\Run.ps1 config list
 .\scripts\Run.ps1 config list --work-path $app
 .\scripts\Run.ps1 config list --work-path $app --output json
 .\scripts\Run.ps1 config list --work-path $app --output text
 
-# unset - remove a specific default (revert to built-in or env var value)
+# unset — remove a specific default
 .\scripts\Run.ps1 config unset -h
-.\scripts\Run.ps1 config unset
 .\scripts\Run.ps1 config unset --work-path $app output
 .\scripts\Run.ps1 config unset --work-path $app verbose
-.\scripts\Run.ps1 config unset --work-path $app quiet 
-
-# ==============================================================================
-# [REFERENCE] config env — manage env-file sources loaded at startup
-# ==============================================================================
+.\scripts\Run.ps1 config unset --work-path $app quiet
 
 .\scripts\Run.ps1 config env -h
-.\scripts\Run.ps1 config env
-
-# add — register an env-file source with load order
-.\scripts\Run.ps1 config env add -h
-.\scripts\Run.ps1 config env add base environments/base.env --order 10 --work-path $app
-.\scripts\Run.ps1 config env add production "@my-repo/environments/prd.env" --order 20 --work-path $app
-.\scripts\Run.ps1 config env add local .env.local --order 30 --work-path $app
-.\scripts\Run.ps1 config env add local .env.local --work-path $app  # duplicate — should fail
-
-# add — structured output
-.\scripts\Run.ps1 config env add json-test envs/test.env --work-path $app --output json
-.\scripts\Run.ps1 config env add text-test envs/test2.env --work-path $app --output text
-
-# list — show registered sources with load order
-.\scripts\Run.ps1 config env list -h
-.\scripts\Run.ps1 config env list --work-path $app
-.\scripts\Run.ps1 config env list --work-path $app --output json
-.\scripts\Run.ps1 config env list --work-path $app --output text
-
-# show — resolve all sources and display merged key=value result
-.\scripts\Run.ps1 config env show -h
-.\scripts\Run.ps1 config env show --work-path $app
-.\scripts\Run.ps1 config env show --work-path $app --output json
-
-# remove — unregister a source
-.\scripts\Run.ps1 config env remove -h
-.\scripts\Run.ps1 config env remove base --work-path $app
-.\scripts\Run.ps1 config env remove no-such-source --work-path $app  # should fail
 
 # ==============================================================================
-# [REFERENCE] solution — Solution lifecycle management
+# [REFERENCE] repo — manage repositories registered in the solution
 # ==============================================================================
 
-.\scripts\Run.ps1 solution -h
-.\scripts\Run.ps1 solution
-.\scripts\Run.ps1 solution init -h
-.\scripts\Run.ps1 solution init --name "test-solution" --work-path $app
+.\scripts\Run.ps1 repo -h
+.\scripts\Run.ps1 repo
 
-# solution clean - remove workspace artifacts without touching state
-
-.\scripts\Run.ps1 solution clean -h
-.\scripts\Run.ps1 solution clean
-.\scripts\Run.ps1 solution clean --work-path $app --dry-run
-.\scripts\Run.ps1 solution clean --work-path $app
-.\scripts\Run.ps1 solution clean --work-path $app --output json
-
-# solution repo — manage repositories registered in the solution
-
-.\scripts\Run.ps1 solution repo -h
-.\scripts\Run.ps1 solution repo
-
-# solution repo add — register a repository (no cloning; clone deferred to xyz solution sync)
-.\scripts\Run.ps1 solution repo add -h
-.\scripts\Run.ps1 solution repo add
-.\scripts\Run.ps1 solution repo add my-repo https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
-.\scripts\Run.ps1 solution repo add my-repo-branch https://github.com/huybrechtsxyz/xyz-traefik.git --branch main --work-path $app
-.\scripts\Run.ps1 solution repo add my-repo-path https://github.com/huybrechtsxyz/xyz-traefik.git --path repos/custom --work-path $app
-.\scripts\Run.ps1 solution repo add my-repo-all https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --path repos/custom --work-path $app
-
-# solution repo add — structured output
-.\scripts\Run.ps1 solution repo add json-repo https://github.com/org/json-repo.git --work-path $app --output json
-.\scripts\Run.ps1 solution repo add text-repo https://github.com/org/text-repo.git --work-path $app --output text
-
-# solution repo add — duplicate name should fail
-.\scripts\Run.ps1 solution repo add my-repo https://github.com/org/my-repo.git --work-path $app
-
-# solution repo list — show repositories registered in the solution
-.\scripts\Run.ps1 solution repo list -h
-.\scripts\Run.ps1 solution repo list
-.\scripts\Run.ps1 solution repo list --work-path $app --output console
-.\scripts\Run.ps1 solution repo list --work-path $app --output json
-.\scripts\Run.ps1 solution repo list --work-path $app --output text
-
-# list a single repo by name
-.\scripts\Run.ps1 solution repo list --name my-repo --work-path $app
-.\scripts\Run.ps1 solution repo list --name my-repo --work-path $app --output json
-
-# list a name that doesn't exist — should return an error
-.\scripts\Run.ps1 solution repo list --name no-such-repo --work-path $app
-
-# solution repo remove — unregister a repository from the solution
-.\scripts\Run.ps1 solution repo remove -h
-.\scripts\Run.ps1 solution repo remove
-
-# remove from registry only (leaves the local folder on disk)
-.\scripts\Run.ps1 solution repo remove my-repo --work-path $app
-.\scripts\Run.ps1 solution repo remove my-repo --work-path $app --output json
-.\scripts\Run.ps1 solution repo remove my-repo --work-path $app --output text
-
-# remove and delete the local clone from disk
-.\scripts\Run.ps1 solution repo remove my-repo --work-path $app --purge
-.\scripts\Run.ps1 solution repo remove my-repo --work-path $app --purge --output json
-
-# remove a name that doesn't exist — should return an error
-.\scripts\Run.ps1 solution repo remove no-such-repo --work-path $app
-
-# solution repo sync — clone or update registered repositories
-.\scripts\Run.ps1 solution repo sync -h
-.\scripts\Run.ps1 solution repo sync
-.\scripts\Run.ps1 solution repo sync --work-path $app
-
-# sync all repos
-.\scripts\Run.ps1 solution repo sync --work-path $app
-.\scripts\Run.ps1 solution repo sync --work-path $app --output json
-.\scripts\Run.ps1 solution repo sync --work-path $app --output text
-
-# sync a single repo by name
-.\scripts\Run.ps1 solution repo sync --name my-repo --work-path $app
-.\scripts\Run.ps1 solution repo sync --name my-repo --work-path $app --output json
-
-# force — pull even when the working tree has uncommitted changes
-.\scripts\Run.ps1 solution repo sync --work-path $app --force
-.\scripts\Run.ps1 solution repo sync --name my-repo --work-path $app --force
-
-# sync a name that doesn't exist — should return an error
-.\scripts\Run.ps1 solution repo sync --name no-such-repo --work-path $app
-
-# ==============================================================================
-# [REFERENCE] solution profile — manage profiles in the solution
-# ==============================================================================
-
-.\scripts\Run.ps1 solution profile -h
-.\scripts\Run.ps1 solution profile
-
-# profile add — create a new profile (first profile auto-activates)
-.\scripts\Run.ps1 solution profile add -h
-.\scripts\Run.ps1 solution profile add production --work-path $app
-.\scripts\Run.ps1 solution profile add development --work-path $app
-.\scripts\Run.ps1 solution profile add staging --work-path $app
-.\scripts\Run.ps1 solution profile add production --work-path $app --output json
-.\scripts\Run.ps1 solution profile add production --work-path $app --output text
+# repo add — register a repository (no cloning; clone deferred to xyz repo sync)
+.\scripts\Run.ps1 repo add -h
+.\scripts\Run.ps1 repo add my-repo https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+.\scripts\Run.ps1 repo add my-repo-branch https://github.com/huybrechtsxyz/xyz-traefik.git --branch main --work-path $app
+.\scripts\Run.ps1 repo add my-repo-path https://github.com/huybrechtsxyz/xyz-traefik.git --path repos/custom --work-path $app
+.\scripts\Run.ps1 repo add my-repo-all https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --path repos/custom --work-path $app
+.\scripts\Run.ps1 repo add json-repo https://github.com/org/json-repo.git --work-path $app --output json
+.\scripts\Run.ps1 repo add text-repo https://github.com/org/text-repo.git --work-path $app --output text
 
 # duplicate name should fail
-.\scripts\Run.ps1 solution profile add production --work-path $app
+.\scripts\Run.ps1 repo add my-repo https://github.com/org/my-repo.git --work-path $app
+
+# repo list — show repositories registered in the solution
+.\scripts\Run.ps1 repo list -h
+.\scripts\Run.ps1 repo list --work-path $app --output console
+.\scripts\Run.ps1 repo list --work-path $app --output json
+.\scripts\Run.ps1 repo list --work-path $app --output text
+.\scripts\Run.ps1 repo list --name my-repo --work-path $app
+.\scripts\Run.ps1 repo list --name my-repo --work-path $app --output json
+.\scripts\Run.ps1 repo list --name no-such-repo --work-path $app
+
+# repo remove — unregister a repository from the solution
+.\scripts\Run.ps1 repo remove -h
+.\scripts\Run.ps1 repo remove my-repo --work-path $app
+.\scripts\Run.ps1 repo remove my-repo --work-path $app --output json
+.\scripts\Run.ps1 repo remove my-repo --work-path $app --output text
+.\scripts\Run.ps1 repo remove my-repo --work-path $app --purge
+.\scripts\Run.ps1 repo remove my-repo --work-path $app --purge --output json
+.\scripts\Run.ps1 repo remove no-such-repo --work-path $app
+
+# repo sync — clone or update registered repositories
+.\scripts\Run.ps1 repo sync -h
+.\scripts\Run.ps1 repo sync --work-path $app
+.\scripts\Run.ps1 repo sync --work-path $app --output json
+.\scripts\Run.ps1 repo sync --work-path $app --output text
+.\scripts\Run.ps1 repo sync --name my-repo --work-path $app
+.\scripts\Run.ps1 repo sync --name my-repo --work-path $app --output json
+.\scripts\Run.ps1 repo sync --work-path $app --force
+.\scripts\Run.ps1 repo sync --name my-repo --work-path $app --force
+.\scripts\Run.ps1 repo sync --name no-such-repo --work-path $app
+
+# ==============================================================================
+# [REFERENCE] profile — manage profiles in the solution
+# ==============================================================================
+
+.\scripts\Run.ps1 profile -h
+.\scripts\Run.ps1 profile
+
+# profile add — create a new profile (first profile auto-activates)
+.\scripts\Run.ps1 profile add -h
+.\scripts\Run.ps1 profile add production --work-path $app
+.\scripts\Run.ps1 profile add development --work-path $app
+.\scripts\Run.ps1 profile add staging --work-path $app
+.\scripts\Run.ps1 profile add production --work-path $app --output json
+.\scripts\Run.ps1 profile add production --work-path $app --output text
+.\scripts\Run.ps1 profile add production --work-path $app          # duplicate — should fail
 
 # profile list — show all profiles with active marker
-.\scripts\Run.ps1 solution profile list -h
-.\scripts\Run.ps1 solution profile list --work-path $app --output console
-.\scripts\Run.ps1 solution profile list --work-path $app --output json
-.\scripts\Run.ps1 solution profile list --work-path $app --output text
-.\scripts\Run.ps1 solution profile list --name production --work-path $app
-.\scripts\Run.ps1 solution profile list --name no-such-profile --work-path $app
+.\scripts\Run.ps1 profile list -h
+.\scripts\Run.ps1 profile list --work-path $app --output console
+.\scripts\Run.ps1 profile list --work-path $app --output json
+.\scripts\Run.ps1 profile list --work-path $app --output text
+.\scripts\Run.ps1 profile list --name production --work-path $app
+.\scripts\Run.ps1 profile list --name no-such-profile --work-path $app
+
+# profile show — display all ref paths for a profile grouped by type
+.\scripts\Run.ps1 profile show -h
+.\scripts\Run.ps1 profile show production --work-path $app
+.\scripts\Run.ps1 profile show production --work-path $app --output json
+.\scripts\Run.ps1 profile show production --work-path $app --output text
+.\scripts\Run.ps1 profile show no-such-profile --work-path $app    # should fail
 
 # profile activate — switch active profile
-.\scripts\Run.ps1 solution profile activate -h
-.\scripts\Run.ps1 solution profile activate development --work-path $app
-.\scripts\Run.ps1 solution profile activate development --work-path $app --output json
-.\scripts\Run.ps1 solution profile activate production --work-path $app --output json
-.\scripts\Run.ps1 solution profile activate no-such-profile --work-path $app
+.\scripts\Run.ps1 profile activate -h
+.\scripts\Run.ps1 profile activate development --work-path $app
+.\scripts\Run.ps1 profile activate development --work-path $app --output json
+.\scripts\Run.ps1 profile activate production --work-path $app --output json
+.\scripts\Run.ps1 profile activate no-such-profile --work-path $app
 
 # profile remove — delete a profile (refuses if active)
-.\scripts\Run.ps1 solution profile remove -h
-.\scripts\Run.ps1 solution profile remove development --work-path $app
-.\scripts\Run.ps1 solution profile remove production --work-path $app --output json
-
-# remove active profile should fail — must activate another first
-.\scripts\Run.ps1 solution profile remove production --work-path $app
-
-# remove non-existent profile should fail
-.\scripts\Run.ps1 solution profile remove no-such-profile --work-path $app
+.\scripts\Run.ps1 profile remove -h
+.\scripts\Run.ps1 profile remove development --work-path $app
+.\scripts\Run.ps1 profile remove production --work-path $app --output json
+.\scripts\Run.ps1 profile remove production --work-path $app       # active — should fail
+.\scripts\Run.ps1 profile remove no-such-profile --work-path $app  # should fail
 
 # ==============================================================================
-# [REFERENCE] solution profile path — manage paths within a profile
+# [REFERENCE] ref — manage named file references within profiles
 # ==============================================================================
 
-.\scripts\Run.ps1 solution profile path -h
-.\scripts\Run.ps1 solution profile path
+.\scripts\Run.ps1 ref -h
+.\scripts\Run.ps1 ref
 
-# path add — register a path entry (type: config|dotenv|data|secret)
-.\scripts\Run.ps1 solution profile path add -h
-.\scripts\Run.ps1 solution profile path add production config main config/app.yaml --work-path $app
-.\scripts\Run.ps1 solution profile path add production dotenv base "@infra/environments/base.env" --work-path $app
-.\scripts\Run.ps1 solution profile path add production data seed data/seed.sql --work-path $app
-.\scripts\Run.ps1 solution profile path add production secret vault "@infra/secrets/vault.yaml" --work-path $app
-.\scripts\Run.ps1 solution profile path add production config main config/app.yaml --work-path $app --output json
+# ref envfile — .env file references
+.\scripts\Run.ps1 ref envfile -h
+.\scripts\Run.ps1 ref envfile add base "@infra/environments/base.env" --profile production --work-path $app
+.\scripts\Run.ps1 ref envfile add prd "@infra/environments/prd.env" --profile production --work-path $app
+.\scripts\Run.ps1 ref envfile add base ".env.local" --work-path $app   # active profile (no --profile)
+.\scripts\Run.ps1 ref envfile add base "@infra/base.env" --profile production --work-path $app --output json
+.\scripts\Run.ps1 ref envfile add base "@infra/base.env" --profile production --work-path $app  # duplicate — should fail
+.\scripts\Run.ps1 ref envfile list --profile production --work-path $app
+.\scripts\Run.ps1 ref envfile list --work-path $app                    # active profile
+.\scripts\Run.ps1 ref envfile list --profile production --work-path $app --output json
+.\scripts\Run.ps1 ref envfile list --profile production --work-path $app --output text
+.\scripts\Run.ps1 ref envfile show base --profile production --work-path $app   # display file content
+.\scripts\Run.ps1 ref envfile remove base --profile production --work-path $app
+.\scripts\Run.ps1 ref envfile remove no-such --profile production --work-path $app  # should fail
 
-# duplicate path name should fail
-.\scripts\Run.ps1 solution profile path add production config main config/other.yaml --work-path $app
+# ref configfile — configuration file references (YAML, TOML, etc.)
+.\scripts\Run.ps1 ref configfile -h
+.\scripts\Run.ps1 ref configfile add main "config/app.yaml" --profile production --work-path $app
+.\scripts\Run.ps1 ref configfile add main "config/app.yaml" --profile production --work-path $app --output json
+.\scripts\Run.ps1 ref configfile list --profile production --work-path $app
+.\scripts\Run.ps1 ref configfile show main --profile production --work-path $app
+.\scripts\Run.ps1 ref configfile remove main --profile production --work-path $app
 
-# path list — show all paths for a profile grouped by type
-.\scripts\Run.ps1 solution profile path list -h
-.\scripts\Run.ps1 solution profile path list production --work-path $app
-.\scripts\Run.ps1 solution profile path list production --work-path $app --output json
-.\scripts\Run.ps1 solution profile path list production --work-path $app --output text
+# ref datafile — data/seed file references
+.\scripts\Run.ps1 ref datafile -h
+.\scripts\Run.ps1 ref datafile add seed "data/seed.sql" --profile production --work-path $app
+.\scripts\Run.ps1 ref datafile list --profile production --work-path $app
+.\scripts\Run.ps1 ref datafile show seed --profile production --work-path $app
+.\scripts\Run.ps1 ref datafile remove seed --profile production --work-path $app
 
-# path list for non-existent profile should fail
-.\scripts\Run.ps1 solution profile path list no-such-profile --work-path $app
-
-# path remove — unregister a path entry
-.\scripts\Run.ps1 solution profile path remove -h
-.\scripts\Run.ps1 solution profile path remove production dotenv base --work-path $app
-.\scripts\Run.ps1 solution profile path remove production config main --work-path $app --output json
-
-# remove non-existent path should fail
-.\scripts\Run.ps1 solution profile path remove production config no-such-path --work-path $app
+# ref secretfile — secret/vault file references
+.\scripts\Run.ps1 ref secretfile -h
+.\scripts\Run.ps1 ref secretfile add vault "@infra/secrets/vault.yaml" --profile production --work-path $app
+.\scripts\Run.ps1 ref secretfile list --profile production --work-path $app
+.\scripts\Run.ps1 ref secretfile show vault --profile production --work-path $app
+.\scripts\Run.ps1 ref secretfile remove vault --profile production --work-path $app
 
 # ==============================================================================
 # [REFERENCE] log — view execution logs and manage logging configuration
@@ -305,42 +258,36 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 .\scripts\Run.ps1 log show --work-path $app --level DEBUG
 .\scripts\Run.ps1 log show --work-path $app --minutes 10
 .\scripts\Run.ps1 log show --work-path $app --last
-
-# structured output
 .\scripts\Run.ps1 log show --work-path $app --output json
 .\scripts\Run.ps1 log show --work-path $app --output text
 
-# log config — manage .platform/logging.yaml
-.\scripts\Run.ps1 log config -h
-.\scripts\Run.ps1 log config
+# log list — show full logging.yaml content
+.\scripts\Run.ps1 log list -h
+.\scripts\Run.ps1 log list --work-path $app
+.\scripts\Run.ps1 log list --work-path $app --output json
+.\scripts\Run.ps1 log list --work-path $app --output text
 
-# list — show full logging.yaml content
-.\scripts\Run.ps1 log config list -h
-.\scripts\Run.ps1 log config list --work-path $app
-.\scripts\Run.ps1 log config list --work-path $app --output json
-.\scripts\Run.ps1 log config list --work-path $app --output text
+# log get — retrieve a value by dot-notation key
+.\scripts\Run.ps1 log get -h
+.\scripts\Run.ps1 log get level --work-path $app
+.\scripts\Run.ps1 log get handlers.console.level --work-path $app
+.\scripts\Run.ps1 log get loggers.xyz_platform.level --work-path $app
 
-# get — retrieve a value by dot-notation key
-.\scripts\Run.ps1 log config get -h
-.\scripts\Run.ps1 log config get level --work-path $app
-.\scripts\Run.ps1 log config get handlers.console.level --work-path $app
-.\scripts\Run.ps1 log config get loggers.xyz_platform.level --work-path $app
+# log set — write a value; 'level' shorthand sets handler + logger level at once
+.\scripts\Run.ps1 log set -h
+.\scripts\Run.ps1 log set level DEBUG --work-path $app
+.\scripts\Run.ps1 log set level INFO --work-path $app
+.\scripts\Run.ps1 log set level WARNING --work-path $app
+.\scripts\Run.ps1 log set handlers.console.level ERROR --work-path $app
 
-# set — write a value; 'level' shorthand sets handler + logger level at once
-.\scripts\Run.ps1 log config set -h
-.\scripts\Run.ps1 log config set level DEBUG --work-path $app
-.\scripts\Run.ps1 log config set level INFO --work-path $app
-.\scripts\Run.ps1 log config set level WARNING --work-path $app
-.\scripts\Run.ps1 log config set handlers.console.level ERROR --work-path $app
+# log unset — remove a key from logging.yaml
+.\scripts\Run.ps1 log unset -h
+.\scripts\Run.ps1 log unset level --work-path $app
+.\scripts\Run.ps1 log unset handlers.console.level --work-path $app
 
-# unset — remove a key from logging.yaml
-.\scripts\Run.ps1 log config unset -h
-.\scripts\Run.ps1 log config unset level --work-path $app
-.\scripts\Run.ps1 log config unset handlers.console.level --work-path $app
-
-# reset — restore to package default
-.\scripts\Run.ps1 log config reset -h
-.\scripts\Run.ps1 log config reset --work-path $app
+# log reset — restore to package default
+.\scripts\Run.ps1 log reset -h
+.\scripts\Run.ps1 log reset --work-path $app
 
 # ==============================================================================
 # End of reference commands

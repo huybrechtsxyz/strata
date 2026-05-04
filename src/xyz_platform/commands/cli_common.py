@@ -172,3 +172,13 @@ def click_work_path(func):
         help="Optional root path of the workspace, if different then PWD (must exist)",
     )(func)
     return func
+
+
+# --profile -> The active profile to use (defaults to the currently active profile)
+def click_profile(func):
+    func = click.option(
+        "--profile",
+        default=None,
+        help="Profile name. Defaults to the currently active profile.",
+    )(func)
+    return func

@@ -483,15 +483,17 @@ class SolutionController(BaseController):
 
         profile = target[0]
         type_map = {
-            "config": "config_paths",
-            "dotenv": "dotenv_paths",
-            "data": "data_paths",
-            "secret": "secret_paths",
+            "configfile": "configfile_paths",
+            "envfile": "envfile_paths",
+            "datafile": "datafile_paths",
+            "secretfile": "secretfile_paths",
         }
 
         attr = type_map.get(path_type)
         if not attr:
-            self._add_error(f"Invalid path type '{path_type}'. Must be one of: config, dotenv, data, secret.")
+            self._add_error(
+                f"Invalid path type '{path_type}'. Must be one of: configfile, envfile, datafile, secretfile."
+            )
             return False, self.get_errors()
 
         paths: Optional[List[SolutionSpecProfileConfigModel]] = getattr(profile, attr)
@@ -532,15 +534,17 @@ class SolutionController(BaseController):
 
         profile = target[0]
         type_map = {
-            "config": "config_paths",
-            "dotenv": "dotenv_paths",
-            "data": "data_paths",
-            "secret": "secret_paths",
+            "configfile": "configfile_paths",
+            "envfile": "envfile_paths",
+            "datafile": "datafile_paths",
+            "secretfile": "secretfile_paths",
         }
 
         attr = type_map.get(path_type)
         if not attr:
-            self._add_error(f"Invalid path type '{path_type}'. Must be one of: config, dotenv, data, secret.")
+            self._add_error(
+                f"Invalid path type '{path_type}'. Must be one of: configfile, envfile, datafile, secretfile."
+            )
             return False, self.get_errors()
 
         paths: Optional[List[SolutionSpecProfileConfigModel]] = getattr(profile, attr)
@@ -577,10 +581,10 @@ class SolutionController(BaseController):
 
         profile = target[0]
         return {
-            "config": profile.config_paths or [],
-            "dotenv": profile.dotenv_paths or [],
-            "data": profile.data_paths or [],
-            "secret": profile.secret_paths or [],
+            "configfile": profile.configfile_paths or [],
+            "envfile": profile.envfile_paths or [],
+            "datafile": profile.datafile_paths or [],
+            "secretfile": profile.secretfile_paths or [],
         }, []
 
     # ------------------------------------------------------------------

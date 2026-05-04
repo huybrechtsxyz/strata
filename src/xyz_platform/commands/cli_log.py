@@ -89,17 +89,11 @@ def log_show(
 
 
 # ==============================================================================
-# xyz log config  (subgroup)
+# xyz log list  (was: xyz log config list)
 # ==============================================================================
 
 
-@log_group.group(name="config", help="Manage the workspace logging.yaml configuration.")
-def log_config_group():
-    """Log config subcommand group."""
-    pass
-
-
-@log_config_group.command(name="list", help="Show the current logging.yaml configuration.")
+@log_group.command(name="list", help="Show the current logging.yaml configuration.")
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -115,7 +109,7 @@ def log_config_list(
     handle_command_exit(command, success)
 
 
-@log_config_group.command(name="get", help="Get a logging.yaml value by key (dot-notation).")
+@log_group.command(name="get", help="Get a logging.yaml value by key (dot-notation).")
 @click.argument("key")
 @click_work_path
 @click_output_format
@@ -133,7 +127,7 @@ def log_config_get(
     handle_command_exit(command, success)
 
 
-@log_config_group.command(name="set", help="Set a logging.yaml value. Use 'level' as a shorthand for log level.")
+@log_group.command(name="set", help="Set a logging.yaml value. Use 'level' as a shorthand for log level.")
 @click.argument("key")
 @click.argument("value")
 @click_work_path
@@ -155,7 +149,7 @@ def log_config_set(
     handle_command_exit(command, success)
 
 
-@log_config_group.command(name="unset", help="Remove a key from logging.yaml.")
+@log_group.command(name="unset", help="Remove a key from logging.yaml.")
 @click.argument("key")
 @click_work_path
 @click_output_format
@@ -175,7 +169,7 @@ def log_config_unset(
     handle_command_exit(command, success)
 
 
-@log_config_group.command(name="reset", help="Reset logging.yaml to the package default.")
+@log_group.command(name="reset", help="Reset logging.yaml to the package default.")
 @click_work_path
 @click_output_format
 @click_output_verbose

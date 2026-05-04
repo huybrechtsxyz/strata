@@ -30,17 +30,17 @@ class SolutionSpecProfileModel(BaseModel):
     name: PlatformName = Field(..., description="Name of the profile")
     active: bool = Field(..., description="Whether the profile is active")
     created: Optional[str] = Field(None, description="Creation timestamp of the profile")
-    config_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
+    configfile_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
         None, description="List of configuration paths associated with the profile"
     )
-    dotenv_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
-        None, description="List of dotenv paths associated with the profile"
+    envfile_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
+        None, description="List of dotenv/env-file paths associated with the profile"
     )
-    data_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
-        None, description="List of data paths associated with the profile"
+    datafile_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
+        None, description="List of data-file paths associated with the profile"
     )
-    secret_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
-        None, description="List of secret paths associated with the profile"
+    secretfile_paths: Optional[List[SolutionSpecProfileConfigModel]] = Field(
+        None, description="List of secret-file paths associated with the profile"
     )
 
 

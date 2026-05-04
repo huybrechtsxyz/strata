@@ -24,7 +24,10 @@ import yaml
 
 from xyz_platform.commands.cli_config import config_group
 from xyz_platform.commands.cli_log import log_group
-from xyz_platform.commands.cli_solution import solution_group
+from xyz_platform.commands.cli_profile import profile_group
+from xyz_platform.commands.cli_ref import ref_group
+from xyz_platform.commands.cli_repo import repo_group
+from xyz_platform.commands.cli_solution import clean_command, init_command
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
@@ -141,9 +144,13 @@ def main(ctx: click.Context) -> None:
 #
 
 main.add_command(version_command, name="version")
-main.add_command(solution_group, name="solution")
+main.add_command(init_command, name="init")
+main.add_command(clean_command, name="clean")
 main.add_command(config_group, name="config")
 main.add_command(log_group, name="log")
+main.add_command(repo_group, name="repo")
+main.add_command(profile_group, name="profile")
+main.add_command(ref_group, name="ref")
 
 #
 # ENTRY POINT
