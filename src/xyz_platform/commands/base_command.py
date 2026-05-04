@@ -211,8 +211,12 @@ class BaseCommand(ABC):
         except Exception as e:
             self.logger.error(
                 "Failed to initialize command",
-                error=str(e),
-                exc_info=True,
+                extra={
+                    "error": str(e),
+                    "exc_info": True,
+                    "execution_id": self._execution_id,
+                    "command_class": self.__class__.__name__,
+                },
             )
             self._errors.append(f"Failed to initialize command: {e}")
             return False
@@ -357,14 +361,8 @@ class BaseCommand(ABC):
         Looks for ``.platform/logging.yaml`` under ``self._work_path``.
         Reconfigures logging only when the discovered config path changes.
         """
-        # Ensure a logger exists even when no session logging config is present
-        try:
-            self.logger = get_logger(self.__class__.__module__)
-        except Exception:
-            # Fallback to the standard logging module if get_logger fails
-            import logging
-
-            self.logger = logging.getLogger(self.__class__.__module__)
+        # Logger must exist — raise immediately if it cannot be created.
+        self.logger = get_logger(self.__class__.__module__)
 
         try:
             logging_config = SolutionController.get_logging_config_path(self._work_path)
