@@ -86,13 +86,8 @@ class SyncRepoSolutionCommand(BaseCommand):
         return True
 
     def _run_execution(self) -> bool:
-        """Load solution, resolve repos to sync, delegate to RepositoryController."""
-        # Step 1: SolutionController loads the solution and provides repos
-        ok, errors = self._solution_controller.load()
-        if not ok:
-            self._errors.extend(errors)
-            return False
-
+        """Resolve repos to sync, delegate to RepositoryController."""
+        # Step 1: SolutionController provides repos from the already-loaded solution
         repos, errors = self._solution_controller.get_repositories(self._filter_name)
         if errors:
             self._errors.extend(errors)

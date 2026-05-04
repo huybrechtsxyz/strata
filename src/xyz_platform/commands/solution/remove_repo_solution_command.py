@@ -82,12 +82,7 @@ class RemoveRepoSolutionCommand(BaseCommand):
         return True
 
     def _run_execution(self) -> bool:
-        """Load solution, capture repo metadata, remove from registry, optionally purge."""
-        ok, errors = self._solution_controller.load()
-        if not ok:
-            self._errors.extend(errors)
-            return False
-
+        """Capture repo metadata, remove from registry, optionally purge."""
         # Capture metadata before removing so _after_execute can report it
         repos, errors = self._solution_controller.get_repositories(self._repo_name)
         if errors:

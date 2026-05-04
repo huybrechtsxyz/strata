@@ -110,12 +110,7 @@ class AddRepoSolutionCommand(BaseCommand):
         return True
 
     def _run_execution(self) -> bool:
-        """Load solution, register the repo, and persist."""
-        ok, errors = self._solution_controller.load()
-        if not ok:
-            self._errors.extend(errors)
-            return False
-
+        """Register the repo in the already-loaded solution and persist."""
         repo = SolutionSpecRepositoryModel(
             name=self._repo_name,
             url=self._repo_url,
