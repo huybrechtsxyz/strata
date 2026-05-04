@@ -22,6 +22,11 @@
 - **Rationale:** Mirrors the existing `session` noun-group pattern already established in `cli.py`. All solution lifecycle verbs (`init`, `add`, `remove`, `list`, `status`) have a single coherent home. Option 2 (`xyz init solution`) creates a split home; Option 3 (`xyz init`) collapses the noun and blocks future extensibility.
 - **Implications:** Register `@click.group(name="solution")` in `cli.py`. Each sub-command is a `BaseCommand` subclass in `commands/`. Short alias `xyz sln` deferred until there is an explicit request.
 
+### 2026-05-04 — CLI surface for repository management: `xyz solution repo <verb>`
+- **Decision:** Use `xyz solution repo add|remove|list` — repo as a nested noun-group under `solution`. Noun is `repo` (not `source`, not `repository`).
+- **Rationale:** Repos are solution-scoped, not top-level entities. Nesting them under `solution` keeps the scope explicit and prevents top-level namespace pollution. `repo` is the de-facto industry abbreviation (git, GitHub CLI, Azure DevOps CLI all use it); `source` is ambiguous (could mean source code, source control, or a data source); `repository` is verbose and inconsistent with CLI conventions.
+- **Implications:** Register a `@click.group(name="repo")` nested inside `solution_group`. Commands: `add`, `remove`, `list`. Each is a `BaseCommand` subclass in `commands/solution/`.
+
 ## Governance
 
 - All meaningful architectural changes require a decision entry here
