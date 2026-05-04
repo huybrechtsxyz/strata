@@ -62,17 +62,14 @@ New-Item -Path $app -ItemType Directory -Force
 .\scripts\Run.ps1 config set --work-path $app quiet false
 
 # info — show all current defaults
-.\scripts\Run.ps1 config info --work-path $app
-.\scripts\Run.ps1 config info --work-path $app --output json
-.\scripts\Run.ps1 config info --work-path $app --output text
+.\scripts\Run.ps1 config list --work-path $app
+.\scripts\Run.ps1 config list --work-path $app --output json
+.\scripts\Run.ps1 config list --work-path $app --output text
 
 # unset - remove a specific default (revert to built-in or env var value)
 .\scripts\Run.ps1 config unset -h
 .\scripts\Run.ps1 config unset
-.\scripts\Run.ps1 config unset --work-path $app output json
-.\scripts\Run.ps1 config unset --work-path $app output console
-.\scripts\Run.ps1 config unset --work-path $app output text
-.\scripts\Run.ps1 config unset --work-path $app verbose true
-.\scripts\Run.ps1 config unset --work-path $app verbose false
-.\scripts\Run.ps1 config unset --work-path $app quiet true
-.\scripts\Run.ps1 config unset --work-path $app quiet false
+.\scripts\Run.ps1 config unset --work-path $app output
+.\scripts\Run.ps1 config unset --work-path $app verbose
+.\scripts\Run.ps1 config unset --work-path $app quiet 
+
