@@ -88,6 +88,10 @@ class AddProfileCommand(BaseCommand):
             name=self._profile_name,
             active=False,
             created=datetime.now(timezone.utc).isoformat(),
+            configfile_paths=[],
+            envfile_paths=[],
+            datafile_paths=[],
+            secretfile_paths=[],
         )
 
         ok, errors = self._solution_controller.add_profile(profile)
