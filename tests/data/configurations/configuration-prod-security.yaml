@@ -1,0 +1,62 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: configuration_prod_security
+  annotations:
+    description: Production configuration with strict security policies
+    owner: "security@xyz.com"
+  labels:
+    version: "1.0.0"
+    environment: "production"
+  tags:
+    - "production"
+    - "security"
+    - "strict"
+spec:
+  # Deployment properties schema
+  deployment:
+    additional_properties: false
+    properties:
+      environment:
+        pattern: "^(dev|test|staging|prod)$"
+        required: true
+        description: "Deployment environment"
+      customer:
+        pattern: "^[a-z][a-z0-9-]*$"
+        required: true
+        description: "Customer identifier"
+  
+  properties:
+    deployment_manifests:
+      source:
+        type: local
+        repository: /
+        reference: /
+        source_path: config
+
+  security:
+    # Production: Only allow secure external stores for secrets
+    allowed_secret_stores:
+      - azure_keyvault
+      - bitwarden
+      - hashicorp_vault
+    
+    # Production: Allow all variable stores (including constant for non-sensitive config)
+    allowed_variable_stores:
+      - constant
+      - environment
+      - azure_appconfig
+      - hashicorp_consul
+      - hashicorp_vault
+    
+    # Production: Allow all feature stores
+    allowed_feature_stores:
+      - constant
+      - environment
+      - azure_appconfig
+
+  providers:
+    - name: azure_westeurope
+      backend: terraform
+      type: azure
+      region: westeurope

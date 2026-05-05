@@ -1,0 +1,14 @@
+# Invalid unknown model example
+# Tests validation failures for missing or empty required fields
+# This should fail validation in UnknownModel
+
+apiVersion: ""  # INVALID: Empty apiVersion should fail validation
+kind: UnknownType
+meta:
+  name: ""  # INVALID: Empty name should fail validation
+  annotations:
+    description: This model should fail validation
+  labels:
+    version: "1.0.0"
+spec:
+  some_data: "This spec is valid but meta fields are not"

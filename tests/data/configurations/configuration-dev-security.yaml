@@ -1,0 +1,46 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: configuration_dev_security
+  annotations:
+    description: Development configuration with relaxed security policies
+    owner: "dev@xyz.com"
+  labels:
+    version: "1.0.0"
+    environment: "development"
+  tags:
+    - "development"
+    - "testing"
+spec:
+  # Deployment properties schema
+  deployment:
+    additional_properties: false
+    properties:
+      environment:
+        pattern: "^(dev|test|staging|prod)$"
+        required: true
+        description: "Deployment environment"
+      customer:
+        pattern: "^[a-z][a-z0-9-]*$"
+        required: true
+        description: "Customer identifier"
+  
+  properties:
+    deployment_manifests:
+      source:
+        type: local
+        repository: /
+        reference: /
+        source_path: config
+
+  security:
+    # Development: Allow all stores including constant and environment (for easy testing)
+    # allowed_secret_stores: null means no restrictions (all allowed)
+    # This allows developers to use constant/environment stores during development
+    # Comment out or set to null to allow all stores
+
+  providers:
+    - name: azure_westeurope
+      backend: terraform
+      type: azure
+      region: westeurope

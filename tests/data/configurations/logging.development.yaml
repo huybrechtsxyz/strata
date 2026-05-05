@@ -1,0 +1,47 @@
+# ===============================================================================
+# Development Logging Configuration
+# ===============================================================================
+# Simple development configuration with:
+# - Console output with colors
+# - DEBUG level logging
+# - Optional file output
+# ===============================================================================
+
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  console:
+    (): xyz_platform.logger.formatters.ConsoleFormatter
+    use_colors: true
+
+  json:
+    (): xyz_platform.logger.formatters.JsonFormatter
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: DEBUG
+    formatter: console
+    stream: ext://sys.stdout
+
+  file:
+    class: logging.FileHandler
+    level: DEBUG
+    formatter: json
+    filename: logs/debug.json
+    mode: w  # Overwrite each run
+    encoding: utf8
+
+loggers:
+  xyz_platform:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: false
+
+root:
+  level: INFO
+  handlers: [console]
+
+azure:
+  enabled: false

@@ -1,0 +1,109 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: vm_manager_kamatera
+  annotations:
+    description: Kamatera Virtual Machine for Docker Swarm manager node
+    owner: platform-team@xyz.com
+    documentation: https://docs.xyz.com/resources/vm-manager
+  labels:
+    version: 1.0.0
+    environment: production
+    role: manager
+  tags: [kamatera, vm, manager, docker-swarm, production]
+spec:
+  properties:
+    provider_type: kamatera
+    resource_type: vm_standard
+    category: compute
+    subcategory: virtual_machine
+    unit_cost: 5.00
+  
+  references:
+    variables:
+      - vm_cpu_count
+      - vm_ram_mb
+      - vm_disk_size_gb
+      - vm_datacenter
+      - vm_image
+      - vm_network_zone
+    secrets:
+      - vm_admin_password
+      - vm_ssh_key
+    features:
+      - enable_auto_backup
+      - enable_monitoring
+      - enable_firewall
+  
+  dependencies:
+    - category: networking
+      subcategory: virtual_network
+      description: Requires a virtual network for VM connectivity
+      optional: false
+    - category: networking
+      subcategory: private_dns
+      description: Private DNS for service discovery
+      optional: true
+    - category: storage
+      subcategory: blob
+      description: Blob storage for backups and logs
+      optional: true
+  
+  storage:
+    install_path: /opt/install/app
+    disks:
+      - name: data_disk
+        size: 200
+        label: vm-manager-data-${.name}
+        mount: /mnt/data
+      - name: backup_disk
+        size: 50
+        label: vm-manager-backup
+        mount: /mnt/backup
+    volumes:
+      - name: config
+        path: /mnt/data/etc/app
+      - name: docs
+        path: /mnt/data/var/docs/app
+      - name: data
+        path: /mnt/data/var/data/app
+      - name: logs
+        path: /mnt/data/var/logs/app
+      - name: serve
+        path: /mnt/data/var/serve
+    parameters:
+      backup_retention_days: 30
+      log_rotation_days: 7
+  
+  configuration:
+    cpu: 4
+    ram_mb: 8192
+    disk_gb: 100
+    custom_tag: manager-swarm
+  
+  custom:
+    deployment_priority: high
+    maintenance_window: "Sunday 02:00-04:00 UTC"
+    alert_email: ops-team@xyz.com
+  
+  lifecycle:
+    build_before:
+      scripts: ["tests/data/scripts/mock_init.sh"]
+    build_validate:
+      scripts: ["tests/data/scripts/mock_validate.sh"]
+    build_compile:
+      scripts: ["tests/data/scripts/mock_build.sh"]
+    build_after:
+      scripts: ["tests/data/scripts/mock_output.sh"]
+    deploy_provision:
+      scripts: ["tests/data/scripts/mock_provision.sh"]
+    deploy_initialize:
+      scripts: ["tests/data/scripts/mock_init.sh"]
+    deploy_configure:
+      scripts: ["tests/data/scripts/mock_configure.sh"]
+    deploy_health:
+      scripts: ["tests/data/scripts/mock_healthcheck.sh"]
+    deploy_destroy_before:
+      scripts: ["tests/data/scripts/mock_protect.sh"]
+    deploy_destroy_after:
+      scripts: ["tests/data/scripts/mock_destroy.sh"]
