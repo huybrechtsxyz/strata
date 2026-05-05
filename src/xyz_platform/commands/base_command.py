@@ -470,17 +470,25 @@ class BaseCommand(ABC):
 
     # Load env-file sources from cli.yaml and inject into os.environ
     def _load_env_sources(self) -> None:
-        """Load registered env-file sources and inject into ``os.environ``.
+        """Inject the active profile's ``envfile`` paths into ``os.environ``.
+
+        Reads ``envfile_paths`` from the currently active profile in
+        ``solution.json``, resolves ``@repo_name/…`` references, parses each
+        ``.env`` file in declaration order, and injects the variables into the
+        current process environment.
 
         Runs after solution load so ``@repo_name/…`` paths can be resolved.
         Non-fatal — missing files produce debug warnings, never block execution.
         """
         try:
-            from xyz_platform.controllers.env_controller import EnvController
+            from xyz_platform.utils.system import resolve_path
 
-            ctrl = EnvController(self._work_path)
-            sources = ctrl.list_sources()
-            if not sources:
+            profile, _ = self._solution_controller.get_active_profile()
+            if profile is None:
+                return
+
+            envfile_paths = profile.envfile_paths or []
+            if not envfile_paths:
                 return
 
             # Build repo_map from solution repositories
@@ -489,9 +497,30 @@ class BaseCommand(ABC):
             for r in repos:
                 repo_map[str(r.name)] = str(self._work_path / r.path)
 
-            warnings = ctrl.inject(repo_map=repo_map)
-            for w in warnings:
-                self.logger.debug(f"Env source warning: {w}")
+            from xyz_platform.controllers.env_controller import EnvController
+
+            for entry in envfile_paths:
+                raw_path = str(entry.path)
+                name = str(entry.name)
+                try:
+                    resolved = resolve_path(str(self._work_path), raw_path, repo_map=repo_map)
+                except ValueError as e:
+                    self.logger.debug(f"Env source '{name}': {e}")
+                    continue
+
+                if not resolved.exists():
+                    self.logger.debug(f"Env source '{name}': file not found at {resolved}")
+                    continue
+
+                file_vars = EnvController._parse_env_file(resolved)
+                for key, value in file_vars.items():
+                    os.environ[key] = value
+                self.logger.debug(
+                    "Loaded env source from active profile",
+                    name=name,
+                    path=str(resolved),
+                    vars_count=len(file_vars),
+                )
 
         except Exception as e:
             # Env loading must never block command execution
