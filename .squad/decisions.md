@@ -17,15 +17,23 @@
 - **Rationale:** Validate the core workflow before multiplying surfaces
 - **Implications:** No web server, no websocket, no VS Code API dependencies in the codebase
 
-### 2026-04-23 — CLI surface for solution management: `xyz solution <verb>`
-- **Decision:** Use `xyz solution init` (and future `xyz solution add`, `xyz solution status`, etc.) — "solution" as a top-level Click noun-group.
-- **Rationale:** Mirrors the existing `session` noun-group pattern already established in `cli.py`. All solution lifecycle verbs (`init`, `add`, `remove`, `list`, `status`) have a single coherent home. Option 2 (`xyz init solution`) creates a split home; Option 3 (`xyz init`) collapses the noun and blocks future extensibility.
-- **Implications:** Register `@click.group(name="solution")` in `cli.py`. Each sub-command is a `BaseCommand` subclass in `commands/`. Short alias `xyz sln` deferred until there is an explicit request.
+### ~~2026-04-23 — CLI surface for solution management: `xyz solution <verb>`~~ (SUPERSEDED 2026-05-05)
+- **Superseded by:** 2026-05-05 flat CLI structure decision (see below)
+- ~~Decision: Use `xyz solution init`...~~
 
-### 2026-05-04 — CLI surface for repository management: `xyz solution repo <verb>`
-- **Decision:** Use `xyz solution repo add|remove|list` — repo as a nested noun-group under `solution`. Noun is `repo` (not `source`, not `repository`).
-- **Rationale:** Repos are solution-scoped, not top-level entities. Nesting them under `solution` keeps the scope explicit and prevents top-level namespace pollution. `repo` is the de-facto industry abbreviation (git, GitHub CLI, Azure DevOps CLI all use it); `source` is ambiguous (could mean source code, source control, or a data source); `repository` is verbose and inconsistent with CLI conventions.
-- **Implications:** Register a `@click.group(name="repo")` nested inside `solution_group`. Commands: `add`, `remove`, `list`. Each is a `BaseCommand` subclass in `commands/solution/`.
+### ~~2026-05-04 — CLI surface for repository management: `xyz solution repo <verb>`~~ (SUPERSEDED 2026-05-05)
+- **Superseded by:** 2026-05-05 flat CLI structure decision (see below)
+- ~~Decision: Use `xyz solution repo add|remove|list`...~~
+
+### 2026-05-05 — Flat top-level CLI structure (no solution wrapper)
+- **Decision:** All top-level commands are flat: `xyz <group> <command>`. No `solution` wrapper noun. Canonical commands: `xyz init`, `xyz clean`, `xyz repo *`, `xyz profile *`, `xyz ref *`, `xyz config *`, `xyz log *`.
+- **Rationale:** `solution` wrapper added depth without clarity gain. Each noun group (`repo`, `profile`, `ref`) is already scoped by name. Flat structure matches the project's target audience (CLI-native DevOps users).
+- **Implications:** `cli_solution.py` deleted. `cli.py` registers groups directly at root. Any new top-level features (`build`, `deploy`) follow the same flat pattern.
+
+### 2026-05-05 — `build` and `deploy` commands deferred
+- **Decision:** `xyz build` and `xyz deploy` are deferred. Not in scope for the current milestone.
+- **Rationale:** Core workspace management (init, repo, profile, ref) must be stable first.
+- **Implications:** No build/deploy code. When added, they register as flat top-level commands in `cli.py`.
 
 ## Governance
 

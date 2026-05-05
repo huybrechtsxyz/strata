@@ -28,6 +28,6 @@
 - **Created:** 2026-04-22
 - **Stack:** Python 3.13, Click, Pydantic v2, uv, structlog, pytest
 - **Purpose:** DevOps profile management CLI — manages multiple repos, merges terraform/ansible/config files across repos, builds unified deployment artifacts, executes deployments in order
-- **CLI flow:** `xyz project init` → `xyz project add <repo>` → `xyz build` → `xyz deploy`
+- **CLI flow:** `xyz init` → `xyz repo add <repo>` → `xyz build` → `xyz deploy`
 - **Workspace state:** `.xyz_platform/` folder in the workspace root
 - **Work-path resolution:** `--work-path` flag > `XYZ_WORK_PATH` env var > walk up from CWD

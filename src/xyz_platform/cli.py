@@ -1,11 +1,13 @@
 """Command-line interface for XYZ Platform.
 
 Commands:
-    config              : Manage configuration settings.
-    help [TOPIC_NAME]   : Show help for a specific topic or list available topics.
-    session             : Manage and view session information.
-    tools               : Tools management commands.
-    validate            : Validate platform definition file(s).
+    init                : Initialize a new solution workspace.
+    clean               : Clean solution artifacts.
+    config              : Manage workspace defaults (cli.yaml).
+    log                 : View log entries and manage logging config.
+    repo                : Manage repositories in the solution.
+    profile             : Manage profiles in the solution.
+    ref                 : Manage file references (envfile, configfile, etc.).
     version             : Show CLI version.
 
 Exit Codes:
@@ -22,12 +24,13 @@ from pathlib import Path
 import click
 import yaml
 
+from xyz_platform.commands.cli_clean import clean_command
 from xyz_platform.commands.cli_config import config_group
+from xyz_platform.commands.cli_init import init_command
 from xyz_platform.commands.cli_log import log_group
 from xyz_platform.commands.cli_profile import profile_group
 from xyz_platform.commands.cli_ref import ref_group
 from xyz_platform.commands.cli_repo import repo_group
-from xyz_platform.commands.cli_solution import clean_command, init_command
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system

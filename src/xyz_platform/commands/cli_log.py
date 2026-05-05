@@ -22,11 +22,11 @@ def log_group():
 
 
 # ==============================================================================
-# xyz log show
+# xyz log list  (show actual log entries)
 # ==============================================================================
 
 
-@log_group.command(name="show", help="Display execution logs for the current workspace.")
+@log_group.command(name="list", help="List execution log entries for the current workspace.")
 @click.option(
     "--lines",
     default=50,
@@ -89,11 +89,11 @@ def log_show(
 
 
 # ==============================================================================
-# xyz log list  (was: xyz log config list)
+# xyz log config  (show logging.yaml settings)
 # ==============================================================================
 
 
-@log_group.command(name="list", help="Show the current logging.yaml configuration.")
+@log_group.command(name="config", help="Show the current logging.yaml configuration.")
 @click_work_path
 @click_output_format
 @click_output_verbose
