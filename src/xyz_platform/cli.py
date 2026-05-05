@@ -1,6 +1,7 @@
 """Command-line interface for XYZ Platform.
 
 Commands:
+    help                : Show help topics and workflow guidance.
     init                : Initialize a new solution workspace.
     clean               : Clean solution artifacts.
     config              : Manage workspace defaults (cli.yaml).
@@ -26,6 +27,7 @@ import yaml
 
 from xyz_platform.commands.cli_clean import clean_command
 from xyz_platform.commands.cli_config import config_group
+from xyz_platform.commands.cli_help import help_command
 from xyz_platform.commands.cli_init import init_command
 from xyz_platform.commands.cli_log import log_group
 from xyz_platform.commands.cli_profile import profile_group
@@ -147,6 +149,7 @@ def main(ctx: click.Context) -> None:
 #
 
 main.add_command(version_command, name="version")
+main.add_command(help_command, name="help")
 main.add_command(init_command, name="init")
 main.add_command(clean_command, name="clean")
 main.add_command(config_group, name="config")

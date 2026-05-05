@@ -11,6 +11,10 @@ DEFAULT_OBJECT_PATH: str = ""
 DEFAULT_STATE_DIR: str = ""
 DEFAULT_STATE_FILE: str = ""
 
+# Public URLs — update when the help-site is live
+DOCS_URL: str = "https://docs.xyzplatform.com"
+SUPPORT_URL: str = "https://support.xyzplatform.com"
+
 # Solution workspace path conventions
 SOLUTION_DIR: str = ".platform"
 SOLUTION_FILE: str = "solution.json"

@@ -15,6 +15,7 @@ from xyz_platform.controllers.solution_controller import SolutionController
 from xyz_platform.logger import get_logger
 from xyz_platform.logger.context import set_context
 from xyz_platform.logger.logger import reconfigure_logging
+from xyz_platform.utils.config import DOCS_URL, SUPPORT_URL
 from xyz_platform.utils.system import generate_uuid, resolve_path, resolve_work_path
 from xyz_platform.utils.version import get_version
 
@@ -102,8 +103,8 @@ class BaseCommand(ABC):
     def show_console_footer(cls) -> None:
         click.echo("=" * 80)
         click.echo("✨ Thank you for using XYZ Platform CLI!")
-        click.echo("📘 Documentation: https://docs.xyzplatform.com")
-        click.echo("💬 Support: https://support.xyzplatform.com")
+        click.echo(f"📘 Documentation: {DOCS_URL}")
+        click.echo(f"💬 Support: {SUPPORT_URL}")
         click.echo("=" * 80)
 
     # Message and error handling methods
