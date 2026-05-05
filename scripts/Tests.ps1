@@ -23,24 +23,6 @@ New-Item -Path $app -ItemType Directory -Force
 
 .\scripts\Run.ps1 init --name "test-solution" --work-path $app
 
-.\scripts\Run.ps1 config set --work-path $app output console
-
-.\scripts\Run.ps1 repo add traefik https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
-
-.\scripts\Run.ps1 repo sync --name traefik --force --work-path $app
-
-.\scripts\Run.ps1 profile add production --work-path $app
-
-.\scripts\Run.ps1 profile add development --work-path $app
-
-.\scripts\Run.ps1 ref envfile add base "@traefik/environments/base.env" --profile production --work-path $app
-
-.\scripts\Run.ps1 profile activate development --work-path $app
-
-.\scripts\Run.ps1 profile list --work-path $app
-
-.\scripts\Run.ps1 profile show production --work-path $app
-
 Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 
 
@@ -50,6 +32,10 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 
 .\scripts\Run.ps1 -h
 .\scripts\Run.ps1
+
+# ==============================================================================
+# [REFERENCE] Version commands
+# ==============================================================================
 
 .\scripts\Run.ps1 version -h
 .\scripts\Run.ps1 version
@@ -61,10 +47,35 @@ Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
 # [REFERENCE] init — initialize a new solution workspace
 # ==============================================================================
 
+New-Item -Path $app+2, $app+3, $app+4, $app+5, $app+6 -ItemType Directory -Force
+
 .\scripts\Run.ps1 init -h
+.\scripts\Run.ps1 init
 .\scripts\Run.ps1 init --name "test-solution" --work-path $app
-.\scripts\Run.ps1 init --name "test-solution" --work-path $app --output json
-.\scripts\Run.ps1 init --name "test-solution" --work-path $app --output text
+.\scripts\Run.ps1 init --name "test-solution" --work-path $app+2 --output console
+.\scripts\Run.ps1 init --name "test-solution" --work-path $app+3 --output json
+.\scripts\Run.ps1 init --name "test-solution" --work-path $app+4 --output text
+.\scripts\Run.ps1 init --name "test-solution" --work-path $app+4 --verbose
+.\scripts\Run.ps1 init --name "test-solution" --work-path $app+5 --quiet
+
+remove-item -Path $app+2, $app+3, $app+4, $app+5, $app+6 -Recurse -Force -ErrorAction SilentlyContinue
+
+# ==============================================================================
+# [REFERENCE] Basic commands
+# clean
+# config
+# help
+# log
+# profile
+# repo
+# ref
+# status
+# ==============================================================================
+
+
+
+
+
 
 # ==============================================================================
 # [REFERENCE] clean — remove workspace artifacts (logs, temp files)
