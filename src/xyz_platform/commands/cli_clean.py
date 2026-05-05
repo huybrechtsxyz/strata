@@ -4,6 +4,7 @@ from typing import Optional
 
 import click
 
+from xyz_platform.commands.clean.clean_solution_command import CleanSolutionCommand
 from xyz_platform.commands.cli_common import (
     click_output_format,
     click_output_quiet,
@@ -11,7 +12,6 @@ from xyz_platform.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from xyz_platform.commands.solution.clean_solution_command import CleanSolutionCommand
 
 
 @click.command(name="clean", help="Clean solution artifacts (logs, temp files).")

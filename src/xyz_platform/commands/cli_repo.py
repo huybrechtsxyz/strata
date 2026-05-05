@@ -11,10 +11,10 @@ from xyz_platform.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from xyz_platform.commands.solution.add_repo_solution_command import AddRepoSolutionCommand
-from xyz_platform.commands.solution.list_repo_solution_command import ListRepoSolutionCommand
-from xyz_platform.commands.solution.remove_repo_solution_command import RemoveRepoSolutionCommand
-from xyz_platform.commands.solution.sync_repo_solution_command import SyncRepoSolutionCommand
+from xyz_platform.commands.repo.add_repo_solution_command import AddRepoSolutionCommand
+from xyz_platform.commands.repo.list_repo_solution_command import ListRepoSolutionCommand
+from xyz_platform.commands.repo.remove_repo_solution_command import RemoveRepoSolutionCommand
+from xyz_platform.commands.repo.sync_repo_solution_command import SyncRepoSolutionCommand
 
 
 @click.group(name="repo", help="Manage repositories in the current solution.")

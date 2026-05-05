@@ -11,7 +11,7 @@ from xyz_platform.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from xyz_platform.commands.solution.init_solution_command import InitSolutionCommand
+from xyz_platform.commands.init.init_solution_command import InitSolutionCommand
 
 
 @click.command(name="init", help="Initialize a new XYZ Platform solution workspace.")

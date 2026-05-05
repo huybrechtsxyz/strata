@@ -11,11 +11,11 @@ from xyz_platform.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from xyz_platform.commands.solution.activate_profile_command import ActivateProfileCommand
-from xyz_platform.commands.solution.add_profile_command import AddProfileCommand
-from xyz_platform.commands.solution.list_profile_command import ListProfileCommand
-from xyz_platform.commands.solution.list_profile_path_command import ListProfilePathCommand
-from xyz_platform.commands.solution.remove_profile_command import RemoveProfileCommand
+from xyz_platform.commands.profile.activate_profile_command import ActivateProfileCommand
+from xyz_platform.commands.profile.add_profile_command import AddProfileCommand
+from xyz_platform.commands.profile.list_profile_command import ListProfileCommand
+from xyz_platform.commands.profile.remove_profile_command import RemoveProfileCommand
+from xyz_platform.commands.ref.list_profile_path_command import ListProfilePathCommand
 
 
 @click.group(name="profile", help="Manage profiles in the current solution.")

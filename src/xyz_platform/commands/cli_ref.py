@@ -17,10 +17,10 @@ from xyz_platform.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from xyz_platform.commands.solution.add_profile_path_command import AddProfilePathCommand
-from xyz_platform.commands.solution.list_profile_path_command import ListProfilePathCommand
-from xyz_platform.commands.solution.remove_profile_path_command import RemoveProfilePathCommand
-from xyz_platform.commands.solution.show_ref_command import ShowRefCommand
+from xyz_platform.commands.ref.add_profile_path_command import AddProfilePathCommand
+from xyz_platform.commands.ref.list_profile_path_command import ListProfilePathCommand
+from xyz_platform.commands.ref.remove_profile_path_command import RemoveProfilePathCommand
+from xyz_platform.commands.ref.show_ref_command import ShowRefCommand
 
 # ---------------------------------------------------------------------------
 # Top-level ref group
