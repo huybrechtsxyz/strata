@@ -56,6 +56,9 @@ class BaseCommand(ABC):
         # Integration controller (lazy-loaded)
         self._integration_controller: Optional[IntegrationController] = None
 
+        # Merged configuration from active profile configfile_paths (set during _initialize)
+        self._merged_config: Optional[Dict[str, Any]] = None
+
         # Message and error accumulation
         self._messages: List[str] = []
         self._errors: List[str] = []
@@ -192,11 +195,14 @@ class BaseCommand(ABC):
 
             set_context({"solution_id": solution_id, "execution_id": self._execution_id})
 
-            # Load env-file sources from cli.yaml and inject into os.environ
-            self._load_env_sources()
-
             # Start session operation if specified
             self._start_session_operation()
+
+            # Load env-file sources from active profile and inject into os.environ
+            self._load_env_sources()
+
+            # Load and merge configfile_paths from active profile
+            self._load_config_sources()
 
             if show_header and self._is_console_output():
                 self.show_console_header()
@@ -525,6 +531,74 @@ class BaseCommand(ABC):
         except Exception as e:
             # Env loading must never block command execution
             self.logger.debug(f"Failed to load env sources: {e}")
+
+    def _load_config_sources(self) -> None:
+        """Load and deep-merge the active profile's ``configfile_paths`` into ``self._merged_config``.
+
+        Files are merged in declaration order (later entries override earlier ones).
+        The merged result is also written to ``.platform/configuration.yaml`` as a
+        debug artifact — write failures are non-fatal.
+
+        Runs after ``_load_env_sources()`` so env vars are available for any
+        variable substitution performed by downstream consumers.
+        """
+        try:
+            from xyz_platform.utils.config import SOLUTION_CONFIGURATION_FILE, SOLUTION_DIR
+            from xyz_platform.utils.configuration_loader import ConfigurationLoader
+            from xyz_platform.utils.system import resolve_path
+
+            profile, _ = self._solution_controller.get_active_profile()
+            if profile is None:
+                return
+
+            configfile_paths = profile.configfile_paths or []
+            if not configfile_paths:
+                return
+
+            # Build repo_map from solution repositories
+            repo_map: Dict[str, str] = {}
+            repos, _ = self._solution_controller.get_repositories()
+            for r in repos:
+                repo_map[str(r.name)] = str(self._work_path / r.path)
+
+            resolved_paths: List[Path] = []
+            for entry in configfile_paths:
+                name = str(entry.name)
+                try:
+                    resolved = resolve_path(str(self._work_path), str(entry.path), repo_map=repo_map)
+                except ValueError as e:
+                    self.logger.debug(f"Config source '{name}': {e}")
+                    continue
+                if not resolved.exists():
+                    self.logger.debug(f"Config source '{name}': file not found at {resolved}")
+                    continue
+                resolved_paths.append(resolved)
+
+            if not resolved_paths:
+                return
+
+            loader = ConfigurationLoader()
+            merged = loader.load_and_merge_yaml_files(resolved_paths)
+            self._merged_config = merged
+            self.logger.debug(
+                "Loaded and merged config sources from active profile",
+                files=len(resolved_paths),
+                keys=len(merged),
+            )
+
+            # Write debug artifact — non-fatal
+            try:
+                import yaml
+
+                debug_path = self._work_path / SOLUTION_DIR / SOLUTION_CONFIGURATION_FILE
+                with open(debug_path, "w", encoding="utf-8") as fh:
+                    yaml.safe_dump(merged, fh, sort_keys=False)
+            except Exception as e:
+                self.logger.warning(f"Failed to write merged config debug artifact: {e}")
+
+        except Exception as e:
+            # Config loading must never block command execution
+            self.logger.debug(f"Failed to load config sources: {e}")
 
     # Validate declared integration requirements (e.g., check if 'git' is available for 'repository clone operations')
     def _validate_requirements(self) -> bool:
