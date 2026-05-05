@@ -251,10 +251,25 @@ def shutdown_logging() -> None:
 
 
 def get_active_log_files() -> list[str]:
-    """Return absolute paths of all active file-based log sinks."""
-    return [
-        handler.baseFilename for handler in logging.getLogger().handlers if isinstance(handler, logging.FileHandler)
-    ]
+    """Return absolute paths of all active file-based log sinks.
+
+    Scans the root logger AND all named loggers, since the workspace
+    logging.yaml attaches the file handler to ``xyz_platform``, not root.
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    loggers_to_check: list[logging.Logger] = [logging.getLogger()]  # root
+    for obj in logging.root.manager.loggerDict.values():
+        if isinstance(obj, logging.Logger):
+            loggers_to_check.append(obj)
+    for logger in loggers_to_check:
+        for handler in logger.handlers:
+            if isinstance(handler, logging.FileHandler):
+                path = handler.baseFilename
+                if path not in seen:
+                    seen.add(path)
+                    result.append(path)
+    return result
 
 
 def get_active_log_file() -> Optional[str]:
