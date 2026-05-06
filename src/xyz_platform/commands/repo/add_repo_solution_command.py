@@ -1,11 +1,12 @@
 """Command to add a repository to an XYZ Platform solution."""
 
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import click
 
 from xyz_platform.commands.base_command import BaseCommand
+from xyz_platform.controllers.repository_controller import RepositoryController
 from xyz_platform.models.solution_model import SolutionSpecRepositoryModel
 
 
@@ -25,6 +26,7 @@ class AddRepoSolutionCommand(BaseCommand):
         url: str,
         branch: str = "main",
         path: Optional[str] = None,
+        clone: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -36,7 +38,9 @@ class AddRepoSolutionCommand(BaseCommand):
         self._repo_branch = branch
         # Default local path: repos/<name> relative to work_path
         self._repo_path = path if path else f"repos/{name}"
+        self._clone = clone
         self._added_repo: Dict = {}
+        self._clone_result: Optional[Dict[str, Any]] = None
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {"git": "repository registration"}
@@ -139,6 +143,18 @@ class AddRepoSolutionCommand(BaseCommand):
             "type": "gitops",
         }
         self._output_data = {k: v for k, v in self._added_repo.items() if v is not None}
+
+        if self._clone:
+            repo_controller = RepositoryController()
+            _all_ok, results = repo_controller.sync_solution_repos(
+                work_path=str(self._work_path),
+                repos=[repo],
+            )
+            self._errors.extend(repo_controller.get_errors())
+            self._clone_result = results[0] if results else None
+            if self._clone_result and self._clone_result["status"] == "failed":
+                return False
+
         return True
 
     def _after_execute(self) -> bool:
@@ -156,7 +172,14 @@ class AddRepoSolutionCommand(BaseCommand):
                 click.echo(f"    • Path:   {self._added_repo['path']}")
                 click.echo(f"    • Type:   {self._added_repo['type']}")
                 click.echo("")
-                click.echo("💡  Run 'xyz solution sync' to clone the repository.")
+                if self._clone and self._clone_result:
+                    r = self._clone_result
+                    if r["status"] == "ok":
+                        click.echo(f"✅  Cloned to {r['path']}")
+                    else:
+                        click.echo(f"❌  Clone failed: {r.get('error', 'unknown error')}")
+                else:
+                    click.echo("💡  Run 'xyz repo sync' to clone the repository.")
                 click.echo("")
 
         return super()._after_execute()

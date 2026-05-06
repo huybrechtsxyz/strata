@@ -37,6 +37,12 @@ def repo_group():
     default=None,
     help="Local path relative to work-path (default: repos/<name>).",
 )
+@click.option(
+    "--clone",
+    is_flag=True,
+    default=False,
+    help="Clone the repository immediately after registering.",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -46,17 +52,19 @@ def repo_add(
     url: str,
     branch: str = "main",
     path: Optional[str] = None,
+    clone: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
     quiet: bool = False,
 ) -> None:
-    """Register a repository entry in the solution (no cloning)."""
+    """Register a repository entry in the solution."""
     command = AddRepoSolutionCommand(
         name=name,
         url=url,
         branch=branch,
         path=path,
+        clone=clone,
         work_path=work_path,
         output=output,
         verbose=verbose,
