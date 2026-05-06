@@ -1,0 +1,138 @@
+# ===============================================================================
+# Script Name   : ci-release.yaml
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Python Version: 3.13+
+# Description   : Creates a GitHub Release from the dist artifact produced by
+#                 ci-build.yaml (artifacts as store pattern), then builds and
+#                 pushes a versioned Docker image to GHCR.
+#                 Triggered on tag push vX.Y.Z.
+# ===============================================================================
+
+name: "CI Release"
+
+# Restrict to least privilege; contents: write required to create a GitHub Release
+permissions:
+  contents: write
+  actions: read # required to download artifacts from ci-build
+  packages: write # required to push to GHCR
+
+# Never cancel an in-progress release
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# Default shell for all run steps
+defaults:
+  run:
+    shell: bash
+
+# Environment variables
+env:
+  CI: "true"
+  PYTHON_VERSION: "3.13"
+
+# Trigger on push of a tag matching vX.Y.Z
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Create GitHub Release and attach the Python package from ci-build
+  # ---------------------------------------------------------------------------
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Look up the successful ci-build run for this exact commit so we can
+      # download the dist artifact it produced (artifacts as store pattern).
+      - name: Find ci-build run for this commit
+        id: find-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID=$(gh run list \
+            --workflow=ci-build.yml \
+            --commit="${{ github.sha }}" \
+            --status=success \
+            --limit=1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "::error::No successful ci-build run found for commit ${{ github.sha }}"
+            exit 1
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Found ci-build run: $RUN_ID"
+
+      # Download the dist/ artifact stored by ci-build
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-run.outputs.run_id }}
+
+      - name: List dist contents
+        run: ls -lh dist/
+
+      # Create the GitHub Release and attach every file from dist/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Build and push the CLI Docker image to GHCR
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    needs: release # only publish if the GitHub Release succeeded
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generate OCI-compliant tags and labels from the git tag
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/xyz-platform
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      # Build multi-stage CLI image and push; pass the tag as VERSION build arg
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.cli
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
