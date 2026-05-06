@@ -4,9 +4,10 @@
 # Version       : 1.0.0
 # Python Version: 3.13+
 # Description   : GitHub Actions workflow for CI build: lint, format-check,
-#                 type-check, and pytest. Triggered on push to main and on pull
-#                 requests targeting main. Builds the Python package with uv and
-#                 uploads dist/ as a GitHub artifact for ci-release.
+#                 type-check, pytest, and Sphinx docs validation. Triggered on
+#                 push to main and on pull requests targeting main. Builds the
+#                 Python package with uv and uploads dist/ as a GitHub artifact
+#                 for ci-release.
 # ===============================================================================
 
 name: "CI Build"
@@ -14,7 +15,7 @@ name: "CI Build"
 # Default workflow header: permissions, concurrency, environment and runner defaults
 permissions:
   contents: read
-  actions: write   # required to upload artifacts
+  actions: write # required to upload artifacts
 
 # Ensure a single run per ref and cancel in-progress runs on updates
 concurrency:
@@ -44,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.13"]
+        python-version: [ "3.13" ]
 
     steps:
       # Checkout the code
@@ -72,3 +73,27 @@ jobs:
           name: dist
           path: dist/
           retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Validate Sphinx documentation (runs in parallel with build)
+  # ---------------------------------------------------------------------------
+  docs:
+    name: Build documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: ./.github/actions/install-python
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Add the doc dependency group on top of the dev install
+      - name: Install doc dependencies
+        run: uv sync --frozen --group doc
+
+      # Treat warnings as errors (-W) so broken refs / missing modules fail fast
+      - name: Build Sphinx docs
+        run: uv run sphinx-build -b html docs/ /tmp/html_out -W --keep-going
