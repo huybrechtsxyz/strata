@@ -38,6 +38,7 @@ from xyz_platform.commands.cli_ref import ref_group
 from xyz_platform.commands.cli_repo import repo_group
 from xyz_platform.commands.cli_status import status_command
 from xyz_platform.commands.cli_validate import validate_command
+from xyz_platform.commands.cli_values import values_group
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
@@ -166,8 +167,7 @@ main.add_command(ref_group, name="ref")
 main.add_command(validate_command, name="validate")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
-
-#
+main.add_command(values_group, name="values")
 # ENTRY POINT
 #
 

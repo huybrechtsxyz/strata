@@ -241,10 +241,33 @@ xyz ref configfile show global-config --profile prd    # preview the file conten
 There is no `xyz profile export` or `xyz env show` command that shows all refs
 deep-merged as the build would see them. To debug merge issues you must run a full build.
 
-### ⚠️ Gap: no secrets management layer
+### 4.5 Inspect resolved values for a deployment
 
-`ref secretfile` records a file path. There is no `xyz secret get KEY`, no vault
-integration, no encryption at rest. Secret files are plain files on disk.
+Before building or deploying you can verify which concrete values the CLI would
+use for every declared variable, secret, and feature flag:
+
+```bash
+# List all (secrets are masked: first 3 chars + *****)
+xyz values list -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+
+# Filter to a single type
+xyz values list -f … --type secrets
+xyz values list -f … --type variables
+xyz values list -f … --type features
+
+# Show only entries that failed to resolve
+xyz values list -f … --unresolved
+
+# Also show the store reference (env var name, key path, flag id)
+xyz values list -f … --show-store
+
+# Retrieve one or more values in full (secrets revealed)
+xyz values get -f … DB_PASSWORD API_KEY
+```
+
+Exit codes: `0` = all resolved, `3` = one or more entries failed.
+
+JSON output is supported via `--output json`.
 
 ---
 
@@ -642,6 +665,13 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 | `xyz deploy history [--lines N] [--operation run\|destroy]`    | Execution history from workspace logs                                |
 | `xyz deploy health -f FILE [--stage S]`                        | Run `health_checks` defined in the deployment YAML                   |
 
+### Values
+
+| Command                                                            | Description                                                          |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `xyz values list -f FILE [--type T] [--show-store] [--unresolved]` | List all variables / secrets (masked) / feature flags                |
+| `xyz values get  -f FILE KEY [KEY …]`                              | Retrieve full resolved value(s) for specific keys (secrets revealed) |
+
 ---
 
 ## Known Gaps
@@ -651,5 +681,4 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 | No `build diff` / change-plan output     | High     | Use `--dry-run` + read Terraform plan manually |
 | No `validate --all` / bulk scan          | High     | Script individual `validate` calls per file    |
 | No `profile export` (merged env preview) | Medium   | Run `build run --dry-run` as a proxy           |
-| No secrets management layer              | Medium   | Manage secret files manually outside the CLI   |
 | No `deploy approve` / gate workflow      | Medium   | Use `--force` or external gate tooling         |
