@@ -14,15 +14,15 @@
 - utils: ✅
 - exceptions: ✅
 - models: ✅
-
 - services: ✅
+- integrations: ✅
 
+- cli
 - cli
 - builders
 - commands
 - controllers
 - deployers
-- integrations
 - validators
 
 ## Models
