@@ -1,0 +1,40 @@
+# ===============================================================================
+# Action Name  : test-python
+# Description  : Run ruff (lint + format check), mypy (type check), and
+#                pytest (unit tests with coverage). Uploads a coverage report
+#                as a job summary annotation.
+# ===============================================================================
+
+name: "Test Python"
+description: "Run ruff, mypy, and pytest with coverage."
+
+runs:
+  using: composite
+  steps:
+    - name: Lint with ruff
+      shell: bash
+      run: uv run ruff check .
+
+    - name: Format check with ruff
+      shell: bash
+      run: uv run ruff format --check .
+
+    - name: Type check with mypy
+      shell: bash
+      run: uv run mypy .
+
+    - name: Run tests with pytest
+      shell: bash
+      run: |
+        uv run pytest tests/ \
+          --cov=xyz_platform \
+          --cov-report=term-missing \
+          --cov-report=xml:coverage.xml \
+          -q
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.xml
+        retention-days: 7
