@@ -368,52 +368,24 @@ class BaseService(ABC, Generic[ModelT]):
         return True, []
 
     # Lifecycle Hooks Section
-    @abstractmethod
     def on_init(self) -> None:
-        """
-        Lifecycle hook: Called after __init__ completes.
+        """Lifecycle hook: Called after __init__ completes.
 
-        Override this method to perform initialization tasks that should
-        happen after the base initialization is complete.
-
-        Example:
-            def on_init(self):
-                self.logger.info("Custom initialization")
-                self._setup_connections()
+        Override to perform initialization tasks after base initialization.
         """
         pass
 
-    @abstractmethod
     def on_ready(self) -> None:
-        """
-        Lifecycle hook: Called after validation succeeds.
+        """Lifecycle hook: Called after validation succeeds.
 
-        Override this method to perform tasks that require a validated model,
-        such as loading related resources or establishing connections.
-
-        Example:
-            def on_ready(self):
-                self.logger.info("Service ready")
-                self._load_dependencies()
+        Override to perform tasks that require a validated model.
         """
         pass
 
-    @abstractmethod
     def on_shutdown(self) -> None:
-        """
-        Lifecycle hook: Called before cleanup/destruction.
+        """Lifecycle hook: Called before cleanup/destruction.
 
-        Override this method to perform cleanup tasks such as:
-        - Closing file handles
-        - Removing temporary directories
-        - Closing network connections
-        - Saving state
-
-        Example:
-            def on_shutdown(self):
-                self.logger.info("Cleaning up")
-                if self._temp_dir:
-                    shutil.rmtree(self._temp_dir)
+        Override to perform cleanup tasks.
         """
         pass
 

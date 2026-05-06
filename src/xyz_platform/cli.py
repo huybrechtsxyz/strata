@@ -35,6 +35,7 @@ from xyz_platform.commands.cli_profile import profile_group
 from xyz_platform.commands.cli_ref import ref_group
 from xyz_platform.commands.cli_repo import repo_group
 from xyz_platform.commands.cli_status import status_command
+from xyz_platform.commands.cli_validate import validate_command
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
@@ -160,6 +161,7 @@ main.add_command(log_group, name="log")
 main.add_command(repo_group, name="repo")
 main.add_command(profile_group, name="profile")
 main.add_command(ref_group, name="ref")
+main.add_command(validate_command, name="validate")
 
 #
 # ENTRY POINT
