@@ -24,7 +24,6 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_toggleprompt",
     "sphinx_copybutton",
-    "sphinx_toolbox.collapse",
     "myst_parser",
 ]
 
