@@ -17,15 +17,12 @@ dist/
 html_docs/
 documentation_build/
 
-# Test / coverage
+# Test / coverage (not needed for docs build)
 tests/
 .pytest_cache/
 .coverage
 htmlcov/
 .mypy_cache/
-
-# Docs source (not needed for CLI image)
-docs/
 
 # CI / version control / editor
 .git/
