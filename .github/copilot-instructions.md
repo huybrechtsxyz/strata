@@ -6,7 +6,7 @@ Python DevOps CLI tool. Click + Pydantic v2 + structlog. Python 3.13. Package ma
 
 ## Architecture Layers
 
-Code is organized into five layers. Respect the dependency direction — lower layers never import higher ones.
+Code is organized into six layers. Respect the dependency direction — lower layers never import higher ones.
 
 ```
 commands/     ← Click CLI entry points (thin wrappers, call BaseCommand subclasses)
@@ -64,8 +64,10 @@ utils/        ← Pure utilities (no business logic, no service imports)
 
 ## CLI Commands
 
+- All top-level commands are flat: `xyz <group> <command>`. No solution wrapper noun.
 - Every command module lives in `commands/` and registers to the `main` Click group in `cli.py`.
-- The `main` Click group carries `ctx.obj = {"work_path": ..., "config": ...}` — always use `@click.pass_context` and read from `ctx.obj`.
+- Registered command groups: `init`, `clean`, `status`, `config`, `log`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`.
+- The `main` Click group loads workspace defaults from `.platform/cli.yaml` into `ctx.default_map` at startup. Always use `@click.pass_context` and read `work_path` from `ctx.obj`.
 - **Never** use `sys.exit()` — always raise `click.exceptions.Exit(code)`.
 - Use `handle_command_exit(command, success)` from `cli_common.py` to map to exit codes.
 - Apply standard decorators from `cli_common.py`: `@click_work_path`, `@click_output_format`, `@click_output_verbose`, `@click_output_quiet`.
@@ -84,23 +86,23 @@ utils/        ← Pure utilities (no business logic, no service imports)
 
 ## Work Path Resolution
 
-Work path is resolved once in `main()` and stored in `ctx.obj["work_path"]`. Resolution order:
+Work path is resolved once before `main()` runs and stored in `ctx.obj["work_path"]`. Resolution order:
 
-1. `--work-path` flag (explicit)
+1. `--work-path` flag (explicit, anywhere in `sys.argv`)
 2. `XYZ_WORK_PATH` environment variable
-3. Walk up from CWD looking for `.xyz_platform/` directory
-4. Error: "Not inside an xyz workspace. Run `xyz project init`."
+3. Walk up from CWD looking for `.platform/` directory — the ancestor containing `.platform/` is returned
+4. Error: "Not inside an xyz workspace. Run `xyz init`."
 
-Never pass `work_path` as a constructor arg or function parameter chain — read it from `ctx.obj`.
+`resolve_work_path()` lives in `utils/system.py`. Never pass `work_path` as a constructor arg or chain — read it from `ctx.obj`.
 
 ---
 
 ## Workspace State
 
-- The `.xyz_platform/` folder in the workspace root is the state directory.
-- `project.json` — the project registry (`ProjectModel`), managed by `ProjectService`.
--- `cli.yaml` — user preferences loaded at startup into Click's `default_map`.
-- `platform.json` — the build output artifact (`PlatformModel`), written by `BuildController`.
+- The `.platform/` folder in the workspace root is the state directory.
+- `solution.json` — the solution registry (`SolutionModel`), managed by `SolutionService`.
+- `cli.yaml` — user preferences loaded at startup into Click's `default_map`. Manage with `xyz config set|unset|list`.
+- `platform.json` — the build output artifact (`PlatformArtifactModel`), written by `BuildController` (deferred).
 
 ---
 
@@ -146,7 +148,18 @@ Cross-repo file references use `@repo_name/relative/path.yaml` notation.
 ## Testing
 
 - Tests live in `tests/xyz_platform/`.
-- CLI commands: use `from click.testing import CliRunner`.
+- Use plain pytest classes (e.g. `class TestConfigSet:`) — never `unittest.TestCase`.
+- CLI commands: use `from click.testing import CliRunner`; invoke via `runner.invoke(main, [...])`.
 - Never call real external tools in tests — mock `subprocess` and integration methods.
 - Test both valid and invalid YAML inputs for all model loading paths.
 - Verify exit codes explicitly: `assert result.exit_code == 0`.
+
+---
+
+## CI / Docker
+
+- CI runs via GitHub Actions in `.github/workflows/` using composite actions in `.github/actions/`.
+- `install-python` action: installs Python + `uv`, runs `uv sync --frozen`.
+- `test-python` action: runs lint, format-check, type-check, and pytest.
+- Package is built with `uv build` (wheel + sdist); `dist/` is uploaded as a GitHub artifact.
+- `Dockerfile.cli` — production CLI image. `Dockerfile.docs` — documentation site image.

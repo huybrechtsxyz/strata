@@ -38,3 +38,14 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 
 **Top 5 priorities:** (1) work_path resolution + CLI init, (2) xyz project commands,
 (3) xyz validate command, (4) BuildController + xyz build, (5) xyz deploy orchestration.
+
+### 2026-05-06 — copilot-instructions.md accuracy review
+
+- Confirmed `.platform/` (not `.xyz_platform/`) is the workspace state directory — `SOLUTION_DIR = ".platform"` in `utils/config.py`.
+- `xyz init` (not `xyz project init`) — flat CLI structure per 2026-05-05 decisions.md decision.
+- `xyz config set|unset|list` (not `xyz set`) — confirmed in `commands/cli_config.py`.
+- Workspace state file is `solution.json` (`SolutionModel`) — not `project.json`.
+- `resolve_work_path()` in `utils/system.py` walks up from CWD for `.platform/` — implemented, falls back to CWD (error path not yet raised).
+- CI uses composite actions: `.github/actions/install-python` (uv sync --frozen) and `.github/actions/test-python` (lint + types + pytest).
+- Testing pattern: plain pytest classes (`class TestConfigSet:`) — no `unittest.TestCase`.
+- copilot-instructions.md updated 2026-05-06.
