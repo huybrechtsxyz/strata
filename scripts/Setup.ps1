@@ -66,6 +66,27 @@ Write-Host "[*] Activating virtual environment..." -ForegroundColor Blue
 Write-Host "[+] Virtual environment activated." -ForegroundColor Green
 Write-Host ""
 
+# Configure uv to use the internal ProGet package index (dev machines only)
+# GitHub Actions uses PyPI directly — this config lives outside the repo and is never committed.
+Write-Host "[*] Configuring uv package index (ProGet)..." -ForegroundColor Blue
+$uvConfigDir = "$env:APPDATA\uv"
+$uvConfigFile = "$uvConfigDir\uv.toml"
+if (-not (Test-Path $uvConfigDir)) {
+    New-Item -Path $uvConfigDir -ItemType Directory -Force | Out-Null
+}
+if (-not (Test-Path $uvConfigFile)) {
+    @"
+[[index]]
+url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple"
+default = true
+"@ | Set-Content -Path $uvConfigFile -Encoding UTF8
+    Write-Host "[+] uv config created at $uvConfigFile" -ForegroundColor Green
+}
+else {
+    Write-Host "[+] uv config already exists at $uvConfigFile — skipping." -ForegroundColor Green
+}
+Write-Host ""
+
 # Install project dependencies
 Write-Host "[*] Installing dependencies..." -ForegroundColor Blue
 uv pip install -e .

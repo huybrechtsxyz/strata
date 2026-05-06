@@ -52,12 +52,6 @@ where = ["src"]
 "xyz_platform.templates.solution" = ["*.yaml", "*.md", "*"]
 "xyz_platform.templates.integrations" = ["*.md"]
 
-[[tool.uv.index]]
-name = "proget"
-url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-Free/simple"
-publish-url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-Free/legacy"
-explicit = true
-
 [dependency-groups]
 dev = [
     "debugpy",
