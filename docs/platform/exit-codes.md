@@ -11,20 +11,20 @@
 
 ## Usage by Command
 
-| Command    | Exit 0 | Exit 1 | Exit 2        | Exit 3                  |
-| ---------- | ------ | ------ | ------------- | ----------------------- |
-| `init`     | ✅      | ✅      | ⚠️ Click only | ❌                       |
-| `config`   | ✅      | ✅      | ⚠️ Click only | ❌                       |
-| `repo`     | ✅      | ✅      | ⚠️ Click only | ❌                       |
-| `profile`  | ✅      | ✅      | ⚠️ Click only | ❌                       |
-| `ref`      | ✅      | ✅      | ⚠️ Click only | ❌                       |
-| `validate` | ✅      | ✅      | ⚠️ Click only | ✅ Schema-invalid file   |
-| `build`    | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment    |
-| `deploy`   | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment    |
-| `values`   | ✅      | ✅      | ⚠️ Click only | ✅ Unresolved entries    |
-| `status`   | ✅      | ✅      | ⚠️ Click only | ❌                       |
-| `log`      | ✅      | ✅      | ⚠️ Click only | ❌                       |
-| `clean`    | ✅      | ✅      | ⚠️ Click only | ❌                       |
+| Command    | Exit 0 | Exit 1 | Exit 2       | Exit 3                |
+| ---------- | ------ | ------ | ------------ | --------------------- |
+| `init`     | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `config`   | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `repo`     | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `profile`  | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `ref`      | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `validate` | ✅      | ✅      | ⚠️ Click only | ✅ Schema-invalid file |
+| `build`    | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  |
+| `deploy`   | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  |
+| `values`   | ✅      | ✅      | ⚠️ Click only | ✅ Unresolved entries  |
+| `status`   | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `log`      | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `clean`    | ✅      | ✅      | ⚠️ Click only | ❌                     |
 
 **Legend:** ✅ Used | ⚠️ Automatic | ❌ Not used
 

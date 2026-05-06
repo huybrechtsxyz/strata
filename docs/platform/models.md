@@ -21,39 +21,39 @@ spec:
 
 ## Constrained Types
 
-| Type | Pattern | Used for |
-| ---- | ------- | -------- |
-| `PlatformName` | `^[a-z][a-z0-9_-]*$` | All `meta.name` fields |
-| `PlatformKind` | enum | `kind` field — one of the values below |
-| `PlatformVersion` | enum | `apiVersion` — only `platform.huybrechts.xyz/v1` |
+| Type              | Pattern              | Used for                                         |
+| ----------------- | -------------------- | ------------------------------------------------ |
+| `PlatformName`    | `^[a-z][a-z0-9_-]*$` | All `meta.name` fields                           |
+| `PlatformKind`    | enum                 | `kind` field — one of the values below           |
+| `PlatformVersion` | enum                 | `apiVersion` — only `platform.huybrechts.xyz/v1` |
 
 Never use plain `str` for `name` fields — always use `PlatformName` from `common_models`.
 
 ## Supported Kinds
 
-| Kind | Model class | Description |
-| ---- | ----------- | ----------- |
-| `configuration` | `ConfigurationModel` | Integration backends and store definitions |
-| `workspace` | `WorkspaceModel` | Infrastructure topology (providers, resources, namespaces) |
-| `deployment` | `DeploymentModel` | Deployment manifest referencing a workspace + environment |
-| `environment` | `EnvironmentModel` | Environment-specific variable/secret/feature overrides |
-| `provider` | `ProviderModel` | Cloud provider connection parameters |
-| `resource` | `ResourceModel` | Infrastructure resource definition (VM size, disk, network) |
-| `firewall` | `FirewallModel` | Firewall ruleset |
-| `module` | `ModuleModel` | Deployable application component (source, lifecycle hooks) |
-| `namespace` | `NamespaceModel` | Application deployment unit (groups modules) |
-| `platform-artifact` | `PlatformArtifactModel` | Build output written to `.platform/build/` |
-| `workspace-template` | `PlatformTemplateModel` | Scaffold for `xyz init --from-template` |
-| `solution` | `SolutionModel` | Project registry (`project.json`) |
-| `repository` | `RepositoryModel` | Registered repository entry |
-| `integration` | `IntegrationModel` | Integration backend credential config |
+| Kind                 | Model class             | Description                                                 |
+| -------------------- | ----------------------- | ----------------------------------------------------------- |
+| `configuration`      | `ConfigurationModel`    | Integration backends and store definitions                  |
+| `workspace`          | `WorkspaceModel`        | Infrastructure topology (providers, resources, namespaces)  |
+| `deployment`         | `DeploymentModel`       | Deployment manifest referencing a workspace + environment   |
+| `environment`        | `EnvironmentModel`      | Environment-specific variable/secret/feature overrides      |
+| `provider`           | `ProviderModel`         | Cloud provider connection parameters                        |
+| `resource`           | `ResourceModel`         | Infrastructure resource definition (VM size, disk, network) |
+| `firewall`           | `FirewallModel`         | Firewall ruleset                                            |
+| `module`             | `ModuleModel`           | Deployable application component (source, lifecycle hooks)  |
+| `namespace`          | `NamespaceModel`        | Application deployment unit (groups modules)                |
+| `platform-artifact`  | `PlatformArtifactModel` | Build output written to `.platform/build/`                  |
+| `workspace-template` | `PlatformTemplateModel` | Scaffold for `xyz init --from-template`                     |
+| `solution`           | `SolutionModel`         | Project registry (`project.json`)                           |
+| `repository`         | `RepositoryModel`       | Registered repository entry                                 |
+| `integration`        | `IntegrationModel`      | Integration backend credential config                       |
 
 ## Two-Phase Validation
 
-| Phase | Trigger | What it checks |
-| ----- | ------- | -------------- |
-| Phase 1 — Pydantic | Model instantiation | Field types, required fields, enum values, regex constraints, cross-field rules (`model_validator`) |
-| Phase 2 — Dynamic | `_validate_dynamic(model, work_path)` | `@repo-name/path` references exist on disk, provider names resolve, integration credentials are available |
+| Phase              | Trigger                               | What it checks                                                                                            |
+| ------------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Phase 1 — Pydantic | Model instantiation                   | Field types, required fields, enum values, regex constraints, cross-field rules (`model_validator`)       |
+| Phase 2 — Dynamic  | `_validate_dynamic(model, work_path)` | `@repo-name/path` references exist on disk, provider names resolve, integration credentials are available |
 
 Phase 2 requires a real filesystem and an initialised workspace. It is never called inside model constructors — only from the service layer.
 

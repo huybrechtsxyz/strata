@@ -6,12 +6,12 @@ All commands are invoked as `xyz <command> [options]` (or `uv run xyz-platform <
 
 These options are accepted by every command and subcommand:
 
-| Option             | Type                      | Default       | Description                                                                                                           |
-| ------------------ | ------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Option             | Type                      | Default       | Description                                                                                                       |
+| ------------------ | ------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `XYZ_WORK_PATH` env var, then walks up from CWD looking for `.platform/`. |
-| `--output FORMAT`  | `console`\|`text`\|`json` | `console`     | Output format. `json` returns a structured envelope `{"success": bool, "data": ...}`.                                 |
-| `--verbose`        | flag                      | off           | Enable verbose output.                                                                                                |
-| `--quiet`          | flag                      | off           | Suppress console output.                                                                                              |
+| `--output FORMAT`  | `console`\|`text`\|`json` | `console`     | Output format. `json` returns a structured envelope `{"success": bool, "data": ...}`.                             |
+| `--verbose`        | flag                      | off           | Enable verbose output.                                                                                            |
+| `--quiet`          | flag                      | off           | Suppress console output.                                                                                          |
 
 ## Exit Codes
 

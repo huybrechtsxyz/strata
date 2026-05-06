@@ -35,10 +35,10 @@ repo_map = config_svc.get_repo_map()
 
 ## Two-Phase Validation
 
-| Phase | What it checks |
-| ----- | -------------- |
-| Phase 1 (Pydantic) | YAML structure, required fields, type constraints, enum values |
-| Phase 2 (dynamic) | Cross-repo `@` references exist on disk, provider names resolve, integration credentials available |
+| Phase              | What it checks                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| Phase 1 (Pydantic) | YAML structure, required fields, type constraints, enum values                                     |
+| Phase 2 (dynamic)  | Cross-repo `@` references exist on disk, provider names resolve, integration credentials available |
 
 Phase 2 is triggered via `_validate_dynamic(model, work_path)` and requires a real filesystem and an active profile with resolved refs.
 
@@ -48,25 +48,25 @@ Services are singletons per path — `BaseService.load(path)` returns a cached i
 
 ## Key Methods
 
-| Method | Description |
-| ------ | ----------- |
-| `ConfigurationService.load(work_path)` | Load and cache the service for the given workspace |
-| `config_svc.get_repo_map()` | Return `{name: Path}` mapping for all registered repos |
-| `config_svc.model` | The validated `ConfigurationModel` (None if not yet validated) |
-| `config_svc.has_errors()` | True if Phase 1 or Phase 2 validation found errors |
-| `config_svc.get_errors()` | List of accumulated error strings |
+| Method                                 | Description                                                    |
+| -------------------------------------- | -------------------------------------------------------------- |
+| `ConfigurationService.load(work_path)` | Load and cache the service for the given workspace             |
+| `config_svc.get_repo_map()`            | Return `{name: Path}` mapping for all registered repos         |
+| `config_svc.model`                     | The validated `ConfigurationModel` (None if not yet validated) |
+| `config_svc.has_errors()`              | True if Phase 1 or Phase 2 validation found errors             |
+| `config_svc.get_errors()`              | List of accumulated error strings                              |
 
 ## ConfigurationModel Fields
 
 Defined in `src/xyz_platform/models/`. Key fields:
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `apiVersion` | `PlatformVersion` | Always `platform.huybrechts.xyz/v1` |
-| `kind` | `PlatformKind` | Always `configuration` |
-| `meta.name` | `PlatformName` | Workspace-scoped identifier |
-| `spec.integrations` | list | Declared integration backends (bitwarden, vault, etc.) |
-| `spec.stores` | list | Variable/secret/feature store definitions |
+| Field               | Type              | Description                                            |
+| ------------------- | ----------------- | ------------------------------------------------------ |
+| `apiVersion`        | `PlatformVersion` | Always `platform.huybrechts.xyz/v1`                    |
+| `kind`              | `PlatformKind`    | Always `configuration`                                 |
+| `meta.name`         | `PlatformName`    | Workspace-scoped identifier                            |
+| `spec.integrations` | list              | Declared integration backends (bitwarden, vault, etc.) |
+| `spec.stores`       | list              | Variable/secret/feature store definitions              |
 
 ## Example
 
