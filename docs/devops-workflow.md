@@ -62,7 +62,57 @@ Creates:
 - `.platform/cli.yaml`    — workspace defaults
 - `.platform/logging.yaml` — logging configuration
 
-### 1.2 Verify it's healthy
+### 1.3 Create the workspace from a template (optional)
+
+A **workspace template** is a local YAML file that declares which repos to
+register, which profiles to create, and which file references to add. Using
+one skips Phases 2–4 for standard setups.
+
+```bash
+xyz init --name xyz-workspace --from-template ./templates/standard-three-repo.yaml
+```
+
+**Template file format** (`standard-three-repo.yaml`):
+
+```yaml
+apiVersion: platform.huybrechts.xyz/v1
+kind: workspace-template
+meta:
+  name: standard-three-repo
+  annotations:
+    description: Config + infrastructure + traefik workspace
+spec:
+  repos:
+    - name: xyz-config
+      url: "git@github.com:org/xyz-config.git"
+      branch: main
+      path: repos/xyz-config
+    - name: xyz-infrastructure
+      url: "git@github.com:org/xyz-infrastructure.git"
+      branch: main
+      path: repos/xyz-infrastructure
+    - name: xyz-svc-traefik
+      url: "git@github.com:org/xyz-svc-traefik.git"
+      branch: main
+      path: repos/xyz-svc-traefik
+  profiles:
+    - name: prd
+      activate: true
+      refs:
+        configfile:
+          - name: global-config
+            path: "@xyz-config/config/xyz-config.yaml"
+          - name: logging-config
+            path: "@xyz-config/config/xyz-logging.yaml"
+        envfile:
+          - name: prd-env
+            path: "@xyz-config/environments/xyz-env-prd.yaml"
+```
+
+- `--from-template` accepts any local path (absolute or relative to `--work-path`).
+- Remote / `@repo-name/...` template references are **not** supported — the file must be on disk before `init` runs.
+- Repos registered from a template are **not** cloned automatically; run `xyz repo sync` afterwards.
+- At most one profile may set `activate: true`.
 
 ```bash
 xyz status
@@ -511,13 +561,13 @@ xyz log list --last
 
 ### Workspace
 
-| Command                   | Description                                        |
-| ------------------------- | -------------------------------------------------- |
-| `xyz init --name NAME`    | Initialize a new workspace                         |
-| `xyz status`              | Show workspace health and integration availability |
-| `xyz clean [--dry-run]`   | Remove logs and temp artifacts                     |
-| `xyz version`             | Print CLI version                                  |
-| `xyz help [--topic NAME]` | Show workflow guidance topics                      |
+| Command                                       | Description                                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `xyz init --name NAME [--from-template FILE]` | Initialize a new workspace; `--from-template` pre-populates repos, profiles, and refs |
+| `xyz status`                                  | Show workspace health and integration availability                                    |
+| `xyz clean [--dry-run]`                       | Remove logs and temp artifacts                                                        |
+| `xyz version`                                 | Print CLI version                                                                     |
+| `xyz help [--topic NAME]`                     | Show workflow guidance topics                                                         |
 
 ### Configuration
 
@@ -603,4 +653,3 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 | No `profile export` (merged env preview) | Medium   | Run `build run --dry-run` as a proxy           |
 | No secrets management layer              | Medium   | Manage secret files manually outside the CLI   |
 | No `deploy approve` / gate workflow      | Medium   | Use `--force` or external gate tooling         |
-| No `init --from-template`                | Low      | Manually configure each new workspace          |

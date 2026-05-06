@@ -88,7 +88,7 @@ class UnknownService(BaseService["UnknownModel"]):
             return WorkspaceService(self.path)
 
         elif kind == PlatformKind.PLATFORM_MODEL:
-            from xyz_platform.services.platform_service import PlatformService
+            from xyz_platform.services.platform_artifact_service import PlatformService
 
             return PlatformService(self.path)
 

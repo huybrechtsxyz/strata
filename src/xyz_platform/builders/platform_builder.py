@@ -4,11 +4,11 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from xyz_platform.builders.base_builder import BaseBuilder
-from xyz_platform.models.platform_model import (
+from xyz_platform.models.platform_artifact_model import (
+    PlatformArtifactModel,
     PlatformFirewallModel,
     PlatformLifecycleModel,
     PlatformMetaModel,
-    PlatformModel,
     PlatformModuleModel,
     PlatformNamespaceModel,
     PlatformProviderModel,
@@ -23,7 +23,7 @@ from xyz_platform.models.store_models import (
     VariableStoreModel,
 )
 from xyz_platform.services.deployment_service import DeploymentService
-from xyz_platform.services.platform_service import PlatformService
+from xyz_platform.services.platform_artifact_service import PlatformService
 
 
 class PlatformBuilder(BaseBuilder):
@@ -33,7 +33,7 @@ class PlatformBuilder(BaseBuilder):
     def __init__(self, verbose: bool = False, configuration_service=None) -> None:
         super().__init__(verbose=verbose)
         self.configuration_service = configuration_service
-        self._last_platform_model: Optional[PlatformModel] = None
+        self._last_platform_model: Optional[PlatformArtifactModel] = None
 
     # ------------------------------------------------------------------
     # BaseBuilder interface
@@ -168,7 +168,9 @@ class PlatformBuilder(BaseBuilder):
     # Internal build logic
     # ------------------------------------------------------------------
 
-    def _build_platform(self, deployment_service: DeploymentService) -> Tuple[Optional[PlatformModel], List[str]]:
+    def _build_platform(
+        self, deployment_service: DeploymentService
+    ) -> Tuple[Optional[PlatformArtifactModel], List[str]]:
         """Assemble the PlatformModel from the deployment service hierarchy.
 
         Args:
@@ -196,7 +198,7 @@ class PlatformBuilder(BaseBuilder):
             )
             spec = self._build_spec(deployment_service, configuration_model=configuration_model)
 
-            platform = PlatformModel(meta=meta, spec=spec)
+            platform = PlatformArtifactModel(meta=meta, spec=spec)
 
             if self.verbose:
                 messages.append(f"Built platform model: {platform.meta.name}")
@@ -414,7 +416,7 @@ class PlatformBuilder(BaseBuilder):
 
     def _save_platform(
         self,
-        platform: PlatformModel,
+        platform: PlatformArtifactModel,
         deployment_service: DeploymentService,
         build_path: Path,
     ) -> List[str]:

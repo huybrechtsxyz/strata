@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from xyz_platform.builders.base_builder import BaseBuilder
-from xyz_platform.models.platform_model import PlatformModel
+from xyz_platform.models.platform_artifact_model import PlatformArtifactModel
 from xyz_platform.services.deployment_service import DeploymentService
-from xyz_platform.services.platform_service import PlatformService
+from xyz_platform.services.platform_artifact_service import PlatformService
 
 
 class TerraformBuilder(BaseBuilder):
@@ -31,7 +31,7 @@ class TerraformBuilder(BaseBuilder):
         work_path: Path,
         build_path: Path,
         dry_run: bool = False,
-        platform_model: Optional["PlatformModel"] = None,
+        platform_model: Optional["PlatformArtifactModel"] = None,
     ) -> bool:
         """Build Terraform tfvars files from ``platform.json``.
 
@@ -188,7 +188,7 @@ class TerraformBuilder(BaseBuilder):
 
     def _build_terraform_vars(
         self,
-        platform: PlatformModel,
+        platform: PlatformArtifactModel,
         deployment_service: DeploymentService,
         messages: List[str],
     ) -> Dict[str, Any]:
@@ -204,7 +204,7 @@ class TerraformBuilder(BaseBuilder):
             "required_secrets": self._document_required_secrets(),
         }
 
-    def _build_workspace_vars(self, platform: PlatformModel, messages: List[str]) -> Dict[str, Any]:
+    def _build_workspace_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
         """Build workspace-level tfvars payload."""
         workspace = platform.spec.workspace
         workspace_labels = workspace.labels or {}
@@ -239,7 +239,7 @@ class TerraformBuilder(BaseBuilder):
 
         return payload
 
-    def _build_provider_vars(self, platform: PlatformModel, messages: List[str]) -> Dict[str, Any]:
+    def _build_provider_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
         """Build provider tfvars payload."""
         providers_dict: Dict[str, Dict[str, Any]] = {}
 
@@ -282,7 +282,7 @@ class TerraformBuilder(BaseBuilder):
 
     def _build_resources_by_category(
         self,
-        platform: PlatformModel,
+        platform: PlatformArtifactModel,
         deployment_service: DeploymentService,
         messages: List[str],
     ) -> Dict[str, Dict[str, Any]]:
@@ -329,7 +329,7 @@ class TerraformBuilder(BaseBuilder):
 
         return result
 
-    def _build_module_vars(self, platform: PlatformModel, messages: List[str]) -> Dict[str, Any]:
+    def _build_module_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
         """Build module tfvars payload."""
         modules_dict: Dict[str, Dict[str, Any]] = {}
 
@@ -367,7 +367,7 @@ class TerraformBuilder(BaseBuilder):
 
         return {"modules": modules_dict}
 
-    def _build_topology_vars(self, platform: PlatformModel, messages: List[str]) -> Dict[str, Any]:
+    def _build_topology_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
         """Build topology tfvars payload."""
         topologies_dict: Dict[str, Dict[str, Any]] = {}
 

@@ -7,12 +7,12 @@ from typing import List, Optional, Tuple
 import yaml
 
 from xyz_platform.models.configuration_model import ConfigurationModel
-from xyz_platform.models.platform_model import PlatformModel
+from xyz_platform.models.platform_artifact_model import PlatformArtifactModel
 from xyz_platform.services.base_service import BaseService
 from xyz_platform.services.workspace_service import WorkspaceService
 
 
-class PlatformService(BaseService["PlatformModel"]):
+class PlatformService(BaseService["PlatformArtifactModel"]):
     """Service for managing platform model I/O operations."""
 
     def __init__(self, path=None, data=None):
@@ -48,7 +48,7 @@ class PlatformService(BaseService["PlatformModel"]):
 
     def _get_model_class(self):
         """Return the PlatformModel class for Pydantic validation."""
-        return PlatformModel
+        return PlatformArtifactModel
 
     def _validate_dynamic(
         self,
@@ -90,7 +90,7 @@ class PlatformService(BaseService["PlatformModel"]):
     # ------------------------------------------------------------------
 
     @property
-    def platform(self) -> Optional[PlatformModel]:
+    def platform(self) -> Optional[PlatformArtifactModel]:
         """Return the loaded PlatformModel instance."""
         return self.model
 
@@ -173,7 +173,7 @@ class PlatformService(BaseService["PlatformModel"]):
     # I/O — load
     # ------------------------------------------------------------------
 
-    def load_from_json(self, path: Path) -> PlatformModel:
+    def load_from_json(self, path: Path) -> PlatformArtifactModel:
         """Load a PlatformModel from a JSON file.
 
         Args:
@@ -191,14 +191,14 @@ class PlatformService(BaseService["PlatformModel"]):
 
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        self.model = PlatformModel.model_validate(data)
+        self.model = PlatformArtifactModel.model_validate(data)
 
         if self.verbose:
             self.logger.info("Loaded platform model", name=self.model.meta.name)
 
         return self.model
 
-    def load_from_yaml(self, path: Path) -> PlatformModel:
+    def load_from_yaml(self, path: Path) -> PlatformArtifactModel:
         """Load a PlatformModel from a YAML file.
 
         Args:
@@ -216,7 +216,7 @@ class PlatformService(BaseService["PlatformModel"]):
 
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        self.model = PlatformModel.model_validate(data)
+        self.model = PlatformArtifactModel.model_validate(data)
 
         if self.verbose:
             self.logger.info("Loaded platform model", name=self.model.meta.name)
@@ -227,7 +227,7 @@ class PlatformService(BaseService["PlatformModel"]):
     # I/O — save
     # ------------------------------------------------------------------
 
-    def save_to_json(self, platform: PlatformModel, path: Path, indent: int = 2) -> None:
+    def save_to_json(self, platform: PlatformArtifactModel, path: Path, indent: int = 2) -> None:
         """Serialise a PlatformModel to a JSON file.
 
         Args:
@@ -247,7 +247,7 @@ class PlatformService(BaseService["PlatformModel"]):
         if self.verbose:
             self.logger.info("Saved platform model to JSON", name=platform.meta.name)
 
-    def save_to_yaml(self, platform: PlatformModel, path: Path) -> None:
+    def save_to_yaml(self, platform: PlatformArtifactModel, path: Path) -> None:
         """Serialise a PlatformModel to a YAML file.
 
         Args:
@@ -270,7 +270,7 @@ class PlatformService(BaseService["PlatformModel"]):
         if self.verbose:
             self.logger.info("Saved platform model to YAML", name=platform.meta.name)
 
-    def save_both_formats(self, platform: PlatformModel, json_path: Path, yaml_path: Path) -> None:
+    def save_both_formats(self, platform: PlatformArtifactModel, json_path: Path, yaml_path: Path) -> None:
         """Serialise a PlatformModel to both JSON and YAML.
 
         Args:

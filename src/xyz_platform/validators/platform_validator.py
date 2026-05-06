@@ -14,7 +14,7 @@ from xyz_platform.services.environment_service import EnvironmentService
 from xyz_platform.services.firewall_service import FirewallService
 from xyz_platform.services.module_service import ModuleService
 from xyz_platform.services.namespace_service import NamespaceService
-from xyz_platform.services.platform_service import PlatformService
+from xyz_platform.services.platform_artifact_service import PlatformService
 from xyz_platform.services.provider_service import ProviderService
 from xyz_platform.services.resource_service import ResourceService
 from xyz_platform.services.workspace_service import WorkspaceService

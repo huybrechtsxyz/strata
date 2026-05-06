@@ -619,7 +619,7 @@ class PlatformMetaModel(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class PlatformModel(BaseModel):
+class PlatformArtifactModel(BaseModel):
     """Root model for the generated platform configuration artifact.
 
     This is the complete output structure written as workspace.json (or similar)
