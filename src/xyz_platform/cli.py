@@ -29,6 +29,7 @@ import yaml
 from xyz_platform.commands.cli_builders import build as build_group
 from xyz_platform.commands.cli_clean import clean_command
 from xyz_platform.commands.cli_config import config_group
+from xyz_platform.commands.cli_deploy import deploy as deploy_group
 from xyz_platform.commands.cli_help import help_command
 from xyz_platform.commands.cli_init import init_command
 from xyz_platform.commands.cli_log import log_group
@@ -164,6 +165,7 @@ main.add_command(profile_group, name="profile")
 main.add_command(ref_group, name="ref")
 main.add_command(validate_command, name="validate")
 main.add_command(build_group, name="build")
+main.add_command(deploy_group, name="deploy")
 
 #
 # ENTRY POINT
