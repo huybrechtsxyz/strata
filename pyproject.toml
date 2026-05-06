@@ -157,6 +157,7 @@ filterwarnings = [
 ]
 
 [tool.mypy]
+plugins = ["pydantic.mypy"]
 exclude = [
     ".eggs",
     ".git",
