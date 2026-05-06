@@ -7,8 +7,8 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "xyz_platform"
-copyright = "2023, OMP"
-author = "OMP"
+copyright = "2025, Huybrechts XYZ"
+author = "Vincent Huybrechts"
 release = "0.0.1"
 
 # -- General configuration ---------------------------------------------------

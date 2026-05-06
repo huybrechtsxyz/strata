@@ -15,6 +15,7 @@
 - exceptions: ✅
 - models: ✅
 
+- services: ✅
 
 - cli
 - builders
@@ -22,7 +23,6 @@
 - controllers
 - deployers
 - integrations
-- services
 - validators
 
 ## Models
