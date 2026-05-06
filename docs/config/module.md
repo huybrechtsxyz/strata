@@ -5,7 +5,7 @@ Defines deployable application components within namespaces. YAML files specify 
 ## Schema
 
 ```yaml
-apiVersion: workspace.huybrechts.xyz/v1
+apiVersion: platform.huybrechts.xyz/v1
 kind: module
 meta:
   name: <module_name> # Required: ^[a-z][a-z0-9_]*$

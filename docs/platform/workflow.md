@@ -302,6 +302,8 @@ and validates values against the merged configuration.
 
 ## Phase 6 — Build
 
+> **Requires:** Terraform CLI (`terraform`) installed and on `PATH`. Use `--dry-run` to validate and plan without writing output files — this works without Terraform.
+
 Build generates the deployment artifacts (rendered Terraform variable files,
 `platform.json`, merged configs) in `.platform/build/<deployment>/`.
 
@@ -378,6 +380,8 @@ what would change before applying.
 ---
 
 ## Phase 7 — Deploy
+
+> **Requires:** Terraform CLI and configured integration credentials (Bitwarden, Vault, Azure Key Vault, etc.). Use `--dry-run` to run `terraform init → validate → plan` safely before applying.
 
 Deploy executes provisioners (Terraform) against the built artifacts.
 

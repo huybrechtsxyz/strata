@@ -8,7 +8,7 @@ These options are accepted by every command and subcommand:
 
 | Option             | Type                      | Default       | Description                                                                                                           |
 | ------------------ | ------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `XYZ_WORK_PATH` env var, then walks up from CWD looking for `.xyz_platform/`. |
+| `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `XYZ_WORK_PATH` env var, then walks up from CWD looking for `.platform/`. |
 | `--output FORMAT`  | `console`\|`text`\|`json` | `console`     | Output format. `json` returns a structured envelope `{"success": bool, "data": ...}`.                                 |
 | `--verbose`        | flag                      | off           | Enable verbose output.                                                                                                |
 | `--quiet`          | flag                      | off           | Suppress console output.                                                                                              |
@@ -319,6 +319,8 @@ xyz repo status --name platform
 
 ## `build`
 
+> **Note:** `build` requires the Terraform CLI (`terraform`) to be installed and on `PATH`. The `--dry-run` mode (plan only, no files written) works without it. Full artifact generation targets production-ready environments.
+
 Build platform and Terraform artifacts from a deployment YAML file.
 
 All `build` subcommands accept `--file/-f PATH` to specify the deployment file.
@@ -391,6 +393,8 @@ xyz validate config/xyz-ws-platform.yaml --deep
 ---
 
 ## `deploy`
+
+> **Note:** `deploy` requires the Terraform CLI and configured integration credentials (Bitwarden, Vault, Azure Key Vault, etc.). Use `--dry-run` to run `terraform init → validate → plan` without applying any changes.
 
 Deploy platform infrastructure using provisioners defined in a deployment YAML file.
 

@@ -12,12 +12,57 @@ xyz_platform
         :alt: Coverage
 
 .. toctree::
-   :maxdepth: 4
-   :caption: Contents:
-   :glob:
+   :maxdepth: 2
+   :caption: Getting Started:
 
    README.rst
-   
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Platform Reference:
+
+   platform/readme
+   platform/commands
+   platform/workflow
+   platform/cli-preferences
+   platform/architecture
+   platform/exit-codes
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Internals:
+
+   platform/models
+   platform/services
+   platform/configuration
+   platform/integrations
+   platform/builders
+   platform/deployers
+   platform/validators
+   platform/lifecycles
+   platform/exceptions
+   platform/logging
+   platform/utilities
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Config File Formats:
+
+   config/readme
+   config/configuration
+   config/workspace
+   config/deployment
+   config/environment
+   config/provider
+   config/resource
+   config/firewall
+   config/module
+   config/namespace
+
+.. toctree::
+   :maxdepth: 4
+   :caption: API Reference:
+
    autoapi.rst
 
 .. :orphan:
@@ -28,7 +73,6 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-
 
 
 

@@ -5,7 +5,7 @@ Defines application deployment units within the platform. YAML files specify mod
 ## Schema
 
 ```yaml
-apiVersion: workspace.huybrechts.xyz/v1
+apiVersion: platform.huybrechts.xyz/v1
 kind: namespace
 meta:
   name: <namespace_name>        # Required: ^[a-z][a-z0-9_]*$

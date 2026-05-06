@@ -1,4 +1,7 @@
-# Getting Started
+# XYZ Platform
+
+The XYZ Platform is a comprehensive solution for managing and deploying cloud infrastructure and applications. It leverages Infrastructure as Code (IaC) principles to provide a structured and automated approach to provisioning resources across various cloud providers.
+
 ## Installation
 ### Linux
 ```console

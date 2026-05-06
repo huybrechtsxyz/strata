@@ -12,7 +12,7 @@ Environment-specific overrides and extensions for workspace deployments. **Works
 ## Schema
 
 ```yaml
-apiVersion: workspace.huybrechts.xyz/v1
+apiVersion: platform.huybrechts.xyz/v1
 kind: environment
 meta:
   name: <environment_name> # Required: ^[a-z][a-z0-9_]*$
@@ -270,14 +270,17 @@ spec:
 ## CLI Integration
 
 ```bash
-# Validate with environment
-python cli.py validate workspace.yaml --env production.yaml
+# Validate a deployment YAML file
+xyz validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
-# Provision with environment
-python cli.py provision workspace.yaml --env production.yaml -s apply
+# Deploy using the active profile's environment refs
+xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
-# Destroy with environment
-python cli.py provision workspace.yaml --env production.yaml -s destroy
+# Dry-run (plan only — no changes applied)
+xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+
+# Tear down infrastructure
+xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
 ```
 
 ## File Location

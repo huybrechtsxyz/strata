@@ -61,7 +61,7 @@ Load order (later overrides earlier):
 **1. Define Infrastructure (workspace.yaml):**
 
 ```yaml
-apiVersion: workspace.huybrechts.xyz/v1
+apiVersion: platform.huybrechts.xyz/v1
 kind: workspace
 spec:
   providers:
@@ -79,7 +79,7 @@ spec:
 **2. Customize for Environment (environment.yaml):**
 
 ```yaml
-apiVersion: environment.huybrechts.xyz/v1
+apiVersion: platform.huybrechts.xyz/v1
 kind: environment
 spec:
   workspace: workspaces/platform.yaml
@@ -94,7 +94,7 @@ spec:
 **3. Create Deployment Instance (deployment.yaml):**
 
 ```yaml
-apiVersion: deployment.huybrechts.xyz/v1
+apiVersion: platform.huybrechts.xyz/v1
 kind: deployment
 meta:
   name: platform_prod_2024_q1
@@ -110,9 +110,7 @@ spec:
 **4. Execute:**
 
 ```bash
-python cli.py deploy ../xyz-deploy-prod/deployments/active/platform-current.yaml \
-  --config ../xyz-config-acme/configurations/ \
-  --steps setup check plan apply
+xyz deploy run -f ../xyz-deploy-prod/deployments/active/platform-current.yaml
 ```
 
 **5. Generated Audit Manifest (build/manifest.yaml):**

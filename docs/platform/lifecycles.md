@@ -50,11 +50,11 @@ Format: `{command}_{action}`
 
 **Examples:** `config_fetch_before`, `config_fetch_after`, `build_validate`, `deploy_provision`, `deploy_provision_after`
 
-| Command        | Phases                                      |
-| -------------- | ------------------------------------------- |
-| `config init`  | `config_init_before`, `config_init_after`   |
-| `config fetch` | `config_fetch_before`, `config_fetch_after` |
-| `config clean` | `config_clean_before`, `config_clean_after` |
+| CLI Command   | Phase Hook Examples                                                         |
+| ------------- | --------------------------------------------------------------------------- |
+| `deploy run`  | `deploy_provision`, `deploy_configure`, `deploy_health`, `deploy_output`    |
+| `deploy run`  | `deploy_apply_before`, `deploy_apply_after`                                 |
+| `build run`   | `build_validate`, `build_generate`                                          |
 
 ## Example
 

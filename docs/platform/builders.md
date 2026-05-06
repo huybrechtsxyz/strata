@@ -206,7 +206,7 @@ from xyz_platform.builders.platform_builder import PlatformBuilder
 from xyz_platform.builders.terraform_builder import TerraformBuilder
 
 work_path = Path("/workspace")
-build_path = Path("/workspace/.xyz_platform/builds")
+build_path = Path("/workspace/.platform/build/")
 
 # Step 1: Build the platform model
 platform_builder = PlatformBuilder(verbose=True, configuration_service=config_svc)

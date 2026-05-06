@@ -56,21 +56,21 @@ Cons:
 
 ---
 
-## Option B: Workspace Config (`xyz set`)
+## Option B: Workspace Config (`xyz config set`)
 
-> **Requires:** `xyz init` to have been run — writes to `.xyz_platform/cli.yaml`.
+> **Requires:** `xyz init` to have been run — writes to `.platform/cli.yaml`.
 
-Store preferences in the workspace itself. Because `.xyz_platform/` is workspace-scoped, different
+Store preferences in the workspace itself. Because `.platform/` is workspace-scoped, different
 workspaces can have different defaults.
 
 ```bash
-xyz set output json        # all commands in this workspace default to JSON output
-xyz set verbose true
-xyz set list               # show current workspace defaults
-xyz set unset output       # remove the override, fall back to built-in default
+xyz config set output json    # all commands in this workspace default to JSON output
+xyz config set verbose true
+xyz config list               # show current workspace defaults
+xyz config unset output       # remove the override, fall back to built-in default
 ```
 
-Stored in `.xyz_platform/cli.yaml`:
+Stored in `.platform/cli.yaml`:
 
 ```yaml
 values:
@@ -84,11 +84,11 @@ Loaded at startup via Click's `default_map`, then merged with env vars and expli
 Pros:
 - Workspace-scoped — different workspaces, different defaults
 - Committed to source control (or gitignored, your choice)
-- Self-documenting via `xyz set list`
+- Self-documenting via `xyz config list`
 
 Cons:
 - Requires an initialised workspace
-- Not available before `xyz project init`
+- Not available before `xyz init`
 
 ---
 
@@ -97,7 +97,7 @@ Cons:
 ```
 --flag explicitly passed
   └─ XYZ_* environment variable
-      └─ .xyz_platform/cli.yaml (xyz set)
+      └─ .platform/cli.yaml (xyz config set)
             └─ built-in default (hardcoded in CLI)
 ```
 
@@ -111,11 +111,11 @@ This means:
 
 ## Work Path Resolution (special case)
 
-`--work-path` / `XYZ_WORK_PATH` additionally supports **directory walking**: if neither the flag nor the env var is set, the CLI walks up from CWD looking for `.xyz_platform/`. This means on a local machine you can `cd` anywhere inside the workspace tree and commands just work.
+`--work-path` / `XYZ_WORK_PATH` additionally supports **directory walking**: if neither the flag nor the env var is set, the CLI walks up from CWD looking for `.platform/`. This means on a local machine you can `cd` anywhere inside the workspace tree and commands just work.
 
 ```
 /myworkspace/
-  .xyz_platform/      ← found here → work-path resolved
+  .platform/          ← found here → work-path resolved
   repo-a/
     src/
       ← user runs `xyz build` here, walks up two levels, finds it
