@@ -26,21 +26,28 @@
   - env_controller: ✅
   - logging_controller: ✅
   - integration_controller: ✅
-
 - validators: ✅
   - base_validator: ✅
-  - platform_validator: ✅
-
+  - platform_validator: 
 - builders: ✅
   - base_builder: ✅
   - platform_builder: ✅
   - terraform_builder: ✅
-
-- cli
-
-- commands
-- deployers
-
+- deployers: ✅
+  - terraform_deployer: ✅
+  - script_deployer: ✅
+- command groups
+    - init ✅
+    - clean ✅
+    - config ✅
+    - status ✅
+    - log ✅
+    - profile ✅
+    - ref ✅
+    - repo ✅
+    - build ✅
+    - validate ✅
+    - deploy ✅
 
 ## Models
 
