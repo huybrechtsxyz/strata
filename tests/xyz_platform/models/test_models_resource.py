@@ -13,6 +13,7 @@ import os
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from xyz_platform.models.resource_model import ResourceModel
 
@@ -58,5 +59,5 @@ def test_resource_yaml_invalid(yaml_path):
     """Test that a resource YAML file is NOT a valid ResourceModel."""
     with open(yaml_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         model = ResourceModel.model_validate(data)

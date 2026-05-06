@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Unit tests for AzureKeyVaultIntegration."""
 
-from unittest.mock import MagicMock, patch
 
-from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.integrations.azure_keyvault import AzureKeyVaultIntegration
+from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.integrations.capabilities import ISecretStore
-from xyz_platform.models.integration_model import IntegrationModel, IntegrationEndpointsSpecModel
+from xyz_platform.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 
 def _cfg(name="keyvault", address=None) -> IntegrationModel:

@@ -3,11 +3,8 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.models.integration_model import IntegrationModel
-
 
 # ---------------------------------------------------------------------------
 # Concrete subclass for testing (not abstract)

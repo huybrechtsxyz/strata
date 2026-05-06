@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from xyz_platform.models.configuration_model import ConfigurationModel
 
@@ -55,7 +56,7 @@ def test_configuration_yaml_invalid(yaml_path):
     """Test that a configuration YAML file is NOT a valid ConfigurationModel."""
     with open(yaml_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ConfigurationModel.model_validate(data)
     model = None
     assert model is None

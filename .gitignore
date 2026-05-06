@@ -555,3 +555,6 @@ ipython_config.py
 .platform/cli.yaml
 .platform/logs/
 .platform/*.log
+
+# Temporary until uv.lock is cleaned of internal ProGet URLs (dev-machine only)
+uv.lock

@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Unit tests for AzureAppConfigIntegration."""
 
-from unittest.mock import MagicMock, patch
 
-from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.integrations.azure_appconfig import AzureAppConfigIntegration
-from xyz_platform.integrations.capabilities import IVariableStore, IFeatureStore
-from xyz_platform.models.integration_model import IntegrationModel, IntegrationEndpointsSpecModel
+from xyz_platform.integrations.base_integration import BaseIntegration
+from xyz_platform.integrations.capabilities import IFeatureStore, IVariableStore
+from xyz_platform.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 
 def _cfg(name="appconfig", address=None) -> IntegrationModel:

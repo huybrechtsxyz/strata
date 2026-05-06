@@ -13,6 +13,7 @@ import os
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from xyz_platform.models.namespace_model import NamespaceModel
 
@@ -50,7 +51,7 @@ def test_namespaces_yaml_invalid(yaml_path):
     """Test that a namespaces YAML file is NOT a valid NamespaceModel."""
     with open(yaml_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         NamespaceModel.model_validate(data)
     model = None
     assert model is None

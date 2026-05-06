@@ -9,10 +9,11 @@ Description   : Security tests for ProviderModel YAML validation.
 ===============================================================================
 """
 
-
 import os
-import yaml
+
 import pytest
+import yaml
+from pydantic import ValidationError
 
 from xyz_platform.models.provider_model import ProviderModel
 
@@ -22,9 +23,7 @@ def set_pythonpath_env(monkeypatch):
     monkeypatch.setenv("PYTHONPATH", "src")
 
 
-PROVIDER_FOLDER = os.path.join(
-    os.path.dirname(__file__), "..", "..", "data", "providers"
-)
+PROVIDER_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "providers")
 
 # List of YAML files to test (extensible)
 PROVIDER_VALID_FILES = [
@@ -49,7 +48,7 @@ def test_provider_yaml_invalid(yaml_path):
     """Test that a provider YAML file is NOT a valid ProviderModel."""
     with open(yaml_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ProviderModel.model_validate(data)
     model = None
     assert model is None

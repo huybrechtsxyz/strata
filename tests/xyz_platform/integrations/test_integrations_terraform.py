@@ -4,8 +4,8 @@
 from unittest.mock import MagicMock, patch
 
 from xyz_platform.integrations.base_integration import BaseIntegration
-from xyz_platform.integrations.terraform import TerraformIntegration
 from xyz_platform.integrations.capabilities import IInfrastructureTool
+from xyz_platform.integrations.terraform import TerraformIntegration
 from xyz_platform.models.integration_model import IntegrationModel
 
 

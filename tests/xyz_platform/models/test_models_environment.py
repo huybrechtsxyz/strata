@@ -13,6 +13,7 @@ import os
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from xyz_platform.models.environment_model import EnvironmentModel
 
@@ -52,7 +53,7 @@ def test_environment_yaml_invalid(yaml_path):
     """Test that an environment YAML file is NOT a valid EnvironmentModel."""
     with open(yaml_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         EnvironmentModel.model_validate(data)
     model = None
     assert model is None

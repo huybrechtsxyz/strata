@@ -13,6 +13,7 @@ import os
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from xyz_platform.models.module_model import ModuleModel
 
@@ -50,7 +51,7 @@ def test_module_yaml_invalid(yaml_path):
     """Test that a module YAML file is NOT a valid ModuleModel."""
     with open(yaml_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ModuleModel.model_validate(data)
     model = None
     assert model is None

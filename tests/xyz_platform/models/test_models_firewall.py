@@ -13,6 +13,7 @@ import os
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from xyz_platform.models.firewall_model import FirewallModel
 
@@ -56,7 +57,7 @@ def test_firewall_yaml_invalid(yaml_path):
     """Test that a firewall YAML file is NOT a valid FirewallModel."""
     with open(yaml_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         FirewallModel.model_validate(data)
     model = None
     assert model is None

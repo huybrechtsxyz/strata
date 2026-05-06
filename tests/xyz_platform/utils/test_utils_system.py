@@ -11,12 +11,13 @@ Description   : Unit tests for system utilities in xyz-platform.
 
 import subprocess
 import sys
+
 import pytest
+
 from xyz_platform.utils.system import (
     CommandResult,
     run_command,
 )
-
 
 # ============================================================================
 # CommandResult Tests

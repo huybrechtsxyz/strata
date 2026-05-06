@@ -10,11 +10,12 @@ Description   : Tests for unknown models in XYZ Platform.
 """
 
 import os
-import yaml
+
 import pytest
+import yaml
+from pydantic import ValidationError
 
 from xyz_platform.models.unknown_model import UnknownModel
-
 
 UNKNOWN_FOLDER = os.path.join(
     os.path.dirname(__file__),
@@ -45,7 +46,7 @@ def test_unknown_yaml_invalid(yaml_path):
     """Test that a unknown YAML file is NOT a valid unknownModel."""
     with open(yaml_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         UnknownModel.model_validate(data)
     model = None
     assert model is None

@@ -10,10 +10,10 @@ Description   : Tests for service caching functionality.
 """
 
 from xyz_platform.utils.service_cache import (
-    get_cache_key,
-    get_or_cache,
     clear_cache,
+    get_cache_key,
     get_cache_stats,
+    get_or_cache,
 )
 
 

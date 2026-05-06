@@ -462,5 +462,5 @@ class TestRaiseCatch:
             raise WorkspaceNotFoundError("/ws.yaml")
 
     def test_catch_as_exception(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ServiceNotValidatedError):
             raise ServiceNotValidatedError("S")

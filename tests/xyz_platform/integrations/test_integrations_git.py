@@ -4,8 +4,8 @@
 from unittest.mock import MagicMock, patch
 
 from xyz_platform.integrations.base_integration import BaseIntegration
-from xyz_platform.integrations.git import GitIntegration
 from xyz_platform.integrations.capabilities import IRepositoryTool
+from xyz_platform.integrations.git import GitIntegration
 from xyz_platform.models.integration_model import IntegrationModel
 
 
