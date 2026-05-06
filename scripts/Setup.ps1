@@ -66,8 +66,11 @@ Write-Host "[*] Activating virtual environment..." -ForegroundColor Blue
 Write-Host "[+] Virtual environment activated." -ForegroundColor Green
 Write-Host ""
 
-# Configure uv to use the internal ProGet package index (dev machines only)
+# Configure uv to use the internal ProGet package index (dev machines only).
 # GitHub Actions uses PyPI directly — this config lives outside the repo and is never committed.
+# ProGet is registered as a supplemental index (not default) so that uv resolves packages
+# against PyPI first. This ensures that regenerating uv.lock locally produces PyPI URLs,
+# which CI can download. Once a clean lockfile is committed, CI can switch back to --frozen.
 Write-Host "[*] Configuring uv package index (ProGet)..." -ForegroundColor Blue
 $uvConfigDir = "$env:APPDATA\uv"
 $uvConfigFile = "$uvConfigDir\uv.toml"
@@ -78,7 +81,6 @@ if (-not (Test-Path $uvConfigFile)) {
     @"
 [[index]]
 url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple"
-default = true
 "@ | Set-Content -Path $uvConfigFile -Encoding UTF8
     Write-Host "[+] uv config created at $uvConfigFile" -ForegroundColor Green
 }

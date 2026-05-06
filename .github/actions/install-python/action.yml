@@ -29,4 +29,8 @@ runs:
 
     - name: Install dependencies
       shell: bash
-      run: uv sync --group dev
+      run: |
+        # Regenerate uv.lock from PyPI before syncing.
+        # The committed uv.lock contains internal ProGet URLs (dev-machine only) that CI cannot reach.
+        # Once a clean PyPI-based lockfile is committed, replace this with: uv sync --frozen --group dev
+        uv lock && uv sync --group dev
