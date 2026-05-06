@@ -53,9 +53,7 @@ class PlatformTemplateSpecModel(BaseModel):
         if self.profiles:
             active = [p for p in self.profiles if p.activate]
             if len(active) > 1:
-                raise ValueError(
-                    f"Only one profile may have activate: true; got: {[str(p.name) for p in active]}"
-                )
+                raise ValueError(f"Only one profile may have activate: true; got: {[str(p.name) for p in active]}")
         return self
 
 

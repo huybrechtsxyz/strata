@@ -118,7 +118,7 @@ def configure_azure_monitor(connection_string: str):
         raise ImportError(
             "azure-monitor-opentelemetry package is required for Azure Application Insights. "
             "Install with: pip install azure-monitor-opentelemetry"
-        )
+        ) from None
     except Exception as e:
         logging.error(f"Failed to configure Azure Application Insights: {e}")
         raise

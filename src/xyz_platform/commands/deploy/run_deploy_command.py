@@ -217,7 +217,7 @@ class RunDeployCommand(BaseDeployCommand):
             return False
 
         # --- pre-flight validation ---
-        for label, validate_fn in (
+        for _label, validate_fn in (
             ("workspace", deployer.validate_workspace),
             ("environment", deployer.validate_environment),
         ):

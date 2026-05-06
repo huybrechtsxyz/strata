@@ -43,8 +43,8 @@ class IntegrationService:
         self._integrations_loaded = False
 
         # Lazy import to avoid circular dependencies
-        from xyz_platform.services.configuration_service import ConfigurationService
         from xyz_platform.integrations.registry import IntegrationRegistry
+        from xyz_platform.services.configuration_service import ConfigurationService
 
         self.config_service = ConfigurationService.get_instance()
         self.registry = IntegrationRegistry.get_instance()
@@ -70,9 +70,7 @@ class IntegrationService:
 
     # Integration lifecycle methods
 
-    def initialize_integrations(
-        self, force_reload: bool = False
-    ) -> Tuple[bool, List[str]]:
+    def initialize_integrations(self, force_reload: bool = False) -> Tuple[bool, List[str]]:
         """
         Load and register integrations from configuration.
 
@@ -96,9 +94,7 @@ class IntegrationService:
         if not self.config_service.is_validated():
             logger.warning("Configuration not validated, attempting to load")
             # ConfigurationService should be loaded before IntegrationService
-            errors.append(
-                "Configuration must be loaded before initializing integrations"
-            )
+            errors.append("Configuration must be loaded before initializing integrations")
             return False, errors
 
         # Get integration specs from configuration
@@ -177,11 +173,7 @@ class IntegrationService:
         if not config_model or not config_model.spec.integrations:
             return True, []
 
-        required_integrations = [
-            spec
-            for spec in config_model.spec.integrations
-            if spec.required and spec.enabled
-        ]
+        required_integrations = [spec for spec in config_model.spec.integrations if spec.required and spec.enabled]
 
         logger.debug("Checking required integrations", count=len(required_integrations))
 
@@ -257,7 +249,9 @@ class IntegrationService:
             if integration and self.registry.is_integration_available(name):
                 return integration
 
-        logger.warning("No available integrations found with capability", capability=capability.__name__, checked=len(integrations))
+        logger.warning(
+            "No available integrations found with capability", capability=capability.__name__, checked=len(integrations)
+        )
         return None
 
     def is_integration_available(self, name: str) -> bool:

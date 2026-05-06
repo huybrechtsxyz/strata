@@ -176,7 +176,7 @@ class DestroyDeployCommand(BaseDeployCommand):
             return False
 
         # Pre-flight validation
-        for label, validate_fn in (
+        for _label, validate_fn in (
             ("workspace", deployer.validate_workspace),
             ("environment", deployer.validate_environment),
         ):

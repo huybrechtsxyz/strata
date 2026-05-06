@@ -73,9 +73,7 @@ class BaseDeployCommand(BaseCommand):
             return False
 
         # Phase 2: cross-validate against configuration
-        config_model = (
-            self._configuration_service.model if self._configuration_service else None
-        )
+        config_model = self._configuration_service.model if self._configuration_service else None
         ok, errors = deployment_service.validate(
             configuration_model=config_model,
             work_path=self._work_path,
@@ -118,16 +116,12 @@ class BaseDeployCommand(BaseCommand):
         from xyz_platform.utils.system import resolve_path
 
         if self._solution_controller.solution is None:
-            self._errors.append(
-                "Deploy requires an initialized workspace. Run `xyz solution init` first."
-            )
+            self._errors.append("Deploy requires an initialized workspace. Run `xyz solution init` first.")
             return None
 
         profile, _ = self._solution_controller.get_active_profile()
         if profile is None:
-            self._errors.append(
-                "Deploy requires an active profile. Run `xyz profile activate <name>`."
-            )
+            self._errors.append("Deploy requires an active profile. Run `xyz profile activate <name>`.")
             return None
 
         configfile_paths = profile.configfile_paths or []
@@ -149,16 +143,12 @@ class BaseDeployCommand(BaseCommand):
                 self.logger.debug("Config source skipped", name=str(entry.name), reason=str(exc))
                 continue
             if not resolved.exists():
-                self.logger.debug(
-                    "Config source not found", name=str(entry.name), path=str(resolved)
-                )
+                self.logger.debug("Config source not found", name=str(entry.name), path=str(resolved))
                 continue
             resolved_paths.append(str(resolved))
 
         if not resolved_paths:
-            self._errors.append(
-                "No configfile_paths resolved to existing files. Check your profile refs."
-            )
+            self._errors.append("No configfile_paths resolved to existing files. Check your profile refs.")
             return None
 
         try:
@@ -166,9 +156,7 @@ class BaseDeployCommand(BaseCommand):
             config_svc = ConfigurationService.get_instance()
             success, load_errors = config_svc.load_from_paths(resolved_paths)
             if not success:
-                self._errors.append(
-                    f"Failed to load configuration: {'; '.join(load_errors)}"
-                )
+                self._errors.append(f"Failed to load configuration: {'; '.join(load_errors)}")
                 return None
 
             self.logger.debug(

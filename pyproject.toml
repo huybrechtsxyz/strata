@@ -77,7 +77,6 @@ doc = [
     "sphinx-autoapi",
     "sphinx-toggleprompt",
     "sphinx-copybutton",
-    "sphinx-toolbox",
     "sphinx-rtd-theme",
     "myst_parser",
     "coverage-badge",

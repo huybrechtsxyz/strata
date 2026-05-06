@@ -34,9 +34,7 @@ class NamespaceReferenceModel(BaseModel):
         None,
         description="List of variable keys this namespace requires from environment",
     )
-    secrets: SecretRefs = Field(
-        None, description="List of secret keys this namespace requires from environment"
-    )
+    secrets: SecretRefs = Field(None, description="List of secret keys this namespace requires from environment")
     features: FeatureRefs = Field(
         None,
         description="List of feature flag keys this namespace requires from environment",
@@ -47,23 +45,17 @@ class NamespaceModuleModel(BaseModel):
     """Model for a namespace module (name, description, properties, lifecycle, labels, tags)."""
 
     name: PlatformName = Field(description="Unique module name within the namespace")
-    description: Optional[Annotated[str, StringConstraints(strip_whitespace=True)]] = (
-        Field(None, description="Optional description of what this module provides")
+    description: Optional[Annotated[str, StringConstraints(strip_whitespace=True)]] = Field(
+        None, description="Optional description of what this module provides"
     )
-    file: str = Field(
-        description="File reference for the module configuration or script"
-    )
+    file: str = Field(description="File reference for the module configuration or script")
 
 
 class NamespaceSpecModel(BaseModel):
     """Model for namespace spec (lifecycle, modules, validation)."""
 
-    lifecycle: Optional[CommonLifecycleModel] = Field(
-        None, description="Namespace lifecycle phases"
-    )
-    modules: Optional[List[NamespaceModuleModel]] = Field(
-        None, description="List of modules in the namespace"
-    )
+    lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Namespace lifecycle phases")
+    modules: Optional[List[NamespaceModuleModel]] = Field(None, description="List of modules in the namespace")
     references: Optional[NamespaceReferenceModel] = Field(
         None, description="Namespace references for variable and secret injection"
     )
@@ -94,9 +86,7 @@ class NamespaceSpecModel(BaseModel):
             module_names = [m.name for m in self.modules]
             duplicates = [name for name in module_names if module_names.count(name) > 1]
             if duplicates:
-                raise ValueError(
-                    f"Duplicate module names found: {', '.join(set(duplicates))}"
-                )
+                raise ValueError(f"Duplicate module names found: {', '.join(set(duplicates))}")
 
         return self
 
@@ -128,9 +118,5 @@ class NamespaceModel(BaseModel):
         frozen=True,
         description="Resource kind (always 'Namespace')",
     )
-    meta: NamespaceMetaModel = Field(
-        description="Namespace metadata (name, annotations, labels, tags)"
-    )
-    spec: NamespaceSpecModel = Field(
-        description="Namespace specification (lifecycle, modules, variables, secrets)"
-    )
+    meta: NamespaceMetaModel = Field(description="Namespace metadata (name, annotations, labels, tags)")
+    spec: NamespaceSpecModel = Field(description="Namespace specification (lifecycle, modules, variables, secrets)")
