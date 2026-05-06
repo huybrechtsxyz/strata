@@ -16,7 +16,6 @@
 - models: ✅
 - services: ✅
 - integrations: ✅
-
 - controllers: ✅
   - base_controller: ✅
   - value_controller: ✅
@@ -28,11 +27,15 @@
   - logging_controller: ✅
   - integration_controller: ✅
 
+- validators: ✅
+  - base_validator: ✅
+  - platform_validator: ✅
+
 - cli
 - builders
 - commands
 - deployers
-- validators
+
 
 ## Models
 
