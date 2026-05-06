@@ -293,12 +293,6 @@ xyz validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --deep
 Resolves `@repo-name/...` cross-references, checks that all referenced files exist,
 and validates values against the merged configuration.
 
-### ⚠️ Gap: no bulk/scan validation
-
-`validate` works on one file at a time. There is no `validate --all` or
-`validate scan` to check every YAML in the workspace at once. CI pipelines
-must call `validate` per file explicitly.
-
 ---
 
 ## Phase 6 — Build
@@ -330,6 +324,44 @@ Writes:
 
 ```bash
 xyz build clean -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+```
+
+### 6.4 Preview what build run would change
+
+```bash
+# Full plan: artifact diff + terraform plan per stage
+xyz build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+
+# Artifact diff only (no terraform required)
+xyz build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --artifacts-only
+
+# Limit terraform plan to one stage
+xyz build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
+```
+
+Nothing is written to `.platform/build/`. The command builds into a temp directory,
+diffs the result against the current on-disk build, then runs
+`terraform init → validate → plan` per stage.
+
+Sample output:
+
+```
+📋  Build Plan — xyz-deploy-prd
+  ────────────────────────────────────────────────────────────
+  Artifact changes:
+  ────────────────────────────────────────────────────────────
+  ~  terraform/xyz-dc-eu-fr.tfvars.json    3 line(s) changed
+  +  terraform/xyz-ns-base.tfvars.json     new file
+  =  platform.json                         no change
+
+  Terraform plan  [stage: xyz-dc-eu-fr]
+  ────────────────────────────────────────────────────────────
+  Plan: 2 to add, 1 to change, 0 to destroy.
+  ✅  Plan complete
+
+  ────────────────────────────────────────────────────────────
+  Artifacts: 1 new, 1 changed, 1 unchanged
+  Terraform: 1 stage(s) planned
 ```
 
 ### ⚠️ Gap: no change-plan diff
@@ -650,10 +682,11 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 
 ### Build
 
-| Command                               | Description                                 |
-| ------------------------------------- | ------------------------------------------- |
-| `xyz build run -f FILE [--dry-run]`   | Run the platform + Terraform build pipeline |
-| `xyz build clean -f FILE [--dry-run]` | Remove build artifacts                      |
+| Command                                                 | Description                                                     |
+| ------------------------------------------------------- | --------------------------------------------------------------- |
+| `xyz build run -f FILE [--dry-run]`                     | Run the platform + Terraform build pipeline                     |
+| `xyz build plan -f FILE [--stage S] [--artifacts-only]` | Artifact diff + terraform plan per stage (reads only, temp dir) |
+| `xyz build clean -f FILE [--dry-run]`                   | Remove build artifacts                                          |
 
 ### Deploy
 
@@ -676,9 +709,7 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 
 ## Known Gaps
 
-| Gap                                      | Priority | Workaround                                     |
-| ---------------------------------------- | -------- | ---------------------------------------------- |
-| No `build diff` / change-plan output     | High     | Use `--dry-run` + read Terraform plan manually |
-| No `validate --all` / bulk scan          | High     | Script individual `validate` calls per file    |
-| No `profile export` (merged env preview) | Medium   | Run `build run --dry-run` as a proxy           |
-| No `deploy approve` / gate workflow      | Medium   | Use `--force` or external gate tooling         |
+| Gap                                      | Priority | Workaround                             |
+| ---------------------------------------- | -------- | -------------------------------------- |
+| No `profile export` (merged env preview) | Medium   | Run `build run --dry-run` as a proxy   |
+| No `deploy approve` / gate workflow      | Medium   | Use `--force` or external gate tooling |
