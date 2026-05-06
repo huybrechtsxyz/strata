@@ -17,11 +17,20 @@
 - services: ✅
 - integrations: ✅
 
-- cli
+- controllers: ✅
+  - base_controller: ✅
+  - value_controller: ✅
+  - configuration_controller: ✅
+  - repository_controller: ✅ (covered via configuration_controller tests)
+  - solution_controller: ✅
+  - lifecycle_controller: ✅
+  - env_controller: ✅
+  - logging_controller: ✅
+  - integration_controller: ✅
+
 - cli
 - builders
 - commands
-- controllers
 - deployers
 - validators
 
