@@ -27,6 +27,7 @@ from xyz_platform.deployers.base_deployer import (
     STEP_DESTROY,
     STEP_OUTPUT,
     STEP_PLAN,
+    STEP_PLAN_DESTROY,
     STEP_SETUP,
     BaseDeployer,
 )
@@ -78,7 +79,7 @@ class TerraformDeployer(BaseDeployer):
         return "terraform"
 
     def get_supported_steps(self) -> List[str]:
-        return [STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY, STEP_DESTROY, STEP_OUTPUT]
+        return [STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY, STEP_DESTROY, STEP_PLAN_DESTROY, STEP_OUTPUT]
 
     # ------------------------------------------------------------------
     # Validation (pre-step guards)
@@ -278,6 +279,36 @@ class TerraformDeployer(BaseDeployer):
             return False, messages
 
         messages.append(f"\u2713 Stage '{self.stage.name}' destroyed successfully.")
+        return True, messages
+
+    def plan_destroy(self) -> Tuple[bool, List[str]]:
+        """terraform plan -destroy  (preview what destroy would remove)"""
+        messages: List[str] = []
+        if not self._ready(messages):
+            return False, messages
+        assert self._working_dir is not None
+        assert self._plan_file is not None
+        assert self._tf is not None
+
+        messages.append(f"terraform plan -destroy  \u2192 {self._plan_file.name}")
+
+        try:
+            ctx = inject_tf_vars(self.resolved_values) if self.resolved_values else nullcontext()
+            with ctx:
+                result = self._tf.plan(
+                    str(self._working_dir),
+                    out_file=str(self._plan_file),
+                    destroy=True,
+                )
+            if result.returncode != 0:
+                messages.append(f"terraform plan -destroy failed:\n{result.stderr}")
+                return False, messages
+            if self.verbose and result.stdout.strip():
+                messages.append(result.stdout.strip())
+        except RuntimeError as exc:
+            messages.append(f"terraform plan -destroy error: {exc}")
+            return False, messages
+
         return True, messages
 
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:

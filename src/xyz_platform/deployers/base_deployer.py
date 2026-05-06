@@ -15,6 +15,7 @@ STEP_CHECK = "check"
 STEP_PLAN = "plan"
 STEP_APPLY = "apply"
 STEP_DESTROY = "destroy"
+STEP_PLAN_DESTROY = "plan_destroy"
 STEP_OUTPUT = "output"
 
 
@@ -139,6 +140,15 @@ class BaseDeployer(ABC):
     @abstractmethod
     def destroy(self) -> Tuple[bool, List[str]]:
         """Destroy infrastructure resources (e.g. terraform destroy).
+
+        Returns:
+            (success, messages)
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def plan_destroy(self) -> Tuple[bool, List[str]]:
+        """Preview what destroy would remove (e.g. terraform plan -destroy).
 
         Returns:
             (success, messages)

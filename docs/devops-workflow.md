@@ -282,10 +282,24 @@ Runs per stage (in order): `terraform init` → `terraform validate` → `terraf
 xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --force
 ```
 
-### ⚠️ Gap: destroy is a stub
+### 7.5 Destroy (tear down infrastructure)
 
-`--destroy` flag is declared on `deploy run` but **not yet implemented** (marked TODO).
-Tearing down infrastructure currently requires running `terraform destroy` manually.
+Destroy is its own command — not a flag on `deploy run`.
+
+```bash
+# Preview what would be removed (safe — no changes)
+xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+
+# Tear down a single stage
+xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr --force
+
+# Tear down all stages (--force required — runs terraform destroy -auto-approve)
+xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --force
+```
+
+- `--dry-run` runs `terraform plan -destroy` — shows exactly what would be removed, writes nothing.
+- `--force` is required for the real destroy (enables `-auto-approve`).
+- Without `--force` and without `--dry-run`, the command exits with an error.
 
 ### ⚠️ Gap: no deploy status / history
 
@@ -470,22 +484,22 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 
 ### Deploy
 
-| Command                                                    | Description                 |
-| ---------------------------------------------------------- | --------------------------- |
-| `xyz deploy run -f FILE [--stage S] [--force] [--dry-run]` | Execute the deploy pipeline |
+| Command                                                        | Description                                                          |
+| -------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `xyz deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                          |
+| `xyz deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves |
 
 ---
 
 ## Known Gaps
 
-| Gap                                      | Priority     | Workaround                                     |
-| ---------------------------------------- | ------------ | ---------------------------------------------- |
-| `deploy run --destroy` is a stub (TODO)  | **Critical** | Run `terraform destroy` manually               |
-| No `deploy status` / deployment history  | High         | Check Terraform state directly                 |
-| No `build diff` / change-plan output     | High         | Use `--dry-run` + read Terraform plan manually |
-| No `validate --all` / bulk scan          | High         | Script individual `validate` calls per file    |
-| No `repo status` (git state inspection)  | Medium       | Use `git status` directly in each repo         |
-| No `profile export` (merged env preview) | Medium       | Run `build run --dry-run` as a proxy           |
-| No secrets management layer              | Medium       | Manage secret files manually outside the CLI   |
-| No `deploy approve` / gate workflow      | Medium       | Use `--force` or external gate tooling         |
-| No `init --from-template`                | Low          | Manually configure each new workspace          |
+| Gap                                      | Priority | Workaround                                     |
+| ---------------------------------------- | -------- | ---------------------------------------------- |
+| No `deploy status` / deployment history  | High     | Check Terraform state directly                 |
+| No `build diff` / change-plan output     | High     | Use `--dry-run` + read Terraform plan manually |
+| No `validate --all` / bulk scan          | High     | Script individual `validate` calls per file    |
+| No `repo status` (git state inspection)  | Medium   | Use `git status` directly in each repo         |
+| No `profile export` (merged env preview) | Medium   | Run `build run --dry-run` as a proxy           |
+| No secrets management layer              | Medium   | Manage secret files manually outside the CLI   |
+| No `deploy approve` / gate workflow      | Medium   | Use `--force` or external gate tooling         |
+| No `init --from-template`                | Low      | Manually configure each new workspace          |
