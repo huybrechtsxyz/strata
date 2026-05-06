@@ -1,0 +1,106 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: xyz_deploy
+  annotations:
+    description: Deployment configuration for Huybrechts XYZ Platform
+  labels:
+    environment: production
+    version: "1.0.0"
+  tags: [ "platform", "infrastructure", "kamatera" ]
+spec:
+  deployment:
+    environment: prd
+
+  workspace:
+    name: xyz_platform
+    description: Huybrechts XYZ Platform Workspace
+    file: config/xyz/workspaces/xyz-platform.yaml
+
+  configurations: null
+
+  environments:
+    - deploy/xyz/envs/xyz-env-prd.yaml
+
+  approvals:
+    type: auto
+
+  stages:
+    # Infrastructure provisioning stage - uses Terraform via convention
+    - name: infrastructure
+      type: infrastructure # Convention: auto-selects Terraform provisioner
+      scope: all
+      depends_on: null
+      on_failure: stop
+      variables:
+        - key: infra_region
+          store: constant
+          value: "eu-de"
+        - key: infra_tier
+          store: constant
+          value: "production"
+      secrets:
+        - key: cloud_api_token
+          store: azure_keyvault
+          value: "kamatera_api_token"
+      features:
+        - key: enable_monitoring
+          store: constant
+          value: true
+
+    # Configuration stage - uses Script provisioner via convention
+    - name: configuration
+      type: configuration # Convention: auto-selects Script provisioner
+      scope: all
+      depends_on: [ "infrastructure" ]
+      on_failure: stop
+      scripts:
+        description: "Post-provisioning configuration scripts"
+        scripts:
+          - tests/data/scripts/deploy_setup.ps1
+          - tests/data/scripts/deploy_check.ps1
+
+    # Application deployment stage
+    - name: application
+      type: application # Convention: auto-selects Script provisioner
+      scope: all
+      depends_on: [ "configuration" ]
+      on_failure: rollback
+
+    # Verification stage - validate deployment
+    - name: verification
+      type: verification # Convention: auto-selects Script provisioner
+      scope: all
+      depends_on: [ "application" ]
+      on_failure: stop
+      scripts:
+        description: "Deployment validation tests"
+        scripts:
+          - tests/data/scripts/deploy_output.ps1
+
+  lifecycle:
+    root:
+      deploy_setup:
+        description: "Initialize deployment environment"
+        scripts:
+          - tests/data/scripts/deploy_setup.ps1
+      deploy_check:
+        description: "Validate deployment prerequisites"
+        scripts:
+          - tests/data/scripts/deploy_check.ps1
+      deploy_plan:
+        description: "Generate deployment plan"
+        scripts:
+          - tests/data/scripts/deploy_plan.ps1
+      deploy_apply:
+        description: "Execute deployment"
+        scripts:
+          - tests/data/scripts/deploy_apply.ps1
+      deploy_output:
+        description: "Display deployment outputs"
+        scripts:
+          - tests/data/scripts/deploy_output.ps1
+      deploy_destroy:
+        description: "Destroy deployment resources"
+        scripts:
+          - tests/data/scripts/deploy_destroy.ps1
