@@ -34,7 +34,7 @@ FIREWALL_FOLDER = os.path.join(
 FIREWALL_VALID_FILES = [
     os.path.join(FIREWALL_FOLDER, "firewall-standard.yaml"),
     os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "xyz_configuration", "stack", "xyz-fw-base.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "config", "xyz-configuration", "stack", "xyz-fw-base.yaml"
     ),
 ]
 

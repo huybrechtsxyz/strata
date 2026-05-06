@@ -28,13 +28,13 @@ RESOURCE_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "r
 RESOURCE_VALID_FILES = [
     os.path.join(RESOURCE_FOLDER, "resource-standard.yaml"),
     os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "xyz_configuration", "stack", "xyz-rx-vm-infra.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "config", "xyz-configuration", "stack", "xyz-rx-vm-infra.yaml"
     ),
     os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "xyz_configuration", "stack", "xyz-rx-vm-manager.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "config", "xyz-configuration", "stack", "xyz-rx-vm-manager.yaml"
     ),
     os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "xyz_configuration", "stack", "xyz-rx-vm-worker.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "config", "xyz-configuration", "stack", "xyz-rx-vm-worker.yaml"
     ),
 ]
 

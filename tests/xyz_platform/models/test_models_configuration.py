@@ -31,7 +31,7 @@ SCRIPTS_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "sc
 CONFIGURATION_VALID_FILES = [
     os.path.join(CONFIGURATION_FOLDER, "configuration-standard.yaml"),
     os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "xyz_configuration", "config", "xyz-config.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "config", "xyz-configuration", "config", "xyz-config.yaml"
     ),
 ]
 

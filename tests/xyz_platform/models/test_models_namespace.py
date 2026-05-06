@@ -28,7 +28,7 @@ NAMESPACES_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", 
 NAMESPACES_VALID_FILES = [
     os.path.join(NAMESPACES_FOLDER, "namespace-standard.yaml"),
     os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "xyz_configuration", "stack", "xyz-ns-base.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "config", "xyz-configuration", "stack", "xyz-ns-base.yaml"
     ),
 ]
 
