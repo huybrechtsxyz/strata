@@ -108,6 +108,23 @@ xyz repo sync --force
 xyz repo list
 ```
 
+### 2.4 Check git state of all repos
+
+```bash
+# All registered repos
+xyz repo status
+
+# Single repo
+xyz repo status --name xyz-infrastructure
+
+# Include individual changed files
+xyz repo status --verbose
+```
+
+Shows current branch, tracking remote, ahead/behind counts, and a clean/dirty
+summary for each repo that has been cloned.  Repos not yet on disk show as
+``not cloned``.
+
 ---
 
 ## Phase 3 — Set Up Profiles
@@ -527,6 +544,7 @@ Valid keys: `output`, `verbose`, `quiet`, `work_path`
 | --------------------------------------------------------- | --------------------------------------------- |
 | `xyz repo add NAME URL [--branch B] [--path P] [--clone]` | Register a repo; `--clone` clones immediately |
 | `xyz repo list [--name NAME]`                             | List registered repos                         |
+| `xyz repo status [--name NAME]`                           | Show git state (branch, dirty, ahead/behind)  |
 | `xyz repo remove NAME [--purge]`                          | Remove a repo (`--purge` deletes from disk)   |
 | `xyz repo sync [--name NAME] [--force]`                   | Clone / pull registered repos                 |
 
@@ -582,7 +600,6 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 | ---------------------------------------- | -------- | ---------------------------------------------- |
 | No `build diff` / change-plan output     | High     | Use `--dry-run` + read Terraform plan manually |
 | No `validate --all` / bulk scan          | High     | Script individual `validate` calls per file    |
-| No `repo status` (git state inspection)  | Medium   | Use `git status` directly in each repo         |
 | No `profile export` (merged env preview) | Medium   | Run `build run --dry-run` as a proxy           |
 | No secrets management layer              | Medium   | Manage secret files manually outside the CLI   |
 | No `deploy approve` / gate workflow      | Medium   | Use `--force` or external gate tooling         |

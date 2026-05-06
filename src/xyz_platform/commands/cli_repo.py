@@ -14,6 +14,7 @@ from xyz_platform.commands.cli_common import (
 from xyz_platform.commands.repo.add_repo_solution_command import AddRepoSolutionCommand
 from xyz_platform.commands.repo.list_repo_solution_command import ListRepoSolutionCommand
 from xyz_platform.commands.repo.remove_repo_solution_command import RemoveRepoSolutionCommand
+from xyz_platform.commands.repo.status_repo_solution_command import StatusRepoSolutionCommand
 from xyz_platform.commands.repo.sync_repo_solution_command import SyncRepoSolutionCommand
 
 
@@ -168,6 +169,36 @@ def repo_sync(
         output=output,
         verbose=verbose,
         quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@repo_group.command(name="status", help="Show git state for all (or one) registered repositories.")
+@click.option(
+    "--name",
+    default=None,
+    metavar="NAME",
+    help="Inspect a single registered repository by name.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def repo_status(
+    name: Optional[str] = None,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Show git working-tree state for registered repositories."""
+    command = StatusRepoSolutionCommand(
+        name=name,
+        work_path=work_path,
+        output=output,
+        verbose=verbose or False,
+        quiet=quiet or False,
     )
     success = command.execute()
     handle_command_exit(command, success)

@@ -1,6 +1,7 @@
 """Git integration for repository operations."""
 
 import re
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 from xyz_platform.integrations.base_integration import BaseIntegration
@@ -324,3 +325,146 @@ class GitIntegration(BaseIntegration):
                 name=self.integration_name,
             )
             return None
+
+    def status(self, working_dir: str, timeout: int = 30) -> Tuple[bool, "GitStatusResult"]:
+        """Return the working-tree status of a repository.
+
+        Args:
+            working_dir: Git repository directory.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            ``(is_git_repo, GitStatusResult)``
+        """
+        available, _ = self.ensure_available()
+        if not available:
+            return False, GitStatusResult()
+
+        try:
+            # Porcelain v1 — machine-readable, one line per changed file
+            result = self._run_integration(
+                ["status", "--porcelain", "-b"],
+                cwd=working_dir,
+                timeout=timeout,
+            )
+            if result.returncode != 0:
+                return False, GitStatusResult()
+            return True, _parse_porcelain_status(result.stdout)
+        except Exception as e:
+            logger.debug(
+                "Failed to get git status",
+                working_dir=working_dir,
+                error=str(e),
+                name=self.integration_name,
+            )
+            return False, GitStatusResult()
+
+    def get_remote_url(self, working_dir: str, remote: str = "origin", timeout: int = 15) -> Optional[str]:
+        """Return the fetch URL for a remote.
+
+        Args:
+            working_dir: Git repository directory.
+            remote: Remote name (default ``origin``).
+            timeout: Command timeout in seconds.
+
+        Returns:
+            Remote URL string, or ``None`` if not found.
+        """
+        available, _ = self.ensure_available()
+        if not available:
+            return None
+
+        try:
+            result = self._run_integration(
+                ["remote", "get-url", remote],
+                cwd=working_dir,
+                timeout=timeout,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip() or None
+            return None
+        except Exception as e:
+            logger.debug(
+                "Failed to get remote URL",
+                working_dir=working_dir,
+                remote=remote,
+                error=str(e),
+                name=self.integration_name,
+            )
+            return None
+
+
+# ---------------------------------------------------------------------------
+# Supporting data types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class GitStatusResult:
+    """Parsed result of ``git status --porcelain -b``."""
+
+    branch: Optional[str] = None
+    tracking: Optional[str] = None
+    ahead: int = 0
+    behind: int = 0
+    staged: List[str] = field(default_factory=list)
+    unstaged: List[str] = field(default_factory=list)
+    untracked: List[str] = field(default_factory=list)
+    conflicted: List[str] = field(default_factory=list)
+
+    @property
+    def is_clean(self) -> bool:
+        return not (self.staged or self.unstaged or self.untracked or self.conflicted)
+
+    @property
+    def is_dirty(self) -> bool:
+        return not self.is_clean
+
+
+def _parse_porcelain_status(output: str) -> "GitStatusResult":
+    """Parse ``git status --porcelain -b`` output into a :class:`GitStatusResult`."""
+    result = GitStatusResult()
+    lines = output.splitlines()
+    if not lines:
+        return result
+
+    # First line: ## branch...tracking [ahead N] [behind N]
+    header = lines[0]
+    if header.startswith("## "):
+        branch_info = header[3:]
+        # Split branch and tracking
+        if "..." in branch_info:
+            branch_part, tracking_part = branch_info.split("...", 1)
+            result.branch = branch_part.strip()
+            # tracking_part may contain "[ahead N, behind M]" etc.
+            tracking_name = re.split(r"\s+\[", tracking_part)[0].strip()
+            result.tracking = tracking_name or None
+            # Ahead / behind counts
+            m_ahead = re.search(r"\bahead\s+(\d+)", tracking_part)
+            m_behind = re.search(r"\bbehind\s+(\d+)", tracking_part)
+            if m_ahead:
+                result.ahead = int(m_ahead.group(1))
+            if m_behind:
+                result.behind = int(m_behind.group(1))
+        else:
+            result.branch = branch_info.strip()
+
+    conflict_codes = {"AA", "UU", "DD", "AU", "UA", "DU", "UD"}
+
+    for line in lines[1:]:
+        if len(line) < 2:
+            continue
+        xy = line[:2]
+        path = line[3:]
+        if xy == "??":
+            result.untracked.append(path)
+        elif xy in conflict_codes:
+            result.conflicted.append(path)
+        else:
+            x, y = xy[0], xy[1]
+            if x != " " and x != "?":
+                result.staged.append(path)
+            if y != " " and y != "?":
+                result.unstaged.append(path)
+
+    return result
