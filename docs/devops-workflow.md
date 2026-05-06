@@ -236,11 +236,6 @@ xyz ref configfile list --profile prd
 xyz ref configfile show global-config --profile prd    # preview the file content
 ```
 
-### ⚠️ Gap: no merged-env preview
-
-There is no `xyz profile export` or `xyz env show` command that shows all refs
-deep-merged as the build would see them. To debug merge issues you must run a full build.
-
 ### 4.5 Inspect resolved values for a deployment
 
 Before building or deploying you can verify which concrete values the CLI would
@@ -741,10 +736,4 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 | `xyz values list -f FILE [--type T] [--show-store] [--unresolved]` | List all variables / secrets (masked) / feature flags                |
 | `xyz values get  -f FILE KEY [KEY …]`                              | Retrieve full resolved value(s) for specific keys (secrets revealed) |
 
----
 
-## Known Gaps
-
-| Gap                                      | Priority | Workaround                           |
-| ---------------------------------------- | -------- | ------------------------------------ |
-| No `profile export` (merged env preview) | Medium   | Run `build run --dry-run` as a proxy |
