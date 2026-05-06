@@ -31,8 +31,13 @@
   - base_validator: ✅
   - platform_validator: ✅
 
+- builders: ✅
+  - base_builder: ✅
+  - platform_builder: ✅
+  - terraform_builder: ✅
+
 - cli
-- builders
+
 - commands
 - deployers
 
