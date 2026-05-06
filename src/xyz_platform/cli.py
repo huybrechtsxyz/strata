@@ -26,6 +26,7 @@ from pathlib import Path
 import click
 import yaml
 
+from xyz_platform.commands.cli_builders import build as build_group
 from xyz_platform.commands.cli_clean import clean_command
 from xyz_platform.commands.cli_config import config_group
 from xyz_platform.commands.cli_help import help_command
@@ -162,6 +163,7 @@ main.add_command(repo_group, name="repo")
 main.add_command(profile_group, name="profile")
 main.add_command(ref_group, name="ref")
 main.add_command(validate_command, name="validate")
+main.add_command(build_group, name="build")
 
 #
 # ENTRY POINT
