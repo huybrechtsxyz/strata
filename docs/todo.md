@@ -6,6 +6,19 @@
 
 ---
 
+## My TODO
+
+- utils
+- builders
+- commands
+- controllers
+- deployers
+- exceptions
+- integrations
+- models
+- services
+- validators
+
 ## Models
 
 ### `common_models.py`
