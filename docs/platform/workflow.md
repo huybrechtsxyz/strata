@@ -107,7 +107,17 @@ spec:
         envfile:
           - name: prd-env
             path: "@xyz-config/environments/xyz-env-prd.yaml"
+  approvals:
+    approvers:
+      platform-team:
+        type: github-team
+        value: "org/platform-team"
+      devops-lead:
+        type: user
+        value: "devops@company.com"
 ```
+
+> **Note:** `spec.approvals` in a workspace template is metadata only — it declares default approvers for deployments initialized from this template. Enforcement is handled by your CI/CD system. See §7.9 for the full approvals schema.
 
 - `--from-template` accepts any local path (absolute or relative to `--work-path`).
 - Remote / `@repo-name/...` template references are **not** supported — the file must be on disk before `init` runs.
