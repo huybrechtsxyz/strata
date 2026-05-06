@@ -10,14 +10,22 @@ from xyz_platform.models.integration_model import IntegrationModel
 
 class ConcreteA(BaseIntegration):
     COMMAND = "tool_a"
-    def get_version_command(self): return ["tool_a", "--version"]
-    def parse_version(self, o): return o.strip()
+
+    def get_version_command(self):
+        return ["tool_a", "--version"]
+
+    def parse_version(self, o):
+        return o.strip()
 
 
 class ConcreteB(BaseIntegration):
     COMMAND = "tool_b"
-    def get_version_command(self): return ["tool_b", "--version"]
-    def parse_version(self, o): return o.strip()
+
+    def get_version_command(self):
+        return ["tool_b", "--version"]
+
+    def parse_version(self, o):
+        return o.strip()
 
 
 def _cfg(name="test", itype="tool_a") -> IntegrationModel:

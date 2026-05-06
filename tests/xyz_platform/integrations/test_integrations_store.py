@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Integration tests verifying capability protocol compliance across store integrations."""
 
-
 from xyz_platform.integrations.azure_appconfig import AzureAppConfigIntegration
 from xyz_platform.integrations.azure_keyvault import AzureKeyVaultIntegration
 from xyz_platform.integrations.base_integration import BaseIntegration

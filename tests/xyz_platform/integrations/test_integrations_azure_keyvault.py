@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for AzureKeyVaultIntegration."""
 
-
 from xyz_platform.integrations.azure_keyvault import AzureKeyVaultIntegration
 from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.integrations.capabilities import ISecretStore

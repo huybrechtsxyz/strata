@@ -12,8 +12,12 @@ def _cfg(name="store", itype="custom_store") -> IntegrationModel:
 
 class ConcreteStore(StoreIntegration):
     COMMAND = "echo"
-    def get_version_command(self): return ["echo", "--version"]
-    def parse_version(self, o): return o.strip()
+
+    def get_version_command(self):
+        return ["echo", "--version"]
+
+    def parse_version(self, o):
+        return o.strip()
 
 
 class TestStoreIntegrationDefaults:

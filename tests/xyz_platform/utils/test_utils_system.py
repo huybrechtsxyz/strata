@@ -160,9 +160,7 @@ class TestRunCommand:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Use Python to print working directory (cross-platform)
-            result = run_command(
-                ["python", "-c", "import os; print(os.getcwd())"], cwd=tmpdir
-            )
+            result = run_command(["python", "-c", "import os; print(os.getcwd())"], cwd=tmpdir)
             assert result.is_successful
             # The output should contain the temp directory path
             assert tmpdir.replace("\\", "/") in result.stdout.replace("\\", "/")

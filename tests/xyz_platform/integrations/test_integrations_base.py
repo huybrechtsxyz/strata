@@ -10,6 +10,7 @@ from xyz_platform.models.integration_model import IntegrationModel
 # Concrete subclass for testing (not abstract)
 # ---------------------------------------------------------------------------
 
+
 class ConcreteIntegration(BaseIntegration):
     COMMAND = "echo"
 
@@ -27,6 +28,7 @@ def _make_config(name="test", itype="echo", **kwargs) -> IntegrationModel:
 # ---------------------------------------------------------------------------
 # Singleton behaviour
 # ---------------------------------------------------------------------------
+
 
 class TestBaseIntegrationSingleton:
     def setup_method(self):
@@ -50,6 +52,7 @@ class TestBaseIntegrationSingleton:
 # Initialisation attributes
 # ---------------------------------------------------------------------------
 
+
 class TestBaseIntegrationInit:
     def setup_method(self):
         BaseIntegration._instances.clear()
@@ -71,8 +74,11 @@ class TestBaseIntegrationInit:
 
     def test_command_fallback_to_type_when_no_class_attr(self):
         class NoCommandIntegration(BaseIntegration):
-            def get_version_command(self): return ["mytool", "--version"]
-            def parse_version(self, o): return o.strip()
+            def get_version_command(self):
+                return ["mytool", "--version"]
+
+            def parse_version(self, o):
+                return o.strip()
 
         cfg = _make_config(itype="mytool")
         i = NoCommandIntegration(cfg)
@@ -89,6 +95,7 @@ class TestBaseIntegrationInit:
 # _get_command_from_config: validation.command path
 # ---------------------------------------------------------------------------
 
+
 class TestGetCommandFromConfig:
     def setup_method(self):
         BaseIntegration._instances.clear()
@@ -97,8 +104,11 @@ class TestGetCommandFromConfig:
         from xyz_platform.models.integration_model import IntegrationValidationSpecModel
 
         class CustomIntegration(BaseIntegration):
-            def get_version_command(self): return ["customtool", "--version"]
-            def parse_version(self, o): return o.strip()
+            def get_version_command(self):
+                return ["customtool", "--version"]
+
+            def parse_version(self, o):
+                return o.strip()
 
         cfg = _make_config(
             itype="customtool",
@@ -111,6 +121,7 @@ class TestGetCommandFromConfig:
 # ---------------------------------------------------------------------------
 # _get_env_var / _resolve_env_vars
 # ---------------------------------------------------------------------------
+
 
 class TestEnvVarHelpers:
     def setup_method(self):
@@ -149,6 +160,7 @@ class TestEnvVarHelpers:
 # ---------------------------------------------------------------------------
 # is_available / get_version
 # ---------------------------------------------------------------------------
+
 
 class TestAvailabilityAndVersion:
     def setup_method(self):
@@ -202,6 +214,7 @@ class TestAvailabilityAndVersion:
 # validate_version
 # ---------------------------------------------------------------------------
 
+
 class TestValidateVersion:
     def setup_method(self):
         BaseIntegration._instances.clear()
@@ -215,6 +228,7 @@ class TestValidateVersion:
 
     def test_version_meets_minimum(self):
         from xyz_platform.models.integration_model import IntegrationValidationSpecModel
+
         cfg = _make_config(validation=IntegrationValidationSpecModel(command="echo --version", min_version="1.0.0"))
         i = ConcreteIntegration(cfg)
         i._is_available = True
@@ -225,6 +239,7 @@ class TestValidateVersion:
 
     def test_version_below_minimum_fails(self):
         from xyz_platform.models.integration_model import IntegrationValidationSpecModel
+
         cfg = _make_config(validation=IntegrationValidationSpecModel(command="echo --version", min_version="3.0.0"))
         i = ConcreteIntegration(cfg)
         i._is_available = True
@@ -236,6 +251,7 @@ class TestValidateVersion:
 
     def test_version_above_maximum_fails(self):
         from xyz_platform.models.integration_model import IntegrationValidationSpecModel
+
         cfg = _make_config(validation=IntegrationValidationSpecModel(command="echo --version", max_version="1.9.9"))
         i = ConcreteIntegration(cfg)
         i._is_available = True
@@ -249,6 +265,7 @@ class TestValidateVersion:
 # ---------------------------------------------------------------------------
 # get_info
 # ---------------------------------------------------------------------------
+
 
 class TestGetInfo:
     def setup_method(self):
@@ -269,6 +286,7 @@ class TestGetInfo:
 # ---------------------------------------------------------------------------
 # _run_integration
 # ---------------------------------------------------------------------------
+
 
 class TestRunIntegration:
     def setup_method(self):

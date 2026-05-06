@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for AzureAppConfigIntegration."""
 
-
 from xyz_platform.integrations.azure_appconfig import AzureAppConfigIntegration
 from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.integrations.capabilities import IFeatureStore, IVariableStore

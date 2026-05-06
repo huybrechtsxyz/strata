@@ -44,9 +44,10 @@ $failed = @()
 # ── 1. Ruff lint ────────────────────────────────────────────────────────────
 Write-Host "[*] Ruff lint..." -ForegroundColor Blue
 if ($Fix) {
-    uv run ruff check --fix ./src
-} else {
-    uv run ruff check ./src
+    uv run ruff check --fix ./src ./tests
+}
+else {
+    uv run ruff check ./src ./tests
 }
 if ($LASTEXITCODE -ne 0) { $failed += "ruff lint" }
 Write-Host ""
@@ -54,9 +55,10 @@ Write-Host ""
 # ── 2. Ruff format ──────────────────────────────────────────────────────────
 Write-Host "[*] Ruff format..." -ForegroundColor Blue
 if ($Fix) {
-    uv run ruff format ./src
-} else {
-    uv run ruff format --check ./src
+    uv run ruff format ./src ./tests
+}
+else {
+    uv run ruff format --check ./src ./tests
 }
 if ($LASTEXITCODE -ne 0) { $failed += "ruff format" }
 Write-Host ""
@@ -73,7 +75,8 @@ if ($failed.Count -eq 0) {
     Write-Host "[+] All checks passed!" -ForegroundColor Green
     Write-Host "[+] ================================================" -ForegroundColor Cyan
     exit 0
-} else {
+}
+else {
     Write-Host "[!] ================================================" -ForegroundColor Red
     Write-Host "[!] The following checks failed:" -ForegroundColor Red
     $failed | ForEach-Object { Write-Host "    - $_" -ForegroundColor Red }
