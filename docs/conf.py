@@ -18,7 +18,6 @@ release = "0.0.1"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = [
     "sphinx.ext.autodoc",
-    "autoapi.extension",
     "sphinx.ext.autosummary",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",
@@ -122,6 +121,3 @@ repo_dir = Path(os.getenv("REPO_DIR", default_repo))
 project_name = Path(repo_dir).name
 project_name = os.getenv("PROJECT", project_name)
 python_package_name = project_name.replace("-", "_")
-
-autoapi_dirs = [str(repo_dir / "src" / python_package_name)]
-autoapi_generate_api_docs = False

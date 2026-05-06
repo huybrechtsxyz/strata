@@ -60,10 +60,10 @@ xyz_platform
    config/namespace
 
 .. toctree::
-   :maxdepth: 4
-   :caption: API Reference:
+   :maxdepth: 2
+   :caption: CLI Reference:
 
-   autoapi.rst
+   platform/commands
 
 .. :orphan:
 
