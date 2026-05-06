@@ -24,7 +24,7 @@ spec:
         pattern: "^[a-z][a-z0-9-]*$"
         required: true
         description: "Customer identifier"
-  
+
   properties:
     deployment_manifests:
       source:
@@ -41,6 +41,12 @@ spec:
 
   providers:
     - name: azure_westeurope
+      description: Azure West Europe provider for development
       backend: terraform
       type: azure
       region: westeurope
+      regions:
+        - westeurope
+        - northeurope
+      additional_regions: true
+      additional_resources: true

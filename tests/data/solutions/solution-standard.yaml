@@ -1,0 +1,41 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: solution
+meta:
+  name: xyz-platform-workspace
+  annotations:
+    description: Standard xyz-platform workspace solution
+  labels:
+    version: "1.0.0"
+spec:
+  solution_id: "550e8400-e29b-41d4-a716-446655440000"
+  repositories:
+    - name: xyz-config
+      url: "git@github.com:org/xyz-config.git"
+      path: repos/xyz-config
+      type: config
+      branch: main
+    - name: xyz-infrastructure
+      url: "git@github.com:org/xyz-infrastructure.git"
+      path: repos/xyz-infrastructure
+      type: infrastructure
+      branch: main
+  profiles:
+    - name: prd
+      active: true
+      configfile_paths:
+        - name: global-config
+          path: "@xyz-config/config/xyz-config.yaml"
+          type: config
+        - name: logging-config
+          path: "@xyz-config/config/xyz-logging.yaml"
+          type: config
+      envfile_paths:
+        - name: prd-env
+          path: "@xyz-config/environments/xyz-env-prd.yaml"
+          type: dotenv
+    - name: dev
+      active: false
+      configfile_paths:
+        - name: global-config
+          path: "@xyz-config/config/xyz-config.yaml"
+          type: config

@@ -25,7 +25,7 @@ spec:
         pattern: "^[a-z][a-z0-9-]*$"
         required: true
         description: "Customer identifier"
-  
+
   properties:
     deployment_manifests:
       source:
@@ -40,7 +40,7 @@ spec:
       - azure_keyvault
       - bitwarden
       - hashicorp_vault
-    
+
     # Production: Allow all variable stores (including constant for non-sensitive config)
     allowed_variable_stores:
       - constant
@@ -48,7 +48,7 @@ spec:
       - azure_appconfig
       - hashicorp_consul
       - hashicorp_vault
-    
+
     # Production: Allow all feature stores
     allowed_feature_stores:
       - constant
@@ -57,6 +57,11 @@ spec:
 
   providers:
     - name: azure_westeurope
+      description: Azure West Europe provider for production
       backend: terraform
       type: azure
       region: westeurope
+      regions:
+        - westeurope
+      additional_regions: false
+      additional_resources: true

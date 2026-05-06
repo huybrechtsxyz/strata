@@ -1,0 +1,51 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: platform_prd_approved
+  annotations:
+    description: Deployment with approval metadata declared for all stages
+  labels:
+    version: "1.0.0"
+    environment: "production"
+spec:
+  layers:
+    environment: prod
+
+  workspace:
+    name: example_xyz_workspace
+    description: Standard xyz workspace
+    file: tests/data/workspaces/workspace-standard.yaml
+  environments:
+    - tests/data/environments/environment-standard.yaml
+
+  # Approval metadata — enforcement is done by CI/CD system, not the CLI.
+  # Empty approvers dict is silently treated as no gate.
+  approvals:
+    approvers:
+      platform-team:
+        type: github-team
+        value: "org/platform-team"
+      devops-lead:
+        type: user
+        value: "devops@example.com"
+      ado-approvers:
+        type: ado-group
+        value: "Platform-Approvers"
+
+  stages:
+    - name: staging
+      type: infrastructure
+      # No approval override — all spec-level approvers apply
+
+    - name: production
+      type: infrastructure
+      # Stage-level override — only these approvers apply to this stage
+      approval:
+        approvers:
+          - platform-team
+          - ado-approvers
+
+  configurations:
+    - name: configuration
+      description: Standard configuration
+      file: tests/data/configurations/configuration-standard.yaml
