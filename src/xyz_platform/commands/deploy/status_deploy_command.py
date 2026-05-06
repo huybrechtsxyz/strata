@@ -1,6 +1,5 @@
-"""Command to report live Terraform outputs, saved plan details, and deploy history."""
+"""Command to report live Terraform outputs and saved plan details for a deployment."""
 
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
@@ -10,14 +9,11 @@ from xyz_platform.deployers.terraform_deployer import TerraformDeployer
 from xyz_platform.models.common_models import ProvisionerType
 from xyz_platform.models.deployment_model import DeploymentStageModel
 
-# Deploy operations to include in history scans
-_DEPLOY_OPERATIONS = {"deploy_run", "deploy_destroy"}
-
 
 class StatusDeployCommand(BaseDeployCommand):
     """Report deployment status for a deployment definition.
 
-    Three modes (select with flags; default = live outputs):
+    Two modes (select with flags; default = live outputs):
 
     Default (no flags)
         For each stage: runs ``terraform output -json`` → prints live
@@ -28,9 +24,7 @@ class StatusDeployCommand(BaseDeployCommand):
         ``deploy run --dry-run`` and shows a human-readable change summary
         (``terraform show -json <plan>``).  No network calls to the backend.
 
-    ``--history``
-        Scans ``.platform/logs/`` for entries from ``deploy_run`` and
-        ``deploy_destroy`` operations and shows a table of past executions.
+    For execution history use ``xyz deploy history``.
     """
 
     OPERATION = "deploy_status"
@@ -41,8 +35,6 @@ class StatusDeployCommand(BaseDeployCommand):
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
         show_plan: bool = False,
-        show_history: bool = False,
-        lines: int = 50,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -56,8 +48,6 @@ class StatusDeployCommand(BaseDeployCommand):
         )
         self._stage = stage
         self._show_plan = show_plan
-        self._show_history = show_history
-        self._history_lines = lines
 
     # -------------------------------------------------------------------------
     # Entry point
@@ -70,12 +60,6 @@ class StatusDeployCommand(BaseDeployCommand):
                     click.echo("\n❌  Initialization failed")
                 self._finalize(success=False)
                 return False
-
-            # History mode does not need the deployment file
-            if self._show_history:
-                ok = self._run_history()
-                self._finalize(success=ok)
-                return ok
 
             if not self._before_execute():
                 if self._is_console_output():
@@ -265,82 +249,6 @@ class StatusDeployCommand(BaseDeployCommand):
                 click.echo(f"         {addr}  [{', '.join(actions)}]")
 
         click.echo()
-
-    # -------------------------------------------------------------------------
-    # Mode: history
-    # -------------------------------------------------------------------------
-
-    def _run_history(self) -> bool:
-        if self._is_console_output():
-            click.echo("\n📜  Deploy history (from workspace logs)…\n")
-
-        ok, entries, errors = self._solution_controller.get_logs(
-            work_path=self._work_path,
-            lines=self._history_lines * 20,  # over-fetch; we filter below
-        )
-        self._errors.extend(errors)
-        if not ok:
-            return False
-
-        # Keep only deploy start/finish events
-        deploy_events = [
-            e
-            for e in entries
-            if e.get("command") in _DEPLOY_OPERATIONS
-            or e.get("operation") in _DEPLOY_OPERATIONS
-            or (e.get("event", "").startswith("Command execution") and e.get("command", "") in _DEPLOY_OPERATIONS)
-        ]
-
-        # Group by execution_id → last entry per execution (has success/fail info)
-        by_exec: Dict[str, Dict[str, Any]] = {}
-        for e in deploy_events:
-            eid = e.get("execution_id", "")
-            if eid:
-                by_exec[eid] = e  # later entries overwrite; last = finalize event
-
-        history: List[Dict[str, Any]] = []
-        for eid, entry in by_exec.items():
-            ts_raw = entry.get("timestamp", "")
-            try:
-                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
-            except (ValueError, TypeError):
-                ts = ts_raw[:16] if ts_raw else "?"
-
-            history.append(
-                {
-                    "when": ts,
-                    "operation": entry.get("command", entry.get("operation", "?")),
-                    "execution_id": eid,
-                    "success": entry.get("success"),
-                }
-            )
-
-        history.sort(key=lambda r: r["when"], reverse=True)
-        history = history[: self._history_lines]
-
-        self._output_data = {
-            "mode": "history",
-            "total": len(history),
-            "entries": history,
-        }
-
-        if self._is_console_output():
-            if not history:
-                click.echo("  (no deploy history found in workspace logs)")
-                click.echo("  Tip: logs are written to .platform/logs/ — older runs may have been cleaned.")
-            else:
-                click.echo(f"  {'WHEN':<18}  {'OPERATION':<20}  {'RESULT'}")
-                click.echo("  " + "-" * 55)
-                for row in history:
-                    result = (
-                        "✅ success" if row["success"] is True else "❌ failed" if row["success"] is False else "  —"
-                    )
-                    click.echo(f"  {row['when']:<18}  {row['operation']:<20}  {result}")
-                    if self._is_verbose():
-                        click.echo(f"  {'':18}  id: {row['execution_id']}")
-            click.echo()
-
-        return True
 
     # -------------------------------------------------------------------------
     # Deployer factory (identical to RunDeployCommand)

@@ -320,7 +320,8 @@ xyz deploy status --history --lines 20
 
 - Default (no flags): runs `terraform output -json` per stage — shows live endpoint URLs, resource IDs, etc.
 - `--plan`: reads the `.tfplan` written by the last `deploy run --dry-run`. Shows resource add/change/destroy counts. No network required.
-- `--history`: scans `.platform/logs/` for `deploy_run` and `deploy_destroy` events. File not required.
+
+For execution history use `xyz deploy history`.
 
 ### 7.7 Health checks
 
@@ -364,6 +365,28 @@ xyz deploy health -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --
 
 - Stages without `health_checks` are silently skipped.
 - Exit code `3` if any check fails; `0` if all pass.
+
+### 7.8 Execution history
+
+```bash
+# All deploy operations (newest first)
+xyz deploy history
+
+# Limit to last 20 entries
+xyz deploy history --lines 20
+
+# Filter by operation type
+xyz deploy history --operation run
+xyz deploy history --operation destroy
+
+# Include execution IDs
+xyz deploy history --verbose
+```
+
+- Scans `.platform/logs/` JSONL files for `deploy_run` and `deploy_destroy` events.
+- Groups entries by `execution_id` so each run appears as a single row.
+- No deployment file required — reads workspace logs only.
+- Exit code `0` even when the history is empty.
 
 ### ⚠️ Gap: no approval workflow
 
@@ -547,7 +570,10 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 | -------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `xyz deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                          |
 | `xyz deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves |
-| `xyz deploy status [-f FILE] [--stage S] [--plan] [--history]` | Live outputs, saved plan details, or execution history               |  | `xyz deploy health -f FILE [--stage S]` | Run `health_checks` defined in the deployment YAML |
+| `xyz deploy status -f FILE [--stage S] [--plan]`               | Live Terraform outputs or saved plan details                         |
+| `xyz deploy history [--lines N] [--operation run\|destroy]`    | Execution history from workspace logs                                |
+| `xyz deploy health -f FILE [--stage S]`                        | Run `health_checks` defined in the deployment YAML                   |
+
 ---
 
 ## Known Gaps

@@ -13,6 +13,7 @@ from xyz_platform.commands.cli_common import (
 )
 from xyz_platform.commands.deploy.destroy_deploy_command import DestroyDeployCommand
 from xyz_platform.commands.deploy.health_deploy_command import HealthDeployCommand
+from xyz_platform.commands.deploy.history_deploy_command import HistoryDeployCommand
 from xyz_platform.commands.deploy.run_deploy_command import RunDeployCommand
 from xyz_platform.commands.deploy.status_deploy_command import StatusDeployCommand
 
@@ -133,13 +134,13 @@ def deploy_destroy(
     handle_command_exit(command, success)
 
 
-@deploy.command(name="status", help="Show deployment status: live outputs, saved plan details, or execution history.")
+@deploy.command(name="status", help="Show deployment status: live Terraform outputs or saved plan details.")
 @click.option(
     "--file",
     "-f",
     default=None,
     metavar="PATH",
-    help="Path to the deployment YAML file (not required for --history).",
+    help="Path to the deployment YAML file.",
 )
 @click_work_path
 @click.option(
@@ -155,19 +156,6 @@ def deploy_destroy(
     default=False,
     help="Show the last saved .tfplan (terraform show -json). No backend calls.",
 )
-@click.option(
-    "--history",
-    "show_history",
-    is_flag=True,
-    default=False,
-    help="Show execution history from workspace logs.",
-)
-@click.option(
-    "--lines",
-    default=50,
-    show_default=True,
-    help="Maximum history entries to show (--history only).",
-)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -176,20 +164,16 @@ def deploy_status(
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
     show_plan: bool = False,
-    show_history: bool = False,
-    lines: int = 50,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
 ):
-    """Show deployment status: live outputs, saved plan, or execution history."""
+    """Show live Terraform outputs or saved plan details."""
     command = StatusDeployCommand(
         file=file,
         work_path=work_path,
         stage=stage,
         show_plan=show_plan,
-        show_history=show_history,
-        lines=lines,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -198,7 +182,44 @@ def deploy_status(
     handle_command_exit(command, success)
 
 
-@deploy.command(name="health", help="Run health checks against provisioned infrastructure stages.")
+@deploy.command(name="history", help="Show deployment execution history from workspace logs.")
+@click_work_path
+@click.option(
+    "--lines",
+    default=50,
+    show_default=True,
+    help="Maximum number of history entries to display.",
+)
+@click.option(
+    "--operation",
+    default=None,
+    type=click.Choice(["run", "destroy"], case_sensitive=False),
+    help="Filter to a specific operation type.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_history(
+    work_path: Optional[str] = None,
+    lines: int = 50,
+    operation: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Show deployment execution history from workspace logs."""
+    command = HistoryDeployCommand(
+        work_path=work_path,
+        lines=lines,
+        operation=operation,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
 @click.option(
     "--file",
     "-f",
