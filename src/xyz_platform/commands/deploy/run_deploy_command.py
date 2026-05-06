@@ -304,25 +304,39 @@ class RunDeployCommand(BaseDeployCommand):
         return None
 
     def _check_approvals(self, stages_to_run: List[DeploymentStageModel]) -> bool:
-        """Check deployment approval gates before executing stages."""
+        """Log approval metadata declared in spec.approvals before executing stages.
+
+        Approvals are metadata-only — enforcement is delegated to the CI/CD system
+        (ADO environment gate, GitHub Actions environment, etc.).  The CLI logs
+        which approvers apply per stage so the audit trail is clear.
+
+        Empty approvers dict → no gate (treated as absent).
+        Stage without an approval override → all spec-level approvers apply.
+        """
         if self._deployment_service is None:
             return True
         spec = self._deployment_service.model.spec  # type: ignore[union-attr]
-        approvals = getattr(spec, "approvals", None) or []
+        approvals = getattr(spec, "approvals", None)
 
-        if not approvals:
+        if not approvals or not approvals.approvers:
             return True
 
-        stage_names = {s.name for s in stages_to_run}
-        pending = [a for a in approvals if getattr(a, "stage", None) in stage_names]
+        for stage in stages_to_run:
+            if stage.approval:
+                active_keys = stage.approval.approvers
+            else:
+                active_keys = list(approvals.approvers.keys())
 
-        if pending:
-            self.logger.debug(
-                "Approval gates present",
-                extra={"count": len(pending)},
-            )
-            # TODO: Implement gate evaluation (e.g., check approval status via
-            #       an external approval service or prompt interactively when
-            #       `--force` is not set).
+            if active_keys:
+                active_approvers = [
+                    f"{approvals.approvers[k].type}:{approvals.approvers[k].value}"
+                    for k in active_keys
+                    if k in approvals.approvers
+                ]
+                self.logger.info(
+                    "Approval gate declared",
+                    stage=stage.name,
+                    approvers=active_approvers,
+                )
 
         return True

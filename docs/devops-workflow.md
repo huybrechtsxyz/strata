@@ -510,10 +510,46 @@ xyz deploy history --verbose
 - No deployment file required — reads workspace logs only.
 - Exit code `0` even when the history is empty.
 
-### ⚠️ Gap: no approval workflow
+### 7.9 Declare approval metadata
 
-`--force` bypasses gates. There is no `xyz deploy approve`, no pending-approval list,
-and no integration with external gate systems (Azure DevOps environment gates, etc.).
+Approvals are **metadata declared in the deployment YAML** — the CLI logs which
+approvers apply per stage, but enforcement is done by the CI/CD system
+(Azure DevOps environment gate, GitHub Actions environment protection rule, etc.).
+
+**Deployment YAML — add `approvals` to the spec:**
+
+```yaml
+spec:
+  approvals:
+    approvers:
+      platform-team:
+        type: github-team       # github-team | ado-group | user
+        value: "org/platform-team"
+      devops-lead:
+        type: user
+        value: "vhuybrec@company.com"
+      ado-approvers:
+        type: ado-group
+        value: "Platform-Approvers"
+
+  stages:
+    - name: xyz-dc-eu-fr
+      type: infrastructure
+      # no approval field → all spec-level approvers apply
+
+    - name: xyz-dc-eu-prod
+      type: infrastructure
+      approval:
+        approvers:
+          - platform-team       # keys from spec.approvals.approvers
+          - ado-approvers
+```
+
+- `spec.approvals` absent → no gate declared, deploy proceeds.
+- `spec.approvals.approvers` empty dict → silently treated as no gate.
+- Stage without `approval` field → no stage-level restriction.
+- Stage `approval.approvers` lists keys from `spec.approvals.approvers`; unknown keys are a validation error.
+- Approver types: `github-team`, `ado-group`, `user`.
 
 ---
 
@@ -709,7 +745,6 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 
 ## Known Gaps
 
-| Gap                                      | Priority | Workaround                             |
-| ---------------------------------------- | -------- | -------------------------------------- |
-| No `profile export` (merged env preview) | Medium   | Run `build run --dry-run` as a proxy   |
-| No `deploy approve` / gate workflow      | Medium   | Use `--force` or external gate tooling |
+| Gap                                      | Priority | Workaround                           |
+| ---------------------------------------- | -------- | ------------------------------------ |
+| No `profile export` (merged env preview) | Medium   | Run `build run --dry-run` as a proxy |

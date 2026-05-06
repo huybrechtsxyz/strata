@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic model for deployment configuration validation."""
 
+from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import (
@@ -48,27 +49,41 @@ class DeploymentWorkspaceModel(DeploymentFileReference):
     pass
 
 
+class ApproverType(str, Enum):
+    """Supported approver identity types."""
+
+    GITHUB_TEAM = "github-team"
+    ADO_GROUP = "ado-group"
+    USER = "user"
+
+
+class ApproverRef(BaseModel):
+    """A single named approver entry."""
+
+    type: ApproverType = Field(description="Approver identity type: github-team | ado-group | user")
+    value: str = Field(description="Approver identifier — team slug, group name, or user address")
+
+
 class DeploymentApprovalModel(BaseModel):
-    """Model for stage approval configuration."""
+    """Deployment-level approval metadata.
 
-    type: Literal["auto", "manual"] = Field(
-        description="Approval type: 'auto' proceeds automatically, 'manual' requires explicit approval"
-    )
-    approvers: Optional[List[str]] = Field(
-        None,
-        description="List of approver identifiers for manual approval (e.g., team names, email addresses)",
-    )
-    timeout: Optional[str] = Field(
-        None,
-        description="Timeout for manual approval (e.g., '72h', '7d'). If exceeded, stage fails.",
+    Presence of this block signals that approvals are declared for this deployment.
+    An empty ``approvers`` dict is silently treated as no gate.
+    The CLI emits this metadata for audit; enforcement is done by the CI/CD system.
+    """
+
+    approvers: Dict[str, ApproverRef] = Field(
+        default_factory=dict,
+        description="Named approver entries. Key is a short identifier used as a cross-reference from stage overrides.",
     )
 
-    @model_validator(mode="after")
-    def validate_manual_approval(self) -> "DeploymentApprovalModel":
-        """Validate that manual approvals have approvers defined."""
-        if self.type == "manual" and not self.approvers:
-            raise ValueError("Manual approval requires 'approvers' to be specified (list of approver identifiers)")
-        return self
+
+class DeploymentStageApprovalModel(BaseModel):
+    """Per-stage approval override: restricts which spec-level approvers apply to this stage."""
+
+    approvers: List[str] = Field(
+        description="List of approver keys from spec.approvals.approvers that apply to this stage"
+    )
 
 
 class HealthCheckModel(BaseModel):
@@ -182,6 +197,11 @@ class DeploymentStageModel(BaseModel):
         None,
         description="Health checks to run against this stage after provisioning.",
     )
+    approval: Optional[DeploymentStageApprovalModel] = Field(
+        None,
+        description="Per-stage approval override: list of approver keys from spec.approvals.approvers. "
+        "Absent means no stage-level restriction — spec-level approvers apply as-is.",
+    )
 
     @model_validator(mode="after")
     def validate_provisioner_selection(self) -> "DeploymentStageModel":
@@ -256,6 +276,22 @@ class DeploymentSpecModel(BaseModel):
                 duplicates = [name for name in config_names if config_names.count(name) > 1]
                 raise ValueError(f"Duplicate configuration names found: {set(duplicates)}")
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_stage_approval_refs(self) -> "DeploymentSpecModel":
+        """Validate that stage approval keys reference declared spec-level approvers."""
+        if not self.stages:
+            return self
+        known_keys: set[str] = set(self.approvals.approvers.keys()) if self.approvals else set()
+        for stage in self.stages:
+            if stage.approval:
+                for key in stage.approval.approvers:
+                    if key not in known_keys:
+                        raise ValueError(
+                            f"Stage '{stage.name}' references unknown approver key '{key}'. "
+                            f"Known keys: {sorted(known_keys) or '(none — spec.approvals not declared)'}"
+                        )
         return self
 
     @model_validator(mode="after")
