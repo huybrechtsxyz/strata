@@ -4,9 +4,9 @@
 from unittest.mock import MagicMock, patch
 
 from xyz_platform.integrations.base_integration import BaseIntegration
+from xyz_platform.integrations.capabilities import IKVStore, ISecretStore, IVariableStore
 from xyz_platform.integrations.hashicorp_vault import VaultIntegration
-from xyz_platform.integrations.capabilities import ISecretStore, IVariableStore, IKVStore
-from xyz_platform.models.integration_model import IntegrationModel, IntegrationEndpointsSpecModel
+from xyz_platform.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 
 def _cfg(name="vault", address=None) -> IntegrationModel:

@@ -6,15 +6,15 @@ Integrations connect the platform to external tools and services (git, terraform
 
 **Available integrations:**
 
-| Class | Module | Type string | Capabilities |
-|---|---|---|---|
-| `GitIntegration` | `integrations.git` | `git` | `IRepositoryTool` |
-| `TerraformIntegration` | `integrations.terraform` | `terraform` | `IInfrastructureTool` |
-| `BitwardenIntegration` | `integrations.bitwarden` | `bitwarden` | `ISecretStore` |
-| `VaultIntegration` | `integrations.hashicorp_vault` | `vault` | `IVariableStore`, `ISecretStore`, `IKVStore` |
-| `ConsulIntegration` | `integrations.hashicorp_consul` | `consul` | `IVariableStore`, `IKVStore` |
-| `AzureKeyVaultIntegration` | `integrations.azure_keyvault` | `azure_keyvault` | `ISecretStore` |
-| `AzureAppConfigIntegration` | `integrations.azure_appconfig` | `azure_appconfig` | `IVariableStore`, `IFeatureStore` |
+| Class                       | Module                          | Type string       | Capabilities                                 |
+| --------------------------- | ------------------------------- | ----------------- | -------------------------------------------- |
+| `GitIntegration`            | `integrations.git`              | `git`             | `IRepositoryTool`                            |
+| `TerraformIntegration`      | `integrations.terraform`        | `terraform`       | `IInfrastructureTool`                        |
+| `BitwardenIntegration`      | `integrations.bitwarden`        | `bitwarden`       | `ISecretStore`                               |
+| `VaultIntegration`          | `integrations.hashicorp_vault`  | `vault`           | `IVariableStore`, `ISecretStore`, `IKVStore` |
+| `ConsulIntegration`         | `integrations.hashicorp_consul` | `consul`          | `IVariableStore`, `IKVStore`                 |
+| `AzureKeyVaultIntegration`  | `integrations.azure_keyvault`   | `azure_keyvault`  | `ISecretStore`                               |
+| `AzureAppConfigIntegration` | `integrations.azure_appconfig`  | `azure_appconfig` | `IVariableStore`, `IFeatureStore`            |
 
 ## Creating an Integration
 
@@ -69,16 +69,16 @@ BaseIntegration._instances.clear()
 
 ## `BaseIntegration` API
 
-| Method | Returns | Description |
-|---|---|---|
-| `is_available(use_cache=True)` | `bool` | Whether the CLI command is on PATH |
-| `get_version(use_cache=True)` | `Optional[str]` | Installed version string |
-| `validate_version()` | `(bool, str)` | Check against `config.validation.min_version` / `max_version` |
-| `ensure_available()` | `(bool, str)` | Combined availability + version check |
-| `get_info()` | `dict` | Name, type, command, availability, version |
-| `_run_integration(args, cwd, timeout)` | `CommandResult` | Run `[command] + args` via `run_command()` |
-| `_get_env_var(name, default)` | `Optional[str]` | Read environment variable |
-| `_resolve_env_vars(value)` | `str` | Expand `${VAR}` and `$VAR` in a string |
+| Method                                 | Returns         | Description                                                   |
+| -------------------------------------- | --------------- | ------------------------------------------------------------- |
+| `is_available(use_cache=True)`         | `bool`          | Whether the CLI command is on PATH                            |
+| `get_version(use_cache=True)`          | `Optional[str]` | Installed version string                                      |
+| `validate_version()`                   | `(bool, str)`   | Check against `config.validation.min_version` / `max_version` |
+| `ensure_available()`                   | `(bool, str)`   | Combined availability + version check                         |
+| `get_info()`                           | `dict`          | Name, type, command, availability, version                    |
+| `_run_integration(args, cwd, timeout)` | `CommandResult` | Run `[command] + args` via `run_command()`                    |
+| `_get_env_var(name, default)`          | `Optional[str]` | Read environment variable                                     |
+| `_resolve_env_vars(value)`             | `str`           | Expand `${VAR}` and `$VAR` in a string                        |
 
 Abstract methods that subclasses must implement: `get_version_command()` → `List[str]`, `parse_version(output)` → `str`.
 
@@ -112,14 +112,14 @@ if isinstance(integration, ISecretStore):
     secret = integration.get_secret("my/secret")
 ```
 
-| Protocol | Methods |
-|---|---|
-| `IVariableStore` | `get_variable`, `set_variable`, `list_variables` |
-| `ISecretStore` | `get_secret`, `set_secret`, `list_secrets` |
-| `IFeatureStore` | `get_feature`, `set_feature`, `list_features` |
-| `IKVStore` | `get_kv`, `set_kv` |
-| `IRepositoryTool` | `clone`, `pull`, `get_current_branch` |
-| `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy` |
+| Protocol              | Methods                                          |
+| --------------------- | ------------------------------------------------ |
+| `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` |
+| `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       |
+| `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    |
+| `IKVStore`            | `get_kv`, `set_kv`                               |
+| `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            |
+| `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               |
 
 `StoreIntegration` (base for all store-type integrations) provides no-op default implementations for all store methods — subclasses override only what they support.
 

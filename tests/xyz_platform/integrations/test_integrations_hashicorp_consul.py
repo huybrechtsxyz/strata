@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Unit tests for ConsulIntegration (HashiCorp Consul)."""
 
-from unittest.mock import MagicMock, patch
-
 from xyz_platform.integrations.base_integration import BaseIntegration
+from xyz_platform.integrations.capabilities import IKVStore, IVariableStore
 from xyz_platform.integrations.hashicorp_consul import ConsulIntegration
-from xyz_platform.integrations.capabilities import IVariableStore, IKVStore
-from xyz_platform.models.integration_model import IntegrationModel, IntegrationEndpointsSpecModel
+from xyz_platform.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
 
 def _cfg(name="consul", address=None) -> IntegrationModel:

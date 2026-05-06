@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 """Unit tests for BitwardenIntegration."""
 
-import os
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.integrations.bitwarden import BitwardenIntegration
 from xyz_platform.integrations.capabilities import ISecretStore
-from xyz_platform.models.integration_model import IntegrationModel
 from xyz_platform.models.auth_models import AuthenticationModel
+from xyz_platform.models.integration_model import IntegrationModel
 
 
 def _cfg(name="bw", token_var=None) -> IntegrationModel:
     auth = None
     if token_var:
         from xyz_platform.models.auth_models import APIKeyAuthenticationModel
+
         auth = AuthenticationModel(method="api_key", api_key=APIKeyAuthenticationModel(api_key=token_var))
     return IntegrationModel(name=name, type="bitwarden", authentication=auth)
 
@@ -90,8 +88,10 @@ class TestBitwardenGetSecret:
         BaseIntegration._instances.clear()
         i = BitwardenIntegration(_cfg(token_var="BWS_ACCESS_TOKEN"))
         mock_result = MagicMock(returncode=0, stdout='{"value": "my_secret"}', stderr="")
-        with patch.object(i, "ensure_available", return_value=(True, "")), \
-             patch.object(i, "_run_integration", return_value=mock_result):
+        with (
+            patch.object(i, "ensure_available", return_value=(True, "")),
+            patch.object(i, "_run_integration", return_value=mock_result),
+        ):
             result = i.get_secret("secret-id")
         assert result == "my_secret"
 

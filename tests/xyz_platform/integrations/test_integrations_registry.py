@@ -3,15 +3,15 @@
 
 import pytest
 
-from xyz_platform.integrations.base_integration import BaseIntegration
 from xyz_platform.integrations.registry import IntegrationRegistry
-from xyz_platform.models.integration_model import IntegrationModel
 
 
 class FakeIntegration:
     """Minimal stand-in — just needs is_available()."""
+
     def __init__(self, available=True):
         self._available = available
+
     def is_available(self):
         return self._available
 
