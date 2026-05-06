@@ -71,6 +71,63 @@ class DeploymentApprovalModel(BaseModel):
         return self
 
 
+class HealthCheckModel(BaseModel):
+    """A single health check applied to a deployment stage after provisioning.
+
+    Two check types:
+    - ``http``  — HTTP(S) GET; passes if response code matches ``expect_status``.
+    - ``tcp``   — TCP connect to ``host:port``; passes if connection succeeds.
+
+    Both types also support checking Terraform output values:
+    - ``output_key`` — name of a Terraform output whose value should be used as
+      the URL (http) or ``host:port`` (tcp).  Takes precedence over ``url`` /
+      ``host`` + ``port`` when present.
+
+    Examples (YAML)::
+
+        health_checks:
+          - name: api-endpoint
+            type: http
+            output_key: api_url
+            expect_status: 200
+            timeout: 10
+          - name: db-port
+            type: tcp
+            host: 10.0.0.5
+            port: 5432
+    """
+
+    name: Annotated[
+        str,
+        StringConstraints(min_length=1, strip_whitespace=True),
+    ] = Field(description="Unique check name within the stage")
+    type: Literal["http", "tcp"] = Field(description="Check type: 'http' or 'tcp'")
+
+    # --- HTTP fields ---
+    url: Optional[str] = Field(None, description="URL to GET (http type). Overridden by output_key.")
+    expect_status: int = Field(default=200, description="Expected HTTP status code (http type).")
+
+    # --- TCP fields ---
+    host: Optional[str] = Field(None, description="Hostname or IP (tcp type). Overridden by output_key.")
+    port: Optional[int] = Field(None, description="TCP port (tcp type).")
+
+    # --- Shared ---
+    output_key: Optional[str] = Field(
+        None,
+        description="Terraform output key whose value provides the URL or host:port target.",
+    )
+    timeout: int = Field(default=10, description="Connection / request timeout in seconds.")
+
+    @model_validator(mode="after")
+    def validate_check_fields(self) -> "HealthCheckModel":
+        if self.type == "http" and not self.url and not self.output_key:
+            raise ValueError("Health check type 'http' requires 'url' or 'output_key'.")
+        if self.type == "tcp":
+            if not self.output_key and (not self.host or self.port is None):
+                raise ValueError("Health check type 'tcp' requires 'host'+'port' or 'output_key'.")
+        return self
+
+
 class DeploymentStageModel(BaseModel):
     """Model for a deployment stage (pipeline execution step).
 
@@ -120,6 +177,10 @@ class DeploymentStageModel(BaseModel):
     on_failure: Literal["stop", "rollback", "continue"] = Field(
         default="stop",
         description="Action to take on stage failure: 'stop' halts pipeline, 'rollback' reverts, 'continue' proceeds",
+    )
+    health_checks: Optional[List[HealthCheckModel]] = Field(
+        None,
+        description="Health checks to run against this stage after provisioning.",
     )
 
     @model_validator(mode="after")

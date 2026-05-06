@@ -16,6 +16,7 @@ STEP_PLAN = "plan"
 STEP_APPLY = "apply"
 STEP_DESTROY = "destroy"
 STEP_PLAN_DESTROY = "plan_destroy"
+STEP_SHOW_PLAN = "show_plan"
 STEP_OUTPUT = "output"
 
 
@@ -152,6 +153,15 @@ class BaseDeployer(ABC):
 
         Returns:
             (success, messages)
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def show_plan(self) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """Decode the last saved plan file (e.g. terraform show -json <plan>).
+
+        Returns:
+            (success, plan_data_dict, messages)
         """
         raise NotImplementedError
 

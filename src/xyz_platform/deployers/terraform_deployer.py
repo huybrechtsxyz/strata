@@ -29,6 +29,7 @@ from xyz_platform.deployers.base_deployer import (
     STEP_PLAN,
     STEP_PLAN_DESTROY,
     STEP_SETUP,
+    STEP_SHOW_PLAN,
     BaseDeployer,
 )
 from xyz_platform.integrations.terraform import TerraformIntegration
@@ -79,7 +80,16 @@ class TerraformDeployer(BaseDeployer):
         return "terraform"
 
     def get_supported_steps(self) -> List[str]:
-        return [STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY, STEP_DESTROY, STEP_PLAN_DESTROY, STEP_OUTPUT]
+        return [
+            STEP_SETUP,
+            STEP_CHECK,
+            STEP_PLAN,
+            STEP_APPLY,
+            STEP_DESTROY,
+            STEP_PLAN_DESTROY,
+            STEP_SHOW_PLAN,
+            STEP_OUTPUT,
+        ]
 
     # ------------------------------------------------------------------
     # Validation (pre-step guards)
@@ -336,6 +346,39 @@ class TerraformDeployer(BaseDeployer):
             return False, outputs, messages
 
         return True, outputs, messages
+
+    def show_plan(self) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """terraform show -json <stage>.tfplan  → raw plan data dict"""
+        messages: List[str] = []
+        data: Dict[str, Any] = {}
+
+        if not self._ready(messages):
+            return False, data, messages
+        assert self._working_dir is not None
+        assert self._plan_file is not None
+        assert self._tf is not None
+
+        if not self._plan_file.exists():
+            messages.append(f"No saved plan found at {self._plan_file}. Run 'xyz deploy run --dry-run' first.")
+            return False, data, messages
+
+        messages.append(f"terraform show -json  {self._plan_file.name}")
+
+        try:
+            result = self._tf.show(
+                str(self._working_dir),
+                plan_file=str(self._plan_file),
+                json_format=True,
+            )
+            if result.returncode != 0:
+                messages.append(f"terraform show failed:\n{result.stderr}")
+                return False, data, messages
+            data = json.loads(result.stdout or "{}")
+        except (RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            messages.append(f"terraform show error: {exc}")
+            return False, data, messages
+
+        return True, data, messages
 
     # ------------------------------------------------------------------
     # Internal helpers

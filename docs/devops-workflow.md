@@ -301,10 +301,69 @@ xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml -
 - `--force` is required for the real destroy (enables `-auto-approve`).
 - Without `--force` and without `--dry-run`, the command exits with an error.
 
-### ⚠️ Gap: no deploy status / history
+### 7.6 Status (outputs, plan details, history)
 
-`xyz status` shows workspace health only. There is no `xyz deploy status`,
-`xyz deploy history`, or deployment audit trail in the CLI.
+```bash
+# Live infrastructure outputs per stage (queries the Terraform backend)
+xyz deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+
+# Single stage only
+xyz deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
+
+# Decode the last saved .tfplan — no backend call, instant
+xyz deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --plan
+
+# Show execution history from workspace logs
+xyz deploy status --history
+xyz deploy status --history --lines 20
+```
+
+- Default (no flags): runs `terraform output -json` per stage — shows live endpoint URLs, resource IDs, etc.
+- `--plan`: reads the `.tfplan` written by the last `deploy run --dry-run`. Shows resource add/change/destroy counts. No network required.
+- `--history`: scans `.platform/logs/` for `deploy_run` and `deploy_destroy` events. File not required.
+
+### 7.7 Health checks
+
+Health checks probe the actual running infrastructure after a deploy. They are defined
+per stage in the deployment YAML and run via `deploy health`.
+
+**Deployment YAML — add `health_checks` to a stage:**
+
+```yaml
+stages:
+  - name: xyz-dc-eu-fr
+    type: infrastructure
+    health_checks:
+      - name: api-endpoint
+        type: http
+        output_key: api_url     # reads from terraform output
+        expect_status: 200
+        timeout: 10
+      - name: db-port
+        type: tcp
+        host: 10.0.0.5
+        port: 5432
+```
+
+**Run the checks:**
+
+```bash
+# All stages in the deployment
+xyz deploy health -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+
+# Single stage
+xyz deploy health -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
+```
+
+**Check types:**
+
+| Type   | Target resolution                                               | What is tested                                                  |
+| ------ | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| `http` | `url` field, or Terraform output named by `output_key`          | HTTP GET — status code must match `expect_status` (default 200) |
+| `tcp`  | `host` + `port` fields, or `host:port` from `output_key` output | TCP connection succeeds within `timeout` seconds                |
+
+- Stages without `health_checks` are silently skipped.
+- Exit code `3` if any check fails; `0` if all pass.
 
 ### ⚠️ Gap: no approval workflow
 
@@ -488,14 +547,13 @@ All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
 | -------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `xyz deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                          |
 | `xyz deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves |
-
+| `xyz deploy status [-f FILE] [--stage S] [--plan] [--history]` | Live outputs, saved plan details, or execution history               |  | `xyz deploy health -f FILE [--stage S]` | Run `health_checks` defined in the deployment YAML |
 ---
 
 ## Known Gaps
 
 | Gap                                      | Priority | Workaround                                     |
 | ---------------------------------------- | -------- | ---------------------------------------------- |
-| No `deploy status` / deployment history  | High     | Check Terraform state directly                 |
 | No `build diff` / change-plan output     | High     | Use `--dry-run` + read Terraform plan manually |
 | No `validate --all` / bulk scan          | High     | Script individual `validate` calls per file    |
 | No `repo status` (git state inspection)  | Medium   | Use `git status` directly in each repo         |

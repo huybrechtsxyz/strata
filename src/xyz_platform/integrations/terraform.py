@@ -543,3 +543,40 @@ class TerraformIntegration(BaseIntegration):
                 exc_info=True,
             )
             raise RuntimeError(f"Terraform output failed: {e}") from e
+
+    def show(
+        self,
+        working_dir: str,
+        plan_file: Optional[str] = None,
+        json_format: bool = True,
+        timeout: int = 60,
+    ) -> "CommandResult":
+        """Read current state or decode a saved plan file.
+
+        Args:
+            working_dir: Terraform working directory.
+            plan_file: Path to a ``.tfplan`` file.  When omitted reads current state.
+            json_format: Pass ``-json`` (default True for machine-readable output).
+            timeout: Command timeout in seconds.
+
+        Returns:
+            CommandResult with returncode / stdout / stderr.
+
+        Raises:
+            RuntimeError: If the command fails.
+        """
+        available, error = self.ensure_available()
+        if not available:
+            raise RuntimeError(f"Terraform not available: {error}")
+
+        args = ["show"]
+        if json_format:
+            args.append("-json")
+        if plan_file:
+            args.append(plan_file)
+
+        try:
+            result = self._run_integration(args, cwd=working_dir, timeout=timeout)
+            return result
+        except Exception as e:
+            raise RuntimeError(f"Terraform show failed: {e}") from e
