@@ -51,13 +51,39 @@ def resolve_path(
     repo_map: Optional[Dict[str, str]] = None,
 ) -> Path:
     """
-    Resolve the target path by joining base path, target path, and sub-paths.
-    arguments:
-        base_path: The base directory path or current working directory if None.
-        target_path: if the target is a directory path. If provided, it is used as the base.
-        sub_paths: Additional sub-paths to join to the base/target path.
-    returns:
-        The resolved full path as a Path object
+    Resolve a path, optionally using cross-repo ``@repo-name/...`` references.
+
+    Resolution rules (applied in order):
+
+    1. **Cross-repo reference** — if ``target_path`` starts with ``@``, the
+       token is split into ``@<repo_name>/<rest>``.  The repo root is looked
+       up in ``repo_map`` and the rest of the path is appended.  If the repo
+       name is not in ``repo_map`` (or ``repo_map`` is ``None``), a
+       :class:`ValueError` is raised.
+    2. **Absolute target** — if ``target_path`` is an absolute path, it is
+       used as-is (``base_path`` is ignored).
+    3. **Relative target** — ``target_path`` is joined onto ``base_path``.
+    4. **Sub-paths** — any positional ``*sub_paths`` are appended.  Absolute
+       values in ``sub_paths`` are rejected with :class:`ValueError`.
+    5. **No target** — when ``target_path`` is ``None`` or empty, only
+       ``base_path`` (plus any ``sub_paths``) is returned.
+
+    If ``base_path`` is ``None`` or an empty string, the current working
+    directory is used as the base.
+
+    Args:
+        base_path: Base directory path (fallback: CWD).
+        target_path: Target path or ``@repo-name/relative/path`` reference.
+        *sub_paths: Additional relative path segments to append.
+        repo_map: Mapping of repo names to their root paths, required when
+            ``target_path`` contains an ``@`` reference.
+
+    Returns:
+        Resolved :class:`pathlib.Path`.
+
+    Raises:
+        ValueError: Unknown ``@repo-name`` reference, or absolute path found
+            in ``sub_paths``.
     """
     if base_path is None or base_path == "":
         base_path = os.getcwd()

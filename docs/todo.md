@@ -8,12 +8,11 @@
 
 ## My TODO
 
-- utils
+
 - builders
 - commands
 - controllers
 - deployers
-- exceptions
 - integrations
 - models
 - services
@@ -53,17 +52,17 @@
 ## Utils
 
 ### `system.py` — `resolve_path(base_path, ref, repo_map)`
-- **Tests:** `@repo-name/rel/path` resolved correctly; unknown repo name raises `InvalidReferenceError`; plain path (no `@`) passes through unchanged
-- **Docs:** inline docstring on `resolve_path` listing the `@repo-name/...` contract
+- ✅ **Tests:** covered in `test_utils_system_paths.py` (`@repo` resolution, unknown repo raises, plain path, sub_paths, absolute sub_path rejected, `normalize_path`, `generate_uuid`, `resolve_work_path`)
+- ✅ **Docs:** docstring on `resolve_path` updated with full `@repo-name/...` contract
 
 ### `configuration_loader.py`
-- **Tests:** deep-merge order (later file overrides earlier); missing file raises correct exception; empty file handled
+- ✅ **Tests:** covered in `test_utils_configurationloader.py`
 
 ### `service_cache.py`
-- **Tests:** second `load()` call returns cached instance; cache key is path-based
+- ✅ **Tests:** covered in `test_utils_servicecache.py`
 
 ### `templater.py`
-- **Tests:** variable substitution; missing variable raises; nested template paths
+- ✅ **Tests:** covered in `test_utils_templater.py`
 
 ---
 
