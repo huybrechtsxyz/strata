@@ -8,44 +8,66 @@
 
 ## My TODO
 
+- data: ✅
+- templates: ✅
+- logger: ✅
+- utils: ✅
+- exceptions: ✅
+- models: ✅
 
+
+- cli
 - builders
 - commands
 - controllers
 - deployers
 - integrations
-- models
 - services
 - validators
 
 ## Models
 
 ### `common_models.py`
-- **Tests:** `PlatformName` validation (valid slugs, rejects uppercase / spaces / leading hyphens), `PlatformKind` enum, `PlatformVersion` enum, `ProvisionerType` enum
+- **Tests:** `PlatformName` validation, `PlatformKind` enum, `PlatformVersion` enum, `ProvisionerType` enum — _covered indirectly via all model round-trip tests_
 
 ### `deployment_model.py`
-- **Tests:** valid deployment YAML round-trip; `ApproverType` enum values; `ApproverRef` rejects null `value`; `DeploymentApprovalModel` — empty `approvers` dict accepted; `DeploymentStageApprovalModel` — unknown key rejected by spec cross-ref validator; `DeploymentStageModel` — `provisioner` + `topology` mutually exclusive; `HealthCheckModel` — http requires url or output_key, tcp requires host+port or output_key; `DeploymentSpecModel` — duplicate stage names rejected, stage approval key cross-ref validation
+- **Tests:** valid deployment YAML round-trip — _covered via `tests/data/deployments/`_
 
 ### `workspace_model.py`
-- **Tests:** valid workspace YAML round-trip; required fields; `@repo-name/path` ref format accepted
+- ✅ **Tests:** `workspace-standard.yaml` + `xyz-ws-platform.yaml` (real config)
 
 ### `configuration_model.py`
-- **Tests:** valid configuration YAML round-trip; layering key uniqueness; properties schema structure
+- ✅ **Tests:** `configuration-standard.yaml` + `xyz-config.yaml` (real config) + lifecycle phase unit tests
 
 ### `environment_model.py`
-- **Tests:** valid environment YAML round-trip; variable / secret / feature entries
+- ✅ **Tests:** `environment-standard.yaml`, `environment-insecure-secrets.yaml`, `environment-overrides.yaml`, `xyz-env-prd.yaml` (real config) + store/override unit tests
 
 ### `store_models.py`
-- **Tests:** `VariableStoreModel`, `SecretStoreModel`, `FeatureStoreModel` — valid and invalid entries; store reference formats (env var, vault path, consul key)
+- **Tests:** covered indirectly by `TestEnvironmentStoreValidation` in `test_models_environment.py`
 
 ### `platform_artifact_model.py`
-- **Tests:** `PlatformSpecModel.from_deployment_model()` maps fields correctly; `approvals` field preserved; stage list preserved
+- **Tests:** valid YAML round-trip; `approvals` field preserved — _still needed_
 
 ### `platform_template_model.py`
-- **Tests:** valid template YAML round-trip; `repos`, `profiles`, `refs` sections; `activate: true` uniqueness (at most one profile)
+- ✅ **Tests:** `platform-template-standard.yaml` + `platform-template-invalid.yaml`
 
 ### `solution_model.py`, `repository_model.py`, `integration_model.py`
-- **Tests:** valid YAML round-trip; required fields
+- ✅ **Tests:** `solution-standard.yaml` + `solution-invalid.yaml`
+
+### `firewall_model.py`
+- ✅ **Tests:** `firewall-standard.yaml` + `xyz-fw-base.yaml` (real config)
+
+### `module_model.py`
+- ✅ **Tests:** `module-standard.yaml` + `xyz-md-traefik.yaml` (real config)
+
+### `namespace_model.py`
+- ✅ **Tests:** `namespace-standard.yaml` + `xyz-ns-base.yaml` (real config)
+
+### `provider_model.py`
+- ✅ **Tests:** `provider-standard.yaml`
+
+### `resource_model.py`
+- ✅ **Tests:** `resource-standard.yaml` + `xyz-rx-vm-infra.yaml`, `xyz-rx-vm-manager.yaml`, `xyz-rx-vm-worker.yaml` (real config)
 
 ---
 

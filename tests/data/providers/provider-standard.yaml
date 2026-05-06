@@ -51,20 +51,20 @@ spec:
   
   lifecycle:
     deploy_check:
-      scripts: ["tests/data/scripts/mock_validate.sh"]
+      scripts: ["../data/scripts/mock_validate.sh"]
     deploy_plan_before:
-      scripts: ["tests/data/scripts/mock_plan.sh"]
+      scripts: ["../data/scripts/mock_plan.sh"]
     deploy_provision:
-      scripts: ["tests/data/scripts/mock_provision.sh"]
+      scripts: ["../data/scripts/mock_provision.sh"]
     deploy_initialize:
-      scripts: ["tests/data/scripts/mock_init.sh"]
+      scripts: ["../data/scripts/mock_init.sh"]
     deploy_configure:
-      scripts: ["tests/data/scripts/mock_configure.sh"]
+      scripts: ["../data/scripts/mock_configure.sh"]
     deploy_output:
-      scripts: ["tests/data/scripts/mock_output.sh"]
+      scripts: ["../data/scripts/mock_output.sh"]
     deploy_health:
-      scripts: ["tests/data/scripts/mock_healthcheck.sh"]
+      scripts: ["../data/scripts/mock_healthcheck.sh"]
     deploy_destroy_before:
-      scripts: ["tests/data/scripts/mock_protect.sh"]
+      scripts: ["../data/scripts/mock_protect.sh"]
     deploy_destroy_after:
-      scripts: ["tests/data/scripts/mock_destroy.sh"]
+      scripts: ["../data/scripts/mock_destroy.sh"]

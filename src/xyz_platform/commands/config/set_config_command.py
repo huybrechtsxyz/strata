@@ -20,7 +20,7 @@ class SetConfigCommand(BaseCommand):
     """
 
     OPERATION = "config_set"
-    INIT_REQUIRED = True
+    INIT_REQUIRED = False  # CLI preferences do not require an initialized solution
 
     ALLOWED_KEYS = ("output", "verbose", "quiet", "work_path")
 

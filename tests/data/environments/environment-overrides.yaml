@@ -15,10 +15,10 @@ spec:
   lifecycle:
     deploy_before:
       scripts:
-        - tests/data/scripts/validate-before.ps1
+        - ../data/scripts/validate-before.ps1
     deploy_after:
       scripts:
-        - tests/data/scripts/validate-after.ps1
+        - ../data/scripts/validate-after.ps1
   properties:
     deployment_strategy: blue_green
     maintenance_window: "03:00-05:00 UTC"

@@ -14,15 +14,15 @@ meta:
 spec:
   lifecycle:
     deploy_provision:
-      scripts: ["tests/data/scripts/mock_provision.sh"]
+      scripts: ["../data/scripts/mock_provision.sh"]
     deploy_configure:
-      scripts: ["tests/data/scripts/mock_configure.sh"]
+      scripts: ["../data/scripts/mock_configure.sh"]
     deploy_health:
-      scripts: ["tests/data/scripts/mock_healthcheck.sh"]
+      scripts: ["../data/scripts/mock_healthcheck.sh"]
     deploy_destroy_before:
-      scripts: ["tests/data/scripts/mock_protect.sh"]
+      scripts: ["../data/scripts/mock_protect.sh"]
     deploy_destroy_after:
-      scripts: ["tests/data/scripts/mock_destroy.sh"]
+      scripts: ["../data/scripts/mock_destroy.sh"]
   modules:
     - name: traefik
       description: Traefik reverse proxy module
