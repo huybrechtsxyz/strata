@@ -6,8 +6,6 @@ from xyz_platform.builders.platform_builder import PlatformBuilder
 
 
 def _mock_deployment_service(validated=True, workspace_service=None):
-    if workspace_service is None:
-        workspace_service = MagicMock()
     """Return a minimal MagicMock DeploymentService."""
     svc = MagicMock()
     svc.is_validated.return_value = validated
