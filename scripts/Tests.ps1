@@ -457,13 +457,28 @@ function Test-ContextCommands {
     .\scripts\Run.ps1 context list --work-path $app
 }
 
+# ==============================================================================
+# [REFERENCE] Status - inspect workspace health and configuration (solution, profile, repositories, etc.)
+# ==============================================================================
 
+function Test-StatusCommand {
+    .\scripts\Run.ps1 status -h
+    .\scripts\Run.ps1 status --work-path $app
+    .\scripts\Run.ps1 status --work-path $app --output console
+    .\scripts\Run.ps1 status --work-path $app --output json
+    .\scripts\Run.ps1 status --work-path $app --output text
+    .\scripts\Run.ps1 status --work-path $app --verbose
+    .\scripts\Run.ps1 status --work-path $app --quiet
+
+    # no initialized solution — should fail (INIT_REQUIRED = True)
+    .\scripts\Run.ps1 status --work-path "$app-missing"
+}
 
 #   audit     Observe and audit platform activity: execution history,...
 #   build     Build platform and Terraform artifacts.
 #   deploy    Deploy platform using provisioners.
 #   new       Create a new platform configuration file from a template.
-#   status    Show workspace health: solution, profile, repositories, and...
+
 #   tools     Manage and inspect external tool integrations.
 #   validate  Validate a platform YAML file against its kind-specific schema.
 #   values    Inspect and manage deployment values (variables, secrets,...
