@@ -40,24 +40,16 @@ master_doc = "index"
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # These patterns also effect html_static_path and html_extra_path
-exclude_patterns = [
-    "_build",
-    "Thumbs.db",
-    ".DS_Store",
-    # GitHub community health files — not Sphinx documentation pages.
-    # GitHub reads these from docs/ automatically; they don't belong in the toctree.
-    "ACKNOWLEDGMENTS.md",
-    "AUTHORS.md",
-    "CHANGELOG.md",
-    "CITATION.md",
-    "CODE_OF_CONDUCT.md",
-    "CONTRIBUTING.md",
-    "CONTRIBUTORS.md",
-    "GOVERNANCE.md",
-    "SECURITY.md",
-    "SQUAD.md",
-    "SUPPORT.md",
-]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+
+# Generate Sphinx-compatible anchors for headings (h1–h3) so that
+# Markdown ToC links like [Key Features](#key-features) resolve correctly.
+myst_heading_anchors = 3
+
+# Links in docs/README.md pointing to .github/ community health files are
+# intentionally outside Sphinx's source root — they work on GitHub but cannot
+# be resolved as Sphinx document cross-references. Suppress rather than error.
+suppress_warnings = ["myst.xref_missing"]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"

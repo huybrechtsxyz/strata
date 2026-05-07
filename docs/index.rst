@@ -12,7 +12,7 @@ xyz_platform
    :maxdepth: 2
    :caption: Getting Started:
 
-   ../README
+   README
 
 .. toctree::
    :maxdepth: 2
@@ -59,8 +59,6 @@ xyz_platform
 .. toctree::
    :maxdepth: 2
    :caption: CLI Reference:
-
-   platform/commands
 
 .. :orphan:
 
