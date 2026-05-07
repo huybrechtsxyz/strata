@@ -27,6 +27,7 @@ _TOPICS: dict[str, tuple[str, str]] = {
     # Integrations
     "git": ("Git: repository clone, fetch, push, branch, and diff operations", "git.md"),
     "terraform": ("Terraform: IaC provisioner used by the build and deploy pipeline", "terraform.md"),
+    "terraform-cloud-auth": ("Terraform Cloud: authentication setup and troubleshooting", "terraform-cloud-auth.md"),
     "docker": ("Docker: container runtime used by the platform", "docker.md"),
     "azure_appconfig": ("Azure App Configuration: externalized key-value config for profiles", "azure_appconfig.md"),
     "azure_keyvault": ("Azure Key Vault: secret resolution for refs and deploy values", "azure_keyvault.md"),
