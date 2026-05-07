@@ -6,6 +6,155 @@
     [REFERENCE] Per-command variations  pick individual lines to test specific flags
 #>
 
+$app = ".app"
+
+New-Item -Path $app -ItemType Directory -Force
+
+Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
+
+# ==============================================================================
+# [REFERENCE] Basic commands
+# ==============================================================================
+
+function Test-BasicCommands {
+    .\scripts\Run.ps1 -h
+    .\scripts\Run.ps1
+}
+
+# ==============================================================================
+# [REFERENCE] Version commands
+# ==============================================================================
+
+function Test-VersionCommands {
+    .\scripts\Run.ps1 version -h
+    .\scripts\Run.ps1 version
+    .\scripts\Run.ps1 version --output console
+    .\scripts\Run.ps1 version --output json
+    .\scripts\Run.ps1 version --output text
+}
+
+# ==============================================================================
+# [REFERENCE] Init — initialize a new solution workspace
+# ==============================================================================
+
+function Test-InitCommand {
+    New-Item -Path "$app-console", "$app-json", "$app-text", "$app-verbose", "$app-quiet" -ItemType Directory -Force
+
+    .\scripts\Run.ps1 init -h
+    .\scripts\Run.ps1 init
+    .\scripts\Run.ps1 init --name "test-solution" --work-path $app
+    .\scripts\Run.ps1 init --name "test-solution" --work-path "$app-console" --output console
+    .\scripts\Run.ps1 init --name "test-solution" --work-path "$app-json" --output json
+    .\scripts\Run.ps1 init --name "test-solution" --work-path "$app-text" --output text
+    .\scripts\Run.ps1 init --name "test-solution" --work-path "$app-verbose" --verbose
+    .\scripts\Run.ps1 init --name "test-solution" --work-path "$app-quiet" --quiet
+
+    Remove-Item -Path "$app-console", "$app-json", "$app-text", "$app-verbose", "$app-quiet" -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# ==============================================================================
+# [REFERENCE] Config — persist workspace defaults into .platform/cli.yaml
+# Allowed keys: output, verbose, quiet, work_path
+# ==============================================================================
+
+function Test-ConfigCommmand {
+    .\scripts\Run.ps1 config -h
+    .\scripts\Run.ps1 config
+
+    # set — define a default value for the current workspace
+    .\scripts\Run.ps1 config set -h
+
+    # output: cycle through all valid values
+    .\scripts\Run.ps1 config set --work-path $app output json
+    .\scripts\Run.ps1 config set --work-path $app output console
+    .\scripts\Run.ps1 config set --work-path $app output text
+    .\scripts\Run.ps1 config unset --work-path $app output
+
+    # verbose: set/unset cleanly (verbose and quiet are mutually exclusive in cli.yaml)
+    .\scripts\Run.ps1 config set --work-path $app verbose true
+    .\scripts\Run.ps1 config set --work-path $app verbose false
+    .\scripts\Run.ps1 config unset --work-path $app verbose
+
+    # quiet: only set after verbose is unset to avoid mutual exclusivity error
+    .\scripts\Run.ps1 config set --work-path $app quiet true
+    .\scripts\Run.ps1 config set --work-path $app quiet false
+    .\scripts\Run.ps1 config unset --work-path $app quiet
+
+    # work_path
+    .\scripts\Run.ps1 config set --work-path $app work_path $app
+    .\scripts\Run.ps1 config unset --work-path $app work_path
+
+    # set output variants — confirm --output flag echoes in requested format
+    .\scripts\Run.ps1 config set --work-path $app output json --output json
+    .\scripts\Run.ps1 config set --work-path $app output text --output text
+    .\scripts\Run.ps1 config unset --work-path $app output
+
+    # set invalid cases — should fail (no cleanup needed, nothing is written)
+    .\scripts\Run.ps1 config set --work-path $app output invalid       # invalid output value
+    .\scripts\Run.ps1 config set --work-path $app unknown_key value    # invalid key
+
+    # list — show all current defaults
+    .\scripts\Run.ps1 config list -h
+    .\scripts\Run.ps1 config list --work-path $app
+    .\scripts\Run.ps1 config list --work-path $app --output console
+    .\scripts\Run.ps1 config list --work-path $app --output json
+    .\scripts\Run.ps1 config list --work-path $app --output text
+
+    # unset — remove a specific default
+    .\scripts\Run.ps1 config unset -h
+    .\scripts\Run.ps1 config unset --work-path $app output
+    .\scripts\Run.ps1 config unset --work-path $app verbose
+    .\scripts\Run.ps1 config unset --work-path $app quiet
+    .\scripts\Run.ps1 config unset --work-path $app work_path
+
+    # unset output variants
+    .\scripts\Run.ps1 config unset --work-path $app output --output json
+    .\scripts\Run.ps1 config unset --work-path $app output --output text
+
+    # unset invalid key — should fail
+    .\scripts\Run.ps1 config unset --work-path $app unknown_key
+}
+
+# ==============================================================================
+# [REFERENCE] clean — remove workspace artifacts (logs, temp files)
+# ==============================================================================
+
+function Test-CleanCommand {
+    .\scripts\Run.ps1 clean -h
+
+    # dry-run — report what would be deleted without removing anything
+    .\scripts\Run.ps1 clean --work-path $app --dry-run
+    .\scripts\Run.ps1 clean --work-path $app --dry-run --output json
+    .\scripts\Run.ps1 clean --work-path $app --dry-run --output text
+
+    # clean — actually delete log files
+    .\scripts\Run.ps1 clean --work-path $app
+    .\scripts\Run.ps1 clean --work-path $app --output json
+    .\scripts\Run.ps1 clean --work-path $app --output text
+
+    # output modifiers
+    .\scripts\Run.ps1 clean --work-path $app --verbose
+    .\scripts\Run.ps1 clean --work-path $app --quiet
+
+    # no initialized solution — should fail (INIT_REQUIRED = True)
+    .\scripts\Run.ps1 clean --work-path "$app-missing"
+}
+
+
+
+#   audit     Observe and audit platform activity: execution history,...
+#   build     Build platform and Terraform artifacts.
+#   context   Manage team-shared template variables (stored in solution.json).
+#   deploy    Deploy platform using provisioners.
+#   help      Show help topics and workflow guidance.
+#   new       Create a new platform configuration file from a template.
+#   profile   Manage profiles in the current solution.
+#   ref       Manage file references (envfile, configfile, datafile,...
+#   repo      Manage repositories in the current solution.
+#   status    Show workspace health: solution, profile, repositories, and...
+#   tools     Manage and inspect external tool integrations.
+#   validate  Validate a platform YAML file against its kind-specific schema.
+#   values    Inspect and manage deployment values (variables, secrets,...
 
 # ------------------------------------------------------------------------------
 # [FLOW] End-to-end session lifecycle
@@ -17,105 +166,24 @@
 # $env:XYZ_VERBOSE    = "true"                      # enable verbose log replay
 # $env:XYZ_QUIET      = "true"                      # suppress all output
 
-$app = ".app"
 
-New-Item -Path $app -ItemType Directory -Force
+
 
 .\scripts\Run.ps1 init --name "test-solution" --work-path $app
 
-Remove-Item -Path $app -Recurse -Force -ErrorAction SilentlyContinue
-
-
-# ==============================================================================
-# [REFERENCE] Basic commands
-# ==============================================================================
-
-.\scripts\Run.ps1 -h
-.\scripts\Run.ps1
-
-# ==============================================================================
-# [REFERENCE] Version commands
-# ==============================================================================
-
-.\scripts\Run.ps1 version -h
-.\scripts\Run.ps1 version
-.\scripts\Run.ps1 version --output console
-.\scripts\Run.ps1 version --output json
-.\scripts\Run.ps1 version --output text
-
-# ==============================================================================
-# [REFERENCE] init — initialize a new solution workspace
-# ==============================================================================
-
-New-Item -Path $app+2, $app+3, $app+4, $app+5, $app+6 -ItemType Directory -Force
-
-.\scripts\Run.ps1 init -h
-.\scripts\Run.ps1 init
-.\scripts\Run.ps1 init --name "test-solution" --work-path $app
-.\scripts\Run.ps1 init --name "test-solution" --work-path $app+2 --output console
-.\scripts\Run.ps1 init --name "test-solution" --work-path $app+3 --output json
-.\scripts\Run.ps1 init --name "test-solution" --work-path $app+4 --output text
-.\scripts\Run.ps1 init --name "test-solution" --work-path $app+4 --verbose
-.\scripts\Run.ps1 init --name "test-solution" --work-path $app+5 --quiet
-
-remove-item -Path $app+2, $app+3, $app+4, $app+5, $app+6 -Recurse -Force -ErrorAction SilentlyContinue
-
-# ==============================================================================
-# [REFERENCE] Basic commands
-# clean
-# config
-# help
-# log
-# profile
-# repo
-# ref
-# status
-# ==============================================================================
 
 
 
 
 
 
-# ==============================================================================
-# [REFERENCE] clean — remove workspace artifacts (logs, temp files)
-# ==============================================================================
 
-.\scripts\Run.ps1 clean -h
-.\scripts\Run.ps1 clean --work-path $app --dry-run
-.\scripts\Run.ps1 clean --work-path $app
-.\scripts\Run.ps1 clean --work-path $app --output json
 
-# ==============================================================================
-# [REFERENCE] config — persist workspace defaults into .platform/cli.yaml
-# ==============================================================================
 
-.\scripts\Run.ps1 config -h
-.\scripts\Run.ps1 config
 
-# set — define a default value for the current workspace
-.\scripts\Run.ps1 config set -h
-.\scripts\Run.ps1 config set --work-path $app output json
-.\scripts\Run.ps1 config set --work-path $app output console
-.\scripts\Run.ps1 config set --work-path $app output text
-.\scripts\Run.ps1 config set --work-path $app verbose true
-.\scripts\Run.ps1 config set --work-path $app verbose false
-.\scripts\Run.ps1 config set --work-path $app quiet true
-.\scripts\Run.ps1 config set --work-path $app quiet false
 
-# list — show all current defaults
-.\scripts\Run.ps1 config list -h
-.\scripts\Run.ps1 config list --work-path $app
-.\scripts\Run.ps1 config list --work-path $app --output json
-.\scripts\Run.ps1 config list --work-path $app --output text
 
-# unset — remove a specific default
-.\scripts\Run.ps1 config unset -h
-.\scripts\Run.ps1 config unset --work-path $app output
-.\scripts\Run.ps1 config unset --work-path $app verbose
-.\scripts\Run.ps1 config unset --work-path $app quiet
 
-.\scripts\Run.ps1 config env -h
 
 # ==============================================================================
 # [REFERENCE] repo — manage repositories registered in the solution

@@ -123,7 +123,7 @@ def click_output_format(func):
     func = click.option(
         "--output",
         type=click.Choice(OUTPUT_FORMATS, case_sensitive=False),
-        default="console",
+        default=None,
         callback=validate_output_quiet_exclusive,
         help=f"Output format: {', '.join(formats_list)}",
     )(func)
