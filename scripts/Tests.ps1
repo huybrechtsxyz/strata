@@ -6,6 +6,14 @@
     [REFERENCE] Per-command variations  pick individual lines to test specific flags
 #>
 
+# ==============================================================================
+#   Explicit flag > XYZ_* env var > .platform/cli.yaml > built-in default
+# ==============================================================================
+# $env:XYZ_WORK_PATH  = (Resolve-Path $app).Path   # auto-resolve work path
+# $env:XYZ_OUTPUT     = "json"                      # default output format
+# $env:XYZ_VERBOSE    = "true"                      # enable verbose log replay
+# $env:XYZ_QUIET      = "true"                      # suppress all output
+
 $app = ".app"
 $cfgBase = (Resolve-Path "config").Path
 
@@ -517,99 +525,132 @@ function Test-ToolsCommand {
     .\scripts\Run.ps1 tools install no-such-tool --work-path $app   # should fail
 }
 
+# ==============================================================================
+# [REFERENCE] Audit - observe and audit platform activity: execution history, configuration changes, etc.
+# ==============================================================================
+
+function Test-AuditCommand {
+    .\scripts\Run.ps1 audit -h
+    .\scripts\Run.ps1 audit
+
+    # audit list — show execution log entries
+    .\scripts\Run.ps1 audit list -h
+    .\scripts\Run.ps1 audit list --work-path $app
+    .\scripts\Run.ps1 audit list --work-path $app --output console
+    .\scripts\Run.ps1 audit list --work-path $app --output json
+    .\scripts\Run.ps1 audit list --work-path $app --output text
+    .\scripts\Run.ps1 audit list --work-path $app --lines 10
+    .\scripts\Run.ps1 audit list --work-path $app --lines 100
+    .\scripts\Run.ps1 audit list --work-path $app --minutes 10
+    .\scripts\Run.ps1 audit list --work-path $app --level DEBUG
+    .\scripts\Run.ps1 audit list --work-path $app --level INFO
+    .\scripts\Run.ps1 audit list --work-path $app --level WARNING
+    .\scripts\Run.ps1 audit list --work-path $app --level ERROR
+    .\scripts\Run.ps1 audit list --work-path $app --last
+    .\scripts\Run.ps1 audit list --work-path $app --last --output json
+    .\scripts\Run.ps1 audit list --work-path $app --verbose
+    .\scripts\Run.ps1 audit list --work-path $app --quiet
+
+    # no initialized solution — should fail (INIT_REQUIRED = True)
+    .\scripts\Run.ps1 audit list --work-path "$app-missing"
+
+    # audit log — manage logging.yaml configuration
+    .\scripts\Run.ps1 audit log -h
+    .\scripts\Run.ps1 audit log
+
+    # audit log list — show full logging.yaml content
+    .\scripts\Run.ps1 audit log list -h
+    .\scripts\Run.ps1 audit log list --work-path $app
+    .\scripts\Run.ps1 audit log list --work-path $app --output json
+    .\scripts\Run.ps1 audit log list --work-path $app --output text
+
+    # audit log get — retrieve a value by dot-notation key
+    .\scripts\Run.ps1 audit log get -h
+    .\scripts\Run.ps1 audit log get level                          --work-path $app
+    .\scripts\Run.ps1 audit log get handlers.console.level         --work-path $app
+    .\scripts\Run.ps1 audit log get loggers.xyz_platform.level     --work-path $app
+    .\scripts\Run.ps1 audit log get no.such.key                    --work-path $app  # should fail
+
+    # audit log set — write a value; 'level' shorthand sets handler + logger level at once
+    .\scripts\Run.ps1 audit log set -h
+    .\scripts\Run.ps1 audit log set level DEBUG                    --work-path $app
+    .\scripts\Run.ps1 audit log set level INFO                     --work-path $app
+    .\scripts\Run.ps1 audit log set level WARNING                  --work-path $app
+    .\scripts\Run.ps1 audit log set handlers.console.level ERROR   --work-path $app
+
+    # audit log unset — remove a key from logging.yaml
+    .\scripts\Run.ps1 audit log unset -h
+    .\scripts\Run.ps1 audit log unset level                        --work-path $app
+    .\scripts\Run.ps1 audit log unset handlers.console.level       --work-path $app
+
+    # audit log reset — restore to package default
+    .\scripts\Run.ps1 audit log reset -h
+    .\scripts\Run.ps1 audit log reset --work-path $app
+}
+
+# ==============================================================================
+# [REFERENCE] New - scaffold a new platform configuration file from a template
+# ==============================================================================
+
+function Test-NewCommand {
+    .\scripts\Run.ps1 new -h
+
+    # --list — show all available templates (no workspace required)
+    .\scripts\Run.ps1 new --list
+    .\scripts\Run.ps1 new --list --work-path $app   # workspace templates merged when .platform/templates/ exists
+
+    # scaffold each built-in template type; NAME is written into meta.name
+    .\scripts\Run.ps1 new configuration  my-config    --work-path $app
+    .\scripts\Run.ps1 new firewall       my-firewall  --work-path $app
+    .\scripts\Run.ps1 new module         my-module    --work-path $app
+    .\scripts\Run.ps1 new namespace      my-namespace --work-path $app
+    .\scripts\Run.ps1 new provider       my-provider  --work-path $app
+    .\scripts\Run.ps1 new resource       my-resource  --work-path $app
+    .\scripts\Run.ps1 new workspace      my-workspace --work-path $app
+
+    # output formats — confirm rendering echoes in the requested format
+    .\scripts\Run.ps1 new namespace my-namespace --work-path $app --output console
+    .\scripts\Run.ps1 new namespace my-namespace --work-path $app --output json
+    .\scripts\Run.ps1 new namespace my-namespace --work-path $app --output text
+
+    # --path — write YAML to a specific file
+    .\scripts\Run.ps1 new namespace my-namespace --work-path $app --path "$app/my-namespace.yaml"
+
+    # --overwrite — re-scaffold over an existing file
+    .\scripts\Run.ps1 new namespace my-namespace --work-path $app --path "$app/my-namespace.yaml" --overwrite
+
+    # --set — override individual template variables
+    .\scripts\Run.ps1 new namespace my-namespace --work-path $app --set "description=test namespace"
+    .\scripts\Run.ps1 new namespace my-namespace --work-path $app --set "description=foo" --set "version=2.0.0"
+
+    # missing TEMPLATE — should fail (exit 2)
+    .\scripts\Run.ps1 new --work-path $app
+
+    # missing NAME — should fail (exit 2)
+    .\scripts\Run.ps1 new namespace --work-path $app
+
+    # unknown template — should fail (exit 1)
+    .\scripts\Run.ps1 new no-such-template my-name --work-path $app
+
+    # write-without-overwrite when file already exists — should fail
+    .\scripts\Run.ps1 new namespace my-namespace --work-path $app --path "$app/my-namespace.yaml"
+}
 
 
 
 
 
-
-
-#   audit     Observe and audit platform activity: execution history,...
 #   build     Build platform and Terraform artifacts.
 #   deploy    Deploy platform using provisioners.
-#   new       Create a new platform configuration file from a template.
 
 #   validate  Validate a platform YAML file against its kind-specific schema.
 #   values    Inspect and manage deployment values (variables, secrets,...
 
-# ------------------------------------------------------------------------------
+# ==============================================================================
 # [FLOW] End-to-end session lifecycle
-# [FLOW] Optional: set env vars to test the resolution order
-#   Explicit flag > XYZ_* env var > .platform/cli.yaml > built-in default
-# ------------------------------------------------------------------------------
-# $env:XYZ_WORK_PATH  = (Resolve-Path $app).Path   # auto-resolve work path
-# $env:XYZ_OUTPUT     = "json"                      # default output format
-# $env:XYZ_VERBOSE    = "true"                      # enable verbose log replay
-# $env:XYZ_QUIET      = "true"                      # suppress all output
-
-
-
+# ==============================================================================
 
 .\scripts\Run.ps1 init --name "test-solution" --work-path $app
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ==============================================================================
-# [REFERENCE] log — view execution logs and manage logging configuration
-# ==============================================================================
-
-.\scripts\Run.ps1 log -h
-.\scripts\Run.ps1 log
-
-# log show — display execution log entries
-.\scripts\Run.ps1 log show -h
-.\scripts\Run.ps1 log show --work-path $app
-.\scripts\Run.ps1 log show --work-path $app --lines 20
-.\scripts\Run.ps1 log show --work-path $app --level WARNING
-.\scripts\Run.ps1 log show --work-path $app --level DEBUG
-.\scripts\Run.ps1 log show --work-path $app --minutes 10
-.\scripts\Run.ps1 log show --work-path $app --last
-.\scripts\Run.ps1 log show --work-path $app --output json
-.\scripts\Run.ps1 log show --work-path $app --output text
-
-# log list — show full logging.yaml content
-.\scripts\Run.ps1 log list -h
-.\scripts\Run.ps1 log list --work-path $app
-.\scripts\Run.ps1 log list --work-path $app --output json
-.\scripts\Run.ps1 log list --work-path $app --output text
-
-# log get — retrieve a value by dot-notation key
-.\scripts\Run.ps1 log get -h
-.\scripts\Run.ps1 log get level --work-path $app
-.\scripts\Run.ps1 log get handlers.console.level --work-path $app
-.\scripts\Run.ps1 log get loggers.xyz_platform.level --work-path $app
-
-# log set — write a value; 'level' shorthand sets handler + logger level at once
-.\scripts\Run.ps1 log set -h
-.\scripts\Run.ps1 log set level DEBUG --work-path $app
-.\scripts\Run.ps1 log set level INFO --work-path $app
-.\scripts\Run.ps1 log set level WARNING --work-path $app
-.\scripts\Run.ps1 log set handlers.console.level ERROR --work-path $app
-
-# log unset — remove a key from logging.yaml
-.\scripts\Run.ps1 log unset -h
-.\scripts\Run.ps1 log unset level --work-path $app
-.\scripts\Run.ps1 log unset handlers.console.level --work-path $app
-
-# log reset — restore to package default
-.\scripts\Run.ps1 log reset -h
-.\scripts\Run.ps1 log reset --work-path $app
 
 # ==============================================================================
 # End of reference commands

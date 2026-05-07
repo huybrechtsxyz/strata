@@ -80,11 +80,12 @@ class NewCommand(BaseCommand):
 
     def __init__(
         self,
-        template: str,
-        name: str,
-        path: Optional[str],
-        overwrite: bool,
-        set_values: Tuple[str, ...],
+        template: Optional[str],
+        name: Optional[str],
+        list_templates: bool = False,
+        path: Optional[str] = None,
+        overwrite: bool = False,
+        set_values: Tuple[str, ...] = (),
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -94,6 +95,7 @@ class NewCommand(BaseCommand):
         self.logger = get_logger(self.__class__.__module__)
         self._template = template
         self._name = name
+        self._list_templates = list_templates
         self._path = path
         self._overwrite = overwrite
         self._set_values = set_values  # tuple of "KEY=VALUE" strings
@@ -160,7 +162,22 @@ class NewCommand(BaseCommand):
         return super()._before_execute()
 
     def _run_execution(self) -> bool:
+        # --list: show available templates and exit cleanly
+        if self._list_templates:
+            available = _collect_available_templates(self._work_path)
+            self._output_data = {"templates": available}
+            if self._is_console_output():
+                if available:
+                    click.echo("\nAvailable templates:")
+                    for t in available:
+                        click.echo(f"  {t}")
+                    click.echo("")
+                else:
+                    click.echo("No templates found.")
+            return True
+
         # 1. Resolve template file
+        assert self._template is not None and self._name is not None  # guarded in cli_new.py
         template_path = _resolve_template_path(self._template, self._work_path)
         if template_path is None:
             available = _collect_available_templates(self._work_path)
@@ -236,7 +253,7 @@ class NewCommand(BaseCommand):
         return True
 
     def _after_execute(self) -> bool:
-        if self._is_console_output():
+        if not self._list_templates and self._is_console_output():
             path = self._output_data.get("path", "")
             if path:
                 click.echo(f"\n✅  Created: {path}\n")
