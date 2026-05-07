@@ -451,3 +451,28 @@ class BaseIntegration(ABC):
             )
 
         return result
+
+    def get_setup_info(self) -> Dict[str, Any]:
+        """
+        Return setup and configuration metadata for this integration.
+
+        Subclasses override this to provide install URLs, required env vars,
+        supported auth methods, and a YAML configuration example.
+
+        Returns:
+            Dict with keys:
+                name        - friendly integration type name
+                command     - CLI command binary (None if SDK-only)
+                install_url - URL for installation docs (None if N/A)
+                env_vars    - list of {"name", "purpose", "required"} dicts
+                auth_methods - list of {"method", "description"} dicts
+                yaml_example - multiline YAML string or None
+        """
+        return {
+            "name": self.__class__.__name__,
+            "command": self.command if hasattr(self, "command") else None,
+            "install_url": None,
+            "env_vars": [],
+            "auth_methods": [],
+            "yaml_example": None,
+        }

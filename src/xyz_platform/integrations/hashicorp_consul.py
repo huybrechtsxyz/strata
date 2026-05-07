@@ -134,6 +134,23 @@ class ConsulIntegration(StoreIntegration):
             return match.group(1)
         return version_output.strip()
 
+    def get_setup_info(self) -> dict:
+        """Return setup metadata for hashicorp_consul."""
+        return {
+            "name": "hashicorp_consul",
+            "command": "consul",
+            "install_url": "https://developer.hashicorp.com/consul/install",
+            "env_vars": [
+                {"name": "CONSUL_HTTP_TOKEN", "purpose": "Consul ACL token for authentication", "required": True},
+                {"name": "CONSUL_HTTP_ADDR", "purpose": "Consul server HTTP address (derived from endpoints.address if set)", "required": False},
+                {"name": "CONSUL_NAMESPACE", "purpose": "Consul namespace (Consul Enterprise only)", "required": False},
+            ],
+            "auth_methods": [
+                {"method": "ACL token", "description": "Set CONSUL_HTTP_TOKEN. Use a policy-scoped token, not the root token."},
+            ],
+            "yaml_example": "type: hashicorp_consul\nspec:\n  endpoints:\n    address: http://consul.example.com:8500",
+        }
+
     def ensure_available(self) -> Tuple[bool, str]:
         """
         Ensure integration is available with proper configuration.

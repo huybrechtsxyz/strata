@@ -87,6 +87,20 @@ class GitIntegration(BaseIntegration):
             return match.group(1)
         return version_output.strip()
 
+    def get_setup_info(self) -> dict:
+        """Return setup metadata for git."""
+        return {
+            "name": "git",
+            "command": "git",
+            "install_url": "https://git-scm.com/downloads",
+            "env_vars": [],
+            "auth_methods": [
+                {"method": "SSH keys", "description": "Add SSH key to remote (e.g. GitHub/GitLab). No env vars needed."},
+                {"method": "HTTPS credentials", "description": "Git credential helper or personal access token in remote URL."},
+            ],
+            "yaml_example": None,
+        }
+
     def ensure_available(self) -> Tuple[bool, str]:
         """
         Ensure integration is available.

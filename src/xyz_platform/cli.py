@@ -39,12 +39,14 @@ from xyz_platform.commands.cli_profile import profile_group
 from xyz_platform.commands.cli_ref import ref_group
 from xyz_platform.commands.cli_repo import repo_group
 from xyz_platform.commands.cli_status import status_command
+from xyz_platform.commands.cli_tools import tools_group
 from xyz_platform.commands.cli_validate import validate_command
 from xyz_platform.commands.cli_values import values_group
 from xyz_platform.commands.cli_version import version_command
 from xyz_platform.logger import configure_logging, get_logger, shutdown_logging
 from xyz_platform.utils import system
 from xyz_platform.utils.config import SOLUTION_CONFIG_FILE, SOLUTION_DIR
+from xyz_platform.utils.integration_loader import load_workspace_integrations
 from xyz_platform.utils.system import resolve_work_path
 
 logger = get_logger(__name__)
@@ -150,6 +152,12 @@ def main(ctx: click.Context) -> None:
         ctx.default_map = _build_default_map(ctx.command, workspace_defaults)
         logger.debug("Workspace values loaded", values=workspace_defaults)
 
+    # Load workspace-local integration drop-ins (.platform/integrations/*.py)
+    try:
+        load_workspace_integrations(work_path)
+    except Exception as exc:
+        logger.debug("Workspace integration loader error (non-fatal)", error=str(exc))
+
 
 #
 # REGISTER COMMAND GROUPS
@@ -172,6 +180,7 @@ main.add_command(validate_command, name="validate")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
 main.add_command(values_group, name="values")
+main.add_command(tools_group, name="tools")
 # ENTRY POINT
 #
 

@@ -134,6 +134,23 @@ class VaultIntegration(StoreIntegration):
             return match.group(1)
         return version_output.strip()
 
+    def get_setup_info(self) -> dict:
+        """Return setup metadata for hashicorp_vault."""
+        return {
+            "name": "hashicorp_vault",
+            "command": "vault",
+            "install_url": "https://developer.hashicorp.com/vault/install",
+            "env_vars": [
+                {"name": "VAULT_TOKEN", "purpose": "Vault authentication token", "required": True},
+                {"name": "VAULT_ADDR", "purpose": "Vault server address (derived from endpoints.address if set)", "required": False},
+            ],
+            "auth_methods": [
+                {"method": "Token", "description": "Set VAULT_TOKEN. Most common method for automation."},
+                {"method": "AppRole", "description": "Obtain token via vault write auth/approle/login; then set VAULT_TOKEN."},
+            ],
+            "yaml_example": "type: hashicorp_vault\nspec:\n  endpoints:\n    address: https://vault.example.com",
+        }
+
     def ensure_available(self) -> Tuple[bool, str]:
         """
         Ensure integration is available with proper configuration.

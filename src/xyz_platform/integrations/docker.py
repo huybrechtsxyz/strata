@@ -86,6 +86,20 @@ class DockerIntegration(BaseIntegration):
             return match.group(1)
         return version_output.strip()
 
+    def get_setup_info(self) -> dict:
+        """Return setup metadata for docker."""
+        return {
+            "name": "docker",
+            "command": "docker",
+            "install_url": "https://docs.docker.com/get-docker/",
+            "env_vars": [],
+            "auth_methods": [
+                {"method": "Docker daemon", "description": "Docker Desktop or daemon must be running. No env vars required."},
+                {"method": "docker login", "description": "Run 'docker login <registry>' to authenticate to a private registry."},
+            ],
+            "yaml_example": None,
+        }
+
     def ensure_available(self) -> Tuple[bool, str]:
         """
         Ensure integration is available.

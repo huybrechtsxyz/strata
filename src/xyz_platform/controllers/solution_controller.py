@@ -1027,6 +1027,27 @@ class SolutionController(BaseController):
                 self._add_error(msg)
                 return False, self.get_errors()
 
+        # Create .platform/integrations/ directory with README stub for drop-in extensions
+        integrations_dir = state_dir / "integrations"
+        integrations_dir.mkdir(exist_ok=True)
+        integrations_readme = integrations_dir / "README.md"
+        if not integrations_readme.exists():
+            try:
+                integrations_readme.write_text(
+                    "# Custom Integrations\n\n"
+                    "Place `.py` files here to register custom integrations with the xyz platform.\n\n"
+                    "Each file must define a `register()` function that calls\n"
+                    "`IntegrationFactory.register_type(type_str, cls)`.\n\n"
+                    "See `xyz help integrations` for documentation.\n",
+                    encoding="utf-8",
+                )
+                self.logger.info("Integrations directory initialised", path=str(integrations_dir))
+                self._add_message(f"Created: {integrations_readme.relative_to(self._work_path)}")
+            except Exception as e:
+                msg = f"Failed to write integrations README: {e}"
+                self._add_error(msg)
+                return False, self.get_errors()
+
         return True, []
 
     # ------------------------------------------------------------------

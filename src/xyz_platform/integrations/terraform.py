@@ -86,6 +86,23 @@ class TerraformIntegration(BaseIntegration):
             return match.group(1)
         return version_output.strip()
 
+    def get_setup_info(self) -> dict:
+        """Return setup metadata for terraform."""
+        return {
+            "name": "terraform",
+            "command": "terraform",
+            "install_url": "https://developer.hashicorp.com/terraform/install",
+            "env_vars": [
+                {"name": "TERRAFORM_API_TOKEN", "purpose": "API token for Terraform Cloud / HCP Terraform authentication", "required": False},
+            ],
+            "auth_methods": [
+                {"method": "Environment variable", "description": "Set TERRAFORM_API_TOKEN. Platform writes a temporary .terraformrc on deploy."},
+                {"method": "Credentials file", "description": "~/.terraform.d/credentials.tfrc.json with token for app.terraform.io."},
+                {"method": "Interactive login", "description": "Run 'terraform login' once; stored in credentials file."},
+            ],
+            "yaml_example": "type: terraform\nspec:\n  source: path/to/module\n  backend: remote",
+        }
+
     def ensure_available(self) -> Tuple[bool, str]:
         """
         Ensure integration is available.
