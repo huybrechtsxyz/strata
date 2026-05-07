@@ -6,11 +6,12 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: workspace
 meta:
-  name: template_workspace
+  name: ${name}
   annotations:
     description: "Platform workspace template"
+    owner: ${owner}
   labels:
-    version: "1.0.0"
+    version: ${version}
   tags: [ "template", "workspace" ]
 spec:
   # Providers (cloud/infrastructure providers)

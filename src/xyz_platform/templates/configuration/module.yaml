@@ -6,11 +6,12 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: module
 meta:
-  name: template_module
+  name: ${name}
   annotations:
     description: "Application module template"
+    owner: ${owner}
   labels:
-    version: "1.0.0"
+    version: ${version}
     category: "application"
   tags: [ "template", "module" ]
 spec:

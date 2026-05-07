@@ -30,9 +30,11 @@ from xyz_platform.commands.cli_audit import audit_group
 from xyz_platform.commands.cli_builders import build as build_group
 from xyz_platform.commands.cli_clean import clean_command
 from xyz_platform.commands.cli_config import config_group
+from xyz_platform.commands.cli_context import context_group
 from xyz_platform.commands.cli_deploy import deploy as deploy_group
 from xyz_platform.commands.cli_help import help_command
 from xyz_platform.commands.cli_init import init_command
+from xyz_platform.commands.cli_new import new_command
 from xyz_platform.commands.cli_profile import profile_group
 from xyz_platform.commands.cli_ref import ref_group
 from xyz_platform.commands.cli_repo import repo_group
@@ -160,6 +162,8 @@ main.add_command(init_command, name="init")
 main.add_command(clean_command, name="clean")
 main.add_command(status_command, name="status")
 main.add_command(config_group, name="config")
+main.add_command(context_group, name="context")
+main.add_command(new_command, name="new")
 main.add_command(audit_group, name="audit")
 main.add_command(repo_group, name="repo")
 main.add_command(profile_group, name="profile")

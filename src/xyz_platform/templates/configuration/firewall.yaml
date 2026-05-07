@@ -6,11 +6,12 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: firewall
 meta:
-  name: template_firewall
+  name: ${name}
   annotations:
     description: "Firewall rules template"
+    owner: ${owner}
   labels:
-    version: "1.0.0"
+    version: ${version}
   tags: [ "template", "security", "firewall" ]
 spec:
   # Reset existing rules before applying (true/false)

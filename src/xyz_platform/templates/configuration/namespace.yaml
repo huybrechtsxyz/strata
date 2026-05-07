@@ -6,11 +6,12 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: namespace
 meta:
-  name: template_namespace
+  name: ${name}
   annotations:
     description: "Application namespace template"
+    owner: ${owner}
   labels:
-    version: "1.0.0"
+    version: ${version}
   tags: [ "template", "namespace" ]
 spec:
   # Modules deployed in this namespace

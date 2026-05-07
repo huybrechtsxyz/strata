@@ -6,12 +6,12 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: configuration
 meta:
-  name: template_config
+  name: ${name}
   annotations:
     description: "Configuration template for platform setup"
-    owner: "platform-team@example.com"
+    owner: ${owner}
   labels:
-    version: "1.0.0"
+    version: ${version}
     environment: "template"
   tags: [ "template", "example" ]
 spec:

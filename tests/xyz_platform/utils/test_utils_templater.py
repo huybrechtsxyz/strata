@@ -66,3 +66,39 @@ def test_process_template_missing_env(monkeypatch):
             content = f.read()
         # Placeholder should remain
         assert 'foo = "$NOT_SET"' in content
+
+
+# =============================================================================
+# TemplateProcessor.render — static method tests
+# =============================================================================
+
+
+class TestTemplateProcessorRender:
+    def test_render_substitutes_known_var_braces(self):
+        result = TemplateProcessor.render("hello ${name}", {"name": "world"})
+        assert result == "hello world"
+
+    def test_render_substitutes_dollar_no_braces(self):
+        result = TemplateProcessor.render("hello $name", {"name": "world"})
+        assert result == "hello world"
+
+    def test_render_leaves_unknown_var(self):
+        result = TemplateProcessor.render("hello ${unknown}", {"name": "world"})
+        assert result == "hello ${unknown}"
+
+    def test_render_empty_context(self):
+        result = TemplateProcessor.render("${name}", {})
+        assert result == "${name}"
+
+    def test_render_multiple_vars(self):
+        result = TemplateProcessor.render("${greeting} ${name}!", {"greeting": "Hi", "name": "Alice"})
+        assert result == "Hi Alice!"
+
+    def test_render_known_and_unknown_mixed(self):
+        result = TemplateProcessor.render("${name} — ${missing}", {"name": "foo"})
+        assert result == "foo — ${missing}"
+
+    def test_render_empty_string(self):
+        result = TemplateProcessor.render("", {"name": "val"})
+        assert result == ""
+

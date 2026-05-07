@@ -6,11 +6,12 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: provider
 meta:
-  name: template_provider
+  name: ${name}
   annotations:
     description: "Cloud provider configuration template"
+    owner: ${owner}
   labels:
-    version: "1.0.0"
+    version: ${version}
   tags: [ "template", "cloud" ]
 spec:
   # Provider details

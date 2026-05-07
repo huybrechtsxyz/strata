@@ -993,6 +993,27 @@ class SolutionController(BaseController):
         logs_dir = state_dir / "logs"
         logs_dir.mkdir(exist_ok=True)
 
+        # Copy configuration templates from templates/configuration/
+        config_templates_src = get_pkg_templates_path() / "configuration"
+        if config_templates_src.exists() and config_templates_src.is_dir():
+            templates_dest = state_dir / "templates"
+            templates_dest.mkdir(exist_ok=True)
+            for src_file in config_templates_src.iterdir():
+                if not src_file.is_file():
+                    continue
+                dest_file = templates_dest / src_file.name
+                if dest_file.exists():
+                    self.logger.debug("Template already exists — skipping", path=str(dest_file))
+                    continue
+                try:
+                    dest_file.write_text(src_file.read_text(encoding="utf-8"), encoding="utf-8")
+                    self.logger.info("Configuration template written", path=str(dest_file))
+                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
+                except Exception as e:
+                    msg = f"Failed to write configuration template {src_file.name}: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
+
         # Copy workspace README from templates/solution/README.md
         readme_src = templates_dir / "README.md"
         dest_readme = state_dir / "README.md"

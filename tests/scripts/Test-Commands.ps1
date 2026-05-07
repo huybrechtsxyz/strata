@@ -27,7 +27,7 @@
 
 param(
     [ValidateSet('all', 'help', 'version', 'status', 'clean', 'config', 'audit',
-        'repo', 'profile', 'ref', 'validate', 'build', 'deploy', 'values')]
+        'repo', 'profile', 'ref', 'validate', 'build', 'deploy', 'values', 'new', 'context')]
     [string]$Category = 'all',
     [switch]$ShowOutput
 )
@@ -489,6 +489,68 @@ function Test-ValuesCommands {
 }
 
 # =============================================================================
+# Test: New
+# =============================================================================
+function Test-NewCommands {
+    Write-TestHeader "new"
+
+    Test-Cmd "new: -h" `
+        -Args @('new', '-h') `
+        -Contains @('TEMPLATE', 'NAME', 'path')
+
+    Test-Cmd "new: --list" `
+        -Args @('new', '--list') `
+        -ExitCode 0
+
+    Test-Cmd "new: namespace in tmp dir (exit 0)" `
+        -Args @('new', 'namespace', 'myapp', '--path', $env:TEMP) `
+        -ExitCode 0
+
+    Test-Cmd "new: unknown template exits 1" `
+        -Args @('new', 'nonexistent_xyz_template', 'myapp') `
+        -ExitCode 1
+
+    Test-Cmd "new: existing file no --overwrite exits 1" `
+        -Args @('new', 'namespace', 'myapp', '--path', $env:TEMP) `
+        -ExitCode 1
+
+    Test-Cmd "new: existing file with --overwrite exits 0" `
+        -Args @('new', 'namespace', 'myapp', '--path', $env:TEMP, '--overwrite') `
+        -ExitCode 0
+}
+
+# =============================================================================
+# Test: Context
+# =============================================================================
+function Test-ContextCommands {
+    Write-TestHeader "context"
+
+    Test-Cmd "context: -h" `
+        -Args @('context', '-h') `
+        -Contains @('set', 'unset', 'list')
+
+    Test-Cmd "context set: -h" `
+        -Args @('context', 'set', '-h') `
+        -Contains @('KEY', 'VALUE')
+
+    Test-Cmd "context unset: -h" `
+        -Args @('context', 'unset', '-h') `
+        -Contains @('KEY')
+
+    Test-Cmd "context list: -h" `
+        -Args @('context', 'list', '-h') `
+        -Contains @('template')
+
+    Test-Cmd "context list: outside workspace exits 1" `
+        -Args @('context', 'list', '--work-path', 'C:\Temp') `
+        -ExitCode 1
+
+    Test-Cmd "context set: outside workspace exits 1" `
+        -Args @('context', 'set', 'owner', 'myteam', '--work-path', 'C:\Temp') `
+        -ExitCode 1
+}
+
+# =============================================================================
 # Main Execution
 # =============================================================================
 
@@ -516,6 +578,8 @@ switch ($Category) {
         Test-ProfileCommands
         Test-RefCommands
         Test-ValidateCommands
+        Test-NewCommands
+        Test-ContextCommands
         Test-BuildCommands
         Test-DeployCommands
         Test-ValuesCommands
@@ -530,6 +594,8 @@ switch ($Category) {
     'profile' { Test-ProfileCommands }
     'ref' { Test-RefCommands }
     'validate' { Test-ValidateCommands }
+    'new' { Test-NewCommands }
+    'context' { Test-ContextCommands }
     'build' { Test-BuildCommands }
     'deploy' { Test-DeployCommands }
     'values' { Test-ValuesCommands }

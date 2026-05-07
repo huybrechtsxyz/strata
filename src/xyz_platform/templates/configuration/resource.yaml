@@ -6,11 +6,12 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: resource
 meta:
-  name: template_resource
+  name: ${name}
   annotations:
     description: "Infrastructure resource template"
+    owner: ${owner}
   labels:
-    version: "1.0.0"
+    version: ${version}
     environment: "production"
   tags: [ "template", "infrastructure" ]
 spec:
