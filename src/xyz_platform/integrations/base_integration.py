@@ -274,7 +274,7 @@ class BaseIntegration(ABC):
         if use_cache and self._version is not None:
             return self._version
 
-        if not self.is_available(use_cache=False):
+        if not self.is_available(use_cache=True):
             return None
 
         try:
