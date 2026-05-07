@@ -1,0 +1,21 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: environments  # Invalid: should be 'environment'
+meta:
+  # Missing required 'name' field
+  annotations:
+    description: Invalid environment example
+  labels:
+    # version is present, but missing other required label fields if any
+  tags: ["invalid", "test"]
+spec:
+  # 'properties' is missing (required)
+  custom: "should-be-a-dict-not-string"
+  variables:
+    - key: ''  # Empty key, should not be allowed
+      store: 123  # Invalid type, should be string/enum
+      value: null
+  secrets:
+    - key: 123  # Invalid type, should be string
+      store: constant
+      value: null
+  features: "should-be-a-dict-not-string"

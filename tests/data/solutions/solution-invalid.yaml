@@ -1,0 +1,27 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: solution
+meta:
+  # Empty name — should be rejected
+  name: ""
+  annotations:
+    description: Invalid solution example
+spec:
+  # Missing required 'solution_id' field
+  repositories:
+    - name: xyz-config
+      # Missing required 'url' field
+      path: repos/xyz-config
+      type: config
+      branch: main
+    - name: 123 # Invalid: name cannot start with a digit
+      url: "git@github.com:org/xyz-infrastructure.git"
+      path: repos/xyz-infrastructure
+      type: infrastructure
+      branch: main
+  profiles:
+    - name: prd
+      # Missing required 'active' field
+      configfile_paths:
+        - name: global-config
+          # Missing required 'path' field
+          type: config

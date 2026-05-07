@@ -1,0 +1,32 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: configuration
+meta:
+  # Missing required 'name' field
+  annotations:
+    description: Invalid configuration example
+  labels:
+    # version is present, but missing other required label fields if any
+  tags: ["invalid", "test"]
+spec:
+  # 'properties' is present but not a dict (should be a dict)
+  properties: "should-be-a-dict-not-string"
+  providers:
+    - name: 123  # Invalid type, should be a string matching PlatformName pattern
+      # Missing required 'description' field
+      additional_regions: "not-a-bool"  # Invalid type
+      regions: "should-be-list"
+      additional_resources: false
+      resources:
+        - name: ''  # Empty name, should not be allowed
+          description: 123  # Invalid type, should be string
+          configuration: "not-a-dict"
+  topologies:
+    - # Missing required 'type' field
+      description: 123  # Invalid type, should be string
+      components:
+        - role: 456  # Invalid type, should be string matching PlatformName
+          description: 789  # Invalid type, should be string
+          uses_module: "not-a-bool"
+          required: "not-a-bool"
+          min_count: "not-an-int"
+          max_count: -1  # Negative count, likely invalid

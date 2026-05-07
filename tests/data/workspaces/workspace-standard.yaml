@@ -1,0 +1,68 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: workspace
+meta:
+  name: valid_workspace
+  annotations:
+    description: Valid workspace example
+    owner: example@xyz.com
+  labels:
+    version: "1.0.0"
+    environment: production
+    customer: example-xyz
+    project: cloud-platform
+  tags: ["platform", "infrastructure", "system"]
+spec:
+  properties:
+    terraform:
+      organization: example-xyz
+      cloudspace: example-xyz-platform
+  custom:
+    costcenter: "XYZ-PLATFORM"
+  providers:
+    - name: kamatera_europe
+      file: tests/data/providers/provider-standard.yaml
+  provisioners:
+    - name: platform_infrastructure
+      provisioner: terraform
+      source:
+        repository: platform-iac
+        source_path: deploy/terraform
+        target_path: iac/terraform
+  resources:
+    - name: manager
+      role: manager
+      file: tests/data/resources/resource-standard.yaml
+      count: 1
+      modules:
+        - name: traefik
+          file: tests/data/modules/module-standard.yaml
+          slot_type: main
+      labels:
+        role: manager
+      tags: ["critical", "swarm"]
+    - name: worker
+      role: worker
+      file: tests/data/resources/resource-standard.yaml
+      count: 2
+      labels:
+        role: worker
+      tags: ["swarm"]
+  topology:
+    - name: platform_swarm
+      provider: kamatera_europe
+      provisioner: terraform
+      type: dockerswarm
+      components:
+        - resource: manager
+        - resource: worker
+      volumes:
+        - name: config
+          type: replicated
+        - name: data
+          type: local
+  namespaces:
+    - name: platform_ns
+      file: tests/data/namespaces/namespace-standard.yaml
+  firewalls:
+    - name: platform_fw
+      file: tests/data/firewalls/firewall-standard.yaml

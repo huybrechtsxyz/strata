@@ -1,0 +1,47 @@
+# Valid unknown model example
+# Tests that UnknownModel accepts unrecognized resource types
+# while still validating required fields
+
+apiVersion: platform.future.xyz/v2
+kind: FutureResource
+meta:
+  name: example_future_resource
+  annotations:
+    description: Example of a future resource type not yet supported
+    created: "2026-01-19"
+    author: "Platform Team"
+  labels:
+    version: "2.0.0"
+    environment: development
+    experimental: true
+  tags:
+    - future
+    - experimental
+    - testing
+spec:
+  # Arbitrary spec structure - UnknownModel accepts any content
+  configuration:
+    enabled: true
+    mode: advanced
+  parameters:
+    - name: param1
+      value: 100
+      type: integer
+    - name: param2
+      value: "custom_setting"
+      type: string
+  nested:
+    deeply:
+      nested:
+        structure:
+          works: true
+          data:
+            - item1
+            - item2
+            - item3
+  custom_field: "This is accepted because spec is Any type"
+  another_custom: 42
+  complex_data:
+    key1: value1
+    key2:
+      subkey: subvalue

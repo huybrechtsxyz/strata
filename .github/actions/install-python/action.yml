@@ -1,0 +1,36 @@
+# ===============================================================================
+# Action Name  : install-python
+# Description  : Install Python and uv, then sync the project's dependencies.
+#                Uses uv's frozen lockfile for fully reproducible installs.
+# ===============================================================================
+
+name: "Install Python"
+description: "Set up Python and uv, install project dependencies via uv sync."
+
+inputs:
+  python-version:
+    description: "Python version to install."
+    required: false
+    default: "3.13"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        # Regenerate uv.lock from PyPI before syncing.
+        # The committed uv.lock contains internal ProGet URLs (dev-machine only) that CI cannot reach.
+        # Once a clean PyPI-based lockfile is committed, replace this with: uv sync --frozen --group dev
+        uv lock && uv sync --group dev

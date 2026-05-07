@@ -1,0 +1,25 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: provider
+meta:
+  # Missing required 'name' field
+  annotations:
+    description: Invalid provider example
+  labels:
+    # version is present, but missing other required label fields if any
+  tags: ["invalid", "test"]
+spec:
+  # 'properties' is missing required fields and has wrong types
+  properties:
+    type: 123 # Invalid type, should be string
+    # Missing region
+  custom: "should-be-a-dict-not-string"
+  references:
+    variables:
+      VM_IMAGE: 123 # Invalid type, should be string
+    secrets:
+      KAMATERA_API_KEY: null # Invalid value
+  lifecycle:
+    deploy_check:
+      scripts: "should-be-a-list-not-string"
+    deploy_provision:
+      scripts: 123 # Invalid type

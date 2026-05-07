@@ -1,7 +1,52 @@
-﻿[*.cs]
+﻿# EditorConfig is awesome: https://editorconfig.org
+# top-most EditorConfig file
+
+# Default settings
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+root = true
+indent_style = space
+indent_size = 2
+
+# C# files
+[*.cs]
 
 # IDE0290: Use primary constructor
 csharp_style_prefer_primary_constructors = false
 
-[*]
-end_of_line = unset
+# Python files
+[*.py]
+indent_style = space
+indent_size = 4
+
+# JSON files
+[*.json]
+indent_style = space
+indent_size = 2
+
+# YAML files
+[*.yml]
+indent_style = space
+indent_size = 2
+
+[*.yaml]
+indent_style = space
+indent_size = 2
+
+# Markdown files
+[*.md]
+indent_style = space
+indent_size = 2
+
+# Shell scripts
+[*.sh]
+indent_style = space
+indent_size = 2
+
+# PowerShell scripts
+[*.ps1]
+indent_style = space
+indent_size = 4

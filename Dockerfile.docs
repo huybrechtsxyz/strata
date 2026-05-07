@@ -1,0 +1,61 @@
+# syntax=docker/dockerfile:1
+
+# ============================================================
+# Stage 1 – builder: build Sphinx HTML documentation
+# ============================================================
+FROM python:3.13-slim AS builder
+
+# Install system dependencies: pandoc (README.md → README.rst conversion)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        pandoc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /build
+
+# Copy dependency files first for layer caching
+COPY pyproject.toml uv.lock VERSION.txt ./
+COPY src/ src/
+
+# Install package with doc dependencies (sphinx, autoapi, myst-parser, etc.)
+RUN uv sync --frozen --no-dev --group doc
+
+# Copy docs source and README
+COPY README.md .
+COPY docs/ docs/
+
+# Convert README.md → docs/README.rst (referenced by index.rst)
+RUN .venv/bin/pandoc README.md -o docs/README.rst
+
+# Generate version badge (no pytest required — uses VERSION.txt directly)
+RUN .venv/bin/python -m anybadge \
+        --value="$(cat VERSION.txt)" \
+        --color=blue \
+        --file=docs/_static/version.svg \
+        -l python \
+    || true
+
+# Build HTML docs
+RUN .venv/bin/sphinx-build -M html docs/ /build/html_out -W --keep-going
+
+# ============================================================
+# Stage 2 – serve: nginx serving the static HTML
+# ============================================================
+FROM nginx:alpine
+
+LABEL org.opencontainers.image.title="xyz-platform-docs" \
+      org.opencontainers.image.description="XYZ Platform documentation site" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/huybrechtsxzy/xyz-platform"
+
+# Remove default nginx placeholder
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy built documentation
+COPY --from=builder /build/html_out/html /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,0 +1,110 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: module
+meta:
+  name: valid_traefik
+  annotations:
+    description: Traefik reverse proxy module for routing and load balancing
+    owner: example@xyz.com
+  labels:
+    version: "1.0.0"
+    category: proxy
+  tags: ["traefik", "proxy", "docker-swarm", "kubernetes", "system"]
+spec:
+  source:
+    repository: platform-modules
+    source_path: services/traefik
+    target_path: modules/traefik
+    description: Traefik module source from platform modules repository
+  
+  lifecycle:
+    service_start_before:
+      scripts: ["../data/scripts/mock_init.sh"]
+    service_start_after:
+      scripts: ["../data/scripts/mock_healthcheck.sh"]
+    deploy_provision:
+      scripts: ["../data/scripts/mock_provision.sh"]
+    deploy_configure:
+      scripts: ["../data/scripts/mock_configure.sh"]
+    deploy_health:
+      scripts: ["../data/scripts/mock_healthcheck.sh"]
+    deploy_destroy_before:
+      scripts: ["../data/scripts/mock_protect.sh"]
+    deploy_destroy_after:
+      scripts: ["../data/scripts/mock_destroy.sh"]
+  
+  references:
+    variables:
+      - traefik_version
+      - traefik_http_port
+      - traefik_https_port
+    secrets:
+      - traefik_admin_password
+      - ssl_certificate
+    features:
+      - enable_dashboard
+      - enable_metrics
+  
+  properties:
+    endpoints:
+      - name: http
+        label: HTTP Endpoint
+        url: http://traefik.local
+        type: http
+        port: 80
+        protocol: tcp
+      - name: https
+        label: HTTPS Endpoint
+        url: https://traefik.local
+        type: https
+        port: 443
+        protocol: tcp
+      - name: dashboard
+        label: Admin Dashboard
+        url: http://traefik.local:8080
+        type: http
+        port: 8080
+        protocol: tcp
+    
+    checks:
+      - name: api_health
+        label: API Health Check
+        target: http://localhost:8080/ping
+        type: http
+        interval: 30s
+        timeout: 5s
+        retries: 3
+      - name: service_running
+        label: Service Running Check
+        type: command
+        command: ["pgrep", "-f", "traefik"]
+        interval: 60s
+        timeout: 10s
+        retries: 2
+    
+    mounts:
+      - name: config
+        type: bind
+        source_path: ./config/traefik.yml
+        target_path: /etc/traefik/traefik.yml
+        change_mod: "644"
+        description: Main Traefik configuration file
+      - name: certificates
+        type: volume
+        source_path: traefik-certs
+        target_path: /certs
+        change_mod: "600"
+        description: SSL/TLS certificates volume
+  
+  configuration:
+    entrypoints:
+      web:
+        address: ":80"
+      websecure:
+        address: ":443"
+    providers:
+      docker:
+        endpoint: unix:///var/run/docker.sock
+        exposedByDefault: false
+    api:
+      dashboard: true
+      insecure: false

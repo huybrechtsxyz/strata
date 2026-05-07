@@ -1,0 +1,99 @@
+# ===============================================================================
+# Script Name   : ci-build.yaml
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Python Version: 3.13+
+# Description   : GitHub Actions workflow for CI build: lint, format-check,
+#                 type-check, pytest, and Sphinx docs validation. Triggered on
+#                 push to main and on pull requests targeting main. Builds the
+#                 Python package with uv and uploads dist/ as a GitHub artifact
+#                 for ci-release.
+# ===============================================================================
+
+name: "CI Build"
+
+# Default workflow header: permissions, concurrency, environment and runner defaults
+permissions:
+  contents: read
+  actions: write # required to upload artifacts
+
+# Ensure a single run per ref and cancel in-progress runs on updates
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Default shell for all run steps
+defaults:
+  run:
+    shell: bash
+
+# Environment variables
+env:
+  PYTHON_VERSION: "3.13"
+
+# Trigger on push to main and on pull requests targeting main
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build and Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ "3.13" ]
+
+    steps:
+      # Checkout the code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install Python and uv, sync dependencies
+      - name: Install Python
+        uses: ./.github/actions/install-python
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Lint, type-check, and test
+      - name: Test Python
+        uses: ./.github/actions/test-python
+
+      # Build the Python package (wheel + sdist)
+      - name: Build package
+        run: uv build
+
+      # Upload dist artifact for use by ci-release
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Validate Sphinx documentation (runs in parallel with build)
+  # ---------------------------------------------------------------------------
+  docs:
+    name: Build documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: ./.github/actions/install-python
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Add the doc dependency group on top of the dev install
+      - name: Install doc dependencies
+        run: uv sync --frozen --group doc
+
+      # Treat warnings as errors (-W) so broken refs / missing modules fail fast
+      - name: Build Sphinx docs
+        run: uv run sphinx-build -b html docs/ /tmp/html_out -W --keep-going

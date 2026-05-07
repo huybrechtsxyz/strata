@@ -1,0 +1,29 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: valid_platform_infra
+  annotations:
+    description: Namespace for platform infrastructure
+    owner: example@xyz.com
+  labels:
+    version: "1.0.0"
+    environment: production
+    customer: example-xyz
+    project: cloud-platform
+  tags: ["platform", "infrastructure", "system"]
+spec:
+  lifecycle:
+    deploy_provision:
+      scripts: ["../data/scripts/mock_provision.sh"]
+    deploy_configure:
+      scripts: ["../data/scripts/mock_configure.sh"]
+    deploy_health:
+      scripts: ["../data/scripts/mock_healthcheck.sh"]
+    deploy_destroy_before:
+      scripts: ["../data/scripts/mock_protect.sh"]
+    deploy_destroy_after:
+      scripts: ["../data/scripts/mock_destroy.sh"]
+  modules:
+    - name: traefik
+      description: Traefik reverse proxy module
+      file: tests/data/modules/module-standard.yaml

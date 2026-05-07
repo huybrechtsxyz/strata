@@ -1,0 +1,24 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: namespace
+meta:
+  # Missing required 'name' field
+  annotations:
+    description: Invalid namespace example
+  labels:
+    # version is present, but missing other required label fields if any
+  tags: ["invalid", "test"]
+spec:
+  # 'lifecycle' is present but has wrong types
+  lifecycle:
+    deploy_provision:
+      scripts: "should-be-a-list-not-string"
+    deploy_configure:
+      scripts: 123 # Invalid type
+  # 'modules' has duplicate names and missing required fields
+  modules:
+    - name: traefik
+      description: 123 # Invalid type, should be string
+      # Missing file
+    - name: traefik # Duplicate name
+      description: "Duplicate module name"
+      file: "should-be-a-dict-not-string"

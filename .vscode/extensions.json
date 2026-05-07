@@ -1,0 +1,31 @@
+{
+  "recommendations": [
+    // Markdown
+    "davidanson.vscode-markdownlint", // Markdown linting
+    "yzhang.markdown-all-in-one", // All-in-one Markdown support
+    // YAML
+    "redhat.vscode-yaml", // YAML validation and IntelliSense
+    // Python
+    "ms-python.python", // Core Python extension
+    "ms-python.debugpy", // Python debugger
+    "ms-python.vscode-pylance", // Type checking and IntelliSense
+    // "ms-python.vscode-python-envs", // Python environment management experimental extension
+    "charliermarsh.ruff", // Ruff linter and formatter
+    // PowerShell
+    "ms-vscode.powershell", // PowerShell language support
+    "pspester.pester-test", // Pester testing framework
+    // General
+    "streetsidesoftware.code-spell-checker", // Spell checker
+    "vscode-icons-team.vscode-icons", // VSCode icons
+    // Deployment and DevOps
+    "ms-vscode-remote.remote-containers", // Remote Containers for development in Docker  
+    // Terraform
+    "hashicorp.terraform" // Terraform language support
+  ],
+  "unwantedRecommendations": [
+    "ms-python.black-formatter", // Replaced by Ruff
+    "ms-python.isort", // Replaced by Ruff (I rules)
+    "esbenp.prettier-vscode", // Not needed for this project
+    "donjayamanne.python-extension-pack" // Individual extensions preferred
+  ]
+}

@@ -1,0 +1,12 @@
+{
+    "image": "omhqproget.domain.ompartners.com/coder-docker/python-development:5cbfbe6",
+    "features": {
+        // Extra features can be installed in this section. For a list of features please consult https://containers.dev/features.
+        // Note that these could be maintained by third parties, so only install features you trust or looked into.
+        // The following shows an example on how to add features to the devcontainer. In this case it would add the mssql odbc driver.
+        // Note that 'ghcr.io' is the default artifact repository for features,
+        // but was replaced with our own internal mirror 'omhqproget.domain.ompartners.com/external-images'
+        // "omhqproget.domain.ompartners.com/external-images/jlaundry/devcontainer-features/mssql-odbc-driver:1": {}
+    },
+    "containerUser": "coder"
+}

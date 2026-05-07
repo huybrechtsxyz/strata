@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@bradygaster/squad-sdk": "^0.9.1"
+  }
+}

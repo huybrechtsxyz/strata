@@ -1,0 +1,22 @@
+# XYZ Platform — .platform/ gitignore
+#
+# Commit:   solution.json, logging.yaml
+# Ignore:   cli.yaml (personal CLI prefs), logs, temp files, local-only overrides
+
+# Personal CLI preferences — each developer sets these locally via `xyz config set`
+cli.yaml
+
+# Log output
+logs/
+*.log
+*.json.log
+
+# Local-only config overrides (never commit secrets or machine-specific paths)
+local.*.yaml
+*.local.yaml
+.env
+.env.*
+
+# Python cache
+__pycache__/
+*.pyc

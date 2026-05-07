@@ -1,0 +1,41 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: workspace-template
+meta:
+  name: standard-three-repo
+  annotations:
+    description: Standard three-repo workspace template for xyz-platform
+spec:
+  repos:
+    - name: xyz-config
+      url: "git@github.com:org/xyz-config.git"
+      branch: main
+      path: repos/xyz-config
+    - name: xyz-infrastructure
+      url: "git@github.com:org/xyz-infrastructure.git"
+      branch: main
+      path: repos/xyz-infrastructure
+    - name: xyz-svc-traefik
+      url: "git@github.com:org/xyz-svc-traefik.git"
+      branch: main
+      path: repos/xyz-svc-traefik
+  profiles:
+    - name: prd
+      activate: true
+      refs:
+        configfile:
+          - name: global-config
+            path: "@xyz-config/config/xyz-config.yaml"
+          - name: logging-config
+            path: "@xyz-config/config/xyz-logging.yaml"
+        envfile:
+          - name: prd-env
+            path: "@xyz-config/environments/xyz-env-prd.yaml"
+    - name: dev
+      activate: false
+      refs:
+        configfile:
+          - name: global-config
+            path: "@xyz-config/config/xyz-config.yaml"
+        envfile:
+          - name: dev-env
+            path: "@xyz-config/environments/xyz-env-dev.yaml"

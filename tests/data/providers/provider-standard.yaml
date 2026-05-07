@@ -1,0 +1,70 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: provider
+meta:
+  name: valid_kamatera_eu_fr
+  annotations:
+    description: Kamatera EU-FR provider for xyz-platform
+    owner: example@xyz.com
+  labels:
+    version: "1.0.0"
+    environment: production
+    customer: example-xyz
+    project: cloud-platform
+  tags: ["kamatera", "eu-fr", "provider"]
+spec:
+  properties:
+    type: kamatera
+    region: eu-fr
+    engine: kamatera-api
+    version: "~>1.0"
+  
+  authentication:
+    method: api_key
+    api_key:
+      api_key: kamatera_api_key
+      api_secret: kamatera_api_secret
+      endpoint: kamatera_api_endpoint
+  
+  references:
+    variables:
+      - vm_image
+      - vm_size
+      - datacenter_location
+      - network_zone
+    secrets:
+      - kamatera_api_key
+      - kamatera_api_secret
+    features:
+      - enable_auto_scaling
+      - enable_monitoring
+  
+  default_tags:
+    ManagedBy: xyz-platform
+    Environment: production
+    CostCenter: XYZ-PLATFORM
+    Project: cloud-platform
+  
+  custom:
+    costcenter: "XYZ-PLATFORM"
+    billing_account: "kamatera-prod-001"
+    support_tier: "enterprise"
+  
+  lifecycle:
+    deploy_check:
+      scripts: ["../data/scripts/mock_validate.sh"]
+    deploy_plan_before:
+      scripts: ["../data/scripts/mock_plan.sh"]
+    deploy_provision:
+      scripts: ["../data/scripts/mock_provision.sh"]
+    deploy_initialize:
+      scripts: ["../data/scripts/mock_init.sh"]
+    deploy_configure:
+      scripts: ["../data/scripts/mock_configure.sh"]
+    deploy_output:
+      scripts: ["../data/scripts/mock_output.sh"]
+    deploy_health:
+      scripts: ["../data/scripts/mock_healthcheck.sh"]
+    deploy_destroy_before:
+      scripts: ["../data/scripts/mock_protect.sh"]
+    deploy_destroy_after:
+      scripts: ["../data/scripts/mock_destroy.sh"]

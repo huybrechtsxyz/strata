@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1
+
+# ============================================================
+# Stage 1 – builder: install dependencies with uv
+# ============================================================
+FROM python:3.13-slim AS builder
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Copy manifest, lock file, and version first for layer caching
+COPY pyproject.toml uv.lock VERSION.txt ./
+COPY src/ src/
+
+# Install production dependencies only into an in-project .venv
+RUN uv sync --frozen --no-dev --no-editable
+
+# ============================================================
+# Stage 2 – runtime: lean image with only the installed venv
+# ============================================================
+FROM python:3.13-slim
+
+ARG VERSION=dev
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH" \
+    APP_VERSION=${VERSION}
+
+LABEL org.opencontainers.image.title="xyz-platform" \
+      org.opencontainers.image.description="XYZ Platform CLI — infrastructure workspace management" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/huybrechtsxzy/xyz-platform"
+
+WORKDIR /app
+
+# Copy the pre-built virtual environment from the builder stage
+COPY --from=builder /app/.venv /app/.venv
+
+# Run as non-root
+RUN useradd --no-create-home --shell /bin/bash appuser
+USER appuser
+
+# The CLI is invoked as: docker run <image> <command> [options]
+# e.g.: docker run xyz-platform validate my-config.yaml
+ENTRYPOINT ["xyz"]
+CMD ["--help"]

@@ -1,0 +1,26 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: workspace-template
+meta:
+  # Missing required 'name' field
+  annotations:
+    description: Invalid workspace template example
+spec:
+  repos:
+    - name: xyz-config
+      # Missing required 'url' field
+      branch: main
+    - name: 123-invalid-name # Invalid: does not match PlatformName pattern
+      url: "git@github.com:org/xyz-config.git"
+  profiles:
+    - name: prd
+      activate: true
+      refs:
+        configfile:
+          - name: global-config
+            path: "@xyz-config/config/xyz-config.yaml"
+    - name: stg
+      activate: true # Invalid: two profiles with activate: true
+      refs:
+        envfile:
+          - name: stg-env
+            # Missing required 'path' field

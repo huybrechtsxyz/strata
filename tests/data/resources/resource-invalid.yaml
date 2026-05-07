@@ -1,0 +1,45 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: resources
+meta:
+  name: vm_manager_kamatera
+  annotations:
+    description: Kamatera Virtual Machine for Docker Swarm manager node
+  labels:
+    version: 1.0.0
+    environment: production
+  tags: [kamatera, vm, manager, docker-swarm]
+specs:
+  lifecycles:
+    build_validate:
+      scripts: []
+    build_compile:
+      scripts: []
+    deploy_provision:
+      scripts: []
+    deploy_initialize:
+      scripts: []
+    deploy_configure:
+      scripts: []
+    deploy_health:
+      scripts: []
+    deploy_destroy_before:
+      scripts: []
+    deploy_destroy_after:
+      scripts: []
+  properties:
+    provider_type: kamatera
+    resource_type: virtualmachine
+    unit_cost: 5.00
+  configurations:
+    os_name: "Ubuntu"
+    os_code: "24.04 64bit"
+    cpu_type: "A"
+    cpu_cores: 1
+    ram_mb: 1024
+    billing: "hourly"
+  virtualmachines: |
+    this: is not valid yaml
+    - missing: brackets
+    - and: structure
+    [
+    totally broken

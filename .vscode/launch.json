@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run: xyz-platform",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}\\src\\xyz_platform\\__main__.py",
+      "args": "${input:cliArgs}",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}\\src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug: xyz-platform",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}\\src\\xyz_platform\\__main__.py",
+      "args": "${input:cliArgs}",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}\\src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ],
+  "inputs": [
+    {
+      "id": "cliArgs",
+      "type": "promptString",
+      "description": "CLI arguments (e.g. --help, version, deploy platform.yaml)",
+      "default": "--help"
+    }
+  ]
+}
