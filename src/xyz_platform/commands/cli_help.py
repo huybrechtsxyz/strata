@@ -15,6 +15,7 @@ from xyz_platform.utils.system import resolve_work_path
 # ---------------------------------------------------------------------------
 
 _TOPICS: dict[str, tuple[str, str]] = {
+    # Platform guides
     "quickstart": ("Get from a fresh install to a running workspace", "quickstart.md"),
     "workspace": ("What .platform/ is and how it is structured", "workspace.md"),
     "profiles": ("Model dev/stg/prd environments with profiles", "profiles.md"),
@@ -23,13 +24,20 @@ _TOPICS: dict[str, tuple[str, str]] = {
     "cross-repo": ("Using @repo_name/ references across repos", "cross-repo.md"),
     "environments": ("Mapping profiles to deployment environments", "environments.md"),
     "troubleshooting": ("Common errors and exactly how to fix them", "troubleshooting.md"),
+    # Integrations
+    "git": ("Git: repository clone, fetch, push, branch, and diff operations", "git.md"),
+    "terraform": ("Terraform: IaC provisioner used by the build and deploy pipeline", "terraform.md"),
+    "docker": ("Docker: container runtime used by the platform", "docker.md"),
+    "azure_appconfig": ("Azure App Configuration: externalized key-value config for profiles", "azure_appconfig.md"),
+    "azure_keyvault": ("Azure Key Vault: secret resolution for refs and deploy values", "azure_keyvault.md"),
+    "bitwarden": ("Bitwarden Secrets Manager: secret resolution for refs and deploy values", "bitwarden.md"),
+    "hashicorp_consul": ("HashiCorp Consul: service discovery and distributed config", "hashicorp_consul.md"),
+    "hashicorp_vault": ("HashiCorp Vault: secret management and dynamic credentials", "hashicorp_vault.md"),
 }
 
 _HELP_DATA_DIR = Path(__file__).parent.parent / "data" / "help"
-_COL_WIDTH = 16  # name column width (longest topic name + 2)
 
 _WORKSPACE_HELP_DIR = "help"  # relative to .platform/
-_WORKSPACE_INTEGRATIONS_DIR = "integrations"  # relative to .platform/
 
 
 # ---------------------------------------------------------------------------
@@ -42,14 +50,6 @@ def _workspace_help_dir(work_path: Optional[Path]) -> Optional[Path]:
     if work_path is None:
         return None
     d = work_path / SOLUTION_DIR / _WORKSPACE_HELP_DIR
-    return d if d.is_dir() else None
-
-
-def _workspace_integrations_dir(work_path: Optional[Path]) -> Optional[Path]:
-    """Return <work_path>/.platform/integrations/ if it exists, else None."""
-    if work_path is None:
-        return None
-    d = work_path / SOLUTION_DIR / _WORKSPACE_INTEGRATIONS_DIR
     return d if d.is_dir() else None
 
 
@@ -67,19 +67,12 @@ def _first_line(md_file: Path) -> str:
 def _topic_file(name: str, work_path: Optional[Path]) -> Optional[Path]:
     """Resolve the file for *name* using priority order:
 
-    1. ``.platform/help/<name>.md``          — workspace custom / override
-    2. ``.platform/integrations/<name>.md``  — integration docs
-    3. ``data/help/<name>.md``               — package built-ins
+    1. ``.platform/help/<name>.md``  — workspace custom / override
+    2. ``data/help/<name>.md``       — package built-ins (guides + integrations)
     """
     ws_dir = _workspace_help_dir(work_path)
     if ws_dir is not None:
         f = ws_dir / f"{name}.md"
-        if f.exists():
-            return f
-
-    int_dir = _workspace_integrations_dir(work_path)
-    if int_dir is not None:
-        f = int_dir / f"{name}.md"
         if f.exists():
             return f
 
@@ -95,21 +88,13 @@ def _topic_file(name: str, work_path: Optional[Path]) -> Optional[Path]:
 def _all_topics(work_path: Optional[Path]) -> dict[str, tuple[str, str]]:
     """Return ordered {name: (description, section)} for --list.
 
-    Sections: ``"built-in"``, ``"integration"``, ``"workspace"``.
+    Sections: ``"built-in"``, ``"workspace"``.
     Workspace entries override built-ins of the same name.
     """
-    # Built-ins first
+    # Built-ins first (platform guides + integrations)
     topics: dict[str, tuple[str, str]] = {name: (desc, "built-in") for name, (desc, _) in _TOPICS.items()}
 
-    # Integration docs — new names only (workspace can still override via help/)
-    int_dir = _workspace_integrations_dir(work_path)
-    if int_dir is not None:
-        for md_file in sorted(int_dir.glob("*.md")):
-            name = md_file.stem
-            if name not in topics:
-                topics[name] = (_first_line(md_file), "integration")
-
-    # Workspace custom — may override built-ins or integration topics
+    # Workspace custom — may override built-in topics
     ws_dir = _workspace_help_dir(work_path)
     if ws_dir is not None:
         for md_file in sorted(ws_dir.glob("*.md")):
@@ -125,7 +110,6 @@ def _render_topic_list(work_path: Optional[Path]) -> None:
 
     sections: dict[str, list[tuple[str, str]]] = {
         "built-in": [],
-        "integration": [],
         "workspace": [],
     }
     for name, (desc, section) in topics.items():
@@ -135,8 +119,7 @@ def _render_topic_list(work_path: Optional[Path]) -> None:
 
     section_labels = {
         "built-in": "Built-in topics",
-        "integration": f"Integration topics  ({SOLUTION_DIR}/integrations/)",
-        "workspace": f"Workspace topics    ({SOLUTION_DIR}/help/)",
+        "workspace": f"Workspace topics  ({SOLUTION_DIR}/help/)",
     }
     first = True
     for key, label in section_labels.items():
