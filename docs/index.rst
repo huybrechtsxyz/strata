@@ -8,9 +8,6 @@ xyz_platform
         :target: https://www.python.org/
         :alt: Python 3.13
 
-.. image:: _static/coverage.svg
-        :alt: Coverage
-
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started:
