@@ -1,0 +1,73 @@
+# Firewall Template
+# Copy this file and customize for your firewall rules
+#
+# Usage: cp config/template/firewalls/template-firewall.yaml config/{platform}/firewalls/{name}-firewall.yaml
+
+apiVersion: platform.huybrechts.xyz/v1
+kind: firewall
+meta:
+  name: ${name}
+  annotations:
+    description: "Firewall rules template"
+    owner: ${owner}
+  labels:
+    version: ${version}
+  tags: [ "template", "security", "firewall" ]
+spec:
+  # Reset existing rules before applying (true/false)
+  reset: true
+
+  # Default policies
+  defaults:
+    - direction: in
+      permission: deny
+      comment: "Deny all inbound traffic by default"
+    - direction: out
+      permission: allow
+      comment: "Allow all outbound traffic by default"
+
+  # Deny rules (applied before allow rules)
+  deny:
+    - direction: in
+      proto: tcp
+      port: [ 23, 135, 139, 445 ] # Block common attack vectors
+      comment: "Block insecure protocols"
+
+  # Allow rules
+  allow:
+    # DNS
+    - direction: out
+      proto: udp
+      port: 53
+      comment: "DNS resolution"
+
+    # HTTP/HTTPS
+    - direction: in
+      proto: tcp
+      port: [ 80, 443 ]
+      comment: "Web traffic"
+
+    # SSH (with source restriction)
+    - direction: in
+      proto: tcp
+      port: 22
+      from: "10.0.0.0/8" # Internal network only
+      comment: "SSH from internal network"
+
+    # Application port with destination
+    - direction: out
+      proto: tcp
+      port: 5432
+      to: "10.0.1.0/24"
+      comment: "Database access to specific subnet"
+
+    # Interface-based rule
+    - direction: in
+      interface: lo
+      comment: "Loopback interface"
+
+    # Port range
+    - direction: in
+      proto: tcp
+      port: "8000:8099"
+      comment: "Application port range"

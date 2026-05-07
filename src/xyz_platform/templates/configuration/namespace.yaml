@@ -1,0 +1,20 @@
+# Namespace Template
+# Copy this file and customize for your application namespace
+#
+# Usage: cp config/template/namespaces/template-namespace.yaml config/{platform}/namespaces/{name}-namespace.yaml
+
+apiVersion: platform.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: ${name}
+  annotations:
+    description: "Application namespace template"
+    owner: ${owner}
+  labels:
+    version: ${version}
+  tags: [ "template", "namespace" ]
+spec:
+  # Modules deployed in this namespace
+  modules:
+    - name: template_module
+      file: config/{platform}/modules/template-module.yaml

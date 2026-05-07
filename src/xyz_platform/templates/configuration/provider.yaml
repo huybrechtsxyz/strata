@@ -1,0 +1,33 @@
+# Provider Template
+# Copy this file and customize for your cloud provider
+#
+# Usage: cp config/template/providers/template-provider.yaml config/{platform}/providers/{name}-provider.yaml
+
+apiVersion: platform.huybrechts.xyz/v1
+kind: provider
+meta:
+  name: ${name}
+  annotations:
+    description: "Cloud provider configuration template"
+    owner: ${owner}
+  labels:
+    version: ${version}
+  tags: [ "template", "cloud" ]
+spec:
+  # Provider details
+  properties:
+    type: "cloud" # cloud, kubernetes, docker, etc.
+    region: "us-east-1" # Provider-specific region
+    engine: "terraform" # terraform, ansible, cloudformation, etc.
+    version: "v1"
+
+  # Authentication configuration
+  authentication:
+    method: "api_key" # oauth2, aws, gcp, api_key, certificate, saml, cli, managed_identity
+    # For api_key method:
+    api_key:
+      api_key: "provider_api_key" # Key reference from environment declarations
+      header_name: "X-API-Key" # Optional: HTTP header name
+
+  # Custom configuration
+  custom: {}

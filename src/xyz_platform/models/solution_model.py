@@ -69,6 +69,10 @@ class SolutionSpecModel(BaseModel):
     profiles: Optional[List[SolutionSpecProfileModel]] = Field(
         None, description="List of profiles associated with the solution"
     )
+    context: Optional[Dict[str, str]] = Field(
+        None,
+        description="Team-shared template substitution variables (committed to solution.json).",
+    )
 
 
 class SolutionMetaModel(BaseModel):

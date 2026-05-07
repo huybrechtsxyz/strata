@@ -180,3 +180,32 @@ class TemplateProcessor:
         pattern = r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
 
         return re.sub(pattern, replace_var, content)
+
+    @staticmethod
+    def render(content: str, context: dict) -> str:
+        """Render template content by substituting variables from *context*.
+
+        Uses the same ``$VAR`` / ``${VAR}`` pattern as
+        :meth:`_substitute_environment_variables` but looks up values from the
+        provided *context* dictionary instead of ``os.environ``.  Variables
+        that are not present in *context* are left as-is.
+
+        Args:
+            content: Template string that may contain ``$VAR`` or ``${VAR}``
+                     placeholders.
+            context: Mapping of variable names to replacement values.
+
+        Returns:
+            The rendered string with all known variables substituted.
+        """
+
+        def replace_var(match):
+            var_name = match.group(1)
+            if var_name in context:
+                logger.debug("Substituted template variable", variable_name=var_name)
+                return str(context[var_name])
+            logger.debug("Template variable not in context — keeping placeholder", variable_name=var_name)
+            return match.group(0)
+
+        pattern = r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
+        return re.sub(pattern, replace_var, content)

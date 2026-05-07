@@ -1,0 +1,37 @@
+# Configuration Template
+# Copy this file and customize for your platform configuration
+#
+# Usage: cp config/template/configurations/template-config.yaml config/{platform}/configurations/{name}-config.yaml
+
+apiVersion: platform.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: ${name}
+  annotations:
+    description: "Configuration template for platform setup"
+    owner: ${owner}
+  labels:
+    version: ${version}
+    environment: "template"
+  tags: [ "template", "example" ]
+spec:
+  # Define deployment layering hierarchy (optional)
+  # Used to construct artifact_path from deployment.spec.deployment values
+  layering:
+    - name: customer
+      required: false
+      default: "default"
+      description: "Customer/tenant identifier"
+    - name: region
+      required: false
+      default: "global"
+      description: "Geographic region"
+    - name: environment
+      required: true
+      description: "Environment (dev/staging/production)"
+
+  # Platform-specific properties
+  properties:
+    platform_version: "1.0.0"
+    api_version: "v1"
+    # Add custom properties as needed

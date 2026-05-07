@@ -99,6 +99,28 @@ class BitwardenIntegration(StoreIntegration):
             return match.group(1)
         return version_output.strip()
 
+    def get_setup_info(self) -> dict:
+        """Return setup metadata for bitwarden."""
+        return {
+            "name": "bitwarden",
+            "command": "bws",
+            "install_url": "https://bitwarden.com/help/secrets-manager-cli/",
+            "env_vars": [
+                {
+                    "name": "BWS_ACCESS_TOKEN",
+                    "purpose": "Machine account access token for Bitwarden Secrets Manager",
+                    "required": True,
+                },
+            ],
+            "auth_methods": [
+                {
+                    "method": "Machine account token",
+                    "description": "Set BWS_ACCESS_TOKEN (default) or configure api_key.api_key in the integration spec.",
+                },
+            ],
+            "yaml_example": "type: bitwarden\nspec:\n  project_id: <project-uuid>",
+        }
+
     def ensure_available(self) -> Tuple[bool, str]:
         """
         Ensure integration is available with proper configuration.

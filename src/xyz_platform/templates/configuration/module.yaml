@@ -1,0 +1,71 @@
+# Module Template
+# Copy this file and customize for your application module
+#
+# Usage: cp config/template/modules/template-module.yaml config/{platform}/modules/{name}-module.yaml
+
+apiVersion: platform.huybrechts.xyz/v1
+kind: module
+meta:
+  name: ${name}
+  annotations:
+    description: "Application module template"
+    owner: ${owner}
+  labels:
+    version: ${version}
+    category: "application"
+  tags: [ "template", "module" ]
+spec:
+  # Module source
+  source:
+    repository: main_repo # Repository name from configuration.spec.repositories
+    source_path: "services/app" # Path within repository
+    target_path: "services/app" # Target deployment path
+
+  # Lifecycle hooks
+  lifecycle:
+    validate_before: {}
+    deploy_before: {}
+    deploy_after: {}
+
+  # Module properties
+  properties:
+    # Mounts (volumes/config/data)
+    mounts:
+      - name: "configuration_files"
+        type: config
+        target_path: "${APP_CONFIG_PATH}"
+        source_path: "config"
+        description: "Application configuration"
+      - name: "data"
+        type: data
+        target_path: "${APP_DATA_PATH}"
+        description: "Application data"
+      - name: "logs"
+        type: logs
+        target_path: "${APP_LOGS_PATH}"
+        description: "Application logs"
+
+    # Health checks
+    checks:
+      - name: "app_health_check"
+        label: "Application Health Check"
+        target: "consul" # consul, http, tcp
+        type: http
+        interval: 60s
+        timeout: 5s
+        retries: 3
+
+    # Endpoints
+    endpoints:
+      - name: "app_dashboard"
+        label: "Application Dashboard"
+        url: "http://localhost:8080/"
+
+  # Variable/secret/feature references (list of required keys)
+  references:
+    variables:
+      - app_port
+    secrets:
+      - db_password
+    features:
+      - enable_debug

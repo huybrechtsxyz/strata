@@ -993,24 +993,24 @@ class SolutionController(BaseController):
         logs_dir = state_dir / "logs"
         logs_dir.mkdir(exist_ok=True)
 
-        # Copy integration help templates from templates/integrations/
-        integrations_src = get_pkg_templates_path() / "integrations"
-        if integrations_src.exists() and integrations_src.is_dir():
-            integrations_dest = state_dir / "integrations"
-            integrations_dest.mkdir(exist_ok=True)
-            for src_file in integrations_src.iterdir():
+        # Copy configuration templates from templates/configuration/
+        config_templates_src = get_pkg_templates_path() / "configuration"
+        if config_templates_src.exists() and config_templates_src.is_dir():
+            templates_dest = state_dir / "templates"
+            templates_dest.mkdir(exist_ok=True)
+            for src_file in config_templates_src.iterdir():
                 if not src_file.is_file():
                     continue
-                dest_file = integrations_dest / src_file.name
+                dest_file = templates_dest / src_file.name
                 if dest_file.exists():
-                    self.logger.debug("Integration template already exists — skipping", path=str(dest_file))
+                    self.logger.debug("Template already exists — skipping", path=str(dest_file))
                     continue
                 try:
                     dest_file.write_text(src_file.read_text(encoding="utf-8"), encoding="utf-8")
-                    self.logger.info("Integration template written", path=str(dest_file))
+                    self.logger.info("Configuration template written", path=str(dest_file))
                     self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
                 except Exception as e:
-                    msg = f"Failed to write integration template {src_file.name}: {e}"
+                    msg = f"Failed to write configuration template {src_file.name}: {e}"
                     self._add_error(msg)
                     return False, self.get_errors()
 
@@ -1024,6 +1024,27 @@ class SolutionController(BaseController):
                 self._add_message(f"Created: {dest_readme.relative_to(self._work_path)}")
             except Exception as e:
                 msg = f"Failed to write workspace README: {e}"
+                self._add_error(msg)
+                return False, self.get_errors()
+
+        # Create .platform/integrations/ directory with README stub for drop-in extensions
+        integrations_dir = state_dir / "integrations"
+        integrations_dir.mkdir(exist_ok=True)
+        integrations_readme = integrations_dir / "README.md"
+        if not integrations_readme.exists():
+            try:
+                integrations_readme.write_text(
+                    "# Custom Integrations\n\n"
+                    "Place `.py` files here to register custom integrations with the xyz platform.\n\n"
+                    "Each file must define a `register()` function that calls\n"
+                    "`IntegrationFactory.register_type(type_str, cls)`.\n\n"
+                    "See `xyz help integrations` for documentation.\n",
+                    encoding="utf-8",
+                )
+                self.logger.info("Integrations directory initialised", path=str(integrations_dir))
+                self._add_message(f"Created: {integrations_readme.relative_to(self._work_path)}")
+            except Exception as e:
+                msg = f"Failed to write integrations README: {e}"
                 self._add_error(msg)
                 return False, self.get_errors()
 

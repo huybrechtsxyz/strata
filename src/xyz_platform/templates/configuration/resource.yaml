@@ -1,0 +1,64 @@
+# Resource Template
+# Copy this file and customize for your infrastructure resource
+#
+# Usage: cp config/template/resources/template-resource.yaml config/{platform}/resources/{name}-resource.yaml
+
+apiVersion: platform.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: ${name}
+  annotations:
+    description: "Infrastructure resource template"
+    owner: ${owner}
+  labels:
+    version: ${version}
+    environment: "production"
+  tags: [ "template", "infrastructure" ]
+spec:
+  # Resource properties
+  properties:
+    provider_type: "cloud" # Must match provider type
+    resource_type: "virtualmachine" # virtualmachine, database, storage, etc.
+    unit_cost: 10.0 # Cost per unit (optional)
+    category: "compute" # compute, storage, network, database
+    subcategory: "vm" # More specific categorization
+
+  # Storage configuration (for VMs/containers)
+  storage:
+    install_path: "/opt/app"
+    disks:
+      - size: 50 # Size in GB
+        label: "os-disk"
+        mount: "/mnt/data"
+    volumes:
+      - name: "config"
+        path: "/mnt/data/config"
+      - name: "data"
+        path: "/mnt/data/app"
+      - name: "logs"
+        path: "/mnt/data/logs"
+
+  # Resource-specific configuration
+  configuration:
+    # Add resource-specific settings
+    cpu_cores: 2
+    memory_gb: 4
+    disk_size_gb: 50
+
+  # Variable/secret/feature references (list of required keys)
+  references:
+    variables:
+      - api_endpoint
+    secrets:
+      - api_key
+    features:
+      - enable_monitoring
+
+  # Lifecycle hooks
+  lifecycle:
+    validate_before: {}
+    deploy_before: {}
+    deploy_after: {}
+
+  # Custom configuration
+  custom: {}

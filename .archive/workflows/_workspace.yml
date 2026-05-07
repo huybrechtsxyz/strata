@@ -1,0 +1,161 @@
+# ==============================================================================
+# Workflow Name : Workspace
+# File Name     : _workspace.yaml
+# Description   :
+#     This workflow manages the lifecycle of a workspace, including
+#     setup, validation, and teardown.
+#
+# Author        : Vincent Huybrechts
+# Created       : 2025-09-09
+# Last Updated  : 2025-10-06
+# Version       : 1.0.0
+#
+# Triggers      :
+#     - [ ] push
+#     - [ ] pull_request
+#     - [ ] schedule
+#     - [x] workflow_dispatch
+#
+# Environment   :
+#     - OS        : ubuntu-latest
+#     - Language  : Bash / Python
+#
+# Notes         :
+#     - This workflow is designed to be reusable across different workspaces.
+# ==============================================================================
+
+name: _WorkspaceDeployment
+
+on:
+  workflow_call:
+    inputs:
+      # Determines what workspace to deploy
+      workspace_file:
+        description: "Configuration file for the workspace"
+        required: true
+        type: string
+      # Determines if core infra requires updating
+      apply_infrastructure:
+        description: "Apply the infrastructure changes"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      bitwarden_token:
+        required: true
+
+# Environment variables for the pipeline
+env:
+  PATH_TEMP: /tmp/app
+  PATH_TERRAFORM: ./deploy/terraform
+  TFOUTPUT_FILE: terraform.json
+  TFVARS_FILE: terraform.tfvars
+  WSDEF_FILE: workspace.json
+
+jobs:
+  # Job and workspace validation for the workflow.
+  validate:
+    name: Input Validation
+    runs-on: ubuntu-latest
+    outputs:
+      workspace_name: ${{ steps.get_name.outputs.workspace_name }}
+      terraform_changed: ${{ steps.check_terraform.outputs.changed }}
+      scripts_changed: ${{ steps.check_scripts.outputs.changed }}
+      config_changed: ${{ steps.check_configurations.outputs.changed }}
+    steps:
+      # Check out the repo
+      - name: Check Out
+        uses: actions/checkout@v4
+
+      # Get Bitwarden
+      - name: Setup Tools
+        uses: ./.github/actions/setup-cli
+        with:
+          bitwarden_token: ${{ secrets.bitwarden_token }}
+          setup_terraform: "false"
+
+      # Validate Bitwarden token
+      - name: Bitwarden Token
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.bitwarden_token }}
+        shell: bash
+        run: |
+          echo "[*] Validating Bitwarden token ..."
+          chmod +x ./deploy/scripts/validate_bitwarden.sh
+          ./deploy/scripts/validate_bitwarden.sh
+          echo "[*] Validating Bitwarden token ... DONE"
+
+      # Validate workspace
+      - name: Validate Workspace
+        id: validate
+        env:
+          WORKSPACE_FILE: ${{ inputs.workspace_file }}
+        shell: bash
+        run: |
+          echo "[*] Input validation of workspace parameters ..."
+
+          # Install the XYZ Platform package in development mode
+          pip install -e .
+
+          # Validate the workspace file with content validation
+          echo " "
+          python -m xyz_platform.cli validate "${{ env.WORKSPACE_FILE }}" --content
+          echo " "
+
+          echo "[*] Input validation of workspace parameters ... DONE"
+
+      # Get the workspace name from the input file
+      - name: Get Workspace Name
+        id: get_name
+        env:
+          WORKSPACE_FILE: ${{ inputs.workspace_file }}
+        shell: bash
+        run: |
+          echo "[*] Extracting workspace name from configuration file ..."
+          WORKSPACE_NAME=$(yq e '.meta.name' "$WORKSPACE_FILE")
+          echo "[*] Workspace name: $WORKSPACE_NAME"
+          echo "workspace_name=$WORKSPACE_NAME" >> $GITHUB_OUTPUT
+          echo "[*] Extracting workspace name from configuration file ... DONE"
+
+      # Check if terraform has changed
+      - name: Check Terraform
+        id: check_terraform
+        uses: ./.github/actions/validate-changes
+        with:
+          workspace_name: ${{ steps.get_name.outputs.workspace_name }}
+          hashfile: ${{env.PATH_TEMP}}/${{ steps.get_name.outputs.workspace_name
+            }}-terraform-hash.json
+          dir: deploy/terraform
+
+      # Check if scripts have changed
+      - name: Check Scripts
+        id: check_scripts
+        uses: ./.github/actions/validate-changes
+        with:
+          workspace_name: ${{ steps.get_name.outputs.workspace_name }}
+          hashfile: ${{env.PATH_TEMP}}/${{ steps.get_name.outputs.workspace_name
+            }}-scripts-hash.json
+          dir: deploy/scripts
+
+      # Check if configurations have changed
+      - name: Check Configurations
+        id: check_configurations
+        uses: ./.github/actions/validate-changes
+        with:
+          workspace_name: ${{ steps.get_name.outputs.workspace_name }}
+          hashfile: ${{env.PATH_TEMP}}/${{ steps.get_name.outputs.workspace_name
+            }}-configurations-hash.json
+          dir: config
+
+  debug:
+    name: Debug Info
+    needs: validate
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Display Outputs
+        run: |
+          echo "Workspace Name: ${{ needs.validate.outputs.workspace_name }}"
+          echo "Terraform Changed: ${{ needs.validate.outputs.terraform_changed }}"
+          echo "Scripts Changed: ${{ needs.validate.outputs.scripts_changed }}"
+          echo "Configurations Changed: ${{ needs.validate.outputs.config_changed }}"

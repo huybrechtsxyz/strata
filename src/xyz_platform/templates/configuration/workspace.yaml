@@ -1,0 +1,75 @@
+# Workspace Template
+# Copy this file and customize for your platform workspace
+#
+# Usage: cp config/template/workspaces/template-workspace.yaml config/{platform}/workspaces/{name}-workspace.yaml
+
+apiVersion: platform.huybrechts.xyz/v1
+kind: workspace
+meta:
+  name: ${name}
+  annotations:
+    description: "Platform workspace template"
+    owner: ${owner}
+  labels:
+    version: ${version}
+  tags: [ "template", "workspace" ]
+spec:
+  # Providers (cloud/infrastructure providers)
+  providers:
+    - name: template_provider
+      file: config/{platform}/providers/template-provider.yaml
+
+  # Provisioners (IaC tools)
+  provisioners:
+    - name: template_provisioner
+      provisioner: terraform # terraform, script
+      source:
+        repository: main_repo # Repository name from configuration.spec.repositories
+        source_path: deploy/terraform
+
+  # Topology (infrastructure layout)
+  topology:
+    - name: template_topology
+      provider: template_provider
+      provisioner: terraform
+      type: docker_swarm # docker_swarm, kubernetes, standalone
+      volumes:
+        - name: config
+          type: replicated
+        - name: data
+          type: local
+        - name: logs
+          type: local
+      components:
+        - resource: template_resource
+
+  # Resources (infrastructure components)
+  resources:
+    - name: template_resource
+      file: config/{platform}/resources/template-resource.yaml
+      role: manager # manager, worker, standalone
+      count: 1 # Number of instances
+      firewalls:
+        - template_firewall # Reference firewall configs
+      configuration:
+        # Override resource-specific settings
+        cpu_cores: 4
+        memory_gb: 16
+      labels:
+        role: manager
+        environment: production
+      tags: [ "template", "manager" ]
+      # Optional: Dependencies
+      depends_on: []
+      # Optional: References to other resources
+      references: {}
+
+  # Namespaces (logical groupings)
+  namespaces:
+    - name: template_namespace
+      file: config/{platform}/namespaces/template-namespace.yaml
+
+  # Firewalls
+  firewalls:
+    - name: template_firewall
+      file: config/{platform}/firewalls/template-firewall.yaml

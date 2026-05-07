@@ -132,6 +132,55 @@ class IntegrationFactory:
         cls._type_mapping.clear()
         logger.debug("Integration factory reset")
 
+    @classmethod
+    def create_by_type(cls, type_str: str) -> BaseIntegration:
+        """
+        Create a minimal integration instance by friendly type name.
+
+        Intended for status and availability checks — does not require a
+        workspace config.  Creates a bare ``IntegrationModel`` with just the
+        type string and delegates to the registered class.
+
+        Args:
+            type_str: Friendly integration type (e.g. "git", "hashicorp_vault")
+
+        Returns:
+            Integration instance
+
+        Raises:
+            ValueError: If the type is not known
+        """
+        import importlib as _importlib
+
+        # Canonical class map keyed by friendly type strings
+        _class_map: dict = {
+            "git": ("xyz_platform.integrations.git", "GitIntegration"),
+            "docker": ("xyz_platform.integrations.docker", "DockerIntegration"),
+            "terraform": ("xyz_platform.integrations.terraform", "TerraformIntegration"),
+            "bitwarden": ("xyz_platform.integrations.bitwarden", "BitwardenIntegration"),
+            "hashicorp_vault": ("xyz_platform.integrations.hashicorp_vault", "VaultIntegration"),
+            "hashicorp_consul": ("xyz_platform.integrations.hashicorp_consul", "ConsulIntegration"),
+            "azure_keyvault": ("xyz_platform.integrations.azure_keyvault", "AzureKeyVaultIntegration"),
+            "azure_appconfig": ("xyz_platform.integrations.azure_appconfig", "AzureAppConfigIntegration"),
+        }
+
+        # Try the registered type_mapping first (supports custom / aliased types)
+        if type_str in cls._type_mapping:
+            integration_class = cls._type_mapping[type_str]
+            config = IntegrationModel(name=type_str, type=type_str)
+            return integration_class(config=config)
+
+        # Fall back to the built-in class map
+        if type_str in _class_map:
+            module_path, class_name = _class_map[type_str]
+            module = _importlib.import_module(module_path)
+            integration_class = getattr(module, class_name)
+            config = IntegrationModel(name=type_str, type=type_str)
+            return integration_class(config=config)
+
+        known = sorted(set(list(cls._type_mapping.keys()) + list(_class_map.keys())))
+        raise ValueError(f"Unknown integration type: '{type_str}'. Known types: {', '.join(known)}")
+
 
 # Auto-registration of built-in integration types
 # This happens at module import time
