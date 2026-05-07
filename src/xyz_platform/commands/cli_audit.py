@@ -4,6 +4,8 @@ from typing import Optional
 
 import click
 
+from xyz_platform.commands.audit.log_config_command import LogConfigCommand
+from xyz_platform.commands.audit.show_audit_command import ShowAuditCommand
 from xyz_platform.commands.cli_common import (
     click_output_format,
     click_output_quiet,
@@ -11,8 +13,6 @@ from xyz_platform.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from xyz_platform.commands.audit.log_config_command import LogConfigCommand
-from xyz_platform.commands.audit.show_audit_command import ShowAuditCommand
 
 
 @click.group(name="audit", help="Observe and audit platform activity: execution history, logging configuration.")

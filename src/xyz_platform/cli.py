@@ -26,13 +26,13 @@ from pathlib import Path
 import click
 import yaml
 
+from xyz_platform.commands.cli_audit import audit_group
 from xyz_platform.commands.cli_builders import build as build_group
 from xyz_platform.commands.cli_clean import clean_command
 from xyz_platform.commands.cli_config import config_group
 from xyz_platform.commands.cli_deploy import deploy as deploy_group
 from xyz_platform.commands.cli_help import help_command
 from xyz_platform.commands.cli_init import init_command
-from xyz_platform.commands.cli_audit import audit_group
 from xyz_platform.commands.cli_profile import profile_group
 from xyz_platform.commands.cli_ref import ref_group
 from xyz_platform.commands.cli_repo import repo_group
