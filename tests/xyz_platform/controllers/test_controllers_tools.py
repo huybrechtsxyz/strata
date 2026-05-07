@@ -2,9 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from xyz_platform.controllers.tools_controller import ToolsController, _BUILTIN_TYPES
+from xyz_platform.controllers.tools_controller import _BUILTIN_TYPES, ToolsController
 
 
 def _make_integration(available=True, version="1.0.0", capabilities=None, command="tool"):

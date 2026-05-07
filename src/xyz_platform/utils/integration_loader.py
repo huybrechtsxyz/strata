@@ -5,6 +5,7 @@ Each file must define a top-level ``register()`` function that calls
 ``IntegrationFactory.register_type(type_str, cls)`` to register custom
 integrations with the platform.
 """
+
 from __future__ import annotations
 
 import importlib.util

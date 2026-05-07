@@ -1,10 +1,5 @@
 """Tests for the ``integration_loader`` utility."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from xyz_platform.utils.integration_loader import load_workspace_integrations
 
 
@@ -41,9 +36,7 @@ class TestLoadWorkspaceIntegrationsFiles:
         called = []
         # Write file that sets a flag when register() is invoked
         (integrations_dir / "flag_tool.py").write_text(
-            "import sys\n"
-            "def register():\n"
-            "    sys.modules[__name__]._called = True\n",
+            "import sys\ndef register():\n    sys.modules[__name__]._called = True\n",
             encoding="utf-8",
         )
         result = load_workspace_integrations(tmp_path)

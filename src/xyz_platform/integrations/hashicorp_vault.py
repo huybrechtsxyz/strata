@@ -142,11 +142,18 @@ class VaultIntegration(StoreIntegration):
             "install_url": "https://developer.hashicorp.com/vault/install",
             "env_vars": [
                 {"name": "VAULT_TOKEN", "purpose": "Vault authentication token", "required": True},
-                {"name": "VAULT_ADDR", "purpose": "Vault server address (derived from endpoints.address if set)", "required": False},
+                {
+                    "name": "VAULT_ADDR",
+                    "purpose": "Vault server address (derived from endpoints.address if set)",
+                    "required": False,
+                },
             ],
             "auth_methods": [
                 {"method": "Token", "description": "Set VAULT_TOKEN. Most common method for automation."},
-                {"method": "AppRole", "description": "Obtain token via vault write auth/approle/login; then set VAULT_TOKEN."},
+                {
+                    "method": "AppRole",
+                    "description": "Obtain token via vault write auth/approle/login; then set VAULT_TOKEN.",
+                },
             ],
             "yaml_example": "type: hashicorp_vault\nspec:\n  endpoints:\n    address: https://vault.example.com",
         }

@@ -101,4 +101,3 @@ class TestTemplateProcessorRender:
     def test_render_empty_string(self):
         result = TemplateProcessor.render("", {"name": "val"})
         assert result == ""
-

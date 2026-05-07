@@ -164,15 +164,35 @@ class AzureAppConfigIntegration(StoreIntegration):
             "install_url": "https://learn.microsoft.com/en-us/azure/azure-app-configuration/",
             "env_vars": [
                 {"name": "AZURE_TENANT_ID", "purpose": "Azure Active Directory tenant ID", "required": True},
-                {"name": "AZURE_CLIENT_ID", "purpose": "Service principal / managed identity client ID", "required": True},
-                {"name": "AZURE_CLIENT_SECRET", "purpose": "Service principal client secret (omit for OIDC / managed identity)", "required": False},
+                {
+                    "name": "AZURE_CLIENT_ID",
+                    "purpose": "Service principal / managed identity client ID",
+                    "required": True,
+                },
+                {
+                    "name": "AZURE_CLIENT_SECRET",
+                    "purpose": "Service principal client secret (omit for OIDC / managed identity)",
+                    "required": False,
+                },
                 {"name": "AZURE_SUBSCRIPTION_ID", "purpose": "Azure subscription ID", "required": True},
             ],
             "auth_methods": [
-                {"method": "Service principal (secret)", "description": "Set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET."},
-                {"method": "OIDC / Workload Identity", "description": "Set AZURE_TENANT_ID and AZURE_CLIENT_ID; omit AZURE_CLIENT_SECRET."},
-                {"method": "Managed Identity", "description": "No env vars required when running on an Azure resource with MI assigned."},
-                {"method": "Connection string", "description": "Set connection_string in the integration spec (not recommended for production)."},
+                {
+                    "method": "Service principal (secret)",
+                    "description": "Set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET.",
+                },
+                {
+                    "method": "OIDC / Workload Identity",
+                    "description": "Set AZURE_TENANT_ID and AZURE_CLIENT_ID; omit AZURE_CLIENT_SECRET.",
+                },
+                {
+                    "method": "Managed Identity",
+                    "description": "No env vars required when running on an Azure resource with MI assigned.",
+                },
+                {
+                    "method": "Connection string",
+                    "description": "Set connection_string in the integration spec (not recommended for production).",
+                },
             ],
             "yaml_example": "type: azure_appconfig\nspec:\n  endpoint: https://my-appconfig.azconfig.io",
         }

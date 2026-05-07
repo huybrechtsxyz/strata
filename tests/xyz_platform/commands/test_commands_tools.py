@@ -1,17 +1,21 @@
 """Tests for the ``tools`` command group."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 from click.testing import CliRunner
 
 from xyz_platform.commands.cli_tools import tools_group
 
-
 _SAMPLE_ROWS = [
     {"name": "git", "available": True, "version": "2.40.0", "capabilities": ["IRepositoryTool"], "command": "git"},
     {"name": "docker", "available": False, "version": None, "capabilities": ["IContainerTool"], "command": "docker"},
-    {"name": "terraform", "available": True, "version": "1.9.2", "capabilities": ["IInfrastructureTool"], "command": "terraform"},
+    {
+        "name": "terraform",
+        "available": True,
+        "version": "1.9.2",
+        "capabilities": ["IInfrastructureTool"],
+        "command": "terraform",
+    },
 ]
 
 _SAMPLE_DETAIL = {

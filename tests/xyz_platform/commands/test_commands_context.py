@@ -2,12 +2,10 @@
 
 from unittest.mock import patch
 
-import pytest
 from click.testing import CliRunner
 
-from xyz_platform.commands.cli_context import context_group
-from xyz_platform.commands.context.set_context_command import SetContextCommand
 from xyz_platform.cli import main
+from xyz_platform.commands.cli_context import context_group
 
 
 class TestContextGroup:

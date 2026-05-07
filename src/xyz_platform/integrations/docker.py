@@ -94,8 +94,14 @@ class DockerIntegration(BaseIntegration):
             "install_url": "https://docs.docker.com/get-docker/",
             "env_vars": [],
             "auth_methods": [
-                {"method": "Docker daemon", "description": "Docker Desktop or daemon must be running. No env vars required."},
-                {"method": "docker login", "description": "Run 'docker login <registry>' to authenticate to a private registry."},
+                {
+                    "method": "Docker daemon",
+                    "description": "Docker Desktop or daemon must be running. No env vars required.",
+                },
+                {
+                    "method": "docker login",
+                    "description": "Run 'docker login <registry>' to authenticate to a private registry.",
+                },
             ],
             "yaml_example": None,
         }

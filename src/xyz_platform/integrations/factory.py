@@ -179,9 +179,7 @@ class IntegrationFactory:
             return integration_class(config=config)
 
         known = sorted(set(list(cls._type_mapping.keys()) + list(_class_map.keys())))
-        raise ValueError(
-            f"Unknown integration type: '{type_str}'. Known types: {', '.join(known)}"
-        )
+        raise ValueError(f"Unknown integration type: '{type_str}'. Known types: {', '.join(known)}")
 
 
 # Auto-registration of built-in integration types

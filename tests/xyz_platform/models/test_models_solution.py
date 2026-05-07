@@ -1,8 +1,6 @@
 """Tests for SolutionModel and related Pydantic models."""
 
-import pytest
-
-from xyz_platform.models.solution_model import SolutionMetaModel, SolutionModel, SolutionSpecModel
+from xyz_platform.models.solution_model import SolutionSpecModel
 
 
 def _make_spec(**kwargs) -> SolutionSpecModel:

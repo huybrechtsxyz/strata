@@ -1,8 +1,6 @@
 """Tests for ContextController — in-memory operations."""
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from xyz_platform.controllers.context_controller import ContextController
 from xyz_platform.models.solution_model import SolutionMetaModel, SolutionModel, SolutionSpecModel

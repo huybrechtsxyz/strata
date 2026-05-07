@@ -1,9 +1,7 @@
 """Tests for the ``new`` command."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from xyz_platform.commands.cli_new import new_command

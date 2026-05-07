@@ -213,9 +213,7 @@ class NewCommand(BaseCommand):
 
         # 6. Overwrite guard
         if output_path.exists() and not self._overwrite:
-            self._errors.append(
-                f"File already exists: {output_path}. Use --overwrite to replace it."
-            )
+            self._errors.append(f"File already exists: {output_path}. Use --overwrite to replace it.")
             return False
 
         # 7. Write file

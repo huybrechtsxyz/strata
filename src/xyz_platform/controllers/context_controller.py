@@ -45,6 +45,7 @@ class ContextController(BaseController):
         ok, solution = self._load()
         if not ok:
             return False, self.get_errors()
+        assert solution is not None
         if solution.spec.context is None:
             solution.spec.context = {}
         solution.spec.context[key] = value
@@ -63,6 +64,7 @@ class ContextController(BaseController):
         ok, solution = self._load()
         if not ok:
             return False, self.get_errors()
+        assert solution is not None
         if solution.spec.context and key in solution.spec.context:
             del solution.spec.context[key]
         ok, errors = self._solution_controller.save()
@@ -78,4 +80,5 @@ class ContextController(BaseController):
         ok, solution = self._load()
         if not ok:
             return False, {}, self.get_errors()
+        assert solution is not None
         return True, dict(solution.spec.context or {}), []

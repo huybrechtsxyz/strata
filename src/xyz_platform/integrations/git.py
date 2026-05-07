@@ -95,8 +95,14 @@ class GitIntegration(BaseIntegration):
             "install_url": "https://git-scm.com/downloads",
             "env_vars": [],
             "auth_methods": [
-                {"method": "SSH keys", "description": "Add SSH key to remote (e.g. GitHub/GitLab). No env vars needed."},
-                {"method": "HTTPS credentials", "description": "Git credential helper or personal access token in remote URL."},
+                {
+                    "method": "SSH keys",
+                    "description": "Add SSH key to remote (e.g. GitHub/GitLab). No env vars needed.",
+                },
+                {
+                    "method": "HTTPS credentials",
+                    "description": "Git credential helper or personal access token in remote URL.",
+                },
             ],
             "yaml_example": None,
         }

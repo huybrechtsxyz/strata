@@ -1,6 +1,5 @@
 """Command to set / unset / list team-shared template variables in solution.json."""
 
-from pathlib import Path
 from typing import Dict, Optional
 
 import click
