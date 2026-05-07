@@ -110,7 +110,7 @@ class TestMainGroup:
             "clean",
             "status",
             "config",
-            "log",
+            "audit",
             "repo",
             "profile",
             "ref",
