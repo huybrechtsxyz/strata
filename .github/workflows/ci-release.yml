@@ -127,7 +127,7 @@ jobs:
 
       # Build multi-stage CLI image and push; pass the tag as VERSION build arg
       - name: Build and push image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.cli
@@ -168,7 +168,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push CLI image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.cli
@@ -209,7 +209,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push docs image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.docs
