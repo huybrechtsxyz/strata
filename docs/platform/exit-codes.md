@@ -23,7 +23,7 @@
 | `deploy`   | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  |
 | `values`   | ✅      | ✅      | ⚠️ Click only | ✅ Unresolved entries  |
 | `status`   | ✅      | ✅      | ⚠️ Click only | ❌                     |
-| `log`      | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `audit`    | ✅      | ✅      | ⚠️ Click only | ❌                     |
 | `clean`    | ✅      | ✅      | ⚠️ Click only | ❌                     |
 
 **Legend:** ✅ Used | ⚠️ Automatic | ❌ Not used

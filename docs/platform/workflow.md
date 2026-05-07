@@ -569,13 +569,13 @@ spec:
 xyz status
 
 # View logs from last command
-xyz log list --last
+xyz audit list --last
 
 # View last 100 lines at DEBUG level
-xyz log list --lines 100 --level DEBUG
+xyz audit list --lines 100 --level DEBUG
 
 # View logs for a specific execution
-xyz log list --execution-id <UUID>
+xyz audit list --execution-id <UUID>
 
 # Show built-in workflow topics
 xyz help --list
@@ -596,7 +596,7 @@ xyz clean
 xyz clean --dry-run     # preview first
 
 # Reset logging config to defaults
-xyz log reset
+xyz audit log reset
 ```
 
 ---
@@ -633,7 +633,7 @@ xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # -- Inspect --
 xyz status
-xyz log list --last
+xyz audit list --last
 ```
 
 ---
@@ -652,7 +652,7 @@ xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry
 xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Review what happened
-xyz log list --last
+xyz audit list --last
 ```
 
 ---
@@ -679,14 +679,14 @@ xyz log list --last
 
 Valid keys: `output`, `verbose`, `quiet`, `work_path`
 
-### Logging
+### Audit
 
-| Command                                         | Description                              |
-| ----------------------------------------------- | ---------------------------------------- |
-| `xyz log list [--last] [--lines N] [--level L]` | View execution logs                      |
-| `xyz log config`                                | Print current `logging.yaml`             |
-| `xyz log set KEY VALUE`                         | Set a logging config value               |
-| `xyz log reset`                                 | Reset logging config to package defaults |
+| Command                                           | Description                              |
+| ------------------------------------------------- | ---------------------------------------- |
+| `xyz audit list [--last] [--lines N] [--level L]` | View execution logs                      |
+| `xyz audit log list`                              | Print current `logging.yaml`             |
+| `xyz audit log set KEY VALUE`                     | Set a logging config value               |
+| `xyz audit log reset`                             | Reset logging config to package defaults |
 
 ### Repositories
 

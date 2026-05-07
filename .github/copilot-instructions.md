@@ -66,7 +66,7 @@ utils/        ← Pure utilities (no business logic, no service imports)
 
 - All top-level commands are flat: `xyz <group> <command>`. No solution wrapper noun.
 - Every command module lives in `commands/` and registers to the `main` Click group in `cli.py`.
-- Registered command groups: `init`, `clean`, `status`, `config`, `log`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`.
+- Registered command groups: `init`, `clean`, `status`, `config`, `audit`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`.
 - The `main` Click group loads workspace defaults from `.platform/cli.yaml` into `ctx.default_map` at startup. Always use `@click.pass_context` and read `work_path` from `ctx.obj`.
 - **Never** use `sys.exit()` — always raise `click.exceptions.Exit(code)`.
 - Use `handle_command_exit(command, success)` from `cli_common.py` to map to exit codes.

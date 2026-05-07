@@ -26,7 +26,7 @@
 - ~~Decision: Use `xyz solution repo add|remove|list`...~~
 
 ### 2026-05-05 — Flat top-level CLI structure (no solution wrapper)
-- **Decision:** All top-level commands are flat: `xyz <group> <command>`. No `solution` wrapper noun. Canonical commands: `xyz init`, `xyz clean`, `xyz repo *`, `xyz profile *`, `xyz ref *`, `xyz config *`, `xyz log *`.
+- **Decision:** All top-level commands are flat: `xyz <group> <command>`. No `solution` wrapper noun. Canonical commands: `xyz init`, `xyz clean`, `xyz repo *`, `xyz profile *`, `xyz ref *`, `xyz config *`, `xyz audit *`.
 - **Rationale:** `solution` wrapper added depth without clarity gain. Each noun group (`repo`, `profile`, `ref`) is already scoped by name. Flat structure matches the project's target audience (CLI-native DevOps users).
 - **Implications:** `cli_solution.py` deleted. `cli.py` registers groups directly at root. Any new top-level features (`build`, `deploy`) follow the same flat pattern.
 

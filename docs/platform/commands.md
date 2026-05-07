@@ -26,22 +26,22 @@ These options are accepted by every command and subcommand:
 
 ## Command Groups
 
-| Group      | Subcommands                                    | Description                                   |
-| ---------- | ---------------------------------------------- | --------------------------------------------- |
-| `init`     | —                                              | Initialize a new solution workspace           |
-| `clean`    | —                                              | Remove workspace artifacts (logs, temp files) |
-| `config`   | `set` `unset` `list`                           | Manage persistent workspace defaults          |
-| `status`   | —                                              | Show workspace health                         |
-| `log`      | `list` `config` `get` `set`                    | View execution logs and manage log config     |
-| `profile`  | `add` `remove` `list` `activate` `show`        | Manage environment profiles                   |
-| `ref`      | `envfile` `configfile` `datafile` `secretfile` | Manage file references within profiles        |
-| `repo`     | `add` `remove` `list` `sync` `status`          | Manage repositories in the solution           |
-| `build`    | `run` `plan` `clean`                           | Build platform and Terraform artifacts        |
-| `validate` | —                                              | Validate a single platform YAML file          |
-| `deploy`   | `run` `destroy` `status` `history` `health`    | Deploy platform using provisioners            |
-| `values`   | `list` `get`                                   | Inspect resolved deployment values            |
-| `version`  | —                                              | Show CLI version                              |
-| `help`     | —                                              | Show help topics                              |
+| Group      | Subcommands                                                    | Description                                   |
+| ---------- | -------------------------------------------------------------- | --------------------------------------------- |
+| `init`     | —                                                              | Initialize a new solution workspace           |
+| `clean`    | —                                                              | Remove workspace artifacts (logs, temp files) |
+| `config`   | `set` `unset` `list`                                           | Manage persistent workspace defaults          |
+| `status`   | —                                                              | Show workspace health                         |
+| `audit`    | `list`; `log list` `log get` `log set` `log unset` `log reset` | View execution logs and manage log config     |
+| `profile`  | `add` `remove` `list` `activate` `show`                        | Manage environment profiles                   |
+| `ref`      | `envfile` `configfile` `datafile` `secretfile`                 | Manage file references within profiles        |
+| `repo`     | `add` `remove` `list` `sync` `status`                          | Manage repositories in the solution           |
+| `build`    | `run` `plan` `clean`                                           | Build platform and Terraform artifacts        |
+| `validate` | —                                                              | Validate a single platform YAML file          |
+| `deploy`   | `run` `destroy` `status` `history` `health`                    | Deploy platform using provisioners            |
+| `values`   | `list` `get`                                                   | Inspect resolved deployment values            |
+| `version`  | —                                                              | Show CLI version                              |
+| `help`     | —                                                              | Show help topics                              |
 
 ---
 
@@ -131,14 +131,14 @@ xyz status --output json
 
 ---
 
-## `log`
+## `audit`
 
 View execution logs and manage logging configuration.
 
-### `log list`
+### `audit list`
 
 ```
-xyz log list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] [--last]
+xyz audit list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] [--last]
 ```
 
 | Option              | Default | Description                                                              |
@@ -150,33 +150,33 @@ xyz log list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] [--la
 | `--last`            | off     | Show logs for the most recent command execution                          |
 
 ```bash
-xyz log list
-xyz log list --last
-xyz log list --level ERROR --lines 20
+xyz audit list
+xyz audit list --last
+xyz audit list --level ERROR --lines 20
 ```
 
-### `log config`
+### `audit log list`
 
 Show the current `logging.yaml` configuration.
 
 ```bash
-xyz log config
+xyz audit log list
 ```
 
-### `log get KEY`
+### `audit log get KEY`
 
 Get a single logging config value by dot-notation key.
 
 ```bash
-xyz log get level
+xyz audit log get level
 ```
 
-### `log set KEY VALUE`
+### `audit log set KEY VALUE`
 
 Set a logging config value. Use `level` as shorthand for log level.
 
 ```bash
-xyz log set level DEBUG
+xyz audit log set level DEBUG
 ```
 
 ---

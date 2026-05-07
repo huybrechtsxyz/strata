@@ -35,7 +35,7 @@ xyz ref configfile list --profile dev   # verify the path is correct
 file loaded but a required field is missing or a cross-reference is broken).
 
 **What to do:** Exit code 3 means the tool ran successfully but the content is
-invalid. Check `xyz log list --level warning` for the specific validation error.
+invalid. Check `xyz audit list --level warning` for the specific validation error.
 This is different from exit code 1 (system crash or missing file).
 
 ## Exit Code 1 — System Failure
@@ -43,7 +43,7 @@ This is different from exit code 1 (system crash or missing file).
 **Cause:** The tool crashed, a required file is missing, or initialization
 failed (e.g., `solution.json` not found but `INIT_REQUIRED = True`).
 
-**What to do:** Check `xyz log list --level error`. Common causes:
+**What to do:** Check `xyz audit list --level error`. Common causes:
 - Running a command that requires `xyz init` first
 - `solution.json` is corrupted or missing — re-run `xyz init`
 - A required integration (git, terraform) is not installed
@@ -55,7 +55,7 @@ but cross-reference checks failed — e.g., a ref points to a repo that doesn't
 exist in the solution.
 
 **Fix:** Review the error message for which service and which reference failed.
-Correct the YAML and re-run. Check `xyz log list --level debug` for the full
+Correct the YAML and re-run. Check `xyz audit list --level debug` for the full
 validation trace.
 
 ## Stale State After a Failed `xyz init`
@@ -74,6 +74,6 @@ Check in order:
 1. `xyz profile list` — is the right profile active?
 2. `xyz ref configfile list --profile dev` — are all refs registered?
 3. `cat .platform/configuration.yaml` — what did the last merge produce?
-4. `xyz log list --level debug` — were any files skipped due to missing paths?
+4. `xyz audit list --level debug` — were any files skipped due to missing paths?
 
 See also: `xyz help --topic config-merge`, `xyz help --topic workspace`
