@@ -1,5 +1,6 @@
 """Click CLI wiring for the help command."""
 
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -153,7 +154,7 @@ def _render_topic(name: str, work_path: Optional[Path]) -> bool:
     indented = "\n".join(f"  {line}" if line.strip() else "" for line in content.splitlines())
     rendered = f"\n{indented}\n"
 
-    _, terminal_height = click.get_terminal_size()
+    terminal_height = shutil.get_terminal_size().lines
     if rendered.count("\n") > terminal_height:
         click.echo_via_pager(rendered)
     else:
