@@ -474,12 +474,44 @@ function Test-StatusCommand {
     .\scripts\Run.ps1 status --work-path "$app-missing"
 }
 
+# ==============================================================================
+# [REFERENCE] tools — manage and inspect external tool integrations
+# ==============================================================================
+
+function Test-ToolsCommand {
+    .\scripts\Run.ps1 tools -h
+    .\scripts\Run.ps1 tools
+
+    # tools status — list all known integrations and their availability
+    .\scripts\Run.ps1 tools status -h
+    .\scripts\Run.ps1 tools status --work-path $app
+    .\scripts\Run.ps1 tools status --work-path $app --verbose
+
+    # tools check — deep-check a single integration by name
+    .\scripts\Run.ps1 tools check -h
+    .\scripts\Run.ps1 tools check git           --work-path $app
+    .\scripts\Run.ps1 tools check docker        --work-path $app
+    .\scripts\Run.ps1 tools check terraform     --work-path $app
+    .\scripts\Run.ps1 tools check bitwarden     --work-path $app
+    .\scripts\Run.ps1 tools check hashicorp_vault  --work-path $app
+    .\scripts\Run.ps1 tools check hashicorp_consul --work-path $app
+    .\scripts\Run.ps1 tools check azure_keyvault   --work-path $app
+    .\scripts\Run.ps1 tools check azure_appconfig  --work-path $app
+    .\scripts\Run.ps1 tools check no-such-tool  --work-path $app    # should fail
+}
+
+
+
+
+
+
+
+
 #   audit     Observe and audit platform activity: execution history,...
 #   build     Build platform and Terraform artifacts.
 #   deploy    Deploy platform using provisioners.
 #   new       Create a new platform configuration file from a template.
 
-#   tools     Manage and inspect external tool integrations.
 #   validate  Validate a platform YAML file against its kind-specific schema.
 #   values    Inspect and manage deployment values (variables, secrets,...
 
