@@ -498,6 +498,23 @@ function Test-ToolsCommand {
     .\scripts\Run.ps1 tools check azure_keyvault   --work-path $app
     .\scripts\Run.ps1 tools check azure_appconfig  --work-path $app
     .\scripts\Run.ps1 tools check no-such-tool  --work-path $app    # should fail
+
+    # tools install — show download URL, env vars, and auth methods (no actual install)
+    .\scripts\Run.ps1 tools install -h
+    .\scripts\Run.ps1 tools install git           --work-path $app
+    .\scripts\Run.ps1 tools install terraform     --work-path $app
+    .\scripts\Run.ps1 tools install docker        --work-path $app
+    .\scripts\Run.ps1 tools install bitwarden     --work-path $app
+    .\scripts\Run.ps1 tools install hashicorp_vault  --work-path $app
+    .\scripts\Run.ps1 tools install hashicorp_consul --work-path $app
+    .\scripts\Run.ps1 tools install azure_keyvault   --work-path $app
+    .\scripts\Run.ps1 tools install azure_appconfig  --work-path $app
+
+    # --env-file — write a commented template for the user to keep on their machine
+    .\scripts\Run.ps1 tools install terraform    --env-file "$app/terraform.env" --work-path $app
+    .\scripts\Run.ps1 tools install hashicorp_vault --env-file "$app/vault.env"  --work-path $app
+
+    .\scripts\Run.ps1 tools install no-such-tool --work-path $app   # should fail
 }
 
 

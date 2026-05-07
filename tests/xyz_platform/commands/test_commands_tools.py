@@ -125,3 +125,96 @@ class TestToolsCheck:
         runner = CliRunner()
         result = runner.invoke(tools_group, ["check"])
         assert result.exit_code == 2
+
+
+_SAMPLE_INSTALL_INFO = {
+    "name": "terraform",
+    "command": "terraform",
+    "install_url": "https://developer.hashicorp.com/terraform/install",
+    "env_vars": [
+        {
+            "name": "TERRAFORM_API_TOKEN",
+            "purpose": "API token for Terraform Cloud authentication",
+            "required": False,
+        },
+    ],
+    "auth_methods": [
+        {"method": "Environment variable", "description": "Set TERRAFORM_API_TOKEN."},
+    ],
+    "yaml_example": "type: terraform\nspec:\n  source: path/to/module",
+}
+
+
+class TestToolsInstall:
+    def test_help(self):
+        runner = CliRunner()
+        result = runner.invoke(tools_group, ["install", "--help"])
+        assert result.exit_code == 0
+        assert "NAME" in result.output
+
+    def test_install_shows_download_url(self, tmp_path):
+        runner = CliRunner()
+        with patch("xyz_platform.commands.tools.install_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.install_info.return_value = (True, _SAMPLE_INSTALL_INFO, [])
+            result = runner.invoke(tools_group, ["install", "terraform", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "developer.hashicorp.com/terraform/install" in result.output
+
+    def test_install_shows_env_vars(self, tmp_path):
+        runner = CliRunner()
+        with patch("xyz_platform.commands.tools.install_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.install_info.return_value = (True, _SAMPLE_INSTALL_INFO, [])
+            result = runner.invoke(tools_group, ["install", "terraform", "--work-path", str(tmp_path)])
+        assert "TERRAFORM_API_TOKEN" in result.output
+
+    def test_install_shows_auth_methods(self, tmp_path):
+        runner = CliRunner()
+        with patch("xyz_platform.commands.tools.install_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.install_info.return_value = (True, _SAMPLE_INSTALL_INFO, [])
+            result = runner.invoke(tools_group, ["install", "terraform", "--work-path", str(tmp_path)])
+        assert "Environment variable" in result.output
+
+    def test_install_env_file_written(self, tmp_path):
+        env_path = str(tmp_path / "terraform.env")
+        runner = CliRunner()
+        with patch("xyz_platform.commands.tools.install_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.install_info.return_value = (True, _SAMPLE_INSTALL_INFO, [])
+            result = runner.invoke(
+                tools_group,
+                ["install", "terraform", "--env-file", env_path, "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+        content = open(env_path).read()
+        assert "TERRAFORM_API_TOKEN" in content
+        assert "developer.hashicorp.com/terraform/install" in content
+
+    def test_install_env_file_is_commented(self, tmp_path):
+        env_path = str(tmp_path / "terraform.env")
+        runner = CliRunner()
+        with patch("xyz_platform.commands.tools.install_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.install_info.return_value = (True, _SAMPLE_INSTALL_INFO, [])
+            runner.invoke(
+                tools_group,
+                ["install", "terraform", "--env-file", env_path, "--work-path", str(tmp_path)],
+            )
+        content = open(env_path).read()
+        # Every non-blank line must be a comment (no executable assignments)
+        for line in content.splitlines():
+            if line.strip():
+                assert line.startswith("#"), f"Unexpected non-comment line: {line!r}"
+
+    def test_install_unknown_integration_exits_nonzero(self, tmp_path):
+        runner = CliRunner()
+        with patch("xyz_platform.commands.tools.install_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.install_info.return_value = (
+                False,
+                {},
+                ["Unknown integration: 'no-such-tool'. Known: git, terraform"],
+            )
+            result = runner.invoke(tools_group, ["install", "no-such-tool", "--work-path", str(tmp_path)])
+        assert result.exit_code != 0
+
+    def test_install_missing_name_arg_exits_2(self):
+        runner = CliRunner()
+        result = runner.invoke(tools_group, ["install"])
+        assert result.exit_code == 2

@@ -1048,6 +1048,25 @@ class SolutionController(BaseController):
                 self._add_error(msg)
                 return False, self.get_errors()
 
+        # Copy integration template so developers have a starting point
+        integrations_templates_src = get_pkg_templates_path() / "integrations"
+        if integrations_templates_src.exists() and integrations_templates_src.is_dir():
+            for src_file in integrations_templates_src.iterdir():
+                if not src_file.is_file():
+                    continue
+                dest_file = integrations_dir / src_file.name
+                if dest_file.exists():
+                    self.logger.debug("Integration template already exists — skipping", path=str(dest_file))
+                    continue
+                try:
+                    dest_file.write_text(src_file.read_text(encoding="utf-8"), encoding="utf-8")
+                    self.logger.info("Integration template written", path=str(dest_file))
+                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
+                except Exception as e:
+                    msg = f"Failed to write integration template {src_file.name}: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
+
         return True, []
 
     # ------------------------------------------------------------------
