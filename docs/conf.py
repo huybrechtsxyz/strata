@@ -40,7 +40,24 @@ master_doc = "index"
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # These patterns also effect html_static_path and html_extra_path
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = [
+    "_build",
+    "Thumbs.db",
+    ".DS_Store",
+    # GitHub community health files — not Sphinx documentation pages.
+    # GitHub reads these from docs/ automatically; they don't belong in the toctree.
+    "ACKNOWLEDGMENTS.md",
+    "AUTHORS.md",
+    "CHANGELOG.md",
+    "CITATION.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "CONTRIBUTORS.md",
+    "GOVERNANCE.md",
+    "SECURITY.md",
+    "SQUAD.md",
+    "SUPPORT.md",
+]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"
