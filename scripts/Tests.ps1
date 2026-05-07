@@ -636,21 +636,59 @@ function Test-NewCommand {
     .\scripts\Run.ps1 new namespace my-namespace --work-path $app --path "$app/my-namespace.yaml"
 }
 
+# ==============================================================================
+# [REFERENCE] validate - Validate a platform YAML file against its kind-specific schema.
+# ==============================================================================
 
+function Test-ValidateCommand {
+    .\scripts\Run.ps1 validate -h
 
+    # validate each supported kind using known-good test data files
+    .\scripts\Run.ps1 validate "tests/data/configurations/configuration-standard.yaml"
+    .\scripts\Run.ps1 validate "tests/data/firewalls/firewall-standard.yaml"
+    .\scripts\Run.ps1 validate "tests/data/modules/module-standard.yaml"
+    .\scripts\Run.ps1 validate "tests/data/namespaces/namespace-standard.yaml"
+    .\scripts\Run.ps1 validate "tests/data/providers/provider-standard.yaml"
+    .\scripts\Run.ps1 validate "tests/data/resources/resource-standard.yaml"
+    .\scripts\Run.ps1 validate "tests/data/workspaces/workspace-standard.yaml"
+
+    # output formats
+    .\scripts\Run.ps1 validate "tests/data/namespaces/namespace-standard.yaml" --output console
+    .\scripts\Run.ps1 validate "tests/data/namespaces/namespace-standard.yaml" --output json
+    .\scripts\Run.ps1 validate "tests/data/namespaces/namespace-standard.yaml" --output text
+
+    # --deep — Phase 2 cross-reference validation (requires initialized workspace + active profile)
+    .\scripts\Run.ps1 validate "tests/data/namespaces/namespace-standard.yaml" --deep --work-path $app
+
+    # --verbose / --quiet
+    .\scripts\Run.ps1 validate "tests/data/namespaces/namespace-standard.yaml" --verbose
+    .\scripts\Run.ps1 validate "tests/data/namespaces/namespace-standard.yaml" --quiet
+
+    # invalid files — should fail (exit 3)
+    .\scripts\Run.ps1 validate "tests/data/configurations/configuration-invalid.yaml"
+    .\scripts\Run.ps1 validate "tests/data/firewalls/firewall-invalid.yaml"
+    .\scripts\Run.ps1 validate "tests/data/modules/module-invalid.yaml"
+    .\scripts\Run.ps1 validate "tests/data/namespaces/namespace-invalid.yaml"
+    .\scripts\Run.ps1 validate "tests/data/providers/provider-invalid.yaml"
+    .\scripts\Run.ps1 validate "tests/data/resources/resource-invalid.yaml"
+    .\scripts\Run.ps1 validate "tests/data/workspaces/workspace-invalid.yaml"
+
+    # unknown kind — should fail
+    .\scripts\Run.ps1 validate "tests/data/unknown/unknown-standard.yaml"
+
+    # file not found — should fail (exit 1)
+    .\scripts\Run.ps1 validate "tests/data/no-such-file.yaml"
+
+    # --deep with missing workspace — should fail
+    .\scripts\Run.ps1 validate "tests/data/namespaces/namespace-standard.yaml" --deep --work-path "$app-missing"
+}
 
 
 #   build     Build platform and Terraform artifacts.
 #   deploy    Deploy platform using provisioners.
 
-#   validate  Validate a platform YAML file against its kind-specific schema.
+#   validate  
 #   values    Inspect and manage deployment values (variables, secrets,...
-
-# ==============================================================================
-# [FLOW] End-to-end session lifecycle
-# ==============================================================================
-
-.\scripts\Run.ps1 init --name "test-solution" --work-path $app
 
 # ==============================================================================
 # End of reference commands
