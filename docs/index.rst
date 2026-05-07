@@ -12,7 +12,7 @@ xyz_platform
    :maxdepth: 2
    :caption: Getting Started:
 
-   README.rst
+   ../README
 
 .. toctree::
    :maxdepth: 2

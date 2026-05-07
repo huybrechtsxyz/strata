@@ -44,8 +44,6 @@ exclude_patterns = [
     "_build",
     "Thumbs.db",
     ".DS_Store",
-    # Root-level markdown files that are not Sphinx documentation pages.
-    "README.md",
     # GitHub community health files — not Sphinx documentation pages.
     # GitHub reads these from docs/ automatically; they don't belong in the toctree.
     "ACKNOWLEDGMENTS.md",
