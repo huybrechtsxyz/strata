@@ -1,0 +1,54 @@
+#===============================================================================
+# Action Name   : Get Secrets
+# Description   : Retrieve general secrets from Bitwarden and set as environment variable
+# Author        : Vincent Huybrechts
+# Created       : 2025-08-11
+# Last Modified : 2026-05-07
+#===============================================================================
+# This composite GitHub Action:
+#   1. Uses the official Bitwarden Secret Manager GitHub Action to fetch a secret.
+#   2. Retrieves the secret associated with a given Bitwarden Item ID.
+#   3. Makes the value available as an Action output so subsequent steps can use it.
+#   4. Keeps the actual value masked in GitHub Actions logs for security.
+#===============================================================================
+
+name: Get Secrets
+description: Retrieve pipeline secrets from Bitwarden
+
+inputs:
+  bitwarden_token:
+    description: Bitwarden access token (GitHub Secret BITWARDEN_TOKEN)
+    required: true
+
+outputs:
+  kamatera_private_key:
+    description: Kamatera private key retrieved from Bitwarden
+    value: ${{ steps.set-output.outputs.kamatera_private_key }}
+
+runs:
+  using: "composite"
+  steps:
+    # Step 1: Fetch Secrets from Bitwarden Secure Storage
+    - name: Fetch Secrets
+      id: get-secrets
+      uses: bitwarden/sm-action@v3
+      with:
+        access_token: ${{ inputs.bitwarden_token }}
+        secrets: |
+          f16fffe2-77b7-4d20-bf6c-b2c9015c71d3 > KAMATERA_PRIVATE_KEY
+
+    # Step 2: Export value to GitHub Actions Output
+    - name: Export Secrets
+      id: set-output
+      shell: bash
+      env:
+        KAMATERA_PRIVATE_KEY: ${{ steps.get-secrets.outputs.kamatera_private_key }}
+      run: |
+        # Mask value from logs for security
+        echo "::add-mask::${KAMATERA_PRIVATE_KEY}"
+
+        # Pass value to this action's output
+        # Multi-line safe output to GITHUB_OUTPUT
+        echo "kamatera_private_key<<EOF" >> "$GITHUB_OUTPUT"
+        echo "${KAMATERA_PRIVATE_KEY}" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
