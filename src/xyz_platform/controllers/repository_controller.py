@@ -237,13 +237,38 @@ class RepositoryController(BaseController):
         self._errors.clear()
         self._messages.clear()
 
-        git = self._get_git_integration()
-        if git is None:
-            return False, []
-
         results: List[Dict[str, Any]] = []
+        git: Optional[GitIntegration] = None  # initialised lazily — only when a gitops repo is encountered
 
         for repo in repos:
+            if repo.type == "local":
+                local_path = Path(repo.url)
+                if local_path.exists() and local_path.is_dir():
+                    status: str = "ok"
+                    error: Optional[str] = None
+                else:
+                    status = "missing"
+                    error = f"Local path not found: {repo.url}"
+                    self._errors.append(error)
+                results.append(
+                    {
+                        "name": str(repo.name),
+                        "url": repo.url,
+                        "path": str(local_path),
+                        "branch": repo.branch,
+                        "action": "local",
+                        "status": status,
+                        "error": error,
+                    }
+                )
+                continue
+
+            # gitops repo — initialise git integration on first use
+            if git is None:
+                git = self._get_git_integration()
+                if git is None:
+                    return False, results
+
             abs_path = Path(work_path) / repo.path
             result = self._clone_or_pull(
                 git=git,

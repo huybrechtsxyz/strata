@@ -6,12 +6,12 @@ All commands are invoked as `xyz <command> [options]` (or `uv run xyz-platform <
 
 These options are accepted by every command and subcommand:
 
-| Option             | Type                      | Default       | Description                                                                                                       |
-| ------------------ | ------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `XYZ_WORK_PATH` env var, then walks up from CWD looking for `.platform/`. |
-| `--output FORMAT`  | `console`\|`text`\|`json` | `console`     | Output format. `json` returns a structured envelope `{"success": bool, "data": ...}`.                             |
-| `--verbose`        | flag                      | off           | Enable verbose output.                                                                                            |
-| `--quiet`          | flag                      | off           | Suppress console output.                                                                                          |
+| Option             | Type                      | Default       | Description                                                                                                                                                                   |
+| ------------------ | ------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `XYZ_WORK_PATH` env var, then walks up from CWD looking for `.platform/`.                                                             |
+| `--output FORMAT`  | `console`\|`text`\|`json` | `console`     | Output format. Defaults to `console` (human-readable) when omitted. `json` returns a structured envelope `{"success": bool, "data": ...}`. Mutually exclusive with `--quiet`. |
+| `--verbose`        | flag                      | off           | Enable verbose output.                                                                                                                                                        |
+| `--quiet`          | flag                      | off           | Suppress console output.                                                                                                                                                      |
 
 ## Exit Codes
 
@@ -272,13 +272,25 @@ xyz repo add NAME URL [--branch BRANCH] [--path PATH] [--clone]
 
 | Option            | Default | Description                                                |
 | ----------------- | ------- | ---------------------------------------------------------- |
-| `--branch BRANCH` | `main`  | Default branch to track                                    |
+| `--branch BRANCH` | `main`  | Default branch to track (git repos only)                   |
 | `--path PATH`     | —       | Local path relative to work-path (default: `repos/<name>`) |
 | `--clone`         | off     | Clone the repository immediately after registering         |
 
+**URL / path auto-detection:**
+
+- Remote git URL (any `https://`, `git@`, etc.) → registered as type `gitops`. Use `--branch` and `--clone` as needed.
+- Local path starting with a drive letter (`C:/…`, `C:\…`) or a network path (`//server/…`, `\\server\…`) → registered as type `local`. The path must exist and be a directory at registration time. `--branch` and `--clone` are ignored. No sync is needed — the folder is already on disk.
+
 ```bash
+# Remote git repository
 xyz repo add platform https://github.com/org/platform.git
 xyz repo add platform https://github.com/org/platform.git --branch develop --clone
+
+# Local folder (Windows drive path)
+xyz repo add infra C:/repos/xyz-infrastructure
+
+# Local network share
+xyz repo add shared //fileserver/repos/platform
 ```
 
 ### `repo list [--name NAME]`

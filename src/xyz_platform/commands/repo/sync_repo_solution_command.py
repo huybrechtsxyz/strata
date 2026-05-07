@@ -116,16 +116,23 @@ class SyncRepoSolutionCommand(BaseCommand):
                 click.echo("")
                 for r in self._sync_results:
                     if r["status"] == "ok":
-                        icon = "✅" if r["action"] == "clone" else "🔄"
+                        if r["action"] == "clone":
+                            icon = "✅"
+                        elif r["action"] == "local":
+                            icon = "📁"
+                        else:
+                            icon = "🔄"
                         click.echo(f"  {icon}  {r['name']}  ({r['action']})  →  {r['path']}")
                     elif r["action"] == "skipped":
                         click.echo(f"  ⚠️   {r['name']}  (skipped — dirty tree)")
+                    elif r["status"] == "missing":
+                        click.echo(f"  ❌  {r['name']}  (missing)  {r['error']}")
                     else:
                         click.echo(f"  ❌  {r['name']}  (failed)  {r['error']}")
 
                 ok_count = sum(1 for r in self._sync_results if r["status"] == "ok")
                 skip_count = sum(1 for r in self._sync_results if r["action"] == "skipped")
-                fail_count = sum(1 for r in self._sync_results if r["status"] == "failed")
+                fail_count = sum(1 for r in self._sync_results if r["status"] in ("failed", "missing"))
                 total = len(self._sync_results)
 
                 click.echo("")

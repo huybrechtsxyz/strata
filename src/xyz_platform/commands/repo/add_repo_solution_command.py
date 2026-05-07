@@ -1,6 +1,8 @@
 """Command to add a repository to an XYZ Platform solution."""
 
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import click
@@ -8,6 +10,14 @@ import click
 from xyz_platform.commands.base_command import BaseCommand
 from xyz_platform.controllers.repository_controller import RepositoryController
 from xyz_platform.models.solution_model import SolutionSpecRepositoryModel
+
+# Matches Windows drive-letter paths (C:\ or C:/) and UNC/network paths (// or \\)
+_LOCAL_PATH_RE = re.compile(r"^[A-Za-z]:[/\\]|^[/\\]{2}")
+
+
+def _is_local_path(url: str) -> bool:
+    """Return True when *url* looks like a local filesystem path rather than a remote URL."""
+    return bool(_LOCAL_PATH_RE.match(url))
 
 
 class AddRepoSolutionCommand(BaseCommand):
@@ -115,12 +125,26 @@ class AddRepoSolutionCommand(BaseCommand):
 
     def _run_execution(self) -> bool:
         """Register the repo in the already-loaded solution and persist."""
+        is_local = _is_local_path(self._repo_url)
+
+        if is_local:
+            local_path = Path(self._repo_url)
+            if not local_path.exists():
+                self._errors.append(f"Local path does not exist: {self._repo_url}")
+                return False
+            if not local_path.is_dir():
+                self._errors.append(f"Local path is not a directory: {self._repo_url}")
+                return False
+
+        repo_type = "local" if is_local else "gitops"
+        repo_branch = "" if is_local else self._repo_branch
+
         repo = SolutionSpecRepositoryModel(
             name=self._repo_name,
             url=self._repo_url,
             path=self._repo_path,
-            branch=self._repo_branch,
-            type="gitops",
+            branch=repo_branch,
+            type=repo_type,
             created=datetime.now(timezone.utc).isoformat(),
         )
 
@@ -139,12 +163,12 @@ class AddRepoSolutionCommand(BaseCommand):
             "name": self._repo_name,
             "url": self._repo_url,
             "path": self._repo_path,
-            "branch": self._repo_branch,
-            "type": "gitops",
+            "branch": repo_branch,
+            "type": repo_type,
         }
         self._output_data = {k: v for k, v in self._added_repo.items() if v is not None}
 
-        if self._clone:
+        if self._clone and not is_local:
             repo_controller = RepositoryController()
             _all_ok, results = repo_controller.sync_solution_repos(
                 work_path=str(self._work_path),
@@ -168,11 +192,14 @@ class AddRepoSolutionCommand(BaseCommand):
                 click.echo("\n📦  Repository registered:")
                 click.echo(f"    • Name:   {self._added_repo['name']}")
                 click.echo(f"    • URL:    {self._added_repo['url']}")
-                click.echo(f"    • Branch: {self._added_repo['branch']}")
+                if self._added_repo["type"] != "local":
+                    click.echo(f"    • Branch: {self._added_repo['branch']}")
                 click.echo(f"    • Path:   {self._added_repo['path']}")
                 click.echo(f"    • Type:   {self._added_repo['type']}")
                 click.echo("")
-                if self._clone and self._clone_result:
+                if self._added_repo["type"] == "local":
+                    click.echo("💡  Local path — no sync required.")
+                elif self._clone and self._clone_result:
                     r = self._clone_result
                     if r["status"] == "ok":
                         click.echo(f"✅  Cloned to {r['path']}")

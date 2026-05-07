@@ -141,6 +141,69 @@ function Test-CleanCommand {
 }
 
 
+# ==============================================================================
+# [REFERENCE] repo — manage repositories registered in the solution
+# ==============================================================================
+
+function Test-RepoCommands {
+    .\scripts\Run.ps1 repo -h
+    .\scripts\Run.ps1 repo
+
+    # repo add — git repositories
+    # Each name is unique so the full remove/sync sequence below stays consistent
+    .\scripts\Run.ps1 repo add -h
+    .\scripts\Run.ps1 repo add repo-default  https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+    .\scripts\Run.ps1 repo add repo-branch   https://github.com/huybrechtsxyz/xyz-traefik.git --branch main --work-path $app
+    .\scripts\Run.ps1 repo add repo-path     https://github.com/huybrechtsxyz/xyz-traefik.git --path repos/custom --work-path $app
+    .\scripts\Run.ps1 repo add repo-all      https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --path repos/all --work-path $app
+    .\scripts\Run.ps1 repo add repo-json     https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app --output json
+    .\scripts\Run.ps1 repo add repo-text     https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app --output text
+    .\scripts\Run.ps1 repo add repo-clone    https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app --clone
+    .\scripts\Run.ps1 repo add repo-purge    https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+    .\scripts\Run.ps1 repo add repo-purge-json https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+
+    # repo add — local path (type=local, no branch/clone needed)
+    .\scripts\Run.ps1 repo add repo-local    $PWD --work-path $app                 # valid local directory
+    .\scripts\Run.ps1 repo add repo-missing  C:/no/such/path --work-path $app      # non-existent path — should fail
+    .\scripts\Run.ps1 repo add repo-file     $MyInvocation.MyCommand.Path --work-path $app  # file not directory — should fail
+
+    # duplicate name — should fail
+    .\scripts\Run.ps1 repo add repo-default  https://github.com/org/other.git --work-path $app
+
+    # repo list — all output formats and filter by name
+    .\scripts\Run.ps1 repo list -h
+    .\scripts\Run.ps1 repo list --work-path $app
+    .\scripts\Run.ps1 repo list --work-path $app --output console
+    .\scripts\Run.ps1 repo list --work-path $app --output json
+    .\scripts\Run.ps1 repo list --work-path $app --output text
+    .\scripts\Run.ps1 repo list --name repo-default --work-path $app
+    .\scripts\Run.ps1 repo list --name repo-default --work-path $app --output json
+    .\scripts\Run.ps1 repo list --name no-such-repo --work-path $app    # not found — should fail
+
+    # repo remove — each variant uses a distinct registered repo to avoid double-remove
+    .\scripts\Run.ps1 repo remove -h
+    .\scripts\Run.ps1 repo remove repo-default   --work-path $app
+    .\scripts\Run.ps1 repo remove repo-json      --work-path $app --output json
+    .\scripts\Run.ps1 repo remove repo-text      --work-path $app --output text
+    .\scripts\Run.ps1 repo remove repo-purge     --work-path $app --purge
+    .\scripts\Run.ps1 repo remove repo-purge-json --work-path $app --purge --output json
+    .\scripts\Run.ps1 repo remove no-such-repo   --work-path $app      # should fail
+
+    # repo sync — operates on repos still registered after the removes above:
+    #   repo-branch, repo-path, repo-all, repo-clone, repo-local
+    .\scripts\Run.ps1 repo sync -h
+    .\scripts\Run.ps1 repo sync --work-path $app
+    .\scripts\Run.ps1 repo sync --work-path $app --output json
+    .\scripts\Run.ps1 repo sync --work-path $app --output text
+    .\scripts\Run.ps1 repo sync --name repo-branch --work-path $app
+    .\scripts\Run.ps1 repo sync --name repo-branch --work-path $app --output json
+    .\scripts\Run.ps1 repo sync --name repo-local  --work-path $app    # local type — no git ops
+    .\scripts\Run.ps1 repo sync --work-path $app --force
+    .\scripts\Run.ps1 repo sync --name repo-branch --work-path $app --force
+    .\scripts\Run.ps1 repo sync --name no-such-repo --work-path $app   # should fail
+}
+
+
 
 #   audit     Observe and audit platform activity: execution history,...
 #   build     Build platform and Terraform artifacts.
@@ -185,53 +248,7 @@ function Test-CleanCommand {
 
 
 
-# ==============================================================================
-# [REFERENCE] repo — manage repositories registered in the solution
-# ==============================================================================
 
-.\scripts\Run.ps1 repo -h
-.\scripts\Run.ps1 repo
-
-# repo add — register a repository (no cloning; clone deferred to xyz repo sync)
-.\scripts\Run.ps1 repo add -h
-.\scripts\Run.ps1 repo add my-repo https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
-.\scripts\Run.ps1 repo add my-repo-branch https://github.com/huybrechtsxyz/xyz-traefik.git --branch main --work-path $app
-.\scripts\Run.ps1 repo add my-repo-path https://github.com/huybrechtsxyz/xyz-traefik.git --path repos/custom --work-path $app
-.\scripts\Run.ps1 repo add my-repo-all https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --path repos/custom --work-path $app
-.\scripts\Run.ps1 repo add json-repo https://github.com/org/json-repo.git --work-path $app --output json
-.\scripts\Run.ps1 repo add text-repo https://github.com/org/text-repo.git --work-path $app --output text
-
-# duplicate name should fail
-.\scripts\Run.ps1 repo add my-repo https://github.com/org/my-repo.git --work-path $app
-
-# repo list — show repositories registered in the solution
-.\scripts\Run.ps1 repo list -h
-.\scripts\Run.ps1 repo list --work-path $app --output console
-.\scripts\Run.ps1 repo list --work-path $app --output json
-.\scripts\Run.ps1 repo list --work-path $app --output text
-.\scripts\Run.ps1 repo list --name my-repo --work-path $app
-.\scripts\Run.ps1 repo list --name my-repo --work-path $app --output json
-.\scripts\Run.ps1 repo list --name no-such-repo --work-path $app
-
-# repo remove — unregister a repository from the solution
-.\scripts\Run.ps1 repo remove -h
-.\scripts\Run.ps1 repo remove my-repo --work-path $app
-.\scripts\Run.ps1 repo remove my-repo --work-path $app --output json
-.\scripts\Run.ps1 repo remove my-repo --work-path $app --output text
-.\scripts\Run.ps1 repo remove my-repo --work-path $app --purge
-.\scripts\Run.ps1 repo remove my-repo --work-path $app --purge --output json
-.\scripts\Run.ps1 repo remove no-such-repo --work-path $app
-
-# repo sync — clone or update registered repositories
-.\scripts\Run.ps1 repo sync -h
-.\scripts\Run.ps1 repo sync --work-path $app
-.\scripts\Run.ps1 repo sync --work-path $app --output json
-.\scripts\Run.ps1 repo sync --work-path $app --output text
-.\scripts\Run.ps1 repo sync --name my-repo --work-path $app
-.\scripts\Run.ps1 repo sync --name my-repo --work-path $app --output json
-.\scripts\Run.ps1 repo sync --work-path $app --force
-.\scripts\Run.ps1 repo sync --name my-repo --work-path $app --force
-.\scripts\Run.ps1 repo sync --name no-such-repo --work-path $app
 
 # ==============================================================================
 # [REFERENCE] profile — manage profiles in the solution

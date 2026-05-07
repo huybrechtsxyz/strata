@@ -5,6 +5,10 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from xyz_platform.commands.cli_repo import repo_group
+from xyz_platform.commands.repo.add_repo_solution_command import (
+    AddRepoSolutionCommand,
+    _is_local_path,
+)
 
 
 class TestRepoAdd:
@@ -155,3 +159,84 @@ class TestRepoStatus:
         ):
             result = runner.invoke(repo_group, ["status", "--name", "myrepo", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
+
+
+class TestIsLocalPath:
+    """Unit tests for the _is_local_path helper."""
+
+    def test_windows_drive_backslash(self):
+        assert _is_local_path(r"C:\repos\xyz") is True
+
+    def test_windows_drive_forward_slash(self):
+        assert _is_local_path("C:/repos/xyz") is True
+
+    def test_unc_double_forward_slash(self):
+        assert _is_local_path("//server/share") is True
+
+    def test_unc_double_backslash(self):
+        assert _is_local_path(r"\\server\share") is True
+
+    def test_https_url_is_not_local(self):
+        assert _is_local_path("https://github.com/org/repo.git") is False
+
+    def test_git_ssh_url_is_not_local(self):
+        assert _is_local_path("git@github.com:org/repo.git") is False
+
+    def test_relative_path_is_not_local(self):
+        assert _is_local_path("repos/myrepo") is False
+
+
+class TestRepoAddLocalPath:
+    """Integration tests for local-path detection inside AddRepoSolutionCommand._run_execution."""
+
+    def _make_command(self, url: str, work_path) -> AddRepoSolutionCommand:
+        return AddRepoSolutionCommand(name="myrepo", url=url, work_path=str(work_path))
+
+    def test_valid_local_directory_succeeds_with_type_local(self, tmp_path):
+        local_dir = tmp_path / "mylocal"
+        local_dir.mkdir()
+        cmd = self._make_command(str(local_dir), tmp_path)
+
+        with (
+            patch.object(cmd._solution_controller, "add_repository", return_value=(True, [])),
+            patch.object(cmd._solution_controller, "get_messages", return_value=[]),
+            patch.object(cmd._solution_controller, "save", return_value=(True, [])),
+        ):
+            result = cmd._run_execution()
+
+        assert result is True
+        assert cmd._added_repo["type"] == "local"
+        assert cmd._added_repo["branch"] == ""
+
+    def test_nonexistent_local_path_fails_with_error(self, tmp_path):
+        nonexistent = str(tmp_path / "no_such_dir")
+        cmd = self._make_command(nonexistent, tmp_path)
+
+        result = cmd._run_execution()
+
+        assert result is False
+        assert any("does not exist" in e for e in cmd._errors)
+
+    def test_local_path_pointing_to_file_fails_with_error(self, tmp_path):
+        local_file = tmp_path / "myfile.txt"
+        local_file.write_text("content")
+        cmd = self._make_command(str(local_file), tmp_path)
+
+        result = cmd._run_execution()
+
+        assert result is False
+        assert any("not a directory" in e for e in cmd._errors)
+
+    def test_https_url_remains_type_gitops(self, tmp_path):
+        cmd = self._make_command("https://github.com/org/repo.git", tmp_path)
+
+        with (
+            patch.object(cmd._solution_controller, "add_repository", return_value=(True, [])),
+            patch.object(cmd._solution_controller, "get_messages", return_value=[]),
+            patch.object(cmd._solution_controller, "save", return_value=(True, [])),
+        ):
+            result = cmd._run_execution()
+
+        assert result is True
+        assert cmd._added_repo["type"] == "gitops"
+        assert cmd._added_repo["branch"] == "main"
