@@ -149,26 +149,27 @@ function Test-RepoCommands {
     .\scripts\Run.ps1 repo -h
     .\scripts\Run.ps1 repo
 
-    # repo add — git repositories
+    # repo add — local folders from config/* (type=local, no git required)
     # Each name is unique so the full remove/sync sequence below stays consistent
+    $cfgBase = (Resolve-Path "config").Path
     .\scripts\Run.ps1 repo add -h
-    .\scripts\Run.ps1 repo add repo-default  https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
-    .\scripts\Run.ps1 repo add repo-branch   https://github.com/huybrechtsxyz/xyz-traefik.git --branch main --work-path $app
-    .\scripts\Run.ps1 repo add repo-path     https://github.com/huybrechtsxyz/xyz-traefik.git --path repos/custom --work-path $app
-    .\scripts\Run.ps1 repo add repo-all      https://github.com/huybrechtsxyz/xyz-traefik.git --branch develop --path repos/all --work-path $app
-    .\scripts\Run.ps1 repo add repo-json     https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app --output json
-    .\scripts\Run.ps1 repo add repo-text     https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app --output text
-    .\scripts\Run.ps1 repo add repo-clone    https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app --clone
-    .\scripts\Run.ps1 repo add repo-purge    https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
-    .\scripts\Run.ps1 repo add repo-purge-json https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+    .\scripts\Run.ps1 repo add repo-default  "$cfgBase/xyz-configuration" --work-path $app
+    .\scripts\Run.ps1 repo add repo-branch   "$cfgBase/xyz-configuration" --work-path $app  # --branch ignored for local
+    .\scripts\Run.ps1 repo add repo-path     "$cfgBase/xyz-infrastructure" --path repos/infra --work-path $app
+    .\scripts\Run.ps1 repo add repo-all      "$cfgBase/xyz-svc-traefik" --path repos/traefik --work-path $app
+    .\scripts\Run.ps1 repo add repo-json     "$cfgBase/xyz-configuration" --work-path $app --output json
+    .\scripts\Run.ps1 repo add repo-text     "$cfgBase/xyz-configuration" --work-path $app --output text
+    .\scripts\Run.ps1 repo add repo-clone    "$cfgBase/xyz-infrastructure" --work-path $app  # --clone ignored for local
+    .\scripts\Run.ps1 repo add repo-purge    "$cfgBase/xyz-svc-traefik" --work-path $app
+    .\scripts\Run.ps1 repo add repo-purge-json "$cfgBase/xyz-svc-traefik" --work-path $app
 
-    # repo add — local path (type=local, no branch/clone needed)
-    .\scripts\Run.ps1 repo add repo-local    $PWD --work-path $app                 # valid local directory
-    .\scripts\Run.ps1 repo add repo-missing  C:/no/such/path --work-path $app      # non-existent path — should fail
-    .\scripts\Run.ps1 repo add repo-file     $MyInvocation.MyCommand.Path --work-path $app  # file not directory — should fail
+    # repo add — local path failure cases
+    .\scripts\Run.ps1 repo add repo-local    $cfgBase --work-path $app              # valid: config root itself
+    .\scripts\Run.ps1 repo add repo-missing  C:/no/such/path --work-path $app       # non-existent path — should fail
+    .\scripts\Run.ps1 repo add repo-file     "$cfgBase/xyz-configuration/README.md" --work-path $app  # file not directory — should fail
 
     # duplicate name — should fail
-    .\scripts\Run.ps1 repo add repo-default  https://github.com/org/other.git --work-path $app
+    .\scripts\Run.ps1 repo add repo-default  "$cfgBase/xyz-infrastructure" --work-path $app
 
     # repo list — all output formats and filter by name
     .\scripts\Run.ps1 repo list -h
@@ -201,9 +202,70 @@ function Test-RepoCommands {
     .\scripts\Run.ps1 repo sync --work-path $app --force
     .\scripts\Run.ps1 repo sync --name repo-branch --work-path $app --force
     .\scripts\Run.ps1 repo sync --name no-such-repo --work-path $app   # should fail
+
+    # cleanup remaining repos
+    .\scripts\Run.ps1 repo remove repo-branch --work-path $app
+    .\scripts\Run.ps1 repo remove repo-path   --work-path $app
+    .\scripts\Run.ps1 repo remove repo-all    --work-path $app
+    .\scripts\Run.ps1 repo remove repo-clone  --work-path $app
+    .\scripts\Run.ps1 repo remove repo-local  --work-path $app
+
+    # Have one registered repo present to confirm that cleanup doesn't interfere with repo management
+    .\scripts\Run.ps1 repo add traefik "$cfgBase/xyz-svc-traefik" --work-path $app
+    .\scripts\Run.ps1 repo remove traefik --work-path $app
+
+    # git integration smoke test — add, sync (clone), remove with purge
+    .\scripts\Run.ps1 repo add traefik-git https://github.com/huybrechtsxyz/xyz-traefik.git --work-path $app
+    .\scripts\Run.ps1 repo sync --name traefik-git --work-path $app
+    .\scripts\Run.ps1 repo remove traefik-git --work-path $app --purge
 }
 
+# ==============================================================================
+# [REFERENCE] profile — manage profiles in the solution
+# ==============================================================================
 
+function Test-ProfileCommands {
+    .\scripts\Run.ps1 profile -h
+    .\scripts\Run.ps1 profile
+
+    # profile add — create a new profile (first profile auto-activates)
+    .\scripts\Run.ps1 profile add -h
+    .\scripts\Run.ps1 profile add production --work-path $app
+    .\scripts\Run.ps1 profile add development --work-path $app
+    .\scripts\Run.ps1 profile add staging --work-path $app
+    .\scripts\Run.ps1 profile add production --work-path $app --output json
+    .\scripts\Run.ps1 profile add production --work-path $app --output text
+    .\scripts\Run.ps1 profile add production --work-path $app          # duplicate — should fail
+
+    # profile list — show all profiles with active marker
+    .\scripts\Run.ps1 profile list -h
+    .\scripts\Run.ps1 profile list --work-path $app --output console
+    .\scripts\Run.ps1 profile list --work-path $app --output json
+    .\scripts\Run.ps1 profile list --work-path $app --output text
+    .\scripts\Run.ps1 profile list --name production --work-path $app
+    .\scripts\Run.ps1 profile list --name no-such-profile --work-path $app
+
+    # profile show — display all ref paths for a profile grouped by type
+    .\scripts\Run.ps1 profile show -h
+    .\scripts\Run.ps1 profile show production --work-path $app
+    .\scripts\Run.ps1 profile show production --work-path $app --output json
+    .\scripts\Run.ps1 profile show production --work-path $app --output text
+    .\scripts\Run.ps1 profile show no-such-profile --work-path $app    # should fail
+
+    # profile activate — switch active profile
+    .\scripts\Run.ps1 profile activate -h
+    .\scripts\Run.ps1 profile activate development --work-path $app
+    .\scripts\Run.ps1 profile activate development --work-path $app --output json
+    .\scripts\Run.ps1 profile activate production --work-path $app --output json
+    .\scripts\Run.ps1 profile activate no-such-profile --work-path $app
+
+    # profile remove — delete a profile (refuses if active)
+    .\scripts\Run.ps1 profile remove -h
+    .\scripts\Run.ps1 profile remove development --work-path $app
+    .\scripts\Run.ps1 profile remove production --work-path $app --output json
+    .\scripts\Run.ps1 profile remove production --work-path $app       # active — should fail
+    .\scripts\Run.ps1 profile remove no-such-profile --work-path $app  # should fail
+}
 
 #   audit     Observe and audit platform activity: execution history,...
 #   build     Build platform and Terraform artifacts.
@@ -211,7 +273,6 @@ function Test-RepoCommands {
 #   deploy    Deploy platform using provisioners.
 #   help      Show help topics and workflow guidance.
 #   new       Create a new platform configuration file from a template.
-#   profile   Manage profiles in the current solution.
 #   ref       Manage file references (envfile, configfile, datafile,...
 #   repo      Manage repositories in the current solution.
 #   status    Show workspace health: solution, profile, repositories, and...
@@ -250,50 +311,7 @@ function Test-RepoCommands {
 
 
 
-# ==============================================================================
-# [REFERENCE] profile — manage profiles in the solution
-# ==============================================================================
 
-.\scripts\Run.ps1 profile -h
-.\scripts\Run.ps1 profile
-
-# profile add — create a new profile (first profile auto-activates)
-.\scripts\Run.ps1 profile add -h
-.\scripts\Run.ps1 profile add production --work-path $app
-.\scripts\Run.ps1 profile add development --work-path $app
-.\scripts\Run.ps1 profile add staging --work-path $app
-.\scripts\Run.ps1 profile add production --work-path $app --output json
-.\scripts\Run.ps1 profile add production --work-path $app --output text
-.\scripts\Run.ps1 profile add production --work-path $app          # duplicate — should fail
-
-# profile list — show all profiles with active marker
-.\scripts\Run.ps1 profile list -h
-.\scripts\Run.ps1 profile list --work-path $app --output console
-.\scripts\Run.ps1 profile list --work-path $app --output json
-.\scripts\Run.ps1 profile list --work-path $app --output text
-.\scripts\Run.ps1 profile list --name production --work-path $app
-.\scripts\Run.ps1 profile list --name no-such-profile --work-path $app
-
-# profile show — display all ref paths for a profile grouped by type
-.\scripts\Run.ps1 profile show -h
-.\scripts\Run.ps1 profile show production --work-path $app
-.\scripts\Run.ps1 profile show production --work-path $app --output json
-.\scripts\Run.ps1 profile show production --work-path $app --output text
-.\scripts\Run.ps1 profile show no-such-profile --work-path $app    # should fail
-
-# profile activate — switch active profile
-.\scripts\Run.ps1 profile activate -h
-.\scripts\Run.ps1 profile activate development --work-path $app
-.\scripts\Run.ps1 profile activate development --work-path $app --output json
-.\scripts\Run.ps1 profile activate production --work-path $app --output json
-.\scripts\Run.ps1 profile activate no-such-profile --work-path $app
-
-# profile remove — delete a profile (refuses if active)
-.\scripts\Run.ps1 profile remove -h
-.\scripts\Run.ps1 profile remove development --work-path $app
-.\scripts\Run.ps1 profile remove production --work-path $app --output json
-.\scripts\Run.ps1 profile remove production --work-path $app       # active — should fail
-.\scripts\Run.ps1 profile remove no-such-profile --work-path $app  # should fail
 
 # ==============================================================================
 # [REFERENCE] ref — manage named file references within profiles
