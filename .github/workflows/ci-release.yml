@@ -74,7 +74,7 @@ jobs:
 
       # Download the dist/ artifact stored by ci-build
       - name: Download dist artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
