@@ -7,6 +7,7 @@
 #>
 
 $app = ".app"
+$cfgBase = (Resolve-Path "config").Path
 
 New-Item -Path $app -ItemType Directory -Force
 
@@ -50,6 +51,38 @@ function Test-InitCommand {
     .\scripts\Run.ps1 init --name "test-solution" --work-path "$app-quiet" --quiet
 
     Remove-Item -Path "$app-console", "$app-json", "$app-text", "$app-verbose", "$app-quiet" -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# ==============================================================================
+# [REFERENCE] Help command — general help and workflow guidance
+# ==============================================================================
+
+function Test-HelpCommand {
+    # default — getting-started overview (no workspace required)
+    .\scripts\Run.ps1 help -h
+    .\scripts\Run.ps1 help
+
+    # --list — all available topics (built-in + workspace)
+    .\scripts\Run.ps1 help --list
+    .\scripts\Run.ps1 help --list --work-path $app   # workspace topics included when .platform/help/ exists
+
+    # --topic — platform guides
+    .\scripts\Run.ps1 help --topic quickstart
+    .\scripts\Run.ps1 help --topic workspace
+    .\scripts\Run.ps1 help --topic profiles
+    .\scripts\Run.ps1 help --topic refs
+    .\scripts\Run.ps1 help --topic config-merge
+    .\scripts\Run.ps1 help --topic cross-repo
+    .\scripts\Run.ps1 help --topic environments
+    .\scripts\Run.ps1 help --topic troubleshooting
+
+    # --topic — integration topics
+    .\scripts\Run.ps1 help --topic git
+    .\scripts\Run.ps1 help --topic terraform
+    .\scripts\Run.ps1 help --topic docker
+
+    # unknown topic — should fail (exit 1) and print topic list
+    .\scripts\Run.ps1 help --topic no-such-topic
 }
 
 # ==============================================================================
@@ -151,7 +184,6 @@ function Test-RepoCommands {
 
     # repo add — local folders from config/* (type=local, no git required)
     # Each name is unique so the full remove/sync sequence below stays consistent
-    $cfgBase = (Resolve-Path "config").Path
     .\scripts\Run.ps1 repo add -h
     .\scripts\Run.ps1 repo add repo-default  "$cfgBase/xyz-configuration" --work-path $app
     .\scripts\Run.ps1 repo add repo-branch   "$cfgBase/xyz-configuration" --work-path $app  # --branch ignored for local
@@ -228,53 +260,209 @@ function Test-ProfileCommands {
     .\scripts\Run.ps1 profile -h
     .\scripts\Run.ps1 profile
 
-    # profile add — create a new profile (first profile auto-activates)
+    # profile add — first profile auto-activates
+    # Extra profiles reserved so each remove variant has its own distinct target
     .\scripts\Run.ps1 profile add -h
-    .\scripts\Run.ps1 profile add production --work-path $app
-    .\scripts\Run.ps1 profile add development --work-path $app
-    .\scripts\Run.ps1 profile add staging --work-path $app
-    .\scripts\Run.ps1 profile add production --work-path $app --output json
-    .\scripts\Run.ps1 profile add production --work-path $app --output text
-    .\scripts\Run.ps1 profile add production --work-path $app          # duplicate — should fail
+    .\scripts\Run.ps1 profile add production     --work-path $app          # auto-activates
+    .\scripts\Run.ps1 profile add development    --work-path $app
+    .\scripts\Run.ps1 profile add staging        --work-path $app
+    .\scripts\Run.ps1 profile add profile-remove --work-path $app          # plain remove
+    .\scripts\Run.ps1 profile add profile-json   --work-path $app          # remove --output json
+    .\scripts\Run.ps1 profile add profile-text   --work-path $app          # remove --output text
 
-    # profile list — show all profiles with active marker
+    # duplicate — should fail
+    .\scripts\Run.ps1 profile add production  --work-path $app
+    .\scripts\Run.ps1 profile add production  --work-path $app --output json
+    .\scripts\Run.ps1 profile add production  --work-path $app --output text
+
+    # profile list — all output formats and filter by name
     .\scripts\Run.ps1 profile list -h
+    .\scripts\Run.ps1 profile list --work-path $app
     .\scripts\Run.ps1 profile list --work-path $app --output console
     .\scripts\Run.ps1 profile list --work-path $app --output json
     .\scripts\Run.ps1 profile list --work-path $app --output text
     .\scripts\Run.ps1 profile list --name production --work-path $app
-    .\scripts\Run.ps1 profile list --name no-such-profile --work-path $app
+    .\scripts\Run.ps1 profile list --name production --work-path $app --output json
+    .\scripts\Run.ps1 profile list --name no-such-profile --work-path $app  # should fail
 
-    # profile show — display all ref paths for a profile grouped by type
+    # profile show — display ref paths grouped by type
     .\scripts\Run.ps1 profile show -h
     .\scripts\Run.ps1 profile show production --work-path $app
     .\scripts\Run.ps1 profile show production --work-path $app --output json
     .\scripts\Run.ps1 profile show production --work-path $app --output text
-    .\scripts\Run.ps1 profile show no-such-profile --work-path $app    # should fail
+    .\scripts\Run.ps1 profile show no-such-profile --work-path $app         # should fail
 
-    # profile activate — switch active profile
+    # profile activate — active profile is now: production
     .\scripts\Run.ps1 profile activate -h
     .\scripts\Run.ps1 profile activate development --work-path $app
     .\scripts\Run.ps1 profile activate development --work-path $app --output json
-    .\scripts\Run.ps1 profile activate production --work-path $app --output json
-    .\scripts\Run.ps1 profile activate no-such-profile --work-path $app
+    .\scripts\Run.ps1 profile activate production  --work-path $app --output json
+    .\scripts\Run.ps1 profile activate no-such-profile --work-path $app     # should fail
 
-    # profile remove — delete a profile (refuses if active)
+    # profile remove — active profile is now: production
+    # Each variant targets a distinct non-active profile to avoid double-remove
     .\scripts\Run.ps1 profile remove -h
-    .\scripts\Run.ps1 profile remove development --work-path $app
-    .\scripts\Run.ps1 profile remove production --work-path $app --output json
-    .\scripts\Run.ps1 profile remove production --work-path $app       # active — should fail
-    .\scripts\Run.ps1 profile remove no-such-profile --work-path $app  # should fail
+    .\scripts\Run.ps1 profile remove profile-remove --work-path $app
+    .\scripts\Run.ps1 profile remove profile-json   --work-path $app --output json
+    .\scripts\Run.ps1 profile remove profile-text   --work-path $app --output text
+    .\scripts\Run.ps1 profile remove production     --work-path $app         # active — should fail
+    .\scripts\Run.ps1 profile remove no-such-profile --work-path $app        # should fail
+
+    # cleanup: switch away from production so it can be removed
+    .\scripts\Run.ps1 profile activate development --work-path $app
+    .\scripts\Run.ps1 profile remove production    --work-path $app
+    .\scripts\Run.ps1 profile remove staging       --work-path $app
+    .\scripts\Run.ps1 profile remove development   --work-path $app          # active — should fail
+
+    # Have one profile present to confirm that cleanup doesn't interfere with profile management
+    .\scripts\Run.ps1 profile add production --work-path $app
 }
+
+
+# ==============================================================================
+# [REFERENCE] ref — manage named file references within profiles
+# ==============================================================================
+
+function Test-RefCommands {
+    .\scripts\Run.ps1 ref -h
+    .\scripts\Run.ps1 ref
+
+    # Precondition from Test-ProfileCommands: active=development, production also present
+
+    # ref envfile — .env file references
+    # Unique names per variant so each add/remove pair is independent
+    .\scripts\Run.ps1 ref envfile -h
+    .\scripts\Run.ps1 ref envfile add base       "@infra/environments/base.env"  --profile production --work-path $app
+    .\scripts\Run.ps1 ref envfile add prd        "@infra/environments/prd.env"   --profile production --work-path $app
+    .\scripts\Run.ps1 ref envfile add envf-json  "@infra/environments/json.env"  --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref envfile add envf-text  "@infra/environments/text.env"  --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref envfile add base       ".env.local"                    --work-path $app       # active profile (development)
+    .\scripts\Run.ps1 ref envfile add base       "@infra/base.env"               --profile production --work-path $app  # duplicate — should fail
+
+    .\scripts\Run.ps1 ref envfile list --profile production --work-path $app
+    .\scripts\Run.ps1 ref envfile list --work-path $app                          # active profile (development)
+    .\scripts\Run.ps1 ref envfile list --profile production --work-path $app --output console
+    .\scripts\Run.ps1 ref envfile list --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref envfile list --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref envfile list --profile no-such-profile --work-path $app  # should fail
+
+    .\scripts\Run.ps1 ref envfile show base      --profile production --work-path $app
+    .\scripts\Run.ps1 ref envfile show base      --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref envfile show no-such   --profile production --work-path $app  # should fail
+
+    .\scripts\Run.ps1 ref envfile remove prd       --profile production --work-path $app
+    .\scripts\Run.ps1 ref envfile remove envf-json --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref envfile remove envf-text --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref envfile remove base      --profile production --work-path $app
+    .\scripts\Run.ps1 ref envfile remove base      --work-path $app               # active profile (development)
+    .\scripts\Run.ps1 ref envfile remove no-such   --profile production --work-path $app  # should fail
+
+    # ref configfile — YAML/TOML configuration file references
+    .\scripts\Run.ps1 ref configfile -h
+    .\scripts\Run.ps1 ref configfile add main      "config/app.yaml"    --profile production --work-path $app
+    .\scripts\Run.ps1 ref configfile add secondary "config/extra.yaml"  --profile production --work-path $app
+    .\scripts\Run.ps1 ref configfile add cfg-json  "config/json.yaml"   --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref configfile add cfg-text  "config/text.yaml"   --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref configfile add main      "config/app.yaml"    --profile production --work-path $app  # duplicate — should fail
+
+    .\scripts\Run.ps1 ref configfile list --profile production --work-path $app
+    .\scripts\Run.ps1 ref configfile list --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref configfile list --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref configfile list --profile no-such-profile --work-path $app  # should fail
+
+    .\scripts\Run.ps1 ref configfile show main     --profile production --work-path $app
+    .\scripts\Run.ps1 ref configfile show main     --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref configfile show no-such  --profile production --work-path $app  # should fail
+
+    .\scripts\Run.ps1 ref configfile remove secondary --profile production --work-path $app
+    .\scripts\Run.ps1 ref configfile remove cfg-json  --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref configfile remove cfg-text  --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref configfile remove main      --profile production --work-path $app
+    .\scripts\Run.ps1 ref configfile remove no-such   --profile production --work-path $app  # should fail
+
+    # ref datafile — data/seed file references
+    .\scripts\Run.ps1 ref datafile -h
+    .\scripts\Run.ps1 ref datafile add seed      "data/seed.sql"   --profile production --work-path $app
+    .\scripts\Run.ps1 ref datafile add dat-json  "data/json.sql"   --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref datafile add dat-text  "data/text.sql"   --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref datafile add seed      "data/seed.sql"   --profile production --work-path $app  # duplicate — should fail
+
+    .\scripts\Run.ps1 ref datafile list --profile production --work-path $app
+    .\scripts\Run.ps1 ref datafile list --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref datafile list --profile production --work-path $app --output text
+
+    .\scripts\Run.ps1 ref datafile show seed     --profile production --work-path $app
+    .\scripts\Run.ps1 ref datafile show seed     --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref datafile show no-such  --profile production --work-path $app  # should fail
+
+    .\scripts\Run.ps1 ref datafile remove dat-json  --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref datafile remove dat-text  --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref datafile remove seed      --profile production --work-path $app
+    .\scripts\Run.ps1 ref datafile remove no-such   --profile production --work-path $app  # should fail
+
+    # ref secretfile — secret/vault file references
+    .\scripts\Run.ps1 ref secretfile -h
+    .\scripts\Run.ps1 ref secretfile add vault     "@infra/secrets/vault.yaml"  --profile production --work-path $app
+    .\scripts\Run.ps1 ref secretfile add sec-json  "@infra/secrets/json.yaml"   --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref secretfile add sec-text  "@infra/secrets/text.yaml"   --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref secretfile add vault     "@infra/secrets/vault.yaml"  --profile production --work-path $app  # duplicate — should fail
+
+    .\scripts\Run.ps1 ref secretfile list --profile production --work-path $app
+    .\scripts\Run.ps1 ref secretfile list --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref secretfile list --profile production --work-path $app --output text
+
+    .\scripts\Run.ps1 ref secretfile show vault    --profile production --work-path $app
+    .\scripts\Run.ps1 ref secretfile show vault    --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref secretfile show no-such  --profile production --work-path $app  # should fail
+
+    .\scripts\Run.ps1 ref secretfile remove sec-json  --profile production --work-path $app --output json
+    .\scripts\Run.ps1 ref secretfile remove sec-text  --profile production --work-path $app --output text
+    .\scripts\Run.ps1 ref secretfile remove vault     --profile production --work-path $app
+    .\scripts\Run.ps1 ref secretfile remove no-such   --profile production --work-path $app  # should fail
+}
+
+# ==============================================================================
+# [REFERENCE] context — manage team-shared template variables (solution.json)
+# ==============================================================================
+
+function Test-ContextCommands {
+    .\scripts\Run.ps1 context -h
+    .\scripts\Run.ps1 context
+
+    # context set — write a template variable
+    .\scripts\Run.ps1 context set -h
+    .\scripts\Run.ps1 context set owner myteam             --work-path $app
+    .\scripts\Run.ps1 context set environment production   --work-path $app
+    .\scripts\Run.ps1 context set region eu-west-1         --work-path $app
+    .\scripts\Run.ps1 context set owner updated-team       --work-path $app  # overwrite existing key
+    .\scripts\Run.ps1 context set owner updated-team       --work-path $app --output json
+    .\scripts\Run.ps1 context set owner updated-team       --work-path $app --output text
+
+    # context list — show all current template variables
+    .\scripts\Run.ps1 context list -h
+    .\scripts\Run.ps1 context list --work-path $app
+    .\scripts\Run.ps1 context list --work-path $app --output console
+    .\scripts\Run.ps1 context list --work-path $app --output json
+    .\scripts\Run.ps1 context list --work-path $app --output text
+
+    # context unset — remove a template variable (silent when key absent)
+    .\scripts\Run.ps1 context unset -h
+    .\scripts\Run.ps1 context unset region              --work-path $app
+    .\scripts\Run.ps1 context unset region              --work-path $app  # already gone — silent success
+    .\scripts\Run.ps1 context unset no-such-key         --work-path $app  # never existed — silent success
+    .\scripts\Run.ps1 context unset environment         --work-path $app --output json
+    .\scripts\Run.ps1 context unset owner               --work-path $app --output text
+
+    # list after cleanup — should be empty
+    .\scripts\Run.ps1 context list --work-path $app
+}
+
+
 
 #   audit     Observe and audit platform activity: execution history,...
 #   build     Build platform and Terraform artifacts.
-#   context   Manage team-shared template variables (stored in solution.json).
 #   deploy    Deploy platform using provisioners.
-#   help      Show help topics and workflow guidance.
 #   new       Create a new platform configuration file from a template.
-#   ref       Manage file references (envfile, configfile, datafile,...
-#   repo      Manage repositories in the current solution.
 #   status    Show workspace health: solution, profile, repositories, and...
 #   tools     Manage and inspect external tool integrations.
 #   validate  Validate a platform YAML file against its kind-specific schema.
@@ -312,50 +500,6 @@ function Test-ProfileCommands {
 
 
 
-
-# ==============================================================================
-# [REFERENCE] ref — manage named file references within profiles
-# ==============================================================================
-
-.\scripts\Run.ps1 ref -h
-.\scripts\Run.ps1 ref
-
-# ref envfile — .env file references
-.\scripts\Run.ps1 ref envfile -h
-.\scripts\Run.ps1 ref envfile add base "@infra/environments/base.env" --profile production --work-path $app
-.\scripts\Run.ps1 ref envfile add prd "@infra/environments/prd.env" --profile production --work-path $app
-.\scripts\Run.ps1 ref envfile add base ".env.local" --work-path $app   # active profile (no --profile)
-.\scripts\Run.ps1 ref envfile add base "@infra/base.env" --profile production --work-path $app --output json
-.\scripts\Run.ps1 ref envfile add base "@infra/base.env" --profile production --work-path $app  # duplicate — should fail
-.\scripts\Run.ps1 ref envfile list --profile production --work-path $app
-.\scripts\Run.ps1 ref envfile list --work-path $app                    # active profile
-.\scripts\Run.ps1 ref envfile list --profile production --work-path $app --output json
-.\scripts\Run.ps1 ref envfile list --profile production --work-path $app --output text
-.\scripts\Run.ps1 ref envfile show base --profile production --work-path $app   # display file content
-.\scripts\Run.ps1 ref envfile remove base --profile production --work-path $app
-.\scripts\Run.ps1 ref envfile remove no-such --profile production --work-path $app  # should fail
-
-# ref configfile — configuration file references (YAML, TOML, etc.)
-.\scripts\Run.ps1 ref configfile -h
-.\scripts\Run.ps1 ref configfile add main "config/app.yaml" --profile production --work-path $app
-.\scripts\Run.ps1 ref configfile add main "config/app.yaml" --profile production --work-path $app --output json
-.\scripts\Run.ps1 ref configfile list --profile production --work-path $app
-.\scripts\Run.ps1 ref configfile show main --profile production --work-path $app
-.\scripts\Run.ps1 ref configfile remove main --profile production --work-path $app
-
-# ref datafile — data/seed file references
-.\scripts\Run.ps1 ref datafile -h
-.\scripts\Run.ps1 ref datafile add seed "data/seed.sql" --profile production --work-path $app
-.\scripts\Run.ps1 ref datafile list --profile production --work-path $app
-.\scripts\Run.ps1 ref datafile show seed --profile production --work-path $app
-.\scripts\Run.ps1 ref datafile remove seed --profile production --work-path $app
-
-# ref secretfile — secret/vault file references
-.\scripts\Run.ps1 ref secretfile -h
-.\scripts\Run.ps1 ref secretfile add vault "@infra/secrets/vault.yaml" --profile production --work-path $app
-.\scripts\Run.ps1 ref secretfile list --profile production --work-path $app
-.\scripts\Run.ps1 ref secretfile show vault --profile production --work-path $app
-.\scripts\Run.ps1 ref secretfile remove vault --profile production --work-path $app
 
 # ==============================================================================
 # [REFERENCE] log — view execution logs and manage logging configuration

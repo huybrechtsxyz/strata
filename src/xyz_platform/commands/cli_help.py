@@ -138,7 +138,11 @@ def _render_topic_list(work_path: Optional[Path]) -> None:
 
 
 def _render_topic(name: str, work_path: Optional[Path]) -> bool:
-    """Print the content of a topic file.  Returns False if not found."""
+    """Print the content of a topic file.  Returns False if not found.
+
+    Uses the system pager (space to scroll, q to quit) when the content is
+    taller than the current terminal; falls back to plain echo otherwise.
+    """
     topic_path = _topic_file(name, work_path)
     if topic_path is None:
         click.echo(f"  Unknown topic: '{name}'.\n", err=True)
@@ -146,10 +150,14 @@ def _render_topic(name: str, work_path: Optional[Path]) -> bool:
         return False
 
     content = topic_path.read_text(encoding="utf-8")
-    click.echo("")
-    for line in content.splitlines():
-        click.echo(f"  {line}" if line else "")
-    click.echo("")
+    indented = "\n".join(f"  {line}" if line.strip() else "" for line in content.splitlines())
+    rendered = f"\n{indented}\n"
+
+    _, terminal_height = click.get_terminal_size()
+    if rendered.count("\n") > terminal_height:
+        click.echo_via_pager(rendered)
+    else:
+        click.echo(rendered)
     return True
 
 
