@@ -11,13 +11,18 @@ from xyz_platform.commands.base_command import BaseCommand
 from xyz_platform.controllers.repository_controller import RepositoryController
 from xyz_platform.models.solution_model import SolutionSpecRepositoryModel
 
-# Matches Windows drive-letter paths (C:\ or C:/) and UNC/network paths (// or \\)
-_LOCAL_PATH_RE = re.compile(r"^[A-Za-z]:[/\\]|^[/\\]{2}")
+# A URL is remote when it contains a scheme (e.g. https://, ssh://) or uses git@ notation.
+_REMOTE_URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+\-.]*://|^git@")
 
 
 def _is_local_path(url: str) -> bool:
-    """Return True when *url* looks like a local filesystem path rather than a remote URL."""
-    return bool(_LOCAL_PATH_RE.match(url))
+    """Return True when *url* looks like a local filesystem path rather than a remote URL.
+
+    Anything without a URL scheme (``<proto>://``) or ``git@`` prefix is treated
+    as a local path — this covers Windows absolute paths (``C:\\...``), Unix
+    absolute paths (``/...``), and relative paths (``repos/myrepo``).
+    """
+    return not bool(_REMOTE_URL_RE.match(url))
 
 
 class AddRepoSolutionCommand(BaseCommand):
@@ -158,6 +163,11 @@ class AddRepoSolutionCommand(BaseCommand):
         self._errors.extend(errors)
         if not ok:
             return False
+
+        # Regenerate the VS Code .code-workspace file to include the new repo folder
+        _ws_ok, ws_errors = self._solution_controller.generate_workspace()
+        if not _ws_ok:
+            self.logger.warning("Could not update .code-workspace", extra={"errors": ws_errors})
 
         self._added_repo = {
             "name": self._repo_name,

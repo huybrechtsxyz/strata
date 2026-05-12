@@ -336,22 +336,22 @@ function Test-RefCommands {
 
     Test-Cmd "ref: -h" `
         -Args @('ref', '-h') `
-        -Contains @('envfile', 'configfile', 'datafile', 'secretfile')
+        -Contains @('env', 'config', 'data', 'secret')
 
-    Test-Cmd "ref envfile: -h" `
-        -Args @('ref', 'envfile', '-h') `
+    Test-Cmd "ref env: -h" `
+        -Args @('ref', 'env', '-h') `
         -Contains @('add', 'remove', 'list')
 
-    Test-Cmd "ref configfile: -h" `
-        -Args @('ref', 'configfile', '-h') `
+    Test-Cmd "ref config: -h" `
+        -Args @('ref', 'config', '-h') `
         -Contains @('add', 'remove', 'list')
 
-    Test-Cmd "ref envfile add: -h" `
-        -Args @('ref', 'envfile', 'add', '-h') `
+    Test-Cmd "ref env add: -h" `
+        -Args @('ref', 'env', 'add', '-h') `
         -Contains @('NAME', 'PATH')
 
-    Test-Cmd "ref envfile list: outside workspace exits 1" `
-        -Args @('ref', 'envfile', 'list', '--work-path', 'C:\Temp') `
+    Test-Cmd "ref env list: outside workspace exits 1" `
+        -Args @('ref', 'env', 'list', '--work-path', 'C:\Temp') `
         -ExitCode 1
 }
 

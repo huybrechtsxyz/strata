@@ -1,8 +1,12 @@
 """Click CLI wiring for the top-level ref command group.
 
-Provides four subgroups — envfile, configfile, datafile, secretfile — each
+Provides four subgroups — env, config, data, secret — each
 with add / remove / list / show commands.  All commands accept an optional
 ``--profile`` option; when omitted the active profile is used.
+
+The CLI command names (env, config, data, secret) are shorter aliases; the
+internal type identifiers passed to controllers remain envfile, configfile,
+datafile, secretfile to match solution model field names.
 """
 
 from typing import Optional
@@ -27,7 +31,7 @@ from xyz_platform.commands.ref.show_ref_command import ShowRefCommand
 # ---------------------------------------------------------------------------
 
 
-@click.group(name="ref", help="Manage file references (envfile, configfile, datafile, secretfile) within profiles.")
+@click.group(name="ref", help="Manage file references (env, config, data, secret) within profiles.")
 def ref_group():
     """Ref command group."""
     pass
@@ -38,10 +42,10 @@ def ref_group():
 # ===========================================================================
 
 
-def _build_file_type_group(type_name: str, description: str) -> click.Group:
-    """Return a fully wired Click group for *type_name* (e.g. 'envfile')."""
+def _build_file_type_group(command_name: str, type_name: str, description: str) -> click.Group:
+    """Return a fully wired Click group for *command_name* (e.g. 'env') with internal type *type_name* (e.g. 'envfile')."""
 
-    @click.group(name=type_name, help=description)
+    @click.group(name=command_name, help=description)
     def _group():
         pass
 
@@ -224,7 +228,7 @@ class _ListSingleTypeCommand(ListProfilePathCommand):
 # Register the four file-type subgroups
 # ---------------------------------------------------------------------------
 
-ref_group.add_command(_build_file_type_group("envfile", "Manage env-file references within a profile."))
-ref_group.add_command(_build_file_type_group("configfile", "Manage config-file references within a profile."))
-ref_group.add_command(_build_file_type_group("datafile", "Manage data-file references within a profile."))
-ref_group.add_command(_build_file_type_group("secretfile", "Manage secret-file references within a profile."))
+ref_group.add_command(_build_file_type_group("env", "envfile", "Manage env-file references within a profile."))
+ref_group.add_command(_build_file_type_group("config", "configfile", "Manage config-file references within a profile."))
+ref_group.add_command(_build_file_type_group("data", "datafile", "Manage data-file references within a profile."))
+ref_group.add_command(_build_file_type_group("secret", "secretfile", "Manage secret-file references within a profile."))

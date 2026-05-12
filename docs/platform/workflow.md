@@ -223,27 +223,27 @@ notation to point into registered repos.
 ### 4.1 Register configuration files (merged into platform config)
 
 ```bash
-xyz ref configfile add global-config @xyz-config/config/xyz-config.yaml       --profile prd
-xyz ref configfile add logging-config @xyz-config/config/xyz-logging.yaml      --profile prd
+xyz ref config add global-config @xyz-config/config/xyz-config.yaml       --profile prd
+xyz ref config add logging-config @xyz-config/config/xyz-logging.yaml      --profile prd
 ```
 
 ### 4.2 Register environment overlays
 
 ```bash
-xyz ref envfile add prd-env @xyz-config/environments/xyz-env-prd.yaml          --profile prd
+xyz ref env add prd-env @xyz-config/environments/xyz-env-prd.yaml          --profile prd
 ```
 
 ### 4.3 Register secret files (plain file on disk — no vault layer yet)
 
 ```bash
-xyz ref secretfile add prd-secrets /run/secrets/xyz-prd.yaml                   --profile prd
+xyz ref secret add prd-secrets /run/secrets/xyz-prd.yaml                   --profile prd
 ```
 
 ### 4.4 Verify refs
 
 ```bash
-xyz ref configfile list --profile prd
-xyz ref configfile show global-config --profile prd    # preview the file content
+xyz ref config list --profile prd
+xyz ref config show global-config --profile prd    # preview the file content
 ```
 
 ### 4.5 Inspect resolved values for a deployment
@@ -616,9 +616,9 @@ xyz repo sync
 xyz profile add prd
 xyz profile activate prd
 
-xyz ref configfile add global-config  @xyz-config/config/xyz-config.yaml      --profile prd
-xyz ref configfile add logging-config @xyz-config/config/xyz-logging.yaml     --profile prd
-xyz ref envfile    add prd-env        @xyz-config/environments/xyz-env-prd.yaml --profile prd
+xyz ref config add global-config  @xyz-config/config/xyz-config.yaml      --profile prd
+xyz ref config add logging-config @xyz-config/config/xyz-logging.yaml     --profile prd
+xyz ref env    add prd-env        @xyz-config/environments/xyz-env-prd.yaml --profile prd
 
 # -- Validate --
 xyz validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --deep
@@ -710,7 +710,7 @@ Valid keys: `output`, `verbose`, `quiet`, `work_path`
 
 ### File References
 
-All `ref` subgroups (`envfile`, `configfile`, `datafile`, `secretfile`) share:
+All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 
 | Command                                      | Description                |
 | -------------------------------------------- | -------------------------- |

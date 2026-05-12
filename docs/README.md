@@ -95,8 +95,8 @@ xyz repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --bran
 xyz profile add prd --activate
 
 # 4. Add file references to the active profile
-xyz ref configfile add global-config --path "@xyz-config/config/xyz-config.yaml"
-xyz ref envfile    add prd-env       --path "@xyz-config/environments/xyz-env-prd.yaml"
+xyz ref config add global-config --path "@xyz-config/config/xyz-config.yaml"
+xyz ref env    add prd-env       --path "@xyz-config/environments/xyz-env-prd.yaml"
 
 # 5. Validate a YAML file
 xyz validate repos/xyz-config/config/xyz-config.yaml
@@ -167,7 +167,7 @@ The full lifecycle from workspace setup to running infrastructure:
 1. `xyz init` — create workspace, optionally from a template
 2. `xyz repo add / sync` — register and clone external repos
 3. `xyz profile add / activate` — create named environment profiles
-4. `xyz ref configfile / envfile add` — attach config and environment files to the active profile
+4. `xyz ref config / env add` — attach config and environment files to the active profile
 5. `xyz validate` — validate individual YAML files
 6. `xyz values list` — inspect resolved variables, secrets, and feature flags
 7. `xyz build run` — generate `.tfvars.json`, `platform.json`, rendered templates
@@ -244,22 +244,22 @@ See [SUPPORT.md](../.github/SUPPORT.md) for where to get help and expected respo
 
 ## Glossary
 
-| Term                         | Definition                                                                               |
-| ---------------------------- | ---------------------------------------------------------------------------------------- |
-| Configuration                | Settings defining providers, resources, and platform behavior                            |
-| Deployment                   | An instance of infrastructure/application in a specific environment                      |
-| Environment                  | A specific setup (dev, staging, prod) that overrides workspace defaults                  |
-| Firewall                     | Security rules governing network traffic to/from resources                               |
-| Infrastructure as Code (IaC) | Managing infrastructure through declarative code and automation                          |
-| Module                       | A deployable application component (source + lifecycle hooks)                            |
-| Namespace                    | A logical grouping of modules within a workspace                                         |
-| Platform                     | The core CLI and orchestration layer                                                     |
-| Profile                      | A named set of file references for a specific environment                                |
-| Provider                     | A cloud service provider (Azure, AWS, GCP, Kamatera, local)                              |
-| Ref                          | A typed file reference (configfile, envfile, datafile, secretfile) attached to a profile |
-| Resource                     | An individual infrastructure component (VM, disk, network)                               |
-| Topology                     | The arrangement and relationships of resources within a workspace                        |
-| Workspace                    | A logical grouping of resources that defines WHAT infrastructure to build                |
+| Term                         | Definition                                                                |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| Configuration                | Settings defining providers, resources, and platform behavior             |
+| Deployment                   | An instance of infrastructure/application in a specific environment       |
+| Environment                  | A specific setup (dev, staging, prod) that overrides workspace defaults   |
+| Firewall                     | Security rules governing network traffic to/from resources                |
+| Infrastructure as Code (IaC) | Managing infrastructure through declarative code and automation           |
+| Module                       | A deployable application component (source + lifecycle hooks)             |
+| Namespace                    | A logical grouping of modules within a workspace                          |
+| Platform                     | The core CLI and orchestration layer                                      |
+| Profile                      | A named set of file references for a specific environment                 |
+| Provider                     | A cloud service provider (Azure, AWS, GCP, Kamatera, local)               |
+| Ref                          | A typed file reference (env, config, data, secret) attached to a profile  |
+| Resource                     | An individual infrastructure component (VM, disk, network)                |
+| Topology                     | The arrangement and relationships of resources within a workspace         |
+| Workspace                    | A logical grouping of resources that defines WHAT infrastructure to build |
 
 ---
 

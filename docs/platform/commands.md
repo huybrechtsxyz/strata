@@ -34,7 +34,7 @@ These options are accepted by every command and subcommand:
 | `status`   | —                                                              | Show workspace health                         |
 | `audit`    | `list`; `log list` `log get` `log set` `log unset` `log reset` | View execution logs and manage log config     |
 | `profile`  | `add` `remove` `list` `activate` `show`                        | Manage environment profiles                   |
-| `ref`      | `envfile` `configfile` `datafile` `secretfile`                 | Manage file references within profiles        |
+| `ref`      | `env` `config` `data` `secret`                                 | Manage file references within profiles        |
 | `repo`     | `add` `remove` `list` `sync` `status`                          | Manage repositories in the solution           |
 | `build`    | `run` `plan` `clean`                                           | Build platform and Terraform artifacts        |
 | `validate` | —                                                              | Validate a single platform YAML file          |
@@ -224,30 +224,30 @@ xyz profile show staging
 
 ## `ref`
 
-Manage file references (envfile, configfile, datafile, secretfile) within profiles.
+Manage file references (env, config, data, secret) within profiles.
 
-Each file type has its own subgroup: `ref envfile`, `ref configfile`, `ref datafile`, `ref secretfile`. All four expose the same four subcommands.
+Each file type has its own subgroup: `ref env`, `ref config`, `ref data`, `ref secret`. All four expose the same four subcommands.
 
 All `ref` subcommands accept `--profile NAME` (optional; defaults to the active profile).
 
 ### `ref <type> add NAME PATH`
 
 ```bash
-xyz ref envfile add base-env .env
-xyz ref configfile add app-config @myrepo/config/app.yaml --profile staging
+xyz ref env add base-env .env
+xyz ref config add app-config @myrepo/config/app.yaml --profile staging
 ```
 
 ### `ref <type> remove NAME`
 
 ```bash
-xyz ref envfile remove base-env --profile staging
+xyz ref env remove base-env --profile staging
 ```
 
 ### `ref <type> list`
 
 ```bash
-xyz ref configfile list
-xyz ref configfile list --profile staging
+xyz ref config list
+xyz ref config list --profile staging
 ```
 
 ### `ref <type> show NAME`
@@ -255,7 +255,7 @@ xyz ref configfile list --profile staging
 Display the file content of a ref path entry.
 
 ```bash
-xyz ref configfile show app-config --profile staging
+xyz ref config show app-config --profile staging
 ```
 
 ---

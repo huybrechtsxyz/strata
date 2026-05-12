@@ -30,6 +30,7 @@ class BaseBuildCommand(BaseCommand):
             verbose=verbose or False,
             quiet=quiet or False,
         )
+        self._raw_file: Optional[str] = file
         self._file_path: Optional[Path] = Path(file) if file else None
         self._deployment_service: Optional[DeploymentService] = None
         self._configuration_service: Optional[ConfigurationService] = None
@@ -51,11 +52,19 @@ class BaseBuildCommand(BaseCommand):
             self._errors.append("No deployment file specified. Use --file.")
             return False
 
-        # Resolve to absolute path
-        candidate = self._file_path
-        if not candidate.is_absolute():
-            candidate = Path.cwd() / candidate
-        candidate = candidate.resolve()
+        # Resolve to absolute path, supporting @repo-name/... references
+        from xyz_platform.utils.system import resolve_path
+
+        repo_map: dict[str, str] = (
+            self._solution_controller.get_repo_map() if self._solution_controller is not None else {}
+        )
+
+        try:
+            candidate = resolve_path(str(self._work_path), self._raw_file, repo_map=repo_map)
+        except ValueError as e:
+            self._errors.append(f"Deployment file reference error: {e}")
+            return False
+
         if not candidate.exists():
             self._errors.append(f"Deployment file not found: {candidate}")
             return False

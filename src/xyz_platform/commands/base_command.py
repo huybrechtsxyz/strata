@@ -497,11 +497,7 @@ class BaseCommand(ABC):
             if not envfile_paths:
                 return
 
-            # Build repo_map from solution repositories
-            repo_map: Dict[str, str] = {}
-            repos, _ = self._solution_controller.get_repositories()
-            for r in repos:
-                repo_map[str(r.name)] = str(self._work_path / r.path)
+            repo_map: Dict[str, str] = self._solution_controller.get_repo_map()
 
             from xyz_platform.controllers.env_controller import EnvController
 
@@ -555,11 +551,7 @@ class BaseCommand(ABC):
             if not configfile_paths:
                 return
 
-            # Build repo_map from solution repositories
-            repo_map: Dict[str, str] = {}
-            repos, _ = self._solution_controller.get_repositories()
-            for r in repos:
-                repo_map[str(r.name)] = str(self._work_path / r.path)
+            repo_map: Dict[str, str] = self._solution_controller.get_repo_map()
 
             resolved_paths: List[Path] = []
             for entry in configfile_paths:

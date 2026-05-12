@@ -1,4 +1,4 @@
-"""Tests for the `ref` command group (envfile / configfile / datafile / secretfile)."""
+"""Tests for the `ref` command group (env / config / data / secret)."""
 
 from unittest.mock import patch
 
@@ -6,7 +6,7 @@ from click.testing import CliRunner
 
 from xyz_platform.commands.cli_ref import ref_group
 
-_FILE_TYPES = ["envfile", "configfile", "datafile", "secretfile"]
+_FILE_TYPES = ["env", "config", "data", "secret"]
 
 
 class TestRefAdd:
@@ -24,7 +24,7 @@ class TestRefAdd:
 
     def test_add_missing_args_returns_exit_2(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(ref_group, ["envfile", "add", "--work-path", str(tmp_path)])
+        result = runner.invoke(ref_group, ["env", "add", "--work-path", str(tmp_path)])
         assert result.exit_code == 2
 
 
@@ -36,13 +36,13 @@ class TestRefRemove:
         ):
             result = runner.invoke(
                 ref_group,
-                ["configfile", "remove", "myref", "--profile", "staging", "--work-path", str(tmp_path)],
+                ["config", "remove", "myref", "--profile", "staging", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
     def test_remove_missing_name_returns_exit_2(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(ref_group, ["configfile", "remove", "--work-path", str(tmp_path)])
+        result = runner.invoke(ref_group, ["config", "remove", "--work-path", str(tmp_path)])
         assert result.exit_code == 2
 
 
@@ -52,7 +52,7 @@ class TestRefList:
         with patch("xyz_platform.commands.cli_ref._ListSingleTypeCommand.execute", return_value=True):
             result = runner.invoke(
                 ref_group,
-                ["envfile", "list", "--profile", "staging", "--work-path", str(tmp_path)],
+                ["env", "list", "--profile", "staging", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -63,11 +63,11 @@ class TestRefShow:
         with patch("xyz_platform.commands.ref.show_ref_command.ShowRefCommand.execute", return_value=True):
             result = runner.invoke(
                 ref_group,
-                ["envfile", "show", "myref", "--profile", "staging", "--work-path", str(tmp_path)],
+                ["env", "show", "myref", "--profile", "staging", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
     def test_show_missing_name_returns_exit_2(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(ref_group, ["envfile", "show", "--work-path", str(tmp_path)])
+        result = runner.invoke(ref_group, ["env", "show", "--work-path", str(tmp_path)])
         assert result.exit_code == 2

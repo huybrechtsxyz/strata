@@ -331,6 +331,29 @@ class SolutionController(BaseController):
 
         return list(repos), []
 
+    def get_repo_map(self) -> Dict[str, str]:
+        """Return a mapping of repo name → absolute root path for ``@repo/...`` resolution.
+
+        - **local** repos: the ``url`` field is the source directory (absolute or
+          relative to CWD).  ``path`` is only a logical mount label and is not used
+          for resolution.
+        - **gitops** repos: the ``path`` field is where the repo was cloned, relative
+          to ``work_path``.
+        """
+        repos, _ = self.get_repositories()
+        repo_map: Dict[str, str] = {}
+        for r in repos:
+            if str(r.type) == "local":
+                # url is the source directory; resolve against CWD if relative
+                url_path = Path(str(r.url))
+                if not url_path.is_absolute():
+                    url_path = Path(os.getcwd()) / url_path
+                repo_map[str(r.name)] = str(url_path.resolve())
+            else:
+                # git repo: cloned into work_path / r.path
+                repo_map[str(r.name)] = str(self._work_path / r.path)
+        return repo_map
+
     # ------------------------------------------------------------------
     # Profile management
     # ------------------------------------------------------------------
@@ -609,7 +632,21 @@ class SolutionController(BaseController):
 
         folders: List[dict] = [{"path": "."}]  # always include the solution root
         for repo in repos:
-            folders.append({"path": repo.path, "name": repo.name})
+            if str(repo.type) == "local":
+                # url is relative to CWD (where the CLI ran); we need it relative
+                # to work_path so VS Code resolves it correctly from the workspace file.
+                url_abs = Path(str(repo.url))
+                if not url_abs.is_absolute():
+                    url_abs = Path(os.getcwd()) / url_abs
+                try:
+                    folder_path = os.path.relpath(url_abs.resolve(), self._work_path.resolve()).replace("\\", "/")
+                except ValueError:
+                    # relpath can fail on Windows across drives — keep absolute
+                    folder_path = str(url_abs.resolve())
+            else:
+                # Gitops: cloned into work_path/repo.path, already relative to work_path
+                folder_path = str(repo.path)
+            folders.append({"path": folder_path, "name": str(repo.name)})
 
         workspace_data = {
             "folders": folders,
