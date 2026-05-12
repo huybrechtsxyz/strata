@@ -361,7 +361,7 @@ class TestRepoStatus:
 # ---------------------------------------------------------------------------
 
 
-class TestAddRepoCommand_LocalPath:
+class TestAddRepoCommandLocalPath:
     def _make_command(self, url: str, work_path, path: Optional[str] = None) -> AddRepoSolutionCommand:
         return AddRepoSolutionCommand(name="myrepo", url=url, path=path, work_path=str(work_path))
 
@@ -481,7 +481,7 @@ class TestAddRepoCommand_LocalPath:
 # ---------------------------------------------------------------------------
 
 
-class TestAddRepoCommand_WorkspaceRegen:
+class TestAddRepoCommandWorkspaceRegen:
     def test_generate_workspace_called_after_successful_save(self, tmp_path):
         cmd = AddRepoSolutionCommand(
             name="myrepo",
