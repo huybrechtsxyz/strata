@@ -9,7 +9,7 @@ Commands:
     log                 : View log entries and manage logging config.
     repo                : Manage repositories in the solution.
     profile             : Manage profiles in the solution.
-    ref                 : Manage file references (envfile, configfile, etc.).
+    ref                 : Manage file references (env, config, data, secret types).
     version             : Show CLI version.
 
 Exit Codes:

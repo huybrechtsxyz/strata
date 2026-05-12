@@ -15,7 +15,7 @@ name: "CI Build"
 # Default workflow header: permissions, concurrency, environment and runner defaults
 permissions:
   contents: read
-  actions: write # required to upload artifacts
+  actions: write # required to upload artifacts and GHA cache
 
 # Ensure a single run per ref and cancel in-progress runs on updates
 concurrency:
@@ -97,3 +97,174 @@ jobs:
       # Treat warnings as errors (-W) so broken refs / missing modules fail fast
       - name: Build Sphinx docs
         run: uv run sphinx-build -b html docs/ /tmp/html_out -W --keep-going
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Push CLI edge image to GHCR (main branch only)
+  # ---------------------------------------------------------------------------
+  edge-ghcr-cli:
+    name: Publish CLI edge image to GHCR
+    runs-on: ubuntu-latest
+    needs: [ build, docs ]
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/xyz-platform
+          tags: |
+            type=raw,value=edge
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push CLI edge image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.cli
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=edge
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Push docs edge image to GHCR (main branch only)
+  # ---------------------------------------------------------------------------
+  edge-ghcr-docs:
+    name: Publish docs edge image to GHCR
+    runs-on: ubuntu-latest
+    needs: [ build, docs ]
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/xyz-platform-docs
+          tags: |
+            type=raw,value=edge
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push docs edge image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.docs
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Job 5: Push CLI edge image to Docker Hub (only if registry secrets are set)
+  # ---------------------------------------------------------------------------
+  edge-hub-cli:
+    name: Publish CLI edge image to Docker Hub
+    runs-on: ubuntu-latest
+    needs: [ build, docs ]
+    if: github.ref == 'refs/heads/main' && vars.REGISTRY_URL != ''
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME }}/xyz-platform
+          tags: |
+            type=raw,value=edge
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push CLI edge image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.cli
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=edge
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Job 6: Push docs edge image to Docker Hub (only if registry secrets are set)
+  # ---------------------------------------------------------------------------
+  edge-hub-docs:
+    name: Publish docs edge image to Docker Hub
+    runs-on: ubuntu-latest
+    needs: [ build, docs ]
+    if: github.ref == 'refs/heads/main' && vars.REGISTRY_URL != ''
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME
+            }}/xyz-platform-docs
+          tags: |
+            type=raw,value=edge
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push docs edge image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.docs
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

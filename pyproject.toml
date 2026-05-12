@@ -50,7 +50,7 @@ where = ["src"]
 "xyz_platform.data" = ["*.yaml", "*.txt"]
 "xyz_platform.templates" = ["*.yaml", "*.json", "*.md", "*.txt"]
 "xyz_platform.templates.solution" = ["*.yaml", "*.md", "*"]
-"xyz_platform.templates.integrations" = ["*.md"]
+"xyz_platform.templates.integrations" = ["*.md", "*.py"]
 
 [dependency-groups]
 dev = [

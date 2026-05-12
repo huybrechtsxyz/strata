@@ -8,6 +8,7 @@ import yaml
 from xyz_platform.controllers.lifecycle_controller import LifecycleController
 from xyz_platform.logger import get_logger
 from xyz_platform.models.common_models import CommonLifecycleModel, PlatformKind
+from xyz_platform.models.configuration_model import ConfigurationModel
 from xyz_platform.services.base_service import BaseService
 from xyz_platform.services.deployment_service import DeploymentService
 from xyz_platform.services.environment_service import EnvironmentService
@@ -22,8 +23,8 @@ from xyz_platform.validators.base_validator import BaseValidator
 
 # ConfigurationService is intentionally excluded: it is a path-less singleton
 # whose __init__ accepts no constructor arguments, making it incompatible with
-# BaseService.load(path).  Validating CONFIGURATION kind files via this
-# validator is therefore not supported.
+# BaseService.load(path).  CONFIGURATION kind files are validated directly via
+# ConfigurationModel.model_validate() in the validate() method below.
 _KIND_TO_SERVICE: Dict[PlatformKind, Any] = {
     PlatformKind.DEPLOYMENT: DeploymentService,
     PlatformKind.ENVIRONMENT: EnvironmentService,
@@ -134,6 +135,10 @@ class PlatformValidator(BaseValidator):
             self._errors.append("validate() called before before_validate() — no kind detected.")
             return False
 
+        # CONFIGURATION kind: validate directly via ConfigurationModel (no path-based service)
+        if self._detected_kind == PlatformKind.CONFIGURATION:
+            return self._validate_configuration_model(work_path)
+
         service_class = _KIND_TO_SERVICE.get(self._detected_kind)
         if service_class is None:
             self._errors.append(
@@ -181,6 +186,37 @@ class PlatformValidator(BaseValidator):
                     path=str(self._file_path),
                 )
                 return False
+
+        return True
+
+    def _validate_configuration_model(self, work_path: Path) -> bool:
+        """Validate a CONFIGURATION kind file directly via ConfigurationModel."""
+        from pydantic import ValidationError
+
+        try:
+            raw = self._file_path.read_text(encoding="utf-8")
+            import yaml as _yaml
+
+            doc = _yaml.safe_load(raw)
+        except Exception as exc:
+            self._errors.append(f"Failed to read '{self._file_path}': {exc}")
+            return False
+
+        try:
+            ConfigurationModel.model_validate(doc)
+        except ValidationError as exc:
+            for err in exc.errors():
+                loc = " -> ".join(str(p) for p in err["loc"])
+                self._errors.append(f"{loc}: {err['msg']}")
+            self.logger.warning(
+                "Configuration model validation failed",
+                error_count=exc.error_count(),
+                path=str(self._file_path),
+            )
+            return False
+        except Exception as exc:
+            self._errors.append(f"Unexpected error validating '{self._file_path}': {exc}")
+            return False
 
         return True
 

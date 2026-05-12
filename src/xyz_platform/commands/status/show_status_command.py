@@ -1,5 +1,7 @@
 """Command to display workspace solution status."""
 
+import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import click
@@ -90,7 +92,13 @@ class StatusCommand(BaseCommand):
             repos, repo_errors = self._solution_controller.get_repositories()
             self._errors.extend(repo_errors)
             for r in repos:
-                local_path = self._work_path / r.path
+                if str(r.type) == "local":
+                    url_path = Path(str(r.url))
+                    if not url_path.is_absolute():
+                        url_path = Path(os.getcwd()) / url_path
+                    local_path = url_path.resolve()
+                else:
+                    local_path = self._work_path / r.path
                 repos_data.append(
                     {
                         "name": str(r.name),

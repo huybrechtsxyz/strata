@@ -107,6 +107,11 @@ class RemoveRepoSolutionCommand(BaseCommand):
             self._errors.extend(errors)
             return False
 
+        # Regenerate the VS Code .code-workspace file to remove the repo folder
+        _ws_ok, ws_errors = self._solution_controller.generate_workspace()
+        if not _ws_ok:
+            self.logger.warning("Could not update .code-workspace", extra={"errors": ws_errors})
+
         if self._purge:
             local_path = Path(str(self._work_path)) / repo.path
             if local_path.exists():

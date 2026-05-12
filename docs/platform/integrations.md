@@ -168,7 +168,7 @@ def register():
 
 Drop-in files are loaded automatically at CLI startup whenever a workspace is detected (i.e. `.platform/` exists). Files whose names start with `_` are skipped. Errors in individual drop-ins are logged as warnings and never crash the CLI.
 
-`xyz init` creates `.platform/integrations/` with a `README.md` stub.
+`xyz init` creates `.platform/integrations/` with a `README.md` stub and a fully-commented `my_integration.py` starter template — rename it and fill in the stubs to build your first custom integration.
 
 ---
 

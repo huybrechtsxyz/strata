@@ -68,6 +68,27 @@ class ToolsController(BaseController):
                 )
         return True, rows, []
 
+    def install_info(self, name: str) -> tuple[bool, dict, list[str]]:
+        """
+        Return static setup/install guidance for a single integration.
+
+        Unlike ``check``, this does *not* probe the runtime — it only reads
+        the integration's ``get_setup_info()`` metadata.  Works even when the
+        tool is not installed.
+
+        Returns:
+            Tuple of (success, setup_info_dict, errors).
+        """
+        if name not in _BUILTIN_TYPES:
+            return False, {}, [f"Unknown integration: '{name}'. Known: {', '.join(_BUILTIN_TYPES)}"]
+
+        try:
+            integration = IntegrationFactory.create_by_type(name)
+        except Exception as exc:
+            return False, {}, [f"Failed to load integration '{name}': {exc}"]
+
+        return True, integration.get_setup_info(), []
+
     def check(self, name: str) -> tuple[bool, dict, list[str]]:
         """
         Deep-check a single integration by type name.

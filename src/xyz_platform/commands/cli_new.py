@@ -11,8 +11,7 @@ from xyz_platform.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from xyz_platform.commands.new.run_new_command import NewCommand, _collect_available_templates
-from xyz_platform.utils.system import resolve_work_path
+from xyz_platform.commands.new.run_new_command import NewCommand
 
 
 @click.command(name="new")
@@ -63,28 +62,19 @@ def new_command(
 
     Use --list to show all available templates.
     """
-    if list_templates:
-        resolved_work_path = resolve_work_path(work_path) if work_path else None
-        available = _collect_available_templates(resolved_work_path)
-        if available:
-            click.echo("Available templates:")
-            for t in available:
-                click.echo(f"  {t}")
-        else:
-            click.echo("No templates found.")
-        raise click.exceptions.Exit(0)
+    if not list_templates:
+        if template is None:
+            click.echo("Error: Missing argument 'TEMPLATE'.", err=True)
+            raise click.exceptions.Exit(2)
 
-    if template is None:
-        click.echo("Error: Missing argument 'TEMPLATE'.", err=True)
-        raise click.exceptions.Exit(2)
-
-    if name is None:
-        click.echo("Error: Missing argument 'NAME'.", err=True)
-        raise click.exceptions.Exit(2)
+        if name is None:
+            click.echo("Error: Missing argument 'NAME'.", err=True)
+            raise click.exceptions.Exit(2)
 
     command = NewCommand(
         template=template,
         name=name,
+        list_templates=list_templates,
         path=path,
         overwrite=overwrite,
         set_values=set_values,

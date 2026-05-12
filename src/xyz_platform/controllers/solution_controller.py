@@ -331,6 +331,29 @@ class SolutionController(BaseController):
 
         return list(repos), []
 
+    def get_repo_map(self) -> Dict[str, str]:
+        """Return a mapping of repo name → absolute root path for ``@repo/...`` resolution.
+
+        - **local** repos: the ``url`` field is the source directory (absolute or
+          relative to CWD).  ``path`` is only a logical mount label and is not used
+          for resolution.
+        - **gitops** repos: the ``path`` field is where the repo was cloned, relative
+          to ``work_path``.
+        """
+        repos, _ = self.get_repositories()
+        repo_map: Dict[str, str] = {}
+        for r in repos:
+            if str(r.type) == "local":
+                # url is the source directory; resolve against CWD if relative
+                url_path = Path(str(r.url))
+                if not url_path.is_absolute():
+                    url_path = Path(os.getcwd()) / url_path
+                repo_map[str(r.name)] = str(url_path.resolve())
+            else:
+                # git repo: cloned into work_path / r.path
+                repo_map[str(r.name)] = str(self._work_path / r.path)
+        return repo_map
+
     # ------------------------------------------------------------------
     # Profile management
     # ------------------------------------------------------------------
@@ -609,7 +632,21 @@ class SolutionController(BaseController):
 
         folders: List[dict] = [{"path": "."}]  # always include the solution root
         for repo in repos:
-            folders.append({"path": repo.path, "name": repo.name})
+            if str(repo.type) == "local":
+                # url is relative to CWD (where the CLI ran); we need it relative
+                # to work_path so VS Code resolves it correctly from the workspace file.
+                url_abs = Path(str(repo.url))
+                if not url_abs.is_absolute():
+                    url_abs = Path(os.getcwd()) / url_abs
+                try:
+                    folder_path = os.path.relpath(url_abs.resolve(), self._work_path.resolve()).replace("\\", "/")
+                except ValueError:
+                    # relpath can fail on Windows across drives — keep absolute
+                    folder_path = str(url_abs.resolve())
+            else:
+                # Gitops: cloned into work_path/repo.path, already relative to work_path
+                folder_path = str(repo.path)
+            folders.append({"path": folder_path, "name": str(repo.name)})
 
         workspace_data = {
             "folders": folders,
@@ -1047,6 +1084,25 @@ class SolutionController(BaseController):
                 msg = f"Failed to write integrations README: {e}"
                 self._add_error(msg)
                 return False, self.get_errors()
+
+        # Copy integration template so developers have a starting point
+        integrations_templates_src = get_pkg_templates_path() / "integrations"
+        if integrations_templates_src.exists() and integrations_templates_src.is_dir():
+            for src_file in integrations_templates_src.iterdir():
+                if not src_file.is_file():
+                    continue
+                dest_file = integrations_dir / src_file.name
+                if dest_file.exists():
+                    self.logger.debug("Integration template already exists — skipping", path=str(dest_file))
+                    continue
+                try:
+                    dest_file.write_text(src_file.read_text(encoding="utf-8"), encoding="utf-8")
+                    self.logger.info("Integration template written", path=str(dest_file))
+                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
+                except Exception as e:
+                    msg = f"Failed to write integration template {src_file.name}: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
 
         return True, []
 

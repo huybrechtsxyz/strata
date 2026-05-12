@@ -1,5 +1,6 @@
 """Click CLI wiring for the help command."""
 
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -138,7 +139,11 @@ def _render_topic_list(work_path: Optional[Path]) -> None:
 
 
 def _render_topic(name: str, work_path: Optional[Path]) -> bool:
-    """Print the content of a topic file.  Returns False if not found."""
+    """Print the content of a topic file.  Returns False if not found.
+
+    Uses the system pager (space to scroll, q to quit) when the content is
+    taller than the current terminal; falls back to plain echo otherwise.
+    """
     topic_path = _topic_file(name, work_path)
     if topic_path is None:
         click.echo(f"  Unknown topic: '{name}'.\n", err=True)
@@ -146,10 +151,14 @@ def _render_topic(name: str, work_path: Optional[Path]) -> bool:
         return False
 
     content = topic_path.read_text(encoding="utf-8")
-    click.echo("")
-    for line in content.splitlines():
-        click.echo(f"  {line}" if line else "")
-    click.echo("")
+    indented = "\n".join(f"  {line}" if line.strip() else "" for line in content.splitlines())
+    rendered = f"\n{indented}\n"
+
+    terminal_height = shutil.get_terminal_size().lines
+    if rendered.count("\n") > terminal_height:
+        click.echo_via_pager(rendered)
+    else:
+        click.echo(rendered)
     return True
 
 
@@ -222,9 +231,9 @@ def help_command(
     click.echo("    xyz repo add myrepo <url>                   # register a repo")
     click.echo("    xyz profile add dev                         # create a profile")
     click.echo("    xyz profile activate dev                    # set active profile")
-    click.echo("    xyz ref envfile add --profile dev \\")
+    click.echo("    xyz ref env add --profile dev \\")
     click.echo("        --name base --path ./dev.env            # register env file")
-    click.echo("    xyz ref configfile add --profile dev \\")
+    click.echo("    xyz ref config add --profile dev \\")
     click.echo("        --name app --path ./app.yaml            # register config file")
     click.echo("    xyz build                                   # merge + build artifacts")
     click.echo("    xyz deploy                                  # execute deployment")

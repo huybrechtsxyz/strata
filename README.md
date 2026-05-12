@@ -26,7 +26,7 @@ Or without activating: `uv run xyz-platform --help`
 xyz init --name my-workspace
 xyz repo add xyz-config git@github.com:org/xyz-config.git --branch main --clone
 xyz profile add prd --activate
-xyz ref configfile add global-config --path "@xyz-config/config/xyz-config.yaml"
+xyz ref config add global-config --path "@xyz-config/config/xyz-config.yaml"
 xyz build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 ```

@@ -89,9 +89,9 @@ class BaseCommand(ABC):
 
     @classmethod
     def show_console_header(cls, work_path: Optional[str] = None) -> None:
-        click.echo("=" * 80)
+        click.echo("─" * 80)
         click.echo(f"🚀 XYZ PLATFORM — CLI (v{get_version()})")
-        click.echo("=" * 80)
+        click.echo("─" * 80)
         click.echo("Automates workspace preparation, configuration, and deployment.")
         click.echo(f"⏱️   Timestamp       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         click.echo(f"📜  Entry point     : {' '.join(sys.argv)}")
@@ -101,11 +101,11 @@ class BaseCommand(ABC):
 
     @classmethod
     def show_console_footer(cls) -> None:
-        click.echo("=" * 80)
+        click.echo("─" * 80)
         click.echo("✨ Thank you for using XYZ Platform CLI!")
         click.echo(f"📘 Documentation: {DOCS_URL}")
         click.echo(f"💬 Support: {SUPPORT_URL}")
-        click.echo("=" * 80)
+        click.echo("─" * 80)
 
     # Message and error handling methods
 
@@ -446,7 +446,6 @@ class BaseCommand(ABC):
                 lvl = entry.get("level", "").upper()
                 msg = entry.get("event", entry.get("message", ""))
                 click.echo(f"  {ts}  {lvl:<8}  {msg}")
-            click.echo("─" * 80)
         except Exception as e:
             self.logger.debug(f"Could not display verbose logs: {e}")
 
@@ -498,11 +497,7 @@ class BaseCommand(ABC):
             if not envfile_paths:
                 return
 
-            # Build repo_map from solution repositories
-            repo_map: Dict[str, str] = {}
-            repos, _ = self._solution_controller.get_repositories()
-            for r in repos:
-                repo_map[str(r.name)] = str(self._work_path / r.path)
+            repo_map: Dict[str, str] = self._solution_controller.get_repo_map()
 
             from xyz_platform.controllers.env_controller import EnvController
 
@@ -556,11 +551,7 @@ class BaseCommand(ABC):
             if not configfile_paths:
                 return
 
-            # Build repo_map from solution repositories
-            repo_map: Dict[str, str] = {}
-            repos, _ = self._solution_controller.get_repositories()
-            for r in repos:
-                repo_map[str(r.name)] = str(self._work_path / r.path)
+            repo_map: Dict[str, str] = self._solution_controller.get_repo_map()
 
             resolved_paths: List[Path] = []
             for entry in configfile_paths:
