@@ -604,7 +604,9 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 return False
 
             # Step 2: Load workspace infrastructure services
-            related_services, rel_success = workspace_service.load_workspace_services(objects_path=objects_path)
+            related_services, rel_success = workspace_service.load_workspace_services(
+                objects_path=objects_path, repo_map=repo_map
+            )
 
             if not rel_success or workspace_service is None or related_services is None:
                 success = False

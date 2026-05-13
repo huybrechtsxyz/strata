@@ -42,7 +42,8 @@ class NamespaceService(BaseService["NamespaceModel"]):
             return True, []
 
         file_refs = []
-        repo_map = configuration_model.get_repo_map() if configuration_model else {}
+        config_repo_map = configuration_model.get_repo_map() if configuration_model else {}
+        repo_map = {**config_repo_map, **(self._repo_map or {})}
 
         if self.model and self.model.spec.modules:
             for m in self.model.spec.modules:
