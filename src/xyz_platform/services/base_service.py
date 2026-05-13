@@ -74,6 +74,7 @@ class BaseService(ABC, Generic[ModelT]):
         self.data = data
         self.model: Optional[ModelT] = None
         self._validated = False
+        self._repo_map: Optional[Dict[str, str]] = None
         self.logger = get_logger(self.__class__.__module__)
         self._load_data()
         # Call initialization hook
@@ -131,12 +132,14 @@ class BaseService(ABC, Generic[ModelT]):
         self,
         configuration_model: Optional["ConfigurationModel"] = None,
         work_path: Optional[str] = None,
+        repo_map: Optional[Dict[str, str]] = None,
     ) -> Tuple[bool, List[str]]:
         """Validate the loaded data against the model.
 
         Args:
             configuration_model: Optional ConfigurationModel for cross-validation
             work_path: Optional working directory for validating file paths
+            repo_map: Optional solution-level repo map for resolving @repo/... refs
 
         Returns:
             Tuple[bool, List[str]]: (success, list of error messages)
@@ -157,6 +160,8 @@ class BaseService(ABC, Generic[ModelT]):
             self.model = cast(ModelT, model_class.model_validate(self.data))
 
             if configuration_model:
+                # Store solution repo_map so _validate_dynamic can access it via self._repo_map
+                self._repo_map = repo_map
                 # Pass both configuration_model and work_path to _validate_dynamic
                 # Use keyword arguments to allow subclasses to accept either parameter
                 dynamic_valid, dynamic_errors = self._validate_dynamic(

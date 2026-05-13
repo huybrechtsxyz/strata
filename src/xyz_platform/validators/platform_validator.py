@@ -45,10 +45,12 @@ class PlatformValidator(BaseValidator):
         self,
         file_path: Path,
         configuration_service=None,
+        repo_map: Optional[Dict[str, str]] = None,
     ) -> None:
         super().__init__()
         self._file_path = file_path
         self._configuration_service = configuration_service
+        self._repo_map = repo_map
         self._detected_kind: Optional[PlatformKind] = None
         self._service: Optional[BaseService] = None
         self._lifecycle_model: Optional[CommonLifecycleModel] = None
@@ -176,6 +178,7 @@ class PlatformValidator(BaseValidator):
             is_valid, dynamic_errors = service.validate(
                 configuration_model=self._configuration_service.model,
                 work_path=str(work_path),
+                repo_map=self._repo_map,
             )
             if not is_valid:
                 self._errors.extend(dynamic_errors)

@@ -80,7 +80,11 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         # Validate that environment and configuration file references exist on disk
         if work_path and self.model:
-            repo_map = configuration_model.get_repo_map() if configuration_model else {}
+            # Merge solution-level repo_map (self._repo_map) with config-level repo_map.
+            # Solution names (e.g. 'haven') take precedence for resolving @repo/... refs
+            # in deployment files, which use solution repo names, not config repo names.
+            config_repo_map = configuration_model.get_repo_map() if configuration_model else {}
+            repo_map = {**config_repo_map, **(self._repo_map or {})}
             file_refs = []
             for i, env_path in enumerate(self.model.spec.environments or []):
                 file_refs.append((f"Environment[{i}]", env_path))

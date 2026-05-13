@@ -121,9 +121,11 @@ class ValidateCommand(BaseCommand):
             return False  # exit code 1 — system error, not validation error
 
         assert self._resolved_file is not None  # guaranteed by _before_execute
+        solution_repo_map = self._solution_controller.get_repo_map()
         self._validator = PlatformValidator(
             file_path=self._resolved_file,
             configuration_service=config_svc,
+            repo_map=solution_repo_map,
         )
 
         work_path = self._work_path
@@ -227,8 +229,7 @@ class ValidateCommand(BaseCommand):
                 )
                 return None
 
-            repos, _ = self._solution_controller.get_repositories()
-            repo_map = {str(r.name): str(self._work_path / r.path) for r in repos}
+            repo_map = self._solution_controller.get_repo_map()
 
             resolved_paths = []
             for entry in configfile_paths:
