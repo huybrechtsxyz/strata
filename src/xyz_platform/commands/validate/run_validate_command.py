@@ -92,10 +92,19 @@ class ValidateCommand(BaseCommand):
         if not super()._before_execute():
             return False
 
-        candidate = Path(self._file_path_raw)
-        if not candidate.is_absolute():
-            candidate = Path.cwd() / candidate
-        candidate = candidate.resolve()
+        if self._file_path_raw.startswith("@"):
+            try:
+                from xyz_platform.utils.system import resolve_path
+
+                repo_map = self._solution_controller.get_repo_map()
+                candidate = resolve_path(str(self._work_path), self._file_path_raw, repo_map=repo_map)
+            except Exception as e:
+                raise click.UsageError(f"Cannot resolve '{self._file_path_raw}': {e}") from e
+        else:
+            candidate = Path(self._file_path_raw)
+            if not candidate.is_absolute():
+                candidate = Path.cwd() / candidate
+            candidate = candidate.resolve()
 
         if not candidate.exists():
             raise click.UsageError(f"File not found: {candidate}")
