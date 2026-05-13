@@ -93,7 +93,7 @@ class BaseBuildCommand(BaseCommand):
             return False
 
         # Load related services (workspace, environment, providers, resources, …)
-        if not deployment_service.load_deploy_services(str(self._work_path)):
+        if not deployment_service.load_deploy_services(str(self._work_path), repo_map=repo_map):
             self._errors.extend(deployment_service.get_validation_errors())
             return False
 

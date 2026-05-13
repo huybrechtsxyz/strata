@@ -541,7 +541,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         return success, errors
 
-    def load_deploy_services(self, objects_path: str) -> bool:
+    def load_deploy_services(self, objects_path: str, repo_map: Optional[Dict[str, str]] = None) -> bool:
         """
         Load workspace and environment services for deployment.
 
@@ -552,6 +552,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         Args:
             objects_path: Base directory for resolving relative file paths
+            repo_map: Optional solution-level repo map for resolving @repo/... refs.
+                      Merged with the config-service repo map; solution names take precedence.
 
         Returns:
             - bool: Success status
@@ -574,8 +576,11 @@ class DeploymentService(BaseService["DeploymentModel"]):
         self.logger.info("Loading related services for deployment", deployment_name=self.get_name())
         success = True
 
-        # Build repo_map once for all @repo_name/... path resolutions in this call
-        repo_map: Dict[str, str] = ConfigurationService.get_instance().get_repo_map()
+        # Build repo_map once for all @repo_name/... path resolutions in this call.
+        # Merge solution-level map (caller-supplied) with config-service map.
+        # Solution names take precedence so @haven/... refs resolve correctly.
+        config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_repo_map()
+        repo_map = {**config_repo_map, **(repo_map or {})}
 
         try:
             # Step 1: Load workspace service
