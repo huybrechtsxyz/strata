@@ -86,6 +86,7 @@ class BaseDeployCommand(BaseCommand):
         ok, errors = deployment_service.validate(
             configuration_model=config_model,
             work_path=self._work_path,
+            repo_map=repo_map,
         )
         if not ok:
             self._errors.extend(errors)
