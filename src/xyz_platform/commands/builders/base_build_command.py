@@ -144,8 +144,7 @@ class BaseBuildCommand(BaseCommand):
             )
             return None
 
-        repos, _ = self._solution_controller.get_repositories()
-        repo_map = {str(r.name): str(self._work_path / r.path) for r in repos}
+        repo_map = self._solution_controller.get_repo_map()
 
         resolved_paths = []
         for entry in configfile_paths:
