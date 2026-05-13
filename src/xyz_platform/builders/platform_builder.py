@@ -285,13 +285,22 @@ class PlatformBuilder(BaseBuilder):
         if resource_services:
             # Map resource names → their workspace firewall reference lists
             resource_to_firewalls: dict = {}
+            resource_to_role: dict = {}
+            resource_to_count: dict = {}
             if workspace_model.spec.resources:
                 for res_ref in workspace_model.spec.resources:
                     if res_ref.firewalls:
                         resource_to_firewalls[res_ref.name] = res_ref.firewalls
+                    if res_ref.role:
+                        resource_to_role[str(res_ref.name)] = str(res_ref.role)
+                    resource_to_count[str(res_ref.name)] = res_ref.count
 
             resources = [
-                PlatformResourceModel.from_resource_model(svc.model)
+                PlatformResourceModel.from_resource_model(
+                    svc.model,
+                    role=resource_to_role.get(str(svc.model.meta.name)),
+                    count=resource_to_count.get(str(svc.model.meta.name), 1),
+                )
                 for svc in resource_services.values()
                 if svc.model is not None
             ]

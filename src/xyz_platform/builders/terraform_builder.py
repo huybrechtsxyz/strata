@@ -193,6 +193,8 @@ class TerraformBuilder(BaseBuilder):
         messages: List[str],
     ) -> Dict[str, Any]:
         """Build all Terraform tfvars payloads."""
+        # Collect environment-declared secrets so they appear in tf_required_secrets
+        self._collect_environment_secrets(deployment_service)
         return {
             "workspace": self._build_workspace_vars(platform, messages),
             "providers": self._build_provider_vars(platform, messages),
@@ -219,7 +221,7 @@ class TerraformBuilder(BaseBuilder):
             "workspace_version": workspace_version,
             "deployment_name": platform.meta.name,
             "environment": environment,
-            "platform_version": str(platform.apiVersion),
+            "platform_version": platform.apiVersion.value,
             "labels": workspace_labels,
             "metadata": {
                 "deployment_version": deployment_version,
@@ -371,11 +373,25 @@ class TerraformBuilder(BaseBuilder):
         """Build topology tfvars payload."""
         topologies_dict: Dict[str, Dict[str, Any]] = {}
 
+        # Build a lookup from resource name → {role, count} for component enrichment
+        resource_meta: Dict[str, Dict[str, Any]] = {}
+        if platform.spec.resources:
+            for r in platform.spec.resources:
+                resource_meta[str(r.name)] = {"role": r.role, "count": r.count}
+
         if platform.spec.topologies:
             for topology in platform.spec.topologies:
                 components = []
                 for component in topology.components:
-                    components.append({"resource": component.resource})
+                    meta = resource_meta.get(str(component.resource), {})
+                    entry: Dict[str, Any] = {"resource": component.resource}
+                    if meta.get("role"):
+                        entry["role"] = meta["role"]
+                    if meta.get("count", 1) != 1:
+                        entry["count"] = meta["count"]
+                    elif "count" in meta:
+                        entry["count"] = meta["count"]
+                    components.append(entry)
 
                 volumes = []
                 if topology.volumes:
@@ -385,7 +401,7 @@ class TerraformBuilder(BaseBuilder):
                 topologies_dict[topology.name] = {
                     "type": topology.type,
                     "provider": topology.provider,
-                    "provisioner": str(topology.provisioner),
+                    "provisioner": topology.provisioner.value,
                     "components": components,
                     "volumes": volumes,
                 }
@@ -509,6 +525,25 @@ class TerraformBuilder(BaseBuilder):
             existing = self.feature_refs[key]
             merged = set(existing.get("used_by", [])) | set(used_by)
             existing["used_by"] = sorted(merged)
+
+    def _collect_environment_secrets(self, deployment_service: DeploymentService) -> None:
+        """Track secrets declared in the deployment's environment file."""
+        try:
+            env_service = deployment_service.get_environment_service()
+        except Exception:
+            return
+        if env_service is None or env_service.model is None:
+            return
+        secrets = env_service.model.spec.secrets if env_service.model.spec else None
+        if not secrets:
+            return
+        env_name = env_service.get_name() or "environment"
+        for secret in secrets:
+            self._track_secret(
+                key=secret.key,
+                description=secret.description or f"Secret from {env_name} ({secret.store})",
+                used_by=[env_name],
+            )
 
     def _track_secret(self, key: str, description: str, used_by: List[str]) -> None:
         if key not in self.secret_refs:

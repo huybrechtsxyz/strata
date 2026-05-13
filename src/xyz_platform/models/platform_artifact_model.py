@@ -253,6 +253,14 @@ class PlatformResourceModel(BaseModel):
         None,
         description="Reference to merged firewall name (if resource has multiple firewalls merged)",
     )
+    role: Optional[str] = Field(
+        None,
+        description="Role of this resource in the workspace topology (e.g., manager, worker)",
+    )
+    count: int = Field(
+        default=1,
+        description="Number of instances of this resource to provision",
+    )
 
     @classmethod
     def from_resource_model(
@@ -260,6 +268,8 @@ class PlatformResourceModel(BaseModel):
         model: ResourceModel,
         firewalls: Optional[List[str]] = None,
         firewall: Optional[str] = None,
+        role: Optional[str] = None,
+        count: int = 1,
     ) -> "PlatformResourceModel":
         """Create from input ResourceModel (merges meta + spec).
 
@@ -291,6 +301,8 @@ class PlatformResourceModel(BaseModel):
             default_tags=None,
             firewalls=firewalls,
             firewall=firewall,
+            role=role,
+            count=count,
         )
 
 
