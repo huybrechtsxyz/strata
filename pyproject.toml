@@ -184,3 +184,4 @@ ignore_missing_imports = true
 
 [project.scripts]
 xyz-platform = "xyz_platform.cli:main"
+xyz = "xyz_platform.cli:main"

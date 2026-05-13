@@ -1,0 +1,19 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.idea/
+*.swp
+*.swo
+*~
+
+# Secrets — must never be committed
+.env
+.env.*
+*.pem
+*.key
+*.secret.yaml
+*.secrets.yaml
+secrets/

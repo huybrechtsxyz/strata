@@ -1026,6 +1026,36 @@ class SolutionController(BaseController):
                 self._add_error(msg)
                 return False, self.get_errors()
 
+        # Write root .gitignore if absent (idempotent — never overwrites existing)
+        root_gitignore = self._work_path / ".gitignore"
+        if not root_gitignore.exists():
+            root_gitignore_src = templates_dir / "root.gitignore"
+            if root_gitignore_src.exists():
+                try:
+                    root_gitignore.write_text(root_gitignore_src.read_text(encoding="utf-8"), encoding="utf-8")
+                    self.logger.info("Root .gitignore written", path=str(root_gitignore))
+                    self._add_message("Created: .gitignore")
+                except Exception as e:
+                    msg = f"Failed to write root .gitignore: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
+
+        # Write root README.md if absent (idempotent — never overwrites existing)
+        root_readme = self._work_path / "README.md"
+        if not root_readme.exists():
+            root_readme_src = templates_dir / "root.readme.md"
+            if root_readme_src.exists():
+                try:
+                    content = root_readme_src.read_text(encoding="utf-8")
+                    content = content.replace("${SOLUTION_NAME}", self._solution.meta.name if self._solution else "")
+                    root_readme.write_text(content, encoding="utf-8")
+                    self.logger.info("Root README.md written", path=str(root_readme))
+                    self._add_message("Created: README.md")
+                except Exception as e:
+                    msg = f"Failed to write root README.md: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
+
         # Ensure logs directory exists
         logs_dir = state_dir / "logs"
         logs_dir.mkdir(exist_ok=True)
