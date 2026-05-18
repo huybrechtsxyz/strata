@@ -421,7 +421,7 @@ class BaseService(ABC, Generic[ModelT]):
 
         if os.path.exists(self.path):
             self.logger.debug("Loading YAML data", path=self.path)
-            with open(self.path, "r") as f:
+            with open(self.path, "r", encoding="utf-8") as f:
                 self.data = yaml.safe_load(f) or {}
             self.logger.debug("Successfully loaded data", path=self.path)
         else:

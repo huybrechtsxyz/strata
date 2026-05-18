@@ -541,7 +541,7 @@ class TerraformBuilder(BaseBuilder):
         for secret in secrets:
             self._track_secret(
                 key=secret.key,
-                description=secret.description or f"Secret from {env_name} ({secret.store})",
+                description=secret.description or f"Secret from {env_name} ({secret.store.value})",
                 used_by=[env_name],
             )
 

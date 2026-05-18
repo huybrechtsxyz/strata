@@ -381,7 +381,7 @@ class VaultIntegration(StoreIntegration):
                 )
                 return None
 
-            with open(jwt_path, "r") as f:
+            with open(jwt_path, "r", encoding="utf-8") as f:
                 jwt = f.read().strip()
 
             auth_url = f"{self.vault_addr}/v1/auth/kubernetes/login"
