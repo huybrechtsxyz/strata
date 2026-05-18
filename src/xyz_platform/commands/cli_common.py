@@ -2,7 +2,7 @@
 
 import click
 
-OUTPUT_FORMATS = ["console", "text", "json"]
+OUTPUT_FORMATS = ["console", "text", "json", "ndjson"]
 
 
 # Exit code handler for commands with validation

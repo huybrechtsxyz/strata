@@ -1,4 +1,6 @@
-from typing import List, Optional
+from datetime import datetime as _dt
+from datetime import timezone as _tz
+from typing import Callable, List, Optional
 
 import click
 
@@ -7,6 +9,7 @@ from xyz_platform.controllers.value_controller import ResolvedValues, ValueContr
 from xyz_platform.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
+    STEP_DESTROY,
     STEP_PLAN,
     STEP_SETUP,
 )
@@ -238,6 +241,16 @@ class RunDeployCommand(BaseDeployCommand):
 
         supported = deployer.get_supported_steps()
 
+        # --- emit stage-start event (NDJSON) ---
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_start",
+                    "stage": stage.name,
+                    "ts": _dt.now(_tz.utc).isoformat(),
+                }
+            )
+
         # --- execute each step ---
         for step_name in steps_to_run:
             if step_name not in supported:
@@ -247,19 +260,81 @@ class RunDeployCommand(BaseDeployCommand):
                 )
                 return False
 
+            # Build the appropriate line callback for this step.
+            line_cb: Optional[Callable[[str, str], None]] = None
+            if self._is_ndjson_output():
+                # Tier 2: stream each subprocess output line as an NDJSON event.
+                self.emit_ndjson(
+                    {
+                        "event": "step_start",
+                        "step": step_name,
+                        "stage": stage.name,
+                        "ts": _dt.now(_tz.utc).isoformat(),
+                    }
+                )
+                line_cb = self.make_ndjson_line_callback(step=step_name, stage=stage.name)
+            elif self._is_verbose():
+                # Tier 1: print subprocess lines live to the console as they arrive.
+                def _make_verbose_cb(sn: str) -> Callable[[str, str], None]:
+                    def _cb(stream: str, text: str) -> None:
+                        if stream == "stderr":
+                            click.secho(f"      [{sn}] {text}", fg="yellow", err=True)
+                        else:
+                            click.echo(f"      [{sn}] {text}")
+
+                    return _cb
+
+                line_cb = _make_verbose_cb(step_name)
+
             if self._is_console_output():
                 prefix = "[DRY-RUN] " if self._dry_run else ""
                 click.echo(f"    {prefix}{step_name}")
 
             step_fn = getattr(deployer, step_name)
-            ok, msgs = step_fn()
+            # Steps that support line_callback accept it as a keyword arg;
+            # output/show_plan return (bool, dict, list) and don't stream.
+            if step_name in (STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY, STEP_DESTROY):
+                ok, msgs = step_fn(line_callback=line_cb)
+            else:
+                ok, msgs = step_fn()
             self._messages.extend(msgs)
             if self._is_console_output():
                 for msg in msgs:
                     click.echo(f"      {msg}")
             if not ok:
                 self._errors.extend(msgs)
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "step_end",
+                            "step": step_name,
+                            "stage": stage.name,
+                            "success": False,
+                            "ts": _dt.now(_tz.utc).isoformat(),
+                        }
+                    )
                 return False
+
+            if self._is_ndjson_output():
+                self.emit_ndjson(
+                    {
+                        "event": "step_end",
+                        "step": step_name,
+                        "stage": stage.name,
+                        "success": True,
+                        "ts": _dt.now(_tz.utc).isoformat(),
+                    }
+                )
+
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_end",
+                    "stage": stage.name,
+                    "success": True,
+                    "ts": _dt.now(_tz.utc).isoformat(),
+                }
+            )
 
         return True
 

@@ -235,6 +235,7 @@ class TerraformIntegration(BaseIntegration):
         working_dir: str,
         json_output: bool = False,
         timeout: int = 60,
+        **kwargs,
     ) -> CommandResult:
         """
         Validate Terraform configuration files.
@@ -449,6 +450,7 @@ class TerraformIntegration(BaseIntegration):
         auto_approve: bool = False,
         target: Optional[List[str]] = None,
         timeout: int = 1800,
+        **kwargs,
     ) -> CommandResult:
         """
         Destroy Terraform-managed infrastructure.
