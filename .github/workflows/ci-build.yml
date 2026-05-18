@@ -131,7 +131,7 @@ jobs:
             type=sha,prefix=sha-,format=short
 
       - name: Build and push CLI edge image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.cli
@@ -176,7 +176,7 @@ jobs:
             type=sha,prefix=sha-,format=short
 
       - name: Build and push docs edge image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.docs
@@ -216,7 +216,7 @@ jobs:
             type=sha,prefix=sha-,format=short
 
       - name: Build and push CLI edge image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.cli
@@ -259,7 +259,7 @@ jobs:
             type=sha,prefix=sha-,format=short
 
       - name: Build and push docs edge image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.docs
