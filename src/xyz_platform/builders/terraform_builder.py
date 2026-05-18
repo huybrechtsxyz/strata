@@ -94,6 +94,8 @@ class TerraformBuilder(BaseBuilder):
                     "providers.auto.tfvars.json",
                     "topologies.auto.tfvars.json",
                     "modules.auto.tfvars.json",
+                    "namespaces.auto.tfvars.json",
+                    "firewalls.auto.tfvars.json",
                     "tf_required_variables.json",
                     "tf_required_features.json",
                     "tf_required_secrets.json",
@@ -169,6 +171,8 @@ class TerraformBuilder(BaseBuilder):
             "providers.auto.tfvars.json",
             "topologies.auto.tfvars.json",
             "modules.auto.tfvars.json",
+            "namespaces.auto.tfvars.json",
+            "firewalls.auto.tfvars.json",
             "tf_required_variables.json",
             "tf_required_features.json",
             "tf_required_secrets.json",
@@ -201,6 +205,8 @@ class TerraformBuilder(BaseBuilder):
             "topologies": self._build_topology_vars(platform, messages),
             "resources_by_category": self._build_resources_by_category(platform, deployment_service, messages),
             "modules": self._build_module_vars(platform, messages),
+            "namespaces": self._build_namespace_vars(platform, messages),
+            "firewalls": self._build_firewall_vars(platform, messages),
             "required_variables": self._document_required_variables(),
             "required_features": self._document_required_features(),
             "required_secrets": self._document_required_secrets(),
@@ -373,24 +379,15 @@ class TerraformBuilder(BaseBuilder):
         """Build topology tfvars payload."""
         topologies_dict: Dict[str, Dict[str, Any]] = {}
 
-        # Build a lookup from resource name → {role, count} for component enrichment
-        resource_meta: Dict[str, Dict[str, Any]] = {}
-        if platform.spec.resources:
-            for r in platform.spec.resources:
-                resource_meta[str(r.name)] = {"role": r.role, "count": r.count}
-
         if platform.spec.topologies:
             for topology in platform.spec.topologies:
                 components = []
                 for component in topology.components:
-                    meta = resource_meta.get(str(component.resource), {})
                     entry: Dict[str, Any] = {"resource": component.resource}
-                    if meta.get("role"):
-                        entry["role"] = meta["role"]
-                    if meta.get("count", 1) != 1:
-                        entry["count"] = meta["count"]
-                    elif "count" in meta:
-                        entry["count"] = meta["count"]
+                    if getattr(component, "role", None):
+                        entry["role"] = component.role
+                    count = getattr(component, "count", 1)
+                    entry["count"] = count
                     components.append(entry)
 
                 volumes = []
@@ -407,6 +404,50 @@ class TerraformBuilder(BaseBuilder):
                 }
 
         return {"topologies": topologies_dict}
+
+    def _build_namespace_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
+        """Build namespace tfvars payload."""
+        namespaces_dict: Dict[str, Any] = {}
+
+        if platform.spec.namespaces:
+            for namespace in platform.spec.namespaces:
+                namespaces_dict[namespace.name] = {
+                    "description": (namespace.annotations.get("description", "") if namespace.annotations else ""),
+                    "labels": namespace.labels or {},
+                    "tags": namespace.tags or [],
+                    "modules": [str(m.module) for m in namespace.modules] if namespace.modules else [],
+                }
+
+        if self.verbose:
+            messages.append(f"Built namespace vars: {len(namespaces_dict)} namespaces")
+
+        return {"namespaces": namespaces_dict}
+
+    def _build_firewall_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
+        """Build firewall tfvars payload."""
+        firewalls_dict: Dict[str, Any] = {}
+
+        if platform.spec.firewalls:
+            for firewall in platform.spec.firewalls:
+                rules: Dict[str, Any] = {
+                    "reset": firewall.reset or False,
+                    "defaults": [r.model_dump(exclude_none=True) for r in firewall.defaults]
+                    if firewall.defaults
+                    else [],
+                    "deny": [r.model_dump(exclude_none=True) for r in firewall.deny] if firewall.deny else [],
+                    "allow": [r.model_dump(exclude_none=True) for r in firewall.allow] if firewall.allow else [],
+                }
+                firewalls_dict[firewall.name] = {
+                    "description": (firewall.annotations.get("description", "") if firewall.annotations else ""),
+                    "labels": firewall.labels or {},
+                    "tags": firewall.tags or [],
+                    "rules": rules,
+                }
+
+        if self.verbose:
+            messages.append(f"Built firewall vars: {len(firewalls_dict)} firewalls")
+
+        return {"firewalls": firewalls_dict}
 
     def _document_required_variables(self) -> Dict[str, Any]:
         return {"variables": list(self.variable_refs.values())}
@@ -444,6 +485,8 @@ class TerraformBuilder(BaseBuilder):
                 terraform_vars["topologies"],
             )
             self._write_json(terraform_path / "modules.auto.tfvars.json", terraform_vars["modules"])
+            self._write_json(terraform_path / "namespaces.auto.tfvars.json", terraform_vars["namespaces"])
+            self._write_json(terraform_path / "firewalls.auto.tfvars.json", terraform_vars["firewalls"])
 
             for resource_type, payload in terraform_vars["resources_by_category"].items():
                 self._write_json(terraform_path / f"resx_{resource_type}.auto.tfvars.json", payload)

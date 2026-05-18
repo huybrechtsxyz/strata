@@ -350,10 +350,24 @@ class PlatformStereotypeModel(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class PlatformTopologyModel(WorkspaceTopologyModel):
-    """Platform topology — delegates to WorkspaceTopologyModel."""
+class PlatformComponentModel(BaseModel):
+    """Enriched topology component for platform output — adds role and count."""
 
-    pass
+    resource: Annotated[
+        str,
+        StringConstraints(min_length=1, strip_whitespace=True),
+        Field(description="Resource name reference"),
+    ]
+    role: Optional[str] = Field(None, description="Role of this resource within the topology")
+    count: int = Field(1, description="Number of instances of this resource")
+
+
+class PlatformTopologyModel(WorkspaceTopologyModel):
+    """Platform topology — enriches components with role and count."""
+
+    components: List[PlatformComponentModel] = Field(  # type: ignore[assignment]
+        default_factory=list, description="Topology components with role and count"
+    )
 
 
 class PlatformProvisionerModel(WorkspaceIacModel):

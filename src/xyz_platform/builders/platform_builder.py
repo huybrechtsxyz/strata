@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 from xyz_platform.builders.base_builder import BaseBuilder
 from xyz_platform.models.platform_artifact_model import (
     PlatformArtifactModel,
+    PlatformComponentModel,
     PlatformFirewallModel,
     PlatformLifecycleModel,
     PlatformMetaModel,
@@ -275,7 +276,7 @@ class PlatformBuilder(BaseBuilder):
                 self.logger.debug(f"Built {len(providers)} provider(s)")
 
         # ------------------------------------------------------------------
-        # Topologies
+        # Topologies — built after resource maps so components can be enriched
         # ------------------------------------------------------------------
         topologies = None
         if workspace_model.spec.topology:
@@ -312,6 +313,18 @@ class PlatformBuilder(BaseBuilder):
                 for svc in resource_services.values()
                 if svc.model is not None
             ]
+
+        # Enrich topology components with role/count now that resource maps exist
+        if topologies:
+            for topology in topologies:
+                topology.components = [
+                    PlatformComponentModel(
+                        resource=str(comp.resource),
+                        role=resource_to_role.get(str(comp.resource)),
+                        count=resource_to_count.get(str(comp.resource), 1),
+                    )
+                    for comp in topology.components
+                ]
 
         # ------------------------------------------------------------------
         # Namespaces
