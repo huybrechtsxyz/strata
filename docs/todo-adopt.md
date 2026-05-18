@@ -98,16 +98,106 @@ Current docs are developer/internals-facing. Team docs need to be operator-facin
 
 ---
 
-## 9. Installation
+## 9. Installation & Editor Experience
 
 - [ ] Single-line install that works on Windows and Linux
   - e.g. `pipx install xyz-ruck` or install from internal GitHub releases
 - [ ] Document: does it need to be in a virtualenv, or is global install fine?
 - [ ] Shell completion (`ruck --install-completion`) — nice to have, high perceived polish
 
+### YAML Schema → VS Code autocomplete
+
+Highest-leverage editor improvement. Requires no per-user setup once done.
+
+- [ ] Publish a JSON Schema for the ruck YAML document format (`ruck-schema.json`)
+- [ ] Register it with the [YAML VS Code extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) via schema URL
+- [ ] Result: autocomplete, inline docs, and red squiggles on `spec.` fields in any YAML config — for free
+- [ ] Add `.vscode/settings.json` to the config repo pointing at the schema so it works without any user config
+
+### VS Code Tasks in the config repo
+
+- [ ] Add `.vscode/tasks.json` to `xyz-configuration` with one-click tasks:
+  - `ruck validate` — validate current file
+  - `ruck diff` — preview changes
+  - `ruck deploy run` — deploy current environment
+- [ ] These surface in the VS Code Command Palette — no terminal knowledge required
+
 ---
 
-## 10. Bus Factor
+## 10. Dev Container
+
+**The single highest-leverage onboarding improvement.** Someone opens the config repo, clicks "Reopen in Container", and has everything working in 2 minutes — no local setup, no "works on my machine."
+
+What it provides automatically:
+- Python + `uv` + `ruck` at the right versions
+- Terraform, Azure CLI, `kubectl`, `helm` pre-installed
+- VS Code YAML extension with the ruck schema pre-configured
+- Shell completion already set up
+- `ruck doctor` passes out of the box
+- Works in GitHub Codespaces (deploy from a browser tab)
+
+Files to create in `xyz-configuration`:
+
+```
+.devcontainer/
+  devcontainer.json
+```
+
+Sample `devcontainer.json`:
+```json
+{
+  "name": "ruck",
+  "image": "mcr.microsoft.com/devcontainers/python:3.13",
+  "features": {
+    "ghcr.io/devcontainers/features/azure-cli:1": {},
+    "ghcr.io/devcontainers/features/terraform:1": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {}
+  },
+  "postCreateCommand": "pip install xyz-ruck && ruck --install-completion bash",
+  "customizations": {
+    "vscode": {
+      "extensions": ["redhat.vscode-yaml"],
+      "settings": {
+        "yaml.schemas": {
+          "https://schema.huybrechts.xyz/ruck/v1/schema.json": "**/*.yaml"
+        }
+      }
+    }
+  }
+}
+```
+
+Checklist:
+- [ ] Create `.devcontainer/devcontainer.json` in `xyz-configuration`
+- [ ] Pin tool versions (Terraform, kubectl) to avoid silent upgrades breaking things
+- [ ] Handle Azure CLI auth flow inside container (document the `az login --use-device-code` workaround)
+- [ ] Test on Windows (Docker Desktop), Mac, and Linux
+- [ ] Test in GitHub Codespaces
+- [ ] Check corporate Docker Desktop licensing situation before making it the primary path
+
+**Caveat:** In some corporate environments Docker Desktop requires a license or is blocked by IT. Keep native install as a fallback.
+
+---
+
+## 11. `ruck doctor`
+
+Eliminates the "it doesn't work and I don't know why" onboarding call.
+
+- [ ] Implement `ruck doctor` command that checks:
+  - Python version
+  - Terraform installed + version
+  - Azure CLI installed + logged in + correct subscription
+  - `kubectl` installed (if AKS workloads present)
+  - `helm` installed (if Helm workloads present)
+  - `.ruck/` workspace marker found
+- [ ] Each check prints ✅ / ❌ with a fix hint on failure
+- [ ] Include in the Getting Started page: "Run `ruck doctor` first if anything isn't working"
+
+---
+
+---
+
+## 12. Bus Factor
 
 Make the tool survivable without the author.
 
@@ -120,14 +210,18 @@ Make the tool survivable without the author.
 
 ## Priority Order
 
-| #   | Item                                     | Effort | Impact                         |
-| --- | ---------------------------------------- | ------ | ------------------------------ |
-| 1   | `ruck diff`                              | High   | Very high — removes #1 blocker |
-| 2   | Getting Started page (10-min onboarding) | Low    | Very high                      |
-| 3   | Error message quality pass               | Medium | High                           |
-| 4   | Terraform/subprocess output passthrough  | Low    | High                           |
-| 5   | Operator cookbook docs                   | Medium | High                           |
-| 6   | `ruck init --template aks`               | Medium | Medium                         |
-| 7   | CI pipeline snippet                      | Low    | Medium                         |
-| 8   | `ruck status`                            | High   | Medium                         |
-| 9   | Shell completion                         | Low    | Low (polish)                   |
+| #   | Item                                     | Effort | Impact                                      |
+| --- | ---------------------------------------- | ------ | ------------------------------------------- |
+| 1   | Dev container in config repo             | Low    | Very high — zero setup for new team members |
+| 2   | `ruck diff`                              | High   | Very high — removes #1 trust blocker        |
+| 3   | Getting Started page (10-min onboarding) | Low    | Very high                                   |
+| 4   | YAML schema → VS Code autocomplete       | Low    | High — editing config feels first-class     |
+| 5   | `ruck doctor`                            | Low    | High — eliminates onboarding support calls  |
+| 6   | Error message quality pass               | Medium | High                                        |
+| 7   | Terraform/subprocess output passthrough  | Low    | High                                        |
+| 8   | Operator cookbook docs                   | Medium | High                                        |
+| 9   | `ruck init --template aks`               | Medium | Medium                                      |
+| 10  | CI pipeline snippet                      | Low    | Medium                                      |
+| 11  | VS Code tasks in config repo             | Low    | Medium                                      |
+| 12  | `ruck status`                            | High   | Medium                                      |
+| 13  | Shell completion                         | Low    | Low (polish)                                |
