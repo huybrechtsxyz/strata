@@ -339,10 +339,10 @@ class BaseCommand(ABC):
 
             # Show errors
             if self._errors and len(self._errors) > 0:
-                click.echo("❌  Errors:")
+                click.echo("❌  Errors:", err=True)
                 for err in self._errors:
-                    click.secho(f"    - {err}", fg="red")
-                click.echo("")
+                    click.secho(f"    - {err}", fg="red", err=True)
+                click.echo("", err=True)
 
             # Show verbose logging
             if self._is_verbose():

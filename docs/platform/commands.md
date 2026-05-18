@@ -13,6 +13,8 @@ These options are accepted by every command and subcommand:
 | `--verbose`        | flag                      | off           | Enable verbose output.                                                                                                                                                        |
 | `--quiet`          | flag                      | off           | Suppress console output.                                                                                                                                                      |
 
+> **Automation / AI agents:** Always use `--output json` (or set `XYZ_OUTPUT=json`). Every CLI flag has an `XYZ_<OPTION>` environment-variable equivalent — set them once rather than passing flags on every call. In console mode, errors are written to **stderr**; the JSON envelope always goes to **stdout**.
+
 ## Exit Codes
 
 | Code | Meaning                                                      |
