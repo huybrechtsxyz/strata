@@ -288,6 +288,8 @@ class BaseCommand(ABC):
             envelope: Dict[str, Any] = {
                 "success": bool(success),
                 "command": self.OPERATION,
+                "execution_id": self._execution_id,
+                "timestamp": self._start_time.isoformat(),
                 "data": self._output_data,
                 "messages": self._messages,
                 "errors": self._errors,
@@ -297,6 +299,8 @@ class BaseCommand(ABC):
             else:  # text
                 click.echo(f"success: {envelope['success']}")
                 click.echo(f"command: {envelope['command']}")
+                click.echo(f"execution_id: {envelope['execution_id']}")
+                click.echo(f"timestamp: {envelope['timestamp']}")
                 for k, v in envelope["data"].items():
                     if isinstance(v, list):
                         click.echo(f"{k}:")
