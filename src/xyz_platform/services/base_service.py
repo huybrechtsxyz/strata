@@ -128,6 +128,30 @@ class BaseService(ABC, Generic[ModelT]):
         """Return a copy of the accumulated validation error list."""
         return self._errors.copy()
 
+    def get_structured_errors(self) -> List:
+        """Return structured ValidationError instances from the most recent Pydantic validation.
+
+        Converts the stored ``ModelValidationError`` (Phase 1) into a list of
+        ``ValidationError`` dataclass instances.  Returns an empty list when Phase 1
+        passed or when no structured error information is available.
+        """
+        from xyz_platform.models.validation_error import ValidationError
+
+        if self._validation_exception is None:
+            return []
+        structured = []
+        for err in self._validation_exception.details.get("errors", []):
+            structured.append(
+                ValidationError(
+                    code="PYDANTIC_FIELD_ERROR",
+                    message=err.get("message", ""),
+                    phase=1,
+                    field=err.get("field"),
+                    context={"type": err.get("type")},
+                )
+            )
+        return structured
+
     def validate(
         self,
         configuration_model: Optional["ConfigurationModel"] = None,

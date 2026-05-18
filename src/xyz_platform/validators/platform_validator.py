@@ -9,6 +9,7 @@ from xyz_platform.controllers.lifecycle_controller import LifecycleController
 from xyz_platform.logger import get_logger
 from xyz_platform.models.common_models import CommonLifecycleModel, PlatformKind
 from xyz_platform.models.configuration_model import ConfigurationModel
+from xyz_platform.models.validation_error import ValidationError
 from xyz_platform.services.base_service import BaseService
 from xyz_platform.services.deployment_service import DeploymentService
 from xyz_platform.services.environment_service import EnvironmentService
@@ -67,7 +68,11 @@ class PlatformValidator(BaseValidator):
     def before_validate(self, work_path: Path) -> bool:
         """Verify file exists, parse YAML, extract and validate ``kind``."""
         if not self._file_path.exists():
-            self._errors.append(f"File not found: {self._file_path}")
+            self.add_validation_error(
+                "FILE_NOT_FOUND",
+                f"File not found: {self._file_path}",
+                context={"path": str(self._file_path)},
+            )
             self.logger.warning("File not found", path=str(self._file_path))
             return False
 
@@ -75,28 +80,49 @@ class PlatformValidator(BaseValidator):
             raw = self._file_path.read_text(encoding="utf-8")
             doc = yaml.safe_load(raw)
         except yaml.YAMLError as exc:
-            self._errors.append(f"YAML parse error in '{self._file_path}': {exc}")
+            self.add_validation_error(
+                "YAML_PARSE_ERROR",
+                f"YAML parse error in '{self._file_path}': {exc}",
+                context={"path": str(self._file_path)},
+            )
             self.logger.warning("YAML parse error", path=str(self._file_path), error=str(exc))
             return False
         except OSError as exc:
-            self._errors.append(f"Cannot read '{self._file_path}': {exc}")
+            self.add_validation_error(
+                "FILE_READ_ERROR",
+                f"Cannot read '{self._file_path}': {exc}",
+                context={"path": str(self._file_path)},
+            )
             self.logger.warning("File read error", path=str(self._file_path), error=str(exc))
             return False
 
         if not isinstance(doc, dict):
-            self._errors.append(f"Expected a YAML mapping in '{self._file_path}', got {type(doc).__name__}.")
+            self.add_validation_error(
+                "INVALID_YAML_STRUCTURE",
+                f"Expected a YAML mapping in '{self._file_path}', got {type(doc).__name__}.",
+                context={"actual_type": type(doc).__name__},
+            )
             return False
 
         raw_kind = doc.get("kind")
         if raw_kind is None:
-            self._errors.append(f"Missing required field 'kind' in '{self._file_path}'.")
+            self.add_validation_error(
+                "MISSING_KIND_FIELD",
+                f"Missing required field 'kind' in '{self._file_path}'.",
+                field="kind",
+            )
             return False
 
         try:
             self._detected_kind = PlatformKind(raw_kind)
         except ValueError:
             valid = ", ".join(k.value for k in PlatformKind)
-            self._errors.append(f"Unknown kind '{raw_kind}' in '{self._file_path}'. Valid kinds: {valid}.")
+            self.add_validation_error(
+                "UNKNOWN_KIND",
+                f"Unknown kind '{raw_kind}' in '{self._file_path}'. Valid kinds: {valid}.",
+                field="kind",
+                value=str(raw_kind),
+            )
             self.logger.warning("Unknown kind", kind=raw_kind, path=str(self._file_path))
             return False
 
@@ -126,7 +152,11 @@ class PlatformValidator(BaseValidator):
             add_config_model=True,
         ):
             for err in lc.get_errors():
-                self._errors.append(f"validate_before lifecycle hook: {err}")
+                self.add_validation_error(
+                    "LIFECYCLE_HOOK_ERROR",
+                    f"validate_before lifecycle hook: {err}",
+                    context={"hook": "validate_before"},
+                )
             return False
 
         return True
@@ -134,7 +164,10 @@ class PlatformValidator(BaseValidator):
     def validate(self, work_path: Path) -> bool:
         """Map kind → service, run Phase 1 (Pydantic) and optional Phase 2 (dynamic)."""
         if self._detected_kind is None:
-            self._errors.append("validate() called before before_validate() — no kind detected.")
+            self.add_validation_error(
+                "MISSING_KIND",
+                "validate() called before before_validate() — no kind detected.",
+            )
             return False
 
         # CONFIGURATION kind: validate directly via ConfigurationModel (no path-based service)
@@ -143,8 +176,11 @@ class PlatformValidator(BaseValidator):
 
         service_class = _KIND_TO_SERVICE.get(self._detected_kind)
         if service_class is None:
-            self._errors.append(
-                f"No service registered for kind '{self._detected_kind}' — cannot validate '{self._file_path}'."
+            self.add_validation_error(
+                "NO_SERVICE_REGISTERED",
+                f"No service registered for kind '{self._detected_kind}' — cannot validate '{self._file_path}'.",
+                field="kind",
+                value=str(self._detected_kind),
             )
             return False
 
@@ -152,7 +188,11 @@ class PlatformValidator(BaseValidator):
         try:
             service = service_class.load(str(self._file_path))
         except Exception as exc:
-            self._errors.append(f"Failed to load '{self._file_path}' as {service_class.__name__}: {exc}")
+            self.add_validation_error(
+                "SERVICE_LOAD_ERROR",
+                f"Failed to load '{self._file_path}' as {service_class.__name__}: {exc}",
+                context={"service": service_class.__name__},
+            )
             self.logger.error(
                 "Service load raised an exception",
                 service=service_class.__name__,
@@ -162,11 +202,20 @@ class PlatformValidator(BaseValidator):
             return False
 
         if not service.is_validated():
-            self._errors.extend(service.get_validation_errors())
+            plain = service.get_validation_errors()
+            structured = service.get_structured_errors()
+            for i, msg in enumerate(plain):
+                self._errors.append(msg)
+                if i < len(structured):
+                    self._structured_errors.append(structured[i])
+                else:
+                    self._structured_errors.append(
+                        ValidationError(code="SERVICE_VALIDATION_ERROR", message=msg, phase=1)
+                    )
             self.logger.warning(
                 "Phase 1 validation failed",
                 service=service_class.__name__,
-                error_count=len(service._errors),
+                error_count=len(plain),
                 path=str(self._file_path),
             )
             return False
@@ -181,7 +230,8 @@ class PlatformValidator(BaseValidator):
                 repo_map=self._repo_map,
             )
             if not is_valid:
-                self._errors.extend(dynamic_errors)
+                for msg in dynamic_errors:
+                    self.add_validation_error("DYNAMIC_VALIDATION_ERROR", msg, phase=2)
                 self.logger.warning(
                     "Phase 2 dynamic validation failed",
                     service=service_class.__name__,
@@ -202,7 +252,11 @@ class PlatformValidator(BaseValidator):
 
             doc = _yaml.safe_load(raw)
         except Exception as exc:
-            self._errors.append(f"Failed to read '{self._file_path}': {exc}")
+            self.add_validation_error(
+                "FILE_READ_ERROR",
+                f"Failed to read '{self._file_path}': {exc}",
+                context={"path": str(self._file_path)},
+            )
             return False
 
         try:
@@ -210,7 +264,13 @@ class PlatformValidator(BaseValidator):
         except ValidationError as exc:
             for err in exc.errors():
                 loc = " -> ".join(str(p) for p in err["loc"])
-                self._errors.append(f"{loc}: {err['msg']}")
+                self.add_validation_error(
+                    "PYDANTIC_FIELD_ERROR",
+                    f"{loc}: {err['msg']}",
+                    phase=1,
+                    field=loc,
+                    context={"type": err["type"]},
+                )
             self.logger.warning(
                 "Configuration model validation failed",
                 error_count=exc.error_count(),
@@ -218,7 +278,10 @@ class PlatformValidator(BaseValidator):
             )
             return False
         except Exception as exc:
-            self._errors.append(f"Unexpected error validating '{self._file_path}': {exc}")
+            self.add_validation_error(
+                "UNEXPECTED_VALIDATION_ERROR",
+                f"Unexpected error validating '{self._file_path}': {exc}",
+            )
             return False
 
         return True
@@ -238,7 +301,11 @@ class PlatformValidator(BaseValidator):
             add_config_model=True,
         ):
             for err in lc.get_errors():
-                self._errors.append(f"validate_after lifecycle hook: {err}")
+                self.add_validation_error(
+                    "LIFECYCLE_HOOK_ERROR",
+                    f"validate_after lifecycle hook: {err}",
+                    context={"hook": "validate_after"},
+                )
             return False
 
         return True

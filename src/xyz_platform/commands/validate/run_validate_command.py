@@ -164,7 +164,7 @@ class ValidateCommand(BaseCommand):
             "kind": self._detected_kind,
             "deep": self._deep,
             "validation_passed": validation_passed,
-            "errors": list(self._validator.get_errors()),
+            "errors": [e.to_dict() for e in self._validator.get_structured_errors()],
         }
 
         return True

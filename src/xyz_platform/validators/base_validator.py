@@ -2,7 +2,9 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional
+
+from xyz_platform.models.validation_error import ValidationError
 
 
 class BaseValidator(ABC):
@@ -11,6 +13,7 @@ class BaseValidator(ABC):
     def __init__(self) -> None:
         self._messages: List[str] = []
         self._errors: List[str] = []
+        self._structured_errors: List[ValidationError] = []
 
     def has_errors(self) -> bool:
         return len(self._errors) > 0
@@ -23,6 +26,25 @@ class BaseValidator(ABC):
 
     def get_errors(self) -> List[str]:
         return self._errors
+
+    def get_structured_errors(self) -> List[ValidationError]:
+        """Return all accumulated structured validation errors."""
+        return list(self._structured_errors)
+
+    def add_validation_error(
+        self,
+        code: str,
+        message: str,
+        phase: int = 1,
+        field: Optional[str] = None,
+        value: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Append a structured validation error and its plain-text equivalent."""
+        self._errors.append(message)
+        self._structured_errors.append(
+            ValidationError(code=code, message=message, phase=phase, field=field, value=value, context=context)
+        )
 
     @abstractmethod
     def validate(self, work_path: Path) -> bool:
