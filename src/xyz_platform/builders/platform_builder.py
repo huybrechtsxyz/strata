@@ -14,6 +14,7 @@ from xyz_platform.models.platform_artifact_model import (
     PlatformModuleModel,
     PlatformNamespaceModel,
     PlatformProviderModel,
+    PlatformProvisionerModel,
     PlatformResourceModel,
     PlatformSpecModel,
     PlatformTopologyModel,
@@ -356,20 +357,11 @@ class PlatformBuilder(BaseBuilder):
                 self.logger.warning("No modules were built for platform model")
 
         # ------------------------------------------------------------------
-        # Firewalls: original definitions + merged resource firewalls
+        # Firewalls: one merged firewall per VM resource (originals are not emitted)
         # ------------------------------------------------------------------
         firewalls_list = []
 
-        firewall_services = workspace_service.get_firewall_services()
-        if firewall_services:
-            firewalls_list = [
-                PlatformFirewallModel.from_firewall_model(svc.model)
-                for svc in firewall_services.values()
-                if svc.model is not None
-            ]
-            self.logger.debug(f"Added {len(firewall_services)} original firewall definition(s)")
-
-        # Merged firewalls synthesised from resources with multiple fw refs
+        # Merged firewalls synthesised per resource from its firewall references
         if resource_services:
             for resource_name, resource_service in resource_services.items():
                 merged_fw = resource_service.get_merged_firewall()
@@ -412,6 +404,16 @@ class PlatformBuilder(BaseBuilder):
         )
 
         # ------------------------------------------------------------------
+        # Provisioners
+        # ------------------------------------------------------------------
+        provisioners = None
+        if workspace_model.spec.provisioners:
+            provisioners = [
+                PlatformProvisionerModel.model_validate(prov.model_dump()) for prov in workspace_model.spec.provisioners
+            ]
+            self.logger.debug(f"Added {len(provisioners)} provisioner(s)")
+
+        # ------------------------------------------------------------------
         # Assemble spec
         # ------------------------------------------------------------------
         lifecycle_model = None
@@ -436,7 +438,7 @@ class PlatformBuilder(BaseBuilder):
             features=all_features,
             variables=all_variables,
             secrets=all_secrets,
-            provisioners=None,
+            provisioners=provisioners,
             stereotypes=None,
         )
 

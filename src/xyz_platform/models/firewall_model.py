@@ -8,6 +8,7 @@ from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     field_validator,
     model_validator,
@@ -49,6 +50,8 @@ class FirewallRuleModel(BaseModel):
     Validates IP/CIDR, port formats, and interface names.
     """
 
+    model_config = ConfigDict(populate_by_name=True)
+
     direction: FirewallDirection = Field(..., description="Direction of traffic: 'in' for inbound, 'out' for outbound.")
     proto: Optional[FirewallProtocol] = Field(
         None, description="Protocol for the rule: 'tcp', 'udp', or 'icmp'. Optional."
@@ -65,6 +68,7 @@ class FirewallRuleModel(BaseModel):
     from_: Optional[str] = Field(
         None,
         alias="from",
+        serialization_alias="from",
         description="Source IP address or CIDR (for inbound rules). Optional.",
     )
     to: Optional[str] = Field(

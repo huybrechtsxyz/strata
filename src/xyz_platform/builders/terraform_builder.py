@@ -197,7 +197,8 @@ class TerraformBuilder(BaseBuilder):
         messages: List[str],
     ) -> Dict[str, Any]:
         """Build all Terraform tfvars payloads."""
-        # Collect environment-declared secrets so they appear in tf_required_secrets
+        # Collect environment-declared variables and secrets
+        self._collect_environment_variables(deployment_service)
         self._collect_environment_secrets(deployment_service)
         return {
             "workspace": self._build_workspace_vars(platform, messages),
@@ -227,7 +228,7 @@ class TerraformBuilder(BaseBuilder):
             "workspace_version": workspace_version,
             "deployment_name": platform.meta.name,
             "environment": environment,
-            "platform_version": platform.apiVersion.value,
+            "platform_version": getattr(platform.apiVersion, "value", platform.apiVersion),
             "labels": workspace_labels,
             "metadata": {
                 "deployment_version": deployment_version,
@@ -431,11 +432,15 @@ class TerraformBuilder(BaseBuilder):
             for firewall in platform.spec.firewalls:
                 rules: Dict[str, Any] = {
                     "reset": firewall.reset or False,
-                    "defaults": [r.model_dump(exclude_none=True) for r in firewall.defaults]
+                    "defaults": [r.model_dump(exclude_none=True, by_alias=True) for r in firewall.defaults]
                     if firewall.defaults
                     else [],
-                    "deny": [r.model_dump(exclude_none=True) for r in firewall.deny] if firewall.deny else [],
-                    "allow": [r.model_dump(exclude_none=True) for r in firewall.allow] if firewall.allow else [],
+                    "deny": [r.model_dump(exclude_none=True, by_alias=True) for r in firewall.deny]
+                    if firewall.deny
+                    else [],
+                    "allow": [r.model_dump(exclude_none=True, by_alias=True) for r in firewall.allow]
+                    if firewall.allow
+                    else [],
                 }
                 firewalls_dict[firewall.name] = {
                     "description": (firewall.annotations.get("description", "") if firewall.annotations else ""),
@@ -541,15 +546,27 @@ class TerraformBuilder(BaseBuilder):
                 [resource.name],
             )
 
-    def _track_variable(self, key: str, description: str, used_by: List[str]) -> None:
+    def _track_variable(
+        self,
+        key: str,
+        description: str,
+        used_by: List[str],
+        store: Optional[str] = None,
+        value: Any = None,
+    ) -> None:
         if key not in self.variable_refs:
-            self.variable_refs[key] = {
+            entry: Dict[str, Any] = {
                 "key": key,
                 "description": description,
                 "required": True,
                 "suggested_env_var": f"TF_VAR_{key}",
                 "used_by": list(used_by),
             }
+            if store is not None:
+                entry["store"] = store
+            if value is not None:
+                entry["value"] = value
+            self.variable_refs[key] = entry
         else:
             existing = self.variable_refs[key]
             merged = set(existing.get("used_by", [])) | set(used_by)
@@ -568,6 +585,27 @@ class TerraformBuilder(BaseBuilder):
             existing = self.feature_refs[key]
             merged = set(existing.get("used_by", [])) | set(used_by)
             existing["used_by"] = sorted(merged)
+
+    def _collect_environment_variables(self, deployment_service: DeploymentService) -> None:
+        """Track variables declared in the deployment's environment file."""
+        try:
+            env_service = deployment_service.get_environment_service()
+        except Exception:
+            return
+        if env_service is None or env_service.model is None:
+            return
+        variables = env_service.model.spec.variables if env_service.model.spec else None
+        if not variables:
+            return
+        env_name = env_service.get_name() or "environment"
+        for variable in variables:
+            self._track_variable(
+                key=variable.key,
+                description=variable.description or f"Variable from {env_name} ({variable.store.value})",
+                used_by=[env_name],
+                store=variable.store.value,
+                value=variable.value,
+            )
 
     def _collect_environment_secrets(self, deployment_service: DeploymentService) -> None:
         """Track secrets declared in the deployment's environment file."""
