@@ -38,6 +38,7 @@ from xyz_platform.commands.cli_new import new_command
 from xyz_platform.commands.cli_profile import profile_group
 from xyz_platform.commands.cli_ref import ref_group
 from xyz_platform.commands.cli_repo import repo_group
+from xyz_platform.commands.cli_schema import schema_group
 from xyz_platform.commands.cli_status import status_command
 from xyz_platform.commands.cli_tools import tools_group
 from xyz_platform.commands.cli_validate import validate_command
@@ -177,6 +178,7 @@ main.add_command(repo_group, name="repo")
 main.add_command(profile_group, name="profile")
 main.add_command(ref_group, name="ref")
 main.add_command(validate_command, name="validate")
+main.add_command(schema_group, name="schema")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
 main.add_command(values_group, name="values")

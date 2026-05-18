@@ -67,7 +67,12 @@ class PlatformService(BaseService["PlatformArtifactModel"]):
         """
         return True, []
 
-    def validate(self, configuration_model=None, work_path=None) -> Tuple[bool, List[str]]:
+    def validate(
+        self,
+        configuration_model: Optional[ConfigurationModel] = None,
+        work_path: Optional[str] = None,
+        repo_map: Optional[dict] = None,
+    ) -> Tuple[bool, List[str]]:
         """Validate the platform model.
 
         When the service is used solely for saving (no path or data was

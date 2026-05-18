@@ -38,6 +38,7 @@ These options are accepted by every command and subcommand:
 | `repo`     | `add` `remove` `list` `sync` `status`                          | Manage repositories in the solution           |
 | `build`    | `run` `plan` `clean`                                           | Build platform and Terraform artifacts        |
 | `validate` | —                                                              | Validate a single platform YAML file          |
+| `schema`   | `list` `get`                                                   | Inspect JSON schemas for platform YAML kinds  |
 | `deploy`   | `run` `destroy` `status` `history` `health`                    | Deploy platform using provisioners            |
 | `values`   | `list` `get`                                                   | Inspect resolved deployment values            |
 | `version`  | —                                                              | Show CLI version                              |
@@ -400,6 +401,47 @@ xyz validate FILE_PATH [--deep] [standard options]
 ```bash
 xyz validate config/xyz-config.yaml
 xyz validate config/xyz-ws-platform.yaml --deep
+```
+
+---
+
+## `schema`
+
+Inspect JSON schemas for platform YAML document kinds. Useful for editors, linters, and AI agents that need to understand what fields a document type requires.
+
+### `schema list`
+
+List all supported platform document kinds.
+
+```
+xyz schema list [--output FORMAT]
+```
+
+**`--output json`** returns `{"kinds": ["configuration", "deployment", ...]}`. **`--output text`** prints one kind per line.
+
+```bash
+xyz schema list
+xyz schema list --output json
+```
+
+### `schema get KIND`
+
+Emit the full JSON Schema for a platform document kind.
+
+```
+xyz schema get KIND [--output FORMAT]
+```
+
+Default and `--output json` both emit the complete Pydantic-generated JSON Schema. `--output text` shows a compact summary (required fields and top-level property names).
+
+**Valid kinds:** `configuration` `deployment` `environment` `firewall` `module` `namespace` `platform_model` `provider` `resource` `workspace`
+
+**Exit codes:** 0 success · 2 unknown kind
+
+```bash
+xyz schema get deployment
+xyz schema get deployment --output json
+xyz schema get environment --output text
 ```
 
 ---
