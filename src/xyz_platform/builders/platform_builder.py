@@ -1,5 +1,6 @@
 """Build the platform model artifact."""
 
+import shutil
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -119,6 +120,13 @@ class PlatformBuilder(BaseBuilder):
         if not workspace_service:
             self._errors.append("Workspace service is not available")
             return False
+
+        # Clean the deployment build folder so stale files from a previous run
+        # (e.g. removed resource types) do not pollute the new output.
+        deployment_build_path = deployment_service.get_build_path(build_path)
+        if deployment_build_path.exists():
+            shutil.rmtree(deployment_build_path)
+            self.logger.debug("Cleaned build folder", path=str(deployment_build_path))
 
         if self.verbose:
             self._messages.append("Pre-build validation passed")
