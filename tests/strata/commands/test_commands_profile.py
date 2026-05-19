@@ -29,9 +29,7 @@ class TestProfileAdd:
 class TestProfileRemove:
     def test_remove_basic(self, tmp_path):
         runner = CliRunner()
-        with patch(
-            "strata.commands.profile.remove_profile_command.RemoveProfileCommand.execute", return_value=True
-        ):
+        with patch("strata.commands.profile.remove_profile_command.RemoveProfileCommand.execute", return_value=True):
             result = runner.invoke(profile_group, ["remove", "staging", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
@@ -73,9 +71,7 @@ class TestProfileActivate:
 class TestProfileShow:
     def test_show_basic(self, tmp_path):
         runner = CliRunner()
-        with patch(
-            "strata.commands.ref.list_profile_path_command.ListProfilePathCommand.execute", return_value=True
-        ):
+        with patch("strata.commands.ref.list_profile_path_command.ListProfilePathCommand.execute", return_value=True):
             result = runner.invoke(profile_group, ["show", "staging", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 

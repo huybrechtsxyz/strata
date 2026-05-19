@@ -48,25 +48,19 @@ class TestDeployRun:
 class TestDeployDestroy:
     def test_destroy_dry_run(self, tmp_path):
         runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True
-        ):
+        with patch("strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True):
             result = runner.invoke(deploy, ["destroy", "--dry-run", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
     def test_destroy_force_flag(self, tmp_path):
         runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True
-        ):
+        with patch("strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True):
             result = runner.invoke(deploy, ["destroy", "--force", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
     def test_destroy_stage_option(self, tmp_path):
         runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True
-        ):
+        with patch("strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=True):
             result = runner.invoke(
                 deploy, ["destroy", "--stage", "production", "--dry-run", "--work-path", str(tmp_path)]
             )
@@ -74,9 +68,7 @@ class TestDeployDestroy:
 
     def test_destroy_execute_false_returns_nonzero(self, tmp_path):
         runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=False
-        ):
+        with patch("strata.commands.deploy.destroy_deploy_command.DestroyDeployCommand.execute", return_value=False):
             result = runner.invoke(deploy, ["destroy", "--dry-run", "--work-path", str(tmp_path)])
         assert result.exit_code != 0
 
@@ -104,25 +96,19 @@ class TestDeployStatus:
 class TestDeployHistory:
     def test_history_basic(self, tmp_path):
         runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute", return_value=True
-        ):
+        with patch("strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute", return_value=True):
             result = runner.invoke(deploy, ["history", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
     def test_history_lines_option(self, tmp_path):
         runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute", return_value=True
-        ):
+        with patch("strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute", return_value=True):
             result = runner.invoke(deploy, ["history", "--lines", "10", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
     def test_history_operation_filter(self, tmp_path):
         runner = CliRunner()
-        with patch(
-            "strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute", return_value=True
-        ):
+        with patch("strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute", return_value=True):
             result = runner.invoke(deploy, ["history", "--operation", "run", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 

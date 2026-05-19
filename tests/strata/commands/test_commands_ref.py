@@ -13,9 +13,7 @@ class TestRefAdd:
     def test_add_basic_each_type(self, tmp_path):
         runner = CliRunner()
         for ftype in _FILE_TYPES:
-            with patch(
-                "strata.commands.ref.add_profile_path_command.AddProfilePathCommand.execute", return_value=True
-            ):
+            with patch("strata.commands.ref.add_profile_path_command.AddProfilePathCommand.execute", return_value=True):
                 result = runner.invoke(
                     ref_group,
                     [ftype, "add", "myref", "/some/path", "--profile", "staging", "--work-path", str(tmp_path)],
