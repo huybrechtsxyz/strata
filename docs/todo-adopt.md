@@ -6,6 +6,8 @@ Target: a DevOps engineer can install, run, and trust `ruck` without needing the
 
 ## 1. The Pitch (one sentence)
 
+> ✅ README.md updated with compelling pitch and Quick Start section.
+
 Before anything else, answer this clearly — in the README, in the first line of the docs:
 
 > "Ruck manages the full lifecycle of your Azure/AKS environments — one consistent YAML config layer over Terraform, Helm, and scripts — so you stop copy-pasting between 8 near-identical environment folders."
@@ -21,8 +23,8 @@ A new team member should be able to go from zero to a validated config without a
 - [ ] `ruck init` scaffolds a working example config (AKS-flavored template)
 - [ ] `ruck init --template aks` for Azure-specific scaffold
 - [ ] Output tells you exactly what was created and what to do next
-- [ ] A single "Getting Started" page: install → init → validate → deploy to sandbox
-- [ ] Document the prerequisites clearly (Python version, uv, Azure CLI, Terraform)
+- [x] A single "Getting Started" page: install → init → validate → deploy to sandbox → `docs/platform/getting-started.md`
+- [x] Document the prerequisites clearly (Python version, uv, Azure CLI, Terraform)
 
 ---
 
@@ -116,11 +118,12 @@ Highest-leverage editor improvement. Requires no per-user setup once done.
 
 ### VS Code Tasks in the config repo
 
-- [ ] Add `.vscode/tasks.json` to `xyz-configuration` with one-click tasks:
-  - `ruck validate` — validate current file
-  - `ruck diff` — preview changes
-  - `ruck deploy run` — deploy current environment
-- [ ] These surface in the VS Code Command Palette — no terminal knowledge required
+- [x] Add `.vscode/tasks.json` to `xyz-configuration` with one-click tasks:
+  - [x] `xyz validate` — validate current file
+  - [ ] `xyz diff` — preview changes (pending `ruck diff` feature)
+  - [x] `xyz deploy run` — deploy current environment
+  - [x] `xyz build run` — run a build
+- [x] These surface in the VS Code Command Palette — no terminal knowledge required
 
 ---
 
@@ -168,7 +171,7 @@ Sample `devcontainer.json`:
 ```
 
 Checklist:
-- [ ] Create `.devcontainer/devcontainer.json` in `xyz-configuration`
+- [x] Create `.devcontainer/devcontainer.json` in `xyz-configuration`
 - [ ] Pin tool versions (Terraform, kubectl) to avoid silent upgrades breaking things
 - [ ] Handle Azure CLI auth flow inside container (document the `az login --use-device-code` workaround)
 - [ ] Test on Windows (Docker Desktop), Mac, and Linux
@@ -212,9 +215,10 @@ Make the tool survivable without the author.
 
 | #   | Item                                     | Effort | Impact                                      |
 | --- | ---------------------------------------- | ------ | ------------------------------------------- |
-| 1   | Dev container in config repo             | Low    | Very high — zero setup for new team members |
+| 1   | Dev container in config repo             | Low    | Very high — zero setup for new team members | ✅ Done |
 | 2   | `ruck diff`                              | High   | Very high — removes #1 trust blocker        |
-| 3   | Getting Started page (10-min onboarding) | Low    | Very high                                   |
+| 3   | Getting Started page (10-min onboarding) | Low    | Very high                                   | ✅ Done |
+| 1a  | The Pitch — README.md                    | Low    | Very high                                   | ✅ Done |
 | 4   | YAML schema → VS Code autocomplete       | Low    | High — editing config feels first-class     |
 | 5   | `ruck doctor`                            | Low    | High — eliminates onboarding support calls  |
 | 6   | Error message quality pass               | Medium | High                                        |
@@ -222,6 +226,6 @@ Make the tool survivable without the author.
 | 8   | Operator cookbook docs                   | Medium | High                                        |
 | 9   | `ruck init --template aks`               | Medium | Medium                                      |
 | 10  | CI pipeline snippet                      | Low    | Medium                                      |
-| 11  | VS Code tasks in config repo             | Low    | Medium                                      |
+| 11  | VS Code tasks in config repo             | Low    | Medium                                      | ✅ Done |
 | 12  | `ruck status`                            | High   | Medium                                      |
 | 13  | Shell completion                         | Low    | Low (polish)                                |

@@ -44,3 +44,18 @@ Key paths: `src/xyz_platform/cli.py`, `commands/cli_common.py`, `models/`, `serv
 **Context wiring gap**
 - `main()` in `cli.py` has no `@click.pass_context`, no `ctx.obj = {}`, no `--work-path` option, and no `.xyz_platform/cli.yaml` loading into `default_map`. This gap is total — zero of the three decisions are implemented in `main()`.
 - To wire up per decisions: add `@click.pass_context`, accept `--work-path` with env var fallback `XYZ_WORK_PATH`, implement CWD-walk for `.xyz_platform/` sentinel, load `.xyz_platform/cli.yaml` into `ctx.default_map`, store resolved path in `ctx.obj['work_path']`.
+
+### 2026-05-19 — VS Code tasks.json for config repo
+
+**Key file paths:**
+- Config repo tasks: `e:\SourcesXYZ\xyz-configuration\.vscode\tasks.json`
+- Platform SDK template: `e:\SourcesXYZ\xyz-platform\src\xyz_platform\templates\vscode\tasks.template.json`
+
+**Changes made to `xyz-configuration/.vscode/tasks.json`:**
+- Removed `Check: lint + format + types` task (SDK-only, not for config operators)
+- Replaced `uv run xyz-platform ${input:cliArgs}` with `xyz ${input:cliArgs}` in `Run: haven`
+- Added three operator-focused tasks: `xyz: validate`, `xyz: deploy run`, `xyz: build run` — all using a `configFile` promptString input
+- Added `configFile` input (promptString, default `@haven/deploy/deploy-prd.yaml`)
+- Updated `cliArgs` input description to reflect real examples
+
+**tasks.template.json:** Already used `xyz ${input:cliArgs}` — no changes needed.
