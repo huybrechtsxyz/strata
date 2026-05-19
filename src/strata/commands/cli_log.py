@@ -1,10 +1,9 @@
-"""Click CLI wiring for the audit command group."""
+"""Click CLI wiring for the log command group."""
 
 from typing import Optional
 
 import click
 
-from strata.commands.audit.show_audit_command import ShowAuditCommand
 from strata.commands.cli_common import (
     click_output_format,
     click_output_quiet,
@@ -12,20 +11,21 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
+from strata.commands.logger.show_log_command import ShowLogCommand
 
 
-@click.group(name="audit", help="Observe platform activity: execution history and audit trail.")
-def audit_group():
-    """Audit command group."""
+@click.group(name="log", help="Show execution logs for the current workspace.")
+def log_group():
+    """Log command group."""
     pass
 
 
 # ==============================================================================
-# xyz audit list  (execution trail)
+# strata log list
 # ==============================================================================
 
 
-@audit_group.command(name="list", help="List execution log entries for the current workspace.")
+@log_group.command(name="list", help="List execution log entries for the current workspace.")
 @click.option(
     "--lines",
     default=50,
@@ -60,7 +60,7 @@ def audit_group():
 @click_output_format
 @click_output_verbose
 @click_output_quiet
-def audit_show(
+def log_list(
     lines: int = 50,
     minutes: Optional[int] = None,
     level: Optional[str] = None,
@@ -71,8 +71,8 @@ def audit_show(
     verbose: bool = False,
     quiet: bool = False,
 ) -> None:
-    """Display execution audit trail for the current workspace."""
-    command = ShowAuditCommand(
+    """Display execution logs for the current workspace."""
+    command = ShowLogCommand(
         lines=lines,
         minutes=minutes,
         level=level,

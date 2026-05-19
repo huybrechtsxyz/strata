@@ -4,7 +4,6 @@ from typing import Optional
 
 import click
 
-from strata.commands.audit.log_config_command import LogConfigCommand
 from strata.commands.cli_common import (
     click_output_format,
     click_output_quiet,
@@ -13,6 +12,7 @@ from strata.commands.cli_common import (
     handle_command_exit,
 )
 from strata.commands.config.set_config_command import SetConfigCommand
+from strata.commands.logger.log_config_command import LogConfigCommand
 
 
 @click.group(name="config", help="Manage workspace CLI preferences and logging configuration.")

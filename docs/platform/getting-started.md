@@ -28,7 +28,7 @@ python --version   # must be 3.13+
 
 ```bash
 pipx install strata
-xyz --version
+strata --version
 ```
 
 **Dev install (from source):**
@@ -240,11 +240,11 @@ This orchestrates the full lifecycle: resolves `@`-references, runs Terraform, a
 
 ## If Something Goes Wrong
 
-**Check the audit trail** — every command execution is logged:
+**Check the execution log** — every command execution is logged:
 
 ```bash
-strata audit list
-strata audit list --last 5
+strata log list
+strata log list --last
 ```
 
 **Run with verbose output** to see every subprocess call and argument:

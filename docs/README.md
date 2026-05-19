@@ -46,12 +46,12 @@ All infrastructure is defined in YAML. The CLI (`strata`) orchestrates the full 
 
 ## Prerequisites
 
-| Tool                                                   | Version | Required for                       |
-| ------------------------------------------------------ | ------- | ---------------------------------- |
-| Python                                                 | 3.13+   | CLI runtime                        |
-| [uv](https://docs.astral.sh/uv/)                       | latest  | Package and environment management |
-| Git                                                    | any     | Repo management (`strata repo sync`)  |
-| [Terraform](https://developer.hashicorp.com/terraform) | 1.5+    | `strata build` and `strata deploy` only  |
+| Tool                                                   | Version | Required for                            |
+| ------------------------------------------------------ | ------- | --------------------------------------- |
+| Python                                                 | 3.13+   | CLI runtime                             |
+| [uv](https://docs.astral.sh/uv/)                       | latest  | Package and environment management      |
+| Git                                                    | any     | Repo management (`strata repo sync`)    |
+| [Terraform](https://developer.hashicorp.com/terraform) | 1.5+    | `strata build` and `strata deploy` only |
 
 ---
 
@@ -64,13 +64,13 @@ uv sync
 **Linux / macOS:**
 ```bash
 source .venv/bin/activate
-xyz --help
+strata --help
 ```
 
 **Windows:**
 ```powershell
 .venv\Scripts\Activate.ps1
-xyz --help
+strata --help
 ```
 
 Or invoke directly without activating:
@@ -150,12 +150,12 @@ strata <command> [options]
 
 Standard options accepted by every command:
 
-| Option                         | Description                                                               |
-| ------------------------------ | ------------------------------------------------------------------------- |
+| Option                         | Description                                                                  |
+| ------------------------------ | ---------------------------------------------------------------------------- |
 | `--work-path PATH`             | Workspace root (or `STRATA_WORK_PATH` env var; walks up from CWD if not set) |
-| `--output console\|text\|json` | Output format (default: `console`)                                        |
-| `--verbose`                    | Show structured log output                                                |
-| `--quiet`                      | Suppress all output                                                       |
+| `--output console\|text\|json` | Output format (default: `console`)                                           |
+| `--verbose`                    | Show structured log output                                                   |
+| `--quiet`                      | Suppress all output                                                          |
 
 Full command reference: [platform/commands.md](platform/commands.md)
 
@@ -203,13 +203,13 @@ strata help --topic quickstart
 
 Common issues:
 
-| Symptom                              | Likely cause                      | Fix                                  |
-| ------------------------------------ | --------------------------------- | ------------------------------------ |
-| `Not inside an strata workspace`        | CWD not in a workspace tree       | Run `strata sln init` or pass `--work-path` |
-| Exit 2 on any command                | Missing required option           | Check `strata <command> --help`         |
-| Exit 3 on `strata validate`             | Schema-invalid YAML               | Read the validation error output     |
-| `@repo-name/...` reference not found | Repo not registered or not cloned | `strata repo add` + `strata repo sync`     |
-| Terraform not found                  | `terraform` not on PATH           | Install Terraform 1.5+               |
+| Symptom                              | Likely cause                      | Fix                                         |
+| ------------------------------------ | --------------------------------- | ------------------------------------------- |
+| `Not inside an strata workspace`     | CWD not in a workspace tree       | Run `strata sln init` or pass `--work-path` |
+| Exit 2 on any command                | Missing required option           | Check `strata <command> --help`             |
+| Exit 3 on `strata validate`          | Schema-invalid YAML               | Read the validation error output            |
+| `@repo-name/...` reference not found | Repo not registered or not cloned | `strata repo add` + `strata repo sync`      |
+| Terraform not found                  | `terraform` not on PATH           | Install Terraform 1.5+                      |
 
 ---
 
@@ -272,7 +272,7 @@ Each concern lives in its own repository:
 
 | Repo type            | Example name         | Contains                                                   |
 | -------------------- | -------------------- | ---------------------------------------------------------- |
-| Platform (this repo) | `strata`       | CLI, provisioners, built-in defaults                       |
+| Platform (this repo) | `strata`             | CLI, provisioners, built-in defaults                       |
 | Configuration        | `xyz-config`         | Provider credentials, topology definitions, firewall rules |
 | Infrastructure       | `xyz-infrastructure` | Deployment manifests, Terraform backends                   |
 | Service config       | `xyz-svc-<service>`  | Service-specific configuration files                       |

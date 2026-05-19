@@ -13,7 +13,7 @@
 
 | Command    | Exit 0 | Exit 1 | Exit 2       | Exit 3                |
 | ---------- | ------ | ------ | ------------ | --------------------- |
-| `init`     | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `sln`      | ✅      | ✅      | ⚠️ Click only | ❌                     |
 | `config`   | ✅      | ✅      | ⚠️ Click only | ❌                     |
 | `repo`     | ✅      | ✅      | ⚠️ Click only | ❌                     |
 | `profile`  | ✅      | ✅      | ⚠️ Click only | ❌                     |
@@ -22,9 +22,7 @@
 | `build`    | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  |
 | `deploy`   | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  |
 | `values`   | ✅      | ✅      | ⚠️ Click only | ✅ Unresolved entries  |
-| `status`   | ✅      | ✅      | ⚠️ Click only | ❌                     |
-| `audit`    | ✅      | ✅      | ⚠️ Click only | ❌                     |
-| `clean`    | ✅      | ✅      | ⚠️ Click only | ❌                     |
+| `log`      | ✅      | ✅      | ⚠️ Click only | ❌                     |
 
 **Legend:** ✅ Used | ⚠️ Automatic | ❌ Not used
 

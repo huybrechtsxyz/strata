@@ -110,7 +110,7 @@ spec:
 **4. Execute:**
 
 ```bash
-xyz deploy run -f ../xyz-deploy-prod/deployments/active/platform-current.yaml
+strata deploy run -f ../xyz-deploy-prod/deployments/active/platform-current.yaml
 ```
 
 **5. Generated Audit Manifest (build/manifest.yaml):**

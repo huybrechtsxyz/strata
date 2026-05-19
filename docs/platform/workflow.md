@@ -573,13 +573,13 @@ spec:
 strata sln status
 
 # View logs from last command
-strata audit list --last
+strata log list --last
 
 # View last 100 lines at DEBUG level
-strata audit list --lines 100 --level DEBUG
+strata log list --lines 100 --level DEBUG
 
 # View logs for a specific execution
-strata audit list --execution-id <UUID>
+strata log list --execution-id <UUID>
 
 # Show built-in workflow topics
 strata help --list
@@ -637,7 +637,7 @@ strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # -- Inspect --
 strata sln status
-strata audit list --last
+strata log list --last
 ```
 
 ---
@@ -656,7 +656,7 @@ strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --
 strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Review what happened
-strata audit list --last
+strata log list --last
 ```
 
 ---
@@ -683,11 +683,11 @@ strata audit list --last
 
 Valid keys: `output`, `verbose`, `quiet`, `work_path`
 
-### Audit
+### Logs
 
-| Command                                              | Description                     |
-| ---------------------------------------------------- | ------------------------------- |
-| `strata audit list [--last] [--lines N] [--level L]` | View execution logs (read-only) |
+| Command                                            | Description                     |
+| -------------------------------------------------- | ------------------------------- |
+| `strata log list [--last] [--lines N] [--level L]` | View execution logs (read-only) |
 
 ### Logging Config
 

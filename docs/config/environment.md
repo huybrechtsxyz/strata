@@ -271,16 +271,16 @@ spec:
 
 ```bash
 # Validate a deployment YAML file
-xyz validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Deploy using the active profile's environment refs
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Dry-run (plan only — no changes applied)
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
 
 # Tear down infrastructure
-xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+strata deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
 ```
 
 ## File Location

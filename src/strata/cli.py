@@ -24,11 +24,11 @@ from pathlib import Path
 import click
 import yaml
 
-from strata.commands.cli_audit import audit_group
 from strata.commands.cli_builders import build as build_group
 from strata.commands.cli_config import config_group
 from strata.commands.cli_deploy import deploy as deploy_group
 from strata.commands.cli_help import help_command
+from strata.commands.cli_log import log_group
 from strata.commands.cli_new import new_command
 from strata.commands.cli_profile import profile_group
 from strata.commands.cli_ref import ref_group
@@ -167,7 +167,7 @@ main.add_command(sln_group, name="sln")
 main.add_command(config_group, name="config")
 main.add_command(vars_group, name="vars")
 main.add_command(new_command, name="new")
-main.add_command(audit_group, name="audit")
+main.add_command(log_group, name="log")
 main.add_command(repo_group, name="repo")
 main.add_command(profile_group, name="profile")
 main.add_command(ref_group, name="ref")

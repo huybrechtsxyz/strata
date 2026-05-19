@@ -1,4 +1,4 @@
-"""Command to display execution audit trail for the current workspace."""
+"""Command to display execution logs for the current workspace."""
 
 from typing import Dict, List, Optional
 
@@ -14,8 +14,8 @@ LEVEL_COLORS = {
 }
 
 
-class ShowAuditCommand(BaseCommand):
-    """Read and display the workspace execution audit trail.
+class ShowLogCommand(BaseCommand):
+    """Read and display the workspace execution logs.
 
     Entries can be filtered by number of lines, time window, log level,
     or execution ID.

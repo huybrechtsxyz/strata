@@ -108,7 +108,7 @@ class TestMainGroup:
         expected = {
             "sln",
             "config",
-            "audit",
+            "log",
             "repo",
             "profile",
             "ref",

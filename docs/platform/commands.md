@@ -32,7 +32,7 @@ These options are accepted by every command and subcommand:
 | ----------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
 | `sln`       | `init` `clean` `status` `export`                                             | Solution workspace lifecycle                            |
 | `config`    | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config |
-| `audit` †   | `list`                                                                       | View execution history logs (read-only)                 |
+| `log` †     | `list`                                                                       | View execution logs (read-only)                         |
 | `profile` † | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                             |
 | `ref` †     | `env` `config` `data` `secret`                                               | Manage file references within profiles                  |
 | `repo` †    | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                     |
@@ -271,14 +271,14 @@ strata config log reset
 
 ---
 
-## `audit`
+## `log`
 
-View execution history logs (read-only). Logging configuration has moved to `config log`.
+View execution logs (read-only).
 
-### `audit list`
+### `log list`
 
 ```
-strata audit list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] [--last]
+strata log list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] [--last]
 ```
 
 | Option              | Default | Description                                                              |
@@ -290,12 +290,10 @@ strata audit list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] 
 | `--last`            | off     | Show logs for the most recent command execution                          |
 
 ```bash
-strata audit list
-strata audit list --last
-strata audit list --level ERROR --lines 20
+strata log list
+strata log list --last
+strata log list --level ERROR --lines 20
 ```
-
-> **Note:** `audit log` subcommands have moved to `config log`. See [config log](#config-log) below.
 
 ---
 

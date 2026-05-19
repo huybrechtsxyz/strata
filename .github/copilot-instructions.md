@@ -64,9 +64,9 @@ utils/        ← Pure utilities (no business logic, no service imports)
 
 ## CLI Commands
 
-- All top-level commands are flat: `xyz <group> <command>`.
+- All top-level commands are flat: `strata <group> <command>`.
 - Every command module lives in `commands/` and registers to the `main` Click group in `cli.py`.
-- Registered command groups: `sln`, `config`, `audit`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`, `new`, `schema`, `build`, `deploy`, `vars`, `tools`.
+- Registered command groups: `sln`, `config`, `log`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`, `new`, `schema`, `build`, `deploy`, `vars`, `tools`.
 - The `sln` group manages solution lifecycle: `sln init`, `sln clean`, `sln status`, `sln export`.
 - The `main` Click group loads workspace defaults from `.strata/cli.yaml` into `ctx.default_map` at startup. Always use `@click.pass_context` and read `work_path` from `ctx.obj`.
 - **Never** use `sys.exit()` — always raise `click.exceptions.Exit(code)`.
@@ -92,7 +92,7 @@ Work path is resolved once before `main()` runs and stored in `ctx.obj["work_pat
 1. `--work-path` flag (explicit, anywhere in `sys.argv`)
 2. `STRATA_WORK_PATH` environment variable
 3. Walk up from CWD looking for `.strata/` directory — the ancestor containing `.strata/` is returned
-4. Error: "Not inside an xyz workspace. Run `xyz sln init`."
+4. Error: "Not inside a strata workspace. Run `strata sln init`."
 
 `resolve_work_path()` lives in `utils/system.py`. Never pass `work_path` as a constructor arg or chain — read it from `ctx.obj`.
 
@@ -102,7 +102,7 @@ Work path is resolved once before `main()` runs and stored in `ctx.obj["work_pat
 
 - The `.strata/` folder in the workspace root is the state directory.
 - `solution.json` — the solution registry (`SolutionModel`), managed by `SolutionService`.
-- `cli.yaml` — user preferences loaded at startup into Click's `default_map`. Manage with `xyz config set|unset|list`.
+- `cli.yaml` — user preferences loaded at startup into Click's `default_map`. Manage with `strata config set|unset|list`.
 - `platform.json` — the build output artifact (`PlatformArtifactModel`), written by `BuildController` (deferred).
 
 ---
