@@ -81,7 +81,7 @@ spec:
     properties:
       terraform:
         organization: example-xyz-prod
-        cloudspace: example-xyz-platform-prod
+        cloudspace: example-strata-prod
   
   # Environment-specific variables (merged with workspace)
   variables:

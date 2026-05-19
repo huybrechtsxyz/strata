@@ -8,18 +8,18 @@ echo "=========================================="
 echo "This step applies the deployment changes"
 echo ""
 echo "Environment variables:"
-echo "  XYZ_WORK_PATH: ${XYZ_WORK_PATH}"
-echo "  XYZ_STAGE: ${XYZ_STAGE}"
-echo "  XYZ_STEP: ${XYZ_STEP}"
+echo "  STRATA_WORK_PATH: ${STRATA_WORK_PATH}"
+echo "  STRATA_STAGE: ${STRATA_STAGE}"
+echo "  STRATA_STEP: ${STRATA_STEP}"
 echo ""
 echo "Applying changes..."
 echo "  [✓] Creating virtualmachine.manager..."
 sleep 0.5
 echo "  [✓] Creating virtualmachine.worker_1..."
 sleep 0.5
-echo "  [✓] Creating firewall.xyz_fw..."
+echo "  [✓] Creating firewall.STRATA_fw..."
 sleep 0.5
-echo "  [✓] Modifying namespace.xyz_base..."
+echo "  [✓] Modifying namespace.STRATA_base..."
 sleep 0.5
 echo ""
 echo "Apply Summary:"

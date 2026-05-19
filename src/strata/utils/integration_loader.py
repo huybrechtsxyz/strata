@@ -1,0 +1,70 @@
+"""
+Loads workspace-local integration drop-ins from .strata/integrations/*.py.
+
+Each file must define a top-level ``register()`` function that calls
+``IntegrationFactory.register_type(type_str, cls)`` to register custom
+integrations with the platform.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+
+from strata.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+def load_workspace_integrations(work_path: Path) -> int:
+    """
+    Scan ``.strata/integrations/*.py`` and call ``register()`` in each.
+
+    Files whose names start with ``_`` are skipped (e.g. ``__init__.py``).
+    Errors in individual files are logged as warnings and never propagate —
+    a broken drop-in must not crash the CLI.
+
+    Args:
+        work_path: Root of the workspace (the directory that contains ``.strata/``).
+
+    Returns:
+        Number of files successfully loaded (i.e. ``register()`` was called
+        without raising).
+    """
+    integrations_dir = work_path / ".strata" / "integrations"
+    if not integrations_dir.is_dir():
+        return 0
+
+    loaded = 0
+    for py_file in sorted(integrations_dir.glob("*.py")):
+        if py_file.name.startswith("_"):
+            continue
+        module_name = f"_xyz_workspace_integration_{py_file.stem}"
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, py_file)
+            if spec is None or spec.loader is None:
+                logger.warning("Could not create module spec for integration drop-in", file=str(py_file))
+                continue
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            spec.loader.exec_module(module)  # type: ignore[union-attr]
+            if callable(getattr(module, "register", None)):
+                module.register()
+                logger.debug("Loaded workspace integration drop-in", file=py_file.name)
+                loaded += 1
+            else:
+                logger.warning(
+                    "Integration drop-in has no register() function — skipped",
+                    file=py_file.name,
+                )
+        except Exception as exc:
+            logger.warning(
+                "Failed to load workspace integration drop-in",
+                file=py_file.name,
+                error=str(exc),
+            )
+            # Remove from sys.modules if partially registered
+            sys.modules.pop(module_name, None)
+
+    return loaded

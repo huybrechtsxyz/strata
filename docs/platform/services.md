@@ -17,7 +17,7 @@ Services provide a consistent interface for loading, validating, and managing pl
 ## Basic Usage
 
 ```python
-from xyz_platform.services.deployment_service import DeploymentService
+from strata.services.deployment_service import DeploymentService
 
 # Load with automatic caching (validates by default)
 service = DeploymentService.load("deployment.yaml")
@@ -36,7 +36,7 @@ else:
 service = DeploymentService.load(path="deployment.yaml", validate=True)
 ```
 
-`BaseService.load()` is the preferred constructor. It handles caching via `service_cache` — if the same class+path combination was loaded before, the cached instance is returned. Internally it calls `get_or_cache()` from `xyz_platform.utils.service_cache`.
+`BaseService.load()` is the preferred constructor. It handles caching via `service_cache` — if the same class+path combination was loaded before, the cached instance is returned. Internally it calls `get_or_cache()` from `strata.utils.service_cache`.
 
 To instantiate without caching (e.g., in tests), construct directly:
 
@@ -48,7 +48,7 @@ is_valid, errors = service.validate()
 ## Service Caching
 
 ```python
-from xyz_platform.utils.service_cache import clear_cache, get_cache_stats
+from strata.utils.service_cache import clear_cache, get_cache_stats
 
 # Cache stats and management
 stats = get_cache_stats()  # dict with hits, misses, size
@@ -106,7 +106,7 @@ class CustomService(BaseService):
 `ConfigurationService` is a singleton that aggregates multiple YAML configuration files:
 
 ```python
-from xyz_platform.services.configuration_service import ConfigurationService
+from strata.services.configuration_service import ConfigurationService
 
 # Add configuration files
 service = ConfigurationService.get_instance()

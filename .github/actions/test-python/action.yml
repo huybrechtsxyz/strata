@@ -27,7 +27,7 @@ runs:
       shell: bash
       run: |
         uv run pytest tests/ \
-          --cov=xyz_platform \
+          --cov=strata \
           --cov-report=term-missing \
           --cov-report=xml:coverage.xml \
           -q

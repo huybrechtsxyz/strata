@@ -8,18 +8,18 @@ Write-Output "=========================================="
 Write-Output "This step applies the deployment changes"
 Write-Output ""
 Write-Output "Environment variables:"
-Write-Output "  XYZ_WORK_PATH: $env:XYZ_WORK_PATH"
-Write-Output "  XYZ_STAGE: $env:XYZ_STAGE"
-Write-Output "  XYZ_STEP: $env:XYZ_STEP"
+Write-Output "  STRATA_WORK_PATH: $env:STRATA_WORK_PATH"
+Write-Output "  STRATA_STAGE: $env:STRATA_STAGE"
+Write-Output "  STRATA_STEP: $env:STRATA_STEP"
 Write-Output ""
 Write-Output "Applying changes..."
 Write-Output "  [✓] Creating virtualmachine.manager..."
 Start-Sleep -Milliseconds 500
 Write-Output "  [✓] Creating virtualmachine.worker_1..."
 Start-Sleep -Milliseconds 500
-Write-Output "  [✓] Creating firewall.xyz_fw..."
+Write-Output "  [✓] Creating firewall.STRATA_fw..."
 Start-Sleep -Milliseconds 500
-Write-Output "  [✓] Modifying namespace.xyz_base..."
+Write-Output "  [✓] Modifying namespace.STRATA_base..."
 Start-Sleep -Milliseconds 500
 Write-Output ""
 Write-Output "Apply Summary:"

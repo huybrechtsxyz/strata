@@ -3,7 +3,7 @@ requires = ["setuptools>=70.3.0", "wheel>=0.43.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "xyz-platform"
+name = "strata"
 authors = [{ name = "Vincent Huybrechts", email = "vincent@huybrechts.xyz" }]
 license = { text = "AGPL-3.0-or-later" }
 description = "Python infrastructure platform for managing VM workspaces and clusters to deploy and maintain an automated container orchestration platform."
@@ -48,11 +48,11 @@ version = { file = "VERSION.txt" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-"xyz_platform.data" = ["*.yaml", "*.txt"]
-"xyz_platform.templates" = ["*.yaml", "*.json", "*.md", "*.txt"]
-"xyz_platform.templates.solution" = ["*.yaml", "*.md", "*"]
-"xyz_platform.templates.integrations" = ["*.md", "*.py"]
-"xyz_platform.templates.devcontainer" = ["*.json", "*.sh"]
+"strata.data" = ["*.yaml", "*.txt"]
+"strata.templates" = ["*.yaml", "*.json", "*.md", "*.txt"]
+"strata.templates.solution" = ["*.yaml", "*.md", "*"]
+"strata.templates.integrations" = ["*.md", "*.py"]
+"strata.templates.devcontainer" = ["*.json", "*.sh"]
 
 [dependency-groups]
 dev = [
@@ -185,5 +185,5 @@ exclude = [
 ignore_missing_imports = true
 
 [project.scripts]
-xyz-platform = "xyz_platform.cli:main"
-xyz = "xyz_platform.cli:main"
+strata = "strata.cli:main"
+xyz = "strata.cli:main"

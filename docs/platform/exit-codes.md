@@ -1,4 +1,4 @@
-# XYZ Platform CLI - Exit Codes
+# strata CLI - Exit Codes
 
 ## Exit Code Definitions
 
@@ -33,7 +33,7 @@
 ### Bash
 
 ```bash
-xyz-platform validate config.yaml
+strata validate config.yaml
 if [ $? -eq 3 ]; then
     echo "Invalid configuration"
 fi
@@ -42,7 +42,7 @@ fi
 ### PowerShell
 
 ```powershell
-xyz-platform validate config.yaml
+strata validate config.yaml
 if ($LASTEXITCODE -eq 3) {
     Write-Error "Invalid configuration"
 }

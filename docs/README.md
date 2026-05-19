@@ -1,12 +1,12 @@
-# XYZ Platform
+# strata
 
-XYZ Platform is a **modular, multi-repository infrastructure platform** for managing workspaces and cluster orchestration. It uses a separation-of-concerns architecture where configuration, modules, and deployments live in separate version-controlled repositories, enabling repeatable, audit-ready infrastructure deployments.
+strata is a **modular, multi-repository infrastructure platform** for managing workspaces and cluster orchestration. It uses a separation-of-concerns architecture where configuration, modules, and deployments live in separate version-controlled repositories, enabling repeatable, audit-ready infrastructure deployments.
 
 All infrastructure is defined in YAML. The CLI (`xyz`) orchestrates the full lifecycle — from workspace initialization through build artifact generation and Terraform provisioning — without manual scripting.
 
 ## Table of Contents
 
-- [XYZ Platform](#xyz-platform)
+- [strata](#strata)
   - [Table of Contents](#table-of-contents)
   - [Key Features](#key-features)
   - [Prerequisites](#prerequisites)
@@ -75,7 +75,7 @@ xyz --help
 
 Or invoke directly without activating:
 ```bash
-uv run xyz-platform --help
+uv run strata --help
 ```
 
 ---
@@ -152,7 +152,7 @@ Standard options accepted by every command:
 
 | Option                         | Description                                                               |
 | ------------------------------ | ------------------------------------------------------------------------- |
-| `--work-path PATH`             | Workspace root (or `XYZ_WORK_PATH` env var; walks up from CWD if not set) |
+| `--work-path PATH`             | Workspace root (or `STRATA_WORK_PATH` env var; walks up from CWD if not set) |
 | `--output console\|text\|json` | Output format (default: `console`)                                        |
 | `--verbose`                    | Show structured log output                                                |
 | `--quiet`                      | Suppress all output                                                       |
@@ -185,7 +185,7 @@ Full guide: [platform/workflow.md](platform/workflow.md)
 uv run pytest tests/ --no-cov -q
 
 # Run with coverage
-uv run pytest tests/ --cov=xyz_platform --cov-report=term-missing
+uv run pytest tests/ --cov=strata --cov-report=term-missing
 ```
 
 For linting, type checking, and the full nox pipeline, see [CONTRIBUTING.md](../.github/CONTRIBUTING.md#developer-setup).
@@ -272,7 +272,7 @@ Each concern lives in its own repository:
 
 | Repo type            | Example name         | Contains                                                   |
 | -------------------- | -------------------- | ---------------------------------------------------------- |
-| Platform (this repo) | `xyz-platform`       | CLI, provisioners, built-in defaults                       |
+| Platform (this repo) | `strata`       | CLI, provisioners, built-in defaults                       |
 | Configuration        | `xyz-config`         | Provider credentials, topology definitions, firewall rules |
 | Infrastructure       | `xyz-infrastructure` | Deployment manifests, Terraform backends                   |
 | Service config       | `xyz-svc-<service>`  | Service-specific configuration files                       |

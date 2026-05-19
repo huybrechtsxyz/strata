@@ -15,9 +15,9 @@ spec:
   properties:
     terraform:
       organization: example-xyz
-      cloudspace: example-xyz-platform
+      cloudspace: example-strata
   custom:
-    costcenter: "XYZ-PLATFORM"
+    costcenter: "strata"
   providers:
     - name: kamatera_europe
       file: tests/data/providers/provider-standard.yaml

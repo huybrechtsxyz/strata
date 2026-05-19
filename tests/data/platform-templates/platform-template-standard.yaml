@@ -3,7 +3,7 @@ kind: workspace-template
 meta:
   name: standard-three-repo
   annotations:
-    description: Standard three-repo workspace template for xyz-platform
+    description: Standard three-repo workspace template for strata
 spec:
   repos:
     - name: xyz-config

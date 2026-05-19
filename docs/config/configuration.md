@@ -97,7 +97,7 @@ Multiple configs merge: built-in → 00-_.yaml → 10-_.yaml → 99-\*.yaml
 
 ## Notes
 
-- Built-in default in `src/xyz_platform/data/configuration.yaml` always loads first
+- Built-in default in `src/STRATA_platform/data/configuration.yaml` always loads first
 - Use numeric prefixes (00-, 10-, 20-) to control merge order
 - Set `additional_regions: false` to restrict regions
 - Regex patterns validate resource configurations

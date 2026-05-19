@@ -80,7 +80,7 @@ uv sync --group dev
 uv run pytest tests/ --no-cov -q
 
 # Run with coverage
-uv run pytest tests/ --cov=xyz_platform --cov-report=term-missing
+uv run pytest tests/ --cov=strata --cov-report=term-missing
 ```
 
 ### Nox (all checks in one command)

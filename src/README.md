@@ -1,13 +1,13 @@
 # src/
 
-Python source tree for the `xyz-platform` package.
+Python source tree for the `strata` package.
 
-The installable package lives in `src/xyz_platform/` and is managed with `uv`. The `xyz.code-workspace` and `pyproject.toml` at the repo root both point here.
+The installable package lives in `src/STRATA_platform/` and is managed with `uv`. The `xyz.code-workspace` and `pyproject.toml` at the repo root both point here.
 
 ## Package layout
 
 ```
-src/xyz_platform/
+src/STRATA_platform/
 ├── cli.py              # Click entry point — registers all command groups
 ├── commands/           # Click wiring (thin wrappers that call BaseCommand subclasses)
 ├── controllers/        # Orchestration — one controller per operation domain
@@ -49,7 +49,7 @@ utils / logger / exceptions  (imported by all layers)
 uv sync
 
 # Run the CLI locally
-uv run xyz-platform --help
+uv run strata --help
 
 # Lint + format + type-check
 scripts/Check.ps1

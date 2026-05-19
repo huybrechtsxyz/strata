@@ -17,7 +17,7 @@ spec:
     vm_type: standard
     enable_monitoring: true
   custom:
-    costcenter: "XYZ-PLATFORM"
+    costcenter: "strata"
     notes: "This is a valid environment for testing."
   variables:
     - key: WORKSPACE

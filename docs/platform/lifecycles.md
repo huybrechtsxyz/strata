@@ -37,11 +37,11 @@ Each level runs its configured scripts in order.
 ## Environment Variables
 
 ```bash
-XYZ_PHASE=config_fetch_before
-XYZ_WORKSPACE_PATH=/path/to/workspace
-XYZ_CONFIG_PATH=/path/to/config
-XYZ_BUILD_PATH=/path/to/build
-XYZ_OBJECT_PATH=/path/to/objects
+STRATA_PHASE=config_fetch_before
+STRATA_WORKSPACE_PATH=/path/to/workspace
+STRATA_CONFIG_PATH=/path/to/config
+STRATA_BUILD_PATH=/path/to/build
+STRATA_OBJECT_PATH=/path/to/objects
 ```
 
 ## Phase Naming

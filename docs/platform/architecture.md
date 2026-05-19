@@ -11,9 +11,9 @@ Modular, multi-repository infrastructure platform for managing VM workspaces wit
 
 ## Multi-Repository Structure
 
-**xyz_platform** - Core platform (CLI, provisioners, defaults)
+**strata** - Core platform (CLI, provisioners, defaults)
 
-- `src/xyz_platform/` - Python source
+- `src/STRATA_platform/` - Python source
 - `config/` - Default configurations, providers, resources, firewalls
 - `deploy/` - IaC templates (Terraform, Ansible)
 - Versioning: Semantic (v1.0.0, v1.1.0)
@@ -45,9 +45,9 @@ Modular, multi-repository infrastructure platform for managing VM workspaces wit
 Load order (later overrides earlier):
 
 ```
-1. Platform Defaults (xyz_platform/src/xyz_platform/data/configuration.yaml)
-2. Platform Config (xyz_platform/config/configurations/*.yaml)
-3. Organization Config (xyz_config_{org}/configurations/*.yaml)
+1. Platform Defaults (STRATA_platform/src/STRATA_platform/data/configuration.yaml)
+2. Platform Config (STRATA_platform/config/configurations/*.yaml)
+3. Organization Config (STRATA_config_{org}/configurations/*.yaml)
 4. Environment Config (--config flag)
 5. Deployment Overrides (deployment.yaml spec.overrides)
 ```

@@ -1,0 +1,240 @@
+"""Factory for creating integration instances from IntegrationModel configuration."""
+
+from typing import Dict, Type
+
+from strata.integrations.base_integration import BaseIntegration
+from strata.logger import get_logger
+from strata.models.integration_model import IntegrationModel
+
+logger = get_logger(__name__)
+
+
+class IntegrationFactory:
+    """
+    Factory for creating integration instances from configuration.
+
+    Maps integration types to concrete integration classes and handles
+    instantiation with proper configuration.
+    """
+
+    # Type mapping: integration type -> integration class
+    # This will be populated as integrations are created
+    _type_mapping: Dict[str, Type[BaseIntegration]] = {}
+
+    @classmethod
+    def register_type(cls, integration_type: str, integration_class: Type[BaseIntegration]):
+        """
+        Register an integration type mapping.
+
+        Args:
+            integration_type: Type string from config (e.g., "git", "terraform")
+            integration_class: Integration class to instantiate
+        """
+        cls._type_mapping[integration_type] = integration_class
+        logger.debug("Integration type registered", type=integration_type, cls=integration_class.__name__)
+
+    @classmethod
+    def unregister_type(cls, integration_type: str):
+        """
+        Unregister an integration type mapping.
+
+        Args:
+            integration_type: Type string to remove
+        """
+        if integration_type in cls._type_mapping:
+            del cls._type_mapping[integration_type]
+            logger.debug("Integration type unregistered", type=integration_type)
+
+    @classmethod
+    def create(cls, config: IntegrationModel) -> BaseIntegration:
+        """
+        Create integration instance from configuration.
+
+        Args:
+            config: Integration configuration model
+
+        Returns:
+            Integration instance
+
+        Raises:
+            ValueError: If integration type is not registered
+            Exception: If integration instantiation fails
+        """
+        integration_type = config.type
+
+        logger.debug("Creating integration", name=config.name, type=integration_type)
+
+        # Check if type is registered
+        if integration_type not in cls._type_mapping:
+            logger.error(
+                "Unknown integration type",
+                type=integration_type,
+                available=list(cls._type_mapping.keys()),
+            )
+            raise ValueError(
+                f"Integration type '{integration_type}' is not registered. "
+                f"Available types: {', '.join(cls._type_mapping.keys())}"
+            )
+
+        # Get integration class
+        integration_class = cls._type_mapping[integration_type]
+
+        try:
+            # Instantiate integration with config
+            integration = integration_class(config)
+
+            logger.info(
+                "Integration created",
+                name=config.name,
+                type=integration_type,
+                cls=integration_class.__name__,
+            )
+
+            return integration
+
+        except Exception as e:
+            logger.error(
+                "Failed to create integration",
+                name=config.name,
+                type=integration_type,
+                cls=integration_class.__name__,
+                error=str(e),
+                exc_info=True,
+            )
+            raise
+
+    @classmethod
+    def get_registered_types(cls) -> Dict[str, Type[BaseIntegration]]:
+        """
+        Get all registered integration type mappings.
+
+        Returns:
+            Dictionary of type string to integration class
+        """
+        return dict(cls._type_mapping)
+
+    @classmethod
+    def is_type_registered(cls, integration_type: str) -> bool:
+        """
+        Check if integration type is registered.
+
+        Args:
+            integration_type: Type string
+
+        Returns:
+            True if type is registered
+        """
+        return integration_type in cls._type_mapping
+
+    @classmethod
+    def reset(cls):
+        """Reset factory (useful for testing)."""
+        cls._type_mapping.clear()
+        logger.debug("Integration factory reset")
+
+    @classmethod
+    def create_by_type(cls, type_str: str) -> BaseIntegration:
+        """
+        Create a minimal integration instance by friendly type name.
+
+        Intended for status and availability checks — does not require a
+        workspace config.  Creates a bare ``IntegrationModel`` with just the
+        type string and delegates to the registered class.
+
+        Args:
+            type_str: Friendly integration type (e.g. "git", "hashicorp_vault")
+
+        Returns:
+            Integration instance
+
+        Raises:
+            ValueError: If the type is not known
+        """
+        import importlib as _importlib
+
+        # Canonical class map keyed by friendly type strings
+        _class_map: dict = {
+            "git": ("strata.integrations.git", "GitIntegration"),
+            "docker": ("strata.integrations.docker", "DockerIntegration"),
+            "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
+            "bitwarden": ("strata.integrations.bitwarden", "BitwardenIntegration"),
+            "hashicorp_vault": ("strata.integrations.hashicorp_vault", "VaultIntegration"),
+            "hashicorp_consul": ("strata.integrations.hashicorp_consul", "ConsulIntegration"),
+            "azure_keyvault": ("strata.integrations.azure_keyvault", "AzureKeyVaultIntegration"),
+            "azure_appconfig": ("strata.integrations.azure_appconfig", "AzureAppConfigIntegration"),
+        }
+
+        # Try the registered type_mapping first (supports custom / aliased types)
+        if type_str in cls._type_mapping:
+            integration_class = cls._type_mapping[type_str]
+            config = IntegrationModel(name=type_str, type=type_str)
+            return integration_class(config=config)
+
+        # Fall back to the built-in class map
+        if type_str in _class_map:
+            module_path, class_name = _class_map[type_str]
+            module = _importlib.import_module(module_path)
+            integration_class = getattr(module, class_name)
+            config = IntegrationModel(name=type_str, type=type_str)
+            return integration_class(config=config)
+
+        known = sorted(set(list(cls._type_mapping.keys()) + list(_class_map.keys())))
+        raise ValueError(f"Unknown integration type: '{type_str}'. Known types: {', '.join(known)}")
+
+
+# Auto-registration of built-in integration types
+# This happens at module import time
+
+
+def _auto_register_builtin_integrations():
+    """
+    Auto-register built-in integration types.
+
+    This function attempts to import and register standard integrations.
+    Failures are logged but don't prevent platform startup.
+    """
+    builtin_integrations = [
+        ("git", "strata.integrations.git", "GitIntegration"),
+        ("docker", "strata.integrations.docker", "DockerIntegration"),
+        ("terraform", "strata.integrations.terraform", "TerraformIntegration"),
+        ("bitwarden", "strata.integrations.bitwarden", "BitwardenIntegration"),
+        (
+            "azure-keyvault",
+            "strata.integrations.azure_keyvault",
+            "AzureKeyVaultIntegration",
+        ),
+        (
+            "azure-appconfig",
+            "strata.integrations.azure_appconfig",
+            "AzureAppConfigIntegration",
+        ),
+        ("consul", "strata.integrations.hashicorp_consul", "ConsulIntegration"),
+        ("vault", "strata.integrations.hashicorp_vault", "VaultIntegration"),
+        # Add more as they are implemented
+    ]
+
+    for integration_type, module_path, class_name in builtin_integrations:
+        try:
+            # Dynamic import
+            import importlib
+
+            module = importlib.import_module(module_path)
+            integration_class = getattr(module, class_name)
+
+            # Register type
+            IntegrationFactory.register_type(integration_type, integration_class)
+
+            logger.debug("Built-in integration auto-registered", type=integration_type, cls=class_name)
+
+        except ImportError as e:
+            logger.debug(
+                "Built-in integration not available (not yet implemented)", type=integration_type, error=str(e)
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to auto-register built-in integration", type=integration_type, error=str(e), exc_info=True
+            )
+
+
+# Run auto-registration on module import
+_auto_register_builtin_integrations()

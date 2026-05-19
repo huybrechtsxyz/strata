@@ -1,4 +1,4 @@
-# XYZ Platform - Utilities Documentation
+# strata - Utilities Documentation
 
 Self-contained utility modules. No cross-imports between utils modules; no imports from `services/`, `controllers/`, or `commands/`.
 
@@ -7,8 +7,8 @@ Self-contained utility modules. No cross-imports between utils modules; no impor
 Package-level constants. Import instead of hard-coding strings.
 
 ```python
-from xyz_platform.utils.config import SOLUTION_DIR, SOLUTION_FILE, SCRIPT_EXTENSIONS
-# SOLUTION_DIR = ".platform"
+from strata.utils.config import SOLUTION_DIR, SOLUTION_FILE, SCRIPT_EXTENSIONS
+# SOLUTION_DIR = ".strata"
 # SOLUTION_FILE = "solution.json"
 # SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1"}
 ```
@@ -19,7 +19,7 @@ Path resolution, UUID generation, subprocess execution.
 
 **`resolve_path(base_path, target_path=None, *sub_paths, repo_map=None)`** — resolves paths with `@repo-name/...` cross-repo reference support. Raises `ValueError` for unknown `@` references or absolute `sub_paths`.
 
-**`resolve_work_path(explicit=None)`** — workspace root discovery: explicit path → `.platform/` upward walk → CWD.
+**`resolve_work_path(explicit=None)`** — workspace root discovery: explicit path → `.strata/` upward walk → CWD.
 
 **`normalize_path(path)`** — strips invalid filesystem characters.
 
@@ -28,10 +28,10 @@ Path resolution, UUID generation, subprocess execution.
 **`run_command(args, cwd, timeout, env)`** — subprocess wrapper returning a `CommandResult(stdout, stderr, returncode)`.
 
 ```python
-from xyz_platform.utils.system import resolve_path, resolve_work_path, run_command
+from strata.utils.system import resolve_path, resolve_work_path, run_command
 
 path = resolve_path("/base", "@myrepo/config/file.yaml", repo_map={"myrepo": "/repos/myrepo"})
-root = resolve_work_path()  # auto-discovers .platform/ ancestor
+root = resolve_work_path()  # auto-discovers .strata/ ancestor
 result = run_command(["git", "status"], cwd="/repo")
 ```
 
@@ -47,7 +47,7 @@ Low-level YAML loader and deep merger. No schema knowledge.
 - `apply_overrides(base, overrides)` — alias for `deep_merge`
 
 ```python
-from xyz_platform.utils.configuration_loader import ConfigurationLoader
+from strata.utils.configuration_loader import ConfigurationLoader
 from pathlib import Path
 
 loader = ConfigurationLoader()
@@ -60,7 +60,7 @@ merged = loader.apply_overrides(config, {"level": "DEBUG"})
 In-process service instance cache to avoid re-parsing YAML on repeated loads.
 
 ```python
-from xyz_platform.utils.service_cache import get_cached_service, cache_service, clear_cache
+from strata.utils.service_cache import get_cached_service, cache_service, clear_cache
 
 instance = get_cached_service(MyService, file_path="/path/to/file.yaml")
 if instance is None:
@@ -75,7 +75,7 @@ Used internally by `BaseService.load()`. Call `clear_cache()` between tests.
 File template processor: expands `*.template.*` files using environment variable substitution (`$VAR` / `${VAR}`), then optionally deletes the template source.
 
 ```python
-from xyz_platform.utils.templater import TemplateProcessor
+from strata.utils.templater import TemplateProcessor
 from pathlib import Path
 
 processor = TemplateProcessor(template_dir=Path("terraform/"), cleanup_templates=True)
@@ -87,6 +87,6 @@ processor.process_all_templates()  # main.template.tf → main.tf
 Reads the installed package version from package metadata.
 
 ```python
-from xyz_platform.utils.version import get_version
+from strata.utils.version import get_version
 print(get_version())  # e.g. "1.2.3"
 ```

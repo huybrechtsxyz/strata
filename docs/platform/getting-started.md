@@ -27,17 +27,17 @@ python --version   # must be 3.13+
 **Recommended (isolated install):**
 
 ```bash
-pipx install xyz-platform
+pipx install strata
 xyz --version
 ```
 
 **Dev install (from source):**
 
 ```bash
-git clone git@github.com:org/xyz-platform.git
-cd xyz-platform
+git clone git@github.com:org/strata.git
+cd strata
 uv sync
-uv run xyz-platform --version
+uv run strata --version
 ```
 
 ---
@@ -55,7 +55,7 @@ What gets created:
 
 ```
 my-config-repo/
-├── .platform/
+├── .strata/
 │   ├── project.json       ← workspace registry (solution model)
 │   ├── cli.yaml           ← your persisted CLI preferences
 │   └── logging.yaml       ← log level and output config

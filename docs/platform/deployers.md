@@ -52,7 +52,7 @@ BaseDeployer(
 ### Step constants
 
 ```python
-from xyz_platform.deployers.base_deployer import (
+from strata.deployers.base_deployer import (
     STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY,
     STEP_DESTROY, STEP_PLAN_DESTROY, STEP_SHOW_PLAN, STEP_OUTPUT,
 )
