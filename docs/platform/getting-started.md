@@ -44,11 +44,11 @@ uv run strata --version
 
 ## Initialize a Workspace
 
-Run `xyz init` inside your config repository (the repo that holds your environment YAML files):
+Run `xyz sln init` inside your config repository (the repo that holds your environment YAML files):
 
 ```bash
 cd my-config-repo
-xyz init --name my-workspace
+xyz sln init --name my-workspace
 ```
 
 What gets created:
@@ -71,7 +71,7 @@ my-config-repo/
 Add `--template <name>` to get a ready-to-edit config folder alongside the workspace state:
 
 ```bash
-xyz init --name my-aks --template aks
+xyz sln init --name my-aks --template aks
 ```
 
 This copies a working set of example config files into the repo root, with `my-aks` substituted wherever the template uses `${solution_name}`:
@@ -116,10 +116,36 @@ Next steps:
 **Using a local template folder:**
 
 ```bash
-xyz init --name my-ws --template ./my-corporate-template/
+xyz sln init --name my-ws --template ./my-corporate-template/
 ```
 
 The folder must contain a `scaffold/` subdirectory with the files to copy. An optional `template.yaml` declares the template name, description, and substitution variables.
+
+### Save your workspace as a template
+
+Once you have a working workspace, capture it as a reusable scaffold for the next project:
+
+```bash
+xyz sln export --name my-corp-base
+```
+
+What it does:
+- Copies all workspace config files into `.strata/templates/my-corp-base/scaffold/`
+- Replaces the current solution name with `${solution_name}` throughout — ready to substitute on next init
+- Shows every substitution so you can spot false positives
+
+Output:
+```
+✅  Template 'my-corp-base' exported
+    • Output       : .strata/templates/my-corp-base/
+    • Files saved  : 6
+    • Substitutions: 14 occurrences across 6 files
+
+Use it:
+    xyz sln init --name new-project --template .strata/templates/my-corp-base/
+```
+
+Use `--dry-run` to preview without writing. Use `--force` to overwrite an existing template.
 
 ---
 

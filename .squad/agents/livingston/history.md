@@ -33,3 +33,13 @@ Key paths: `tests/xyz_platform/`, `conftest.py`, `noxfile.py`.
 
 **Test file location:** `tests/xyz_platform/controllers/test_controllers_solution.py`
 **Import added:** `from pathlib import Path` and `from unittest.mock import patch`
+
+### 2026-05-19 — sln group test pattern
+
+**Pattern for testing sln subcommands:**
+- Test class naming: `TestSln<Verb>` (e.g., `TestSlnInit`, `TestSlnClean`, `TestSlnStatus`, `TestSlnExport`).
+- CLI invocation must include the group prefix: `runner.invoke(main, ["sln", "init", ...])` — not `["init", ...]`.
+- Existing command tests (`test_commands_init.py`, `test_commands_clean.py`, `test_commands_status.py`) were updated in-place: class renamed, invocation updated.
+- New subcommand tests (e.g., `test_commands_sln_export.py`) live in `tests/strata/commands/` — same directory as other command tests.
+- New subcommand modules live under `src/strata/commands/sln/` — import path: `from strata.commands.sln.export_template_command import ...`.
+- **25 sln command tests passing after this session.**

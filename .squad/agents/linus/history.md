@@ -59,3 +59,18 @@ Key paths: `src/xyz_platform/cli.py`, `commands/cli_common.py`, `models/`, `serv
 - Updated `cliArgs` input description to reflect real examples
 
 **tasks.template.json:** Already used `xyz ${input:cliArgs}` — no changes needed.
+
+### 2026-05-19 — sln group implementation
+
+**New sln group pattern:**
+- `cli_sln.py` is the group wiring file: defines `sln_group` Click group and attaches `init`, `clean`, `status`, `export` subcommands.
+- `cli.py` registers `sln_group` and removes the flat `init`, `clean`, `status` registrations.
+- Subcommand modules for non-trivial commands live under `src/strata/commands/sln/` (e.g., `export_template_command.py`).
+- Simple delegates (init, clean, status) are wired directly in `cli_sln.py` using existing command classes.
+
+**Export command location:**
+- `src/strata/commands/sln/export_template_command.py` — contains `SolutionExportCommand` (extends `BaseCommand`) and `export_command` Click entry point.
+
+**`_substitute()` in `export_template_command.py`:**
+- Handles template variable replacement in scaffold output files.
+- Called during workspace-to-template export to substitute workspace-specific values with template placeholders.
