@@ -374,14 +374,14 @@ class TerraformLoader:
         Nested dicts within blocks are recursively merged (later wins).
         """
         # Top-level block types that contain lists of definitions
-        LIST_BLOCK_TYPES = ("resource", "data", "variable", "output", "module", "provider", "locals", "moved")
+        list_block_types = ("resource", "data", "variable", "output", "module", "provider", "locals", "moved")
 
         result = base.copy()
 
         for key, value in override.items():
             if key not in result:
                 result[key] = value
-            elif key in LIST_BLOCK_TYPES and isinstance(result[key], list) and isinstance(value, list):
+            elif key in list_block_types and isinstance(result[key], list) and isinstance(value, list):
                 # Concatenate block lists (combine all resource/variable/etc. definitions)
                 result[key] = result[key] + value
             elif isinstance(result[key], dict) and isinstance(value, dict):
