@@ -1,6 +1,6 @@
 # Adoption Readiness Checklist
 
-Target: a DevOps engineer can install, run, and trust `ruck` without needing the author present.
+Target: a DevOps engineer can install, run, and trust `strata` without needing the author present.
 
 ---
 
@@ -10,7 +10,7 @@ Target: a DevOps engineer can install, run, and trust `ruck` without needing the
 
 Before anything else, answer this clearly — in the README, in the first line of the docs:
 
-> "Ruck manages the full lifecycle of your Azure/AKS environments — one consistent YAML config layer over Terraform, Helm, and scripts — so you stop copy-pasting between 8 near-identical environment folders."
+> "strata manages the full lifecycle of your Azure/AKS environments — one consistent YAML config layer over Terraform, Helm, and scripts — so you stop copy-pasting between 8 near-identical environment folders."
 
 Without a clear answer to "why not just Terraform?", every DevOps engineer will bounce.
 
@@ -20,8 +20,8 @@ Without a clear answer to "why not just Terraform?", every DevOps engineer will 
 
 A new team member should be able to go from zero to a validated config without asking anyone.
 
-- [ ] `ruck init` scaffolds a working example config (AKS-flavored template)
-- [ ] `ruck init --template aks` for Azure-specific scaffold
+- [ ] `strata init` scaffolds a working example config (AKS-flavored template)
+- [ ] `strata init --template aks` for Azure-specific scaffold
 - [ ] Output tells you exactly what was created and what to do next
 - [x] A single "Getting Started" page: install → init → validate → deploy to sandbox → `docs/platform/getting-started.md`
 - [x] Document the prerequisites clearly (Python version, uv, Azure CLI, Terraform)
@@ -32,23 +32,23 @@ A new team member should be able to go from zero to a validated config without a
 
 These are the commands that turn skeptics into believers.
 
-- [ ] **`ruck diff`** — show what *would* change in the environment before deploying
+- [ ] **`strata diff`** — show what *would* change in the environment before deploying
   - Most important missing feature for team adoption
-  - Without it, `ruck deploy` feels like flying blind
-- [ ] **`ruck validate`** — already exists, but:
+  - Without it, `strata deploy` feels like flying blind
+- [ ] **`strata validate`** — already exists, but:
   - [ ] Error messages must say *what to fix*, not just *what is wrong*
   - [ ] `--dry-run` should work on `deploy` and `build` too, not just validate
-- [ ] **`ruck status`** — show current state of each environment (deployed / drifted / unknown)
+- [ ] **`strata status`** — show current state of each environment (deployed / drifted / unknown)
 
 ---
 
 ## 4. Transparency (don't hide the plumbing)
 
-DevOps engineers debug at 2am. They need to see what ruck is actually doing.
+DevOps engineers debug at 2am. They need to see what strata is actually doing.
 
-- [ ] When ruck runs Terraform, stream Terraform output to the terminal (not swallowed)
-- [ ] When ruck runs Helm or scripts, same — full passthrough visible
-- [ ] `ruck audit list --last` is good — make it prominent in the docs
+- [ ] When strata runs Terraform, stream Terraform output to the terminal (not swallowed)
+- [ ] When strata runs Helm or scripts, same — full passthrough visible
+- [ ] `strata audit list --last` is good — make it prominent in the docs
 - [ ] Add a `--verbose` mode that shows every subprocess call with full args
 - [ ] Long-running operations (`deploy run`, `build run`) need progress output, not silence
   - See also: `todo.md` item 1 — NDJSON streaming mode
@@ -59,9 +59,9 @@ DevOps engineers debug at 2am. They need to see what ruck is actually doing.
 
 Counter-intuitively, documenting how to leave *increases* adoption.
 
-- [ ] Document: "If ruck doesn't work for your case, here's your Terraform — take it and go"
-- [ ] Make clear that ruck does not generate Terraform state — state is standard, portable
-- [ ] Show the file layout so someone can understand what ruck touches vs. what it doesn't
+- [ ] Document: "If strata doesn't work for your case, here's your Terraform — take it and go"
+- [ ] Make clear that strata does not generate Terraform state — state is standard, portable
+- [ ] Show the file layout so someone can understand what strata touches vs. what it doesn't
 
 ---
 
@@ -80,7 +80,7 @@ The difference between a tool people tolerate and one they trust is error qualit
 
 Teams adopt tools that fit into their existing PR flow.
 
-- [ ] Document: how to run `ruck validate` as a PR gate in GitHub Actions / Azure Pipelines
+- [ ] Document: how to run `strata validate` as a PR gate in GitHub Actions / Azure Pipelines
 - [ ] Provide a sample pipeline snippet (GitHub Actions YAML)
 - [ ] Exit codes are already well-defined (0/1/2/3) — document them prominently
 - [ ] `--output json` mode for machine-readable results in CI — already exists, document it
@@ -103,15 +103,15 @@ Current docs are developer/internals-facing. Team docs need to be operator-facin
 ## 9. Installation & Editor Experience
 
 - [ ] Single-line install that works on Windows and Linux
-  - e.g. `pipx install xyz-ruck` or install from internal GitHub releases
+  - e.g. `pipx install xyz-strata` or install from internal GitHub releases
 - [ ] Document: does it need to be in a virtualenv, or is global install fine?
-- [ ] Shell completion (`ruck --install-completion`) — nice to have, high perceived polish
+- [ ] Shell completion (`strata --install-completion`) — nice to have, high perceived polish
 
 ### YAML Schema → VS Code autocomplete
 
 Highest-leverage editor improvement. Requires no per-user setup once done.
 
-- [ ] Publish a JSON Schema for the ruck YAML document format (`ruck-schema.json`)
+- [ ] Publish a JSON Schema for the strata YAML document format (`strata-schema.json`)
 - [ ] Register it with the [YAML VS Code extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) via schema URL
 - [ ] Result: autocomplete, inline docs, and red squiggles on `spec.` fields in any YAML config — for free
 - [ ] Add `.vscode/settings.json` to the config repo pointing at the schema so it works without any user config
@@ -120,7 +120,7 @@ Highest-leverage editor improvement. Requires no per-user setup once done.
 
 - [x] Add `.vscode/tasks.json` to `xyz-configuration` with one-click tasks:
   - [x] `xyz validate` — validate current file
-  - [ ] `xyz diff` — preview changes (pending `ruck diff` feature)
+  - [ ] `xyz diff` — preview changes (pending `strata diff` feature)
   - [x] `xyz deploy run` — deploy current environment
   - [x] `xyz build run` — run a build
 - [x] These surface in the VS Code Command Palette — no terminal knowledge required
@@ -132,11 +132,11 @@ Highest-leverage editor improvement. Requires no per-user setup once done.
 **The single highest-leverage onboarding improvement.** Someone opens the config repo, clicks "Reopen in Container", and has everything working in 2 minutes — no local setup, no "works on my machine."
 
 What it provides automatically:
-- Python + `uv` + `ruck` at the right versions
+- Python + `uv` + `strata` at the right versions
 - Terraform, Azure CLI, `kubectl`, `helm` pre-installed
-- VS Code YAML extension with the ruck schema pre-configured
+- VS Code YAML extension with the strata schema pre-configured
 - Shell completion already set up
-- `ruck doctor` passes out of the box
+- `strata doctor` passes out of the box
 - Works in GitHub Codespaces (deploy from a browser tab)
 
 Files to create in `xyz-configuration`:
@@ -149,20 +149,20 @@ Files to create in `xyz-configuration`:
 Sample `devcontainer.json`:
 ```json
 {
-  "name": "ruck",
+  "name": "strata",
   "image": "mcr.microsoft.com/devcontainers/python:3.13",
   "features": {
     "ghcr.io/devcontainers/features/azure-cli:1": {},
     "ghcr.io/devcontainers/features/terraform:1": {},
     "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {}
   },
-  "postCreateCommand": "pip install xyz-ruck && ruck --install-completion bash",
+  "postCreateCommand": "pip install xyz-strata && strata --install-completion bash",
   "customizations": {
     "vscode": {
       "extensions": ["redhat.vscode-yaml"],
       "settings": {
         "yaml.schemas": {
-          "https://schema.huybrechts.xyz/ruck/v1/schema.json": "**/*.yaml"
+          "https://schema.huybrechts.xyz/strata/v1/schema.json": "**/*.yaml"
         }
       }
     }
@@ -182,19 +182,19 @@ Checklist:
 
 ---
 
-## 11. `ruck doctor`
+## 11. `strata doctor`
 
 Eliminates the "it doesn't work and I don't know why" onboarding call.
 
-- [ ] Implement `ruck doctor` command that checks:
+- [ ] Implement `strata doctor` command that checks:
   - Python version
   - Terraform installed + version
   - Azure CLI installed + logged in + correct subscription
   - `kubectl` installed (if AKS workloads present)
   - `helm` installed (if Helm workloads present)
-  - `.ruck/` workspace marker found
+  - `.strata/` workspace marker found
 - [ ] Each check prints ✅ / ❌ with a fix hint on failure
-- [ ] Include in the Getting Started page: "Run `ruck doctor` first if anything isn't working"
+- [ ] Include in the Getting Started page: "Run `strata doctor` first if anything isn't working"
 
 ---
 
@@ -207,7 +207,7 @@ Make the tool survivable without the author.
 - [ ] Architecture decision records (why the YAML schema looks like Kubernetes-style)
 - [ ] Contribution guide — how to add a new integration, a new command
 - [ ] Changelog — what changed between versions, so the team can trust upgrades
-- [ ] The rename (see `todo-rename.md`) — `ruck` is more memorable and survives "it's Vince's thing"
+- [ ] The rename (see `todo-rename.md`) — `strata` is more memorable and survives "it's Vince's thing"
 
 ---
 
@@ -216,16 +216,16 @@ Make the tool survivable without the author.
 | #   | Item                                     | Effort | Impact                                      |
 | --- | ---------------------------------------- | ------ | ------------------------------------------- |
 | 1   | Dev container in config repo             | Low    | Very high — zero setup for new team members | ✅ Done |
-| 2   | `ruck diff`                              | High   | Very high — removes #1 trust blocker        |
+| 2   | `strata diff`                              | High   | Very high — removes #1 trust blocker        |
 | 3   | Getting Started page (10-min onboarding) | Low    | Very high                                   | ✅ Done |
 | 1a  | The Pitch — README.md                    | Low    | Very high                                   | ✅ Done |
 | 4   | YAML schema → VS Code autocomplete       | Low    | High — editing config feels first-class     |
-| 5   | `ruck doctor`                            | Low    | High — eliminates onboarding support calls  |
+| 5   | `strata doctor`                            | Low    | High — eliminates onboarding support calls  |
 | 6   | Error message quality pass               | Medium | High                                        |
 | 7   | Terraform/subprocess output passthrough  | Low    | High                                        |
 | 8   | Operator cookbook docs                   | Medium | High                                        |
-| 9   | `ruck init --template aks`               | Medium | Medium                                      |
+| 9   | `strata init --template aks`               | Medium | Medium                                      |
 | 10  | CI pipeline snippet                      | Low    | Medium                                      |
 | 11  | VS Code tasks in config repo             | Low    | Medium                                      | ✅ Done |
-| 12  | `ruck status`                            | High   | Medium                                      |
+| 12  | `strata status`                            | High   | Medium                                      |
 | 13  | Shell completion                         | Low    | Low (polish)                                |

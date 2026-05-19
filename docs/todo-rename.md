@@ -1,4 +1,4 @@
-# Rename: xyz-platform → ruck
+# Rename: xyz-platform → strata
 
 ## Context
 
@@ -10,55 +10,55 @@
 
 | Layer                   | Current              | New                                                              |
 | ----------------------- | -------------------- | ---------------------------------------------------------------- |
-| CLI command             | `xyz-platform`       | `ruck`                                                           |
-| PyPI / internal package | `xyz-platform`       | `ruck` (internal feed) / `xyz-ruck` (if published to PyPI later) |
-| Python import           | `xyz_platform`       | `ruck`                                                           |
-| GitHub repo             | `xyz-platform`       | `ruck`                                                           |
-| Env var prefix          | `XYZ_`               | `RUCK_`                                                          |
-| Workspace marker        | `.platform/`         | `.ruck/`                                                         |
-| Config file             | `.platform/cli.yaml` | `.ruck/cli.yaml`                                                 |
+| CLI command             | `xyz-platform`       | `strata`                                                           |
+| PyPI / internal package | `xyz-platform`       | `strata` (internal feed) / `xyz-strata` (if published to PyPI later) |
+| Python import           | `xyz_platform`       | `strata`                                                           |
+| GitHub repo             | `xyz-platform`       | `strata`                                                           |
+| Env var prefix          | `XYZ_`               | `STRATA_`                                                          |
+| Workspace marker        | `.platform/`         | `.strata/`                                                         |
+| Config file             | `.platform/cli.yaml` | `.strata/cli.yaml`                                                 |
 
 ## Files to Rename/Update
 
 ### Package Structure
-- `src/xyz_platform/` → `src/ruck/`
-- `tests/xyz_platform/` → `tests/ruck/`
+- `src/xyz_platform/` → `src/strata/`
+- `tests/xyz_platform/` → `tests/strata/`
 - `src/xyz_platform.egg-info/` → rebuild (auto-generated)
 - `pyproject.toml` — name, scripts entry point, package discovery
 - `package.json` — name field (if relevant)
 
 ### Entry Point
-- `pyproject.toml` `[project.scripts]`: `xyz-platform = "xyz_platform.cli:main"` → `ruck = "ruck.cli:main"`
+- `pyproject.toml` `[project.scripts]`: `xyz-platform = "xyz_platform.cli:main"` → `strata = "strata.cli:main"`
 
 ### Internal References
-- All `from xyz_platform` / `import xyz_platform` → `from ruck` / `import ruck`
-- Logger names: `xyz_platform.*` → `ruck.*`
+- All `from xyz_platform` / `import xyz_platform` → `from strata` / `import strata`
+- Logger names: `xyz_platform.*` → `strata.*`
 - Exception hierarchy module paths
-- `PlatformError` → `RuckError`
-- `PlatformName` → `RuckName`
-- `PlatformKind` → `RuckKind`
-- `PlatformVersion` → `RuckVersion`
-- `PlatformFileNotFoundError` → `RuckFileNotFoundError`
+- `PlatformError` → `StrataError`
+- `PlatformName` → `StrataName`
+- `PlatformKind` → `StrataKind`
+- `PlatformVersion` → `StrataVersion`
+- `PlatformFileNotFoundError` → `StrataFileNotFoundError`
 - `BaseService`, `BaseController`, `BaseCommand`, `BaseIntegration` — keep (not prefixed)
 
 ### Environment Variables
-- `XYZ_WORK_PATH` → `RUCK_WORK_PATH`
-- `XYZ_OUTPUT` → `RUCK_OUTPUT`
-- `XYZ_<OPTION>` pattern → `RUCK_<OPTION>`
+- `XYZ_WORK_PATH` → `STRATA_WORK_PATH`
+- `XYZ_OUTPUT` → `STRATA_OUTPUT`
+- `XYZ_<OPTION>` pattern → `STRATA_<OPTION>`
 
 ### Workspace State
-- `.platform/` directory → `.ruck/`
+- `.platform/` directory → `.strata/`
 - `solution.json`, `cli.yaml`, `platform.json` inside it
-- `PlatformArtifactModel` → `RuckArtifactModel`
+- `PlatformArtifactModel` → `StrataArtifactModel`
 
 ### Documentation (full rewrite needed)
 
 #### `docs/platform/` — CLI & Architecture docs
 - `docs/platform/architecture.md` — update all references to "xyz-platform", module paths
-- `docs/platform/commands.md` — all CLI examples (`xyz validate` → `ruck validate`, etc.)
+- `docs/platform/commands.md` — all CLI examples (`xyz validate` → `strata validate`, etc.)
 - `docs/platform/cli-preferences.md` — env var names, config file paths
 - `docs/platform/configuration.md` — workspace marker references
-- `docs/platform/exceptions.md` — class names (PlatformError → RuckError)
+- `docs/platform/exceptions.md` — class names (PlatformError → StrataError)
 - `docs/platform/exit-codes.md` — CLI name in examples
 - `docs/platform/integrations.md` — references to the tool name
 - `docs/platform/lifecycles.md` — CLI command references
@@ -73,7 +73,7 @@
 - `docs/platform/readme.md` — intro/overview
 
 #### `docs/config/` — YAML config schema docs
-- `docs/config/workspace.md` — `.platform/` → `.ruck/` references
+- `docs/config/workspace.md` — `.platform/` → `.strata/` references
 - `docs/config/configuration.md` — apiVersion references
 - `docs/config/deployment.md` — CLI command examples
 - `docs/config/environment.md` — CLI command examples
@@ -94,7 +94,7 @@
 - `.github/` workflows — package name references
 
 ### YAML Documents
-- `apiVersion: platform.huybrechts.xyz/v1` → `apiVersion: ruck.huybrechts.xyz/v1`
+- `apiVersion: platform.huybrechts.xyz/v1` → `apiVersion: strata.huybrechts.xyz/v1`
 - Update all YAML files in `config/` and `xyz-configuration` repo
 
 ### Configuration Repo (xyz-configuration)
@@ -113,6 +113,6 @@
 
 ## Open Questions
 
-- [ ] Rename `docs/platform/` directory itself to `docs/cli/` or `docs/ruck/`?
-- [ ] Keep `apiVersion` as `platform.huybrechts.xyz/v1` for backward compat with existing configs, or clean-cut to `ruck.huybrechts.xyz/v1`?
+- [ ] Rename `docs/platform/` directory itself to `docs/cli/` or `docs/strata/`?
+- [ ] Keep `apiVersion` as `platform.huybrechts.xyz/v1` for backward compat with existing configs, or clean-cut to `strata.huybrechts.xyz/v1`?
 - [ ] Rename the `docs/config/` folder or keep as-is (it describes config file format, not the tool)?
