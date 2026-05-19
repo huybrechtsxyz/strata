@@ -1,0 +1,56 @@
+# ===============================================================================
+# Development Logging Configuration
+# ===============================================================================
+# Console output (human-readable) + rotating JSON file for local log replay.
+# Use --verbose to display the file log after a command run.
+#
+# For production (ELK + Azure), replace this file with the production variant
+# from the docs or the xyz-logging.yaml example in config/STRATA_configuration/.
+# ===============================================================================
+
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  console:
+    (): strata.logger.formatters.make_console_formatter
+
+  json:
+    (): strata.logger.formatters.make_json_formatter
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: WARNING
+    formatter: console
+    stream: ext://sys.stderr
+
+  file:
+    class: logging.handlers.RotatingFileHandler
+    level: DEBUG
+    formatter: json
+    filename: .strata/logs/application.json
+    maxBytes: 10485760 # 10MB
+    backupCount: 5
+    encoding: utf8
+
+loggers:
+  strata:
+    level: DEBUG
+    handlers: [ console, file ]
+    propagate: false
+
+  urllib3:
+    level: ERROR
+  requests:
+    level: ERROR
+  paramiko:
+    level: ERROR
+
+root:
+  level: WARNING
+  handlers: [ console ]
+
+# Azure Application Insights — disabled in development
+azure:
+  enabled: false

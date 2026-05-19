@@ -1,4 +1,4 @@
-# XYZ Platform — DevOps Workflow Guide
+# strata — DevOps Workflow Guide
 
 > **Audience:** DevOps engineer (Basher) working with VS Code, multiple repositories, and a
 > dedicated workspace repo. This guide walks through the complete lifecycle of a platform
@@ -17,7 +17,7 @@ Basher's environment:
 | Platform config repo            | `git@github.com:org/xyz-config.git`               |
 | Infrastructure (Terraform) repo | `git@github.com:org/xyz-infrastructure.git`       |
 | Service config repo             | `git@github.com:org/xyz-svc-traefik.git`          |
-| Local workspace root            | `C:\src\workspace\` (has `.platform/` after init) |
+| Local workspace root            | `C:\src\workspace\` (has `.strata/` after init) |
 | Active profile                  | `prd`                                             |
 
 All `xyz` commands are run from inside the workspace root (or pass `--work-path`).
@@ -29,7 +29,7 @@ All `xyz` commands are run from inside the workspace root (or pass `--work-path`
 Every `xyz` command accepts these options:
 
 ```bash
---work-path PATH    # Override workspace root (also: XYZ_WORK_PATH env var)
+--work-path PATH    # Override workspace root (also: STRATA_WORK_PATH env var)
 --output FORMAT     # Output format: console (default) | text | json
 --verbose           # Show structured log output inline
 --quiet             # Suppress all console output
@@ -58,11 +58,11 @@ xyz init --name xyz-workspace
 ```
 
 Creates:
-- `.platform/project.json`          — solution registry
-- `.platform/cli.yaml`              — workspace defaults
-- `.platform/logging.yaml`          — logging configuration
+- `.strata/project.json`          — solution registry
+- `.strata/cli.yaml`              — workspace defaults
+- `.strata/logging.yaml`          — logging configuration
 - `.devcontainer/devcontainer.json` — dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm)
-- `.devcontainer/post-create.sh`    — installs `xyz-platform` and shell completion inside the container
+- `.devcontainer/post-create.sh`    — installs `strata` and shell completion inside the container
 
 > **VS Code / Codespaces:** Once `xyz init` completes, select **Reopen in Container** in VS Code (or open the repo in GitHub Codespaces) to get a fully configured environment with no local tool installation required.
 
@@ -309,7 +309,7 @@ and validates values against the merged configuration.
 > **Requires:** Terraform CLI (`terraform`) installed and on `PATH`. Use `--dry-run` to validate and plan without writing output files — this works without Terraform.
 
 Build generates the deployment artifacts (rendered Terraform variable files,
-`platform.json`, merged configs) in `.platform/build/<deployment>/`.
+`platform.json`, merged configs) in `.strata/build/<deployment>/`.
 
 ### 6.1 Dry-run first (plan only — no files written)
 
@@ -329,7 +329,7 @@ Reads:
 - All related workspace / stack YAML files referenced inside the deployment
 
 Writes:
-- `.platform/build/<deployment>/` — Terraform `.tfvars.json`, `platform.json`, rendered templates
+- `.strata/build/<deployment>/` — Terraform `.tfvars.json`, `platform.json`, rendered templates
 
 ### 6.3 Clean build artifacts
 
@@ -350,7 +350,7 @@ xyz build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --art
 xyz build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
 ```
 
-Nothing is written to `.platform/build/`. The command builds into a temp directory,
+Nothing is written to `.strata/build/`. The command builds into a temp directory,
 diffs the result against the current on-disk build, then runs
 `terraform init → validate → plan` per stage.
 
@@ -518,7 +518,7 @@ xyz deploy history --operation destroy
 xyz deploy history --verbose
 ```
 
-- Scans `.platform/logs/` JSONL files for `deploy_run` and `deploy_destroy` events.
+- Scans `.strata/logs/` JSONL files for `deploy_run` and `deploy_destroy` events.
 - Groups entries by `execution_id` so each run appears as a single row.
 - No deployment file required — reads workspace logs only.
 - Exit code `0` even when the history is empty.

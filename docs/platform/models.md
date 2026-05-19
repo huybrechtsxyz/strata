@@ -42,7 +42,7 @@ Never use plain `str` for `name` fields — always use `PlatformName` from `comm
 | `firewall`           | `FirewallModel`         | Firewall ruleset                                            |
 | `module`             | `ModuleModel`           | Deployable application component (source, lifecycle hooks)  |
 | `namespace`          | `NamespaceModel`        | Application deployment unit (groups modules)                |
-| `platform-artifact`  | `PlatformArtifactModel` | Build output written to `.platform/build/`                  |
+| `platform-artifact`  | `PlatformArtifactModel` | Build output written to `.strata/build/`                  |
 | `workspace-template` | `PlatformTemplateModel` | Scaffold for `xyz init --from-template`                     |
 | `solution`           | `SolutionModel`         | Project registry (`project.json`)                           |
 | `repository`         | `RepositoryModel`       | Registered repository entry                                 |
@@ -79,7 +79,7 @@ Lifecycle hooks in YAML map to these stage names via the `{command}_{stage}` nam
 
 ```python
 from pydantic import BaseModel, field_validator, model_validator
-from xyz_platform.models.common_models import PlatformName, PlatformKind, PlatformVersion
+from strata.models.common_models import PlatformName, PlatformKind, PlatformVersion
 
 class MySpec(BaseModel):
     name: PlatformName

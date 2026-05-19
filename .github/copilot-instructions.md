@@ -1,4 +1,4 @@
-# GitHub Copilot Instructions — xyz-platform
+# GitHub Copilot Instructions — strata
 
 Python DevOps CLI tool. Click + Pydantic v2 + structlog. Python 3.13. Package managed with `uv`.
 
@@ -67,7 +67,7 @@ utils/        ← Pure utilities (no business logic, no service imports)
 - All top-level commands are flat: `xyz <group> <command>`. No solution wrapper noun.
 - Every command module lives in `commands/` and registers to the `main` Click group in `cli.py`.
 - Registered command groups: `init`, `clean`, `status`, `config`, `audit`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`.
-- The `main` Click group loads workspace defaults from `.platform/cli.yaml` into `ctx.default_map` at startup. Always use `@click.pass_context` and read `work_path` from `ctx.obj`.
+- The `main` Click group loads workspace defaults from `.strata/cli.yaml` into `ctx.default_map` at startup. Always use `@click.pass_context` and read `work_path` from `ctx.obj`.
 - **Never** use `sys.exit()` — always raise `click.exceptions.Exit(code)`.
 - Use `handle_command_exit(command, success)` from `cli_common.py` to map to exit codes.
 - Apply standard decorators from `cli_common.py`: `@click_work_path`, `@click_output_format`, `@click_output_verbose`, `@click_output_quiet`.
@@ -89,8 +89,8 @@ utils/        ← Pure utilities (no business logic, no service imports)
 Work path is resolved once before `main()` runs and stored in `ctx.obj["work_path"]`. Resolution order:
 
 1. `--work-path` flag (explicit, anywhere in `sys.argv`)
-2. `XYZ_WORK_PATH` environment variable
-3. Walk up from CWD looking for `.platform/` directory — the ancestor containing `.platform/` is returned
+2. `STRATA_WORK_PATH` environment variable
+3. Walk up from CWD looking for `.strata/` directory — the ancestor containing `.strata/` is returned
 4. Error: "Not inside an xyz workspace. Run `xyz init`."
 
 `resolve_work_path()` lives in `utils/system.py`. Never pass `work_path` as a constructor arg or chain — read it from `ctx.obj`.
@@ -99,7 +99,7 @@ Work path is resolved once before `main()` runs and stored in `ctx.obj["work_pat
 
 ## Workspace State
 
-- The `.platform/` folder in the workspace root is the state directory.
+- The `.strata/` folder in the workspace root is the state directory.
 - `solution.json` — the solution registry (`SolutionModel`), managed by `SolutionService`.
 - `cli.yaml` — user preferences loaded at startup into Click's `default_map`. Manage with `xyz config set|unset|list`.
 - `platform.json` — the build output artifact (`PlatformArtifactModel`), written by `BuildController` (deferred).
@@ -117,7 +117,7 @@ Work path is resolved once before `main()` runs and stored in `ctx.obj["work_pat
 
 ## Logging
 
-- Always use structured logging: `from xyz_platform.logger import get_logger; logger = get_logger(__name__)`.
+- Always use structured logging: `from strata.logger import get_logger; logger = get_logger(__name__)`.
 - Pass context as keyword args: `logger.info("message", key=value, other=value)`.
 - Never use `print()` for application output — use the logger or Click's `echo`.
 - Log levels: `DEBUG` for internals, `INFO` for user-visible progress, `WARNING` for recoverable issues, `ERROR` for failures.
@@ -147,7 +147,7 @@ Cross-repo file references use `@repo_name/relative/path.yaml` notation.
 
 ## Testing
 
-- Tests live in `tests/xyz_platform/`.
+- Tests live in `tests/strata/`.
 - Use plain pytest classes (e.g. `class TestConfigSet:`) — never `unittest.TestCase`.
 - CLI commands: use `from click.testing import CliRunner`; invoke via `runner.invoke(main, [...])`.
 - Never call real external tools in tests — mock `subprocess` and integration methods.

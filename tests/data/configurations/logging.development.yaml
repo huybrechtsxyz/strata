@@ -12,11 +12,11 @@ disable_existing_loggers: false
 
 formatters:
   console:
-    (): xyz_platform.logger.formatters.ConsoleFormatter
+    (): strata.logger.formatters.ConsoleFormatter
     use_colors: true
 
   json:
-    (): xyz_platform.logger.formatters.JsonFormatter
+    (): strata.logger.formatters.JsonFormatter
 
 handlers:
   console:
@@ -34,7 +34,7 @@ handlers:
     encoding: utf8
 
 loggers:
-  xyz_platform:
+  strata:
     level: DEBUG
     handlers: [console, file]
     propagate: false

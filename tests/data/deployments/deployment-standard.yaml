@@ -20,7 +20,7 @@ spec:
     region: eu-west-1
 
   custom:
-    costcenter: "XYZ-PLATFORM"
+    costcenter: "strata"
     project: platform
 
   workspace:

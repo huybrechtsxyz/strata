@@ -8,23 +8,23 @@ Set env vars in your shell profile (local dev) or pipeline definition (CI/CD). T
 
 | Env var         | Equivalent flag | Example value             |
 | --------------- | --------------- | ------------------------- |
-| `XYZ_OUTPUT`    | `--output`      | `json`, `text`, `console` |
-| `XYZ_VERBOSE`   | `--verbose`     | `true`, `1`               |
-| `XYZ_QUIET`     | `--quiet`       | `true`, `1`               |
-| `XYZ_WORK_PATH` | `--work-path`   | `/path/to/workspace`      |
+| `STRATA_OUTPUT`    | `--output`      | `json`, `text`, `console` |
+| `STRATA_VERBOSE`   | `--verbose`     | `true`, `1`               |
+| `STRATA_QUIET`     | `--quiet`       | `true`, `1`               |
+| `STRATA_WORK_PATH` | `--work-path`   | `/path/to/workspace`      |
 
 **Local dev — PowerShell profile (`$PROFILE`):**
 
 ```powershell
-$env:XYZ_OUTPUT = "console"
-$env:XYZ_WORK_PATH = "C:\Projects\myworkspace"
+$env:STRATA_OUTPUT = "console"
+$env:STRATA_WORK_PATH = "C:\Projects\myworkspace"
 ```
 
 **Local dev — bash/zsh profile (`~/.bashrc` or `~/.zshrc`):**
 
 ```bash
-export XYZ_OUTPUT=console
-export XYZ_WORK_PATH=/home/user/projects/myworkspace
+export STRATA_OUTPUT=console
+export STRATA_WORK_PATH=/home/user/projects/myworkspace
 ```
 
 **CI/CD — Azure Pipelines:**
@@ -32,8 +32,8 @@ export XYZ_WORK_PATH=/home/user/projects/myworkspace
 ```yaml
 - script: xyz build
   env:
-    XYZ_OUTPUT: json
-    XYZ_WORK_PATH: $(Pipeline.Workspace)/myworkspace
+    STRATA_OUTPUT: json
+    STRATA_WORK_PATH: $(Pipeline.Workspace)/myworkspace
 ```
 
 **CI/CD — GitHub Actions:**
@@ -41,14 +41,14 @@ export XYZ_WORK_PATH=/home/user/projects/myworkspace
 ```yaml
 - run: xyz build
   env:
-    XYZ_OUTPUT: json
-    XYZ_WORK_PATH: ${{ github.workspace }}/myworkspace
+    STRATA_OUTPUT: json
+    STRATA_WORK_PATH: ${{ github.workspace }}/myworkspace
 ```
 
 Pros:
 - Zero workspace dependency — works before `xyz init`
 - Standard pattern — well understood by CI/CD systems
-- Per-shell overrides are easy (`XYZ_OUTPUT=json xyz validate` for one invocation)
+- Per-shell overrides are easy (`STRATA_OUTPUT=json xyz validate` for one invocation)
 
 Cons:
 - Global to the shell — affects all workspaces open in the same session
@@ -58,9 +58,9 @@ Cons:
 
 ## Option B: Workspace Config (`xyz config set`)
 
-> **Requires:** `xyz init` to have been run — writes to `.platform/cli.yaml`.
+> **Requires:** `xyz init` to have been run — writes to `.strata/cli.yaml`.
 
-Store preferences in the workspace itself. Because `.platform/` is workspace-scoped, different
+Store preferences in the workspace itself. Because `.strata/` is workspace-scoped, different
 workspaces can have different defaults.
 
 ```bash
@@ -70,7 +70,7 @@ xyz config list               # show current workspace defaults
 xyz config unset output       # remove the override, fall back to built-in default
 ```
 
-Stored in `.platform/cli.yaml`:
+Stored in `.strata/cli.yaml`:
 
 ```yaml
 values:
@@ -97,32 +97,32 @@ Cons:
 ```
 --flag explicitly passed
   └─ XYZ_* environment variable
-      └─ .platform/cli.yaml (xyz config set)
+      └─ .strata/cli.yaml (xyz config set)
             └─ built-in default (hardcoded in CLI)
 ```
 
 This means:
 
-- CI/CD: use `--work-path` or `XYZ_WORK_PATH` — explicit, deterministic, no filesystem dependency
+- CI/CD: use `--work-path` or `STRATA_WORK_PATH` — explicit, deterministic, no filesystem dependency
 - Local dev: run `xyz set output console` once after `xyz init` and forget about it
-- One-off override: prefix any command with `XYZ_OUTPUT=json xyz validate`
+- One-off override: prefix any command with `STRATA_OUTPUT=json xyz validate`
 
 ---
 
 ## Work Path Resolution (special case)
 
-`--work-path` / `XYZ_WORK_PATH` additionally supports **directory walking**: if neither the flag nor the env var is set, the CLI walks up from CWD looking for `.platform/`. This means on a local machine you can `cd` anywhere inside the workspace tree and commands just work.
+`--work-path` / `STRATA_WORK_PATH` additionally supports **directory walking**: if neither the flag nor the env var is set, the CLI walks up from CWD looking for `.strata/`. This means on a local machine you can `cd` anywhere inside the workspace tree and commands just work.
 
 ```
 /myworkspace/
-  .platform/          ← found here → work-path resolved
+  .strata/          ← found here → work-path resolved
   repo-a/
     src/
       ← user runs `xyz build` here, walks up two levels, finds it
   repo-b/
 ```
 
-In CI/CD pipelines the checkout directory is rarely predictable, so always set `XYZ_WORK_PATH` or `--work-path` explicitly there.
+In CI/CD pipelines the checkout directory is rarely predictable, so always set `STRATA_WORK_PATH` or `--work-path` explicitly there.
 
 ## Keyword Reference
 

@@ -1,9 +1,9 @@
 apiVersion: platform.huybrechts.xyz/v1
 kind: solution
 meta:
-  name: xyz-platform-workspace
+  name: strata-workspace
   annotations:
-    description: Standard xyz-platform workspace solution
+    description: Standard strata workspace solution
   labels:
     version: "1.0.0"
 spec:

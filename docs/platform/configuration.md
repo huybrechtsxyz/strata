@@ -7,7 +7,7 @@ The `ConfigurationService` loads, validates, and merges YAML configuration files
 Files are merged in order — later entries override earlier ones for the same key:
 
 ```
-1. Platform defaults   src/xyz_platform/data/configuration.yaml
+1. Platform defaults   src/STRATA_platform/data/configuration.yaml
 2. Numeric-prefixed config files from active profile (00-*.yaml → 99-*.yaml)
 3. Deployment-level overrides (spec.overrides in deployment.yaml)
 ```
@@ -27,7 +27,7 @@ Numeric prefixes control merge order:
 Before any `@repo-name/path` reference can be resolved, `ConfigurationService.get_repo_map()` must be called to build a mapping from repo name to local path. This map is passed to `utils/system.py::resolve_path()` whenever a cross-repo reference appears.
 
 ```python
-from xyz_platform.services.configuration_service import ConfigurationService
+from strata.services.configuration_service import ConfigurationService
 
 config_svc = ConfigurationService.load(work_path)
 repo_map = config_svc.get_repo_map()
@@ -58,7 +58,7 @@ Services are singletons per path — `BaseService.load(path)` returns a cached i
 
 ## ConfigurationModel Fields
 
-Defined in `src/xyz_platform/models/`. Key fields:
+Defined in `src/STRATA_platform/models/`. Key fields:
 
 | Field               | Type              | Description                                            |
 | ------------------- | ----------------- | ------------------------------------------------------ |
@@ -72,7 +72,7 @@ Defined in `src/xyz_platform/models/`. Key fields:
 
 ```python
 from pathlib import Path
-from xyz_platform.services.configuration_service import ConfigurationService
+from strata.services.configuration_service import ConfigurationService
 
 work_path = Path("/workspace")
 config_svc = ConfigurationService.load(work_path)

@@ -1,6 +1,6 @@
 # Configuration Files
 
-XYZ Platform uses YAML configuration files to define infrastructure, environments, and deployments.
+strata uses YAML configuration files to define infrastructure, environments, and deployments.
 
 ## File Types
 

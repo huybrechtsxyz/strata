@@ -20,9 +20,9 @@ Integrations connect the platform to external tools and services (git, terraform
 ## Creating an Integration
 
 ```python
-from xyz_platform.integrations.base_integration import BaseIntegration
-from xyz_platform.integrations.capabilities import IRepositoryTool
-from xyz_platform.models.integration_model import IntegrationModel
+from strata.integrations.base_integration import BaseIntegration
+from strata.integrations.capabilities import IRepositoryTool
+from strata.models.integration_model import IntegrationModel
 
 class MyToolIntegration(BaseIntegration):
     COMMAND = "mytool"
@@ -40,15 +40,15 @@ class MyToolIntegration(BaseIntegration):
 Register it with the factory:
 
 ```python
-from xyz_platform.integrations.factory import IntegrationFactory
+from strata.integrations.factory import IntegrationFactory
 IntegrationFactory.register_type("mytool", MyToolIntegration)
 ```
 
 ## Using the Factory
 
 ```python
-from xyz_platform.integrations.factory import IntegrationFactory
-from xyz_platform.models.integration_model import IntegrationModel
+from strata.integrations.factory import IntegrationFactory
+from strata.models.integration_model import IntegrationModel
 
 config = IntegrationModel(name="git", type="git", required=True)
 integration = IntegrationFactory.create(config)
@@ -64,7 +64,7 @@ if integration.is_available():
 Each integration class maintains one singleton per **instance key** (defaults to `"default"`; subclasses override `_get_instance_key_static()` to key on endpoint URL, access token, etc.). To reset between tests:
 
 ```python
-from xyz_platform.integrations.base_integration import BaseIntegration
+from strata.integrations.base_integration import BaseIntegration
 BaseIntegration._instances.clear()
 ```
 
@@ -88,7 +88,7 @@ Abstract methods that subclasses must implement: `get_version_command()` → `Li
 Singleton registry for tracking loaded integrations and validating operation requirements.
 
 ```python
-from xyz_platform.integrations.registry import IntegrationRegistry
+from strata.integrations.registry import IntegrationRegistry
 
 registry = IntegrationRegistry.get_instance()
 registry.register_integration("git", git_integration)
@@ -107,7 +107,7 @@ if not ok:
 Capability protocols are `runtime_checkable` `Protocol` classes in `integrations.capabilities`. Use `isinstance()` to check capability support:
 
 ```python
-from xyz_platform.integrations.capabilities import ISecretStore
+from strata.integrations.capabilities import ISecretStore
 
 if isinstance(integration, ISecretStore):
     secret = integration.get_secret("my/secret")
@@ -156,19 +156,19 @@ xyz tools check terraform     # deep-check: availability, env vars, auth
 
 ## Workspace drop-ins
 
-Custom integrations can be added to `.platform/integrations/*.py`. Each file must define a `register()` function:
+Custom integrations can be added to `.strata/integrations/*.py`. Each file must define a `register()` function:
 
 ```python
-from xyz_platform.integrations.factory import IntegrationFactory
+from strata.integrations.factory import IntegrationFactory
 from my_package import MyCustomIntegration
 
 def register():
     IntegrationFactory.register_type("my_tool", MyCustomIntegration)
 ```
 
-Drop-in files are loaded automatically at CLI startup whenever a workspace is detected (i.e. `.platform/` exists). Files whose names start with `_` are skipped. Errors in individual drop-ins are logged as warnings and never crash the CLI.
+Drop-in files are loaded automatically at CLI startup whenever a workspace is detected (i.e. `.strata/` exists). Files whose names start with `_` are skipped. Errors in individual drop-ins are logged as warnings and never crash the CLI.
 
-`xyz init` creates `.platform/integrations/` with a `README.md` stub and a fully-commented `my_integration.py` starter template — rename it and fill in the stubs to build your first custom integration.
+`xyz init` creates `.strata/integrations/` with a `README.md` stub and a fully-commented `my_integration.py` starter template — rename it and fill in the stubs to build your first custom integration.
 
 ---
 

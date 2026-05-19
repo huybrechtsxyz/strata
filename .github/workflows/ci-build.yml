@@ -125,7 +125,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/xyz-platform
+          images: ghcr.io/${{ github.repository_owner }}/strata
           tags: |
             type=raw,value=edge
             type=sha,prefix=sha-,format=short
@@ -170,7 +170,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/xyz-platform-docs
+          images: ghcr.io/${{ github.repository_owner }}/strata-docs
           tags: |
             type=raw,value=edge
             type=sha,prefix=sha-,format=short
@@ -210,7 +210,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME }}/xyz-platform
+          images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME }}/strata
           tags: |
             type=raw,value=edge
             type=sha,prefix=sha-,format=short
@@ -253,7 +253,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ vars.REGISTRY_URL }}/${{ secrets.REGISTRY_USERNAME
-            }}/xyz-platform-docs
+            }}/strata-docs
           tags: |
             type=raw,value=edge
             type=sha,prefix=sha-,format=short

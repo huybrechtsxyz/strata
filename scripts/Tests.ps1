@@ -1,5 +1,5 @@
 <#
-  Tests.ps1  Manual test reference for xyz-platform CLI
+  Tests.ps1  Manual test reference for strata CLI
 
   TEST RUN FROM THE ROOT OF THE REPO !
   
@@ -9,12 +9,12 @@
 #>
 
 # ==============================================================================
-#   Explicit flag > XYZ_* env var > .platform/cli.yaml > built-in default
+#   Explicit flag > XYZ_* env var > .strata/cli.yaml > built-in default
 # ==============================================================================
-# $env:XYZ_WORK_PATH  = (Resolve-Path $app).Path   # auto-resolve work path
-# $env:XYZ_OUTPUT     = "json"                      # default output format
-# $env:XYZ_VERBOSE    = "true"                      # enable verbose log replay
-# $env:XYZ_QUIET      = "true"                      # suppress all output
+# $env:STRATA_WORK_PATH  = (Resolve-Path $app).Path   # auto-resolve work path
+# $env:STRATA_OUTPUT     = "json"                      # default output format
+# $env:STRATA_VERBOSE    = "true"                      # enable verbose log replay
+# $env:STRATA_QUIET      = "true"                      # suppress all output
 
 # ==============================================================================
 # [REFERENCE] Setup and cleanup for tests
@@ -93,7 +93,7 @@ function Test-HelpCommand {
 
     # --list — all available topics (built-in + workspace)
     .\scripts\Run.ps1 help --list
-    .\scripts\Run.ps1 help --list --work-path $app   # workspace topics included when .platform/help/ exists
+    .\scripts\Run.ps1 help --list --work-path $app   # workspace topics included when .strata/help/ exists
 
     # --topic — platform guides
     .\scripts\Run.ps1 help --topic quickstart
@@ -115,7 +115,7 @@ function Test-HelpCommand {
 }
 
 # ==============================================================================
-# [REFERENCE] Config — persist workspace defaults into .platform/cli.yaml
+# [REFERENCE] Config — persist workspace defaults into .strata/cli.yaml
 # Allowed keys: output, verbose, quiet, work_path
 # ==============================================================================
 
@@ -589,7 +589,7 @@ function Test-AuditCommand {
     .\scripts\Run.ps1 audit log get -h
     .\scripts\Run.ps1 audit log get level                          --work-path $app
     .\scripts\Run.ps1 audit log get handlers.console.level         --work-path $app
-    .\scripts\Run.ps1 audit log get loggers.xyz_platform.level     --work-path $app
+    .\scripts\Run.ps1 audit log get loggers.strata.level     --work-path $app
     .\scripts\Run.ps1 audit log get no.such.key                    --work-path $app  # should fail
 
     # audit log set — write a value; 'level' shorthand sets handler + logger level at once
@@ -618,7 +618,7 @@ function Test-NewCommand {
 
     # --list — show all available templates (no workspace required)
     .\scripts\Run.ps1 new --list
-    .\scripts\Run.ps1 new --list --work-path $app   # workspace templates merged when .platform/templates/ exists
+    .\scripts\Run.ps1 new --list --work-path $app   # workspace templates merged when .strata/templates/ exists
 
     # scaffold each built-in template type; NAME is written into meta.name
     .\scripts\Run.ps1 new configuration  my-config    --work-path $app

@@ -37,7 +37,7 @@ PlatformError (base)
 - `to_dict()`: Convert to structured dict for logging/API
 
 ```python
-from xyz_platform.exceptions import PlatformError
+from strata.exceptions import PlatformError
 
 try:
     # operation
@@ -55,7 +55,7 @@ except Exception as e:
 **Configuration errors:**
 
 ```python
-from xyz_platform.exceptions import PlatformConfigurationError
+from strata.exceptions import PlatformConfigurationError
 
 if not path and not data:
     raise PlatformConfigurationError("Either path or data must be provided")
@@ -64,7 +64,7 @@ if not path and not data:
 **Model validation:**
 
 ```python
-from xyz_platform.exceptions import ModelValidationError
+from strata.exceptions import ModelValidationError
 
 try:
     model = MyModel.model_validate(data)
@@ -78,7 +78,7 @@ except ValidationError as e:
 **Service state:**
 
 ```python
-from xyz_platform.exceptions import ServiceNotValidatedError
+from strata.exceptions import ServiceNotValidatedError
 
 def _ensure_validated(self):
     if not self._validated:
@@ -88,7 +88,7 @@ def _ensure_validated(self):
 **Invalid references:**
 
 ```python
-from xyz_platform.exceptions import InvalidReferenceError
+from strata.exceptions import InvalidReferenceError
 
 raise InvalidReferenceError(
     source_type="Topology",
@@ -143,7 +143,7 @@ if not is_valid:
 
 ```python
 import pytest
-from xyz_platform.exceptions import (
+from strata.exceptions import (
     PlatformConfigurationError,
     ServiceNotValidatedError,
     PlatformFileNotFoundError,

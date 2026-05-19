@@ -1,7 +1,7 @@
 
 
 ############
-xyz_platform
+strata
 ############
 
 .. image:: _static/python-blue.svg

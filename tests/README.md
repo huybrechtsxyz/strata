@@ -1,6 +1,6 @@
 # tests/
 
-Automated test suite for the `xyz-platform` CLI.
+Automated test suite for the `strata` CLI.
 
 ## Structure
 
@@ -19,7 +19,7 @@ tests/
 │   └── workspaces/     # Workspace YAML samples
 ├── scripts/            # Helper PowerShell scripts for smoke-testing the CLI
 │   └── Test-Commands.ps1
-└── xyz_platform/       # Python unit/integration tests (mirrors src/ layout)
+└── STRATA_platform/       # Python unit/integration tests (mirrors src/ layout)
     ├── builders/
     ├── commands/
     ├── controllers/
@@ -39,7 +39,7 @@ tests/
 uv run pytest
 
 # Specific module
-uv run pytest tests/xyz_platform/commands/
+uv run pytest tests/strata/commands/
 
 # With short traceback
 uv run pytest --tb=short

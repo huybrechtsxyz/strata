@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Manual smoke-test suite for xyz-platform CLI commands.
+    Manual smoke-test suite for strata CLI commands.
 
 .DESCRIPTION
     Runs a comprehensive set of manual tests for all CLI commands.
@@ -187,7 +187,7 @@ function Test-StatusCommands {
         -Args @('status', '-h') `
         -Contains @('workspace', 'health')
 
-    # status outside a workspace should exit 1 (no .platform/ folder)
+    # status outside a workspace should exit 1 (no .strata/ folder)
     Test-Cmd "status: outside workspace exits 1" `
         -Args @('status', '--work-path', 'C:\Temp') `
         -ExitCode 1

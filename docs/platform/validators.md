@@ -9,7 +9,7 @@ The validators layer provides structural validation of individual platform YAML 
 | Class               | Module                          | Purpose                                                 |
 | ------------------- | ------------------------------- | ------------------------------------------------------- |
 | `BaseValidator`     | `validators.base_validator`     | Abstract base — error/message accumulation + hook hooks |
-| `PlatformValidator` | `validators.platform_validator` | Validates a single platform YAML file by kind           |
+| `PlatformValidator` | `validators.strata_validator` | Validates a single platform YAML file by kind           |
 
 ---
 
@@ -41,7 +41,7 @@ class BaseValidator(ABC):
 
 ```python
 from pathlib import Path
-from xyz_platform.validators.base_validator import BaseValidator
+from strata.validators.base_validator import BaseValidator
 
 class MyValidator(BaseValidator):
     def before_validate(self, work_path: Path) -> bool:
@@ -65,7 +65,7 @@ Validates a single platform YAML file. The caller is responsible for calling the
 
 ```python
 from pathlib import Path
-from xyz_platform.validators.platform_validator import PlatformValidator
+from strata.validators.strata_validator import PlatformValidator
 
 file_path = Path("path/to/workspace.yaml")
 work_path = Path("/workspace/root")
@@ -138,8 +138,8 @@ Executes the `validate_after` lifecycle phase (no-op when no hooks defined).
 ### With Configuration Service (Phase 2)
 
 ```python
-from xyz_platform.services.configuration_service import ConfigurationService
-from xyz_platform.validators.platform_validator import PlatformValidator
+from strata.services.configuration_service import ConfigurationService
+from strata.validators.strata_validator import PlatformValidator
 
 config_svc = ConfigurationService.get_instance()
 # ... load configuration ...

@@ -65,7 +65,7 @@ The CLI is optional for local development but recommended if you want Ralph (the
 
 ```powershell
 git clone <repo-url>
-cd xyz-platform
+cd strata
 ```
 
 ### 2. Configure the git union merge driver
@@ -152,14 +152,14 @@ Run the following to confirm everything works:
 
 ```powershell
 # Python environment
-& ".venv\Scripts\python.exe" -m xyz_platform --help
+& ".venv\Scripts\python.exe" -m strata --help
 
 # Linting + formatting
 scripts/Check.ps1
 ```
 
 In VS Code:
-- Press `F5` → select **Run: xyz-platform** → should prompt for CLI args and run in the integrated terminal
+- Press `F5` → select **Run: strata** → should prompt for CLI args and run in the integrated terminal
 - Open Squad chat mode → should greet you and show the team
 
 ---

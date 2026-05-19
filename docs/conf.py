@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "xyz_platform"
+project = "strata"
 copyright = "2025, Huybrechts XYZ"
 author = "Vincent Huybrechts"
 release = "0.0.1"

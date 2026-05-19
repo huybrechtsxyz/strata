@@ -28,7 +28,7 @@ spec:
   resources:
     - name: manager
       role: manager
-      file: config/resources/xyz-platform-vm-manager.yaml
+      file: config/resources/strata-vm-manager.yaml
       count: 1
   topology:
     - name: test_swarm

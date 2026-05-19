@@ -9,7 +9,7 @@ PowerShell helper scripts for local development.
 | `Tests.ps1`   | Manual test reference — end-to-end CLI workflow examples and per-command variations for exploratory testing. |
 | `Clean.ps1`   | Removes `__pycache__`, `.pyc` files, and other build artefacts.                                              |
 | `Docs.ps1`    | Builds the Sphinx documentation site.                                                                        |
-| `Run.ps1`     | Thin wrapper that forwards all arguments to `uv run xyz-platform`.                                           |
+| `Run.ps1`     | Thin wrapper that forwards all arguments to `uv run strata`.                                           |
 | `Release.ps1` | Bumps `VERSION.txt`, commits, and creates an annotated git tag. Run `git push origin main --tags` after.     |
 
 Run any script from the repository root:

@@ -9,7 +9,7 @@ Builders assemble and persist deployment artifacts from fully-loaded services. T
 | Class              | Module                       | Purpose                                                              |
 | ------------------ | ---------------------------- | -------------------------------------------------------------------- |
 | `BaseBuilder`      | `builders.base_builder`      | Abstract base — error/message accumulation + lifecycle hooks         |
-| `PlatformBuilder`  | `builders.platform_builder`  | Assembles `platform.json` / `platform.yaml` from services            |
+| `PlatformBuilder`  | `builders.strata_builder`  | Assembles `platform.json` / `platform.yaml` from services            |
 | `TerraformBuilder` | `builders.terraform_builder` | Generates `.tfvars.json` files for Terraform from the platform model |
 
 ---
@@ -42,7 +42,7 @@ class BaseBuilder(ABC):
 
 ```python
 from pathlib import Path
-from xyz_platform.builders.base_builder import BaseBuilder
+from strata.builders.base_builder import BaseBuilder
 
 class MyBuilder(BaseBuilder):
     def before_build(self, deployment_service, work_path, build_path):
@@ -68,7 +68,7 @@ Assembles a `PlatformArtifactModel` from a fully-loaded `DeploymentService` hier
 
 ```python
 from pathlib import Path
-from xyz_platform.builders.platform_builder import PlatformBuilder
+from strata.builders.strata_builder import PlatformBuilder
 
 builder = PlatformBuilder(verbose=True, configuration_service=config_svc)
 
@@ -125,7 +125,7 @@ Generates Terraform `.tfvars.json` files from a `PlatformArtifactModel`. The bui
 
 ```python
 from pathlib import Path
-from xyz_platform.builders.terraform_builder import TerraformBuilder
+from strata.builders.terraform_builder import TerraformBuilder
 
 builder = TerraformBuilder(verbose=True)
 
@@ -202,11 +202,11 @@ All files are written to `{deployment_build_path}/terraform/`:
 
 ```python
 from pathlib import Path
-from xyz_platform.builders.platform_builder import PlatformBuilder
-from xyz_platform.builders.terraform_builder import TerraformBuilder
+from strata.builders.strata_builder import PlatformBuilder
+from strata.builders.terraform_builder import TerraformBuilder
 
 work_path = Path("/workspace")
-build_path = Path("/workspace/.platform/build/")
+build_path = Path("/workspace/.strata/build/")
 
 # Step 1: Build the platform model
 platform_builder = PlatformBuilder(verbose=True, configuration_service=config_svc)

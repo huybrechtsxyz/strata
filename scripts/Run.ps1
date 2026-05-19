@@ -2,7 +2,7 @@
 .SYNOPSIS
     Runs the XYZ Platform CLI, forwarding all arguments.
 .DESCRIPTION
-    Executes the xyz-platform CLI via uv. All arguments are forwarded to the CLI.
+    Executes the strata CLI via uv. All arguments are forwarded to the CLI.
 .PARAMETER Clean
     Removes all __pycache__ directories before running.
 .EXAMPLE
@@ -37,4 +37,4 @@ if ($Clean) {
 }
 
 # Run via uv so it always uses the correct venv and PYTHONPATH
-uv run xyz-platform @RemainingArgs
+uv run strata @RemainingArgs

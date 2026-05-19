@@ -1,6 +1,6 @@
 # Platform Reference
 
-This section documents the internal layers of the XYZ Platform CLI.
+This section documents the internal layers of the strata CLI.
 
 ## What's Here
 

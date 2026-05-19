@@ -5,7 +5,7 @@ Enterprise-grade structured logging using **structlog**, routed through Python's
 ## Quick Start
 
 ```python
-from xyz_platform.logger import get_logger, configure_logging
+from strata.logger import get_logger, configure_logging
 
 # Basic usage
 logger = get_logger(__name__)
@@ -50,7 +50,7 @@ configure_logging(
 ### Correlation IDs
 
 ```python
-from xyz_platform.logger import set_correlation_id
+from strata.logger import set_correlation_id
 
 set_correlation_id("req-123-456")
 logger.info("Processing request")  # Includes correlation_id
@@ -59,7 +59,7 @@ logger.info("Processing request")  # Includes correlation_id
 ### Context Data
 
 ```python
-from xyz_platform.logger import LogContext
+from strata.logger import LogContext
 
 with LogContext(user_id=123, tenant="acme"):
     logger.info("User action")  # Includes context
@@ -68,7 +68,7 @@ with LogContext(user_id=123, tenant="acme"):
 ### Performance Tracking
 
 ```python
-from xyz_platform.logger import log_performance, trace_operation
+from strata.logger import log_performance, trace_operation
 
 @log_performance
 def slow_function():
@@ -89,7 +89,7 @@ Logs output standard JSON for Elasticsearch/Logstash:
 {
   "timestamp": "2026-02-06T10:30:45.123Z",
   "level": "INFO",
-  "logger": "xyz_platform.module",
+  "logger": "strata.module",
   "message": "Operation completed",
   "correlation_id": "req-123",
   "context": { "user_id": 123 }
@@ -121,5 +121,5 @@ export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=xxx..."
 
 ## Default Config Files
 
-- `src/xyz_platform/data/logging.yaml` — default logging config used when none is specified
-- `src/xyz_platform/templates/solution/logging.yaml` — scaffold placed into new workspace on `xyz init`
+- `src/STRATA_platform/data/logging.yaml` — default logging config used when none is specified
+- `src/STRATA_platform/templates/solution/logging.yaml` — scaffold placed into new workspace on `xyz init`

@@ -1,6 +1,6 @@
-# XYZ Platform — CLI Command Reference
+# strata — CLI Command Reference
 
-All commands are invoked as `xyz <command> [options]` (or `uv run xyz-platform <command>`).
+All commands are invoked as `xyz <command> [options]` (or `uv run strata <command>`).
 
 ## Standard Options
 
@@ -8,12 +8,12 @@ These options are accepted by every command and subcommand:
 
 | Option             | Type                      | Default       | Description                                                                                                                                                                   |
 | ------------------ | ------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `XYZ_WORK_PATH` env var, then walks up from CWD looking for `.platform/`.                                                             |
+| `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH` env var, then walks up from CWD looking for `.strata/`.                                                             |
 | `--output FORMAT`  | `console`\|`text`\|`json` | `console`     | Output format. Defaults to `console` (human-readable) when omitted. `json` returns a structured envelope `{"success": bool, "data": ...}`. Mutually exclusive with `--quiet`. |
 | `--verbose`        | flag                      | off           | Enable verbose output.                                                                                                                                                        |
 | `--quiet`          | flag                      | off           | Suppress console output.                                                                                                                                                      |
 
-> **Automation / AI agents:** Always use `--output json` (or set `XYZ_OUTPUT=json`). Every CLI flag has an `XYZ_<OPTION>` environment-variable equivalent — set them once rather than passing flags on every call. In console mode, errors are written to **stderr**; the JSON envelope always goes to **stdout**.
+> **Automation / AI agents:** Always use `--output json` (or set `STRATA_OUTPUT=json`). Every CLI flag has an `XYZ_<OPTION>` environment-variable equivalent — set them once rather than passing flags on every call. In console mode, errors are written to **stderr**; the JSON envelope always goes to **stdout**.
 
 ## Exit Codes
 
@@ -50,7 +50,7 @@ These options are accepted by every command and subcommand:
 
 ## `init`
 
-Initialize a new XYZ Platform solution workspace. Creates the `.platform/` state directory, workspace defaults, and a ready-to-use `.devcontainer/` for VS Code Dev Containers and GitHub Codespaces.
+Initialize a new strata solution workspace. Creates the `.strata/` state directory, workspace defaults, and a ready-to-use `.devcontainer/` for VS Code Dev Containers and GitHub Codespaces.
 
 ```
 xyz init --name NAME [--from-template FILE] [standard options]
@@ -65,11 +65,11 @@ xyz init --name NAME [--from-template FILE] [standard options]
 
 | Path                                  | Description                                                                      |
 | ------------------------------------- | -------------------------------------------------------------------------------- |
-| `.platform/project.json`              | Solution registry                                                                |
-| `.platform/cli.yaml`                  | Workspace CLI defaults                                                           |
-| `.platform/logging.yaml`              | Logging configuration                                                            |
+| `.strata/project.json`              | Solution registry                                                                |
+| `.strata/cli.yaml`                  | Workspace CLI defaults                                                           |
+| `.strata/logging.yaml`              | Logging configuration                                                            |
 | `.devcontainer/devcontainer.json`     | Dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm)       |
-| `.devcontainer/post-create.sh`        | Post-create script — installs `xyz-platform` and sets up shell completion        |
+| `.devcontainer/post-create.sh`        | Post-create script — installs `strata` and sets up shell completion        |
 
 All `.devcontainer/` files are written **idempotently** — existing files are never overwritten.
 
@@ -105,7 +105,7 @@ xyz clean --dry-run
 
 ## `config`
 
-Manage persistent workspace defaults stored in `.platform/cli.yaml`.
+Manage persistent workspace defaults stored in `.strata/cli.yaml`.
 
 ### `config set KEY VALUE`
 

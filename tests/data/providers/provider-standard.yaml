@@ -3,7 +3,7 @@ kind: provider
 meta:
   name: valid_kamatera_eu_fr
   annotations:
-    description: Kamatera EU-FR provider for xyz-platform
+    description: Kamatera EU-FR provider for strata
     owner: example@xyz.com
   labels:
     version: "1.0.0"
@@ -39,13 +39,13 @@ spec:
       - enable_monitoring
   
   default_tags:
-    ManagedBy: xyz-platform
+    ManagedBy: strata
     Environment: production
-    CostCenter: XYZ-PLATFORM
+    CostCenter: strata
     Project: cloud-platform
   
   custom:
-    costcenter: "XYZ-PLATFORM"
+    costcenter: "strata"
     billing_account: "kamatera-prod-001"
     support_tier: "enterprise"
   
