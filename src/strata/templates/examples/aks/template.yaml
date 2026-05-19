@@ -1,0 +1,6 @@
+name: aks
+description: Azure Kubernetes Service starter workspace — Terraform + Helm
+variables:
+  - name: solution_name
+    description: Logical name for your solution (lowercase, hyphens ok)
+    default: my-aks

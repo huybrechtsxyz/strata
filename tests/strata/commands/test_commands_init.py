@@ -19,22 +19,23 @@ class TestInitCommand:
             result = runner.invoke(init_command, ["--name", "myapp", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
-    def test_from_template_nonexistent_returns_exit_2(self, tmp_path):
-        runner = CliRunner()
-        result = runner.invoke(
-            init_command,
-            ["--name", "myapp", "--from-template", str(tmp_path / "missing.yaml"), "--work-path", str(tmp_path)],
-        )
-        assert result.exit_code == 2
-
-    def test_from_template_existing_file_accepted(self, tmp_path):
-        template = tmp_path / "tmpl.yaml"
-        template.write_text("apiVersion: platform.huybrechts.xyz/v1\nkind: workspace\n")
+    def test_template_builtin_name_accepted(self, tmp_path):
         runner = CliRunner()
         with patch("strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True):
             result = runner.invoke(
                 init_command,
-                ["--name", "myapp", "--from-template", str(template), "--work-path", str(tmp_path)],
+                ["--name", "myapp", "--template", "aks", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_template_local_folder_accepted(self, tmp_path):
+        template_dir = tmp_path / "mytpl"
+        (template_dir / "scaffold").mkdir(parents=True)
+        runner = CliRunner()
+        with patch("strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True):
+            result = runner.invoke(
+                init_command,
+                ["--name", "myapp", "--template", str(template_dir), "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 

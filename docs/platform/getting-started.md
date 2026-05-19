@@ -6,13 +6,13 @@
 
 ## Prerequisites
 
-| Tool | Version | Why |
-|------|---------|-----|
-| Python | 3.13+ | Runtime |
-| [pipx](https://pipx.pypa.io/) or [uv](https://docs.astral.sh/uv/) | latest | Package install |
-| [Terraform](https://developer.hashicorp.com/terraform/install) | 1.6+ | Infrastructure provisioning |
-| [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | latest | Azure authentication |
-| kubectl | latest | AKS cluster management (AKS deployments only) |
+| Tool                                                                       | Version | Why                                           |
+| -------------------------------------------------------------------------- | ------- | --------------------------------------------- |
+| Python                                                                     | 3.13+   | Runtime                                       |
+| [pipx](https://pipx.pypa.io/) or [uv](https://docs.astral.sh/uv/)          | latest  | Package install                               |
+| [Terraform](https://developer.hashicorp.com/terraform/install)             | 1.6+    | Infrastructure provisioning                   |
+| [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | latest  | Azure authentication                          |
+| kubectl                                                                    | latest  | AKS cluster management (AKS deployments only) |
 
 Check your Python version:
 
@@ -65,6 +65,61 @@ my-config-repo/
 ```
 
 > **VS Code users:** After init, use **Reopen in Container** to get a fully configured dev environment with all tools pre-installed.
+
+### Scaffold with a template
+
+Add `--template <name>` to get a ready-to-edit config folder alongside the workspace state:
+
+```bash
+xyz init --name my-aks --template aks
+```
+
+This copies a working set of example config files into the repo root, with `my-aks` substituted wherever the template uses `${solution_name}`:
+
+```
+my-config-repo/
+├── config/
+│   └── my-aks-config.yaml     ← platform configuration (providers, integrations)
+├── stack/
+│   ├── ws-platform.yaml       ← workspace definition
+│   ├── ns-base.yaml           ← base namespace
+│   └── mod-traefik.yaml       ← Traefik Helm module
+├── deploy/
+│   └── deploy-prd.yaml        ← production deployment descriptor
+├── envs/
+│   └── env-prd.yaml           ← environment variables (fill in secrets)
+└── .strata/                   ← workspace state (as above)
+```
+
+The output tells you exactly what to do next:
+
+```
+✅  Solution 'my-aks' initialised
+    • Work path    : /path/to/my-config-repo
+    • Solution ID  : abc-123
+    • Template     : aks
+    • Files created: 6
+
+Next steps:
+    1. Register your repo:   xyz repo add my-aks <git-url> --clone
+    2. Add a profile:        xyz profile add prd --activate
+    3. Validate:             xyz validate --file deploy/deploy-prd.yaml
+    4. Deploy:               xyz deploy run --file deploy/deploy-prd.yaml
+```
+
+**Built-in templates:**
+
+| Name  | Description                                         |
+| ----- | --------------------------------------------------- |
+| `aks` | Azure Kubernetes Service — Terraform + Helm starter |
+
+**Using a local template folder:**
+
+```bash
+xyz init --name my-ws --template ./my-corporate-template/
+```
+
+The folder must contain a `scaffold/` subdirectory with the files to copy. An optional `template.yaml` declares the template name, description, and substitution variables.
 
 ---
 
@@ -179,7 +234,7 @@ xyz deploy run --file deploy/my-environment.yaml --verbose
 xyz validate --file stack/my-environment.yaml --output json
 ```
 
-**Coming soon:** `ruck doctor` — self-diagnoses common workspace and environment issues automatically.
+**Coming soon:** `strata doctor` — self-diagnoses common workspace and environment issues automatically.
 
 ---
 

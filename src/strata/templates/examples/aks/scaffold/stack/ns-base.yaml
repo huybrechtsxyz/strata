@@ -1,0 +1,13 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: ${solution_name}_ns_base
+  annotations:
+    description: Base namespace — ingress controller and cluster-wide infrastructure
+  labels:
+    version: "1.0.0"
+  tags: [${solution_name}, namespace, base]
+spec:
+  modules:
+    - name: traefik
+      file: "@${solution_name}/stack/mod-traefik.yaml"
