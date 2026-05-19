@@ -15,7 +15,7 @@ keywords = [
     "containers",
     "automation",
 ]
-urls = { Homepage = "https://github.com/huybrechtsxzy/xyz-platform", Repository = "https://github.com/huybrechtsxzy/xyz-platform", Issues = "https://github.com/huybrechtsxzy/xyz-platform/issues" }
+urls = { Homepage = "https://github.com/huybrechtsxyz/strata", Repository = "https://github.com/huybrechtsxyz/strata", Issues = "https://github.com/huybrechtsxyz/strata/issues" }
 requires-python = ">=3.13"
 classifiers = [
     "Programming Language :: Python :: 3.13",

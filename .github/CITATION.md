@@ -1,20 +1,20 @@
-# Platform XYZ - How to cite
+# strata - How to cite
 
-If you use Platform XYZ in your work, please cite it to help give proper credit to the authors and maintainers.
+If you use strata in your work, please cite it to help give proper credit to the authors and maintainers.
 
 Recommended citation (plain text)
 
-- Huybrechts, V. et al. Platform XYZ. Version 0.1.0 (2025). <https://github.com/huybrechtsxyz/xyz-platform> (commit: `commit-hash`)
+- Huybrechts, V. et al. strata. Version 0.1.0 (2025). <https://github.com/huybrechtsxyz/strata> (commit: `commit-hash`)
 
 BibTeX (example)
 
 ```bibtex
 @misc{huybrechts2025platformxyz,
   author = {Huybrechts, V. and Contributors},
-  title = {{Platform XYZ}},
+  title = {{strata}},
   year = {2025},
   version = {0.1.0},
-  howpublished = {\url{https://github.com/huybrechtsxyz/xyz-platform}},
+  howpublished = {\url{https://github.com/huybrechtsxyz/strata}},
   note = {commit: <commit-hash>}
 }
 ```
@@ -22,9 +22,9 @@ BibTeX (example)
 RIS (example)
 TY  - SOFTWARE
 AU  - Huybrechts, V.
-TI  - Platform XYZ
+TI  - strata
 PY  - 2025
-UR  - <https://github.com/huybrechtsxyz/xyz-platform>
+UR  - <https://github.com/huybrechtsxyz/strata>
 VL  - 0.1.0
 N1  - commit: `commit-hash`
 ER  -
