@@ -8,7 +8,7 @@ These options are accepted by every command and subcommand:
 
 | Option             | Type                      | Default       | Description                                                                                                                                                                   |
 | ------------------ | ------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH` env var, then walks up from CWD looking for `.strata/`.                                                             |
+| `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH` env var, then walks up from CWD looking for `.strata/`.                                                            |
 | `--output FORMAT`  | `console`\|`text`\|`json` | `console`     | Output format. Defaults to `console` (human-readable) when omitted. `json` returns a structured envelope `{"success": bool, "data": ...}`. Mutually exclusive with `--quiet`. |
 | `--verbose`        | flag                      | off           | Enable verbose output.                                                                                                                                                        |
 | `--quiet`          | flag                      | off           | Suppress console output.                                                                                                                                                      |
@@ -28,48 +28,55 @@ These options are accepted by every command and subcommand:
 
 ## Command Groups
 
-| Group      | Subcommands                                                    | Description                                   |
-| ---------- | -------------------------------------------------------------- | --------------------------------------------- |
-| `init`     | —                                                              | Initialize a new solution workspace           |
-| `clean`    | —                                                              | Remove workspace artifacts (logs, temp files) |
-| `config`   | `set` `unset` `list`                                           | Manage persistent workspace defaults          |
-| `status`   | —                                                              | Show workspace health                         |
-| `audit`    | `list`; `log list` `log get` `log set` `log unset` `log reset` | View execution logs and manage log config     |
-| `profile`  | `add` `remove` `list` `activate` `show`                        | Manage environment profiles                   |
-| `ref`      | `env` `config` `data` `secret`                                 | Manage file references within profiles        |
-| `repo`     | `add` `remove` `list` `sync` `status`                          | Manage repositories in the solution           |
-| `build`    | `run` `plan` `clean`                                           | Build platform and Terraform artifacts        |
-| `validate` | —                                                              | Validate a single platform YAML file          |
-| `schema`   | `list` `get`                                                   | Inspect JSON schemas for platform YAML kinds  |
-| `deploy`   | `run` `destroy` `status` `history` `health`                    | Deploy platform using provisioners            |
-| `values`   | `list` `get`                                                   | Inspect resolved deployment values            |
-| `version`  | —                                                              | Show CLI version                              |
-| `help`     | —                                                              | Show help topics                              |
+| Group       | Subcommands                                                    | Description                                   |
+| ----------- | -------------------------------------------------------------- | --------------------------------------------- |
+| `sln`       | `init` `clean` `status` `export`                               | Solution workspace lifecycle                  |
+| `config`    | `set` `unset` `list`                                           | Manage persistent workspace defaults          |
+| `audit` †   | `list`; `log list` `log get` `log set` `log unset` `log reset` | View execution logs and manage log config     |
+| `profile` † | `add` `remove` `list` `activate` `show`                        | Manage environment profiles                   |
+| `ref` †     | `env` `config` `data` `secret`                                 | Manage file references within profiles        |
+| `repo` †    | `add` `remove` `list` `sync` `status`                          | Manage repositories in the solution           |
+| `build` †   | `run` `plan` `clean`                                           | Build platform and Terraform artifacts        |
+| `validate`  | —                                                              | Validate a single platform YAML file          |
+| `schema`    | `list` `get`                                                   | Inspect JSON schemas for platform YAML kinds  |
+| `deploy` †  | `run` `destroy` `status` `history` `health`                    | Deploy platform using provisioners            |
+| `values` †  | `list` `get`                                                   | Inspect resolved deployment values            |
+| `context` † | `set` `unset` `list`                                           | Manage team-shared template variables         |
+| `tools`     | `status` `check` `install`                                     | Manage and inspect external tool integrations |
+| `new` †     | —                                                              | Create a platform config file from a template |
+| `version`   | —                                                              | Show CLI version                              |
+| `help`      | —                                                              | Show help topics                              |
+
+> **†** Requires an initialized workspace (`.strata/` directory). Run `strata sln init --name NAME` first.
 
 ---
 
-## `init`
+## `sln`
+
+Solution workspace lifecycle commands.
+
+### `sln init`
 
 Initialize a new strata solution workspace. Creates the `.strata/` state directory, workspace defaults, and a ready-to-use `.devcontainer/` for VS Code Dev Containers and GitHub Codespaces.
 
 ```
-strata sln init --name NAME [--template FILE] [standard options]
+strata sln init --name NAME [--template NAME-OR-PATH] [standard options]
 ```
 
-| Option                 | Required | Description                                                                                       |
-| ---------------------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `--name NAME`          | ✅        | Name of the solution workspace                                                                    |
-| `--template FILE` | —        | Path to a workspace template YAML file. Pre-populates repos, profiles, and refs. File must exist. |
+| Option                    | Required | Description                                                                                                                    |
+| ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `--name NAME`             | ✅        | Name of the solution workspace                                                                                                 |
+| `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
 
 **Files created:**
 
-| Path                                  | Description                                                                      |
-| ------------------------------------- | -------------------------------------------------------------------------------- |
-| `.strata/project.json`              | Solution registry                                                                |
-| `.strata/cli.yaml`                  | Workspace CLI defaults                                                           |
-| `.strata/logging.yaml`              | Logging configuration                                                            |
-| `.devcontainer/devcontainer.json`     | Dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm)       |
-| `.devcontainer/post-create.sh`        | Post-create script — installs `strata` and sets up shell completion        |
+| Path                              | Description                                                                |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `.strata/project.json`            | Solution registry                                                          |
+| `.strata/cli.yaml`                | Workspace CLI defaults                                                     |
+| `.strata/logging.yaml`            | Logging configuration                                                      |
+| `.devcontainer/devcontainer.json` | Dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm) |
+| `.devcontainer/post-create.sh`    | Post-create script — installs `strata` and sets up shell completion        |
 
 All `.devcontainer/` files are written **idempotently** — existing files are never overwritten.
 
@@ -77,14 +84,12 @@ All `.devcontainer/` files are written **idempotently** — existing files are n
 
 ```bash
 strata sln init --name my-platform
-strata sln init --name my-platform --template templates/base.yaml
+strata sln init --name my-platform --template .strata/templates/my-corp-base/
 ```
 
 > **Dev container:** After `strata sln init`, open the workspace in VS Code and select **Reopen in Container** to start a pre-configured environment with all tools installed. The container also works with GitHub Codespaces.
 
----
-
-## `clean`
+### `sln clean`
 
 Remove workspace artifacts (log files, temp files) without touching solution state.
 
@@ -99,6 +104,121 @@ strata sln clean [--dry-run] [standard options]
 ```bash
 strata sln clean
 strata sln clean --dry-run
+```
+
+### `sln status`
+
+Show workspace health: solution identity, active profile, repositories, and integration availability.
+
+```
+strata sln status [standard options]
+```
+
+Works inside and outside an initialized workspace (degrades gracefully when `solution.json` is absent).
+
+```bash
+strata sln status
+strata sln status --output json
+```
+
+### `sln export`
+
+Export the current workspace as a reusable scaffold template. Copies all workspace files into `.strata/templates/<name>/scaffold/`, replaces every occurrence of the solution name with `${solution_name}` in file content and file paths, then generates a `template.yaml` manifest.
+
+```
+strata sln export --name NAME [--force] [--dry-run] [standard options]
+```
+
+| Option        | Required | Description                                                             |
+| ------------- | -------- | ----------------------------------------------------------------------- |
+| `--name NAME` | ✅        | Template name — used as the output directory under `.strata/templates/` |
+| `--force`     | —        | Overwrite an existing template with the same name                       |
+| `--dry-run`   | —        | List files that would be copied without writing anything                |
+
+**Output structure:**
+
+| Path                                     | Description                                           |
+| ---------------------------------------- | ----------------------------------------------------- |
+| `.strata/templates/<name>/scaffold/`     | Workspace files with `${solution_name}` substitutions |
+| `.strata/templates/<name>/template.yaml` | Template manifest (name, description, variables)      |
+
+**Excluded from export:** `.git/`, `repos/`, `.venv/`, `node_modules/`, `.strata/logs/`, `__pycache__/`, `*.pyc`, `*.log`
+
+**Exit codes:** 0 success · 1 failure (includes target directory already exists without `--force`)
+
+```bash
+strata sln export --name my-corp-base
+strata sln export --name my-corp-base --dry-run
+strata sln export --name my-corp-base --force
+```
+
+> **Next steps:** Use the exported template with `strata sln init --name new-ws --template .strata/templates/my-corp-base/`
+
+---
+
+## `context`
+
+Manage team-shared template variables stored in `solution.json`. Context variables are substituted as `${key}` in platform YAML files.
+
+| Subcommand      | Description                          |
+| --------------- | ------------------------------------ |
+| `set KEY VALUE` | Set or overwrite a template variable |
+| `unset KEY`     | Remove a template variable           |
+| `list`          | Show all current template variables  |
+
+```bash
+strata context set owner myteam
+strata context unset owner
+strata context list
+strata context list --output json
+```
+
+---
+
+## `tools`
+
+Manage and inspect external tool integrations (Terraform, Docker, kubectl, Helm, Azure CLI, etc.).
+
+| Subcommand     | Description                                                      |
+| -------------- | ---------------------------------------------------------------- |
+| `status`       | List all known integrations and their availability               |
+| `check NAME`   | Deep-check a single integration (version, auth, connectivity)    |
+| `install NAME` | Show download URL, env vars, and auth methods for an integration |
+
+`tools install` accepts `--env-file PATH` to write a commented env-var template to a file.
+
+```bash
+strata tools status
+strata tools check terraform
+strata tools install terraform
+strata tools install terraform --env-file .env.template
+```
+
+---
+
+## `new`
+
+Create a new platform configuration file from a built-in or custom template.
+
+```
+strata new TEMPLATE NAME [--path PATH] [--overwrite] [--set KEY=VALUE ...] [standard options]
+strata new --list
+```
+
+| Option / Argument | Description                                                |
+| ----------------- | ---------------------------------------------------------- |
+| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `workspace`)  |
+| `NAME`            | Written into `meta.name` and used in the output filename   |
+| `--path PATH`     | Output file path or directory (default: current directory) |
+| `--overwrite`     | Overwrite the output file if it already exists             |
+| `--set KEY=VALUE` | Override a template variable (repeatable)                  |
+| `--list`          | List available templates and exit                          |
+
+```bash
+strata new namespace my-app
+strata new provider azure --path config/
+strata new workspace my-ws --set owner=myteam
+strata new --list
 ```
 
 ---
@@ -127,23 +247,6 @@ strata config unset output
 ```bash
 strata config list
 strata config list --output json
-```
-
----
-
-## `status`
-
-Show workspace health: solution identity, active profile, repositories, and integration availability.
-
-```
-strata sln status [standard options]
-```
-
-Works inside and outside an initialized workspace (degrades gracefully when `solution.json` is absent).
-
-```bash
-strata sln status
-strata sln status --output json
 ```
 
 ---
