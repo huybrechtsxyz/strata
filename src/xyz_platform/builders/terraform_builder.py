@@ -5,13 +5,16 @@ It only documents required keys.
 """
 
 import json
+from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from xyz_platform.builders.base_builder import BaseBuilder
+from xyz_platform.models.environment_model import IncludeMergeStrategy
 from xyz_platform.models.platform_artifact_model import PlatformArtifactModel
 from xyz_platform.services.deployment_service import DeploymentService
 from xyz_platform.services.platform_artifact_service import PlatformService
+from xyz_platform.utils.terraform_loader import TerraformLoader
 
 
 class TerraformBuilder(BaseBuilder):
@@ -32,6 +35,7 @@ class TerraformBuilder(BaseBuilder):
         build_path: Path,
         dry_run: bool = False,
         platform_model: Optional["PlatformArtifactModel"] = None,
+        repo_map: Optional[Dict[str, str]] = None,
     ) -> bool:
         """Build Terraform tfvars files from ``platform.json``.
 
@@ -43,6 +47,7 @@ class TerraformBuilder(BaseBuilder):
                 output files.  A summary of planned outputs is emitted.
             platform_model: Pre-assembled PlatformModel (used in dry-run so
                 that the on-disk ``platform.json`` is not required).
+            repo_map: Repository name → absolute path mapping for @repo/ resolution.
 
         Returns:
             bool: True on success, False on failure.
@@ -113,9 +118,32 @@ class TerraformBuilder(BaseBuilder):
                         f"[DRY-RUN] Requires: {variables_count} variable(s), "
                         f"{features_count} feature(s), {secrets_count} secret(s)"
                     )
+
+                # Validate includes in dry-run mode (no writes)
+                include_ok = self._process_includes(
+                    deployment_service=deployment_service,
+                    build_path=build_path,
+                    work_path=work_path,
+                    repo_map=repo_map or {},
+                    dry_run=True,
+                )
+                if not include_ok:
+                    return False
+
                 return True
 
             self._messages.extend(self._save_terraform_vars(terraform_vars, deployment_service, build_path))
+
+            # Process environment includes (merge user .tf/.tfvars files)
+            include_ok = self._process_includes(
+                deployment_service=deployment_service,
+                build_path=build_path,
+                work_path=work_path,
+                repo_map=repo_map or {},
+                dry_run=False,
+            )
+            if not include_ok:
+                return False
 
             return True
 
@@ -520,6 +548,170 @@ class TerraformBuilder(BaseBuilder):
 
     def _write_json(self, path: Path, payload: Dict[str, Any]) -> None:
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    # ------------------------------------------------------------------
+    # Terraform file includes (merge external .tf / .tfvars into build)
+    # ------------------------------------------------------------------
+
+    def _process_includes(
+        self,
+        deployment_service: DeploymentService,
+        build_path: Path,
+        work_path: Path,
+        repo_map: Dict[str, str],
+        dry_run: bool = False,
+    ) -> bool:
+        """Validate and execute terraform file includes from environment model.
+
+        Collects includes from:
+        - Environment-wide: spec.overrides.includes
+        - Per-resource: spec.overrides.resources[].includes
+
+        Phase 1: Validate all includes (resolve paths, check files exist).
+        Phase 2: Execute merges/concatenations (skipped in dry_run mode).
+
+        Returns:
+            True on success, False if validation fails.
+        """
+        from xyz_platform.utils.system import resolve_path
+
+        env_service = deployment_service.get_environment_service()
+        if env_service is None or env_service.model is None:
+            return True  # No environment — nothing to include
+
+        overrides = getattr(env_service.model.spec, "overrides", None)
+        if overrides is None:
+            return True
+
+        # Collect all include directives with their context
+        include_tasks: List[Dict[str, Any]] = []
+
+        # Environment-wide includes
+        if overrides.includes:
+            for inc in overrides.includes:
+                include_tasks.append({"include": inc, "context": "environment-wide"})
+
+        # Per-resource includes
+        if overrides.resources:
+            for res_override in overrides.resources:
+                if res_override.includes:
+                    for inc in res_override.includes:
+                        include_tasks.append(
+                            {
+                                "include": inc,
+                                "context": f"resource:{res_override.resource}",
+                            }
+                        )
+
+        if not include_tasks:
+            return True
+
+        # Resolve output directory
+        deployment_build_path = deployment_service.get_build_path(build_path)
+        terraform_path = deployment_build_path / "terraform"
+
+        # Phase 1: Validate all includes
+        resolved_tasks: List[Dict[str, Any]] = []
+        for task in include_tasks:
+            inc = task["include"]
+            context = task["context"]
+
+            # Resolve source path(s)
+            source_files: List[Path] = []
+            try:
+                resolved_source = resolve_path(str(work_path), inc.source, repo_map=repo_map)
+                source_str = str(resolved_source)
+
+                # Support glob patterns
+                if "*" in source_str or "?" in source_str:
+                    matched = sorted(glob(source_str))
+                    if not matched and not inc.optional:
+                        self._errors.append(f"Include source glob matched no files: {inc.source} ({context})")
+                        return False
+                    source_files = [Path(m) for m in matched]
+                else:
+                    if not resolved_source.exists():
+                        if not inc.optional:
+                            self._errors.append(
+                                f"Include source not found: {inc.source} → {resolved_source} ({context})"
+                            )
+                            return False
+                    else:
+                        source_files = [resolved_source]
+
+            except ValueError as exc:
+                self._errors.append(f"Include source resolution error: {exc} ({context})")
+                return False
+
+            if not source_files:
+                # Optional include with no matching files — skip
+                self._messages.append(f"⊘ Include skipped (optional, not found): {inc.source} ({context})")
+                continue
+
+            # Validate target filename (no path traversal)
+            target_path = terraform_path / inc.target
+            try:
+                target_path.resolve().relative_to(terraform_path.resolve())
+            except ValueError:
+                self._errors.append(f"Include target escapes terraform directory: {inc.target} ({context})")
+                return False
+
+            # Sort by order field if specified
+            if inc.order is not None:
+                sort_key = inc.order
+            else:
+                sort_key = len(resolved_tasks)
+
+            resolved_tasks.append(
+                {
+                    "source_files": source_files,
+                    "target": target_path,
+                    "strategy": inc.strategy,
+                    "context": context,
+                    "order": sort_key,
+                    "source_ref": inc.source,
+                }
+            )
+
+        # Sort resolved tasks by order
+        resolved_tasks.sort(key=lambda t: t["order"])
+
+        # Dry-run reporting
+        if dry_run:
+            for task in resolved_tasks:
+                strategy_label = task["strategy"].value
+                src_count = len(task["source_files"])
+                self._messages.append(
+                    f"[DRY-RUN] Would {strategy_label} {src_count} file(s) → {task['target'].name} ({task['context']})"
+                )
+            if resolved_tasks:
+                self._messages.append(f"[DRY-RUN] Planned {len(resolved_tasks)} include operation(s)")
+            return True
+
+        # Phase 2: Execute
+        loader = TerraformLoader()
+        for task in resolved_tasks:
+            src_files: List[Path] = task["source_files"]
+            target: Path = task["target"]
+            strategy: IncludeMergeStrategy = task["strategy"]
+            ctx: str = task["context"]
+            source_ref: str = task["source_ref"]
+
+            try:
+                if strategy == IncludeMergeStrategy.MERGE:
+                    result = loader.load_and_merge(src_files)
+                    loader.write(result, target)
+                elif strategy == IncludeMergeStrategy.CONCATENATE:
+                    content = loader.concatenate(src_files)
+                    loader.write_raw(content, target)
+
+                self._messages.append(f"✓ Include {strategy.value}: {source_ref} → {target.name} ({ctx})")
+
+            except Exception as exc:
+                self._errors.append(f"Include {strategy.value} failed: {source_ref} → {target.name}: {exc} ({ctx})")
+                return False
+
+        return True
 
     def _track_resource_requirements(self, resource: Any) -> None:
         if not resource.references:

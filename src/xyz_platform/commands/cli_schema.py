@@ -1,6 +1,7 @@
 """Click CLI wiring for the ``schema`` command group."""
 
 import json
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -106,4 +107,37 @@ def schema_get(kind: str, output: Optional[str] = None) -> None:
     click.echo(f"  Properties: {', '.join(schema.get('properties', {}).keys())}")
     click.echo("")
     click.echo("  Run with --output json to get the full JSON Schema.")
+    click.echo("")
+
+
+@schema_group.command(name="export", help="Export JSON Schemas for all document kinds to files.")
+@click.option(
+    "--output-dir",
+    default=".platform/schemas",
+    show_default=True,
+    help="Directory to write schema files. Created if it does not exist.",
+)
+def schema_export(output_dir: str) -> None:
+    """Export JSON Schemas for all platform document kinds to individual files."""
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    written = []
+    errors = []
+    for kind, model_cls in _KIND_TO_MODEL.items():
+        schema_file = output_path / f"{kind.value}.json"
+        try:
+            schema_file.write_text(json.dumps(model_cls.model_json_schema(), indent=2), encoding="utf-8")
+            written.append(schema_file)
+        except Exception as exc:
+            errors.append(f"  {kind.value}: {exc}")
+
+    click.echo("")
+    for f in written:
+        click.echo(f"  Wrote: {f}")
+    if errors:
+        click.echo("")
+        for e in errors:
+            click.echo(f"  ERROR: {e}", err=True)
+    click.echo(f"\n  {len(written)} schema(s) exported to {output_path}")
     click.echo("")

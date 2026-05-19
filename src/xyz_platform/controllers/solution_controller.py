@@ -1134,6 +1134,45 @@ class SolutionController(BaseController):
                     self._add_error(msg)
                     return False, self.get_errors()
 
+        # Generate JSON Schemas for all platform document kinds → .platform/schemas/
+        # These are derived artifacts (regenerated, not user-edited), so we always overwrite.
+        try:
+            from xyz_platform.models.configuration_model import ConfigurationModel
+            from xyz_platform.models.deployment_model import DeploymentModel
+            from xyz_platform.models.environment_model import EnvironmentModel
+            from xyz_platform.models.firewall_model import FirewallModel
+            from xyz_platform.models.module_model import ModuleModel
+            from xyz_platform.models.namespace_model import NamespaceModel
+            from xyz_platform.models.platform_artifact_model import PlatformArtifactModel
+            from xyz_platform.models.provider_model import ProviderModel
+            from xyz_platform.models.resource_model import ResourceModel
+            from xyz_platform.models.workspace_model import WorkspaceModel
+
+            _schema_map = {
+                "configuration": ConfigurationModel,
+                "deployment": DeploymentModel,
+                "environment": EnvironmentModel,
+                "firewall": FirewallModel,
+                "module": ModuleModel,
+                "namespace": NamespaceModel,
+                "platform": PlatformArtifactModel,
+                "provider": ProviderModel,
+                "resource": ResourceModel,
+                "workspace": WorkspaceModel,
+            }
+            schemas_dir = state_dir / "schemas"
+            schemas_dir.mkdir(exist_ok=True)
+            for kind_name, model_cls in _schema_map.items():
+                schema_file = schemas_dir / f"{kind_name}.json"
+                try:
+                    schema_file.write_text(json.dumps(model_cls.model_json_schema(), indent=2), encoding="utf-8")
+                    self.logger.debug("Schema written", kind=kind_name)
+                except Exception as schema_exc:
+                    self.logger.warning("Failed to write schema", kind=kind_name, error=str(schema_exc))
+            self._add_message(f"Created: {schemas_dir.relative_to(self._work_path)} (JSON Schemas for all kinds)")
+        except Exception as e:
+            self.logger.warning("Schema generation skipped", error=str(e))
+
         # Scaffold .devcontainer/ — idempotent, never overwrites existing files
         devcontainer_templates_src = get_pkg_templates_path() / "devcontainer"
         if devcontainer_templates_src.exists() and devcontainer_templates_src.is_dir():
