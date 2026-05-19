@@ -28,24 +28,24 @@ These options are accepted by every command and subcommand:
 
 ## Command Groups
 
-| Group       | Subcommands                                                    | Description                                   |
-| ----------- | -------------------------------------------------------------- | --------------------------------------------- |
-| `sln`       | `init` `clean` `status` `export`                               | Solution workspace lifecycle                  |
-| `config`    | `set` `unset` `list`                                           | Manage persistent workspace defaults          |
-| `audit` †   | `list`; `log list` `log get` `log set` `log unset` `log reset` | View execution logs and manage log config     |
-| `profile` † | `add` `remove` `list` `activate` `show`                        | Manage environment profiles                   |
-| `ref` †     | `env` `config` `data` `secret`                                 | Manage file references within profiles        |
-| `repo` †    | `add` `remove` `list` `sync` `status`                          | Manage repositories in the solution           |
-| `build` †   | `run` `plan` `clean`                                           | Build platform and Terraform artifacts        |
-| `validate`  | —                                                              | Validate a single platform YAML file          |
-| `schema`    | `list` `get`                                                   | Inspect JSON schemas for platform YAML kinds  |
-| `deploy` †  | `run` `destroy` `status` `history` `health`                    | Deploy platform using provisioners            |
-| `values` †  | `list` `get`                                                   | Inspect resolved deployment values            |
-| `context` † | `set` `unset` `list`                                           | Manage team-shared template variables         |
-| `tools`     | `status` `check` `install`                                     | Manage and inspect external tool integrations |
-| `new` †     | —                                                              | Create a platform config file from a template |
-| `version`   | —                                                              | Show CLI version                              |
-| `help`      | —                                                              | Show help topics                              |
+| Group       | Subcommands                                                                  | Description                                             |
+| ----------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `sln`       | `init` `clean` `status` `export`                                             | Solution workspace lifecycle                            |
+| `config`    | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config |
+| `audit` †   | `list`                                                                       | View execution history logs (read-only)                 |
+| `profile` † | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                             |
+| `ref` †     | `env` `config` `data` `secret`                                               | Manage file references within profiles                  |
+| `repo` †    | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                     |
+| `build` †   | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                  |
+| `validate`  | —                                                                            | Validate a single platform YAML file                    |
+| `schema`    | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds            |
+| `deploy` †  | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                      |
+| `values` †  | `list` `get`                                                                 | Inspect resolved deployment values                      |
+| `vars` †    | `set` `unset` `list`                                                         | Manage team-shared template variables                   |
+| `tools`     | `status` `check` `install`                                                   | Manage and inspect external tool integrations           |
+| `new` †     | —                                                                            | Create a platform config file from a template           |
+| `version`   | —                                                                            | Show CLI version                                        |
+| `help`      | —                                                                            | Show help topics                                        |
 
 > **†** Requires an initialized workspace (`.strata/` directory). Run `strata sln init --name NAME` first.
 
@@ -156,9 +156,9 @@ strata sln export --name my-corp-base --force
 
 ---
 
-## `context`
+## `vars`
 
-Manage team-shared template variables stored in `solution.json`. Context variables are substituted as `${key}` in platform YAML files.
+Manage team-shared template variables stored in `solution.json`. Variables are substituted as `${key}` in platform YAML files.
 
 | Subcommand      | Description                          |
 | --------------- | ------------------------------------ |
@@ -167,10 +167,10 @@ Manage team-shared template variables stored in `solution.json`. Context variabl
 | `list`          | Show all current template variables  |
 
 ```bash
-strata context set owner myteam
-strata context unset owner
-strata context list
-strata context list --output json
+strata vars set owner myteam
+strata vars unset owner
+strata vars list
+strata vars list --output json
 ```
 
 ---
@@ -249,11 +249,31 @@ strata config list
 strata config list --output json
 ```
 
+### `config log` {#config-log}
+
+Manage `logging.yaml` — the workspace logging configuration.
+
+| Subcommand        | Description                                   |
+| ----------------- | --------------------------------------------- |
+| `log list`        | Show the full current `logging.yaml`          |
+| `log get KEY`     | Get a single value by dot-notation key        |
+| `log set KEY VAL` | Set a logging config value                    |
+| `log unset KEY`   | Remove a logging config key (restore default) |
+| `log reset`       | Reset `logging.yaml` to package defaults      |
+
+```bash
+strata config log list
+strata config log get level
+strata config log set level DEBUG
+strata config log unset level
+strata config log reset
+```
+
 ---
 
 ## `audit`
 
-View execution logs and manage logging configuration.
+View execution history logs (read-only). Logging configuration has moved to `config log`.
 
 ### `audit list`
 
@@ -275,29 +295,7 @@ strata audit list --last
 strata audit list --level ERROR --lines 20
 ```
 
-### `audit log list`
-
-Show the current `logging.yaml` configuration.
-
-```bash
-strata audit log list
-```
-
-### `audit log get KEY`
-
-Get a single logging config value by dot-notation key.
-
-```bash
-strata audit log get level
-```
-
-### `audit log set KEY VALUE`
-
-Set a logging config value. Use `level` as shorthand for log level.
-
-```bash
-strata audit log set level DEBUG
-```
+> **Note:** `audit log` subcommands have moved to `config log`. See [config log](#config-log) below.
 
 ---
 

@@ -4,7 +4,6 @@ from typing import Optional
 
 import click
 
-from strata.commands.audit.log_config_command import LogConfigCommand
 from strata.commands.audit.show_audit_command import ShowAuditCommand
 from strata.commands.cli_common import (
     click_output_format,
@@ -15,7 +14,7 @@ from strata.commands.cli_common import (
 )
 
 
-@click.group(name="audit", help="Observe and audit platform activity: execution history, logging configuration.")
+@click.group(name="audit", help="Observe platform activity: execution history and audit trail.")
 def audit_group():
     """Audit command group."""
     pass
@@ -84,108 +83,5 @@ def audit_show(
         verbose=verbose,
         quiet=quiet,
     )
-    success = command.execute()
-    handle_command_exit(command, success)
-
-
-# ==============================================================================
-# xyz audit log  (logging configuration subgroup)
-# ==============================================================================
-
-
-@audit_group.group(name="log", help="Manage workspace logging configuration (logging.yaml).")
-def audit_log_group():
-    """Audit log subgroup."""
-    pass
-
-
-@audit_log_group.command(name="list", help="Show the current logging.yaml configuration.")
-@click_work_path
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def audit_log_list(
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-    quiet: bool = False,
-) -> None:
-    command = LogConfigCommand(action="list", work_path=work_path, output=output, verbose=verbose, quiet=quiet)
-    success = command.execute()
-    handle_command_exit(command, success)
-
-
-@audit_log_group.command(name="get", help="Get a logging.yaml value by key (dot-notation).")
-@click.argument("key")
-@click_work_path
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def audit_log_get(
-    key: str,
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-    quiet: bool = False,
-) -> None:
-    command = LogConfigCommand(action="get", key=key, work_path=work_path, output=output, verbose=verbose, quiet=quiet)
-    success = command.execute()
-    handle_command_exit(command, success)
-
-
-@audit_log_group.command(name="set", help="Set a logging.yaml value. Use 'level' as a shorthand for log level.")
-@click.argument("key")
-@click.argument("value")
-@click_work_path
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def audit_log_set(
-    key: str,
-    value: str,
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-    quiet: bool = False,
-) -> None:
-    command = LogConfigCommand(
-        action="set", key=key, value=value, work_path=work_path, output=output, verbose=verbose, quiet=quiet
-    )
-    success = command.execute()
-    handle_command_exit(command, success)
-
-
-@audit_log_group.command(name="unset", help="Remove a key from logging.yaml.")
-@click.argument("key")
-@click_work_path
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def audit_log_unset(
-    key: str,
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-    quiet: bool = False,
-) -> None:
-    command = LogConfigCommand(
-        action="unset", key=key, work_path=work_path, output=output, verbose=verbose, quiet=quiet
-    )
-    success = command.execute()
-    handle_command_exit(command, success)
-
-
-@audit_log_group.command(name="reset", help="Reset logging.yaml to the package default.")
-@click_work_path
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def audit_log_reset(
-    work_path: Optional[str] = None,
-    output: Optional[str] = None,
-    verbose: bool = False,
-    quiet: bool = False,
-) -> None:
-    command = LogConfigCommand(action="reset", work_path=work_path, output=output, verbose=verbose, quiet=quiet)
     success = command.execute()
     handle_command_exit(command, success)

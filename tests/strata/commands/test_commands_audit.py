@@ -5,6 +5,7 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from strata.commands.cli_audit import audit_group
+from strata.commands.cli_config import config_group
 
 
 class TestAuditList:
@@ -48,5 +49,5 @@ class TestAuditLog:
     def test_log_list_basic(self, tmp_path):
         runner = CliRunner()
         with patch("strata.commands.audit.log_config_command.LogConfigCommand.execute", return_value=True):
-            result = runner.invoke(audit_group, ["log", "list", "--work-path", str(tmp_path)])
+            result = runner.invoke(config_group, ["log", "list", "--work-path", str(tmp_path)])
         assert result.exit_code == 0

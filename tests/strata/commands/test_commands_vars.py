@@ -3,9 +3,9 @@
 from unittest.mock import patch
 
 from click.testing import CliRunner
-from strata.commands.cli_context import vars_group
 
 from strata.cli import main
+from strata.commands.cli_vars import vars_group
 
 
 class TestContextGroup:
@@ -38,7 +38,7 @@ class TestContextGroup:
     def test_set_basic(self, tmp_path):
         runner = CliRunner()
         with patch(
-            "strata.commands.context.set_context_command.SetContextCommand.execute",
+            "strata.commands.vars.set_vars_command.SetContextCommand.execute",
             return_value=True,
         ):
             result = runner.invoke(
@@ -50,7 +50,7 @@ class TestContextGroup:
     def test_unset_basic(self, tmp_path):
         runner = CliRunner()
         with patch(
-            "strata.commands.context.set_context_command.SetContextCommand.execute",
+            "strata.commands.vars.set_vars_command.SetContextCommand.execute",
             return_value=True,
         ):
             result = runner.invoke(
@@ -62,7 +62,7 @@ class TestContextGroup:
     def test_list_basic(self, tmp_path):
         runner = CliRunner()
         with patch(
-            "strata.commands.context.set_context_command.SetContextCommand.execute",
+            "strata.commands.vars.set_vars_command.SetContextCommand.execute",
             return_value=True,
         ):
             result = runner.invoke(

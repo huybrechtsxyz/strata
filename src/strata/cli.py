@@ -27,7 +27,6 @@ import yaml
 from strata.commands.cli_audit import audit_group
 from strata.commands.cli_builders import build as build_group
 from strata.commands.cli_config import config_group
-from strata.commands.cli_context import context_group
 from strata.commands.cli_deploy import deploy as deploy_group
 from strata.commands.cli_help import help_command
 from strata.commands.cli_new import new_command
@@ -39,6 +38,7 @@ from strata.commands.cli_sln import sln_group
 from strata.commands.cli_tools import tools_group
 from strata.commands.cli_validate import validate_command
 from strata.commands.cli_values import values_group
+from strata.commands.cli_vars import vars_group
 from strata.commands.cli_version import version_command
 from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
@@ -165,7 +165,7 @@ main.add_command(version_command, name="version")
 main.add_command(help_command, name="help")
 main.add_command(sln_group, name="sln")
 main.add_command(config_group, name="config")
-main.add_command(context_group, name="context")
+main.add_command(vars_group, name="vars")
 main.add_command(new_command, name="new")
 main.add_command(audit_group, name="audit")
 main.add_command(repo_group, name="repo")

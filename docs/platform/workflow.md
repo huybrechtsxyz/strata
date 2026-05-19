@@ -11,14 +11,14 @@
 
 Basher's environment:
 
-| Item                            | Example                                           |
-| ------------------------------- | ------------------------------------------------- |
-| Workspace repo                  | `git@github.com:org/xyz-workspace.git`            |
-| Platform config repo            | `git@github.com:org/xyz-config.git`               |
-| Infrastructure (Terraform) repo | `git@github.com:org/xyz-infrastructure.git`       |
-| Service config repo             | `git@github.com:org/xyz-svc-traefik.git`          |
+| Item                            | Example                                         |
+| ------------------------------- | ----------------------------------------------- |
+| Workspace repo                  | `git@github.com:org/xyz-workspace.git`          |
+| Platform config repo            | `git@github.com:org/xyz-config.git`             |
+| Infrastructure (Terraform) repo | `git@github.com:org/xyz-infrastructure.git`     |
+| Service config repo             | `git@github.com:org/xyz-svc-traefik.git`        |
 | Local workspace root            | `C:\src\workspace\` (has `.strata/` after init) |
-| Active profile                  | `prd`                                             |
+| Active profile                  | `prd`                                           |
 
 All `strata` commands are run from inside the workspace root (or pass `--work-path`).
 
@@ -600,7 +600,7 @@ strata sln clean
 strata sln clean --dry-run     # preview first
 
 # Reset logging config to defaults
-strata audit log reset
+strata config log reset
 ```
 
 ---
@@ -665,18 +665,18 @@ strata audit list --last
 
 ### Workspace
 
-| Command                                       | Description                                                                           |
-| --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Command                                         | Description                                                                      |
+| ----------------------------------------------- | -------------------------------------------------------------------------------- |
 | `strata sln init --name NAME [--template FILE]` | Initialize a new workspace; `--template` pre-populates repos, profiles, and refs |
-| `strata sln status`                                  | Show workspace health and integration availability                                    |
-| `strata sln clean [--dry-run]`                       | Remove logs and temp artifacts                                                        |
-| `strata version`                                 | Print CLI version                                                                     |
-| `strata help [--topic NAME]`                     | Show workflow guidance topics                                                         |
+| `strata sln status`                             | Show workspace health and integration availability                               |
+| `strata sln clean [--dry-run]`                  | Remove logs and temp artifacts                                                   |
+| `strata version`                                | Print CLI version                                                                |
+| `strata help [--topic NAME]`                    | Show workflow guidance topics                                                    |
 
 ### Configuration
 
-| Command                    | Description                           |
-| -------------------------- | ------------------------------------- |
+| Command                       | Description                           |
+| ----------------------------- | ------------------------------------- |
 | `strata config set KEY VALUE` | Persist a workspace-level CLI default |
 | `strata config unset KEY`     | Remove a persisted default            |
 | `strata config list`          | List all persisted defaults           |
@@ -685,17 +685,24 @@ Valid keys: `output`, `verbose`, `quiet`, `work_path`
 
 ### Audit
 
-| Command                                           | Description                              |
-| ------------------------------------------------- | ---------------------------------------- |
-| `strata audit list [--last] [--lines N] [--level L]` | View execution logs                      |
-| `strata audit log list`                              | Print current `logging.yaml`             |
-| `strata audit log set KEY VALUE`                     | Set a logging config value               |
-| `strata audit log reset`                             | Reset logging config to package defaults |
+| Command                                              | Description                     |
+| ---------------------------------------------------- | ------------------------------- |
+| `strata audit list [--last] [--lines N] [--level L]` | View execution logs (read-only) |
+
+### Logging Config
+
+| Command                           | Description                              |
+| --------------------------------- | ---------------------------------------- |
+| `strata config log list`          | Print current `logging.yaml`             |
+| `strata config log get KEY`       | Get a single logging config value        |
+| `strata config log set KEY VALUE` | Set a logging config value               |
+| `strata config log unset KEY`     | Remove a logging config key              |
+| `strata config log reset`         | Reset logging config to package defaults |
 
 ### Repositories
 
-| Command                                                   | Description                                   |
-| --------------------------------------------------------- | --------------------------------------------- |
+| Command                                                      | Description                                   |
+| ------------------------------------------------------------ | --------------------------------------------- |
 | `strata repo add NAME URL [--branch B] [--path P] [--clone]` | Register a repo; `--clone` clones immediately |
 | `strata repo list [--name NAME]`                             | List registered repos                         |
 | `strata repo status [--name NAME]`                           | Show git state (branch, dirty, ahead/behind)  |
@@ -704,8 +711,8 @@ Valid keys: `output`, `verbose`, `quiet`, `work_path`
 
 ### Profiles
 
-| Command                     | Description                           |
-| --------------------------- | ------------------------------------- |
+| Command                        | Description                           |
+| ------------------------------ | ------------------------------------- |
 | `strata profile add NAME`      | Create a new profile                  |
 | `strata profile remove NAME`   | Delete a profile                      |
 | `strata profile list`          | List all profiles                     |
@@ -716,8 +723,8 @@ Valid keys: `output`, `verbose`, `quiet`, `work_path`
 
 All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 
-| Command                                      | Description                |
-| -------------------------------------------- | -------------------------- |
+| Command                                         | Description                |
+| ----------------------------------------------- | -------------------------- |
 | `strata ref <TYPE> add NAME PATH [--profile P]` | Register a file reference  |
 | `strata ref <TYPE> remove NAME [--profile P]`   | Remove a file reference    |
 | `strata ref <TYPE> list [--profile P]`          | List registered references |
@@ -725,22 +732,22 @@ All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 
 ### Validation
 
-| Command                      | Description                   |
-| ---------------------------- | ----------------------------- |
+| Command                         | Description                   |
+| ------------------------------- | ----------------------------- |
 | `strata validate FILE [--deep]` | Validate a platform YAML file |
 
 ### Build
 
-| Command                                                 | Description                                                     |
-| ------------------------------------------------------- | --------------------------------------------------------------- |
+| Command                                                    | Description                                                     |
+| ---------------------------------------------------------- | --------------------------------------------------------------- |
 | `strata build run -f FILE [--dry-run]`                     | Run the platform + Terraform build pipeline                     |
 | `strata build plan -f FILE [--stage S] [--artifacts-only]` | Artifact diff + terraform plan per stage (reads only, temp dir) |
 | `strata build clean -f FILE [--dry-run]`                   | Remove build artifacts                                          |
 
 ### Deploy
 
-| Command                                                        | Description                                                          |
-| -------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Command                                                           | Description                                                          |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `strata deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                          |
 | `strata deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves |
 | `strata deploy status -f FILE [--stage S] [--plan]`               | Live Terraform outputs or saved plan details                         |
@@ -749,8 +756,8 @@ All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 
 ### Values
 
-| Command                                                            | Description                                                          |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Command                                                               | Description                                                          |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `strata values list -f FILE [--type T] [--show-store] [--unresolved]` | List all variables / secrets (masked) / feature flags                |
 | `strata values get  -f FILE KEY [KEY …]`                              | Retrieve full resolved value(s) for specific keys (secrets revealed) |
 

@@ -11,7 +11,7 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from strata.commands.context.set_context_command import SetContextCommand
+from strata.commands.vars.set_vars_command import SetContextCommand
 
 
 @click.group(name="vars", help="Manage team-shared template variables (stored in solution.json).")
