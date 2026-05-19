@@ -6,7 +6,7 @@ import sys
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import click
 
@@ -283,11 +283,31 @@ class BaseCommand(ABC):
             extra={"command_class": self.__class__.__name__, "success": success},
         )
 
-        if self._is_structured_output():
+        if self._is_ndjson_output():
+            # ── NDJSON mode: emit final "complete" event ──────────────────────
+            from datetime import timezone
+
+            self.emit_ndjson(
+                {
+                    "event": "complete",
+                    "success": bool(success),
+                    "command": self.OPERATION,
+                    "execution_id": self._execution_id,
+                    "timestamp": self._start_time.isoformat(),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "data": self._output_data,
+                    "messages": self._messages,
+                    "errors": self._errors,
+                }
+            )
+
+        elif self._is_structured_output():
             # ── Structured output (--output json / text) ─────────────────────
             envelope: Dict[str, Any] = {
                 "success": bool(success),
                 "command": self.OPERATION,
+                "execution_id": self._execution_id,
+                "timestamp": self._start_time.isoformat(),
                 "data": self._output_data,
                 "messages": self._messages,
                 "errors": self._errors,
@@ -297,6 +317,8 @@ class BaseCommand(ABC):
             else:  # text
                 click.echo(f"success: {envelope['success']}")
                 click.echo(f"command: {envelope['command']}")
+                click.echo(f"execution_id: {envelope['execution_id']}")
+                click.echo(f"timestamp: {envelope['timestamp']}")
                 for k, v in envelope["data"].items():
                     if isinstance(v, list):
                         click.echo(f"{k}:")
@@ -335,10 +357,10 @@ class BaseCommand(ABC):
 
             # Show errors
             if self._errors and len(self._errors) > 0:
-                click.echo("❌  Errors:")
+                click.echo("❌  Errors:", err=True)
                 for err in self._errors:
-                    click.secho(f"    - {err}", fg="red")
-                click.echo("")
+                    click.secho(f"    - {err}", fg="red", err=True)
+                click.echo("", err=True)
 
             # Show verbose logging
             if self._is_verbose():
@@ -371,11 +393,47 @@ class BaseCommand(ABC):
 
     def _is_structured_output(self) -> bool:
         """Return True when --output <format> is active: emit machine-readable data (json, text, etc.)."""
-        return bool(self._output_format) and self._output_format != "console"
+        return bool(self._output_format) and self._output_format not in ("console", "ndjson")
+
+    def _is_ndjson_output(self) -> bool:
+        """Return True when --output ndjson is active: emit events as newline-delimited JSON."""
+        return self._output_format == "ndjson"
 
     def _is_console_output(self) -> bool:
         """Return True for default human-readable console output (no --quiet, no explicit --output format)."""
         return not self._output_quiet and (not bool(self._output_format) or self._output_format == "console")
+
+    def emit_ndjson(self, event: Dict[str, Any]) -> None:
+        """Emit one NDJSON event line immediately to stdout.
+
+        Each call writes exactly one ``\\n``-terminated JSON object.  Callers
+        should add a ``"ts"`` field with the current ISO-8601 timestamp when the
+        event carries timing information.
+        """
+        click.echo(json.dumps(event, default=str), nl=True)
+
+    def make_ndjson_line_callback(self, step: str, stage: Optional[str] = None) -> "Callable[[str, str], None]":
+        """Return a ``line_callback`` that emits NDJSON ``line`` events for every subprocess output line.
+
+        The returned callable signature matches the one expected by
+        ``run_command(line_callback=...)`` and ``TerraformDeployer`` step methods:
+        ``(stream: str, text: str) -> None``.
+        """
+        from datetime import timezone
+
+        def _cb(stream: str, text: str) -> None:
+            event: Dict[str, Any] = {
+                "event": "line",
+                "step": step,
+                "stream": stream,
+                "text": text,
+                "ts": datetime.now(timezone.utc).isoformat(),
+            }
+            if stage is not None:
+                event["stage"] = stage
+            self.emit_ndjson(event)
+
+        return _cb
 
     # Internal helper methods
 

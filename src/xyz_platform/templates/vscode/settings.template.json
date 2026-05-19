@@ -40,7 +40,9 @@
   "python.envFile": "${workspaceFolder}/.env",
   "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
   "python.testing.cwd": "${workspaceFolder}",
-  "python.testing.pytestArgs": ["tests"],
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
   "editor.formatOnSave": true,
@@ -52,5 +54,19 @@
     ".nox": true,
     ".pytest_cache": true,
     ".coverage": true
+  },
+  "yaml.schemas": {
+    "${workspaceFolder}/.platform/schemas/configuration.json": [
+      "config/**/*.yaml"
+    ],
+    "${workspaceFolder}/.platform/schemas/deployment.json": [
+      "deploy/**/*.yaml"
+    ],
+    "${workspaceFolder}/.platform/schemas/environment.json": [
+      "envs/**/*.yaml"
+    ],
+    "${workspaceFolder}/.platform/schemas/workspace.json": [
+      "stack/**/*.yaml"
+    ]
   }
 }

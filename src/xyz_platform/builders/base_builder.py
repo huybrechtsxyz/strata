@@ -26,6 +26,12 @@ class BaseBuilder(ABC):
     def get_messages(self) -> List[str]:
         return self._messages
 
+    def drain_messages(self) -> List[str]:
+        """Return accumulated messages and clear the internal list."""
+        msgs = list(self._messages)
+        self._messages.clear()
+        return msgs
+
     def get_errors(self) -> List[str]:
         return self._errors
 

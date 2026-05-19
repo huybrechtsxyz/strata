@@ -114,11 +114,7 @@ class ShowRefCommand(BaseCommand):
             return False
 
         # Build repo_map for @repo_name/... resolution
-        repos, repo_errors = self._solution_controller.get_repositories()
-        if repo_errors:
-            self._errors.extend(repo_errors)
-            return False
-        repo_map = {str(r.name): str(self._work_path / r.path) for r in repos}
+        repo_map = self._solution_controller.get_repo_map()
 
         try:
             resolved: Path = resolve_path(

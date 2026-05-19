@@ -19,6 +19,7 @@ xyz_platform
    :caption: Platform Reference:
 
    platform/readme
+   platform/getting-started
    platform/commands
    platform/workflow
    platform/cli-preferences

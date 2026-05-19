@@ -86,6 +86,7 @@ uv run xyz-platform --help
 # 1. Initialize a new workspace
 cd /path/to/my-workspace
 xyz init --name my-workspace
+# Opens in VS Code? Select "Reopen in Container" to use the pre-configured dev container.
 
 # 2. Register external repositories
 xyz repo add xyz-config         git@github.com:org/xyz-config.git         --branch main --clone

@@ -111,7 +111,7 @@ class RunBuildCommand(BaseBuildCommand):
             work_path=self._work_path,
             build_path=self._build_path,
         )
-        self._messages.extend(builder.get_messages())
+        self._messages.extend(builder.drain_messages())
         if not ok:
             self._errors.extend(builder.get_errors())
             return False
@@ -122,7 +122,7 @@ class RunBuildCommand(BaseBuildCommand):
             build_path=self._build_path,
             dry_run=self._dry_run,
         )
-        self._messages.extend(builder.get_messages())
+        self._messages.extend(builder.drain_messages())
         if not ok:
             self._errors.extend(builder.get_errors())
             return False
@@ -136,7 +136,7 @@ class RunBuildCommand(BaseBuildCommand):
             build_path=self._build_path,
             dry_run=self._dry_run,
         )
-        self._messages.extend(builder.get_messages())
+        self._messages.extend(builder.drain_messages())
         if not ok:
             self._errors.extend(builder.get_errors())
             return False
@@ -149,13 +149,15 @@ class RunBuildCommand(BaseBuildCommand):
             return False
         builder = TerraformBuilder(verbose=self._is_verbose())
 
+        repo_map = self._solution_controller.get_repo_map() if self._solution_controller is not None else {}
+
         ok = builder.before_build(
             deployment_service=self._deployment_service,
             work_path=self._work_path,
             build_path=self._build_path,
             dry_run=self._dry_run,
         )
-        self._messages.extend(builder.get_messages())
+        self._messages.extend(builder.drain_messages())
         if not ok:
             self._errors.extend(builder.get_errors())
             return False
@@ -166,8 +168,9 @@ class RunBuildCommand(BaseBuildCommand):
             build_path=self._build_path,
             dry_run=self._dry_run,
             platform_model=getattr(self, "_platform_model", None),
+            repo_map=repo_map,
         )
-        self._messages.extend(builder.get_messages())
+        self._messages.extend(builder.drain_messages())
         if not ok:
             self._errors.extend(builder.get_errors())
             return False
@@ -178,7 +181,7 @@ class RunBuildCommand(BaseBuildCommand):
             build_path=self._build_path,
             dry_run=self._dry_run,
         )
-        self._messages.extend(builder.get_messages())
+        self._messages.extend(builder.drain_messages())
         if not ok:
             self._errors.extend(builder.get_errors())
             return False

@@ -6,6 +6,9 @@
 # Personal CLI preferences — each developer sets these locally via `xyz config set`
 cli.yaml
 
+# Build output — generated artifacts, never committed
+build/
+
 # Log output
 logs/
 *.log

@@ -4,7 +4,7 @@
     {
       "label": "Run: ${SOLUTION_NAME}",
       "type": "shell",
-      "command": "uv run xyz-platform ${input:cliArgs}",
+      "command": "xyz ${input:cliArgs}",
       "group": "build",
       "presentation": {
         "echo": true,

@@ -27,6 +27,7 @@ classifiers = [
 dependencies = [
     "pydantic>=2.4",
     "pyyaml>=6.0",
+    "python-hcl2>=8.0",
     "click>=8.0",
     "rich>=13.0",
     "requests>=2.31",
@@ -51,6 +52,7 @@ where = ["src"]
 "xyz_platform.templates" = ["*.yaml", "*.json", "*.md", "*.txt"]
 "xyz_platform.templates.solution" = ["*.yaml", "*.md", "*"]
 "xyz_platform.templates.integrations" = ["*.md", "*.py"]
+"xyz_platform.templates.devcontainer" = ["*.json", "*.sh"]
 
 [dependency-groups]
 dev = [
@@ -184,3 +186,4 @@ ignore_missing_imports = true
 
 [project.scripts]
 xyz-platform = "xyz_platform.cli:main"
+xyz = "xyz_platform.cli:main"

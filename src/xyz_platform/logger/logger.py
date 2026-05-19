@@ -189,7 +189,7 @@ def _configure_from_yaml(config_path: str) -> None:
           connection_string: "InstrumentationKey=..."
     """
     try:
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         from .handlers import LogstashHandler

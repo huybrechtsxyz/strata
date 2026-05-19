@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic model for environment configuration validation."""
 
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import (
@@ -25,6 +26,54 @@ from xyz_platform.models.store_models import (
     validate_unique_secret_keys,
     validate_unique_variable_keys,
 )
+
+
+class IncludeMergeStrategy(str, Enum):
+    """Supported merge strategies for terraform file includes."""
+
+    CONCATENATE = "concatenate"
+    MERGE = "merge"
+
+
+class EnvironmentIncludeModel(BaseModel):
+    """
+    Terraform file include definition for merging during build.
+
+    Defines which source files to merge, the merge strategy, and the output target
+    within the build terraform directory.
+    """
+
+    source: str = Field(
+        description="Source file path or glob pattern. Supports @repo/ references. "
+        "Examples: '@haven/terraform/waf/listeners/*.tf', 'customers/acme/overrides.tfvars'",
+        min_length=1,
+    )
+    target: str = Field(
+        description="Output filename in the build terraform directory. "
+        "Examples: 'waf_listeners.tf', 'acme.auto.tfvars.json'",
+        min_length=1,
+    )
+    strategy: IncludeMergeStrategy = Field(
+        default=IncludeMergeStrategy.CONCATENATE,
+        description="Merge strategy: 'concatenate' (raw append) or 'merge' (structural merge)",
+    )
+    optional: bool = Field(
+        default=False,
+        description="If true, silently skip when source resolves to no files",
+    )
+    order: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Sort priority when multiple includes share the same target (lower = first)",
+    )
+
+    @field_validator("target")
+    @classmethod
+    def validate_target_no_traversal(cls, v: str) -> str:
+        """Prevent path traversal in target."""
+        if ".." in v:
+            raise ValueError("Target path must not contain '..' (path traversal)")
+        return v
 
 
 class EnvironmentResourceOverrideModel(BaseModel):
@@ -72,6 +121,10 @@ class EnvironmentResourceOverrideModel(BaseModel):
         description="Override resource labels",
     )
     tags: Optional[List[Any]] = Field(None, description="Override resource tags")
+    includes: Optional[List[EnvironmentIncludeModel]] = Field(
+        None,
+        description="Terraform files to merge into build output for this resource",
+    )
 
 
 class EnvironmentModuleOverrideModel(BaseModel):
@@ -135,6 +188,10 @@ class EnvironmentOverridesModel(BaseModel):
         None, description="Provider-specific overrides (description)"
     )
     properties: Optional[Dict[str, Any]] = Field(None, description="Override workspace properties for this environment")
+    includes: Optional[List[EnvironmentIncludeModel]] = Field(
+        None,
+        description="Environment-wide terraform file includes (not tied to a specific resource)",
+    )
 
     @model_validator(mode="after")
     def validate_unique_overrides(self) -> "EnvironmentOverridesModel":

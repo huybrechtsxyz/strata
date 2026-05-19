@@ -1,17 +1,20 @@
 """Build the platform model artifact."""
 
+import shutil
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 from xyz_platform.builders.base_builder import BaseBuilder
 from xyz_platform.models.platform_artifact_model import (
     PlatformArtifactModel,
+    PlatformComponentModel,
     PlatformFirewallModel,
     PlatformLifecycleModel,
     PlatformMetaModel,
     PlatformModuleModel,
     PlatformNamespaceModel,
     PlatformProviderModel,
+    PlatformProvisionerModel,
     PlatformResourceModel,
     PlatformSpecModel,
     PlatformTopologyModel,
@@ -119,6 +122,13 @@ class PlatformBuilder(BaseBuilder):
         if not workspace_service:
             self._errors.append("Workspace service is not available")
             return False
+
+        # Clean the deployment build folder so stale files from a previous run
+        # (e.g. removed resource types) do not pollute the new output.
+        deployment_build_path = deployment_service.get_build_path(build_path)
+        if deployment_build_path.exists():
+            shutil.rmtree(deployment_build_path)
+            self.logger.debug("Cleaned build folder", path=str(deployment_build_path))
 
         if self.verbose:
             self._messages.append("Pre-build validation passed")
@@ -267,7 +277,7 @@ class PlatformBuilder(BaseBuilder):
                 self.logger.debug(f"Built {len(providers)} provider(s)")
 
         # ------------------------------------------------------------------
-        # Topologies
+        # Topologies — built after resource maps so components can be enriched
         # ------------------------------------------------------------------
         topologies = None
         if workspace_model.spec.topology:
@@ -285,16 +295,37 @@ class PlatformBuilder(BaseBuilder):
         if resource_services:
             # Map resource names → their workspace firewall reference lists
             resource_to_firewalls: dict = {}
+            resource_to_role: dict = {}
+            resource_to_count: dict = {}
             if workspace_model.spec.resources:
                 for res_ref in workspace_model.spec.resources:
                     if res_ref.firewalls:
                         resource_to_firewalls[res_ref.name] = res_ref.firewalls
+                    if res_ref.role:
+                        resource_to_role[str(res_ref.name)] = str(res_ref.role)
+                    resource_to_count[str(res_ref.name)] = res_ref.count
 
             resources = [
-                PlatformResourceModel.from_resource_model(svc.model)
+                PlatformResourceModel.from_resource_model(
+                    svc.model,
+                    role=resource_to_role.get(str(svc.model.meta.name)),
+                    count=resource_to_count.get(str(svc.model.meta.name), 1),
+                )
                 for svc in resource_services.values()
                 if svc.model is not None
             ]
+
+        # Enrich topology components with role/count now that resource maps exist
+        if topologies:
+            for topology in topologies:
+                topology.components = [
+                    PlatformComponentModel(
+                        resource=str(comp.resource),
+                        role=resource_to_role.get(str(comp.resource)),
+                        count=resource_to_count.get(str(comp.resource), 1),
+                    )
+                    for comp in topology.components
+                ]
 
         # ------------------------------------------------------------------
         # Namespaces
@@ -326,20 +357,11 @@ class PlatformBuilder(BaseBuilder):
                 self.logger.warning("No modules were built for platform model")
 
         # ------------------------------------------------------------------
-        # Firewalls: original definitions + merged resource firewalls
+        # Firewalls: one merged firewall per VM resource (originals are not emitted)
         # ------------------------------------------------------------------
         firewalls_list = []
 
-        firewall_services = workspace_service.get_firewall_services()
-        if firewall_services:
-            firewalls_list = [
-                PlatformFirewallModel.from_firewall_model(svc.model)
-                for svc in firewall_services.values()
-                if svc.model is not None
-            ]
-            self.logger.debug(f"Added {len(firewall_services)} original firewall definition(s)")
-
-        # Merged firewalls synthesised from resources with multiple fw refs
+        # Merged firewalls synthesised per resource from its firewall references
         if resource_services:
             for resource_name, resource_service in resource_services.items():
                 merged_fw = resource_service.get_merged_firewall()
@@ -382,6 +404,16 @@ class PlatformBuilder(BaseBuilder):
         )
 
         # ------------------------------------------------------------------
+        # Provisioners
+        # ------------------------------------------------------------------
+        provisioners = None
+        if workspace_model.spec.provisioners:
+            provisioners = [
+                PlatformProvisionerModel.model_validate(prov.model_dump()) for prov in workspace_model.spec.provisioners
+            ]
+            self.logger.debug(f"Added {len(provisioners)} provisioner(s)")
+
+        # ------------------------------------------------------------------
         # Assemble spec
         # ------------------------------------------------------------------
         lifecycle_model = None
@@ -406,7 +438,7 @@ class PlatformBuilder(BaseBuilder):
             features=all_features,
             variables=all_variables,
             secrets=all_secrets,
-            provisioners=None,
+            provisioners=provisioners,
             stereotypes=None,
         )
 

@@ -13,6 +13,8 @@ These options are accepted by every command and subcommand:
 | `--verbose`        | flag                      | off           | Enable verbose output.                                                                                                                                                        |
 | `--quiet`          | flag                      | off           | Suppress console output.                                                                                                                                                      |
 
+> **Automation / AI agents:** Always use `--output json` (or set `XYZ_OUTPUT=json`). Every CLI flag has an `XYZ_<OPTION>` environment-variable equivalent — set them once rather than passing flags on every call. In console mode, errors are written to **stderr**; the JSON envelope always goes to **stdout**.
+
 ## Exit Codes
 
 | Code | Meaning                                                      |
@@ -38,6 +40,7 @@ These options are accepted by every command and subcommand:
 | `repo`     | `add` `remove` `list` `sync` `status`                          | Manage repositories in the solution           |
 | `build`    | `run` `plan` `clean`                                           | Build platform and Terraform artifacts        |
 | `validate` | —                                                              | Validate a single platform YAML file          |
+| `schema`   | `list` `get`                                                   | Inspect JSON schemas for platform YAML kinds  |
 | `deploy`   | `run` `destroy` `status` `history` `health`                    | Deploy platform using provisioners            |
 | `values`   | `list` `get`                                                   | Inspect resolved deployment values            |
 | `version`  | —                                                              | Show CLI version                              |
@@ -47,7 +50,7 @@ These options are accepted by every command and subcommand:
 
 ## `init`
 
-Initialize a new XYZ Platform solution workspace. Creates `.platform/` state directory and `solution.json`.
+Initialize a new XYZ Platform solution workspace. Creates the `.platform/` state directory, workspace defaults, and a ready-to-use `.devcontainer/` for VS Code Dev Containers and GitHub Codespaces.
 
 ```
 xyz init --name NAME [--from-template FILE] [standard options]
@@ -58,12 +61,26 @@ xyz init --name NAME [--from-template FILE] [standard options]
 | `--name NAME`          | ✅        | Name of the solution workspace                                                                    |
 | `--from-template FILE` | —        | Path to a workspace template YAML file. Pre-populates repos, profiles, and refs. File must exist. |
 
+**Files created:**
+
+| Path                                  | Description                                                                      |
+| ------------------------------------- | -------------------------------------------------------------------------------- |
+| `.platform/project.json`              | Solution registry                                                                |
+| `.platform/cli.yaml`                  | Workspace CLI defaults                                                           |
+| `.platform/logging.yaml`              | Logging configuration                                                            |
+| `.devcontainer/devcontainer.json`     | Dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm)       |
+| `.devcontainer/post-create.sh`        | Post-create script — installs `xyz-platform` and sets up shell completion        |
+
+All `.devcontainer/` files are written **idempotently** — existing files are never overwritten.
+
 **Exit codes:** 0 success · 1 failure · 2 missing `--name`
 
 ```bash
 xyz init --name my-platform
 xyz init --name my-platform --from-template templates/base.yaml
 ```
+
+> **Dev container:** After `xyz init`, open the workspace in VS Code and select **Reopen in Container** to start a pre-configured environment with all tools installed. The container also works with GitHub Codespaces.
 
 ---
 
@@ -400,6 +417,47 @@ xyz validate FILE_PATH [--deep] [standard options]
 ```bash
 xyz validate config/xyz-config.yaml
 xyz validate config/xyz-ws-platform.yaml --deep
+```
+
+---
+
+## `schema`
+
+Inspect JSON schemas for platform YAML document kinds. Useful for editors, linters, and AI agents that need to understand what fields a document type requires.
+
+### `schema list`
+
+List all supported platform document kinds.
+
+```
+xyz schema list [--output FORMAT]
+```
+
+**`--output json`** returns `{"kinds": ["configuration", "deployment", ...]}`. **`--output text`** prints one kind per line.
+
+```bash
+xyz schema list
+xyz schema list --output json
+```
+
+### `schema get KIND`
+
+Emit the full JSON Schema for a platform document kind.
+
+```
+xyz schema get KIND [--output FORMAT]
+```
+
+Default and `--output json` both emit the complete Pydantic-generated JSON Schema. `--output text` shows a compact summary (required fields and top-level property names).
+
+**Valid kinds:** `configuration` `deployment` `environment` `firewall` `module` `namespace` `platform_model` `provider` `resource` `workspace`
+
+**Exit codes:** 0 success · 2 unknown kind
+
+```bash
+xyz schema get deployment
+xyz schema get deployment --output json
+xyz schema get environment --output text
 ```
 
 ---

@@ -815,7 +815,7 @@ class SolutionController(BaseController):
                             {
                                 "label": f"Run: {name}",
                                 "type": "shell",
-                                "command": "uv run xyz-platform ${input:cliArgs}",
+                                "command": "xyz ${input:cliArgs}",
                                 "group": "build",
                                 "presentation": {
                                     "echo": True,
@@ -1026,6 +1026,36 @@ class SolutionController(BaseController):
                 self._add_error(msg)
                 return False, self.get_errors()
 
+        # Write root .gitignore if absent (idempotent — never overwrites existing)
+        root_gitignore = self._work_path / ".gitignore"
+        if not root_gitignore.exists():
+            root_gitignore_src = templates_dir / "root.gitignore"
+            if root_gitignore_src.exists():
+                try:
+                    root_gitignore.write_text(root_gitignore_src.read_text(encoding="utf-8"), encoding="utf-8")
+                    self.logger.info("Root .gitignore written", path=str(root_gitignore))
+                    self._add_message("Created: .gitignore")
+                except Exception as e:
+                    msg = f"Failed to write root .gitignore: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
+
+        # Write root README.md if absent (idempotent — never overwrites existing)
+        root_readme = self._work_path / "README.md"
+        if not root_readme.exists():
+            root_readme_src = templates_dir / "root.readme.md"
+            if root_readme_src.exists():
+                try:
+                    content = root_readme_src.read_text(encoding="utf-8")
+                    content = content.replace("${SOLUTION_NAME}", self._solution.meta.name if self._solution else "")
+                    root_readme.write_text(content, encoding="utf-8")
+                    self.logger.info("Root README.md written", path=str(root_readme))
+                    self._add_message("Created: README.md")
+                except Exception as e:
+                    msg = f"Failed to write root README.md: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
+
         # Ensure logs directory exists
         logs_dir = state_dir / "logs"
         logs_dir.mkdir(exist_ok=True)
@@ -1101,6 +1131,70 @@ class SolutionController(BaseController):
                     self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
                 except Exception as e:
                     msg = f"Failed to write integration template {src_file.name}: {e}"
+                    self._add_error(msg)
+                    return False, self.get_errors()
+
+        # Generate JSON Schemas for all platform document kinds → .platform/schemas/
+        # These are derived artifacts (regenerated, not user-edited), so we always overwrite.
+        try:
+            from xyz_platform.models.configuration_model import ConfigurationModel
+            from xyz_platform.models.deployment_model import DeploymentModel
+            from xyz_platform.models.environment_model import EnvironmentModel
+            from xyz_platform.models.firewall_model import FirewallModel
+            from xyz_platform.models.module_model import ModuleModel
+            from xyz_platform.models.namespace_model import NamespaceModel
+            from xyz_platform.models.platform_artifact_model import PlatformArtifactModel
+            from xyz_platform.models.provider_model import ProviderModel
+            from xyz_platform.models.resource_model import ResourceModel
+            from xyz_platform.models.workspace_model import WorkspaceModel
+
+            _schema_map = {
+                "configuration": ConfigurationModel,
+                "deployment": DeploymentModel,
+                "environment": EnvironmentModel,
+                "firewall": FirewallModel,
+                "module": ModuleModel,
+                "namespace": NamespaceModel,
+                "platform": PlatformArtifactModel,
+                "provider": ProviderModel,
+                "resource": ResourceModel,
+                "workspace": WorkspaceModel,
+            }
+            schemas_dir = state_dir / "schemas"
+            schemas_dir.mkdir(exist_ok=True)
+            for kind_name, model_cls in _schema_map.items():
+                schema_file = schemas_dir / f"{kind_name}.json"
+                try:
+                    schema_file.write_text(json.dumps(model_cls.model_json_schema(), indent=2), encoding="utf-8")
+                    self.logger.debug("Schema written", kind=kind_name)
+                except Exception as schema_exc:
+                    self.logger.warning("Failed to write schema", kind=kind_name, error=str(schema_exc))
+            self._add_message(f"Created: {schemas_dir.relative_to(self._work_path)} (JSON Schemas for all kinds)")
+        except Exception as e:
+            self.logger.warning("Schema generation skipped", error=str(e))
+
+        # Scaffold .devcontainer/ — idempotent, never overwrites existing files
+        devcontainer_templates_src = get_pkg_templates_path() / "devcontainer"
+        if devcontainer_templates_src.exists() and devcontainer_templates_src.is_dir():
+            devcontainer_dir = self._work_path / ".devcontainer"
+            devcontainer_dir.mkdir(exist_ok=True)
+            solution_name = str(self._solution.meta.name) if self._solution else ""
+            for src_file in devcontainer_templates_src.iterdir():
+                if not src_file.is_file():
+                    continue
+                out_name = src_file.name.replace(".template.", ".")
+                dest_file = devcontainer_dir / out_name
+                if dest_file.exists():
+                    self.logger.debug("Devcontainer file already exists — skipping", path=str(dest_file))
+                    continue
+                try:
+                    content = src_file.read_text(encoding="utf-8")
+                    content = content.replace("${SOLUTION_NAME}", solution_name)
+                    dest_file.write_text(content, encoding="utf-8")
+                    self.logger.info("Devcontainer file written", path=str(dest_file))
+                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
+                except Exception as e:
+                    msg = f"Failed to write devcontainer file {out_name}: {e}"
                     self._add_error(msg)
                     return False, self.get_errors()
 

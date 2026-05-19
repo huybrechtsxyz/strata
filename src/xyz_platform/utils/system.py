@@ -4,12 +4,13 @@
 import os
 import re
 import subprocess
+import threading
 import time
 import unicodedata
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import IO, Callable, Dict, List, Optional, Union
 
 from rich.console import Console
 
@@ -250,7 +251,8 @@ def run_command(
     timeout: Optional[int] = None,
     capture_output: Optional[bool] = None,
     cwd: Optional[str] = None,
-) -> CommandResult:
+    line_callback: Optional[Callable[[str, str], None]] = None,
+) -> "CommandResult":
     """
     Run a shell command and capture its output.
 
@@ -261,15 +263,14 @@ def run_command(
         timeout: Timeout in seconds for command execution.
         capture_output: If True, capture stdout/stderr. If False, allow interactive. If None, auto-detect based on show_output.
         cwd: Working directory for command execution.
+        line_callback: Optional callable ``(stream, line) -> None`` called for every output
+            line as it arrives.  *stream* is ``"stdout"`` or ``"stderr"``.  When set,
+            the command is run with ``Popen`` for true streaming instead of
+            ``subprocess.run``; ``show_output`` is ignored in this mode.
 
     Returns:
         CommandResult object with returncode, stdout, stderr, command, and duration_ms.
         Use result.is_successful to check if command succeeded.
-
-    Example:
-        result = run_command("ls -la")
-        if result.is_successful:
-            print(result.stdout)
     """
     if isinstance(command, List):
         cmd_display = " ".join(command)
@@ -285,13 +286,105 @@ def run_command(
     start_time = time.time()
     console = Console()
 
-    if show_output:
+    if show_output and line_callback is None:
         console.print(f"Running command: [yellow]{cmd_display}[/yellow]")
 
     # Auto-detect capture_output if not specified
     if capture_output is None:
         capture_output = True  # Default to capturing output
 
+    # ------------------------------------------------------------------
+    # Streaming path — used when a line_callback is supplied or when
+    # show_output=True (so verbose output appears live, not buffered).
+    # ------------------------------------------------------------------
+    if line_callback is not None or show_output:
+        stdout_lines: List[str] = []
+        stderr_lines: List[str] = []
+
+        try:
+            with subprocess.Popen(
+                command,
+                shell=isinstance(command, str),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=os.environ.copy(),
+                cwd=cwd,
+            ) as proc:
+
+                def _drain(pipe: IO[str], stream_name: str, lines_acc: List[str]) -> None:
+                    for raw in pipe:
+                        line = raw.rstrip("\n\r")
+                        lines_acc.append(line)
+                        if line_callback is not None:
+                            line_callback(stream_name, line)
+                        elif show_output:
+                            if stream_name == "stderr":
+                                console.print(f"[red]{line}[/red]")
+                            else:
+                                console.print(f"[dim]{line}[/dim]")
+
+                assert proc.stdout is not None
+                assert proc.stderr is not None
+                t_out = threading.Thread(target=_drain, args=(proc.stdout, "stdout", stdout_lines), daemon=True)
+                t_err = threading.Thread(target=_drain, args=(proc.stderr, "stderr", stderr_lines), daemon=True)
+                t_out.start()
+                t_err.start()
+                try:
+                    t_out.join(timeout=timeout)
+                    t_err.join(timeout=timeout)
+                    returncode = proc.wait(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    t_out.join()
+                    t_err.join()
+                    returncode = proc.wait()
+
+            duration_ms = (time.time() - start_time) * 1000
+            stdout_text = "\n".join(stdout_lines)
+            stderr_text = "\n".join(stderr_lines)
+
+            logger.debug(
+                "Command completed (streaming)",
+                command=cmd_display,
+                returncode=returncode,
+                duration_ms=round(duration_ms, 2),
+            )
+
+            if check and returncode != 0:
+                logger.error(
+                    "Command failed",
+                    command=cmd_display,
+                    returncode=returncode,
+                    duration_ms=round(duration_ms, 2),
+                    stderr=stderr_text.strip(),
+                )
+                raise subprocess.CalledProcessError(returncode, cmd_display, stdout_text, stderr_text)
+
+            return CommandResult(
+                returncode=returncode,
+                stdout=stdout_text.strip(),
+                stderr=stderr_text.strip(),
+                command=cmd_display,
+                duration_ms=round(duration_ms, 2),
+            )
+
+        except subprocess.CalledProcessError:
+            raise
+        except FileNotFoundError as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.debug("Command not found in PATH", command=cmd_display, error=str(e))
+            return CommandResult(
+                returncode=127,
+                stdout="",
+                stderr=f"Command not found: {cmd_display}",
+                command=cmd_display,
+                duration_ms=round(duration_ms, 2),
+            )
+
+    # ------------------------------------------------------------------
+    # Buffered path (default) — subprocess.run, results after completion.
+    # ------------------------------------------------------------------
     try:
         result = subprocess.run(
             command,
@@ -304,12 +397,6 @@ def run_command(
             timeout=timeout,
             cwd=cwd,
         )
-
-        if show_output and capture_output:
-            if result.stdout:
-                console.print(f"[dim]{result.stdout.strip()}[/dim]")
-            if result.stderr:
-                console.print(f"[red]{result.stderr.strip()}[/red]")
 
         if check and result.returncode != 0:
             duration_ms = (time.time() - start_time) * 1000

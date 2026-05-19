@@ -92,10 +92,19 @@ class ValidateCommand(BaseCommand):
         if not super()._before_execute():
             return False
 
-        candidate = Path(self._file_path_raw)
-        if not candidate.is_absolute():
-            candidate = Path.cwd() / candidate
-        candidate = candidate.resolve()
+        if self._file_path_raw.startswith("@"):
+            try:
+                from xyz_platform.utils.system import resolve_path
+
+                repo_map = self._solution_controller.get_repo_map()
+                candidate = resolve_path(str(self._work_path), self._file_path_raw, repo_map=repo_map)
+            except Exception as e:
+                raise click.UsageError(f"Cannot resolve '{self._file_path_raw}': {e}") from e
+        else:
+            candidate = Path(self._file_path_raw)
+            if not candidate.is_absolute():
+                candidate = Path.cwd() / candidate
+            candidate = candidate.resolve()
 
         if not candidate.exists():
             raise click.UsageError(f"File not found: {candidate}")
@@ -112,9 +121,11 @@ class ValidateCommand(BaseCommand):
             return False  # exit code 1 — system error, not validation error
 
         assert self._resolved_file is not None  # guaranteed by _before_execute
+        solution_repo_map = self._solution_controller.get_repo_map()
         self._validator = PlatformValidator(
             file_path=self._resolved_file,
             configuration_service=config_svc,
+            repo_map=solution_repo_map,
         )
 
         work_path = self._work_path
@@ -153,7 +164,7 @@ class ValidateCommand(BaseCommand):
             "kind": self._detected_kind,
             "deep": self._deep,
             "validation_passed": validation_passed,
-            "errors": list(self._validator.get_errors()),
+            "errors": [e.to_dict() for e in self._validator.get_structured_errors()],
         }
 
         return True
@@ -218,8 +229,7 @@ class ValidateCommand(BaseCommand):
                 )
                 return None
 
-            repos, _ = self._solution_controller.get_repositories()
-            repo_map = {str(r.name): str(self._work_path / r.path) for r in repos}
+            repo_map = self._solution_controller.get_repo_map()
 
             resolved_paths = []
             for entry in configfile_paths:

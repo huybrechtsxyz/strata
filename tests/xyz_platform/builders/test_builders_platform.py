@@ -5,11 +5,13 @@ from unittest.mock import MagicMock, patch
 from xyz_platform.builders.platform_builder import PlatformBuilder
 
 
-def _mock_deployment_service(validated=True, workspace_service=None):
+def _mock_deployment_service(validated=True, workspace_service=None, build_path=None):
     """Return a minimal MagicMock DeploymentService."""
     svc = MagicMock()
     svc.is_validated.return_value = validated
     svc.get_workspace_service.return_value = workspace_service
+    if build_path is not None:
+        svc.get_build_path.return_value = build_path
     return svc
 
 
@@ -54,14 +56,14 @@ class TestPlatformBuilderBeforeBuild:
 
     def test_valid_service_returns_true(self, tmp_path):
         builder = PlatformBuilder()
-        svc = _mock_deployment_service(validated=True, workspace_service=MagicMock())
+        svc = _mock_deployment_service(validated=True, workspace_service=MagicMock(), build_path=tmp_path / "dep")
         result = builder.before_build(svc, tmp_path, tmp_path)
         assert result is True
         assert not builder.has_errors()
 
     def test_verbose_adds_message(self, tmp_path):
         builder = PlatformBuilder(verbose=True)
-        svc = _mock_deployment_service(validated=True, workspace_service=MagicMock())
+        svc = _mock_deployment_service(validated=True, workspace_service=MagicMock(), build_path=tmp_path / "dep")
         builder.before_build(svc, tmp_path, tmp_path)
         assert builder.has_messages()
         assert any("Pre-build" in m for m in builder.get_messages())

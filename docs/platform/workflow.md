@@ -58,9 +58,13 @@ xyz init --name xyz-workspace
 ```
 
 Creates:
-- `.platform/project.json` — solution registry
-- `.platform/cli.yaml`    — workspace defaults
-- `.platform/logging.yaml` — logging configuration
+- `.platform/project.json`          — solution registry
+- `.platform/cli.yaml`              — workspace defaults
+- `.platform/logging.yaml`          — logging configuration
+- `.devcontainer/devcontainer.json` — dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm)
+- `.devcontainer/post-create.sh`    — installs `xyz-platform` and shell completion inside the container
+
+> **VS Code / Codespaces:** Once `xyz init` completes, select **Reopen in Container** in VS Code (or open the repo in GitHub Codespaces) to get a fully configured environment with no local tool installation required.
 
 ### 1.3 Create the workspace from a template (optional)
 

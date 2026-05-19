@@ -1,0 +1,202 @@
+# Getting Started
+
+> **Audience:** DevOps engineer seeing `xyz` (soon: `ruck`) for the first time. Goal: install the tool, initialize a config workspace, and validate a config file — in under 10 minutes.
+
+---
+
+## Prerequisites
+
+| Tool | Version | Why |
+|------|---------|-----|
+| Python | 3.13+ | Runtime |
+| [pipx](https://pipx.pypa.io/) or [uv](https://docs.astral.sh/uv/) | latest | Package install |
+| [Terraform](https://developer.hashicorp.com/terraform/install) | 1.6+ | Infrastructure provisioning |
+| [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | latest | Azure authentication |
+| kubectl | latest | AKS cluster management (AKS deployments only) |
+
+Check your Python version:
+
+```bash
+python --version   # must be 3.13+
+```
+
+---
+
+## Install
+
+**Recommended (isolated install):**
+
+```bash
+pipx install xyz-platform
+xyz --version
+```
+
+**Dev install (from source):**
+
+```bash
+git clone git@github.com:org/xyz-platform.git
+cd xyz-platform
+uv sync
+uv run xyz-platform --version
+```
+
+---
+
+## Initialize a Workspace
+
+Run `xyz init` inside your config repository (the repo that holds your environment YAML files):
+
+```bash
+cd my-config-repo
+xyz init --name my-workspace
+```
+
+What gets created:
+
+```
+my-config-repo/
+├── .platform/
+│   ├── project.json       ← workspace registry (solution model)
+│   ├── cli.yaml           ← your persisted CLI preferences
+│   └── logging.yaml       ← log level and output config
+└── .devcontainer/
+    ├── devcontainer.json  ← VS Code Dev Container definition
+    └── post-create.sh     ← post-create setup script
+```
+
+> **VS Code users:** After init, use **Reopen in Container** to get a fully configured dev environment with all tools pre-installed.
+
+---
+
+## File Structure
+
+Config files follow a Kubernetes-style format (`apiVersion`, `kind`, `meta`, `spec`):
+
+```yaml
+apiVersion: platform.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: my-environment
+  annotations:
+    description: Production AKS cluster — EU West
+spec:
+  profile: prd
+  workspace: "@xyz-config/config/xyz-config.yaml"
+  modules:
+    - "@xyz-config/stack/ns-base.yaml"
+    - "@xyz-config/stack/mod-traefik.yaml"
+```
+
+Cross-repository file references use `@repo-name/path/to/file.yaml` notation. The `@` prefix tells `xyz` to resolve the path through the registered repo map.
+
+Typical workspace layout:
+
+```
+my-config-repo/
+├── stack/          ← reusable module and namespace configs
+├── deploy/         ← environment deployment files (one per env)
+├── envs/           ← environment-specific variable overrides
+└── config/         ← global configuration (workspace-level)
+```
+
+---
+
+## Register Repositories
+
+If your config references files from other repos (Terraform, service configs), register them:
+
+```bash
+xyz repo add xyz-config git@github.com:org/xyz-config.git --branch main --clone
+xyz repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --branch main --clone
+```
+
+---
+
+## Set an Active Profile
+
+Profiles group environment-specific overrides (think: `dev`, `staging`, `prd`):
+
+```bash
+xyz profile add prd --activate
+xyz profile list
+```
+
+---
+
+## Validate
+
+Before deploying anything, validate your config file:
+
+```bash
+xyz validate --file stack/my-environment.yaml
+```
+
+A clean run exits `0` and prints a summary. A validation failure exits `3` and tells you:
+
+- which file failed
+- which field is invalid
+- what the valid options are
+
+Run against all files to catch cross-reference errors early:
+
+```bash
+xyz validate --file deploy/my-environment.yaml
+```
+
+---
+
+## Deploy
+
+Once validation passes:
+
+```bash
+xyz deploy run --file deploy/my-environment.yaml
+```
+
+This orchestrates the full lifecycle: resolves `@`-references, runs Terraform, applies Helm charts, and executes any pre/post scripts. Terraform output streams directly to your terminal.
+
+---
+
+## If Something Goes Wrong
+
+**Check the audit trail** — every command execution is logged:
+
+```bash
+xyz audit list
+xyz audit list --last 5
+```
+
+**Run with verbose output** to see every subprocess call and argument:
+
+```bash
+xyz validate --file stack/my-environment.yaml --verbose
+xyz deploy run --file deploy/my-environment.yaml --verbose
+```
+
+**Structured output for automation or debugging:**
+
+```bash
+xyz validate --file stack/my-environment.yaml --output json
+```
+
+**Coming soon:** `ruck doctor` — self-diagnoses common workspace and environment issues automatically.
+
+---
+
+## Persist Your Preferences
+
+Stop passing the same flags on every command:
+
+```bash
+xyz config set output json      # always use JSON output
+xyz config set verbose true     # always show verbose logs
+xyz config list                 # check what's set
+```
+
+---
+
+## Next Steps
+
+- [Workflow Guide](workflow.md) — full lifecycle walkthrough with real repo examples
+- [CLI Reference](commands.md) — every command and flag documented
+- [Configuration Format](../config/configuration.md) — YAML schema reference

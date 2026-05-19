@@ -1,0 +1,44 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# Editor
+.idea/
+*.swp
+*.swo
+*~
+*.orig
+
+# Secrets — must never be committed
+.env
+.env.*
+*.pem
+*.key
+*.secret.yaml
+*.secrets.yaml
+secrets/
+
+# Logs
+logs/
+*.log
+
+# Python (scripts, tooling)
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Terraform state & local overrides
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+.terraformrc
+terraform.rc
+
+# Node (if tooling is ever added)
+node_modules/

@@ -74,6 +74,7 @@ class BaseService(ABC, Generic[ModelT]):
         self.data = data
         self.model: Optional[ModelT] = None
         self._validated = False
+        self._repo_map: Optional[Dict[str, str]] = None
         self.logger = get_logger(self.__class__.__module__)
         self._load_data()
         # Call initialization hook
@@ -127,16 +128,42 @@ class BaseService(ABC, Generic[ModelT]):
         """Return a copy of the accumulated validation error list."""
         return self._errors.copy()
 
+    def get_structured_errors(self) -> List:
+        """Return structured ValidationError instances from the most recent Pydantic validation.
+
+        Converts the stored ``ModelValidationError`` (Phase 1) into a list of
+        ``ValidationError`` dataclass instances.  Returns an empty list when Phase 1
+        passed or when no structured error information is available.
+        """
+        from xyz_platform.models.validation_error import ValidationError
+
+        if self._validation_exception is None:
+            return []
+        structured = []
+        for err in self._validation_exception.details.get("errors", []):
+            structured.append(
+                ValidationError(
+                    code="PYDANTIC_FIELD_ERROR",
+                    message=err.get("message", ""),
+                    phase=1,
+                    field=err.get("field"),
+                    context={"type": err.get("type")},
+                )
+            )
+        return structured
+
     def validate(
         self,
         configuration_model: Optional["ConfigurationModel"] = None,
         work_path: Optional[str] = None,
+        repo_map: Optional[Dict[str, str]] = None,
     ) -> Tuple[bool, List[str]]:
         """Validate the loaded data against the model.
 
         Args:
             configuration_model: Optional ConfigurationModel for cross-validation
             work_path: Optional working directory for validating file paths
+            repo_map: Optional solution-level repo map for resolving @repo/... refs
 
         Returns:
             Tuple[bool, List[str]]: (success, list of error messages)
@@ -157,6 +184,8 @@ class BaseService(ABC, Generic[ModelT]):
             self.model = cast(ModelT, model_class.model_validate(self.data))
 
             if configuration_model:
+                # Store solution repo_map so _validate_dynamic can access it via self._repo_map
+                self._repo_map = repo_map
                 # Pass both configuration_model and work_path to _validate_dynamic
                 # Use keyword arguments to allow subclasses to accept either parameter
                 dynamic_valid, dynamic_errors = self._validate_dynamic(
@@ -416,7 +445,7 @@ class BaseService(ABC, Generic[ModelT]):
 
         if os.path.exists(self.path):
             self.logger.debug("Loading YAML data", path=self.path)
-            with open(self.path, "r") as f:
+            with open(self.path, "r", encoding="utf-8") as f:
                 self.data = yaml.safe_load(f) or {}
             self.logger.debug("Successfully loaded data", path=self.path)
         else:

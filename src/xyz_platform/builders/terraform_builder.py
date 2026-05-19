@@ -5,13 +5,16 @@ It only documents required keys.
 """
 
 import json
+from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from xyz_platform.builders.base_builder import BaseBuilder
+from xyz_platform.models.environment_model import IncludeMergeStrategy
 from xyz_platform.models.platform_artifact_model import PlatformArtifactModel
 from xyz_platform.services.deployment_service import DeploymentService
 from xyz_platform.services.platform_artifact_service import PlatformService
+from xyz_platform.utils.terraform_loader import TerraformLoader
 
 
 class TerraformBuilder(BaseBuilder):
@@ -32,6 +35,7 @@ class TerraformBuilder(BaseBuilder):
         build_path: Path,
         dry_run: bool = False,
         platform_model: Optional["PlatformArtifactModel"] = None,
+        repo_map: Optional[Dict[str, str]] = None,
     ) -> bool:
         """Build Terraform tfvars files from ``platform.json``.
 
@@ -43,6 +47,7 @@ class TerraformBuilder(BaseBuilder):
                 output files.  A summary of planned outputs is emitted.
             platform_model: Pre-assembled PlatformModel (used in dry-run so
                 that the on-disk ``platform.json`` is not required).
+            repo_map: Repository name → absolute path mapping for @repo/ resolution.
 
         Returns:
             bool: True on success, False on failure.
@@ -94,6 +99,8 @@ class TerraformBuilder(BaseBuilder):
                     "providers.auto.tfvars.json",
                     "topologies.auto.tfvars.json",
                     "modules.auto.tfvars.json",
+                    "namespaces.auto.tfvars.json",
+                    "firewalls.auto.tfvars.json",
                     "tf_required_variables.json",
                     "tf_required_features.json",
                     "tf_required_secrets.json",
@@ -111,9 +118,32 @@ class TerraformBuilder(BaseBuilder):
                         f"[DRY-RUN] Requires: {variables_count} variable(s), "
                         f"{features_count} feature(s), {secrets_count} secret(s)"
                     )
+
+                # Validate includes in dry-run mode (no writes)
+                include_ok = self._process_includes(
+                    deployment_service=deployment_service,
+                    build_path=build_path,
+                    work_path=work_path,
+                    repo_map=repo_map or {},
+                    dry_run=True,
+                )
+                if not include_ok:
+                    return False
+
                 return True
 
             self._messages.extend(self._save_terraform_vars(terraform_vars, deployment_service, build_path))
+
+            # Process environment includes (merge user .tf/.tfvars files)
+            include_ok = self._process_includes(
+                deployment_service=deployment_service,
+                build_path=build_path,
+                work_path=work_path,
+                repo_map=repo_map or {},
+                dry_run=False,
+            )
+            if not include_ok:
+                return False
 
             return True
 
@@ -169,6 +199,8 @@ class TerraformBuilder(BaseBuilder):
             "providers.auto.tfvars.json",
             "topologies.auto.tfvars.json",
             "modules.auto.tfvars.json",
+            "namespaces.auto.tfvars.json",
+            "firewalls.auto.tfvars.json",
             "tf_required_variables.json",
             "tf_required_features.json",
             "tf_required_secrets.json",
@@ -193,12 +225,17 @@ class TerraformBuilder(BaseBuilder):
         messages: List[str],
     ) -> Dict[str, Any]:
         """Build all Terraform tfvars payloads."""
+        # Collect environment-declared variables and secrets
+        self._collect_environment_variables(deployment_service)
+        self._collect_environment_secrets(deployment_service)
         return {
             "workspace": self._build_workspace_vars(platform, messages),
             "providers": self._build_provider_vars(platform, messages),
             "topologies": self._build_topology_vars(platform, messages),
             "resources_by_category": self._build_resources_by_category(platform, deployment_service, messages),
             "modules": self._build_module_vars(platform, messages),
+            "namespaces": self._build_namespace_vars(platform, messages),
+            "firewalls": self._build_firewall_vars(platform, messages),
             "required_variables": self._document_required_variables(),
             "required_features": self._document_required_features(),
             "required_secrets": self._document_required_secrets(),
@@ -219,7 +256,7 @@ class TerraformBuilder(BaseBuilder):
             "workspace_version": workspace_version,
             "deployment_name": platform.meta.name,
             "environment": environment,
-            "platform_version": str(platform.apiVersion),
+            "platform_version": getattr(platform.apiVersion, "value", platform.apiVersion),
             "labels": workspace_labels,
             "metadata": {
                 "deployment_version": deployment_version,
@@ -375,7 +412,12 @@ class TerraformBuilder(BaseBuilder):
             for topology in platform.spec.topologies:
                 components = []
                 for component in topology.components:
-                    components.append({"resource": component.resource})
+                    entry: Dict[str, Any] = {"resource": component.resource}
+                    if getattr(component, "role", None):
+                        entry["role"] = component.role
+                    count = getattr(component, "count", 1)
+                    entry["count"] = count
+                    components.append(entry)
 
                 volumes = []
                 if topology.volumes:
@@ -385,12 +427,60 @@ class TerraformBuilder(BaseBuilder):
                 topologies_dict[topology.name] = {
                     "type": topology.type,
                     "provider": topology.provider,
-                    "provisioner": str(topology.provisioner),
+                    "provisioner": topology.provisioner.value,
                     "components": components,
                     "volumes": volumes,
                 }
 
         return {"topologies": topologies_dict}
+
+    def _build_namespace_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
+        """Build namespace tfvars payload."""
+        namespaces_dict: Dict[str, Any] = {}
+
+        if platform.spec.namespaces:
+            for namespace in platform.spec.namespaces:
+                namespaces_dict[namespace.name] = {
+                    "description": (namespace.annotations.get("description", "") if namespace.annotations else ""),
+                    "labels": namespace.labels or {},
+                    "tags": namespace.tags or [],
+                    "modules": [str(m.module) for m in namespace.modules] if namespace.modules else [],
+                }
+
+        if self.verbose:
+            messages.append(f"Built namespace vars: {len(namespaces_dict)} namespaces")
+
+        return {"namespaces": namespaces_dict}
+
+    def _build_firewall_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
+        """Build firewall tfvars payload."""
+        firewalls_dict: Dict[str, Any] = {}
+
+        if platform.spec.firewalls:
+            for firewall in platform.spec.firewalls:
+                rules: Dict[str, Any] = {
+                    "reset": firewall.reset or False,
+                    "defaults": [r.model_dump(exclude_none=True, by_alias=True) for r in firewall.defaults]
+                    if firewall.defaults
+                    else [],
+                    "deny": [r.model_dump(exclude_none=True, by_alias=True) for r in firewall.deny]
+                    if firewall.deny
+                    else [],
+                    "allow": [r.model_dump(exclude_none=True, by_alias=True) for r in firewall.allow]
+                    if firewall.allow
+                    else [],
+                }
+                firewalls_dict[firewall.name] = {
+                    "description": (firewall.annotations.get("description", "") if firewall.annotations else ""),
+                    "labels": firewall.labels or {},
+                    "tags": firewall.tags or [],
+                    "rules": rules,
+                }
+
+        if self.verbose:
+            messages.append(f"Built firewall vars: {len(firewalls_dict)} firewalls")
+
+        return {"firewalls": firewalls_dict}
 
     def _document_required_variables(self) -> Dict[str, Any]:
         return {"variables": list(self.variable_refs.values())}
@@ -428,6 +518,8 @@ class TerraformBuilder(BaseBuilder):
                 terraform_vars["topologies"],
             )
             self._write_json(terraform_path / "modules.auto.tfvars.json", terraform_vars["modules"])
+            self._write_json(terraform_path / "namespaces.auto.tfvars.json", terraform_vars["namespaces"])
+            self._write_json(terraform_path / "firewalls.auto.tfvars.json", terraform_vars["firewalls"])
 
             for resource_type, payload in terraform_vars["resources_by_category"].items():
                 self._write_json(terraform_path / f"resx_{resource_type}.auto.tfvars.json", payload)
@@ -457,6 +549,170 @@ class TerraformBuilder(BaseBuilder):
     def _write_json(self, path: Path, payload: Dict[str, Any]) -> None:
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
+    # ------------------------------------------------------------------
+    # Terraform file includes (merge external .tf / .tfvars into build)
+    # ------------------------------------------------------------------
+
+    def _process_includes(
+        self,
+        deployment_service: DeploymentService,
+        build_path: Path,
+        work_path: Path,
+        repo_map: Dict[str, str],
+        dry_run: bool = False,
+    ) -> bool:
+        """Validate and execute terraform file includes from environment model.
+
+        Collects includes from:
+        - Environment-wide: spec.overrides.includes
+        - Per-resource: spec.overrides.resources[].includes
+
+        Phase 1: Validate all includes (resolve paths, check files exist).
+        Phase 2: Execute merges/concatenations (skipped in dry_run mode).
+
+        Returns:
+            True on success, False if validation fails.
+        """
+        from xyz_platform.utils.system import resolve_path
+
+        env_service = deployment_service.get_environment_service()
+        if env_service is None or env_service.model is None:
+            return True  # No environment — nothing to include
+
+        overrides = getattr(env_service.model.spec, "overrides", None)
+        if overrides is None:
+            return True
+
+        # Collect all include directives with their context
+        include_tasks: List[Dict[str, Any]] = []
+
+        # Environment-wide includes
+        if overrides.includes:
+            for inc in overrides.includes:
+                include_tasks.append({"include": inc, "context": "environment-wide"})
+
+        # Per-resource includes
+        if overrides.resources:
+            for res_override in overrides.resources:
+                if res_override.includes:
+                    for inc in res_override.includes:
+                        include_tasks.append(
+                            {
+                                "include": inc,
+                                "context": f"resource:{res_override.resource}",
+                            }
+                        )
+
+        if not include_tasks:
+            return True
+
+        # Resolve output directory
+        deployment_build_path = deployment_service.get_build_path(build_path)
+        terraform_path = deployment_build_path / "terraform"
+
+        # Phase 1: Validate all includes
+        resolved_tasks: List[Dict[str, Any]] = []
+        for task in include_tasks:
+            inc = task["include"]
+            context = task["context"]
+
+            # Resolve source path(s)
+            source_files: List[Path] = []
+            try:
+                resolved_source = resolve_path(str(work_path), inc.source, repo_map=repo_map)
+                source_str = str(resolved_source)
+
+                # Support glob patterns
+                if "*" in source_str or "?" in source_str:
+                    matched = sorted(glob(source_str))
+                    if not matched and not inc.optional:
+                        self._errors.append(f"Include source glob matched no files: {inc.source} ({context})")
+                        return False
+                    source_files = [Path(m) for m in matched]
+                else:
+                    if not resolved_source.exists():
+                        if not inc.optional:
+                            self._errors.append(
+                                f"Include source not found: {inc.source} → {resolved_source} ({context})"
+                            )
+                            return False
+                    else:
+                        source_files = [resolved_source]
+
+            except ValueError as exc:
+                self._errors.append(f"Include source resolution error: {exc} ({context})")
+                return False
+
+            if not source_files:
+                # Optional include with no matching files — skip
+                self._messages.append(f"⊘ Include skipped (optional, not found): {inc.source} ({context})")
+                continue
+
+            # Validate target filename (no path traversal)
+            target_path = terraform_path / inc.target
+            try:
+                target_path.resolve().relative_to(terraform_path.resolve())
+            except ValueError:
+                self._errors.append(f"Include target escapes terraform directory: {inc.target} ({context})")
+                return False
+
+            # Sort by order field if specified
+            if inc.order is not None:
+                sort_key = inc.order
+            else:
+                sort_key = len(resolved_tasks)
+
+            resolved_tasks.append(
+                {
+                    "source_files": source_files,
+                    "target": target_path,
+                    "strategy": inc.strategy,
+                    "context": context,
+                    "order": sort_key,
+                    "source_ref": inc.source,
+                }
+            )
+
+        # Sort resolved tasks by order
+        resolved_tasks.sort(key=lambda t: t["order"])
+
+        # Dry-run reporting
+        if dry_run:
+            for task in resolved_tasks:
+                strategy_label = task["strategy"].value
+                src_count = len(task["source_files"])
+                self._messages.append(
+                    f"[DRY-RUN] Would {strategy_label} {src_count} file(s) → {task['target'].name} ({task['context']})"
+                )
+            if resolved_tasks:
+                self._messages.append(f"[DRY-RUN] Planned {len(resolved_tasks)} include operation(s)")
+            return True
+
+        # Phase 2: Execute
+        loader = TerraformLoader()
+        for task in resolved_tasks:
+            src_files: List[Path] = task["source_files"]
+            target: Path = task["target"]
+            strategy: IncludeMergeStrategy = task["strategy"]
+            ctx: str = task["context"]
+            source_ref: str = task["source_ref"]
+
+            try:
+                if strategy == IncludeMergeStrategy.MERGE:
+                    result = loader.load_and_merge(src_files)
+                    loader.write(result, target)
+                elif strategy == IncludeMergeStrategy.CONCATENATE:
+                    content = loader.concatenate(src_files)
+                    loader.write_raw(content, target)
+
+                self._messages.append(f"✓ Include {strategy.value}: {source_ref} → {target.name} ({ctx})")
+
+            except Exception as exc:
+                self._errors.append(f"Include {strategy.value} failed: {source_ref} → {target.name}: {exc} ({ctx})")
+                return False
+
+        return True
+
     def _track_resource_requirements(self, resource: Any) -> None:
         if not resource.references:
             return
@@ -482,15 +738,27 @@ class TerraformBuilder(BaseBuilder):
                 [resource.name],
             )
 
-    def _track_variable(self, key: str, description: str, used_by: List[str]) -> None:
+    def _track_variable(
+        self,
+        key: str,
+        description: str,
+        used_by: List[str],
+        store: Optional[str] = None,
+        value: Any = None,
+    ) -> None:
         if key not in self.variable_refs:
-            self.variable_refs[key] = {
+            entry: Dict[str, Any] = {
                 "key": key,
                 "description": description,
                 "required": True,
                 "suggested_env_var": f"TF_VAR_{key}",
                 "used_by": list(used_by),
             }
+            if store is not None:
+                entry["store"] = store
+            if value is not None:
+                entry["value"] = value
+            self.variable_refs[key] = entry
         else:
             existing = self.variable_refs[key]
             merged = set(existing.get("used_by", [])) | set(used_by)
@@ -509,6 +777,46 @@ class TerraformBuilder(BaseBuilder):
             existing = self.feature_refs[key]
             merged = set(existing.get("used_by", [])) | set(used_by)
             existing["used_by"] = sorted(merged)
+
+    def _collect_environment_variables(self, deployment_service: DeploymentService) -> None:
+        """Track variables declared in the deployment's environment file."""
+        try:
+            env_service = deployment_service.get_environment_service()
+        except Exception:
+            return
+        if env_service is None or env_service.model is None:
+            return
+        variables = env_service.model.spec.variables if env_service.model.spec else None
+        if not variables:
+            return
+        env_name = env_service.get_name() or "environment"
+        for variable in variables:
+            self._track_variable(
+                key=variable.key,
+                description=variable.description or f"Variable from {env_name} ({variable.store.value})",
+                used_by=[env_name],
+                store=variable.store.value,
+                value=variable.value,
+            )
+
+    def _collect_environment_secrets(self, deployment_service: DeploymentService) -> None:
+        """Track secrets declared in the deployment's environment file."""
+        try:
+            env_service = deployment_service.get_environment_service()
+        except Exception:
+            return
+        if env_service is None or env_service.model is None:
+            return
+        secrets = env_service.model.spec.secrets if env_service.model.spec else None
+        if not secrets:
+            return
+        env_name = env_service.get_name() or "environment"
+        for secret in secrets:
+            self._track_secret(
+                key=secret.key,
+                description=secret.description or f"Secret from {env_name} ({secret.store.value})",
+                used_by=[env_name],
+            )
 
     def _track_secret(self, key: str, description: str, used_by: List[str]) -> None:
         if key not in self.secret_refs:

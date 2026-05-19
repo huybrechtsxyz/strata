@@ -13,12 +13,18 @@ Typical caller sequences:
   deploy   : setup → check → plan → apply
   destroy  : setup → destroy  (force=True required)
   output   : output
+
+``line_callback`` parameter (all step methods):
+  Optional ``Callable[[str, str], None]`` — called for each subprocess output
+  line as it arrives.  First arg is the stream name (``"stdout"`` / ``"stderr"``),
+  second is the raw text line.  Use this to stream live output to the caller
+  (e.g. NDJSON events or verbose console output).
 """
 
 import json
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from xyz_platform.controllers.value_controller import ResolvedValues, inject_tf_vars
 from xyz_platform.deployers.base_deployer import (
@@ -160,7 +166,10 @@ class TerraformDeployer(BaseDeployer):
     # Step methods
     # ------------------------------------------------------------------
 
-    def setup(self) -> Tuple[bool, List[str]]:
+    def setup(
+        self,
+        line_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> Tuple[bool, List[str]]:
         """terraform init"""
         messages: List[str] = []
         if not self._ready(messages):
@@ -177,11 +186,12 @@ class TerraformDeployer(BaseDeployer):
                 str(self._working_dir),
                 backend_config=backend_config or None,
                 reconfigure=bool(backend_config),
+                line_callback=line_callback,
             )
             if result.returncode != 0:
                 messages.append(f"terraform init failed:\n{result.stderr}")
                 return False, messages
-            if self.verbose and result.stdout.strip():
+            if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
         except RuntimeError as exc:
             messages.append(f"terraform init error: {exc}")
@@ -189,7 +199,10 @@ class TerraformDeployer(BaseDeployer):
 
         return True, messages
 
-    def check(self) -> Tuple[bool, List[str]]:
+    def check(
+        self,
+        line_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> Tuple[bool, List[str]]:
         """terraform validate"""
         messages: List[str] = []
         if not self._ready(messages):
@@ -204,7 +217,7 @@ class TerraformDeployer(BaseDeployer):
             if result.returncode != 0:
                 messages.append(f"terraform validate failed:\n{result.stderr}")
                 return False, messages
-            if self.verbose and result.stdout.strip():
+            if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
         except RuntimeError as exc:
             messages.append(f"terraform validate error: {exc}")
@@ -212,7 +225,10 @@ class TerraformDeployer(BaseDeployer):
 
         return True, messages
 
-    def plan(self) -> Tuple[bool, List[str]]:
+    def plan(
+        self,
+        line_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> Tuple[bool, List[str]]:
         """terraform plan -out=<stage>.tfplan"""
         messages: List[str] = []
         if not self._ready(messages):
@@ -226,11 +242,15 @@ class TerraformDeployer(BaseDeployer):
         try:
             ctx = inject_tf_vars(self.resolved_values) if self.resolved_values else nullcontext()
             with ctx:
-                result = self._tf.plan(str(self._working_dir), out_file=str(self._plan_file))
+                result = self._tf.plan(
+                    str(self._working_dir),
+                    out_file=str(self._plan_file),
+                    line_callback=line_callback,
+                )
             if result.returncode != 0:
                 messages.append(f"terraform plan failed:\n{result.stderr}")
                 return False, messages
-            if self.verbose and result.stdout.strip():
+            if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
         except RuntimeError as exc:
             messages.append(f"terraform plan error: {exc}")
@@ -238,7 +258,10 @@ class TerraformDeployer(BaseDeployer):
 
         return True, messages
 
-    def apply(self) -> Tuple[bool, List[str]]:
+    def apply(
+        self,
+        line_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> Tuple[bool, List[str]]:
         """terraform apply <stage>.tfplan"""
         messages: List[str] = []
         if not self._ready(messages):
@@ -252,11 +275,15 @@ class TerraformDeployer(BaseDeployer):
         try:
             ctx = inject_tf_vars(self.resolved_values) if self.resolved_values else nullcontext()
             with ctx:
-                result = self._tf.apply(str(self._working_dir), plan_file=str(self._plan_file))
+                result = self._tf.apply(
+                    str(self._working_dir),
+                    plan_file=str(self._plan_file),
+                    line_callback=line_callback,
+                )
             if result.returncode != 0:
                 messages.append(f"terraform apply failed:\n{result.stderr}")
                 return False, messages
-            if self.verbose and result.stdout.strip():
+            if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
         except RuntimeError as exc:
             messages.append(f"terraform apply error: {exc}")
@@ -265,7 +292,10 @@ class TerraformDeployer(BaseDeployer):
         messages.append(f"\u2713 Stage '{self.stage.name}' applied successfully.")
         return True, messages
 
-    def destroy(self) -> Tuple[bool, List[str]]:
+    def destroy(
+        self,
+        line_callback: Optional[Callable[[str, str], None]] = None,
+    ) -> Tuple[bool, List[str]]:
         """terraform destroy (-auto-approve when force=True)"""
         messages: List[str] = []
         if not self._ready(messages):
@@ -278,11 +308,15 @@ class TerraformDeployer(BaseDeployer):
         try:
             ctx = inject_tf_vars(self.resolved_values) if self.resolved_values else nullcontext()
             with ctx:
-                result = self._tf.destroy(str(self._working_dir), auto_approve=self.force)
+                result = self._tf.destroy(
+                    str(self._working_dir),
+                    auto_approve=self.force,
+                    line_callback=line_callback,
+                )
             if result.returncode != 0:
                 messages.append(f"terraform destroy failed:\n{result.stderr}")
                 return False, messages
-            if self.verbose and result.stdout.strip():
+            if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
         except RuntimeError as exc:
             messages.append(f"terraform destroy error: {exc}")

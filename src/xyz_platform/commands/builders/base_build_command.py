@@ -86,13 +86,14 @@ class BaseBuildCommand(BaseCommand):
         ok, errors = deployment_service.validate(
             configuration_model=config_model,
             work_path=self._work_path,
+            repo_map=repo_map,
         )
         if not ok:
             self._errors.extend(errors)
             return False
 
         # Load related services (workspace, environment, providers, resources, …)
-        if not deployment_service.load_deploy_services(str(self._work_path)):
+        if not deployment_service.load_deploy_services(str(self._work_path), repo_map=repo_map):
             self._errors.extend(deployment_service.get_validation_errors())
             return False
 
@@ -144,8 +145,7 @@ class BaseBuildCommand(BaseCommand):
             )
             return None
 
-        repos, _ = self._solution_controller.get_repositories()
-        repo_map = {str(r.name): str(self._work_path / r.path) for r in repos}
+        repo_map = self._solution_controller.get_repo_map()
 
         resolved_paths = []
         for entry in configfile_paths:

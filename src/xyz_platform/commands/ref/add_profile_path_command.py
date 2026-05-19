@@ -84,8 +84,11 @@ class AddProfilePathCommand(BaseCommand):
         if not super()._before_execute():
             return False
         if not self._profile_name:
-            self._errors.append("Profile name is required.")
-            return False
+            active, errors = self._solution_controller.get_active_profile()
+            if errors or active is None:
+                self._errors.append("No profile specified and no active profile found. Use 'xyz profile add' first.")
+                return False
+            self._profile_name = str(active.name)
         if not self._path_name:
             self._errors.append("Path name is required.")
             return False

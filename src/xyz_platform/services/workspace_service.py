@@ -238,7 +238,8 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
 
         # STEP 5: Validate that all file: references resolve to existing files on disk
         if work_path:
-            repo_map = configuration_model.get_repo_map() if configuration_model else {}
+            config_repo_map = configuration_model.get_repo_map() if configuration_model else {}
+            repo_map = {**config_repo_map, **(self._repo_map or {})}
             file_refs = []
             for p in self.model.spec.providers:
                 file_refs.append((f"Provider '{p.name}'", p.file))
@@ -407,7 +408,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         return self._validation_errors
 
     def load_workspace_services(
-        self, objects_path: Optional[str] = None
+        self, objects_path: Optional[str] = None, repo_map: Optional[Dict[str, str]] = None
     ) -> Tuple[Dict[str, Dict[str, BaseService]], bool]:
         """
         Load all related services (providers, resources, namespaces, firewalls) into a dictionary.
@@ -466,8 +467,11 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
             raise ValueError(error_msg)
         workspace: WorkspaceModel = self.model
 
-        # Build repo_map once for all @repo_name/... path resolutions in this call
-        repo_map: Dict[str, str] = ConfigurationService.get_instance().get_repo_map()
+        # Build repo_map once for all @repo_name/... path resolutions in this call.
+        # Merge solution-level map (caller-supplied) with config-service map.
+        # Solution names take precedence so @haven/... refs resolve correctly.
+        config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_repo_map()
+        repo_map = {**config_repo_map, **(repo_map or {})}
 
         # Load firewall services from workspace spec firewalls
         if workspace.spec.firewalls:
