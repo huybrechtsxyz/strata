@@ -4,6 +4,9 @@ Tests that require a populated ``_solution`` manipulate it directly to avoid
 full init/save round-trips with the heavy scaffold logic.
 """
 
+from pathlib import Path
+from unittest.mock import patch
+
 from xyz_platform.controllers.solution_controller import SolutionController
 from xyz_platform.models.solution_model import (
     SolutionMetaModel,
@@ -288,3 +291,141 @@ class TestSolutionControllerClean:
         ok, stats = ctrl.clean_solution(tmp_path, dry_run=False)
         assert ok is True
         assert stats["logs_deleted"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _scaffold_platform_dir — devcontainer scaffolding
+# ---------------------------------------------------------------------------
+
+
+class TestSolutionControllerScaffoldDevcontainer:
+    """Tests for the .devcontainer scaffolding inside _scaffold_platform_dir.
+
+    ``get_pkg_templates_path`` is patched to a controlled temp directory so
+    only the devcontainer subtree is populated — all other scaffold sections
+    gracefully skip missing templates.
+    """
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_templates(templates_root: Path) -> None:
+        """Populate templates_root/devcontainer/ with minimal fixtures."""
+        dc_dir = templates_root / "devcontainer"
+        dc_dir.mkdir(parents=True)
+        (dc_dir / "devcontainer.template.json").write_text(
+            '{"name": "${SOLUTION_NAME}"}', encoding="utf-8"
+        )
+        (dc_dir / "post-create.sh").write_text(
+            "#!/bin/bash\necho hello\n", encoding="utf-8"
+        )
+
+    @staticmethod
+    def _make_ctrl(work_path: Path) -> SolutionController:
+        """Return a controller with .platform/ pre-created and a loaded solution."""
+        (work_path / ".platform").mkdir(exist_ok=True)
+        ctrl = SolutionController(work_path)
+        ctrl._solution = _make_solution("my-solution")
+        return ctrl
+
+    # ------------------------------------------------------------------
+    # Tests
+    # ------------------------------------------------------------------
+
+    def test_devcontainer_json_is_created(self, tmp_path):
+        templates_path = tmp_path / "_templates"
+        self._make_templates(templates_path)
+        ctrl = self._make_ctrl(tmp_path)
+        with patch(
+            "xyz_platform.controllers.solution_controller.get_pkg_templates_path",
+            return_value=templates_path,
+        ):
+            ok, errors = ctrl._scaffold_platform_dir()
+        assert ok is True
+        assert errors == []
+        assert (tmp_path / ".devcontainer" / "devcontainer.json").exists()
+
+    def test_post_create_sh_is_created(self, tmp_path):
+        templates_path = tmp_path / "_templates"
+        self._make_templates(templates_path)
+        ctrl = self._make_ctrl(tmp_path)
+        with patch(
+            "xyz_platform.controllers.solution_controller.get_pkg_templates_path",
+            return_value=templates_path,
+        ):
+            ok, errors = ctrl._scaffold_platform_dir()
+        assert ok is True
+        assert (tmp_path / ".devcontainer" / "post-create.sh").exists()
+
+    def test_solution_name_substituted_in_devcontainer_json(self, tmp_path):
+        templates_path = tmp_path / "_templates"
+        self._make_templates(templates_path)
+        ctrl = self._make_ctrl(tmp_path)
+        with patch(
+            "xyz_platform.controllers.solution_controller.get_pkg_templates_path",
+            return_value=templates_path,
+        ):
+            ctrl._scaffold_platform_dir()
+        content = (tmp_path / ".devcontainer" / "devcontainer.json").read_text(encoding="utf-8")
+        assert "my-solution" in content
+        assert "${SOLUTION_NAME}" not in content
+
+    def test_post_create_sh_no_substitution(self, tmp_path):
+        """post-create.sh is copied verbatim — no variable substitution."""
+        templates_path = tmp_path / "_templates"
+        self._make_templates(templates_path)
+        ctrl = self._make_ctrl(tmp_path)
+        with patch(
+            "xyz_platform.controllers.solution_controller.get_pkg_templates_path",
+            return_value=templates_path,
+        ):
+            ctrl._scaffold_platform_dir()
+        content = (tmp_path / ".devcontainer" / "post-create.sh").read_text(encoding="utf-8")
+        assert "#!/bin/bash" in content
+
+    def test_existing_devcontainer_json_not_overwritten(self, tmp_path):
+        templates_path = tmp_path / "_templates"
+        self._make_templates(templates_path)
+        dc_dir = tmp_path / ".devcontainer"
+        dc_dir.mkdir()
+        original = '{"name": "do-not-overwrite"}'
+        (dc_dir / "devcontainer.json").write_text(original, encoding="utf-8")
+        ctrl = self._make_ctrl(tmp_path)
+        with patch(
+            "xyz_platform.controllers.solution_controller.get_pkg_templates_path",
+            return_value=templates_path,
+        ):
+            ok, errors = ctrl._scaffold_platform_dir()
+        assert ok is True
+        assert (dc_dir / "devcontainer.json").read_text(encoding="utf-8") == original
+
+    def test_existing_post_create_sh_not_overwritten(self, tmp_path):
+        templates_path = tmp_path / "_templates"
+        self._make_templates(templates_path)
+        dc_dir = tmp_path / ".devcontainer"
+        dc_dir.mkdir()
+        original = "#!/bin/bash\necho original\n"
+        (dc_dir / "post-create.sh").write_text(original, encoding="utf-8")
+        ctrl = self._make_ctrl(tmp_path)
+        with patch(
+            "xyz_platform.controllers.solution_controller.get_pkg_templates_path",
+            return_value=templates_path,
+        ):
+            ok, errors = ctrl._scaffold_platform_dir()
+        assert ok is True
+        assert (dc_dir / "post-create.sh").read_text(encoding="utf-8") == original
+
+    def test_missing_devcontainer_templates_dir_skipped_gracefully(self, tmp_path):
+        """If the devcontainer/ template dir doesn't exist, scaffold returns ok with no .devcontainer/ created."""
+        templates_path = tmp_path / "_templates"
+        templates_path.mkdir()  # exists, but NO devcontainer/ subdir
+        ctrl = self._make_ctrl(tmp_path)
+        with patch(
+            "xyz_platform.controllers.solution_controller.get_pkg_templates_path",
+            return_value=templates_path,
+        ):
+            ok, errors = ctrl._scaffold_platform_dir()
+        assert ok is True
+        assert not (tmp_path / ".devcontainer").exists()

@@ -50,7 +50,7 @@ These options are accepted by every command and subcommand:
 
 ## `init`
 
-Initialize a new XYZ Platform solution workspace. Creates `.platform/` state directory and `solution.json`.
+Initialize a new XYZ Platform solution workspace. Creates the `.platform/` state directory, workspace defaults, and a ready-to-use `.devcontainer/` for VS Code Dev Containers and GitHub Codespaces.
 
 ```
 xyz init --name NAME [--from-template FILE] [standard options]
@@ -61,12 +61,26 @@ xyz init --name NAME [--from-template FILE] [standard options]
 | `--name NAME`          | ✅        | Name of the solution workspace                                                                    |
 | `--from-template FILE` | —        | Path to a workspace template YAML file. Pre-populates repos, profiles, and refs. File must exist. |
 
+**Files created:**
+
+| Path                                  | Description                                                                      |
+| ------------------------------------- | -------------------------------------------------------------------------------- |
+| `.platform/project.json`              | Solution registry                                                                |
+| `.platform/cli.yaml`                  | Workspace CLI defaults                                                           |
+| `.platform/logging.yaml`              | Logging configuration                                                            |
+| `.devcontainer/devcontainer.json`     | Dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm)       |
+| `.devcontainer/post-create.sh`        | Post-create script — installs `xyz-platform` and sets up shell completion        |
+
+All `.devcontainer/` files are written **idempotently** — existing files are never overwritten.
+
 **Exit codes:** 0 success · 1 failure · 2 missing `--name`
 
 ```bash
 xyz init --name my-platform
 xyz init --name my-platform --from-template templates/base.yaml
 ```
+
+> **Dev container:** After `xyz init`, open the workspace in VS Code and select **Reopen in Container** to start a pre-configured environment with all tools installed. The container also works with GitHub Codespaces.
 
 ---
 
