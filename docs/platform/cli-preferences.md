@@ -1,4 +1,4 @@
-# CLI Preferences and Defaults
+﻿# CLI Preferences and Defaults
 
 Some CLI options apply across many commands — output format, verbosity, quiet mode. Rather than repeating `--output json --verbose` on every invocation, the CLI supports two mechanisms to set persistent defaults.
 
@@ -30,7 +30,7 @@ export STRATA_WORK_PATH=/home/user/projects/myworkspace
 **CI/CD — Azure Pipelines:**
 
 ```yaml
-- script: xyz build
+- script: strata build
   env:
     STRATA_OUTPUT: json
     STRATA_WORK_PATH: $(Pipeline.Workspace)/myworkspace
@@ -39,16 +39,16 @@ export STRATA_WORK_PATH=/home/user/projects/myworkspace
 **CI/CD — GitHub Actions:**
 
 ```yaml
-- run: xyz build
+- run: strata build
   env:
     STRATA_OUTPUT: json
     STRATA_WORK_PATH: ${{ github.workspace }}/myworkspace
 ```
 
 Pros:
-- Zero workspace dependency — works before `xyz init`
+- Zero workspace dependency — works before `strata sln init`
 - Standard pattern — well understood by CI/CD systems
-- Per-shell overrides are easy (`STRATA_OUTPUT=json xyz validate` for one invocation)
+- Per-shell overrides are easy (`STRATA_OUTPUT=json strata validate` for one invocation)
 
 Cons:
 - Global to the shell — affects all workspaces open in the same session
@@ -56,18 +56,18 @@ Cons:
 
 ---
 
-## Option B: Workspace Config (`xyz config set`)
+## Option B: Workspace Config (`strata config set`)
 
-> **Requires:** `xyz init` to have been run — writes to `.strata/cli.yaml`.
+> **Requires:** `strata sln init` to have been run — writes to `.strata/cli.yaml`.
 
 Store preferences in the workspace itself. Because `.strata/` is workspace-scoped, different
 workspaces can have different defaults.
 
 ```bash
-xyz config set output json    # all commands in this workspace default to JSON output
-xyz config set verbose true
-xyz config list               # show current workspace defaults
-xyz config unset output       # remove the override, fall back to built-in default
+strata config set output json    # all commands in this workspace default to JSON output
+strata config set verbose true
+strata config list               # show current workspace defaults
+strata config unset output       # remove the override, fall back to built-in default
 ```
 
 Stored in `.strata/cli.yaml`:
@@ -84,11 +84,11 @@ Loaded at startup via Click's `default_map`, then merged with env vars and expli
 Pros:
 - Workspace-scoped — different workspaces, different defaults
 - Committed to source control (or gitignored, your choice)
-- Self-documenting via `xyz config list`
+- Self-documenting via `strata config list`
 
 Cons:
 - Requires an initialised workspace
-- Not available before `xyz init`
+- Not available before `strata sln init`
 
 ---
 
@@ -96,16 +96,16 @@ Cons:
 
 ```
 --flag explicitly passed
-  └─ XYZ_* environment variable
-      └─ .strata/cli.yaml (xyz config set)
+  └─ STRATA_* environment variable
+      └─ .strata/cli.yaml (strata config set)
             └─ built-in default (hardcoded in CLI)
 ```
 
 This means:
 
 - CI/CD: use `--work-path` or `STRATA_WORK_PATH` — explicit, deterministic, no filesystem dependency
-- Local dev: run `xyz set output console` once after `xyz init` and forget about it
-- One-off override: prefix any command with `STRATA_OUTPUT=json xyz validate`
+- Local dev: run `strata config set output console` once after `strata sln init` and forget about it
+- One-off override: prefix any command with `STRATA_OUTPUT=json strata validate`
 
 ---
 
@@ -118,7 +118,7 @@ This means:
   .strata/          ← found here → work-path resolved
   repo-a/
     src/
-      ← user runs `xyz build` here, walks up two levels, finds it
+      ← user runs `strata build` here, walks up two levels, finds it
   repo-b/
 ```
 
@@ -130,11 +130,11 @@ The following keywords are common CLI verbs and their typical meaning. Use `--ou
 
 | Keyword             | Use                                                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `list`              | Enumerate multiple items (short summary). Example: `xyz config list` — shows keys and brief values.              |
-| `show` / `get`      | Display a single resource's content or value; include source with `--source`. Example: `xyz config show output`. |
-| `dump` / `view`     | Output the full merged config or raw file (machine-friendly). Example: `xyz config dump --output json`.          |
-| `info` / `describe` | Human-friendly overview or summary of workspace state (counts, last run, repos). Example: `xyz workspace info`.  |
-| `status`            | Operational or sync state for resources (repos, deployments). Example: `xyz repo status <name>`.                 |
-| `show-file`         | Explicitly show raw file content (alias of `show` for files). Example: `xyz config show cli.yaml`.               |
-| `source`            | Show origin of a value (env, `cli.yaml`, builtin). Example: `xyz config show output --source`.                   |
+| `list`              | Enumerate multiple items (short summary). Example: `strata config list` — shows keys and brief values.              |
+| `show` / `get`      | Display a single resource's content or value; include source with `--source`. Example: `strata config show output`. |
+| `dump` / `view`     | Output the full merged config or raw file (machine-friendly). Example: `strata config dump --output json`.          |
+| `info` / `describe` | Human-friendly overview or summary of workspace state (counts, last run, repos). Example: `strata workspace info`.  |
+| `status`            | Operational or sync state for resources (repos, deployments). Example: `strata repo status <name>`.                 |
+| `show-file`         | Explicitly show raw file content (alias of `show` for files). Example: `strata config show cli.yaml`.               |
+| `source`            | Show origin of a value (env, `cli.yaml`, builtin). Example: `strata config show output --source`.                   |
 

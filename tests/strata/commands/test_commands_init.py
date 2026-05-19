@@ -44,3 +44,20 @@ class TestInitCommand:
         with patch("strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=False):
             result = runner.invoke(init_command, ["--name", "myapp", "--work-path", str(tmp_path)])
         assert result.exit_code != 0
+
+
+class TestSlnInitCommand:
+    def test_sln_init_missing_name_returns_exit_2(self):
+        from strata.commands.cli_sln import sln_group
+
+        runner = CliRunner()
+        result = runner.invoke(sln_group, ["init"])
+        assert result.exit_code == 2
+
+    def test_sln_init_accepted(self, tmp_path):
+        from strata.commands.cli_sln import sln_group
+
+        runner = CliRunner()
+        with patch("strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True):
+            result = runner.invoke(sln_group, ["init", "--name", "myapp", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0

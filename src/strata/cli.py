@@ -2,9 +2,7 @@
 
 Commands:
     help                : Show help topics and workflow guidance.
-    init                : Initialize a new solution workspace.
-    clean               : Clean solution artifacts.
-    status              : Show workspace health and configuration status.
+    sln                 : Manage solution workspace lifecycle (init, clean, status, export).
     config              : Manage workspace defaults (cli.yaml).
     log                 : View log entries and manage logging config.
     repo                : Manage repositories in the solution.
@@ -28,18 +26,16 @@ import yaml
 
 from strata.commands.cli_audit import audit_group
 from strata.commands.cli_builders import build as build_group
-from strata.commands.cli_clean import clean_command
 from strata.commands.cli_config import config_group
 from strata.commands.cli_context import context_group
 from strata.commands.cli_deploy import deploy as deploy_group
 from strata.commands.cli_help import help_command
-from strata.commands.cli_init import init_command
 from strata.commands.cli_new import new_command
 from strata.commands.cli_profile import profile_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
 from strata.commands.cli_schema import schema_group
-from strata.commands.cli_status import status_command
+from strata.commands.cli_sln import sln_group
 from strata.commands.cli_tools import tools_group
 from strata.commands.cli_validate import validate_command
 from strata.commands.cli_values import values_group
@@ -167,9 +163,7 @@ def main(ctx: click.Context) -> None:
 
 main.add_command(version_command, name="version")
 main.add_command(help_command, name="help")
-main.add_command(init_command, name="init")
-main.add_command(clean_command, name="clean")
-main.add_command(status_command, name="status")
+main.add_command(sln_group, name="sln")
 main.add_command(config_group, name="config")
 main.add_command(context_group, name="context")
 main.add_command(new_command, name="new")

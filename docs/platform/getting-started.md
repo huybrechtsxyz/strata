@@ -1,6 +1,6 @@
-# Getting Started
+﻿# Getting Started
 
-> **Audience:** DevOps engineer seeing `xyz` (soon: `ruck`) for the first time. Goal: install the tool, initialize a config workspace, and validate a config file — in under 10 minutes.
+> **Audience:** DevOps engineer seeing `strata` (soon: `ruck`) for the first time. Goal: install the tool, initialize a config workspace, and validate a config file — in under 10 minutes.
 
 ---
 
@@ -44,11 +44,11 @@ uv run strata --version
 
 ## Initialize a Workspace
 
-Run `xyz sln init` inside your config repository (the repo that holds your environment YAML files):
+Run `strata sln init` inside your config repository (the repo that holds your environment YAML files):
 
 ```bash
 cd my-config-repo
-xyz sln init --name my-workspace
+strata sln init --name my-workspace
 ```
 
 What gets created:
@@ -71,7 +71,7 @@ my-config-repo/
 Add `--template <name>` to get a ready-to-edit config folder alongside the workspace state:
 
 ```bash
-xyz sln init --name my-aks --template aks
+strata sln init --name my-aks --template aks
 ```
 
 This copies a working set of example config files into the repo root, with `my-aks` substituted wherever the template uses `${solution_name}`:
@@ -101,10 +101,10 @@ The output tells you exactly what to do next:
     • Files created: 6
 
 Next steps:
-    1. Register your repo:   xyz repo add my-aks <git-url> --clone
-    2. Add a profile:        xyz profile add prd --activate
-    3. Validate:             xyz validate --file deploy/deploy-prd.yaml
-    4. Deploy:               xyz deploy run --file deploy/deploy-prd.yaml
+    1. Register your repo:   strata repo add my-aks <git-url> --clone
+    2. Add a profile:        strata profile add prd --activate
+    3. Validate:             strata validate --file deploy/deploy-prd.yaml
+    4. Deploy:               strata deploy run --file deploy/deploy-prd.yaml
 ```
 
 **Built-in templates:**
@@ -116,7 +116,7 @@ Next steps:
 **Using a local template folder:**
 
 ```bash
-xyz sln init --name my-ws --template ./my-corporate-template/
+strata sln init --name my-ws --template ./my-corporate-template/
 ```
 
 The folder must contain a `scaffold/` subdirectory with the files to copy. An optional `template.yaml` declares the template name, description, and substitution variables.
@@ -126,7 +126,7 @@ The folder must contain a `scaffold/` subdirectory with the files to copy. An op
 Once you have a working workspace, capture it as a reusable scaffold for the next project:
 
 ```bash
-xyz sln export --name my-corp-base
+strata sln export --name my-corp-base
 ```
 
 What it does:
@@ -142,7 +142,7 @@ Output:
     • Substitutions: 14 occurrences across 6 files
 
 Use it:
-    xyz sln init --name new-project --template .strata/templates/my-corp-base/
+    strata sln init --name new-project --template .strata/templates/my-corp-base/
 ```
 
 Use `--dry-run` to preview without writing. Use `--force` to overwrite an existing template.
@@ -168,7 +168,7 @@ spec:
     - "@xyz-config/stack/mod-traefik.yaml"
 ```
 
-Cross-repository file references use `@repo-name/path/to/file.yaml` notation. The `@` prefix tells `xyz` to resolve the path through the registered repo map.
+Cross-repository file references use `@repo-name/path/to/file.yaml` notation. The `@` prefix tells `strata` to resolve the path through the registered repo map.
 
 Typical workspace layout:
 
@@ -187,8 +187,8 @@ my-config-repo/
 If your config references files from other repos (Terraform, service configs), register them:
 
 ```bash
-xyz repo add xyz-config git@github.com:org/xyz-config.git --branch main --clone
-xyz repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --branch main --clone
+strata repo add xyz-config git@github.com:org/xyz-config.git --branch main --clone
+strata repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --branch main --clone
 ```
 
 ---
@@ -198,8 +198,8 @@ xyz repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --bran
 Profiles group environment-specific overrides (think: `dev`, `staging`, `prd`):
 
 ```bash
-xyz profile add prd --activate
-xyz profile list
+strata profile add prd --activate
+strata profile list
 ```
 
 ---
@@ -209,7 +209,7 @@ xyz profile list
 Before deploying anything, validate your config file:
 
 ```bash
-xyz validate --file stack/my-environment.yaml
+strata validate --file stack/my-environment.yaml
 ```
 
 A clean run exits `0` and prints a summary. A validation failure exits `3` and tells you:
@@ -221,7 +221,7 @@ A clean run exits `0` and prints a summary. A validation failure exits `3` and t
 Run against all files to catch cross-reference errors early:
 
 ```bash
-xyz validate --file deploy/my-environment.yaml
+strata validate --file deploy/my-environment.yaml
 ```
 
 ---
@@ -231,7 +231,7 @@ xyz validate --file deploy/my-environment.yaml
 Once validation passes:
 
 ```bash
-xyz deploy run --file deploy/my-environment.yaml
+strata deploy run --file deploy/my-environment.yaml
 ```
 
 This orchestrates the full lifecycle: resolves `@`-references, runs Terraform, applies Helm charts, and executes any pre/post scripts. Terraform output streams directly to your terminal.
@@ -243,21 +243,21 @@ This orchestrates the full lifecycle: resolves `@`-references, runs Terraform, a
 **Check the audit trail** — every command execution is logged:
 
 ```bash
-xyz audit list
-xyz audit list --last 5
+strata audit list
+strata audit list --last 5
 ```
 
 **Run with verbose output** to see every subprocess call and argument:
 
 ```bash
-xyz validate --file stack/my-environment.yaml --verbose
-xyz deploy run --file deploy/my-environment.yaml --verbose
+strata validate --file stack/my-environment.yaml --verbose
+strata deploy run --file deploy/my-environment.yaml --verbose
 ```
 
 **Structured output for automation or debugging:**
 
 ```bash
-xyz validate --file stack/my-environment.yaml --output json
+strata validate --file stack/my-environment.yaml --output json
 ```
 
 **Coming soon:** `strata doctor` — self-diagnoses common workspace and environment issues automatically.
@@ -269,9 +269,9 @@ xyz validate --file stack/my-environment.yaml --output json
 Stop passing the same flags on every command:
 
 ```bash
-xyz config set output json      # always use JSON output
-xyz config set verbose true     # always show verbose logs
-xyz config list                 # check what's set
+strata config set output json      # always use JSON output
+strata config set verbose true     # always show verbose logs
+strata config list                 # check what's set
 ```
 
 ---

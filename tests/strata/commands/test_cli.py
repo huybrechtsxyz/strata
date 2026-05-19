@@ -106,9 +106,7 @@ class TestMainGroup:
     def test_all_groups_registered(self):
         registered = set(main.commands.keys())
         expected = {
-            "init",
-            "clean",
-            "status",
+            "sln",
             "config",
             "audit",
             "repo",
@@ -122,6 +120,16 @@ class TestMainGroup:
             "help",
         }
         assert expected.issubset(registered)
+        # init/clean/status moved under sln — must NOT appear at top level
+        assert "init" not in registered
+        assert "clean" not in registered
+        assert "status" not in registered
+
+    def test_sln_subcommands_registered(self):
+        from strata.commands.cli_sln import sln_group
+
+        sln_cmds = set(sln_group.commands.keys())
+        assert {"init", "clean", "status", "export"} == sln_cmds
 
 
 # ---------------------------------------------------------------------------

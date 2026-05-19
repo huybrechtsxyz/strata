@@ -152,10 +152,7 @@ class SolutionExportCommand(BaseCommand):
         # Handle existing output directory
         if output_dir.exists():
             if not self._force:
-                self._errors.append(
-                    f"Output directory already exists: {output_dir}\n"
-                    "Use --force to overwrite."
-                )
+                self._errors.append(f"Output directory already exists: {output_dir}\nUse --force to overwrite.")
                 return False
             shutil.rmtree(output_dir)
             self.logger.debug("Removed existing output dir", path=str(output_dir))
@@ -196,9 +193,7 @@ class SolutionExportCommand(BaseCommand):
             click.echo(f"🔁  Substitutions    : {sub_count}")
             click.echo("")
             click.echo("💡  Next steps:")
-            click.echo(
-                f"    xyz init --name <new-ws> --template .strata/templates/{self._name}/"
-            )
+            click.echo(f"    xyz init --name <new-ws> --template .strata/templates/{self._name}/")
 
         return True
 
@@ -248,7 +243,9 @@ class SolutionExportCommand(BaseCommand):
             sub_info = f"  [{subs} sub(s)]" if subs else ""
             click.echo(f"    {rel_path}{sub_info}")
         click.echo("")
-        click.echo(f"🔁  Total substitutions of '{solution_name}' → '${{solution_name}}': {sum(s for _, _, s in files)}")
+        click.echo(
+            f"🔁  Total substitutions of '{solution_name}' → '${{solution_name}}': {sum(s for _, _, s in files)}"
+        )
 
 
 def _substitute(text: str, solution_name: str) -> tuple:

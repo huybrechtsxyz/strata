@@ -1,6 +1,6 @@
-# strata — CLI Command Reference
+﻿# strata — CLI Command Reference
 
-All commands are invoked as `xyz <command> [options]` (or `uv run strata <command>`).
+All commands are invoked as `strata <command> [options]` (or `uv run strata <command>`).
 
 ## Standard Options
 
@@ -53,13 +53,13 @@ These options are accepted by every command and subcommand:
 Initialize a new strata solution workspace. Creates the `.strata/` state directory, workspace defaults, and a ready-to-use `.devcontainer/` for VS Code Dev Containers and GitHub Codespaces.
 
 ```
-xyz init --name NAME [--from-template FILE] [standard options]
+strata sln init --name NAME [--template FILE] [standard options]
 ```
 
 | Option                 | Required | Description                                                                                       |
 | ---------------------- | -------- | ------------------------------------------------------------------------------------------------- |
 | `--name NAME`          | ✅        | Name of the solution workspace                                                                    |
-| `--from-template FILE` | —        | Path to a workspace template YAML file. Pre-populates repos, profiles, and refs. File must exist. |
+| `--template FILE` | —        | Path to a workspace template YAML file. Pre-populates repos, profiles, and refs. File must exist. |
 
 **Files created:**
 
@@ -76,11 +76,11 @@ All `.devcontainer/` files are written **idempotently** — existing files are n
 **Exit codes:** 0 success · 1 failure · 2 missing `--name`
 
 ```bash
-xyz init --name my-platform
-xyz init --name my-platform --from-template templates/base.yaml
+strata sln init --name my-platform
+strata sln init --name my-platform --template templates/base.yaml
 ```
 
-> **Dev container:** After `xyz init`, open the workspace in VS Code and select **Reopen in Container** to start a pre-configured environment with all tools installed. The container also works with GitHub Codespaces.
+> **Dev container:** After `strata sln init`, open the workspace in VS Code and select **Reopen in Container** to start a pre-configured environment with all tools installed. The container also works with GitHub Codespaces.
 
 ---
 
@@ -89,7 +89,7 @@ xyz init --name my-platform --from-template templates/base.yaml
 Remove workspace artifacts (log files, temp files) without touching solution state.
 
 ```
-xyz clean [--dry-run] [standard options]
+strata sln clean [--dry-run] [standard options]
 ```
 
 | Option      | Default | Description                                            |
@@ -97,8 +97,8 @@ xyz clean [--dry-run] [standard options]
 | `--dry-run` | off     | Report what would be deleted without removing anything |
 
 ```bash
-xyz clean
-xyz clean --dry-run
+strata sln clean
+strata sln clean --dry-run
 ```
 
 ---
@@ -110,8 +110,8 @@ Manage persistent workspace defaults stored in `.strata/cli.yaml`.
 ### `config set KEY VALUE`
 
 ```bash
-xyz config set output json
-xyz config set verbose true
+strata config set output json
+strata config set verbose true
 ```
 
 Allowed keys: `output`, `verbose`, `quiet`, `work_path`.
@@ -119,14 +119,14 @@ Allowed keys: `output`, `verbose`, `quiet`, `work_path`.
 ### `config unset KEY`
 
 ```bash
-xyz config unset output
+strata config unset output
 ```
 
 ### `config list`
 
 ```bash
-xyz config list
-xyz config list --output json
+strata config list
+strata config list --output json
 ```
 
 ---
@@ -136,14 +136,14 @@ xyz config list --output json
 Show workspace health: solution identity, active profile, repositories, and integration availability.
 
 ```
-xyz status [standard options]
+strata sln status [standard options]
 ```
 
 Works inside and outside an initialized workspace (degrades gracefully when `solution.json` is absent).
 
 ```bash
-xyz status
-xyz status --output json
+strata sln status
+strata sln status --output json
 ```
 
 ---
@@ -155,7 +155,7 @@ View execution logs and manage logging configuration.
 ### `audit list`
 
 ```
-xyz audit list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] [--last]
+strata audit list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] [--last]
 ```
 
 | Option              | Default | Description                                                              |
@@ -167,9 +167,9 @@ xyz audit list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] [--
 | `--last`            | off     | Show logs for the most recent command execution                          |
 
 ```bash
-xyz audit list
-xyz audit list --last
-xyz audit list --level ERROR --lines 20
+strata audit list
+strata audit list --last
+strata audit list --level ERROR --lines 20
 ```
 
 ### `audit log list`
@@ -177,7 +177,7 @@ xyz audit list --level ERROR --lines 20
 Show the current `logging.yaml` configuration.
 
 ```bash
-xyz audit log list
+strata audit log list
 ```
 
 ### `audit log get KEY`
@@ -185,7 +185,7 @@ xyz audit log list
 Get a single logging config value by dot-notation key.
 
 ```bash
-xyz audit log get level
+strata audit log get level
 ```
 
 ### `audit log set KEY VALUE`
@@ -193,7 +193,7 @@ xyz audit log get level
 Set a logging config value. Use `level` as shorthand for log level.
 
 ```bash
-xyz audit log set level DEBUG
+strata audit log set level DEBUG
 ```
 
 ---
@@ -205,20 +205,20 @@ Manage environment profiles within the solution.
 ### `profile add NAME`
 
 ```bash
-xyz profile add staging
+strata profile add staging
 ```
 
 ### `profile remove NAME`
 
 ```bash
-xyz profile remove staging
+strata profile remove staging
 ```
 
 ### `profile list [--name NAME]`
 
 ```bash
-xyz profile list
-xyz profile list --name staging
+strata profile list
+strata profile list --name staging
 ```
 
 ### `profile activate NAME`
@@ -226,7 +226,7 @@ xyz profile list --name staging
 Activate a profile (deactivates all others).
 
 ```bash
-xyz profile activate staging
+strata profile activate staging
 ```
 
 ### `profile show NAME`
@@ -234,7 +234,7 @@ xyz profile activate staging
 Show all registered ref paths for a profile, grouped by type.
 
 ```bash
-xyz profile show staging
+strata profile show staging
 ```
 
 ---
@@ -250,21 +250,21 @@ All `ref` subcommands accept `--profile NAME` (optional; defaults to the active 
 ### `ref <type> add NAME PATH`
 
 ```bash
-xyz ref env add base-env .env
-xyz ref config add app-config @myrepo/config/app.yaml --profile staging
+strata ref env add base-env .env
+strata ref config add app-config @myrepo/config/app.yaml --profile staging
 ```
 
 ### `ref <type> remove NAME`
 
 ```bash
-xyz ref env remove base-env --profile staging
+strata ref env remove base-env --profile staging
 ```
 
 ### `ref <type> list`
 
 ```bash
-xyz ref config list
-xyz ref config list --profile staging
+strata ref config list
+strata ref config list --profile staging
 ```
 
 ### `ref <type> show NAME`
@@ -272,7 +272,7 @@ xyz ref config list --profile staging
 Display the file content of a ref path entry.
 
 ```bash
-xyz ref config show app-config --profile staging
+strata ref config show app-config --profile staging
 ```
 
 ---
@@ -284,7 +284,7 @@ Manage repositories registered in the solution.
 ### `repo add NAME URL`
 
 ```
-xyz repo add NAME URL [--branch BRANCH] [--path PATH] [--clone]
+strata repo add NAME URL [--branch BRANCH] [--path PATH] [--clone]
 ```
 
 | Option            | Default | Description                                                |
@@ -300,21 +300,21 @@ xyz repo add NAME URL [--branch BRANCH] [--path PATH] [--clone]
 
 ```bash
 # Remote git repository
-xyz repo add platform https://github.com/org/platform.git
-xyz repo add platform https://github.com/org/platform.git --branch develop --clone
+strata repo add platform https://github.com/org/platform.git
+strata repo add platform https://github.com/org/platform.git --branch develop --clone
 
 # Local folder (Windows drive path)
-xyz repo add infra C:/repos/xyz-infrastructure
+strata repo add infra C:/repos/xyz-infrastructure
 
 # Local network share
-xyz repo add shared //fileserver/repos/platform
+strata repo add shared //fileserver/repos/platform
 ```
 
 ### `repo list [--name NAME]`
 
 ```bash
-xyz repo list
-xyz repo list --name platform
+strata repo list
+strata repo list --name platform
 ```
 
 ### `repo remove NAME [--purge]`
@@ -322,8 +322,8 @@ xyz repo list --name platform
 `--purge` also deletes the local clone directory from disk.
 
 ```bash
-xyz repo remove old-repo
-xyz repo remove old-repo --purge
+strata repo remove old-repo
+strata repo remove old-repo --purge
 ```
 
 ### `repo sync [--name NAME] [--force]`
@@ -331,8 +331,8 @@ xyz repo remove old-repo --purge
 Clone or pull repositories. `--force` hard-resets dirty working trees instead of skipping them.
 
 ```bash
-xyz repo sync
-xyz repo sync --name platform --force
+strata repo sync
+strata repo sync --name platform --force
 ```
 
 ### `repo status [--name NAME]`
@@ -340,8 +340,8 @@ xyz repo sync --name platform --force
 Show git working-tree state for registered repositories.
 
 ```bash
-xyz repo status
-xyz repo status --name platform
+strata repo status
+strata repo status --name platform
 ```
 
 ---
@@ -357,20 +357,20 @@ All `build` subcommands accept `--file/-f PATH` to specify the deployment file.
 ### `build run`
 
 ```
-xyz build run [-f FILE] [--dry-run] [standard options]
+strata build run [-f FILE] [--dry-run] [standard options]
 ```
 
 Runs the full build pipeline (platform builder → terraform builder). `--dry-run` validates and plans without writing output files.
 
 ```bash
-xyz build run -f xyz-deploy-prd.yaml
-xyz build run --dry-run
+strata build run -f xyz-deploy-prd.yaml
+strata build run --dry-run
 ```
 
 ### `build plan`
 
 ```
-xyz build plan [-f FILE] [--stage NAME] [--artifacts-only] [standard options]
+strata build plan [-f FILE] [--stage NAME] [--artifacts-only] [standard options]
 ```
 
 Builds into a temp directory, diffs against existing artifacts, then runs `terraform init → validate → plan` per stage. Nothing is written to the real build path.
@@ -381,21 +381,21 @@ Builds into a temp directory, diffs against existing artifacts, then runs `terra
 | `--artifacts-only` | Skip terraform plan — show artifact diff only |
 
 ```bash
-xyz build plan -f xyz-deploy-prd.yaml
-xyz build plan --stage production --artifacts-only
+strata build plan -f xyz-deploy-prd.yaml
+strata build plan --stage production --artifacts-only
 ```
 
 ### `build clean`
 
 ```
-xyz build clean [-f FILE] [--dry-run] [standard options]
+strata build clean [-f FILE] [--dry-run] [standard options]
 ```
 
 Remove build artifacts for the selected deployment.
 
 ```bash
-xyz build clean -f xyz-deploy-prd.yaml
-xyz build clean --dry-run
+strata build clean -f xyz-deploy-prd.yaml
+strata build clean --dry-run
 ```
 
 ---
@@ -405,7 +405,7 @@ xyz build clean --dry-run
 Validate a single platform YAML file against its kind-specific schema.
 
 ```
-xyz validate FILE_PATH [--deep] [standard options]
+strata validate FILE_PATH [--deep] [standard options]
 ```
 
 | Option   | Description                                                                                                                                               |
@@ -415,8 +415,8 @@ xyz validate FILE_PATH [--deep] [standard options]
 **Exit codes:** 0 valid · 1 system failure · 2 missing argument · 3 schema-invalid
 
 ```bash
-xyz validate config/xyz-config.yaml
-xyz validate config/xyz-ws-platform.yaml --deep
+strata validate config/xyz-config.yaml
+strata validate config/xyz-ws-platform.yaml --deep
 ```
 
 ---
@@ -430,14 +430,14 @@ Inspect JSON schemas for platform YAML document kinds. Useful for editors, linte
 List all supported platform document kinds.
 
 ```
-xyz schema list [--output FORMAT]
+strata schema list [--output FORMAT]
 ```
 
 **`--output json`** returns `{"kinds": ["configuration", "deployment", ...]}`. **`--output text`** prints one kind per line.
 
 ```bash
-xyz schema list
-xyz schema list --output json
+strata schema list
+strata schema list --output json
 ```
 
 ### `schema get KIND`
@@ -445,7 +445,7 @@ xyz schema list --output json
 Emit the full JSON Schema for a platform document kind.
 
 ```
-xyz schema get KIND [--output FORMAT]
+strata schema get KIND [--output FORMAT]
 ```
 
 Default and `--output json` both emit the complete Pydantic-generated JSON Schema. `--output text` shows a compact summary (required fields and top-level property names).
@@ -455,9 +455,9 @@ Default and `--output json` both emit the complete Pydantic-generated JSON Schem
 **Exit codes:** 0 success · 2 unknown kind
 
 ```bash
-xyz schema get deployment
-xyz schema get deployment --output json
-xyz schema get environment --output text
+strata schema get deployment
+strata schema get deployment --output json
+strata schema get environment --output text
 ```
 
 ---
@@ -473,7 +473,7 @@ All `deploy` subcommands accept `--file/-f PATH` and `--stage NAME`.
 ### `deploy run`
 
 ```
-xyz deploy run [-f FILE] [--stage NAME] [--force] [--dry-run] [standard options]
+strata deploy run [-f FILE] [--stage NAME] [--force] [--dry-run] [standard options]
 ```
 
 Execute the deploy pipeline (setup → check → plan → apply).
@@ -485,61 +485,61 @@ Execute the deploy pipeline (setup → check → plan → apply).
 | `--dry-run`    | Validate and plan only — no provisioners run |
 
 ```bash
-xyz deploy run -f xyz-deploy-prd.yaml
-xyz deploy run --stage production --dry-run
-xyz deploy run --force
+strata deploy run -f xyz-deploy-prd.yaml
+strata deploy run --stage production --dry-run
+strata deploy run --force
 ```
 
 ### `deploy destroy`
 
 ```
-xyz deploy destroy [-f FILE] [--stage NAME] [--force] [--dry-run] [standard options]
+strata deploy destroy [-f FILE] [--stage NAME] [--force] [--dry-run] [standard options]
 ```
 
 Tear down provisioned infrastructure. `--force` is required for a real destroy (runs non-interactively). `--dry-run` runs `terraform plan -destroy` only.
 
 ```bash
-xyz deploy destroy -f xyz-deploy-prd.yaml --dry-run
-xyz deploy destroy --stage production --force
+strata deploy destroy -f xyz-deploy-prd.yaml --dry-run
+strata deploy destroy --stage production --force
 ```
 
 ### `deploy status`
 
 ```
-xyz deploy status [-f FILE] [--stage NAME] [--plan] [standard options]
+strata deploy status [-f FILE] [--stage NAME] [--plan] [standard options]
 ```
 
 Show live Terraform outputs or saved plan details. `--plan` reads the last saved `.tfplan` file without backend calls.
 
 ```bash
-xyz deploy status -f xyz-deploy-prd.yaml
-xyz deploy status --stage production --plan
+strata deploy status -f xyz-deploy-prd.yaml
+strata deploy status --stage production --plan
 ```
 
 ### `deploy history`
 
 ```
-xyz deploy history [--lines N] [--operation run|destroy] [standard options]
+strata deploy history [--lines N] [--operation run|destroy] [standard options]
 ```
 
 Show deployment execution history from workspace logs.
 
 ```bash
-xyz deploy history
-xyz deploy history --lines 20 --operation run
+strata deploy history
+strata deploy history --lines 20 --operation run
 ```
 
 ### `deploy health`
 
 ```
-xyz deploy health -f FILE [--stage NAME] [standard options]
+strata deploy health -f FILE [--stage NAME] [standard options]
 ```
 
 Run health checks against provisioned infrastructure stages. Exit code 3 if any check fails.
 
 ```bash
-xyz deploy health -f xyz-deploy-prd.yaml
-xyz deploy health -f xyz-deploy-prd.yaml --stage production
+strata deploy health -f xyz-deploy-prd.yaml
+strata deploy health -f xyz-deploy-prd.yaml --stage production
 ```
 
 ---
@@ -551,7 +551,7 @@ Inspect resolved deployment values (variables, secrets, feature flags).
 ### `values list`
 
 ```
-xyz values list -f FILE [--stage NAME] [--type TYPE] [--show-store] [--unresolved] [standard options]
+strata values list -f FILE [--stage NAME] [--type TYPE] [--show-store] [--unresolved] [standard options]
 ```
 
 | Option                                | Description                                                    |
@@ -565,22 +565,22 @@ xyz values list -f FILE [--stage NAME] [--type TYPE] [--show-store] [--unresolve
 Secrets are masked (first 3 chars + `*****`). Exit code 3 if any entry is unresolved.
 
 ```bash
-xyz values list -f xyz-deploy-prd.yaml
-xyz values list -f xyz-deploy-prd.yaml --type secrets --show-store
-xyz values list -f xyz-deploy-prd.yaml --unresolved
+strata values list -f xyz-deploy-prd.yaml
+strata values list -f xyz-deploy-prd.yaml --type secrets --show-store
+strata values list -f xyz-deploy-prd.yaml --unresolved
 ```
 
 ### `values get`
 
 ```
-xyz values get -f FILE KEY... [standard options]
+strata values get -f FILE KEY... [standard options]
 ```
 
 Retrieve the full resolved value for one or more keys. **Secrets are revealed in plain text.**
 
 ```bash
-xyz values get -f xyz-deploy-prd.yaml DB_PASSWORD
-xyz values get -f xyz-deploy-prd.yaml DB_PASSWORD API_KEY
+strata values get -f xyz-deploy-prd.yaml DB_PASSWORD
+strata values get -f xyz-deploy-prd.yaml DB_PASSWORD API_KEY
 ```
 
 ---
@@ -590,8 +590,8 @@ xyz values get -f xyz-deploy-prd.yaml DB_PASSWORD API_KEY
 Show the current CLI version.
 
 ```bash
-xyz version
-xyz version --output json
+strata version
+strata version --output json
 ```
 
 ---
@@ -601,9 +601,9 @@ xyz version --output json
 Show help topics for common workflows.
 
 ```bash
-xyz help
-xyz help quickstart
-xyz help profiles
+strata help
+strata help quickstart
+strata help profiles
 ```
 
 Available topics: `quickstart`, `workspace`, `profiles`, `refs`, `config-merge`, `cross-repo`, `environments`, `troubleshooting`.
