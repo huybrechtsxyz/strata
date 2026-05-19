@@ -315,12 +315,8 @@ class TestSolutionControllerScaffoldDevcontainer:
         """Populate templates_root/devcontainer/ with minimal fixtures."""
         dc_dir = templates_root / "devcontainer"
         dc_dir.mkdir(parents=True)
-        (dc_dir / "devcontainer.template.json").write_text(
-            '{"name": "${SOLUTION_NAME}"}', encoding="utf-8"
-        )
-        (dc_dir / "post-create.sh").write_text(
-            "#!/bin/bash\necho hello\n", encoding="utf-8"
-        )
+        (dc_dir / "devcontainer.template.json").write_text('{"name": "${SOLUTION_NAME}"}', encoding="utf-8")
+        (dc_dir / "post-create.sh").write_text("#!/bin/bash\necho hello\n", encoding="utf-8")
 
     @staticmethod
     def _make_ctrl(work_path: Path) -> SolutionController:
