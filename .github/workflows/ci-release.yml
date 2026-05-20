@@ -16,6 +16,7 @@ permissions:
   contents: write
   actions: read # required to download artifacts from ci-build
   packages: write # required to push to GHCR
+  id-token: write # required for PyPI trusted publishing (OIDC)
 
 # Never cancel an in-progress release
 concurrency:
@@ -45,6 +46,8 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.find-run.outputs.run_id }}
 
     steps:
       # Checkout the code
@@ -96,7 +99,30 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # Job 2: Build and push the CLI Docker image to GHCR
+  # Job 2: Publish Python package to PyPI via Trusted Publishing (OIDC)
+  # ---------------------------------------------------------------------------
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: release
+
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ needs.release.outputs.run_id }}
+
+      - name: Publish to PyPI
+        run: uv publish --trusted-publishing always
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Build and push the CLI Docker image to GHCR
   # ---------------------------------------------------------------------------
   publish:
     name: Build and push Docker image
