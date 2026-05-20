@@ -230,11 +230,11 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
         Examples:
             - "config/*.yaml"
             - "config/**/*.yaml"
-            - "~/.xyz/config/*.yaml"
+            - "~/.strata/config/*.yaml"
             - "/etc/strata/*.yaml"
 
         Args:
-            patterns: List of file patterns (e.g., ["config/*.yaml", "~/.xyz/*.yaml"])
+            patterns: List of file patterns (e.g., ["config/*.yaml", "~/.strata/*.yaml"])
 
         Returns:
             Tuple[bool, List[str]]: (success, list of error messages)
@@ -244,7 +244,7 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
             >>> success, errors = config_svc.load_from_paths([
             ...     "config/base.yaml",
             ...     "config/*.yaml",
-            ...     "~/.xyz/*.yaml"
+            ...     "~/.strata/*.yaml"
             ... ])
             >>> if success:
             ...     print("Configuration loaded")

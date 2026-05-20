@@ -211,13 +211,13 @@ class ValidateCommand(BaseCommand):
             from strata.utils.system import resolve_path
 
             if self._solution_controller.solution is None:
-                self._errors.append("--deep requires an initialized workspace. Run `xyz init` or remove --deep.")
+                self._errors.append("--deep requires an initialized workspace. Run `strata init` or remove --deep.")
                 return None
 
             profile, _ = self._solution_controller.get_active_profile()
             if profile is None:
                 self._errors.append(
-                    "--deep requires an active profile. Run `xyz profile activate <name>` or remove --deep."
+                    "--deep requires an active profile. Run `strata profile activate <name>` or remove --deep."
                 )
                 return None
 
@@ -225,7 +225,7 @@ class ValidateCommand(BaseCommand):
             if not configfile_paths:
                 self._errors.append(
                     "--deep requires at least one configfile path on the active profile. "
-                    "Add one with `xyz ref configfile add` or remove --deep."
+                    "Add one with `strata ref configfile add` or remove --deep."
                 )
                 return None
 

@@ -11,7 +11,7 @@ from strata.controllers.value_controller import ValueController
 class GetValuesDeployCommand(BaseDeployCommand):
     """Retrieve the full resolved value for one or more keys.
 
-    Unlike ``xyz values list``, this reveals secrets in full.
+    Unlike ``strata values list``, this reveals secrets in full.
     Provide one or more KEY arguments to look up.
 
     Exit codes:

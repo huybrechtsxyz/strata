@@ -21,18 +21,18 @@ Configuration repository managed by [strata](https://github.com/huybrechtsxyz/st
 
 ```bash
 # 1. Register this repo as the config source
-xyz repo add ${solution_name} <git-url> --branch main --clone
+strata repo add ${solution_name} <git-url> --branch main --clone
 
 # 2. Add an environment profile and activate it
-xyz profile add prd --activate
-xyz ref config add ${solution_name}-config --path "@${solution_name}/config/${solution_name}-config.yaml"
-xyz ref env add ${solution_name}-env --path "@${solution_name}/envs/env-prd.yaml"
+strata profile add prd --activate
+strata ref config add ${solution_name}-config --path "@${solution_name}/config/${solution_name}-config.yaml"
+strata ref env add ${solution_name}-env --path "@${solution_name}/envs/env-prd.yaml"
 
 # 3. Validate
-xyz validate --file deploy/deploy-prd.yaml
+strata validate --file deploy/deploy-prd.yaml
 
 # 4. Deploy
-xyz deploy run --file deploy/deploy-prd.yaml
+strata deploy run --file deploy/deploy-prd.yaml
 ```
 
 ---

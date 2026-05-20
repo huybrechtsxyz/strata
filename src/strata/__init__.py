@@ -1,4 +1,4 @@
-"""XYZ Platform — Python infrastructure platform for workspace and cluster management."""
+"""Strata — Python infrastructure platform for workspace and cluster management."""
 
 from strata.utils.version import get_version
 

@@ -1,4 +1,4 @@
-"""Command to add a profile to an XYZ Platform solution."""
+"""Command to add a profile to an Strata solution."""
 
 from datetime import datetime, timezone
 from typing import Dict, Optional

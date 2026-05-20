@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Common models, enums, and reusable types for XYZ Platform."""
+"""Common models, enums, and reusable types for Strata."""
 
 import re
 import warnings

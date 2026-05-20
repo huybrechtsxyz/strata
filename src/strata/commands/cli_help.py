@@ -22,7 +22,7 @@ _TOPICS: dict[str, tuple[str, str]] = {
     "workspace": ("What .strata/ is and how it is structured", "workspace.md"),
     "profiles": ("Model dev/stg/prd environments with profiles", "profiles.md"),
     "refs": ("Env files, config files, and how they layer", "refs.md"),
-    "config-merge": ("How xyz deep-merges multiple config files", "config-merge.md"),
+    "config-merge": ("How strata deep-merges multiple config files", "config-merge.md"),
     "cross-repo": ("Using @repo_name/ references across repos", "cross-repo.md"),
     "environments": ("Mapping profiles to deployment environments", "environments.md"),
     "troubleshooting": ("Common errors and exactly how to fix them", "troubleshooting.md"),
@@ -136,7 +136,7 @@ def _render_topic_list(work_path: Optional[Path]) -> None:
             click.echo(f"    {name:<{col}}{desc}")
         first = False
 
-    click.echo("\n  Use: xyz help --topic <name>")
+    click.echo("\n  Use: strata help --topic <name>")
 
 
 def _render_topic(name: str, work_path: Optional[Path]) -> bool:
@@ -228,21 +228,21 @@ def help_command(
     # Default: curated getting-started overview
     BaseCommand.show_console_header(work_path=None)
     click.echo("")
-    click.echo("  XYZ Platform CLI automates multi-repo workspace preparation,")
+    click.echo("  Strata CLI automates multi-repo workspace preparation,")
     click.echo("  configuration merging, and deployment execution.")
     click.echo("")
     click.echo("  Canonical workflow:")
     click.echo("")
-    click.echo("    xyz init --name myproject                   # create workspace")
-    click.echo("    xyz repo add myrepo <url>                   # register a repo")
-    click.echo("    xyz profile add dev                         # create a profile")
-    click.echo("    xyz profile activate dev                    # set active profile")
-    click.echo("    xyz ref env add --profile dev \\")
+    click.echo("    strata sln init --name myproject                   # create workspace")
+    click.echo("    strata repo add myrepo <url>                   # register a repo")
+    click.echo("    strata profile add dev                         # create a profile")
+    click.echo("    strata profile activate dev                    # set active profile")
+    click.echo("    strata ref env add --profile dev \\")
     click.echo("        --name base --path ./dev.env            # register env file")
-    click.echo("    xyz ref config add --profile dev \\")
+    click.echo("    strata ref config add --profile dev \\")
     click.echo("        --name app --path ./app.yaml            # register config file")
-    click.echo("    xyz build                                   # merge + build artifacts")
-    click.echo("    xyz deploy                                  # execute deployment")
+    click.echo("    strata build                                   # merge + build artifacts")
+    click.echo("    strata deploy                                  # execute deployment")
     click.echo("")
     click.echo("  Command groups:")
     click.echo("")
@@ -259,8 +259,8 @@ def help_command(
     for name, desc in groups:
         click.echo(f"    {name:<10}{desc}")
     click.echo("")
-    click.echo("  For per-command usage:  xyz <command> --help")
-    click.echo("  For topic guides:       xyz help --list")
+    click.echo("  For per-command usage:  strata <command> --help")
+    click.echo("  For topic guides:       strata help --list")
     click.echo(f"  Full documentation:     {DOCS_URL}")
     click.echo("")
     BaseCommand.show_console_footer()

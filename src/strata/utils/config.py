@@ -12,8 +12,8 @@ DEFAULT_STATE_DIR: str = ""
 DEFAULT_STATE_FILE: str = ""
 
 # Public URLs — update when the help-site is live
-DOCS_URL: str = "https://docs.xyzplatform.com"
-SUPPORT_URL: str = "https://support.xyzplatform.com"
+DOCS_URL: str = "https://docs.strata.huybrechts.xyz"
+SUPPORT_URL: str = "https://support.strata.huybrechts.xyz"
 
 # Solution workspace path conventions
 SOLUTION_DIR: str = ".strata"

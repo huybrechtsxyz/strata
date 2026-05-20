@@ -24,7 +24,7 @@ class StatusDeployCommand(BaseDeployCommand):
         ``deploy run --dry-run`` and shows a human-readable change summary
         (``terraform show -json <plan>``).  No network calls to the backend.
 
-    For execution history use ``xyz deploy history``.
+    For execution history use ``strata deploy history``.
     """
 
     OPERATION = "deploy_status"

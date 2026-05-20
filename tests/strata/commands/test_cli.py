@@ -90,13 +90,13 @@ class TestMainGroup:
         runner = CliRunner()
         result = runner.invoke(main, ["--help"])
         assert result.exit_code == 0
-        assert "XYZ Platform" in result.output
+        assert "Strata" in result.output
 
     def test_no_subcommand_shows_help(self):
         runner = CliRunner()
         result = runner.invoke(main, [])
         # Click groups print help and exit 0 or 2 depending on invoke_without_command
-        assert "XYZ Platform" in result.output or result.exit_code in (0, 2)
+        assert "Strata" in result.output or result.exit_code in (0, 2)
 
     def test_unknown_subcommand_exits_nonzero(self):
         runner = CliRunner()

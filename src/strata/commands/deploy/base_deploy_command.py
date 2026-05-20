@@ -127,19 +127,19 @@ class BaseDeployCommand(BaseCommand):
         from strata.utils.system import resolve_path
 
         if self._solution_controller.solution is None:
-            self._errors.append("Deploy requires an initialized workspace. Run `xyz solution init` first.")
+            self._errors.append("Deploy requires an initialized workspace. Run `strata sln init` first.")
             return None
 
         profile, _ = self._solution_controller.get_active_profile()
         if profile is None:
-            self._errors.append("Deploy requires an active profile. Run `xyz profile activate <name>`.")
+            self._errors.append("Deploy requires an active profile. Run `strata profile activate <name>`.")
             return None
 
         configfile_paths = profile.configfile_paths or []
         if not configfile_paths:
             self._errors.append(
                 "Deploy requires at least one configfile path on the active profile. "
-                "Add one with `xyz ref configfile add`."
+                "Add one with `strata ref configfile add`."
             )
             return None
 

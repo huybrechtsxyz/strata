@@ -19,20 +19,20 @@ export STRATA_OUTPUT=json
 export STRATA_WORK_PATH=/path/to/workspace
 
 # Validate before any deploy
-xyz validate <file> --output json
+strata validate <file> --output json
 
 # Build artifacts
-xyz build run -f <deployment.yaml> --output json
+strata build run -f <deployment.yaml> --output json
 
 # Deploy (with dry-run first)
-xyz deploy run -f <deployment.yaml> --dry-run --output json
+strata deploy run -f <deployment.yaml> --dry-run --output json
 ```
 
 ---
 
 ## CLI Structure
 
-Commands follow a flat `xyz <group> <command>` pattern:
+Commands follow a flat `strata <group> <command>` pattern:
 
 | Group | Key Commands | Purpose |
 |-------|-------------|---------|
@@ -117,10 +117,10 @@ The CLI auto-discovers the workspace by walking up from CWD looking for a `.stra
 
 ```bash
 # Phase 1 — structural validation (schema check)
-xyz validate path/to/file.yaml --output json
+strata validate path/to/file.yaml --output json
 
 # Phase 2 — deep validation (cross-reference checks, requires active profile)
-xyz validate path/to/file.yaml --deep --output json
+strata validate path/to/file.yaml --deep --output json
 ```
 
 **Important:**
@@ -134,22 +134,22 @@ xyz validate path/to/file.yaml --deep --output json
 
 ```bash
 # Full build (generates Terraform artifacts)
-xyz build run -f deploy/deploy-prd.yaml --output json
+strata build run -f deploy/deploy-prd.yaml --output json
 
 # Dry-run (validate + plan without writing)
-xyz build run -f deploy/deploy-prd.yaml --dry-run --output json
+strata build run -f deploy/deploy-prd.yaml --dry-run --output json
 
 # Show what would change (diff existing vs new artifacts)
-xyz build plan -f deploy/deploy-prd.yaml --output json
+strata build plan -f deploy/deploy-prd.yaml --output json
 
 # Limit to a single stage
-xyz build plan -f deploy/deploy-prd.yaml --stage staging --output json
+strata build plan -f deploy/deploy-prd.yaml --stage staging --output json
 
 # Artifacts diff only (skip terraform plan)
-xyz build plan -f deploy/deploy-prd.yaml --artifacts-only --output json
+strata build plan -f deploy/deploy-prd.yaml --artifacts-only --output json
 
 # Clean build artifacts
-xyz build clean -f deploy/deploy-prd.yaml --output json
+strata build clean -f deploy/deploy-prd.yaml --output json
 ```
 
 ---
@@ -158,25 +158,25 @@ xyz build clean -f deploy/deploy-prd.yaml --output json
 
 ```bash
 # Always dry-run first
-xyz deploy run -f deploy/deploy-prd.yaml --dry-run --output json
+strata deploy run -f deploy/deploy-prd.yaml --dry-run --output json
 
 # Execute deploy (--force skips confirmation prompts)
-xyz deploy run -f deploy/deploy-prd.yaml --force --output json
+strata deploy run -f deploy/deploy-prd.yaml --force --output json
 
 # Limit to a specific stage
-xyz deploy run -f deploy/deploy-prd.yaml --stage networking --force --output json
+strata deploy run -f deploy/deploy-prd.yaml --stage networking --force --output json
 
 # Check current state
-xyz deploy status -f deploy/deploy-prd.yaml --output json
+strata deploy status -f deploy/deploy-prd.yaml --output json
 
 # View deployment history
-xyz deploy history -f deploy/deploy-prd.yaml --output json
+strata deploy history -f deploy/deploy-prd.yaml --output json
 
 # Health check
-xyz deploy health -f deploy/deploy-prd.yaml --output json
+strata deploy health -f deploy/deploy-prd.yaml --output json
 
 # Destroy (requires --force)
-xyz deploy destroy -f deploy/deploy-prd.yaml --force --output json
+strata deploy destroy -f deploy/deploy-prd.yaml --force --output json
 ```
 
 **Caution:** `deploy run` and `deploy destroy` are long-running operations. They may take minutes and produce no output until completion.
@@ -187,19 +187,19 @@ xyz deploy destroy -f deploy/deploy-prd.yaml --force --output json
 
 ```bash
 # Last execution only
-xyz audit list --last --output json
+strata audit list --last --output json
 
 # Filter by level
-xyz audit list --level ERROR --output json
+strata audit list --level ERROR --output json
 
 # Filter by execution ID
-xyz audit list --execution-id <id> --output json
+strata audit list --execution-id <id> --output json
 
 # Last N minutes
-xyz audit list --minutes 10 --output json
+strata audit list --minutes 10 --output json
 
 # Check tool availability
-xyz tools status --output json
+strata tools status --output json
 ```
 
 ---
@@ -213,7 +213,7 @@ spec:
   source: "@haven/config/config.yaml"
 ```
 
-The `@repo_name` prefix resolves via the solution's repository map. Repositories are managed with `xyz repo add|remove|list`.
+The `@repo_name` prefix resolves via the solution's repository map. Repositories are managed with `strata repo add|remove|list`.
 
 ---
 
@@ -248,7 +248,7 @@ Valid kinds: `deployment`, `workspace`, `configuration`, `environment`, `namespa
 ```
 
 - `solution.json` — managed by the CLI, do not edit manually
-- `cli.yaml` — user preferences, manage via `xyz config set|unset|list`
+- `cli.yaml` — user preferences, manage via `strata config set|unset|list`
 
 ---
 
@@ -271,13 +271,13 @@ These are available in lifecycle scripts during build/deploy:
 1. **Always use `--output json`** — parse structured responses, never scrape console output.
 2. **Check exit code first** — `3` means validation errors (read `errors`); `1` means system failure (read `messages`).
 3. **Set `STRATA_WORK_PATH`** — eliminates ambiguity about which workspace you're targeting.
-4. **Validate before deploy** — `xyz validate` is safe and read-only. Run it first.
+4. **Validate before deploy** — `strata validate` is safe and read-only. Run it first.
 5. **Use `--dry-run`** — available on `build run`, `build clean`, `deploy run`, `deploy destroy`.
 6. **Use `--force` for automation** — skips interactive confirmation prompts.
-7. **Use `xyz audit list --last --output json`** — inspect what the last command actually did.
-8. **Use `xyz tools status`** — verify required tools (terraform, git, docker) are available before operations.
+7. **Use `strata audit list --last --output json`** — inspect what the last command actually did.
+8. **Use `strata tools status`** — verify required tools (terraform, git, docker) are available before operations.
 9. **Long operations produce no streaming output** — `deploy run` and `build run` may take minutes. Set appropriate timeouts.
-10. **Profile must be active for deep validation** — activate with `xyz profile activate <name>` before `validate --deep`.
+10. **Profile must be active for deep validation** — activate with `strata profile activate <name>` before `validate --deep`.
 
 ---
 
@@ -285,23 +285,23 @@ These are available in lifecycle scripts during build/deploy:
 
 ### Initial Setup
 ```bash
-xyz init --output json
-xyz repo add --name haven --path ../xyz-configuration --output json
-xyz profile add --name prd --output json
-xyz profile activate prd --output json
+strata init --output json
+strata repo add --name haven --path ../xyz-configuration --output json
+strata profile add --name prd --output json
+strata profile activate prd --output json
 ```
 
 ### Validate → Build → Deploy
 ```bash
-xyz validate deploy/deploy-prd.yaml --output json
-xyz build run -f deploy/deploy-prd.yaml --output json
-xyz deploy run -f deploy/deploy-prd.yaml --dry-run --output json
-xyz deploy run -f deploy/deploy-prd.yaml --force --output json
+strata validate deploy/deploy-prd.yaml --output json
+strata build run -f deploy/deploy-prd.yaml --output json
+strata deploy run -f deploy/deploy-prd.yaml --dry-run --output json
+strata deploy run -f deploy/deploy-prd.yaml --force --output json
 ```
 
 ### Troubleshooting a Failed Deploy
 ```bash
-xyz audit list --last --level ERROR --output json
-xyz deploy status -f deploy/deploy-prd.yaml --output json
-xyz tools status --output json
+strata audit list --last --level ERROR --output json
+strata deploy status -f deploy/deploy-prd.yaml --output json
+strata tools status --output json
 ```

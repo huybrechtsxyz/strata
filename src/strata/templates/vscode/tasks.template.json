@@ -4,7 +4,7 @@
     {
       "label": "Run: ${SOLUTION_NAME}",
       "type": "shell",
-      "command": "xyz ${input:cliArgs}",
+      "command": "strata ${input:cliArgs}",
       "group": "build",
       "presentation": {
         "echo": true,
@@ -22,7 +22,10 @@
       "options": {
         "shell": {
           "executable": "pwsh",
-          "args": ["-NoProfile", "-File"]
+          "args": [
+            "-NoProfile",
+            "-File"
+          ]
         }
       },
       "group": "build",

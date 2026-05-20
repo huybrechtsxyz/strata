@@ -133,7 +133,7 @@ function Test-HelpCommands {
 
     Test-Cmd "help: main -h" `
         -Args @('-h') `
-        -Contains @('XYZ Platform CLI', 'Usage:')
+        -Contains @('Strata CLI', 'Usage:')
 
     Test-Cmd "help: help -h" `
         -Args @('help', '-h') `
@@ -169,12 +169,12 @@ function Test-VersionCommands {
     Test-Cmd "version: json output" `
         -Args @('version', '--output', 'json') `
         -Contains @('"version"') `
-        -NotContains @('XYZ Platform CLI')
+        -NotContains @('Strata CLI')
 
     Test-Cmd "version: text output is bare version number" `
         -Args @('version', '--output', 'text') `
         -Contains @('^\d+\.\d+\.\d+') `
-        -NotContains @('XYZ Platform CLI')
+        -NotContains @('Strata CLI')
 }
 
 # =============================================================================
@@ -555,7 +555,7 @@ function Test-ContextCommands {
 # =============================================================================
 
 Write-Host ""
-Write-Host "XYZ PLATFORM - MANUAL SMOKE TEST SUITE" -ForegroundColor $ColorInfo
+Write-Host "STRATA - MANUAL SMOKE TEST SUITE" -ForegroundColor $ColorInfo
 Write-Host "Category : $Category" -ForegroundColor Gray
 Write-Host "Date     : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
 Write-Host ""

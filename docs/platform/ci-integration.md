@@ -95,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv tool install strata
+      - run: uv tool install xyz-strata
       - run: strata validate --file $STRATA_FILE --output json
         id: validate
       - run: strata diff --file $STRATA_FILE --output json > diff.json
@@ -122,7 +122,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv tool install strata
+      - run: uv tool install xyz-strata
       - run: strata build run --file $STRATA_FILE
       - run: strata deploy run --file $STRATA_FILE --force
 ```
@@ -166,8 +166,8 @@ stages:
 
           - script: |
               pip install uv
-              uv tool install strata
-            displayName: Install strata
+              uv tool install xyz-strata
+            displayName: install xyz-strata
 
           - script: strata validate --file $(STRATA_FILE) --output json
             displayName: Validate deployment file
@@ -199,8 +199,8 @@ stages:
 
                 - script: |
                     pip install uv
-                    uv tool install strata
-                  displayName: Install strata
+                    uv tool install xyz-strata
+                  displayName: install xyz-strata
 
                 - script: strata build run --file $(STRATA_FILE)
                   displayName: Build artifacts
@@ -266,7 +266,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - run: uv tool install strata
+      - run: uv tool install xyz-strata
       - run: strata validate --file ${{ matrix.file }} --output json
 ```
 

@@ -1,4 +1,4 @@
-"""Command to sync (clone or pull) repositories in an XYZ Platform solution."""
+"""Command to sync (clone or pull) repositories in an Strata solution."""
 
 from typing import Dict, List, Optional
 

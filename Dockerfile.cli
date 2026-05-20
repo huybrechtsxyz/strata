@@ -29,11 +29,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
     APP_VERSION=${VERSION}
 
-LABEL org.opencontainers.image.title="xyz-platform" \
-      org.opencontainers.image.description="XYZ Platform CLI — infrastructure workspace management" \
+LABEL org.opencontainers.image.title="strata" \
+      org.opencontainers.image.description="Strata CLI — infrastructure workspace management" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later" \
-      org.opencontainers.image.source="https://github.com/huybrechtsxzy/xyz-platform"
+      org.opencontainers.image.source="https://github.com/huybrechtsxyz/strata"
 
 WORKDIR /app
 
@@ -45,6 +45,6 @@ RUN useradd --no-create-home --shell /bin/bash appuser
 USER appuser
 
 # The CLI is invoked as: docker run <image> <command> [options]
-# e.g.: docker run xyz-platform validate my-config.yaml
-ENTRYPOINT ["xyz"]
+# e.g.: docker run strata validate my-config.yaml
+ENTRYPOINT ["strata"]
 CMD ["--help"]

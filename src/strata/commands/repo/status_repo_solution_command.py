@@ -150,7 +150,7 @@ class StatusRepoSolutionCommand(BaseCommand):
             state = r.get("state", "?")
 
             if state == "not_cloned":
-                click.echo(f"  ⚪  {r['name']}  (not cloned — run `xyz repo sync`)")
+                click.echo(f"  ⚪  {r['name']}  (not cloned — run `strata repo sync`)")
                 continue
 
             if state == "error":

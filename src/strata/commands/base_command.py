@@ -1,4 +1,4 @@
-"""Base command class for XYZ Platform CLI commands."""
+"""Base command class for Strata CLI commands."""
 
 import json
 import os
@@ -21,7 +21,7 @@ from strata.utils.version import get_version
 
 
 class BaseCommand(ABC):
-    """Base command class for XYZ Platform CLI commands."""
+    """Base command class for Strata CLI commands."""
 
     OPERATION = "base_command"
     INIT_REQUIRED = True  # By default, commands require an initialized solution (solution.json)
@@ -90,7 +90,7 @@ class BaseCommand(ABC):
     @classmethod
     def show_console_header(cls, work_path: Optional[str] = None) -> None:
         click.echo("─" * 80)
-        click.echo(f"🚀 XYZ PLATFORM — CLI (v{get_version()})")
+        click.echo(f"🚀 Strata — CLI (v{get_version()})")
         click.echo("─" * 80)
         click.echo("Automates workspace preparation, configuration, and deployment.")
         click.echo(f"⏱️   Timestamp       : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -102,7 +102,7 @@ class BaseCommand(ABC):
     @classmethod
     def show_console_footer(cls) -> None:
         click.echo("─" * 80)
-        click.echo("✨ Thank you for using XYZ Platform CLI!")
+        click.echo("✨ Thank you for using Strata CLI!")
         click.echo(f"📘 Documentation: {DOCS_URL}")
         click.echo(f"💬 Support: {SUPPORT_URL}")
         click.echo("─" * 80)
@@ -182,14 +182,14 @@ class BaseCommand(ABC):
                 return False
 
             # Try to load — but don't fail hard if solution.json doesn't exist yet
-            # (e.g. during `xyz solution init` itself)
+            # (e.g. during `strata sln init` itself)
             solution_id: str = "unknown"
             solution_path = SolutionController.get_solution_json_path(self._work_path)
             if solution_path.exists():
                 self._solution_controller.load()
                 solution_id = self._solution_controller.get_solution_id()
             elif self.INIT_REQUIRED:
-                error_msg = f"Solution configuration not found at {solution_path}. This command requires an initialized solution. Please run 'xyz solution init' first."
+                error_msg = f"Solution configuration not found at {solution_path}. This command requires an initialized solution. Please run 'strata sln init' first."
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
                 return False

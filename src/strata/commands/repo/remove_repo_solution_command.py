@@ -1,4 +1,4 @@
-"""Command to remove a repository from an XYZ Platform solution."""
+"""Command to remove a repository from an Strata solution."""
 
 import shutil
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""Command that shows what ``xyz build run`` would write, then runs terraform plan.
+"""Command that shows what ``strata build run`` would write, then runs terraform plan.
 
 Two-layer output
 ----------------

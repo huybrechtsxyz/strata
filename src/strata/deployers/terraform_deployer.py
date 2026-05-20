@@ -125,7 +125,7 @@ class TerraformDeployer(BaseDeployer):
         if not self._working_dir.exists():
             messages.append(
                 f"Terraform working directory does not exist: {self._working_dir}\n"
-                "  Run 'xyz build run' first to copy IaC artefacts to the build folder."
+                "  Run 'strata build run' first to copy IaC artefacts to the build folder."
             )
             return False, messages
 
@@ -393,7 +393,7 @@ class TerraformDeployer(BaseDeployer):
         assert self._tf is not None
 
         if not self._plan_file.exists():
-            messages.append(f"No saved plan found at {self._plan_file}. Run 'xyz deploy run --dry-run' first.")
+            messages.append(f"No saved plan found at {self._plan_file}. Run 'strata deploy run --dry-run' first.")
             return False, data, messages
 
         messages.append(f"terraform show -json  {self._plan_file.name}")

@@ -1,6 +1,6 @@
 # Workspace README
 
-This `.strata` folder contains workspace state and helper files created by the XYZ Platform CLI.
+This `.strata` folder contains workspace state and helper files created by the Strata CLI.
 
 Included files:
 

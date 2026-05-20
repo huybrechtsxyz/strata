@@ -129,7 +129,7 @@ class InstallToolsCommand(BaseCommand):
         lines = [
             f"# {name} environment variables",
             f"# Download: {install_url}",
-            "# Source this file before running xyz commands that use this integration.",
+            "# Source this file before running strata commands that use this integration.",
             "# Keep this file on your machine — do NOT commit it to source control.",
             "",
         ]

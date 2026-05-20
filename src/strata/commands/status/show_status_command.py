@@ -172,8 +172,8 @@ class StatusCommand(BaseCommand):
             click.echo("")
             click.echo(f"  Work path : {sol['work_path']}")
             click.echo("")
-            click.echo("  ℹ️   No xyz workspace found in this directory.")
-            click.echo("      Run `xyz init` to initialize a workspace here.")
+            click.echo("  ℹ️   No strata workspace found in this directory.")
+            click.echo("      Run `strata init` to initialize a workspace here.")
             click.echo("")
             self._print_integrations(ints)
             return
@@ -256,7 +256,7 @@ class StatusCommand(BaseCommand):
         issues: List[str] = []
 
         if not initialized:
-            return "DEGRADED", ["workspace not initialized — run xyz init"]
+            return "DEGRADED", ["workspace not initialized — run strata sln init"]
 
         # Required integrations broken (currently: none declared, flag any unavailable)
         unavailable = [n for n, i in integrations.items() if not i.get("available", False)]
@@ -265,7 +265,7 @@ class StatusCommand(BaseCommand):
 
         # No active profile
         if not profiles.get("active"):
-            issues.append("no active profile — run xyz profile activate <name>")
+            issues.append("no active profile — run strata profile activate <name>")
 
         # Missing clones
         missing = [r["name"] for r in repos if not r["cloned"]]

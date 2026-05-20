@@ -1,9 +1,9 @@
-# XYZ Platform — .platform/ gitignore
+# Strata — .strata/ gitignore
 #
 # Commit:   solution.json, logging.yaml
 # Ignore:   cli.yaml (personal CLI prefs), logs, temp files, local-only overrides
 
-# Personal CLI preferences — each developer sets these locally via `xyz config set`
+# Personal CLI preferences — each developer sets these locally via `strata config set`
 cli.yaml
 
 # Build output — generated artifacts, never committed

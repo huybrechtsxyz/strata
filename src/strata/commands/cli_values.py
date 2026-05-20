@@ -76,7 +76,7 @@ def values_list(
     """List all variables, secrets, and feature flags for a deployment.
 
     Secrets are masked (first 3 chars + *****).
-    Use ``xyz values get`` to reveal a full value.
+    Use ``strata values get`` to reveal a full value.
     """
     command = ListValuesDeployCommand(
         file=file,

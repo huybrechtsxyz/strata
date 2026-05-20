@@ -1,4 +1,4 @@
-"""Command to remove a profile from an XYZ Platform solution."""
+"""Command to remove a profile from an Strata solution."""
 
 from typing import Dict, Optional
 

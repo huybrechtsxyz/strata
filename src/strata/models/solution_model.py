@@ -99,7 +99,7 @@ class SolutionModel(BaseModel):
     Model for solution resource types.
 
     A solution groups a collection of related repositories together and provides
-    the source of truth for ``xyz init <name>``, including the VS Code workspace
+    the source of truth for ``strata init <name>``, including the VS Code workspace
     definition, shared profiles, and per-repo metadata.
     """
 

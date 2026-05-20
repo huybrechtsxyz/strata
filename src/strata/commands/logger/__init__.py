@@ -1,1 +1,1 @@
-"""Commands package for xyz audit command group."""
+"""Commands package for strata log command group."""

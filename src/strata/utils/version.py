@@ -7,4 +7,4 @@ def get_version() -> str:
     Returns:
         str: The version as a string.
     """
-    return version("strata")
+    return version("xyz-strata")

@@ -1,4 +1,4 @@
-"""Command to activate a profile in an XYZ Platform solution."""
+"""Command to activate a profile in an Strata solution."""
 
 from typing import Dict, Optional
 
