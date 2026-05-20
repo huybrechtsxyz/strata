@@ -1,4 +1,4 @@
-"""Command to clean workspace artifacts from an XYZ Platform solution."""
+"""Command to clean workspace artifacts from an Strata solution."""
 
 from typing import Optional
 

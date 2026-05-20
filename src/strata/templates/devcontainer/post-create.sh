@@ -5,10 +5,10 @@ echo ">>> Installing strata..."
 pip install --quiet git+https://github.com/huybrechtsxzy/strata.git
 
 echo ">>> Installing shell completion..."
-xyz --install-completion bash 2>/dev/null || true
+strata --install-completion bash 2>/dev/null || true
 
 echo ">>> Verifying installation..."
-xyz --version
+strata --version
 
 echo ""
-echo ">>> Setup complete. Run 'xyz doctor' to verify your environment."
+echo ">>> Setup complete. Run 'strata doctor' to verify your environment."

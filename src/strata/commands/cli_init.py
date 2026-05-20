@@ -14,7 +14,7 @@ from strata.commands.cli_common import (
 from strata.commands.init.init_solution_command import InitSolutionCommand
 
 
-@click.command(name="init", help="Initialize a new XYZ Platform solution workspace.")
+@click.command(name="init", help="Initialize a new Strata solution workspace.")
 @click.option(
     "--name",
     required=True,

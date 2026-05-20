@@ -65,7 +65,7 @@ Write-Host ""
 
 # ── 3. Mypy (type check = compile equivalent) ───────────────────────────────
 Write-Host "[*] Mypy type check..." -ForegroundColor Blue
-uv run mypy ./src
+uv run python -m mypy ./src ./tests
 if ($LASTEXITCODE -ne 0) { $failed += "mypy" }
 Write-Host ""
 

@@ -21,7 +21,7 @@ def config_group():
     pass
 
 
-@config_group.command(name="set", help="Set a workspace default (e.g. `xyz config set output json`).")
+@config_group.command(name="set", help="Set a workspace default (e.g. `strata config set output json`).")
 @click.argument("key", required=True)
 @click.argument("value", required=True)
 @click_work_path
@@ -43,7 +43,7 @@ def set_config_command(
     handle_command_exit(command, success)
 
 
-@config_group.command(name="unset", help="Remove a workspace default (e.g. `xyz config unset output`).")
+@config_group.command(name="unset", help="Remove a workspace default (e.g. `strata config unset output`).")
 @click.argument("key", required=True)
 @click_work_path
 @click_output_format

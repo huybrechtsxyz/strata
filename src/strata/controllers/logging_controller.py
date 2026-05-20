@@ -10,7 +10,7 @@ from strata.controllers.base_controller import BaseController
 from strata.utils.config import SOLUTION_DIR, SOLUTION_LOGGING_FILE
 from strata.utils.system import get_pkg_data_path
 
-# Keys that the `level` shorthand touches when the user runs `xyz log config set level X`
+# Keys that the `level` shorthand touches when the user runs `strata log config set level X`
 _LEVEL_PATHS = [
     ["handlers", "console", "level"],
     ["loggers", "strata", "level"],

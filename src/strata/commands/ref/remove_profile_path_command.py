@@ -1,4 +1,4 @@
-"""Command to remove a configuration path from a profile in an XYZ Platform solution."""
+"""Command to remove a configuration path from a profile in an Strata solution."""
 
 from typing import Dict, Optional
 
@@ -82,7 +82,7 @@ class RemoveProfilePathCommand(BaseCommand):
         if not self._profile_name:
             active, errors = self._solution_controller.get_active_profile()
             if errors or active is None:
-                self._errors.append("No profile specified and no active profile found. Use 'xyz profile add' first.")
+                self._errors.append("No profile specified and no active profile found. Use 'strata profile add' first.")
                 return False
             self._profile_name = str(active.name)
         return True

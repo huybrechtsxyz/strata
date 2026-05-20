@@ -33,7 +33,7 @@ class SolutionController(BaseController):
     Controller for solution-level operations.
 
     Responsibilities:
-    - Initialise a new solution (``xyz solution init <name>``)
+    - Initialise a new solution (``strata sln init <name>``)
     - Load and validate an existing solution from disk
     - Add / remove repositories from a solution
     - Generate the VS Code ``.code-workspace`` file from solution state
@@ -815,7 +815,7 @@ class SolutionController(BaseController):
                             {
                                 "label": f"Run: {name}",
                                 "type": "shell",
-                                "command": "xyz ${input:cliArgs}",
+                                "command": "strata ${input:cliArgs}",
                                 "group": "build",
                                 "presentation": {
                                     "echo": True,
@@ -1102,10 +1102,10 @@ class SolutionController(BaseController):
             try:
                 integrations_readme.write_text(
                     "# Custom Integrations\n\n"
-                    "Place `.py` files here to register custom integrations with the xyz platform.\n\n"
+                    "Place `.py` files here to register custom integrations with the Strata.\n\n"
                     "Each file must define a `register()` function that calls\n"
                     "`IntegrationFactory.register_type(type_str, cls)`.\n\n"
-                    "See `xyz help integrations` for documentation.\n",
+                    "See `strata help integrations` for documentation.\n",
                     encoding="utf-8",
                 )
                 self.logger.info("Integrations directory initialised", path=str(integrations_dir))

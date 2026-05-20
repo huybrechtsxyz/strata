@@ -36,6 +36,6 @@ def version_command(
     # If no output format specified, show full console header and footer with version in between
     BaseCommand.show_console_header(work_path=None)  # No work path for version command
     click.echo("")
-    click.echo(f"XYZ Platform CLI Version: {version}")
+    click.echo(f"Strata CLI Version: {version}")
     click.echo("")
     BaseCommand.show_console_footer()

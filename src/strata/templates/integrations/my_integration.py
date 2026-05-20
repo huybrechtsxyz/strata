@@ -1,7 +1,7 @@
 """
-Custom integration template for XYZ Platform.
+Custom integration template for Strata.
 
-Copy / rename this file, implement the class, then register the type so xyz
+Copy / rename this file, implement the class, then register the type so strata
 can load it via the YAML ``type:`` field in your configuration files.
 
 Drop-in location: .strata/integrations/<your_name>.py
@@ -132,11 +132,11 @@ class MyIntegration(BaseIntegration):
         return True, ""
 
     # ------------------------------------------------------------------ #
-    # Setup metadata (used by `xyz tools install` and `xyz tools check`)  #
+    # Setup metadata (used by `strata tools install` and `strata tools check`)  #
     # ------------------------------------------------------------------ #
 
     def get_setup_info(self) -> Dict[str, Any]:
-        """Return metadata used by `xyz tools install` and `xyz tools check`."""
+        """Return metadata used by `strata tools install` and `strata tools check`."""
         return {
             "name": "my_integration",
             "command": self.COMMAND,
@@ -156,7 +156,7 @@ class MyIntegration(BaseIntegration):
             "auth_methods": [
                 {
                     "method": "Environment variable",
-                    "description": "Set MY_TOOL_API_TOKEN before running xyz.",
+                    "description": "Set MY_TOOL_API_TOKEN before running strata.",
                 },
             ],
             "yaml_example": ("type: my_integration\nspec:\n  endpoint: https://my-service.example.com\n"),

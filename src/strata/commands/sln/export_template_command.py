@@ -193,7 +193,7 @@ class SolutionExportCommand(BaseCommand):
             click.echo(f"🔁  Substitutions    : {sub_count}")
             click.echo("")
             click.echo("💡  Next steps:")
-            click.echo(f"    xyz init --name <new-ws> --template .strata/templates/{self._name}/")
+            click.echo(f"    strata sln init --name <new-ws> --template .strata/templates/{self._name}/")
 
         return True
 

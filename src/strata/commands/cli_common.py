@@ -1,4 +1,4 @@
-"""Common Click decorators, option callbacks, and exit-code helpers for XYZ Platform CLI commands."""
+"""Common Click decorators, option callbacks, and exit-code helpers for Strata CLI commands."""
 
 import click
 

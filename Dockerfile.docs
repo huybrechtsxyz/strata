@@ -45,10 +45,10 @@ RUN .venv/bin/sphinx-build -M html docs/ /build/html_out -W --keep-going
 # ============================================================
 FROM nginx:alpine
 
-LABEL org.opencontainers.image.title="xyz-platform-docs" \
-      org.opencontainers.image.description="XYZ Platform documentation site" \
+LABEL org.opencontainers.image.title="strata-docs" \
+      org.opencontainers.image.description="Strata documentation site" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later" \
-      org.opencontainers.image.source="https://github.com/huybrechtsxzy/xyz-platform"
+      org.opencontainers.image.source="https://github.com/huybrechtsxyz/strata"
 
 # Remove default nginx placeholder
 RUN rm -rf /usr/share/nginx/html/*

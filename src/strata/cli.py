@@ -1,4 +1,4 @@
-"""Command-line interface for XYZ Platform.
+"""Command-line interface for Strata.
 
 Commands:
     help                : Show help topics and workflow guidance.
@@ -123,9 +123,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 
 @click.group(
     name="main",
-    help=(
-        "XYZ Platform CLI.\n\nAutomates workspace preparation, configuration, and deployment for the XYZ Platform.\n\n"
-    ),
+    help=("Strata CLI.\n\nAutomates workspace preparation, configuration, and deployment for the Strata platform.\n\n"),
     context_settings={
         "help_option_names": ["-h", "--help"],
         "auto_envvar_prefix": "STRATA",
@@ -133,7 +131,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 )
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    """XYZ Platform CLI entry point."""
+    """Strata CLI entry point."""
     # Fallback to WARNING level console logging
     logging_config = system.get_pkg_logging_path()
     if logging_config.exists():
@@ -142,7 +140,7 @@ def main(ctx: click.Context) -> None:
         configure_logging(level="WARNING", enable_console=True)
 
     # Load workspace defaults from cli.yaml and apply as Click default_map.
-    # Resolution order: explicit flag > XYZ_* env var > cli.yaml > built-in default.
+    # Resolution order: explicit flag > STRATA_* env var > cli.yaml > built-in default.
     work_path = _resolve_work_path_early()
     workspace_defaults = _load_workspace_defaults(work_path)
     if workspace_defaults:

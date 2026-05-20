@@ -1,4 +1,4 @@
-"""Command to initialize a new XYZ Platform solution workspace."""
+"""Command to initialize a new Strata solution workspace."""
 
 from pathlib import Path
 from typing import Dict, Optional
@@ -14,7 +14,7 @@ from strata.services.template_resolver import resolve_template
 
 class InitSolutionCommand(BaseCommand):
     """
-    Initialize a new XYZ Platform solution workspace.
+    Initialize a new Strata solution workspace.
 
     Creates the ``.strata/`` state directory, ``solution.json``, and a
     ``<name>.code-workspace`` file in the work path.
@@ -218,14 +218,14 @@ class InitSolutionCommand(BaseCommand):
             click.echo("")
             click.echo("Next steps:")
             if self._scaffold_dir is not None:
-                click.echo(f"    1. Register your repo:   xyz repo add {self._solution_name} <git-url> --clone")
-                click.echo("    2. Add a profile:        xyz profile add prd --activate")
-                click.echo("    3. Validate:             xyz validate --file deploy/deploy-prd.yaml")
-                click.echo("    4. Deploy:               xyz deploy run --file deploy/deploy-prd.yaml")
+                click.echo(f"    1. Register your repo:   strata repo add {self._solution_name} <git-url> --clone")
+                click.echo("    2. Add a profile:        strata profile add prd --activate")
+                click.echo("    3. Validate:             strata validate --file deploy/deploy-prd.yaml")
+                click.echo("    4. Deploy:               strata deploy run --file deploy/deploy-prd.yaml")
             else:
                 click.echo("    1. Scaffold config files:  strata init --name <name> --template aks")
-                click.echo(f"    2. Register your repo:     xyz repo add {self._solution_name} <git-url> --clone")
-                click.echo("    3. Add a profile:          xyz profile add prd --activate")
+                click.echo(f"    2. Register your repo:     strata repo add {self._solution_name} <git-url> --clone")
+                click.echo("    3. Add a profile:          strata profile add prd --activate")
             click.echo("")
         return super()._after_execute()
 

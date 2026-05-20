@@ -31,7 +31,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
 
     Entries that cannot be resolved show the error inline.
 
-    Use ``xyz values get`` to reveal a full secret or variable value.
+    Use ``strata values get`` to reveal a full secret or variable value.
     """
 
     OPERATION = "deploy_values_list"

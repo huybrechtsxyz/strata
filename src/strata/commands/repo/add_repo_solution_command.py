@@ -1,4 +1,4 @@
-"""Command to add a repository to an XYZ Platform solution."""
+"""Command to add a repository to an Strata solution."""
 
 import re
 from datetime import datetime, timezone
@@ -29,7 +29,7 @@ class AddRepoSolutionCommand(BaseCommand):
     """Register a repository entry in the current solution.
 
     Adds the repository to ``solution.json`` only — cloning is deferred to
-    ``xyz solution sync`` (not yet implemented).
+    ``strata sln sync`` (not yet implemented).
     """
 
     OPERATION = "solution_repo_add"
@@ -216,7 +216,7 @@ class AddRepoSolutionCommand(BaseCommand):
                     else:
                         click.echo(f"❌  Clone failed: {r.get('error', 'unknown error')}")
                 else:
-                    click.echo("💡  Run 'xyz repo sync' to clone the repository.")
+                    click.echo("💡  Run 'strata repo sync' to clone the repository.")
                 click.echo("")
 
         return super()._after_execute()

@@ -1,4 +1,4 @@
-"""Base controller class for XYZ Platform."""
+"""Base controller class for Strata."""
 
 from typing import List
 

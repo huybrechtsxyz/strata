@@ -1,4 +1,4 @@
-"""Command to list repositories registered in an XYZ Platform solution."""
+"""Command to list repositories registered in an Strata solution."""
 
 from typing import Dict, List, Optional
 

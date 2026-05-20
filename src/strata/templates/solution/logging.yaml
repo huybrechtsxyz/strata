@@ -5,7 +5,7 @@
 # Use --verbose to display the file log after a command run.
 #
 # For production (ELK + Azure), replace this file with the production variant
-# from the docs or the xyz-logging.yaml example in config/STRATA_configuration/.
+# from the docs or the strata-logging.yaml example in config/strata_configuration/.
 # ===============================================================================
 
 version: 1
@@ -37,7 +37,7 @@ handlers:
 loggers:
   strata:
     level: DEBUG
-    handlers: [ console, file ]
+    handlers: [console, file]
     propagate: false
 
   urllib3:
@@ -49,7 +49,7 @@ loggers:
 
 root:
   level: WARNING
-  handlers: [ console ]
+  handlers: [console]
 
 # Azure Application Insights — disabled in development
 azure:
