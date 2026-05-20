@@ -41,9 +41,9 @@ runs:
         if [ "${{ inputs.strata-version }}" = "local" ]; then
           uv tool install --from .
         elif [ "${{ inputs.strata-version }}" = "latest" ]; then
-          uv tool install strata
+          uv tool install xyz-strata
         else
-          uv tool install "strata${{ inputs.strata-version }}"
+          uv tool install "xyz-strata${{ inputs.strata-version }}"
         fi
 
     - name: Verify installation

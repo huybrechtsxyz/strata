@@ -29,7 +29,7 @@ Chosen: **Python + Click**, because strata's primary users are infrastructure en
 - Good: `subprocess` for Terraform/Helm/Ansible invocation is straightforward — no FFI or cgo complexity.
 - Bad: Python startup time (~100ms) is slower than a compiled binary. Acceptable for a deployment tool where operations take seconds to minutes.
 - Bad: Requires Python 3.13 to be installed — one more prerequisite for end users (mitigated by dev container and `pipx install`).
-- Bad: No single-binary distribution — users must have Python available (mitigated by `pipx install strata` which handles isolation).
+- Bad: No single-binary distribution — users must have Python available (mitigated by `pipx install xyz-strata` which handles isolation).
 
 ## Pros and Cons of the Options
 

@@ -9,7 +9,7 @@ You already have Terraform. The problem is you have eight environment folders �
 ## Quick Start
 
 ```bash
-pipx install strata                            # install
+pipx install xyz-strata                        # install
 strata sln init                                             # scaffold a new config workspace
 strata validate --file stack/my-environment.yaml        # validate before you touch anything
 strata deploy run --file deploy/my-environment.yaml     # deploy to the target environment
@@ -37,14 +37,14 @@ Set `STRATA_OUTPUT=json` once (or `strata config set output json`) and every com
 
 Key conventions for automation:
 
-| Concern | Guidance |
-|---------|----------|
-| Output format | Always use `--output json` or `STRATA_OUTPUT=json` |
-| Exit codes | `0` success · `1` system failure · `2` bad args · `3` validation failure |
-| Workspace | Set `STRATA_WORK_PATH` to target a workspace without `cd` |
-| Error stream | In console mode, errors go to **stderr**; structured JSON always goes to **stdout** |
-| Execution correlation | `execution_id` in the envelope maps directly to `strata audit list --execution-id <id>` |
-| Env-var overrides | Every CLI flag has an `XYZ_<OPTION>` equivalent (`STRATA_VERBOSE=true`, `STRATA_QUIET=true`, …) |
+| Concern               | Guidance                                                                                        |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| Output format         | Always use `--output json` or `STRATA_OUTPUT=json`                                              |
+| Exit codes            | `0` success · `1` system failure · `2` bad args · `3` validation failure                        |
+| Workspace             | Set `STRATA_WORK_PATH` to target a workspace without `cd`                                       |
+| Error stream          | In console mode, errors go to **stderr**; structured JSON always goes to **stdout**             |
+| Execution correlation | `execution_id` in the envelope maps directly to `strata audit list --execution-id <id>`         |
+| Env-var overrides     | Every CLI flag has an `XYZ_<OPTION>` equivalent (`STRATA_VERBOSE=true`, `STRATA_QUIET=true`, …) |
 
 Safe read-only commands that work outside an initialized workspace (`INIT_REQUIRED=False`): `validate`, `status`, `schema list`, `schema get`.
 

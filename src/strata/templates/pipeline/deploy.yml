@@ -62,7 +62,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install strata
-        run: pip install strata
+        run: pip install xyz-strata
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3

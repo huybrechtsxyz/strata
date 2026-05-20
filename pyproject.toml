@@ -3,7 +3,7 @@ requires = ["setuptools>=70.3.0", "wheel>=0.43.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "strata"
+name = "xyz-strata"
 authors = [{ name = "Vincent Huybrechts", email = "vincent@huybrechts.xyz" }]
 license = { text = "AGPL-3.0-or-later" }
 description = "Python infrastructure platform for managing VM workspaces and clusters to deploy and maintain an automated container orchestration platform."

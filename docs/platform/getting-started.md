@@ -1,4 +1,4 @@
-﻿# Getting Started
+# Getting Started
 
 > **Audience:** DevOps engineer seeing `strata` (soon: `ruck`) for the first time. Goal: install the tool, initialize a config workspace, and validate a config file — in under 10 minutes.
 
@@ -27,7 +27,7 @@ python --version   # must be 3.13+
 **Recommended (isolated install):**
 
 ```bash
-pipx install strata
+pipx install xyz-strata
 strata --version
 ```
 

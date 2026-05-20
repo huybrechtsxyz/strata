@@ -4,7 +4,7 @@ Configuration repository managed by [strata](https://github.com/huybrechtsxzy/st
 
 ## Getting Started
 
-**Prerequisites:** `strata` installed (`uv tool install strata`) and `git`, `terraform` on PATH.
+**Prerequisites:** `strata` installed (`uv tool install xyz-strata`) and `git`, `terraform` on PATH.
 
 **First time setup:**
 
