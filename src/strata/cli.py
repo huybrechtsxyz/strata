@@ -27,6 +27,7 @@ import yaml
 from strata.commands.cli_builders import build as build_group
 from strata.commands.cli_config import config_group
 from strata.commands.cli_deploy import deploy as deploy_group
+from strata.commands.cli_diff import diff_command
 from strata.commands.cli_help import help_command
 from strata.commands.cli_log import log_group
 from strata.commands.cli_new import new_command
@@ -175,6 +176,7 @@ main.add_command(validate_command, name="validate")
 main.add_command(schema_group, name="schema")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
+main.add_command(diff_command, name="diff")
 main.add_command(values_group, name="values")
 main.add_command(tools_group, name="tools")
 # ENTRY POINT

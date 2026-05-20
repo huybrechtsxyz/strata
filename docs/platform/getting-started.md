@@ -226,6 +226,18 @@ strata validate --file deploy/my-environment.yaml
 
 ---
 
+## Preview Changes
+
+Before deploying, review what would change:
+
+```bash
+strata diff -f deploy/my-environment.yaml
+```
+
+This is read-only — nothing is modified. It builds artifacts to a temp directory, diffs against the current build, and runs `terraform plan` against remote state. Review the output, then deploy when satisfied.
+
+---
+
 ## Deploy
 
 Once validation passes:

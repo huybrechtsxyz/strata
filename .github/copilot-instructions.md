@@ -66,7 +66,7 @@ utils/        ← Pure utilities (no business logic, no service imports)
 
 - All top-level commands are flat: `strata <group> <command>`.
 - Every command module lives in `commands/` and registers to the `main` Click group in `cli.py`.
-- Registered command groups: `sln`, `config`, `log`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`, `new`, `schema`, `build`, `deploy`, `vars`, `tools`.
+- Registered command groups: `sln`, `config`, `log`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`, `new`, `schema`, `build`, `deploy`, `diff`, `vars`, `tools`.
 - The `sln` group manages solution lifecycle: `sln init`, `sln clean`, `sln status`, `sln export`.
 - The `main` Click group loads workspace defaults from `.strata/cli.yaml` into `ctx.default_map` at startup. Always use `@click.pass_context` and read `work_path` from `ctx.obj`.
 - **Never** use `sys.exit()` — always raise `click.exceptions.Exit(code)`.

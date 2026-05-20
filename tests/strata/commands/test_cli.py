@@ -115,6 +115,7 @@ class TestMainGroup:
             "validate",
             "build",
             "deploy",
+            "diff",
             "values",
             "version",
             "help",
