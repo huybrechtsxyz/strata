@@ -1,8 +1,12 @@
 """Tests for strata.logger.audit — dedicated audit logger."""
 
+import importlib
 import json
 
 import pytest
+
+# Import the module directly (avoid name collision with the 'audit' function at package level)
+_audit_mod = importlib.import_module("strata.logger.audit")
 
 from strata.logger.audit import (
     audit,
@@ -15,13 +19,13 @@ from strata.logger.audit import (
 @pytest.fixture(autouse=True)
 def _reset_audit_logger():
     """Reset the audit logger state between tests."""
-    import strata.logger.audit as _mod
-
-    _mod._audit_logger = None
+    # Shutdown any existing handlers before resetting
+    shutdown_audit()
+    _audit_mod._audit_logger = None
     yield
     # Cleanup after test
     shutdown_audit()
-    _mod._audit_logger = None
+    _audit_mod._audit_logger = None
 
 
 class TestConfigureAuditLog:
@@ -39,10 +43,11 @@ class TestConfigureAuditLog:
         audit("test.action")
         assert log_path.exists()
 
-    def test_is_audit_configured_false_before_configure(self):
+    def test_is_audit_configured_reflects_state(self, tmp_path):
+        # Force unconfigured state
+        _audit_mod._audit_logger = None
         assert not is_audit_configured()
-
-    def test_is_audit_configured_true_after_configure(self, tmp_path):
+        # After configure, should be configured
         configure_audit_log(log_path=str(tmp_path / "audit.log"))
         assert is_audit_configured()
 
