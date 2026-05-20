@@ -290,6 +290,39 @@ strata config list                 # check what's set
 
 ---
 
+## Shell Completion
+
+Enable Tab completion for all commands, subcommands, and options:
+
+**Bash** — add to `~/.bashrc`:
+
+```bash
+eval "$(_STRATA_COMPLETE=bash_source strata)"
+```
+
+**Zsh** — add to `~/.zshrc`:
+
+```bash
+eval "$(_STRATA_COMPLETE=zsh_source strata)"
+```
+
+**Fish** — add to `~/.config/fish/completions/strata.fish`:
+
+```fish
+_STRATA_COMPLETE=fish_source strata | source
+```
+
+**Faster startup** (generate a static script instead of eval on every shell open):
+
+```bash
+_STRATA_COMPLETE=bash_source strata > ~/.strata-complete.bash
+echo ". ~/.strata-complete.bash" >> ~/.bashrc
+```
+
+After reloading your shell, `strata <TAB>` completes commands and `--<TAB>` completes options.
+
+---
+
 ## Next Steps
 
 - [Workflow Guide](workflow.md) — full lifecycle walkthrough with real repo examples

@@ -61,6 +61,17 @@ strata
    :maxdepth: 2
    :caption: CLI Reference:
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Architectural Decisions:
+
+   decisions/README
+   decisions/0001-kubernetes-style-yaml-schema
+   decisions/0002-python-click-not-compiled-cli
+   decisions/0003-layered-architecture
+   decisions/0004-exit-code-convention
+   decisions/0005-secret-resolution-at-build-time
+
 .. :orphan:
 
 Indices and tables
