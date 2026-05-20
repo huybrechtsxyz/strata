@@ -41,6 +41,7 @@ All infrastructure is defined in YAML. The CLI (`strata`) orchestrates the full 
 - **Audit-ready deployment manifests** — Every build captures exact Git commits, version tags, timestamps, user, and resource configuration — ready for NIS2 / ISAE 3402 evidence packages.
 - **Pluggable secret backends** — Bitwarden, HashiCorp Vault, Azure Key Vault, Azure App Config, and environment variables all supported through a unified integration layer.
 - **Terraform orchestration** — Build generates `.tfvars.json` and `platform.json` artifacts; deploy runs `terraform init → validate → plan → apply` per stage in the correct order.
+- **No lock-in** — Build output is plain Terraform. Copy it, run it yourself, and strata is out of the picture. See [Value Proposition & Escape Hatch](platform/value-proposition.md).
 
 ---
 

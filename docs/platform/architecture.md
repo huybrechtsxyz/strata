@@ -9,6 +9,8 @@ Modular, multi-repository infrastructure platform for managing VM workspaces wit
 - **Declarative Configuration:** YAML-defined infrastructure, reproducible deployments
 - **Audit Trail:** Complete deployment manifests with version references
 
+> For a concise overview of what strata brings and how to leave if it doesn't fit, see [Value Proposition](value-proposition.md).
+
 ## Multi-Repository Structure
 
 **strata** - Core platform (CLI, provisioners, defaults)
