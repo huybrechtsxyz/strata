@@ -1,4 +1,4 @@
-# src/
+﻿# src/
 
 Python source tree for the `strata` package.
 
@@ -29,7 +29,7 @@ src/STRATA_platform/
 ├── logger/             # structlog configuration and context helpers
 ├── utils/              # Pure utilities (no business logic, no service imports)
 ├── data/               # Bundled static assets (help topics, etc.)
-└── templates/          # Scaffold templates copied to workspaces on xyz init
+└── templates/          # Scaffold templates copied to workspaces on strata sln init
 ```
 
 ## Dependency direction

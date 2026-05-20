@@ -1,0 +1,30 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: workspace
+meta:
+  name: ${solution_name}_platform
+  annotations:
+    description: AKS platform workspace for ${solution_name}
+  labels:
+    version: "1.0.0"
+  tags: [${solution_name}, workspace, aks]
+spec:
+  providers:
+    - name: azure
+      file: "@${solution_name}/config/${solution_name}-config.yaml"
+
+  provisioners:
+    - name: terraform
+      provisioner: terraform
+      source:
+        repository: ${solution_name}
+        source_path: terraform
+
+  topology:
+    - name: aks_cluster
+      type: kubernetes
+      region: westeurope
+      description: "AKS cluster — West Europe"
+
+  namespaces:
+    - name: base
+      file: "@${solution_name}/stack/ns-base.yaml"

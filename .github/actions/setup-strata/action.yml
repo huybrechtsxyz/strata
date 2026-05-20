@@ -1,0 +1,55 @@
+# ===============================================================================
+# Action Name  : setup-strata
+# Description  : Install Python, uv, and the strata CLI tool.
+#                All other strata actions require this as a prerequisite.
+# ===============================================================================
+
+name: "Setup Strata"
+description: "Install Python, uv, and the strata CLI. Required before any other strata action."
+
+inputs:
+  strata-version:
+    description: "Strata version to install (e.g., 'latest', '2.1.0', '>=2.0'). Use 'local' to install from the current repo."
+    required: false
+    default: "latest"
+  python-version:
+    description: "Python version to install."
+    required: false
+    default: "3.13"
+
+outputs:
+  version:
+    description: "Installed strata version string."
+    value: ${{ steps.version.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+
+    - name: Install strata
+      shell: bash
+      run: |
+        if [ "${{ inputs.strata-version }}" = "local" ]; then
+          uv tool install --from .
+        elif [ "${{ inputs.strata-version }}" = "latest" ]; then
+          uv tool install strata
+        else
+          uv tool install "strata${{ inputs.strata-version }}"
+        fi
+
+    - name: Verify installation
+      id: version
+      shell: bash
+      run: |
+        VERSION=$(strata version --quiet 2>/dev/null || strata --version | head -1)
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "✅ strata ${VERSION} installed"

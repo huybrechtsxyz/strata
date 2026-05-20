@@ -186,4 +186,3 @@ ignore_missing_imports = true
 
 [project.scripts]
 strata = "strata.cli:main"
-xyz = "strata.cli:main"

@@ -37,10 +37,22 @@
 - **Superseded by:** 2026-05-05 flat CLI structure decision (see below)
 - ~~Decision: Use `xyz solution repo add|remove|list`...~~
 
-### 2026-05-05 — Flat top-level CLI structure (no solution wrapper)
-- **Decision:** All top-level commands are flat: `xyz <group> <command>`. No `solution` wrapper noun. Canonical commands: `xyz init`, `xyz clean`, `xyz repo *`, `xyz profile *`, `xyz ref *`, `xyz config *`, `xyz audit *`.
-- **Rationale:** `solution` wrapper added depth without clarity gain. Each noun group (`repo`, `profile`, `ref`) is already scoped by name. Flat structure matches the project's target audience (CLI-native DevOps users).
-- **Implications:** `cli_solution.py` deleted. `cli.py` registers groups directly at root. Any new top-level features (`build`, `deploy`) follow the same flat pattern.
+### ~~2026-05-05 — Flat top-level CLI structure (no solution wrapper)~~ (SUPERSEDED 2026-05-19)
+- **Superseded by:** 2026-05-19 `sln` group for workspace lifecycle (see below)
+
+### 2026-05-19 — Introduce `sln` group for workspace lifecycle (supersedes 2026-05-05)
+- **By:** Danny (architecture review)
+- **Supersedes:** 2026-05-05 — Flat top-level CLI structure decision
+- **Decision:** Introduce `xyz sln` as a dedicated command group for workspace lifecycle operations:
+  - `xyz sln init`    ← replaces flat `xyz init`
+  - `xyz sln clean`   ← replaces flat `xyz clean`
+  - `xyz sln status`  ← replaces flat `xyz status`
+  - `xyz sln export`  ← new command (Option C — save workspace as scaffold template)
+  - `xyz config` stays at top level (workspace preferences, not lifecycle)
+  - All other groups (repo, profile, ref, context, build, deploy, validate, schema, audit, tools, values, new) remain flat and unchanged.
+- **Why this differs from the rejected `solution` wrapper:** The 2026-05-05 rejection was about wrapping ALL commands under a `solution` noun. That added depth with no clarity gain. This proposal is narrower: only the 4 commands that have always been "workspace lifecycle orphans" (flat commands with no group) move to `sln`. Everything else stays flat.
+- **Rationale:** `init`, `clean`, `status` have always operated on the same noun (the solution workspace) but had no shared group. `sln export` naturally belongs with `sln init`. `sln` is an established abbreviation (Visual Studio, dotnet CLI) — widely understood in DevOps tooling. Pre-release: no production breakage risk.
+- **Implications:** `cli.py` removes flat registrations for `init`, `clean`, `status` and adds `sln_group`. `cli_sln.py` is the new group wiring file. Underlying command implementations (InitSolutionCommand, CleanSolutionCommand, StatusCommand) are unchanged. All tests referencing flat `init`/`clean`/`status` commands must be updated. `getting-started.md` must be updated. copilot-instructions.md registered command list must be updated.
 
 ### 2026-05-05 — `build` and `deploy` commands deferred
 - **Decision:** `xyz build` and `xyz deploy` are deferred. Not in scope for the current milestone.

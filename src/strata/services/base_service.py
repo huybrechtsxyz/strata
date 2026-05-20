@@ -4,7 +4,7 @@
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar, cast
+from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, Type, TypeVar, cast
 
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -218,12 +218,13 @@ class BaseService(ABC, Generic[ModelT]):
             self._validated = False
 
             # Convert Pydantic errors to our format
+            file_ref = f" [{self.path}]" if self.path else ""
             pydantic_errors = []
             for error in e.errors():
                 field_path = " -> ".join(str(loc) for loc in error["loc"])
-                error_msg = error["msg"]
+                error_msg = self._humanize_pydantic_error(error)
                 error_type = error["type"]
-                errors.append(f"Field '{field_path}': {error_msg} (type: {error_type})")
+                errors.append(f"Field '{field_path}': {error_msg} (type: {error_type}){file_ref}")
                 pydantic_errors.append(
                     {
                         "field": field_path,
@@ -236,6 +237,7 @@ class BaseService(ABC, Generic[ModelT]):
             self._validation_exception = ModelValidationError(
                 model_name=self.__class__.__name__,
                 validation_errors=pydantic_errors,
+                file_path=self.path,
             )
             self.logger.error(
                 "Validation failed",
@@ -434,6 +436,32 @@ class BaseService(ABC, Generic[ModelT]):
         return self._validated
 
     # Base service utility methods
+
+    @staticmethod
+    def _humanize_pydantic_error(error: Mapping[str, Any]) -> str:
+        """Translate cryptic Pydantic error messages to actionable human text."""
+        error_type = error.get("type", "")
+        ctx = error.get("ctx", {})
+
+        if error_type == "string_pattern_mismatch":
+            pattern = ctx.get("pattern", "")
+            if pattern:
+                return f"must match pattern '{pattern}' (lowercase letters, numbers, underscores, or hyphens)"
+            return "must be lowercase letters, numbers, underscores, or hyphens"
+        if error_type == "enum":
+            expected = ctx.get("expected", "")
+            if expected:
+                return f"must be one of: {expected}"
+        if error_type == "literal_error":
+            expected = ctx.get("expected", "")
+            if expected:
+                return f"must be one of: {expected}"
+        if error_type == "missing":
+            return "this field is required"
+        if error_type == "extra_forbidden":
+            return "unexpected field (not allowed)"
+
+        return error.get("msg", str(error))
 
     def _load_data(self):
         """Load YAML data from the specified path."""

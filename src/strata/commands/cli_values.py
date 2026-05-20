@@ -26,8 +26,9 @@ def values_group():
     "--file",
     "-f",
     required=True,
+    envvar="STRATA_FILE",
     metavar="PATH",
-    help="Path to the deployment YAML file.",
+    help="Path to the deployment YAML file. [env: STRATA_FILE]",
 )
 @click_work_path
 @click.option(
@@ -97,8 +98,9 @@ def values_list(
     "--file",
     "-f",
     required=True,
+    envvar="STRATA_FILE",
     metavar="PATH",
-    help="Path to the deployment YAML file.",
+    help="Path to the deployment YAML file. [env: STRATA_FILE]",
 )
 @click_work_path
 @click.argument("keys", nargs=-1, required=True, metavar="KEY...")

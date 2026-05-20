@@ -21,3 +21,9 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 - **`docs/platform/workflow.md`** — Extended the "Creates:" bullet list in Phase 1 to include both `.devcontainer/` files and a note about VS Code / Codespaces.
 - **`docs/README.md`** — Added a one-line inline comment in the Quick Start `xyz init` step pointing users to "Reopen in Container".
 - Only touched the three files directly affected; no new files created.
+
+### 2026-05-19 — sln group docs and instructions update
+
+- **`docs/platform/getting-started.md`** — Updated all `xyz init` references to `xyz sln init`. Added a `xyz sln export` section documenting the workflow for saving a workspace as a scaffold template.
+- **`.github/copilot-instructions.md`** — Added `sln` to the registered CLI command groups list. Canonical list now includes: `sln init`, `sln clean`, `sln status`, `sln export` under the `sln` group. Flat `init`, `clean`, `status` are no longer registered directly.
+- **Key convention:** `xyz sln init` is the canonical entry point for workspace creation in all documentation. Any doc referencing the old flat `xyz init` must be updated.

@@ -2,9 +2,7 @@
 
 Commands:
     help                : Show help topics and workflow guidance.
-    init                : Initialize a new solution workspace.
-    clean               : Clean solution artifacts.
-    status              : Show workspace health and configuration status.
+    sln                 : Manage solution workspace lifecycle (init, clean, status, export).
     config              : Manage workspace defaults (cli.yaml).
     log                 : View log entries and manage logging config.
     repo                : Manage repositories in the solution.
@@ -26,23 +24,22 @@ from pathlib import Path
 import click
 import yaml
 
-from strata.commands.cli_audit import audit_group
 from strata.commands.cli_builders import build as build_group
-from strata.commands.cli_clean import clean_command
 from strata.commands.cli_config import config_group
-from strata.commands.cli_context import context_group
 from strata.commands.cli_deploy import deploy as deploy_group
+from strata.commands.cli_diff import diff_command
 from strata.commands.cli_help import help_command
-from strata.commands.cli_init import init_command
+from strata.commands.cli_log import log_group
 from strata.commands.cli_new import new_command
 from strata.commands.cli_profile import profile_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
 from strata.commands.cli_schema import schema_group
-from strata.commands.cli_status import status_command
+from strata.commands.cli_sln import sln_group
 from strata.commands.cli_tools import tools_group
 from strata.commands.cli_validate import validate_command
 from strata.commands.cli_values import values_group
+from strata.commands.cli_vars import vars_group
 from strata.commands.cli_version import version_command
 from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
@@ -53,7 +50,7 @@ from strata.utils.system import resolve_work_path
 logger = get_logger(__name__)
 
 _CONFIG_FILE = SOLUTION_CONFIG_FILE
-_DEFAULT_MAP_KEYS = ("output", "verbose", "quiet", "work_path")
+_DEFAULT_MAP_KEYS = ("output", "verbose", "quiet", "work_path", "file")
 
 
 def _load_workspace_defaults(work_path: Path) -> dict:
@@ -131,7 +128,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
     ),
     context_settings={
         "help_option_names": ["-h", "--help"],
-        "auto_envvar_prefix": "XYZ",
+        "auto_envvar_prefix": "STRATA",
     },
 )
 @click.pass_context
@@ -167,13 +164,11 @@ def main(ctx: click.Context) -> None:
 
 main.add_command(version_command, name="version")
 main.add_command(help_command, name="help")
-main.add_command(init_command, name="init")
-main.add_command(clean_command, name="clean")
-main.add_command(status_command, name="status")
+main.add_command(sln_group, name="sln")
 main.add_command(config_group, name="config")
-main.add_command(context_group, name="context")
+main.add_command(vars_group, name="vars")
 main.add_command(new_command, name="new")
-main.add_command(audit_group, name="audit")
+main.add_command(log_group, name="log")
 main.add_command(repo_group, name="repo")
 main.add_command(profile_group, name="profile")
 main.add_command(ref_group, name="ref")
@@ -181,6 +176,7 @@ main.add_command(validate_command, name="validate")
 main.add_command(schema_group, name="schema")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
+main.add_command(diff_command, name="diff")
 main.add_command(values_group, name="values")
 main.add_command(tools_group, name="tools")
 # ENTRY POINT
@@ -200,21 +196,27 @@ if __name__ == "__main__":
 
         main()
     except click.UsageError as e:
-        # logger.error(f"Usage error: {e}")
         click.echo(f"Error: {e}", err=True)
         click.echo(click.Context(main).get_help())
         exit(2)
     except click.ClickException as e:
-        # logger.error(f"CLI error: {e}", exc_info=True)
-        click.echo(f"Unexpected Error: {e}", err=True)
         e.show()
         exit(e.exit_code)
     except Exception as e:
-        # logger.exception(f"Unexpected error in CLI")
-        click.echo(f"Unexpected error: {e}", err=True)
-        import traceback
+        from strata.exceptions import PlatformError
+        from strata.utils.config import SUPPORT_URL
+        from strata.utils.version import get_version
 
-        traceback.print_exc()
+        if isinstance(e, PlatformError):
+            click.echo(f"❌ {e}", err=True)
+        else:
+            click.echo(
+                f"❌ Unexpected error: {e}\n"
+                f"   Command: {' '.join(sys.argv)}\n"
+                f"   Version: {get_version()}\n"
+                f"   Please report at: {SUPPORT_URL}",
+                err=True,
+            )
         exit(1)
     finally:
         # Ensure logs are flushed before exit

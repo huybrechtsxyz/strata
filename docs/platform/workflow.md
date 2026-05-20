@@ -1,4 +1,4 @@
-# strata — DevOps Workflow Guide
+﻿# strata — DevOps Workflow Guide
 
 > **Audience:** DevOps engineer (Basher) working with VS Code, multiple repositories, and a
 > dedicated workspace repo. This guide walks through the complete lifecycle of a platform
@@ -11,22 +11,22 @@
 
 Basher's environment:
 
-| Item                            | Example                                           |
-| ------------------------------- | ------------------------------------------------- |
-| Workspace repo                  | `git@github.com:org/xyz-workspace.git`            |
-| Platform config repo            | `git@github.com:org/xyz-config.git`               |
-| Infrastructure (Terraform) repo | `git@github.com:org/xyz-infrastructure.git`       |
-| Service config repo             | `git@github.com:org/xyz-svc-traefik.git`          |
+| Item                            | Example                                         |
+| ------------------------------- | ----------------------------------------------- |
+| Workspace repo                  | `git@github.com:org/xyz-workspace.git`          |
+| Platform config repo            | `git@github.com:org/xyz-config.git`             |
+| Infrastructure (Terraform) repo | `git@github.com:org/xyz-infrastructure.git`     |
+| Service config repo             | `git@github.com:org/xyz-svc-traefik.git`        |
 | Local workspace root            | `C:\src\workspace\` (has `.strata/` after init) |
-| Active profile                  | `prd`                                             |
+| Active profile                  | `prd`                                           |
 
-All `xyz` commands are run from inside the workspace root (or pass `--work-path`).
+All `strata` commands are run from inside the workspace root (or pass `--work-path`).
 
 ---
 
 ## Global Options
 
-Every `xyz` command accepts these options:
+Every `strata` command accepts these options:
 
 ```bash
 --work-path PATH    # Override workspace root (also: STRATA_WORK_PATH env var)
@@ -39,9 +39,9 @@ Every `xyz` command accepts these options:
 Persist defaults so you don't repeat them every time:
 
 ```bash
-xyz config set output json       # Switch to JSON output globally
-xyz config set verbose true      # Always show verbose logs
-xyz config list                  # Verify persisted defaults
+strata config set output json       # Switch to JSON output globally
+strata config set verbose true      # Always show verbose logs
+strata config list                  # Verify persisted defaults
 ```
 
 ---
@@ -54,7 +54,7 @@ xyz config list                  # Verify persisted defaults
 # In the empty workspace repo clone
 cd C:\src\workspace
 
-xyz init --name xyz-workspace
+strata sln init --name xyz-workspace
 ```
 
 Creates:
@@ -64,7 +64,7 @@ Creates:
 - `.devcontainer/devcontainer.json` — dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm)
 - `.devcontainer/post-create.sh`    — installs `strata` and shell completion inside the container
 
-> **VS Code / Codespaces:** Once `xyz init` completes, select **Reopen in Container** in VS Code (or open the repo in GitHub Codespaces) to get a fully configured environment with no local tool installation required.
+> **VS Code / Codespaces:** Once `strata sln init` completes, select **Reopen in Container** in VS Code (or open the repo in GitHub Codespaces) to get a fully configured environment with no local tool installation required.
 
 ### 1.3 Create the workspace from a template (optional)
 
@@ -73,7 +73,7 @@ register, which profiles to create, and which file references to add. Using
 one skips Phases 2–4 for standard setups.
 
 ```bash
-xyz init --name xyz-workspace --from-template ./templates/standard-three-repo.yaml
+strata sln init --name xyz-workspace --template ./templates/standard-three-repo.yaml
 ```
 
 **Template file format** (`standard-three-repo.yaml`):
@@ -123,13 +123,13 @@ spec:
 
 > **Note:** `spec.approvals` in a workspace template is metadata only — it declares default approvers for deployments initialized from this template. Enforcement is handled by your CI/CD system. See §7.9 for the full approvals schema.
 
-- `--from-template` accepts any local path (absolute or relative to `--work-path`).
+- `--template` accepts any local path (absolute or relative to `--work-path`).
 - Remote / `@repo-name/...` template references are **not** supported — the file must be on disk before `init` runs.
-- Repos registered from a template are **not** cloned automatically; run `xyz repo sync` afterwards.
+- Repos registered from a template are **not** cloned automatically; run `strata repo sync` afterwards.
 - At most one profile may set `activate: true`.
 
 ```bash
-xyz status
+strata sln status
 ```
 
 ---
@@ -143,46 +143,46 @@ registered before it can be referenced.
 
 ```bash
 # Register and clone in one step
-xyz repo add xyz-config         git@github.com:org/xyz-config.git         --branch main --path repos/xyz-config --clone
-xyz repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --branch main --path repos/xyz-infrastructure --clone
-xyz repo add xyz-svc-traefik    git@github.com:org/xyz-svc-traefik.git    --branch main --path repos/xyz-svc-traefik --clone
+strata repo add xyz-config         git@github.com:org/xyz-config.git         --branch main --path repos/xyz-config --clone
+strata repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --branch main --path repos/xyz-infrastructure --clone
+strata repo add xyz-svc-traefik    git@github.com:org/xyz-svc-traefik.git    --branch main --path repos/xyz-svc-traefik --clone
 ```
 
-Omit `--clone` to register without cloning and run `xyz repo sync` separately.
+Omit `--clone` to register without cloning and run `strata repo sync` separately.
 
 ### 2.2 Clone / pull them all (when not using `--clone`)
 
 ```bash
-xyz repo sync
+strata repo sync
 ```
 
 Clones any repo not yet on disk; pulls repos already cloned. Re-run after upstream changes.
 
 ```bash
 # Sync only one repo
-xyz repo sync --name xyz-infrastructure
+strata repo sync --name xyz-infrastructure
 
 # Hard reset dirty trees
-xyz repo sync --force
+strata repo sync --force
 ```
 
 ### 2.3 List registered repos
 
 ```bash
-xyz repo list
+strata repo list
 ```
 
 ### 2.4 Check git state of all repos
 
 ```bash
 # All registered repos
-xyz repo status
+strata repo status
 
 # Single repo
-xyz repo status --name xyz-infrastructure
+strata repo status --name xyz-infrastructure
 
 # Include individual changed files
-xyz repo status --verbose
+strata repo status --verbose
 ```
 
 Shows current branch, tracking remote, ahead/behind counts, and a clean/dirty
@@ -199,22 +199,22 @@ The active profile determines which config files are fed into `build` and `deplo
 ### 3.1 Create profiles
 
 ```bash
-xyz profile add dev
-xyz profile add stg
-xyz profile add prd
+strata profile add dev
+strata profile add stg
+strata profile add prd
 ```
 
 ### 3.2 Activate the working profile
 
 ```bash
-xyz profile activate prd
+strata profile activate prd
 ```
 
 ### 3.3 List / inspect profiles
 
 ```bash
-xyz profile list
-xyz profile show prd
+strata profile list
+strata profile show prd
 ```
 
 ---
@@ -227,27 +227,27 @@ notation to point into registered repos.
 ### 4.1 Register configuration files (merged into platform config)
 
 ```bash
-xyz ref config add global-config @xyz-config/config/xyz-config.yaml       --profile prd
-xyz ref config add logging-config @xyz-config/config/xyz-logging.yaml      --profile prd
+strata ref config add global-config @xyz-config/config/xyz-config.yaml       --profile prd
+strata ref config add logging-config @xyz-config/config/xyz-logging.yaml      --profile prd
 ```
 
 ### 4.2 Register environment overlays
 
 ```bash
-xyz ref env add prd-env @xyz-config/environments/xyz-env-prd.yaml          --profile prd
+strata ref env add prd-env @xyz-config/environments/xyz-env-prd.yaml          --profile prd
 ```
 
 ### 4.3 Register secret files (plain file on disk — no vault layer yet)
 
 ```bash
-xyz ref secret add prd-secrets /run/secrets/xyz-prd.yaml                   --profile prd
+strata ref secret add prd-secrets /run/secrets/xyz-prd.yaml                   --profile prd
 ```
 
 ### 4.4 Verify refs
 
 ```bash
-xyz ref config list --profile prd
-xyz ref config show global-config --profile prd    # preview the file content
+strata ref config list --profile prd
+strata ref config show global-config --profile prd    # preview the file content
 ```
 
 ### 4.5 Inspect resolved values for a deployment
@@ -257,21 +257,21 @@ use for every declared variable, secret, and feature flag:
 
 ```bash
 # List all (secrets are masked: first 3 chars + *****)
-xyz values list -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata values list -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Filter to a single type
-xyz values list -f … --type secrets
-xyz values list -f … --type variables
-xyz values list -f … --type features
+strata values list -f … --type secrets
+strata values list -f … --type variables
+strata values list -f … --type features
 
 # Show only entries that failed to resolve
-xyz values list -f … --unresolved
+strata values list -f … --unresolved
 
 # Also show the store reference (env var name, key path, flag id)
-xyz values list -f … --show-store
+strata values list -f … --show-store
 
 # Retrieve one or more values in full (secrets revealed)
-xyz values get -f … DB_PASSWORD API_KEY
+strata values get -f … DB_PASSWORD API_KEY
 ```
 
 Exit codes: `0` = all resolved, `3` = one or more entries failed.
@@ -287,8 +287,8 @@ Before building, validate individual YAML files:
 ### 5.1 Structural validation (Pydantic schema)
 
 ```bash
-xyz validate repos/xyz-config/config/xyz-config.yaml
-xyz validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata validate repos/xyz-config/config/xyz-config.yaml
+strata validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 ```
 
 Exit codes: `0` = valid, `3` = validation failure.
@@ -296,7 +296,7 @@ Exit codes: `0` = valid, `3` = validation failure.
 ### 5.2 Deep validation (cross-references against active profile)
 
 ```bash
-xyz validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --deep
+strata validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --deep
 ```
 
 Resolves `@repo-name/...` cross-references, checks that all referenced files exist,
@@ -314,13 +314,13 @@ Build generates the deployment artifacts (rendered Terraform variable files,
 ### 6.1 Dry-run first (plan only — no files written)
 
 ```bash
-xyz build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+strata build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
 ```
 
 ### 6.2 Full build
 
 ```bash
-xyz build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 ```
 
 Reads:
@@ -334,20 +334,20 @@ Writes:
 ### 6.3 Clean build artifacts
 
 ```bash
-xyz build clean -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata build clean -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 ```
 
 ### 6.4 Preview what build run would change
 
 ```bash
 # Full plan: artifact diff + terraform plan per stage
-xyz build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Artifact diff only (no terraform required)
-xyz build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --artifacts-only
+strata build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --artifacts-only
 
 # Limit terraform plan to one stage
-xyz build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
+strata build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
 ```
 
 Nothing is written to `.strata/build/`. The command builds into a temp directory,
@@ -375,11 +375,23 @@ Sample output:
   Terraform: 1 stage(s) planned
 ```
 
-### ⚠️ Gap: no change-plan diff
+### 6.5 Preview what would change (deployment-framed)
 
-`--dry-run` validates and plans but produces no readable diff against current
-infrastructure state. There is no `build diff` or `deploy diff` that shows
-what would change before applying.
+Use `strata diff` for a deployment-oriented "what would change?" view — the ergonomic
+equivalent of `git diff` for your infrastructure:
+
+```bash
+# Full diff: artifact changes + terraform plan per stage
+strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+
+# Limit to one stage
+strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
+
+# Machine-readable output
+strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --output json
+```
+
+Nothing is written. Exit code 0 whether or not changes exist.
 
 ---
 
@@ -392,7 +404,7 @@ Deploy executes provisioners (Terraform) against the built artifacts.
 ### 7.1 Dry-run (init + validate + plan — no apply)
 
 ```bash
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
 ```
 
 Runs: `terraform init` → `terraform validate` → `terraform plan`
@@ -400,13 +412,13 @@ Runs: `terraform init` → `terraform validate` → `terraform plan`
 ### 7.2 Deploy a single stage (selective)
 
 ```bash
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
 ```
 
 ### 7.3 Full deploy
 
 ```bash
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 ```
 
 Runs per stage (in order): `terraform init` → `terraform validate` → `terraform plan` → `terraform apply`
@@ -414,7 +426,7 @@ Runs per stage (in order): `terraform init` → `terraform validate` → `terraf
 ### 7.4 Force (skip approval gates)
 
 ```bash
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --force
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --force
 ```
 
 ### 7.5 Destroy (tear down infrastructure)
@@ -423,13 +435,13 @@ Destroy is its own command — not a flag on `deploy run`.
 
 ```bash
 # Preview what would be removed (safe — no changes)
-xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+strata deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
 
 # Tear down a single stage
-xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr --force
+strata deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr --force
 
 # Tear down all stages (--force required — runs terraform destroy -auto-approve)
-xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --force
+strata deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --force
 ```
 
 - `--dry-run` runs `terraform plan -destroy` — shows exactly what would be removed, writes nothing.
@@ -440,23 +452,23 @@ xyz deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml -
 
 ```bash
 # Live infrastructure outputs per stage (queries the Terraform backend)
-xyz deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Single stage only
-xyz deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
+strata deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
 
 # Decode the last saved .tfplan — no backend call, instant
-xyz deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --plan
+strata deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --plan
 
 # Show execution history from workspace logs
-xyz deploy status --history
-xyz deploy status --history --lines 20
+strata deploy status --history
+strata deploy status --history --lines 20
 ```
 
 - Default (no flags): runs `terraform output -json` per stage — shows live endpoint URLs, resource IDs, etc.
 - `--plan`: reads the `.tfplan` written by the last `deploy run --dry-run`. Shows resource add/change/destroy counts. No network required.
 
-For execution history use `xyz deploy history`.
+For execution history use `strata deploy history`.
 
 ### 7.7 Health checks
 
@@ -485,10 +497,10 @@ stages:
 
 ```bash
 # All stages in the deployment
-xyz deploy health -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata deploy health -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Single stage
-xyz deploy health -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
+strata deploy health -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
 ```
 
 **Check types:**
@@ -505,17 +517,17 @@ xyz deploy health -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --
 
 ```bash
 # All deploy operations (newest first)
-xyz deploy history
+strata deploy history
 
 # Limit to last 20 entries
-xyz deploy history --lines 20
+strata deploy history --lines 20
 
 # Filter by operation type
-xyz deploy history --operation run
-xyz deploy history --operation destroy
+strata deploy history --operation run
+strata deploy history --operation destroy
 
 # Include execution IDs
-xyz deploy history --verbose
+strata deploy history --verbose
 ```
 
 - Scans `.strata/logs/` JSONL files for `deploy_run` and `deploy_destroy` events.
@@ -570,21 +582,21 @@ spec:
 
 ```bash
 # Workspace health + integration availability
-xyz status
+strata sln status
 
 # View logs from last command
-xyz audit list --last
+strata log list --last
 
 # View last 100 lines at DEBUG level
-xyz audit list --lines 100 --level DEBUG
+strata log list --lines 100 --level DEBUG
 
 # View logs for a specific execution
-xyz audit list --execution-id <UUID>
+strata log list --execution-id <UUID>
 
 # Show built-in workflow topics
-xyz help --list
-xyz help --topic quickstart
-xyz help --topic cross-repo
+strata help --list
+strata help --topic quickstart
+strata help --topic cross-repo
 ```
 
 ---
@@ -593,14 +605,14 @@ xyz help --topic cross-repo
 
 ```bash
 # Pull latest from all registered repos
-xyz repo sync
+strata repo sync
 
 # Wipe logs and temp artifacts
-xyz clean
-xyz clean --dry-run     # preview first
+strata sln clean
+strata sln clean --dry-run     # preview first
 
 # Reset logging config to defaults
-xyz audit log reset
+strata config log reset
 ```
 
 ---
@@ -610,34 +622,37 @@ xyz audit log reset
 ```bash
 # -- One-time setup --
 cd C:\src\workspace
-xyz init --name xyz-workspace
+strata sln init --name xyz-workspace
 
-xyz repo add xyz-config         git@github.com:org/xyz-config.git
-xyz repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git
-xyz repo add xyz-svc-traefik    git@github.com:org/xyz-svc-traefik.git
-xyz repo sync
+strata repo add xyz-config         git@github.com:org/xyz-config.git
+strata repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git
+strata repo add xyz-svc-traefik    git@github.com:org/xyz-svc-traefik.git
+strata repo sync
 
-xyz profile add prd
-xyz profile activate prd
+strata profile add prd
+strata profile activate prd
 
-xyz ref config add global-config  @xyz-config/config/xyz-config.yaml      --profile prd
-xyz ref config add logging-config @xyz-config/config/xyz-logging.yaml     --profile prd
-xyz ref env    add prd-env        @xyz-config/environments/xyz-env-prd.yaml --profile prd
+strata ref config add global-config  @xyz-config/config/xyz-config.yaml      --profile prd
+strata ref config add logging-config @xyz-config/config/xyz-logging.yaml     --profile prd
+strata ref env    add prd-env        @xyz-config/environments/xyz-env-prd.yaml --profile prd
 
 # -- Validate --
-xyz validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --deep
+strata validate repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --deep
 
 # -- Build --
-xyz build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
-xyz build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+strata build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+
+# -- Preview changes --
+strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # -- Deploy --
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # -- Inspect --
-xyz status
-xyz audit list --last
+strata sln status
+strata log list --last
 ```
 
 ---
@@ -646,17 +661,20 @@ xyz audit list --last
 
 ```bash
 # Pull latest config/infra changes
-xyz repo sync
+strata repo sync
 
 # Re-build after upstream changes
-xyz build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+
+# Review what would change
+strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Deploy changes
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
-xyz deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
+strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Review what happened
-xyz audit list --last
+strata log list --last
 ```
 
 ---
@@ -665,93 +683,108 @@ xyz audit list --last
 
 ### Workspace
 
-| Command                                       | Description                                                                           |
-| --------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `xyz init --name NAME [--from-template FILE]` | Initialize a new workspace; `--from-template` pre-populates repos, profiles, and refs |
-| `xyz status`                                  | Show workspace health and integration availability                                    |
-| `xyz clean [--dry-run]`                       | Remove logs and temp artifacts                                                        |
-| `xyz version`                                 | Print CLI version                                                                     |
-| `xyz help [--topic NAME]`                     | Show workflow guidance topics                                                         |
+| Command                                         | Description                                                                      |
+| ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| `strata sln init --name NAME [--template FILE]` | Initialize a new workspace; `--template` pre-populates repos, profiles, and refs |
+| `strata sln status`                             | Show workspace health and integration availability                               |
+| `strata sln clean [--dry-run]`                  | Remove logs and temp artifacts                                                   |
+| `strata version`                                | Print CLI version                                                                |
+| `strata help [--topic NAME]`                    | Show workflow guidance topics                                                    |
 
 ### Configuration
 
-| Command                    | Description                           |
-| -------------------------- | ------------------------------------- |
-| `xyz config set KEY VALUE` | Persist a workspace-level CLI default |
-| `xyz config unset KEY`     | Remove a persisted default            |
-| `xyz config list`          | List all persisted defaults           |
+| Command                       | Description                           |
+| ----------------------------- | ------------------------------------- |
+| `strata config set KEY VALUE` | Persist a workspace-level CLI default |
+| `strata config unset KEY`     | Remove a persisted default            |
+| `strata config list`          | List all persisted defaults           |
 
 Valid keys: `output`, `verbose`, `quiet`, `work_path`
 
-### Audit
+### Logs
 
-| Command                                           | Description                              |
-| ------------------------------------------------- | ---------------------------------------- |
-| `xyz audit list [--last] [--lines N] [--level L]` | View execution logs                      |
-| `xyz audit log list`                              | Print current `logging.yaml`             |
-| `xyz audit log set KEY VALUE`                     | Set a logging config value               |
-| `xyz audit log reset`                             | Reset logging config to package defaults |
+| Command                                            | Description                     |
+| -------------------------------------------------- | ------------------------------- |
+| `strata log list [--last] [--lines N] [--level L]` | View execution logs (read-only) |
+
+> **Note:** To configure logging behaviour (levels, output format), use `strata config log` — see [Logging Config](#logging-config) below.
+
+### Logging Config
+
+| Command                           | Description                              |
+| --------------------------------- | ---------------------------------------- |
+| `strata config log list`          | Print current `logging.yaml`             |
+| `strata config log get KEY`       | Get a single logging config value        |
+| `strata config log set KEY VALUE` | Set a logging config value               |
+| `strata config log unset KEY`     | Remove a logging config key              |
+| `strata config log reset`         | Reset logging config to package defaults |
 
 ### Repositories
 
-| Command                                                   | Description                                   |
-| --------------------------------------------------------- | --------------------------------------------- |
-| `xyz repo add NAME URL [--branch B] [--path P] [--clone]` | Register a repo; `--clone` clones immediately |
-| `xyz repo list [--name NAME]`                             | List registered repos                         |
-| `xyz repo status [--name NAME]`                           | Show git state (branch, dirty, ahead/behind)  |
-| `xyz repo remove NAME [--purge]`                          | Remove a repo (`--purge` deletes from disk)   |
-| `xyz repo sync [--name NAME] [--force]`                   | Clone / pull registered repos                 |
+| Command                                                      | Description                                   |
+| ------------------------------------------------------------ | --------------------------------------------- |
+| `strata repo add NAME URL [--branch B] [--path P] [--clone]` | Register a repo; `--clone` clones immediately |
+| `strata repo list [--name NAME]`                             | List registered repos                         |
+| `strata repo status [--name NAME]`                           | Show git state (branch, dirty, ahead/behind)  |
+| `strata repo remove NAME [--purge]`                          | Remove a repo (`--purge` deletes from disk)   |
+| `strata repo sync [--name NAME] [--force]`                   | Clone / pull registered repos                 |
 
 ### Profiles
 
-| Command                     | Description                           |
-| --------------------------- | ------------------------------------- |
-| `xyz profile add NAME`      | Create a new profile                  |
-| `xyz profile remove NAME`   | Delete a profile                      |
-| `xyz profile list`          | List all profiles                     |
-| `xyz profile activate NAME` | Set the active profile                |
-| `xyz profile show NAME`     | Show all refs registered on a profile |
+| Command                        | Description                           |
+| ------------------------------ | ------------------------------------- |
+| `strata profile add NAME`      | Create a new profile                  |
+| `strata profile remove NAME`   | Delete a profile                      |
+| `strata profile list`          | List all profiles                     |
+| `strata profile activate NAME` | Set the active profile                |
+| `strata profile show NAME`     | Show all refs registered on a profile |
 
 ### File References
 
 All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 
-| Command                                      | Description                |
-| -------------------------------------------- | -------------------------- |
-| `xyz ref <TYPE> add NAME PATH [--profile P]` | Register a file reference  |
-| `xyz ref <TYPE> remove NAME [--profile P]`   | Remove a file reference    |
-| `xyz ref <TYPE> list [--profile P]`          | List registered references |
-| `xyz ref <TYPE> show NAME [--profile P]`     | Display the file content   |
+| Command                                         | Description                |
+| ----------------------------------------------- | -------------------------- |
+| `strata ref <TYPE> add NAME PATH [--profile P]` | Register a file reference  |
+| `strata ref <TYPE> remove NAME [--profile P]`   | Remove a file reference    |
+| `strata ref <TYPE> list [--profile P]`          | List registered references |
+| `strata ref <TYPE> show NAME [--profile P]`     | Display the file content   |
 
 ### Validation
 
-| Command                      | Description                   |
-| ---------------------------- | ----------------------------- |
-| `xyz validate FILE [--deep]` | Validate a platform YAML file |
+| Command                         | Description                   |
+| ------------------------------- | ----------------------------- |
+| `strata validate FILE [--deep]` | Validate a platform YAML file |
 
 ### Build
 
-| Command                                                 | Description                                                     |
-| ------------------------------------------------------- | --------------------------------------------------------------- |
-| `xyz build run -f FILE [--dry-run]`                     | Run the platform + Terraform build pipeline                     |
-| `xyz build plan -f FILE [--stage S] [--artifacts-only]` | Artifact diff + terraform plan per stage (reads only, temp dir) |
-| `xyz build clean -f FILE [--dry-run]`                   | Remove build artifacts                                          |
+| Command                                                    | Description                                                     |
+| ---------------------------------------------------------- | --------------------------------------------------------------- |
+| `strata build run -f FILE [--dry-run]`                     | Run the platform + Terraform build pipeline                     |
+| `strata build plan -f FILE [--stage S] [--artifacts-only]` | Artifact diff + terraform plan per stage (reads only, temp dir) |
+| `strata build clean -f FILE [--dry-run]`                   | Remove build artifacts                                          |
+
+### Diff
+
+| Command                           | Description                                                       |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `strata diff -f FILE [--stage S]` | Preview artifact + Terraform changes before deploying (read-only) |
 
 ### Deploy
 
-| Command                                                        | Description                                                          |
-| -------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `xyz deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                          |
-| `xyz deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves |
-| `xyz deploy status -f FILE [--stage S] [--plan]`               | Live Terraform outputs or saved plan details                         |
-| `xyz deploy history [--lines N] [--operation run\|destroy]`    | Execution history from workspace logs                                |
-| `xyz deploy health -f FILE [--stage S]`                        | Run `health_checks` defined in the deployment YAML                   |
+| Command                                                           | Description                                                          |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `strata deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                          |
+| `strata deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves |
+| `strata deploy status -f FILE [--stage S] [--plan]`               | Live Terraform outputs or saved plan details                         |
+| `strata deploy history [--lines N] [--operation run\|destroy]`    | Execution history from workspace logs                                |
+| `strata deploy health -f FILE [--stage S]`                        | Run `health_checks` defined in the deployment YAML                   |
 
 ### Values
 
-| Command                                                            | Description                                                          |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| `xyz values list -f FILE [--type T] [--show-store] [--unresolved]` | List all variables / secrets (masked) / feature flags                |
-| `xyz values get  -f FILE KEY [KEY …]`                              | Retrieve full resolved value(s) for specific keys (secrets revealed) |
+| Command                                                               | Description                                                          |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `strata values list -f FILE [--type T] [--show-store] [--unresolved]` | List all variables / secrets (masked) / feature flags                |
+| `strata values get  -f FILE KEY [KEY …]`                              | Retrieve full resolved value(s) for specific keys (secrets revealed) |
 
 

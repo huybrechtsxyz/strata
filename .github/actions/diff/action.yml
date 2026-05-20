@@ -1,0 +1,85 @@
+# ===============================================================================
+# Action Name  : diff
+# Description  : Show what would change in the environment before deploying.
+#                Combines artifact diff + terraform plan into a unified view.
+# ===============================================================================
+
+name: "Strata Diff"
+description: "Show what would change in the environment if you deploy now. Read-only — nothing is modified."
+
+inputs:
+  file:
+    description: "Path to the deployment YAML file."
+    required: true
+  work-path:
+    description: "Workspace root directory."
+    required: false
+    default: "."
+  stage:
+    description: "Limit diff to a specific deployment stage."
+    required: false
+    default: ""
+  extra-args:
+    description: "Additional arguments to pass to strata diff."
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: "Numeric exit code."
+    value: ${{ steps.run.outputs.exit-code }}
+  success:
+    description: "Whether diff succeeded (true/false)."
+    value: ${{ steps.run.outputs.success }}
+  result:
+    description: "Raw JSON output from strata diff."
+    value: ${{ steps.run.outputs.result }}
+  has-drift:
+    description: "Whether any drift was detected (true/false)."
+    value: ${{ steps.run.outputs.has-drift }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run strata diff
+      id: run
+      shell: bash
+      run: |
+        STAGE_FLAG=""
+        if [ -n "${{ inputs.stage }}" ]; then
+          STAGE_FLAG="--stage ${{ inputs.stage }}"
+        fi
+
+        set +e
+        RESULT=$(strata diff --file "${{ inputs.file }}" --work-path "${{ inputs.work-path }}" --output json ${STAGE_FLAG} ${{ inputs.extra-args }} 2>&1)
+        EXIT_CODE=$?
+        set -e
+
+        echo "exit-code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
+        echo "result<<EOF" >> "$GITHUB_OUTPUT"
+        echo "${RESULT}" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+
+        if [ "${EXIT_CODE}" -eq 0 ]; then
+          echo "success=true" >> "$GITHUB_OUTPUT"
+          HAS_DRIFT=$(echo "${RESULT}" | jq -r '
+            (.artifact_diff // [] | map(select(.status != "unchanged")) | length > 0) or
+            (.terraform_plan // [] | map(select(.ok == true)) | length > 0)
+          ' 2>/dev/null || echo "false")
+          echo "has-drift=${HAS_DRIFT}" >> "$GITHUB_OUTPUT"
+        else
+          echo "success=false" >> "$GITHUB_OUTPUT"
+          echo "has-drift=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        echo "### Strata Diff" >> "$GITHUB_STEP_SUMMARY"
+        if [ "${EXIT_CODE}" -eq 0 ]; then
+          echo "✅ **Diff complete**" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "${RESULT}" | head -100 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "❌ **Diff failed** (exit code ${EXIT_CODE})" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        exit ${EXIT_CODE}

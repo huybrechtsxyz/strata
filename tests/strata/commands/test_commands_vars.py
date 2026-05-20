@@ -5,13 +5,13 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from strata.cli import main
-from strata.commands.cli_context import context_group
+from strata.commands.cli_vars import vars_group
 
 
 class TestContextGroup:
     def test_help(self):
         runner = CliRunner()
-        result = runner.invoke(context_group, ["--help"])
+        result = runner.invoke(vars_group, ["--help"])
         assert result.exit_code == 0
         assert "set" in result.output
         assert "unset" in result.output
@@ -19,30 +19,30 @@ class TestContextGroup:
 
     def test_set_help(self):
         runner = CliRunner()
-        result = runner.invoke(context_group, ["set", "--help"])
+        result = runner.invoke(vars_group, ["set", "--help"])
         assert result.exit_code == 0
         assert "KEY" in result.output
         assert "VALUE" in result.output
 
     def test_unset_help(self):
         runner = CliRunner()
-        result = runner.invoke(context_group, ["unset", "--help"])
+        result = runner.invoke(vars_group, ["unset", "--help"])
         assert result.exit_code == 0
         assert "KEY" in result.output
 
     def test_list_help(self):
         runner = CliRunner()
-        result = runner.invoke(context_group, ["list", "--help"])
+        result = runner.invoke(vars_group, ["list", "--help"])
         assert result.exit_code == 0
 
     def test_set_basic(self, tmp_path):
         runner = CliRunner()
         with patch(
-            "strata.commands.context.set_context_command.SetContextCommand.execute",
+            "strata.commands.vars.set_vars_command.SetContextCommand.execute",
             return_value=True,
         ):
             result = runner.invoke(
-                context_group,
+                vars_group,
                 ["set", "owner", "myteam", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
@@ -50,11 +50,11 @@ class TestContextGroup:
     def test_unset_basic(self, tmp_path):
         runner = CliRunner()
         with patch(
-            "strata.commands.context.set_context_command.SetContextCommand.execute",
+            "strata.commands.vars.set_vars_command.SetContextCommand.execute",
             return_value=True,
         ):
             result = runner.invoke(
-                context_group,
+                vars_group,
                 ["unset", "owner", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
@@ -62,11 +62,11 @@ class TestContextGroup:
     def test_list_basic(self, tmp_path):
         runner = CliRunner()
         with patch(
-            "strata.commands.context.set_context_command.SetContextCommand.execute",
+            "strata.commands.vars.set_vars_command.SetContextCommand.execute",
             return_value=True,
         ):
             result = runner.invoke(
-                context_group,
+                vars_group,
                 ["list", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
@@ -76,7 +76,7 @@ class TestContextGroup:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["context", "list", "--work-path", str(tmp_path)],
+            ["vars", "list", "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 1
 
@@ -85,6 +85,6 @@ class TestContextGroup:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["context", "set", "owner", "myteam", "--work-path", str(tmp_path)],
+            ["vars", "set", "owner", "myteam", "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 1

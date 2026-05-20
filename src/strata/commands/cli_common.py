@@ -174,6 +174,19 @@ def click_work_path(func):
     return func
 
 
+# --file / -f -> Path to the deployment YAML file (supports STRATA_FILE env var)
+def click_file(func):
+    func = click.option(
+        "--file",
+        "-f",
+        default=None,
+        envvar="STRATA_FILE",
+        metavar="PATH",
+        help="Path to the deployment YAML file. [env: STRATA_FILE]",
+    )(func)
+    return func
+
+
 # --profile -> The active profile to use (defaults to the currently active profile)
 def click_profile(func):
     func = click.option(

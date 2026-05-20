@@ -2,11 +2,11 @@
   "folders": [
     {
       "path": ".",
-      "name": "Platform"
+      "name": "Strata"
     },
     {
       "path": "../xyz-configuration",
-      "name": "Configuration"
+      "name": "Haven"
     }
   ],
   "settings": {

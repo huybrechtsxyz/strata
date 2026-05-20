@@ -12,10 +12,10 @@ import click
 
 from strata.controllers.integration_controller import IntegrationController
 from strata.controllers.solution_controller import SolutionController
-from strata.logger import get_logger
+from strata.logger import audit, configure_audit_log, get_logger, shutdown_audit
 from strata.logger.context import set_context
 from strata.logger.logger import reconfigure_logging
-from strata.utils.config import DOCS_URL, SUPPORT_URL
+from strata.utils.config import DOCS_URL, SOLUTION_DIR, SUPPORT_URL
 from strata.utils.system import generate_uuid, resolve_path, resolve_work_path
 from strata.utils.version import get_version
 
@@ -41,9 +41,6 @@ class BaseCommand(ABC):
         # Paths
         self._work_path: Path = self._get_current_workpath(work_path)
 
-        # Logging context
-        self._configure_session_logging()
-
         # Correlation IDs — set during _initialize()
         self._solution_controller: SolutionController = SolutionController(self._work_path)
         self._execution_id: str = generate_uuid()
@@ -53,6 +50,9 @@ class BaseCommand(ABC):
         self._output_format = output or "console"
         self._output_verbose = verbose or False
         self._output_quiet = quiet or False
+
+        # Logging context (must be after _output_verbose/_output_quiet are set)
+        self._configure_session_logging()
 
         # Integration controller (lazy-loaded)
         self._integration_controller: Optional[IntegrationController] = None
@@ -195,6 +195,10 @@ class BaseCommand(ABC):
                 return False
 
             set_context({"solution_id": solution_id, "execution_id": self._execution_id})
+
+            # Configure audit log (separate from application logs)
+            audit_path = self._work_path / SOLUTION_DIR / "audit.log"
+            configure_audit_log(log_path=str(audit_path))
 
             # Start session operation if specified
             self._start_session_operation()
@@ -371,6 +375,20 @@ class BaseCommand(ABC):
 
         self._end_time = datetime.now()
         duration = self._end_time - self._start_time
+
+        # Emit audit entry for every command execution
+        audit(
+            f"command.{self.OPERATION}",
+            outcome="success" if success else "failure",
+            target=" ".join(sys.argv[1:]) if len(sys.argv) > 1 else self.OPERATION,
+            detail={
+                "execution_id": self._execution_id,
+                "duration_ms": round(duration.total_seconds() * 1000),
+                "error_count": len(self._errors),
+            },
+        )
+        shutdown_audit()
+
         self.logger.debug(
             "Command execution completed",
             extra={
@@ -444,6 +462,7 @@ class BaseCommand(ABC):
 
         Looks for ``.strata/logging.yaml`` under ``self._work_path``.
         Reconfigures logging only when the discovered config path changes.
+        Falls back to enabling a default session log file for crash diagnostics.
         """
         # Logger must exist — raise immediately if it cannot be created.
         self.logger = get_logger(self.__class__.__module__)
@@ -451,9 +470,11 @@ class BaseCommand(ABC):
         try:
             logging_config = SolutionController.get_logging_config_path(self._work_path)
             if logging_config is None:
+                self._configure_default_session_log()
                 return
 
             if not logging_config.exists():
+                self._configure_default_session_log()
                 return
 
             config_path = resolve_path(str(logging_config))
@@ -479,6 +500,24 @@ class BaseCommand(ABC):
             except Exception:
                 # Best-effort only; never raise from logging setup
                 pass
+
+    def _configure_default_session_log(self) -> None:
+        """Enable a JSON session log file for crash diagnostics when no YAML config exists."""
+        from datetime import date
+
+        log_dir = self._work_path / SOLUTION_DIR / "logs"
+        if not log_dir.parent.exists():
+            return  # work_path/.strata/ doesn't exist yet (pre-init)
+
+        session_log = log_dir / f"session-{date.today().isoformat()}.json"
+        level = "DEBUG" if self._output_verbose else "WARNING"
+        reconfigure_logging(
+            level=level,
+            enable_console=not self._output_quiet,
+            enable_json_file=True,
+            log_file_path=str(session_log),
+        )
+        self.logger = get_logger(self.__class__.__module__)
 
     # Get the work path based on input or default to current directory
     def _get_current_workpath(self, work_path: Optional[str]) -> Path:

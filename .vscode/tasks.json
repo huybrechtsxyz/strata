@@ -2,9 +2,9 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Run: xyz-platform",
+            "label": "Run: strata",
             "type": "shell",
-            "command": "uv run xyz-platform ${input:cliArgs}",
+            "command": "uv run strata ${input:cliArgs}",
             "group": "build",
             "presentation": {
                 "echo": true,

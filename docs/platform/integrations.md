@@ -145,11 +145,11 @@ spec:
 
 ## Runtime inspection
 
-Use `xyz tools` to inspect integrations at runtime without reading config files:
+Use `strata tools` to inspect integrations at runtime without reading config files:
 
 ```
-xyz tools status              # table of all 8 built-in integrations
-xyz tools check terraform     # deep-check: availability, env vars, auth
+strata tools status              # table of all 8 built-in integrations
+strata tools check terraform     # deep-check: availability, env vars, auth
 ```
 
 ---
@@ -168,7 +168,7 @@ def register():
 
 Drop-in files are loaded automatically at CLI startup whenever a workspace is detected (i.e. `.strata/` exists). Files whose names start with `_` are skipped. Errors in individual drop-ins are logged as warnings and never crash the CLI.
 
-`xyz init` creates `.strata/integrations/` with a `README.md` stub and a fully-commented `my_integration.py` starter template — rename it and fill in the stubs to build your first custom integration.
+`strata sln init` creates `.strata/integrations/` with a `README.md` stub and a fully-commented `my_integration.py` starter template — rename it and fill in the stubs to build your first custom integration.
 
 ---
 
@@ -222,7 +222,7 @@ spec:
 
 #### Troubleshooting
 
-Run `xyz tools check terraform` for live status. Run `xyz help terraform-cloud-auth` for Terraform Cloud setup instructions.
+Run `strata tools check terraform` for live status. Run `strata help terraform-cloud-auth` for Terraform Cloud setup instructions.
 
 ---
 

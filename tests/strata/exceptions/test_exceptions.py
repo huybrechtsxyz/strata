@@ -87,8 +87,14 @@ class TestPlatformError:
     def test_str_with_details(self):
         e = PlatformError("msg", details={"k": "v"})
         s = str(e)
-        assert "k" in s
-        assert "v" in s
+        # __str__ is now human-first (message only), details in __repr__
+        assert "msg" in s
+
+    def test_repr_with_details(self):
+        e = PlatformError("msg", details={"k": "v"})
+        r = repr(e)
+        assert "k" in r
+        assert "v" in r
 
     def test_str_with_cause(self):
         e = PlatformError("msg", cause=ValueError("root cause"))
@@ -143,7 +149,7 @@ class TestModelValidationError:
 
     def test_custom_message(self):
         e = ModelValidationError("MyModel", [], message="custom msg")
-        assert e.message == "custom msg"
+        assert "custom msg" in e.message
 
     def test_error_code(self):
         e = ModelValidationError("M", [])
@@ -154,6 +160,19 @@ class TestModelValidationError:
         e = ModelValidationError("M", errors)
         assert e.details["model"] == "M"
         assert e.details["errors"] == errors
+
+    def test_file_path_included_in_message(self):
+        e = ModelValidationError("MyModel", [], file_path="stack/vm-infra.yaml")
+        assert "stack/vm-infra.yaml" in e.message
+        assert e.file_path == "stack/vm-infra.yaml"
+
+    def test_file_path_in_details(self):
+        e = ModelValidationError("MyModel", [], file_path="deploy/deploy.yaml")
+        assert e.details["file"] == "deploy/deploy.yaml"
+
+    def test_no_file_path_omits_from_message(self):
+        e = ModelValidationError("MyModel", [])
+        assert " in " not in e.message
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +221,52 @@ class TestInvalidReferenceError:
         assert e.details["source_name"] == "name"
         assert e.details["reference_type"] == "ref_type"
         assert e.details["reference_value"] == "ref_val"
+
+    def test_resolved_path_in_message(self):
+        e = InvalidReferenceError(
+            "Workspace",
+            "prod",
+            "environment",
+            "staging-eu",
+            resolved_path="@infra/envs/staging-eu.yaml",
+        )
+        assert "resolved to: @infra/envs/staging-eu.yaml" in e.message
+
+    def test_available_options_in_message(self):
+        e = InvalidReferenceError(
+            "Workspace",
+            "prod",
+            "environment",
+            "staging-eu",
+            available=["production-eu", "production-us", "staging-global"],
+        )
+        assert "Valid options:" in e.message
+        assert "production-eu" in e.message
+        assert "staging-global" in e.message
+
+    def test_file_path_in_message(self):
+        e = InvalidReferenceError(
+            "Workspace",
+            "prod",
+            "environment",
+            "staging-eu",
+            file_path="deploy/deploy-prd.yaml",
+        )
+        assert "[deploy/deploy-prd.yaml]" in e.message
+
+    def test_all_new_params_in_details(self):
+        e = InvalidReferenceError(
+            "Stage",
+            "name",
+            "ref_type",
+            "ref_val",
+            resolved_path="/resolved/path",
+            available=["a", "b"],
+            file_path="some/file.yaml",
+        )
+        assert e.details["resolved_path"] == "/resolved/path"
+        assert e.details["available"] == ["a", "b"]
+        assert e.details["file_path"] == "some/file.yaml"
 
 
 # ---------------------------------------------------------------------------

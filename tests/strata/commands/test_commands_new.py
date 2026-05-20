@@ -149,7 +149,7 @@ class TestNewCommandContextSubstitution:
             work_path=str(tmp_path),
         )
 
-        def _fake_load():
+        def _fake_load() -> tuple:
             cmd._solution_controller._solution = mock_solution
             return True, []
 

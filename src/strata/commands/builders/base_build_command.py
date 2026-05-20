@@ -69,6 +69,7 @@ class BaseBuildCommand(BaseCommand):
             self._errors.append(f"Deployment file not found: {candidate}")
             return False
         self._file_path = candidate
+        self.logger.info("Using deployment file", file=str(self._file_path))
 
         # Load configuration service (always required for build)
         self._configuration_service = self._load_configuration_service()

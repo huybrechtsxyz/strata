@@ -1,0 +1,86 @@
+# ===============================================================================
+# Action Name  : build-plan
+# Description  : Show artifact diff + terraform plan without writing to the real build path.
+#                Ideal for PR comments showing what would change.
+# ===============================================================================
+
+name: "Strata Build Plan"
+description: "Show what build run would produce: artifact diff + terraform plan. Nothing is written."
+
+inputs:
+  file:
+    description: "Path to the deployment YAML file."
+    required: true
+  work-path:
+    description: "Workspace root directory."
+    required: false
+    default: "."
+  stage:
+    description: "Limit plan to a specific deployment stage."
+    required: false
+    default: ""
+  extra-args:
+    description: "Additional arguments to pass to strata build plan."
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: "Numeric exit code."
+    value: ${{ steps.run.outputs.exit-code }}
+  success:
+    description: "Whether plan succeeded (true/false)."
+    value: ${{ steps.run.outputs.success }}
+  result:
+    description: "Raw JSON output (artifact diff + terraform plan)."
+    value: ${{ steps.run.outputs.result }}
+  has-changes:
+    description: "Whether any artifacts or resources would change (true/false)."
+    value: ${{ steps.run.outputs.has-changes }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run strata build plan
+      id: run
+      shell: bash
+      run: |
+        STAGE_FLAG=""
+        if [ -n "${{ inputs.stage }}" ]; then
+          STAGE_FLAG="--stage ${{ inputs.stage }}"
+        fi
+
+        set +e
+        RESULT=$(strata build plan --file "${{ inputs.file }}" --work-path "${{ inputs.work-path }}" --output json ${STAGE_FLAG} ${{ inputs.extra-args }} 2>&1)
+        EXIT_CODE=$?
+        set -e
+
+        echo "exit-code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
+        echo "result<<EOF" >> "$GITHUB_OUTPUT"
+        echo "${RESULT}" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+
+        if [ "${EXIT_CODE}" -eq 0 ]; then
+          echo "success=true" >> "$GITHUB_OUTPUT"
+          # Check if there are actual changes
+          HAS_CHANGES=$(echo "${RESULT}" | jq -r '
+            (.artifact_diff // [] | map(select(.status != "unchanged")) | length > 0) or
+            (.terraform_plan // [] | length > 0)
+          ' 2>/dev/null || echo "false")
+          echo "has-changes=${HAS_CHANGES}" >> "$GITHUB_OUTPUT"
+        else
+          echo "success=false" >> "$GITHUB_OUTPUT"
+          echo "has-changes=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        echo "### Strata Build Plan" >> "$GITHUB_STEP_SUMMARY"
+        if [ "${EXIT_CODE}" -eq 0 ]; then
+          echo "✅ **Plan complete**" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "${RESULT}" | head -100 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "❌ **Plan failed** (exit code ${EXIT_CODE})" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        exit ${EXIT_CODE}

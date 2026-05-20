@@ -1,0 +1,21 @@
+apiVersion: platform.huybrechts.xyz/v1
+kind: module
+meta:
+  name: ${solution_name}_mod_traefik
+  annotations:
+    description: Traefik ingress controller deployed via Helm
+  labels:
+    version: "1.0.0"
+  tags: [${solution_name}, module, traefik, ingress]
+spec:
+  type: helm
+  chart:
+    repository: https://helm.traefik.io/traefik
+    name: traefik
+    version: "26.0.0"
+  namespace: traefik
+  values:
+    - key: ingressClass.enabled
+      value: "true"
+    - key: ingressClass.isDefaultClass
+      value: "true"

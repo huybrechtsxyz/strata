@@ -1,18 +1,18 @@
-# Getting Started
+﻿# Getting Started
 
-> **Audience:** DevOps engineer seeing `xyz` (soon: `ruck`) for the first time. Goal: install the tool, initialize a config workspace, and validate a config file — in under 10 minutes.
+> **Audience:** DevOps engineer seeing `strata` (soon: `ruck`) for the first time. Goal: install the tool, initialize a config workspace, and validate a config file — in under 10 minutes.
 
 ---
 
 ## Prerequisites
 
-| Tool | Version | Why |
-|------|---------|-----|
-| Python | 3.13+ | Runtime |
-| [pipx](https://pipx.pypa.io/) or [uv](https://docs.astral.sh/uv/) | latest | Package install |
-| [Terraform](https://developer.hashicorp.com/terraform/install) | 1.6+ | Infrastructure provisioning |
-| [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | latest | Azure authentication |
-| kubectl | latest | AKS cluster management (AKS deployments only) |
+| Tool                                                                       | Version | Why                                           |
+| -------------------------------------------------------------------------- | ------- | --------------------------------------------- |
+| Python                                                                     | 3.13+   | Runtime                                       |
+| [pipx](https://pipx.pypa.io/) or [uv](https://docs.astral.sh/uv/)          | latest  | Package install                               |
+| [Terraform](https://developer.hashicorp.com/terraform/install)             | 1.6+    | Infrastructure provisioning                   |
+| [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | latest  | Azure authentication                          |
+| kubectl                                                                    | latest  | AKS cluster management (AKS deployments only) |
 
 Check your Python version:
 
@@ -28,7 +28,7 @@ python --version   # must be 3.13+
 
 ```bash
 pipx install strata
-xyz --version
+strata --version
 ```
 
 **Dev install (from source):**
@@ -44,11 +44,11 @@ uv run strata --version
 
 ## Initialize a Workspace
 
-Run `xyz init` inside your config repository (the repo that holds your environment YAML files):
+Run `strata sln init` inside your config repository (the repo that holds your environment YAML files):
 
 ```bash
 cd my-config-repo
-xyz init --name my-workspace
+strata sln init --name my-workspace
 ```
 
 What gets created:
@@ -65,6 +65,87 @@ my-config-repo/
 ```
 
 > **VS Code users:** After init, use **Reopen in Container** to get a fully configured dev environment with all tools pre-installed.
+
+### Scaffold with a template
+
+Add `--template <name>` to get a ready-to-edit config folder alongside the workspace state:
+
+```bash
+strata sln init --name my-aks --template aks
+```
+
+This copies a working set of example config files into the repo root, with `my-aks` substituted wherever the template uses `${solution_name}`:
+
+```
+my-config-repo/
+├── config/
+│   └── my-aks-config.yaml     ← platform configuration (providers, integrations)
+├── stack/
+│   ├── ws-platform.yaml       ← workspace definition
+│   ├── ns-base.yaml           ← base namespace
+│   └── mod-traefik.yaml       ← Traefik Helm module
+├── deploy/
+│   └── deploy-prd.yaml        ← production deployment descriptor
+├── envs/
+│   └── env-prd.yaml           ← environment variables (fill in secrets)
+└── .strata/                   ← workspace state (as above)
+```
+
+The output tells you exactly what to do next:
+
+```
+✅  Solution 'my-aks' initialised
+    • Work path    : /path/to/my-config-repo
+    • Solution ID  : abc-123
+    • Template     : aks
+    • Files created: 6
+
+Next steps:
+    1. Register your repo:   strata repo add my-aks <git-url> --clone
+    2. Add a profile:        strata profile add prd --activate
+    3. Validate:             strata validate --file deploy/deploy-prd.yaml
+    4. Deploy:               strata deploy run --file deploy/deploy-prd.yaml
+```
+
+**Built-in templates:**
+
+| Name  | Description                                         |
+| ----- | --------------------------------------------------- |
+| `aks` | Azure Kubernetes Service — Terraform + Helm starter |
+
+**Using a local template folder:**
+
+```bash
+strata sln init --name my-ws --template ./my-corporate-template/
+```
+
+The folder must contain a `scaffold/` subdirectory with the files to copy. An optional `template.yaml` declares the template name, description, and substitution variables.
+
+### Save your workspace as a template
+
+Once you have a working workspace, capture it as a reusable scaffold for the next project:
+
+```bash
+strata sln export --name my-corp-base
+```
+
+What it does:
+- Copies all workspace config files into `.strata/templates/my-corp-base/scaffold/`
+- Replaces the current solution name with `${solution_name}` throughout — ready to substitute on next init
+- Shows every substitution so you can spot false positives
+
+Output:
+```
+✅  Template 'my-corp-base' exported
+    • Output       : .strata/templates/my-corp-base/
+    • Files saved  : 6
+    • Substitutions: 14 occurrences across 6 files
+
+Use it:
+    strata sln init --name new-project --template .strata/templates/my-corp-base/
+```
+
+Use `--dry-run` to preview without writing. Use `--force` to overwrite an existing template.
 
 ---
 
@@ -87,7 +168,7 @@ spec:
     - "@xyz-config/stack/mod-traefik.yaml"
 ```
 
-Cross-repository file references use `@repo-name/path/to/file.yaml` notation. The `@` prefix tells `xyz` to resolve the path through the registered repo map.
+Cross-repository file references use `@repo-name/path/to/file.yaml` notation. The `@` prefix tells `strata` to resolve the path through the registered repo map.
 
 Typical workspace layout:
 
@@ -106,8 +187,8 @@ my-config-repo/
 If your config references files from other repos (Terraform, service configs), register them:
 
 ```bash
-xyz repo add xyz-config git@github.com:org/xyz-config.git --branch main --clone
-xyz repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --branch main --clone
+strata repo add xyz-config git@github.com:org/xyz-config.git --branch main --clone
+strata repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --branch main --clone
 ```
 
 ---
@@ -117,8 +198,8 @@ xyz repo add xyz-infrastructure git@github.com:org/xyz-infrastructure.git --bran
 Profiles group environment-specific overrides (think: `dev`, `staging`, `prd`):
 
 ```bash
-xyz profile add prd --activate
-xyz profile list
+strata profile add prd --activate
+strata profile list
 ```
 
 ---
@@ -128,7 +209,7 @@ xyz profile list
 Before deploying anything, validate your config file:
 
 ```bash
-xyz validate --file stack/my-environment.yaml
+strata validate --file stack/my-environment.yaml
 ```
 
 A clean run exits `0` and prints a summary. A validation failure exits `3` and tells you:
@@ -140,8 +221,20 @@ A clean run exits `0` and prints a summary. A validation failure exits `3` and t
 Run against all files to catch cross-reference errors early:
 
 ```bash
-xyz validate --file deploy/my-environment.yaml
+strata validate --file deploy/my-environment.yaml
 ```
+
+---
+
+## Preview Changes
+
+Before deploying, review what would change:
+
+```bash
+strata diff -f deploy/my-environment.yaml
+```
+
+This is read-only — nothing is modified. It builds artifacts to a temp directory, diffs against the current build, and runs `terraform plan` against remote state. Review the output, then deploy when satisfied.
 
 ---
 
@@ -150,7 +243,7 @@ xyz validate --file deploy/my-environment.yaml
 Once validation passes:
 
 ```bash
-xyz deploy run --file deploy/my-environment.yaml
+strata deploy run --file deploy/my-environment.yaml
 ```
 
 This orchestrates the full lifecycle: resolves `@`-references, runs Terraform, applies Helm charts, and executes any pre/post scripts. Terraform output streams directly to your terminal.
@@ -159,27 +252,29 @@ This orchestrates the full lifecycle: resolves `@`-references, runs Terraform, a
 
 ## If Something Goes Wrong
 
-**Check the audit trail** — every command execution is logged:
+**Check the execution log** — every command execution is logged:
 
 ```bash
-xyz audit list
-xyz audit list --last 5
+strata log list
+strata log list --last
 ```
+
+To configure logging behaviour (levels, output format), use `strata config log`.
 
 **Run with verbose output** to see every subprocess call and argument:
 
 ```bash
-xyz validate --file stack/my-environment.yaml --verbose
-xyz deploy run --file deploy/my-environment.yaml --verbose
+strata validate --file stack/my-environment.yaml --verbose
+strata deploy run --file deploy/my-environment.yaml --verbose
 ```
 
 **Structured output for automation or debugging:**
 
 ```bash
-xyz validate --file stack/my-environment.yaml --output json
+strata validate --file stack/my-environment.yaml --output json
 ```
 
-**Coming soon:** `ruck doctor` — self-diagnoses common workspace and environment issues automatically.
+**Coming soon:** `strata doctor` — self-diagnoses common workspace and environment issues automatically.
 
 ---
 
@@ -188,10 +283,43 @@ xyz validate --file stack/my-environment.yaml --output json
 Stop passing the same flags on every command:
 
 ```bash
-xyz config set output json      # always use JSON output
-xyz config set verbose true     # always show verbose logs
-xyz config list                 # check what's set
+strata config set output json      # always use JSON output
+strata config set verbose true     # always show verbose logs
+strata config list                 # check what's set
 ```
+
+---
+
+## Shell Completion
+
+Enable Tab completion for all commands, subcommands, and options:
+
+**Bash** — add to `~/.bashrc`:
+
+```bash
+eval "$(_STRATA_COMPLETE=bash_source strata)"
+```
+
+**Zsh** — add to `~/.zshrc`:
+
+```bash
+eval "$(_STRATA_COMPLETE=zsh_source strata)"
+```
+
+**Fish** — add to `~/.config/fish/completions/strata.fish`:
+
+```fish
+_STRATA_COMPLETE=fish_source strata | source
+```
+
+**Faster startup** (generate a static script instead of eval on every shell open):
+
+```bash
+_STRATA_COMPLETE=bash_source strata > ~/.strata-complete.bash
+echo ". ~/.strata-complete.bash" >> ~/.bashrc
+```
+
+After reloading your shell, `strata <TAB>` completes commands and `--<TAB>` completes options.
 
 ---
 

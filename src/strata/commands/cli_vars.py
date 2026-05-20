@@ -11,16 +11,16 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from strata.commands.context.set_context_command import SetContextCommand
+from strata.commands.vars.set_vars_command import SetContextCommand
 
 
-@click.group(name="context", help="Manage team-shared template variables (stored in solution.json).")
-def context_group():
-    """Context command group."""
+@click.group(name="vars", help="Manage team-shared template variables (stored in solution.json).")
+def vars_group():
+    """Vars command group."""
     pass
 
 
-@context_group.command(name="set", help="Set a template variable (e.g. `xyz context set owner myteam`).")
+@vars_group.command(name="set", help="Set a template variable (e.g. `strata vars set owner myteam`).")
 @click.argument("key", required=True)
 @click.argument("value", required=True)
 @click_work_path
@@ -42,7 +42,7 @@ def set_context_command(
     handle_command_exit(command, success)
 
 
-@context_group.command(name="unset", help="Remove a template variable.")
+@vars_group.command(name="unset", help="Remove a template variable.")
 @click.argument("key", required=True)
 @click_work_path
 @click_output_format
@@ -62,7 +62,7 @@ def unset_context_command(
     handle_command_exit(command, success)
 
 
-@context_group.command(name="list", help="Show current template variables.")
+@vars_group.command(name="list", help="Show current template variables.")
 @click_work_path
 @click_output_format
 @click_output_verbose

@@ -32,6 +32,7 @@ class IntegrationRegistry:
 
     _instance: Optional["IntegrationRegistry"] = None
     _lock = threading.Lock()
+    _initialized: bool
 
     def __new__(cls):
         """Create singleton instance."""
@@ -42,7 +43,7 @@ class IntegrationRegistry:
                 cls._instance = instance
             return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize integration registry (only once)."""
         if self._initialized:
             return

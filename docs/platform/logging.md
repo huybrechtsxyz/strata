@@ -122,4 +122,4 @@ export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=xxx..."
 ## Default Config Files
 
 - `src/STRATA_platform/data/logging.yaml` — default logging config used when none is specified
-- `src/STRATA_platform/templates/solution/logging.yaml` — scaffold placed into new workspace on `xyz init`
+- `src/STRATA_platform/templates/solution/logging.yaml` — scaffold placed into new workspace on `strata sln init`

@@ -22,11 +22,14 @@ from strata.commands.init.init_solution_command import InitSolutionCommand
     help="Name of the solution workspace.",
 )
 @click.option(
-    "--from-template",
-    "from_template",
+    "--template",
+    "template",
     default=None,
-    type=click.Path(exists=True, dir_okay=False),
-    help="Path to a workspace template YAML file. Pre-populates repos, profiles, and refs.",
+    type=str,
+    help=(
+        "Scaffold template to apply. Accepts a built-in name (e.g. 'aks') "
+        "or a path to a local template folder containing 'scaffold/' and an optional 'template.yaml'."
+    ),
 )
 @click_work_path
 @click_output_format
@@ -34,7 +37,7 @@ from strata.commands.init.init_solution_command import InitSolutionCommand
 @click_output_quiet
 def init_command(
     name: str,
-    from_template: Optional[str] = None,
+    template: Optional[str] = None,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
@@ -43,7 +46,7 @@ def init_command(
     """Initialize a new solution workspace."""
     command = InitSolutionCommand(
         name=name,
-        from_template=from_template,
+        template=template,
         work_path=work_path,
         output=output,
         verbose=verbose,

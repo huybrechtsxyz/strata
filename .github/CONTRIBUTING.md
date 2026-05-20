@@ -1,51 +1,110 @@
-# XYZ Platform - Contributing
+# strata — Contributing
 
-Thanks for your interest in contributing! This document describes the preferred workflow and guidelines to make collaboration smooth and efficient.
+Thanks for your interest in contributing! This document covers the workflow, conventions, and architecture rules you need to contribute effectively to strata.
 
-## Get started
+---
 
-- Fork the repo and create a branch from main: git checkout -b my-feature
-- Keep changes focused: one logical change per PR.
-- Write clear, descriptive commit messages.
+## Get Started
 
-## Report bugs & request features
+1. Fork the repo and create a branch from `main`: `git checkout -b my-feature`
+2. Keep changes focused — one logical change per PR.
+3. Run tests and linters locally before opening a PR.
+4. Update `CHANGELOG.md` under `[Unreleased]` for any user-visible change.
 
-- For usage questions or discussion, open a GitHub Discussion (preferred) or an Issue.
-- For bugs, include steps to reproduce, expected vs actual behaviour, environment, and relevant logs or stack traces.
+---
 
-## Development workflow
+## Report Bugs & Request Features
 
-- Run tests and linters locally before opening a PR.
-- Add or update tests for new behavior.
-- Update documentation where applicable (README, docs, CHANGELOG).
+- For usage questions, open a GitHub Discussion.
+- For bugs, include: steps to reproduce, expected vs actual behaviour, `strata --version`, and relevant logs (`strata log list --last`).
+- For features, describe the operator problem you're solving, not the implementation.
 
-## Pull requests
+---
 
-- Open a PR against main with a clear title and description of the change.
-- Link related issues and include screenshots or logs if relevant.
-- PRs should pass CI checks before review.
-- Be responsive to review feedback; maintainers may request changes.
+## Architecture Overview
 
-## Code style
+strata uses a strict layered architecture. **Lower layers never import higher ones.**
 
-- Follow existing project style and patterns.
-- Keep changes minimal and consistent with the repository conventions.
+```
+commands/     ← Click CLI entry points — thin wrappers, call command classes
+controllers/  ← Orchestrate services + integrations for a single operation
+services/     ← Load, validate, and expose a single YAML model type
+integrations/ ← Subprocess wrappers for external tools (git, terraform, etc.)
+models/       ← Pydantic v2 models for YAML documents
+utils/        ← Pure utilities (no business logic, no service imports)
+```
 
-## Review & merging
+### Adding a new CLI command
+
+1. Create `src/strata/commands/<group>/<name>_command.py` extending `BaseCommand`.
+2. Implement `get_required_integrations()`, `execute()`, and optionally `_print_console`.
+3. Wire it up in `src/strata/commands/cli_<group>.py` with Click decorators.
+4. Register the group in `src/strata/cli.py` if it's new.
+5. Use `@click_work_path`, `@click_output_format`, `@click_output_verbose`, `@click_output_quiet` from `cli_common.py`.
+6. Use `@click_file` from `cli_common.py` for `--file` options (includes `STRATA_FILE` env var automatically).
+7. Never use `sys.exit()` — raise `click.exceptions.Exit(code)`.
+
+### Adding a new integration
+
+1. Create `src/strata/integrations/<name>.py` extending `BaseIntegration`.
+2. Set `COMMAND = "<binary>"` for availability detection.
+3. Implement `_check_version_command()` to return the version command args.
+4. Register in `integrations/registry.py` and `integrations/factory.py`.
+5. Add `CAPABILITIES` list from `integrations/capabilities.py` as appropriate.
+6. Never call subprocess directly — use `self._run_integration(args, cwd, timeout)`.
+
+### Adding a new model
+
+1. Create `src/strata/models/<name>_model.py` extending `pydantic.BaseModel`.
+2. Use `PlatformName` for `name` fields, `PlatformKind` for `kind`, `PlatformVersion` for `apiVersion`.
+3. Use `model_validator(mode="after")` for cross-field validation.
+4. Never call `Path.exists()` inside validators — models must load without a filesystem.
+5. Add a corresponding service in `src/strata/services/`.
+
+---
+
+## Exit Codes
+
+| Code | Meaning                                         |
+| ---- | ----------------------------------------------- |
+| `0`  | Success                                         |
+| `1`  | System / execution failure                      |
+| `2`  | Usage error (Click default for bad arguments)   |
+| `3`  | Validation failure — file processed but invalid |
+
+Always use `handle_command_exit(command, success)` from `cli_common.py` to map to exit codes.
+
+---
+
+## Pull Requests
+
+- Open against `main` with a clear title and description.
+- Link related issues.
+- PRs must pass CI (lint + type check + pytest) before review.
+- Be responsive to review feedback.
+- Update `CHANGELOG.md` under `[Unreleased]`.
+
+---
+
+## Review & Merging
 
 - Maintainers will review PRs and may request changes.
 - Merge is performed when CI passes and reviewers approve; maintainers may squash or rebase as needed.
+
+---
 
 ## Security
 
 - Do not include secrets, credentials, or private data in PRs or issues.
 - For security vulnerabilities, follow SECURITY.md (do not open a public issue).
 
-## Questions & support
+---
+
+## Questions & Support
 
 - See [SUPPORT](./support.md) for where to get help and expected response times.
 
-Thank you for contributing — your help improves Platform XYZ for everyone.
+Thank you for contributing!
 
 ---
 

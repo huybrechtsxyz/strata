@@ -216,7 +216,7 @@ function Test-ConfigCommands {
 
     Test-Cmd "config: -h" `
         -Args @('config', '-h') `
-        -Contains @('set', 'unset', 'list')
+        -Contains @('set', 'unset', 'list', 'log')
 
     Test-Cmd "config set: -h" `
         -Args @('config', 'set', '-h') `
@@ -237,6 +237,10 @@ function Test-ConfigCommands {
     Test-Cmd "config set: invalid key outside workspace exits 1" `
         -Args @('config', 'set', 'invalid_key', 'somevalue', '--work-path', 'C:\Temp') `
         -ExitCode 1
+
+    Test-Cmd "config log: -h" `
+        -Args @('config', 'log', '-h') `
+        -Contains @('list', 'get', 'set', 'unset', 'reset')
 }
 
 # =============================================================================
@@ -247,15 +251,11 @@ function Test-AuditCommands {
 
     Test-Cmd "audit: -h" `
         -Args @('audit', '-h') `
-        -Contains @('list', 'log-config')
+        -Contains @('list')
 
     Test-Cmd "audit list: -h" `
         -Args @('audit', 'list', '-h') `
         -Contains @('lines', 'level', 'last')
-
-    Test-Cmd "audit log-config: -h" `
-        -Args @('audit', 'log-config', '-h') `
-        -Contains @('log')
 
     Test-Cmd "audit list: outside workspace exits 1" `
         -Args @('audit', 'list', '--work-path', 'C:\Temp') `
@@ -523,30 +523,30 @@ function Test-NewCommands {
 # Test: Context
 # =============================================================================
 function Test-ContextCommands {
-    Write-TestHeader "context"
+    Write-TestHeader "vars"
 
-    Test-Cmd "context: -h" `
-        -Args @('context', '-h') `
+    Test-Cmd "vars: -h" `
+        -Args @('vars', '-h') `
         -Contains @('set', 'unset', 'list')
 
-    Test-Cmd "context set: -h" `
-        -Args @('context', 'set', '-h') `
+    Test-Cmd "vars set: -h" `
+        -Args @('vars', 'set', '-h') `
         -Contains @('KEY', 'VALUE')
 
-    Test-Cmd "context unset: -h" `
-        -Args @('context', 'unset', '-h') `
+    Test-Cmd "vars unset: -h" `
+        -Args @('vars', 'unset', '-h') `
         -Contains @('KEY')
 
-    Test-Cmd "context list: -h" `
-        -Args @('context', 'list', '-h') `
+    Test-Cmd "vars list: -h" `
+        -Args @('vars', 'list', '-h') `
         -Contains @('template')
 
-    Test-Cmd "context list: outside workspace exits 1" `
-        -Args @('context', 'list', '--work-path', 'C:\Temp') `
+    Test-Cmd "vars list: outside workspace exits 1" `
+        -Args @('vars', 'list', '--work-path', 'C:\Temp') `
         -ExitCode 1
 
-    Test-Cmd "context set: outside workspace exits 1" `
-        -Args @('context', 'set', 'owner', 'myteam', '--work-path', 'C:\Temp') `
+    Test-Cmd "vars set: outside workspace exits 1" `
+        -Args @('vars', 'set', 'owner', 'myteam', '--work-path', 'C:\Temp') `
         -ExitCode 1
 }
 
