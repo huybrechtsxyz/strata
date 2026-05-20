@@ -15,7 +15,7 @@ from strata.services.workspace_service import WorkspaceService
 class PlatformService(BaseService["PlatformArtifactModel"]):
     """Service for managing platform model I/O operations."""
 
-    def __init__(self, path=None, data=None):
+    def __init__(self, path: Optional[str] = None, data: Optional[dict] = None) -> None:
         """
         Initialize the platform service.
 

@@ -26,7 +26,7 @@ Pass `--output json` to any command to get structured JSON on stdout:
 ```json
 {
   "success": true,
-  "data": { ... },
+  "data": {},
   "errors": [],
   "messages": []
 }

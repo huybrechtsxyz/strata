@@ -41,9 +41,6 @@ class BaseCommand(ABC):
         # Paths
         self._work_path: Path = self._get_current_workpath(work_path)
 
-        # Logging context
-        self._configure_session_logging()
-
         # Correlation IDs — set during _initialize()
         self._solution_controller: SolutionController = SolutionController(self._work_path)
         self._execution_id: str = generate_uuid()
@@ -53,6 +50,9 @@ class BaseCommand(ABC):
         self._output_format = output or "console"
         self._output_verbose = verbose or False
         self._output_quiet = quiet or False
+
+        # Logging context (must be after _output_verbose/_output_quiet are set)
+        self._configure_session_logging()
 
         # Integration controller (lazy-loaded)
         self._integration_controller: Optional[IntegrationController] = None

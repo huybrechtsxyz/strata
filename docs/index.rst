@@ -20,9 +20,11 @@ strata
 
    platform/readme
    platform/getting-started
+   platform/value-proposition
    platform/commands
    platform/workflow
    platform/cli-preferences
+   platform/ci-integration
    platform/architecture
    platform/exit-codes
 
@@ -71,6 +73,15 @@ strata
    decisions/0003-layered-architecture
    decisions/0004-exit-code-convention
    decisions/0005-secret-resolution-at-build-time
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Guides:
+
+   guides/faq
+   guides/cookbook-add-environment
+   guides/pattern-cross-env-changes
+   guides/troubleshooting-what-changed
 
 .. :orphan:
 

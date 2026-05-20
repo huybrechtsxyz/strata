@@ -1,20 +1,18 @@
 # Frequently Asked Questions
 
----
-
 ## Why not Terragrunt?
 
 Terragrunt solves a similar problem (DRY Terraform configuration) but with a different philosophy:
 
-| Aspect | strata | Terragrunt |
-|--------|--------|-----------|
-| Config language | YAML (declarative, tooling-friendly) | HCL (Terraform-native) |
-| Approach | Generate complete Terraform, then run it | Wrap Terraform with inheritance and includes |
-| Secret management | Built-in (Key Vault, Bitwarden, env vars) | External (sops, vault, env vars) |
-| Drift detection | `strata diff` (built-in) | Manual `terraform plan` per module |
-| Multi-stage orchestration | Deployment stages with dependency ordering | `run-all` with dependency blocks |
-| Escape hatch | Copy generated `.tf` files, run Terraform directly | Already Terraform — remove `terragrunt.hcl` |
-| Learning curve | Know YAML + understand the layering model | Know HCL + Terragrunt's inheritance model |
+| Aspect                    | strata                                             | Terragrunt                                   |
+| ------------------------- | -------------------------------------------------- | -------------------------------------------- |
+| Config language           | YAML (declarative, tooling-friendly)               | HCL (Terraform-native)                       |
+| Approach                  | Generate complete Terraform, then run it           | Wrap Terraform with inheritance and includes |
+| Secret management         | Built-in (Key Vault, Bitwarden, env vars)          | External (sops, vault, env vars)             |
+| Drift detection           | `strata diff` (built-in)                           | Manual `terraform plan` per module           |
+| Multi-stage orchestration | Deployment stages with dependency ordering         | `run-all` with dependency blocks             |
+| Escape hatch              | Copy generated `.tf` files, run Terraform directly | Already Terraform — remove `terragrunt.hcl`  |
+| Learning curve            | Know YAML + understand the layering model          | Know HCL + Terragrunt's inheritance model    |
 
 **Choose strata when:**
 - You want a clean separation between config (YAML) and infrastructure code (Terraform modules).
@@ -33,12 +31,12 @@ Terragrunt solves a similar problem (DRY Terraform configuration) but with a dif
 
 Ansible is a configuration management tool. strata is an infrastructure deployment orchestrator. They solve different problems and work well together.
 
-| Aspect | strata | Ansible |
-|--------|--------|---------|
+| Aspect          | strata                                             | Ansible                                 |
+| --------------- | -------------------------------------------------- | --------------------------------------- |
 | Primary purpose | Generate + deploy infrastructure (Terraform, Helm) | Configure servers + deploy applications |
-| When it runs | Before infrastructure exists (or to change it) | After infrastructure exists |
-| State | Terraform state (remote backend) | Stateless (or Tower/AWX for tracking) |
-| Idempotency | Via Terraform's state diffing | Via module design (task-level) |
+| When it runs    | Before infrastructure exists (or to change it)     | After infrastructure exists             |
+| State           | Terraform state (remote backend)                   | Stateless (or Tower/AWX for tracking)   |
+| Idempotency     | Via Terraform's state diffing                      | Via module design (task-level)          |
 
 **They complement each other:** strata provisions the VMs and networking; Ansible configures the OS, installs packages, and deploys applications. Some teams use strata's `lifecycle.configure` phase to call Ansible after infrastructure is provisioned.
 

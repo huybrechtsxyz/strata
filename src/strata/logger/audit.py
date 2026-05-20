@@ -91,7 +91,7 @@ def audit(
     if _audit_logger is None:
         return
 
-    entry = {
+    entry: dict[str, Any] = {
         "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "action": action,
         "outcome": outcome,

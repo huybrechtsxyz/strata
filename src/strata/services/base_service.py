@@ -4,7 +4,7 @@
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Generic, List, Optional, Tuple, Type, TypeVar, cast
+from typing import Any, Dict, Generic, List, Mapping, Optional, Tuple, Type, TypeVar, cast
 
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -438,7 +438,7 @@ class BaseService(ABC, Generic[ModelT]):
     # Base service utility methods
 
     @staticmethod
-    def _humanize_pydantic_error(error: dict) -> str:
+    def _humanize_pydantic_error(error: Mapping[str, Any]) -> str:
         """Translate cryptic Pydantic error messages to actionable human text."""
         error_type = error.get("type", "")
         ctx = error.get("ctx", {})
