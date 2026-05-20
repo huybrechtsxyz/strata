@@ -1,0 +1,93 @@
+# ===============================================================================
+# Action Name  : deploy-run
+# Description  : Run the strata deploy pipeline.
+#                Typically used on merge to main with an environment protection rule.
+# ===============================================================================
+
+name: "Strata Deploy Run"
+description: "Execute the deploy pipeline for a deployment definition."
+
+inputs:
+  file:
+    description: "Path to the deployment YAML file."
+    required: true
+  work-path:
+    description: "Workspace root directory."
+    required: false
+    default: "."
+  stage:
+    description: "Limit execution to a specific deployment stage."
+    required: false
+    default: ""
+  force:
+    description: "Skip interactive confirmation prompts (required for CI)."
+    required: false
+    default: "true"
+  dry-run:
+    description: "Plan without running provisioners."
+    required: false
+    default: "false"
+  extra-args:
+    description: "Additional arguments to pass to strata deploy run."
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: "Numeric exit code."
+    value: ${{ steps.run.outputs.exit-code }}
+  success:
+    description: "Whether deploy succeeded (true/false)."
+    value: ${{ steps.run.outputs.success }}
+  result:
+    description: "Raw JSON output from strata deploy run."
+    value: ${{ steps.run.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run strata deploy run
+      id: run
+      shell: bash
+      run: |
+        STAGE_FLAG=""
+        if [ -n "${{ inputs.stage }}" ]; then
+          STAGE_FLAG="--stage ${{ inputs.stage }}"
+        fi
+
+        FORCE_FLAG=""
+        if [ "${{ inputs.force }}" = "true" ]; then
+          FORCE_FLAG="--force"
+        fi
+
+        DRY_RUN_FLAG=""
+        if [ "${{ inputs.dry-run }}" = "true" ]; then
+          DRY_RUN_FLAG="--dry-run"
+        fi
+
+        set +e
+        RESULT=$(strata deploy run --file "${{ inputs.file }}" --work-path "${{ inputs.work-path }}" --output json ${STAGE_FLAG} ${FORCE_FLAG} ${DRY_RUN_FLAG} ${{ inputs.extra-args }} 2>&1)
+        EXIT_CODE=$?
+        set -e
+
+        echo "exit-code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
+        echo "result<<EOF" >> "$GITHUB_OUTPUT"
+        echo "${RESULT}" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+
+        if [ "${EXIT_CODE}" -eq 0 ]; then
+          echo "success=true" >> "$GITHUB_OUTPUT"
+          echo "✅ Deploy completed"
+        else
+          echo "success=false" >> "$GITHUB_OUTPUT"
+          echo "❌ Deploy failed (exit code ${EXIT_CODE})"
+        fi
+
+        echo "### Strata Deploy Run" >> "$GITHUB_STEP_SUMMARY"
+        if [ "${EXIT_CODE}" -eq 0 ]; then
+          echo "✅ **Deploy succeeded**" >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "❌ **Deploy failed** (exit code ${EXIT_CODE})" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        exit ${EXIT_CODE}

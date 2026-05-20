@@ -177,6 +177,8 @@ The full lifecycle from workspace setup to running infrastructure:
 
 Full guide: [platform/workflow.md](platform/workflow.md)
 
+CI/CD integration: [platform/ci-integration.md](platform/ci-integration.md)
+
 ---
 
 ## Testing

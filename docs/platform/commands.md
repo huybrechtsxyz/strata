@@ -24,6 +24,8 @@ These options are accepted by every command and subcommand:
 | `2`  | Usage error — invalid CLI arguments (Click default)          |
 | `3`  | Validation failure — file processed but schema-invalid       |
 
+> **Using strata in CI/CD?** See [ci-integration.md](ci-integration.md) for complete GitHub Actions and Azure Pipelines examples that leverage these exit codes.
+
 ---
 
 ## Command Groups
