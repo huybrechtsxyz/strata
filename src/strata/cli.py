@@ -196,21 +196,27 @@ if __name__ == "__main__":
 
         main()
     except click.UsageError as e:
-        # logger.error(f"Usage error: {e}")
         click.echo(f"Error: {e}", err=True)
         click.echo(click.Context(main).get_help())
         exit(2)
     except click.ClickException as e:
-        # logger.error(f"CLI error: {e}", exc_info=True)
-        click.echo(f"Unexpected Error: {e}", err=True)
         e.show()
         exit(e.exit_code)
     except Exception as e:
-        # logger.exception(f"Unexpected error in CLI")
-        click.echo(f"Unexpected error: {e}", err=True)
-        import traceback
+        from strata.exceptions import PlatformError
+        from strata.utils.config import SUPPORT_URL
+        from strata.utils.version import get_version
 
-        traceback.print_exc()
+        if isinstance(e, PlatformError):
+            click.echo(f"❌ {e}", err=True)
+        else:
+            click.echo(
+                f"❌ Unexpected error: {e}\n"
+                f"   Command: {' '.join(sys.argv)}\n"
+                f"   Version: {get_version()}\n"
+                f"   Please report at: {SUPPORT_URL}",
+                err=True,
+            )
         exit(1)
     finally:
         # Ensure logs are flushed before exit

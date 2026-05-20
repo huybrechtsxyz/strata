@@ -33,12 +33,20 @@ class PlatformError(Exception):
         return result
 
     def __str__(self) -> str:
-        parts = [f"{self.error_code}: {self.message}"]
-        if self.details:
-            parts.append(f"Details: {self.details}")
+        """Human-readable error message. Actionable without reading source."""
+        parts = [self.message]
         if self.cause:
-            parts.append(f"Caused by: {self.cause}")
-        return " | ".join(parts)
+            parts.append(f"  Caused by: {self.cause}")
+        return "\n".join(parts)
+
+    def __repr__(self) -> str:
+        """Machine-readable representation with full structured details."""
+        return (
+            f"{self.__class__.__name__}("
+            f"code={self.error_code!r}, "
+            f"message={self.message!r}, "
+            f"details={self.details!r})"
+        )
 
 
 class PlatformConfigurationError(PlatformError):
