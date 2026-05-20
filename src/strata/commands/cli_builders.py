@@ -8,6 +8,7 @@ from strata.commands.builders.clean_build_command import CleanBuildCommand
 from strata.commands.builders.plan_build_command import PlanBuildCommand
 from strata.commands.builders.run_build_command import RunBuildCommand
 from strata.commands.cli_common import (
+    click_file,
     click_output_format,
     click_output_quiet,
     click_output_verbose,
@@ -23,12 +24,7 @@ def build():
 
 
 @build.command(name="run", help="Run platform + terraform build pipeline.")
-@click.option(
-    "--file",
-    "-f",
-    default=None,
-    help="Path to the deployment YAML file.",
-)
+@click_file
 @click_work_path
 @click.option(
     "--dry-run",
@@ -61,12 +57,7 @@ def build_run(
 
 
 @build.command(name="clean", help="Clean deployment build artifacts.")
-@click.option(
-    "--file",
-    "-f",
-    default=None,
-    help="Path to the deployment YAML file.",
-)
+@click_file
 @click_work_path
 @click.option(
     "--dry-run",
@@ -99,12 +90,7 @@ def build_clean(
 
 
 @build.command(name="plan", help="Show artifact diff + terraform plan without writing to the real build path.")
-@click.option(
-    "--file",
-    "-f",
-    default=None,
-    help="Path to the deployment YAML file.",
-)
+@click_file
 @click_work_path
 @click.option(
     "--stage",

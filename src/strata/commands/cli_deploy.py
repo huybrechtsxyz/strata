@@ -5,6 +5,7 @@ from typing import Optional
 import click
 
 from strata.commands.cli_common import (
+    click_file,
     click_output_format,
     click_output_quiet,
     click_output_verbose,
@@ -25,13 +26,7 @@ def deploy():
 
 
 @deploy.command(name="run", help="Run the deploy pipeline for a deployment definition.")
-@click.option(
-    "--file",
-    "-f",
-    default=None,
-    metavar="PATH",
-    help="Path to the deployment YAML file.",
-)
+@click_file
 @click_work_path
 @click.option(
     "--stage",
@@ -80,13 +75,7 @@ def deploy_run(
 
 
 @deploy.command(name="destroy", help="Tear down provisioned infrastructure for a deployment definition.")
-@click.option(
-    "--file",
-    "-f",
-    default=None,
-    metavar="PATH",
-    help="Path to the deployment YAML file.",
-)
+@click_file
 @click_work_path
 @click.option(
     "--stage",
@@ -135,13 +124,7 @@ def deploy_destroy(
 
 
 @deploy.command(name="status", help="Show deployment status: live Terraform outputs or saved plan details.")
-@click.option(
-    "--file",
-    "-f",
-    default=None,
-    metavar="PATH",
-    help="Path to the deployment YAML file.",
-)
+@click_file
 @click_work_path
 @click.option(
     "--stage",
@@ -224,8 +207,9 @@ def deploy_history(
     "--file",
     "-f",
     required=True,
+    envvar="STRATA_FILE",
     metavar="PATH",
-    help="Path to the deployment YAML file.",
+    help="Path to the deployment YAML file. [env: STRATA_FILE]",
 )
 @click_work_path
 @click.option(

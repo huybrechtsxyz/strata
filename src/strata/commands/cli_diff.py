@@ -5,6 +5,7 @@ from typing import Optional
 import click
 
 from strata.commands.cli_common import (
+    click_file,
     click_output_format,
     click_output_quiet,
     click_output_verbose,
@@ -20,13 +21,7 @@ from strata.commands.diff.diff_command import DiffCommand
     "Builds artifacts to a temp directory, diffs against the current build, "
     "and runs terraform plan against remote state. Nothing is modified.",
 )
-@click.option(
-    "--file",
-    "-f",
-    default=None,
-    metavar="PATH",
-    help="Path to the deployment YAML file.",
-)
+@click_file
 @click_work_path
 @click.option(
     "--stage",

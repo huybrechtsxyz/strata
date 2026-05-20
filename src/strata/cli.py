@@ -50,7 +50,7 @@ from strata.utils.system import resolve_work_path
 logger = get_logger(__name__)
 
 _CONFIG_FILE = SOLUTION_CONFIG_FILE
-_DEFAULT_MAP_KEYS = ("output", "verbose", "quiet", "work_path")
+_DEFAULT_MAP_KEYS = ("output", "verbose", "quiet", "work_path", "file")
 
 
 def _load_workspace_defaults(work_path: Path) -> dict:
@@ -128,7 +128,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
     ),
     context_settings={
         "help_option_names": ["-h", "--help"],
-        "auto_envvar_prefix": "XYZ",
+        "auto_envvar_prefix": "STRATA",
     },
 )
 @click.pass_context
