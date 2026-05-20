@@ -8,6 +8,18 @@ from strata.commands.cli_config import config_group
 from strata.commands.cli_log import log_group
 
 
+class TestLogGroup:
+    def test_help_exits_zero(self):
+        runner = CliRunner()
+        result = runner.invoke(log_group, ["--help"])
+        assert result.exit_code == 0
+
+    def test_help_contains_config_log_crossreference(self):
+        runner = CliRunner()
+        result = runner.invoke(log_group, ["--help"])
+        assert "config log" in result.output
+
+
 class TestLogList:
     def test_list_basic(self, tmp_path):
         runner = CliRunner()

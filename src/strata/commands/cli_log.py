@@ -14,7 +14,10 @@ from strata.commands.cli_common import (
 from strata.commands.logger.show_log_command import ShowLogCommand
 
 
-@click.group(name="log", help="Show execution logs for the current workspace.")
+@click.group(
+    name="log",
+    help="Show execution logs for the current workspace.\n\nTo configure logging behaviour (levels, output), use: strata config log",
+)
 def log_group():
     """Log command group."""
     pass

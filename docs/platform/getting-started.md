@@ -247,6 +247,8 @@ strata log list
 strata log list --last
 ```
 
+To configure logging behaviour (levels, output format), use `strata config log`.
+
 **Run with verbose output** to see every subprocess call and argument:
 
 ```bash

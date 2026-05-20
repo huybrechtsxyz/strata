@@ -275,6 +275,8 @@ strata config log reset
 
 View execution logs (read-only).
 
+> **Note:** To configure logging behaviour (levels, output format), use `strata config log`. See [`config log`](#config-log) for details.
+
 ### `log list`
 
 ```

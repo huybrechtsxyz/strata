@@ -689,6 +689,8 @@ Valid keys: `output`, `verbose`, `quiet`, `work_path`
 | -------------------------------------------------- | ------------------------------- |
 | `strata log list [--last] [--lines N] [--level L]` | View execution logs (read-only) |
 
+> **Note:** To configure logging behaviour (levels, output format), use `strata config log` — see [Logging Config](#logging-config) below.
+
 ### Logging Config
 
 | Command                           | Description                              |
