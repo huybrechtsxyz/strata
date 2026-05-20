@@ -224,14 +224,20 @@ class TestInvalidReferenceError:
 
     def test_resolved_path_in_message(self):
         e = InvalidReferenceError(
-            "Workspace", "prod", "environment", "staging-eu",
+            "Workspace",
+            "prod",
+            "environment",
+            "staging-eu",
             resolved_path="@infra/envs/staging-eu.yaml",
         )
         assert "resolved to: @infra/envs/staging-eu.yaml" in e.message
 
     def test_available_options_in_message(self):
         e = InvalidReferenceError(
-            "Workspace", "prod", "environment", "staging-eu",
+            "Workspace",
+            "prod",
+            "environment",
+            "staging-eu",
             available=["production-eu", "production-us", "staging-global"],
         )
         assert "Valid options:" in e.message
@@ -240,14 +246,20 @@ class TestInvalidReferenceError:
 
     def test_file_path_in_message(self):
         e = InvalidReferenceError(
-            "Workspace", "prod", "environment", "staging-eu",
+            "Workspace",
+            "prod",
+            "environment",
+            "staging-eu",
             file_path="deploy/deploy-prd.yaml",
         )
         assert "[deploy/deploy-prd.yaml]" in e.message
 
     def test_all_new_params_in_details(self):
         e = InvalidReferenceError(
-            "Stage", "name", "ref_type", "ref_val",
+            "Stage",
+            "name",
+            "ref_type",
+            "ref_val",
             resolved_path="/resolved/path",
             available=["a", "b"],
             file_path="some/file.yaml",

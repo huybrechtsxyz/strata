@@ -42,10 +42,7 @@ class PlatformError(Exception):
     def __repr__(self) -> str:
         """Machine-readable representation with full structured details."""
         return (
-            f"{self.__class__.__name__}("
-            f"code={self.error_code!r}, "
-            f"message={self.message!r}, "
-            f"details={self.details!r})"
+            f"{self.__class__.__name__}(code={self.error_code!r}, message={self.message!r}, details={self.details!r})"
         )
 
 

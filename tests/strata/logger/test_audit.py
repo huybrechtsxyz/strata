@@ -1,7 +1,6 @@
 """Tests for strata.logger.audit — dedicated audit logger."""
 
 import json
-from pathlib import Path
 
 import pytest
 
