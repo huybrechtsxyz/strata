@@ -47,17 +47,22 @@ Write-Host "[*] Strata - Release $tag" -ForegroundColor Cyan
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Read and compare versions
+$currentRaw = (Get-Content $versionFile -Raw).Trim()
+$currentVer = [System.Version]$currentRaw
+$newVer     = [System.Version]$Version
+
+Write-Host "[*] VERSION.txt: $currentRaw" -ForegroundColor Yellow
+
+if ($newVer -lt $currentVer) {
+    Write-Host "[!] Version $Version is less than current $currentRaw. Aborting." -ForegroundColor Red
+    exit 1
+}
+
 # Abort if tag already exists locally
 $existingTag = git tag --list $tag
 if ($existingTag) {
     Write-Host "[!] Tag $tag already exists locally. Aborting." -ForegroundColor Red
-    exit 1
-}
-
-# Abort if release branch already exists
-$existingBranch = git branch --list $branch
-if ($existingBranch) {
-    Write-Host "[!] Branch $branch already exists. Aborting." -ForegroundColor Red
     exit 1
 }
 
@@ -81,6 +86,36 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# ── Equal: VERSION.txt already at target — just re-tag HEAD ─────────────────
+if ($newVer -eq $currentVer) {
+    Write-Host "[*] Version unchanged ($Version) — skipping commit, tagging HEAD." -ForegroundColor Yellow
+    Write-Host ""
+
+    git tag -a $tag -m "Release $tag"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[!] git tag failed." -ForegroundColor Red
+        exit 1
+    }
+
+    $headCommit = git rev-parse --short HEAD
+    Write-Host "[+] Tag $tag created on HEAD ($headCommit)" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "[>] Push the tag to trigger ci-release:" -ForegroundColor Cyan
+    Write-Host "     git push origin $tag" -ForegroundColor DarkCyan
+    Write-Host ""
+    exit 0
+}
+
+# ── Greater: bump VERSION.txt via a PR branch ────────────────────────────────
+Write-Host "[*] VERSION.txt: $currentRaw → $Version" -ForegroundColor Yellow
+
+# Abort if release branch already exists
+$existingBranch = git branch --list $branch
+if ($existingBranch) {
+    Write-Host "[!] Branch $branch already exists. Aborting." -ForegroundColor Red
+    exit 1
+}
+
 # 1. Create and switch to the release branch
 git checkout -b $branch
 if ($LASTEXITCODE -ne 0) {
@@ -89,8 +124,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 2. Write new version
-$current = Get-Content $versionFile -Raw
-Write-Host "[*] VERSION.txt: $($current.Trim()) → $Version" -ForegroundColor Yellow
 Set-Content -Path $versionFile -Value $Version -NoNewline
 
 # 3. Stage and commit
