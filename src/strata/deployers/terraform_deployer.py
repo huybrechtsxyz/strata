@@ -499,10 +499,12 @@ class TerraformDeployer(BaseDeployer):
 
         The build step copies IaC source to:
             deployment_build_path / iac_model.source.target_path
-        Falls back to ``terraform/<iac_model.name>`` when target_path is unset.
+        Falls back to ``iac_model.source.source_path`` when target_path is unset,
+        so the deployer working directory aligns with both the terraform source
+        location and where the builder writes the auto.tfvars.json files.
         """
         deployment_build_path = deployment_service.get_build_path(build_path)
-        target = iac_model.source.target_path or f"terraform/{iac_model.name}"
+        target = iac_model.source.target_path or iac_model.source.source_path
         return deployment_build_path / target
 
     def _build_backend_config(self, iac_model: WorkspaceIacModel) -> Optional[Dict[str, str]]:

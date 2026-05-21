@@ -5,6 +5,7 @@ It only documents required keys.
 """
 
 import json
+import shutil
 from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -119,6 +120,17 @@ class TerraformBuilder(BaseBuilder):
                         f"{features_count} feature(s), {secrets_count} secret(s)"
                     )
 
+                # Validate source copy in dry-run mode (no writes)
+                copy_ok = self._copy_provisioner_source(
+                    deployment_service=deployment_service,
+                    build_path=build_path,
+                    work_path=work_path,
+                    repo_map=repo_map or {},
+                    dry_run=True,
+                )
+                if not copy_ok:
+                    return False
+
                 # Validate includes in dry-run mode (no writes)
                 include_ok = self._process_includes(
                     deployment_service=deployment_service,
@@ -134,7 +146,18 @@ class TerraformBuilder(BaseBuilder):
 
             self._messages.extend(self._save_terraform_vars(terraform_vars, deployment_service, build_path))
 
-            # Process environment includes (merge user .tf/.tfvars files)
+            # Copy terraform source files from the provisioner source_path into the build
+            copy_ok = self._copy_provisioner_source(
+                deployment_service=deployment_service,
+                build_path=build_path,
+                work_path=work_path,
+                repo_map=repo_map or {},
+                dry_run=False,
+            )
+            if not copy_ok:
+                return False
+
+            # Process environment includes (merge/override .tf/.tfvars files on top)
             include_ok = self._process_includes(
                 deployment_service=deployment_service,
                 build_path=build_path,
@@ -548,6 +571,66 @@ class TerraformBuilder(BaseBuilder):
 
     def _write_json(self, path: Path, payload: Dict[str, Any]) -> None:
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    # ------------------------------------------------------------------
+    # Terraform provisioner source copy
+    # ------------------------------------------------------------------
+
+    def _copy_provisioner_source(
+        self,
+        deployment_service: DeploymentService,
+        build_path: Path,
+        work_path: Path,
+        repo_map: Dict[str, str],
+        dry_run: bool = False,
+    ) -> bool:
+        """Copy terraform source files from each provisioner's source_path into the build.
+
+        For each terraform provisioner declared in the workspace:
+          source  = repo_root / source_path   (repo_root = work_path when repo not in repo_map)
+          dest    = deployment_build_path / (target_path or source_path)
+
+        In dry_run mode only logs the planned copy; no files are written.
+        """
+        workspace_service = deployment_service.get_workspace_service()
+        if workspace_service is None or workspace_service.model is None:
+            return True  # Nothing to copy — workspace not loaded
+
+        provisioners = workspace_service.model.spec.provisioners or []
+        deployment_build_path = deployment_service.get_build_path(build_path)
+
+        for prov in provisioners:
+            if prov.provisioner.value != "terraform":
+                continue
+
+            source = prov.source
+            repo_name = str(source.repository)
+
+            # Resolve repository root: use repo_map when available, fall back to work_path
+            if repo_map and repo_name in repo_map:
+                repo_root = Path(repo_map[repo_name])
+            else:
+                repo_root = work_path
+
+            src_dir = repo_root / source.source_path
+            dest_dir = deployment_build_path / (source.target_path or source.source_path)
+
+            if dry_run:
+                self._messages.append(f"[DRY-RUN] Would copy terraform source: {src_dir} → {dest_dir}")
+                if not src_dir.exists():
+                    self._errors.append(f"Terraform source directory not found: {src_dir} (provisioner: {prov.name})")
+                    return False
+                continue
+
+            if not src_dir.exists():
+                self._errors.append(f"Terraform source directory not found: {src_dir} (provisioner: {prov.name})")
+                return False
+
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
+            self._messages.append(f"Copied terraform source: {src_dir} → {dest_dir}")
+
+        return True
 
     # ------------------------------------------------------------------
     # Terraform file includes (merge external .tf / .tfvars into build)
