@@ -34,13 +34,13 @@ function Get-ProjectRoot {
 $projectRoot = Get-ProjectRoot
 Set-Location $projectRoot
 
-$tag      = "v$Version"
-$branch   = "release/$tag"
+$tag = "v$Version"
+$branch = "release/$tag"
 $versionFile = Join-Path $projectRoot "VERSION.txt"
 
 # Derive GitHub repo URL for the PR compare link
-$remoteUrl  = git remote get-url origin 2>$null
-$repoPath   = $remoteUrl -replace '\.git$','' -replace '^https://github\.com/',''
+$remoteUrl = git remote get-url origin 2>$null
+$repoPath = $remoteUrl -replace '\.git$', '' -replace '^https://github\.com/', ''
 
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host "[*] Strata - Release $tag" -ForegroundColor Cyan
@@ -50,7 +50,7 @@ Write-Host ""
 # Read and compare versions
 $currentRaw = (Get-Content $versionFile -Raw).Trim()
 $currentVer = [System.Version]$currentRaw
-$newVer     = [System.Version]$Version
+$newVer = [System.Version]$Version
 
 Write-Host "[*] VERSION.txt: $currentRaw" -ForegroundColor Yellow
 
