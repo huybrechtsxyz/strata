@@ -85,7 +85,7 @@ url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple"
     Write-Host "[+] uv config created at $uvConfigFile" -ForegroundColor Green
 }
 else {
-    Write-Host "[+] uv config already exists at $uvConfigFile — skipping." -ForegroundColor Green
+    Write-Host "[+] uv config already exists at $uvConfigFile - skipping." -ForegroundColor Green
 }
 Write-Host ""
 
