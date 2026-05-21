@@ -16,11 +16,9 @@ from strata.models.solution_model import (
 )
 from strata.services.solution_service import SolutionService
 from strata.utils.config import (
-    SOLUTION_CONFIG_FILE,
     SOLUTION_CONFIGURATION_FILE,
     SOLUTION_DIR,
     SOLUTION_FILE,
-    SOLUTION_GITIGNORE_FILE,
     SOLUTION_LOGGING_FILE,
     SOLUTION_WORKSPACE_SUFFIX,
 )
@@ -987,152 +985,50 @@ class SolutionController(BaseController):
     # ------------------------------------------------------------------
 
     def _scaffold_platform_dir(self) -> Tuple[bool, List[str]]:
-        """Write scaffold files into ``.strata/`` that don't exist yet.
+        """Deep-copy ``templates/solution/`` into the workspace.
 
-        Files written (skipped if already present — idempotent):
-        - logging.yaml  — dev logging profile (console + rotating file)
-        - cli.yaml      — CLI preferences stub
-        - .gitignore    — what to commit vs. ignore
-        - logs/         — log output directory (empty)
+        Every file is copied idempotently (skipped when the destination already
+        exists).  Path components that start with ``dot.`` are renamed so that
+        the leading ``dot.`` becomes ``.`` — e.g. ``dot.strata/`` → ``.strata/``
+        and ``dot.gitignore`` → ``.gitignore``.
+
+        Token substitutions applied to every file:
+        - ``${SOLUTION_NAME}`` → solution name
+        - ``.strata/logs/application.json`` → resolved log file path
+          (logging.yaml only)
         """
+        solution_tpl = get_pkg_templates_path() / "solution"
+        solution_name = str(self._solution.meta.name) if self._solution else ""
         state_dir = SolutionController.get_state_dir(self._work_path)
-        templates_dir = get_pkg_templates_path() / "solution"
 
-        scaffold = [
-            (SOLUTION_LOGGING_FILE, "logging.yaml"),
-            (SOLUTION_CONFIG_FILE, SOLUTION_CONFIG_FILE),
-            (SOLUTION_GITIGNORE_FILE, ".gitignore"),
-        ]
+        def _dest_name(part: str) -> str:
+            return "." + part[4:] if part.startswith("dot.") else part
 
-        for dest_name, src_name in scaffold:
-            dest = state_dir / dest_name
+        for src in sorted(solution_tpl.rglob("*")):
+            if not src.is_file():
+                continue
+            rel_parts = [_dest_name(p) for p in src.relative_to(solution_tpl).parts]
+            dest = self._work_path / Path(*rel_parts)
             if dest.exists():
                 self.logger.debug("Scaffold file already exists — skipping", path=str(dest))
                 continue
-            src = templates_dir / src_name
-            if not src.exists():
-                self.logger.warning("Scaffold template not found", template=str(src))
-                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
             try:
                 content = src.read_text(encoding="utf-8")
-                if dest_name == SOLUTION_LOGGING_FILE:
+                content = content.replace("${SOLUTION_NAME}", solution_name)
+                if dest.name == SOLUTION_LOGGING_FILE:
                     log_file = (state_dir / "logs" / "application.json").as_posix()
                     content = content.replace(".strata/logs/application.json", log_file)
                 dest.write_text(content, encoding="utf-8")
                 self.logger.info("Scaffold file written", path=str(dest))
                 self._add_message(f"Created: {dest.relative_to(self._work_path)}")
             except Exception as e:
-                msg = f"Failed to write scaffold file {dest_name}: {e}"
+                msg = f"Failed to write scaffold file {dest}: {e}"
                 self._add_error(msg)
                 return False, self.get_errors()
 
-        # Write root .gitignore if absent (idempotent — never overwrites existing)
-        root_gitignore = self._work_path / ".gitignore"
-        if not root_gitignore.exists():
-            root_gitignore_src = templates_dir / "root.gitignore"
-            if root_gitignore_src.exists():
-                try:
-                    root_gitignore.write_text(root_gitignore_src.read_text(encoding="utf-8"), encoding="utf-8")
-                    self.logger.info("Root .gitignore written", path=str(root_gitignore))
-                    self._add_message("Created: .gitignore")
-                except Exception as e:
-                    msg = f"Failed to write root .gitignore: {e}"
-                    self._add_error(msg)
-                    return False, self.get_errors()
-
-        # Write root README.md if absent (idempotent — never overwrites existing)
-        root_readme = self._work_path / "README.md"
-        if not root_readme.exists():
-            root_readme_src = templates_dir / "root.readme.md"
-            if root_readme_src.exists():
-                try:
-                    content = root_readme_src.read_text(encoding="utf-8")
-                    content = content.replace("${SOLUTION_NAME}", self._solution.meta.name if self._solution else "")
-                    root_readme.write_text(content, encoding="utf-8")
-                    self.logger.info("Root README.md written", path=str(root_readme))
-                    self._add_message("Created: README.md")
-                except Exception as e:
-                    msg = f"Failed to write root README.md: {e}"
-                    self._add_error(msg)
-                    return False, self.get_errors()
-
-        # Ensure logs directory exists
-        logs_dir = state_dir / "logs"
-        logs_dir.mkdir(exist_ok=True)
-
-        # Copy configuration templates from templates/configuration/
-        config_templates_src = get_pkg_templates_path() / "configuration"
-        if config_templates_src.exists() and config_templates_src.is_dir():
-            templates_dest = state_dir / "templates"
-            templates_dest.mkdir(exist_ok=True)
-            for src_file in config_templates_src.iterdir():
-                if not src_file.is_file():
-                    continue
-                dest_file = templates_dest / src_file.name
-                if dest_file.exists():
-                    self.logger.debug("Template already exists — skipping", path=str(dest_file))
-                    continue
-                try:
-                    dest_file.write_text(src_file.read_text(encoding="utf-8"), encoding="utf-8")
-                    self.logger.info("Configuration template written", path=str(dest_file))
-                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
-                except Exception as e:
-                    msg = f"Failed to write configuration template {src_file.name}: {e}"
-                    self._add_error(msg)
-                    return False, self.get_errors()
-
-        # Copy workspace README from templates/solution/README.md
-        readme_src = templates_dir / "README.md"
-        dest_readme = state_dir / "README.md"
-        if readme_src.exists() and not dest_readme.exists():
-            try:
-                dest_readme.write_text(readme_src.read_text(encoding="utf-8"), encoding="utf-8")
-                self.logger.info("Workspace README written", path=str(dest_readme))
-                self._add_message(f"Created: {dest_readme.relative_to(self._work_path)}")
-            except Exception as e:
-                msg = f"Failed to write workspace README: {e}"
-                self._add_error(msg)
-                return False, self.get_errors()
-
-        # Create .strata/integrations/ directory with README stub for drop-in extensions
-        integrations_dir = state_dir / "integrations"
-        integrations_dir.mkdir(exist_ok=True)
-        integrations_readme = integrations_dir / "README.md"
-        if not integrations_readme.exists():
-            try:
-                integrations_readme.write_text(
-                    "# Custom Integrations\n\n"
-                    "Place `.py` files here to register custom integrations with the Strata.\n\n"
-                    "Each file must define a `register()` function that calls\n"
-                    "`IntegrationFactory.register_type(type_str, cls)`.\n\n"
-                    "See `strata help integrations` for documentation.\n",
-                    encoding="utf-8",
-                )
-                self.logger.info("Integrations directory initialised", path=str(integrations_dir))
-                self._add_message(f"Created: {integrations_readme.relative_to(self._work_path)}")
-            except Exception as e:
-                msg = f"Failed to write integrations README: {e}"
-                self._add_error(msg)
-                return False, self.get_errors()
-
-        # Copy integration template so developers have a starting point
-        integrations_templates_src = get_pkg_templates_path() / "integrations"
-        if integrations_templates_src.exists() and integrations_templates_src.is_dir():
-            for src_file in integrations_templates_src.iterdir():
-                if not src_file.is_file():
-                    continue
-                dest_file = integrations_dir / src_file.name
-                if dest_file.exists():
-                    self.logger.debug("Integration template already exists — skipping", path=str(dest_file))
-                    continue
-                try:
-                    dest_file.write_text(src_file.read_text(encoding="utf-8"), encoding="utf-8")
-                    self.logger.info("Integration template written", path=str(dest_file))
-                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
-                except Exception as e:
-                    msg = f"Failed to write integration template {src_file.name}: {e}"
-                    self._add_error(msg)
-                    return False, self.get_errors()
+        # Ensure .strata/logs/ exists (not a template file — just a directory)
+        (state_dir / "logs").mkdir(parents=True, exist_ok=True)
 
         # Generate JSON Schemas for all platform document kinds → .strata/schemas/
         # These are derived artifacts (regenerated, not user-edited), so we always overwrite.
@@ -1172,31 +1068,6 @@ class SolutionController(BaseController):
             self._add_message(f"Created: {schemas_dir.relative_to(self._work_path)} (JSON Schemas for all kinds)")
         except Exception as e:
             self.logger.warning("Schema generation skipped", error=str(e))
-
-        # Scaffold .devcontainer/ — idempotent, never overwrites existing files
-        devcontainer_templates_src = get_pkg_templates_path() / "devcontainer"
-        if devcontainer_templates_src.exists() and devcontainer_templates_src.is_dir():
-            devcontainer_dir = self._work_path / ".devcontainer"
-            devcontainer_dir.mkdir(exist_ok=True)
-            solution_name = str(self._solution.meta.name) if self._solution else ""
-            for src_file in devcontainer_templates_src.iterdir():
-                if not src_file.is_file():
-                    continue
-                out_name = src_file.name.replace(".template.", ".")
-                dest_file = devcontainer_dir / out_name
-                if dest_file.exists():
-                    self.logger.debug("Devcontainer file already exists — skipping", path=str(dest_file))
-                    continue
-                try:
-                    content = src_file.read_text(encoding="utf-8")
-                    content = content.replace("${SOLUTION_NAME}", solution_name)
-                    dest_file.write_text(content, encoding="utf-8")
-                    self.logger.info("Devcontainer file written", path=str(dest_file))
-                    self._add_message(f"Created: {dest_file.relative_to(self._work_path)}")
-                except Exception as e:
-                    msg = f"Failed to write devcontainer file {out_name}: {e}"
-                    self._add_error(msg)
-                    return False, self.get_errors()
 
         return True, []
 
