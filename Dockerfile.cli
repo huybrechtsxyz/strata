@@ -10,12 +10,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy manifest, lock file, and version first for layer caching
-COPY pyproject.toml uv.lock VERSION.txt ./
+# Copy manifest and version first for layer caching
+COPY pyproject.toml VERSION.txt ./
 COPY src/ src/
 
 # Install production dependencies only into an in-project .venv
-RUN uv sync --frozen --no-dev --no-editable
+RUN uv sync --no-dev --no-editable
 
 # ============================================================
 # Stage 2 – runtime: lean image with only the installed venv
