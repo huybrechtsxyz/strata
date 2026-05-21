@@ -37,8 +37,8 @@ RUN .venv/bin/python -m anybadge \
         -l python \
     || true
 
-# Build HTML docs
-RUN .venv/bin/sphinx-build -M html docs/ /build/html_out -W --keep-going
+# Build HTML docs (-W omitted: CI validates strictness; image build just needs output)
+RUN .venv/bin/sphinx-build -M html docs/ /build/html_out
 
 # ============================================================
 # Stage 2 – serve: nginx serving the static HTML
