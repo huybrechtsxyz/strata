@@ -57,8 +57,6 @@ where = ["src"]
     "solution/**/*",
     "solution/**",
 ]
-"strata.templates.integrations" = ["*.md", "*.py"]
-"strata.templates.devcontainer" = ["*.json", "*.sh"]
 
 [dependency-groups]
 dev = [
