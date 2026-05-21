@@ -1,0 +1,153 @@
+# ===============================================================================
+# Script Name   : ci-pr-images.yml
+# Author        : Vincent Huybrechts
+# Version       : 1.0.0
+# Description   : Builds and pushes PR preview Docker images to GHCR when a
+#                 pull request is opened or updated, and deletes them when the
+#                 PR is closed. Images are tagged as pr-N (e.g. pr-33).
+#                 Docker Hub is intentionally excluded — PR images are GHCR only.
+# ===============================================================================
+
+name: "CI PR Images"
+
+permissions:
+  contents: read
+  packages: write # push/delete images in GHCR
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build and push CLI PR preview image to GHCR
+  # ---------------------------------------------------------------------------
+  pr-ghcr-cli:
+    name: PR preview — CLI image (GHCR)
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/strata
+          tags: |
+            type=raw,value=pr-${{ github.event.pull_request.number }}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push CLI PR image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.cli
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Build and push docs PR preview image to GHCR
+  # ---------------------------------------------------------------------------
+  pr-ghcr-docs:
+    name: PR preview — docs image (GHCR)
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/strata-docs
+          tags: |
+            type=raw,value=pr-${{ github.event.pull_request.number }}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push docs PR image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.docs
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Delete CLI PR preview image from GHCR on PR close
+  # ---------------------------------------------------------------------------
+  cleanup-ghcr-cli:
+    name: Cleanup — delete CLI PR image (GHCR)
+    runs-on: ubuntu-latest
+    if: github.event.action == 'closed'
+
+    steps:
+      - name: Delete CLI PR image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: strata
+          package-type: container
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-only-untagged-versions: false
+          ignore-versions: "^(latest|edge|\\d+\\.\\d+(\\.\\d+)?)$"
+          min-versions-to-keep: 0
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Delete docs PR preview image from GHCR on PR close
+  # ---------------------------------------------------------------------------
+  cleanup-ghcr-docs:
+    name: Cleanup — delete docs PR image (GHCR)
+    runs-on: ubuntu-latest
+    if: github.event.action == 'closed'
+
+    steps:
+      - name: Delete docs PR image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: strata-docs
+          package-type: container
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-only-untagged-versions: false
+          ignore-versions: "^(latest|edge|\\d+\\.\\d+(\\.\\d+)?)$"
+          min-versions-to-keep: 0

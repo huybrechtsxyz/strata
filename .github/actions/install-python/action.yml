@@ -25,12 +25,8 @@ runs:
       uses: astral-sh/setup-uv@v5
       with:
         enable-cache: true
-        cache-dependency-glob: "uv.lock"
+        cache-dependency-glob: "pyproject.toml"
 
     - name: Install dependencies
       shell: bash
-      run: |
-        # Regenerate uv.lock from PyPI before syncing.
-        # The committed uv.lock contains internal ProGet URLs (dev-machine only) that CI cannot reach.
-        # Once a clean PyPI-based lockfile is committed, replace this with: uv sync --frozen --group dev
-        uv lock && uv sync --group dev
+      run: uv sync --group dev

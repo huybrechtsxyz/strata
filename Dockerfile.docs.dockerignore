@@ -24,6 +24,9 @@ tests/
 htmlcov/
 .mypy_cache/
 
+# Sphinx pre-built output (keep build context clean)
+docs/_build/
+
 # CI / version control / editor
 .git/
 .github/
