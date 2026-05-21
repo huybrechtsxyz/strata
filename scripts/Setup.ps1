@@ -3,10 +3,17 @@
     Setup script for the XYZ Platform on Windows.
 .DESCRIPTION
     Installs uv, creates a virtual environment, and installs project dependencies.
+.PARAMETER UseProGet
+    Register the internal ProGet package index in uv's config. Use this on work machines.
+    Omit on home machines to resolve packages directly from PyPI.
 .EXAMPLE
     .\Setup.ps1
+    .\Setup.ps1 -UseProGet
 .NOTES
 #>
+param(
+    [switch]$UseProGet
+)
 
 # Function to get the project root directory
 function Get-ProjectRoot {
@@ -66,28 +73,40 @@ Write-Host "[*] Activating virtual environment..." -ForegroundColor Blue
 Write-Host "[+] Virtual environment activated." -ForegroundColor Green
 Write-Host ""
 
-# Configure uv to use the internal ProGet package index (dev machines only).
-# GitHub Actions uses PyPI directly — this config lives outside the repo and is never committed.
-# ProGet is registered as a supplemental index (not default) so that uv resolves packages
-# against PyPI first. This ensures that regenerating uv.lock locally produces PyPI URLs,
-# which CI can download. Once a clean lockfile is committed, CI can switch back to --frozen.
-Write-Host "[*] Configuring uv package index (ProGet)..." -ForegroundColor Blue
-$uvConfigDir = "$env:APPDATA\uv"
-$uvConfigFile = "$uvConfigDir\uv.toml"
-if (-not (Test-Path $uvConfigDir)) {
-    New-Item -Path $uvConfigDir -ItemType Directory -Force | Out-Null
-}
-if (-not (Test-Path $uvConfigFile)) {
-    @"
+# Configure uv to use the internal ProGet package index (work machines only).
+# At home, skip this block and resolve packages directly from PyPI.
+# Run Setup.ps1 -UseProGet on work machines to register the internal index.
+if ($UseProGet) {
+    Write-Host "[*] Configuring uv package index (ProGet)..." -ForegroundColor Blue
+    $uvConfigDir = "$env:APPDATA\uv"
+    $uvConfigFile = "$uvConfigDir\uv.toml"
+    if (-not (Test-Path $uvConfigDir)) {
+        New-Item -Path $uvConfigDir -ItemType Directory -Force | Out-Null
+    }
+    if (-not (Test-Path $uvConfigFile)) {
+        @"
 [[index]]
 url = "https://omhqproget.domain.ompartners.com/pypi/Dev-PyPI-OSS/simple"
 "@ | Set-Content -Path $uvConfigFile -Encoding UTF8
-    Write-Host "[+] uv config created at $uvConfigFile" -ForegroundColor Green
+        Write-Host "[+] uv config created at $uvConfigFile" -ForegroundColor Green
+    }
+    else {
+        Write-Host "[+] uv config already exists at $uvConfigFile - skipping." -ForegroundColor Green
+    }
+    Write-Host ""
 }
 else {
-    Write-Host "[+] uv config already exists at $uvConfigFile - skipping." -ForegroundColor Green
+    $uvConfigDir = "$env:APPDATA\uv"
+    $uvConfigFile = "$uvConfigDir\uv.toml"
+    if (Test-Path $uvConfigFile) {
+        Remove-Item -Path $uvConfigFile -Force
+        Write-Host "[*] Removed stale ProGet uv config (resolving from PyPI)." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "[*] No ProGet config present (resolving from PyPI)." -ForegroundColor Yellow
+    }
+    Write-Host ""
 }
-Write-Host ""
 
 # Install project dependencies
 Write-Host "[*] Installing dependencies..." -ForegroundColor Blue
