@@ -27,7 +27,7 @@ COPY README.md .
 COPY docs/ docs/
 
 # Convert README.md → docs/README.rst (referenced by index.rst)
-RUN .venv/bin/pandoc README.md -o docs/README.rst
+RUN pandoc README.md -o docs/README.rst
 
 # Generate version badge (no pytest required — uses VERSION.txt directly)
 RUN .venv/bin/python -m anybadge \
