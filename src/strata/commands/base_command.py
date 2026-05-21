@@ -77,7 +77,7 @@ class BaseCommand(ABC):
         has run), otherwise falls back to ``work_path / DEFAULT_BUILD_PATH``.
         """
         if getattr(self, "_configuration_service", None) is not None:
-            return self._configuration_service.get_default_build_path(  # type: ignore[union-attr]
+            return self._configuration_service.get_default_build_path(  # type: ignore[attr-defined]
                 self._work_path, create_path=False
             )
         return self._work_path / DEFAULT_BUILD_PATH

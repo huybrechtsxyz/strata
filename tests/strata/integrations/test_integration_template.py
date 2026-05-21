@@ -4,10 +4,14 @@ the BaseIntegration contract."""
 
 from unittest.mock import patch
 
+from strata.templates.integrations.my_integration import (
+    MyIntegration,
+    register,
+)
+
 from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.factory import IntegrationFactory
 from strata.models.integration_model import IntegrationModel
-from strata.templates.integrations.my_integration import MyIntegration, register
 
 
 def _make_config() -> IntegrationModel:
