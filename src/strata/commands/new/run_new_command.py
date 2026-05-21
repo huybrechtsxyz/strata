@@ -27,7 +27,7 @@ def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
     stems: set[str] = set()
 
     # Package-bundled templates
-    pkg_dir = get_pkg_templates_path() / "configuration"
+    pkg_dir = get_pkg_templates_path() / "solution" / "dot.strata" / "templates"
     if pkg_dir.exists() and pkg_dir.is_dir():
         for f in pkg_dir.iterdir():
             if f.is_file() and f.suffix == ".yaml":
@@ -61,7 +61,7 @@ def _resolve_template_path(template: str, work_path: Optional[Path]) -> Optional
             return ws_path
 
     # 2. Package-bundled templates
-    pkg_path = get_pkg_templates_path() / "configuration" / f"{template}.yaml"
+    pkg_path = get_pkg_templates_path() / "solution" / "dot.strata" / "templates" / f"{template}.yaml"
     if pkg_path.exists():
         return pkg_path
 
