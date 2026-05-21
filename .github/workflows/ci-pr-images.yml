@@ -121,6 +121,7 @@ jobs:
     name: Cleanup — delete CLI PR image (GHCR)
     runs-on: ubuntu-latest
     if: github.event.action == 'closed'
+    continue-on-error: true # GitHub blocks deletion of packages with 5000+ downloads
 
     steps:
       - name: Delete CLI PR image versions
@@ -140,6 +141,7 @@ jobs:
     name: Cleanup — delete docs PR image (GHCR)
     runs-on: ubuntu-latest
     if: github.event.action == 'closed'
+    continue-on-error: true # GitHub blocks deletion of packages with 5000+ downloads
 
     steps:
       - name: Delete docs PR image versions
