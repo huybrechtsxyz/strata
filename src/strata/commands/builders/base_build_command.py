@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Optional
 
 from strata.commands.base_command import BaseCommand
-from strata.controllers.solution_controller import SolutionController
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 
@@ -34,7 +33,7 @@ class BaseBuildCommand(BaseCommand):
         self._file_path: Optional[Path] = Path(file) if file else None
         self._deployment_service: Optional[DeploymentService] = None
         self._configuration_service: Optional[ConfigurationService] = None
-        self._build_path: Path = SolutionController.get_state_dir(self._work_path) / "build"
+        self._build_path: Path = self._work_path / "build"
 
     @abstractmethod
     def execute(self) -> bool:
@@ -75,6 +74,7 @@ class BaseBuildCommand(BaseCommand):
         self._configuration_service = self._load_configuration_service()
         if self._configuration_service is None:
             return False
+        self._build_path = self._get_build_path()
 
         # Phase 1: load + Pydantic-validate the deployment file
         deployment_service = DeploymentService.load(str(self._file_path), validate=True)

@@ -2,12 +2,38 @@
 """Tests that validate the MyIntegration template compiles and satisfies
 the BaseIntegration contract."""
 
+import importlib.util
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
+import strata
 from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.factory import IntegrationFactory
 from strata.models.integration_model import IntegrationModel
-from strata.templates.integrations.my_integration import MyIntegration, register
+
+
+def _load_template() -> ModuleType:
+    """Load my_integration.py from the templates package tree.
+
+    The file lives at strata/templates/solution/dot.strata/integrations/my_integration.py.
+    The ``dot.strata`` path component is intentionally not a Python package (it
+    uses the dot. prefix convention for the scaffolder), so we load it via
+    importlib to avoid requiring it to be importable by name.
+    """
+    template_path = (
+        Path(strata.__file__).parent / "templates" / "solution" / "dot.strata" / "integrations" / "my_integration.py"
+    )
+    spec = importlib.util.spec_from_file_location("my_integration_template", template_path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+_tpl = _load_template()
+MyIntegration = _tpl.MyIntegration
+register = _tpl.register
 
 
 def _make_config() -> IntegrationModel:

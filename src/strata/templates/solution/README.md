@@ -1,38 +1,28 @@
-# Workspace README
+# ${SOLUTION_NAME}
 
-This `.strata` folder contains workspace state and helper files created by the Strata CLI.
+Configuration repository managed by [strata](https://github.com/huybrechtsxzy/strata).
 
-Included files:
+## Getting Started
 
-- `logging.yaml` — development logging configuration for local runs
-- `cli.yaml` — CLI preference values for the workspace
-- `.gitignore` — files to ignore from the `.strata` folder
-- `integrations/` — per-integration help documents (one markdown file per integration)
+**Prerequisites:** `strata` installed (`uv tool install xyz-strata`) and `git`, `terraform` on PATH.
 
-## Using the integration docs
+**First time setup:**
 
-Each file under `.strata/integrations/` documents how to configure and use an integration (for example, `azure_keyvault.md`, `git.md`, `terraform.md`). Use these documents as the first-stop reference when wiring credentials, environment variables, or diagnosing common issues.
+```bash
+# Register this repo as the config source
+strata repo add ${SOLUTION_NAME}_config <repo-url> --branch main --clone
 
-Examples:
+# Add a profile and point it at your config files
+strata profile add <environment> --activate
+strata ref config add ${SOLUTION_NAME}-config --path "@${SOLUTION_NAME}_config/config/${SOLUTION_NAME}-config.yaml"
+strata ref env add ${SOLUTION_NAME}-env --path "@${SOLUTION_NAME}_config/environments/${SOLUTION_NAME}-env-<environment>.yaml"
+```
 
-- To see the Azure Key Vault guide: open `.strata/integrations/azure_keyvault.md`
-- To find quick Git setup instructions: open `.strata/integrations/git.md`
-- To find Bitwarden Secrets Manager setup: open `.strata/integrations/bitwarden.md`
+**Day-to-day:**
 
-## Available integrations
-
-| File                   | Integration               |
-| ---------------------- | ------------------------- |
-| `azure_appconfig.md`   | Azure App Configuration   |
-| `azure_keyvault.md`    | Azure Key Vault           |
-| `bitwarden.md`         | Bitwarden Secrets Manager |
-| `docker.md`            | Docker                    |
-| `git.md`               | Git                       |
-| `hashicorp_consul.md`  | HashiCorp Consul          |
-| `hashicorp_vault.md`   | HashiCorp Vault           |
-| `store_integration.md` | Generic Store             |
-| `terraform.md`         | Terraform                 |
-
-## Customising
-
-You can safely edit these files in your workspace to add project-specific notes (for example, the vault name to use in your environment or a private registry URL). Local edits are intended to be committed into your repository.
+```bash
+strata status                                                  # workspace overview
+strata validate run -f deployments/<deployment>.yaml           # lint & validate
+strata build run -f deployments/<deployment>.yaml              # build artifact
+strata deploy run -f deployments/<deployment>.yaml             # provision & deploy
+```

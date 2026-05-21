@@ -312,10 +312,10 @@ class TestSolutionControllerScaffoldDevcontainer:
 
     @staticmethod
     def _make_templates(templates_root: Path) -> None:
-        """Populate templates_root/devcontainer/ with minimal fixtures."""
-        dc_dir = templates_root / "devcontainer"
+        """Populate templates_root/solution/dot.devcontainer/ with minimal fixtures."""
+        dc_dir = templates_root / "solution" / "dot.devcontainer"
         dc_dir.mkdir(parents=True)
-        (dc_dir / "devcontainer.template.json").write_text('{"name": "${SOLUTION_NAME}"}', encoding="utf-8")
+        (dc_dir / "devcontainer.json").write_text('{"name": "${SOLUTION_NAME}"}', encoding="utf-8")
         (dc_dir / "post-create.sh").write_text("#!/bin/bash\necho hello\n", encoding="utf-8")
 
     @staticmethod

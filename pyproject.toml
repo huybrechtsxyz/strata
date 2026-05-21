@@ -49,10 +49,14 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "strata.data" = ["*.yaml", "*.txt"]
-"strata.templates" = ["*.yaml", "*.json", "*.md", "*.txt"]
-"strata.templates.solution" = ["*.yaml", "*.md", "*"]
-"strata.templates.integrations" = ["*.md", "*.py"]
-"strata.templates.devcontainer" = ["*.json", "*.sh"]
+"strata.templates" = [
+    "*.yaml",
+    "*.json",
+    "*.md",
+    "*.txt",
+    "solution/**/*",
+    "solution/**",
+]
 
 [dependency-groups]
 dev = [

@@ -15,7 +15,7 @@ from strata.controllers.solution_controller import SolutionController
 from strata.logger import audit, configure_audit_log, get_logger, shutdown_audit
 from strata.logger.context import set_context
 from strata.logger.logger import reconfigure_logging
-from strata.utils.config import DOCS_URL, SOLUTION_DIR, SUPPORT_URL
+from strata.utils.config import DEFAULT_BUILD_PATH, DOCS_URL, SOLUTION_DIR, SUPPORT_URL
 from strata.utils.system import generate_uuid, resolve_path, resolve_work_path
 from strata.utils.version import get_version
 
@@ -69,7 +69,19 @@ class BaseCommand(ABC):
         """Execute the command. To be implemented by subclasses."""
         raise NotImplementedError("Subclasses must implement the execute method.")
 
-    @abstractmethod
+    def _get_build_path(self) -> Path:
+        """Return the resolved build output path.
+
+        Uses ``_configuration_service.get_default_build_path()`` when the
+        configuration service is already loaded (i.e. after ``_before_execute``
+        has run), otherwise falls back to ``work_path / DEFAULT_BUILD_PATH``.
+        """
+        if getattr(self, "_configuration_service", None) is not None:
+            return self._configuration_service.get_default_build_path(  # type: ignore[attr-defined]
+                self._work_path, create_path=False
+            )
+        return self._work_path / DEFAULT_BUILD_PATH
+
     def get_required_integrations(self) -> Dict[str, str]:
         """
         Declare required integrations for this command.
