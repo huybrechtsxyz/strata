@@ -5,7 +5,7 @@
 SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1"}
 
 # Default path constants (empty string = use hardcoded fallback in callers)
-DEFAULT_BUILD_PATH: str = ""
+DEFAULT_BUILD_PATH: str = "build"
 DEFAULT_DIST_PATH: str = ""
 DEFAULT_OBJECT_PATH: str = ""
 DEFAULT_STATE_DIR: str = ""
