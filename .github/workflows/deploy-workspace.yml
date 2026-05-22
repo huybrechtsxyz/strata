@@ -1,0 +1,156 @@
+# ==============================================================================
+# Workflow Name : Deploy Workspace
+# Description   : This workflow manages the lifecycle of a workspace, including
+#                 setup, validation, and teardown.
+#
+# Triggers :
+#     - [ ] push
+#     - [ ] pull_request
+#     - [ ] schedule
+#     - [x] workflow_dispatch
+#
+# Environment :
+#     - OS        : ubuntu-latest
+#     - Language  : Bash / Python
+#
+# Notes :
+#     - This workflow is designed to be reusable across different workspaces.
+# ==============================================================================
+
+name: Deploy Workspace
+
+on:
+  workflow_call:
+    inputs:
+      # Determines what workspace to deploy
+      deployment_file:
+        description: "Deployment configuration and environment file for the workspace"
+        required: true
+        type: string
+      # Determines if core infra requires updating
+      apply_infrastructure:
+        description: "Apply the infrastructure changes"
+        required: false
+        type: boolean
+        default: false
+      # Azure store credentials (azure-keyvault, azure-appconfig)
+      azure_tenant_id:
+        description: "Azure tenant ID"
+        required: false
+        type: string
+      azure_subscription_id:
+        description: "Azure subscription ID"
+        required: false
+        type: string
+      azure_client_id:
+        description: "Azure service principal client ID"
+        required: false
+        type: string
+      # HashiCorp Vault store address
+      vault_address:
+        description: "HashiCorp Vault server address"
+        required: false
+        type: string
+      # Consul store address
+      consul_address:
+        description: "Consul server address"
+        required: false
+        type: string
+    secrets:
+      # Bitwarden store (bitwarden)
+      bitwarden_token:
+        required: false
+      # Azure store credentials (azure-keyvault, azure-appconfig)
+      azure_client_secret:
+        required: false
+      # HashiCorp Vault store token (vault)
+      vault_token:
+        required: false
+      # Consul store token (consul)
+      consul_token:
+        required: false
+
+# Permissions for the workflow
+permissions:
+  contents: read
+
+# Environment variables for the pipeline
+env:
+  PATH_TEMP: /tmp/app
+
+jobs:
+  # Initial validation of inputs and environment before proceeding with deployment.
+  check:
+    name: Input Validation
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_name: ${{ steps.get_name.outputs.deployment_name }}
+      use_bitwarden: ${{ steps.flags.outputs.use_bitwarden }}
+      use_azure: ${{ steps.flags.outputs.use_azure }}
+      use_vault: ${{ steps.flags.outputs.use_vault }}
+      use_consul: ${{ steps.flags.outputs.use_consul }}
+    steps:
+      # Check out the repo
+      - name: Check Out
+        uses: actions/checkout@v4
+
+      # Detect which secret stores are configured based on provided credentials.
+      # Outputs: use_bitwarden, use_azure, use_vault, use_consul (true/false strings)
+      # Downstream jobs use these as: needs.check.outputs.use_bitwarden == 'true'
+      - name: Detect Stores
+        id: flags
+        run: |
+          echo "use_bitwarden=${{ secrets.bitwarden_token != '' }}" >> $GITHUB_OUTPUT
+          echo "use_azure=${{ inputs.azure_client_id != '' && secrets.azure_client_secret != '' }}" >> $GITHUB_OUTPUT
+          echo "use_vault=${{ inputs.vault_address != '' && secrets.vault_token != '' }}" >> $GITHUB_OUTPUT
+          echo "use_consul=${{ inputs.consul_address != '' && secrets.consul_token != '' }}" >> $GITHUB_OUTPUT
+
+      # Install uv / python and strata
+      - name: Setup Strata
+        uses: ./.github/actions/setup-strata
+        with:
+          python-version: "3.13"
+
+      # Validate the deployment file structure and schema
+      - name: Validate Deployment
+        run: |
+          echo "[*] Validating deployment file ..."
+          uv run strata validate "${{ inputs.deployment_file }}"
+          echo "[*] Validating deployment file ... DONE"
+
+      # Extract the deployment name from the file for use in downstream jobs
+      - name: Get Deployment Name
+        id: get_name
+        run: |
+          DEPLOYMENT_NAME=$(yq e '.meta.name' "${{ inputs.deployment_file }}")
+          echo "deployment_name=$DEPLOYMENT_NAME" >> $GITHUB_OUTPUT
+          echo "[*] Deployment name: $DEPLOYMENT_NAME"
+
+      # Verify all configured store integrations are reachable before proceeding
+      - name: Verify Integrations
+        uses: ./.github/actions/verify-integrations
+        with:
+          bitwarden_token: ${{ secrets.bitwarden_token }}
+          azure_tenant_id: ${{ inputs.azure_tenant_id }}
+          azure_subscription_id: ${{ inputs.azure_subscription_id }}
+          azure_client_id: ${{ inputs.azure_client_id }}
+          azure_client_secret: ${{ secrets.azure_client_secret }}
+          vault_address: ${{ inputs.vault_address }}
+          vault_token: ${{ secrets.vault_token }}
+          consul_address: ${{ inputs.consul_address }}
+          consul_token: ${{ secrets.consul_token }}
+
+  # plan:
+  #   name: Plan
+  #   needs: check
+  #   runs-on: ubuntu-latest
+
+  # apply:
+  #   name: Apply
+  #   needs: plan
+  #   runs-on: ubuntu-latest
+
+  # output:
+  #   name: Output
+  #   needs: apply
+  #   runs-on: ubuntu-latest

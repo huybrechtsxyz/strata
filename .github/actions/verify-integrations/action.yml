@@ -1,0 +1,119 @@
+# ===============================================================================
+# Action Name  : verify-integrations
+# Description  : Set env vars for all configured store integrations and verify
+#                their availability using `strata tools status --output json`.
+#
+# Store env var mapping:
+#   bitwarden        → BWS_ACCESS_TOKEN
+#   azure-keyvault   → AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET,
+#                       AZURE_SUBSCRIPTION_ID
+#   azure-appconfig  → (same Azure credentials as above)
+#   hashicorp-vault  → VAULT_ADDR, VAULT_TOKEN
+#   consul           → CONSUL_HTTP_ADDR, CONSUL_HTTP_TOKEN
+# ===============================================================================
+
+name: "Verify Integrations"
+description: "Configure store env vars and verify integration availability via strata tools status."
+
+inputs:
+  # Bitwarden store
+  bitwarden_token:
+    description: "Bitwarden Secrets Manager access token (BWS_ACCESS_TOKEN)"
+    required: false
+    default: ""
+  # Azure store (azure-keyvault + azure-appconfig share credentials)
+  azure_tenant_id:
+    description: "Azure tenant ID (AZURE_TENANT_ID)"
+    required: false
+    default: ""
+  azure_subscription_id:
+    description: "Azure subscription ID (AZURE_SUBSCRIPTION_ID)"
+    required: false
+    default: ""
+  azure_client_id:
+    description: "Azure service principal client ID (AZURE_CLIENT_ID)"
+    required: false
+    default: ""
+  azure_client_secret:
+    description: "Azure service principal client secret (AZURE_CLIENT_SECRET)"
+    required: false
+    default: ""
+  # HashiCorp Vault store
+  vault_address:
+    description: "HashiCorp Vault server address (VAULT_ADDR)"
+    required: false
+    default: ""
+  vault_token:
+    description: "HashiCorp Vault token (VAULT_TOKEN)"
+    required: false
+    default: ""
+  # Consul store
+  consul_address:
+    description: "Consul server address (CONSUL_HTTP_ADDR)"
+    required: false
+    default: ""
+  consul_token:
+    description: "Consul ACL token (CONSUL_HTTP_TOKEN)"
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # Mask secrets so they never appear in logs
+    - name: Mask Secrets
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.bitwarden_token }}" ]; then
+          echo "::add-mask::${{ inputs.bitwarden_token }}"
+        fi
+        if [ -n "${{ inputs.azure_client_secret }}" ]; then
+          echo "::add-mask::${{ inputs.azure_client_secret }}"
+        fi
+        if [ -n "${{ inputs.vault_token }}" ]; then
+          echo "::add-mask::${{ inputs.vault_token }}"
+        fi
+        if [ -n "${{ inputs.consul_token }}" ]; then
+          echo "::add-mask::${{ inputs.consul_token }}"
+        fi
+
+    # Export store credentials as the env vars each integration expects
+    - name: Configure Store Environment Variables
+      shell: bash
+      run: |
+        # Bitwarden
+        if [ -n "${{ inputs.bitwarden_token }}" ]; then
+          echo "BWS_ACCESS_TOKEN=${{ inputs.bitwarden_token }}" >> $GITHUB_ENV
+          echo "[+] Bitwarden configured (BWS_ACCESS_TOKEN)"
+        fi
+
+        # Azure (shared by azure-keyvault and azure-appconfig)
+        if [ -n "${{ inputs.azure_client_id }}" ]; then
+          echo "AZURE_TENANT_ID=${{ inputs.azure_tenant_id }}" >> $GITHUB_ENV
+          echo "AZURE_SUBSCRIPTION_ID=${{ inputs.azure_subscription_id }}" >> $GITHUB_ENV
+          echo "AZURE_CLIENT_ID=${{ inputs.azure_client_id }}" >> $GITHUB_ENV
+          echo "AZURE_CLIENT_SECRET=${{ inputs.azure_client_secret }}" >> $GITHUB_ENV
+          echo "[+] Azure configured (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)"
+        fi
+
+        # HashiCorp Vault
+        if [ -n "${{ inputs.vault_address }}" ]; then
+          echo "VAULT_ADDR=${{ inputs.vault_address }}" >> $GITHUB_ENV
+          echo "VAULT_TOKEN=${{ inputs.vault_token }}" >> $GITHUB_ENV
+          echo "[+] HashiCorp Vault configured (VAULT_ADDR, VAULT_TOKEN)"
+        fi
+
+        # Consul
+        if [ -n "${{ inputs.consul_address }}" ]; then
+          echo "CONSUL_HTTP_ADDR=${{ inputs.consul_address }}" >> $GITHUB_ENV
+          echo "CONSUL_HTTP_TOKEN=${{ inputs.consul_token }}" >> $GITHUB_ENV
+          echo "[+] Consul configured (CONSUL_HTTP_ADDR, CONSUL_HTTP_TOKEN)"
+        fi
+
+    # Verify all integrations and emit structured JSON output
+    - name: Verify Integrations
+      shell: bash
+      run: |
+        echo "[*] Verifying integration status ..."
+        strata tools status --output json | tee /tmp/strata-tools-status.json
+        echo "[*] Verifying integration status ... DONE"
