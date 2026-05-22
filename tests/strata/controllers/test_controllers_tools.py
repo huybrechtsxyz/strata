@@ -50,6 +50,58 @@ class TestToolsControllerStatus:
         assert "version" in row
         assert "capabilities" in row
         assert "command" in row
+        assert "requirement" in row
+
+    def test_requirement_is_none_without_deployment(self):
+        ctrl = ToolsController()
+        mock_integration = _make_integration()
+        with patch(
+            "strata.controllers.tools_controller.IntegrationFactory.create_by_type",
+            return_value=mock_integration,
+        ):
+            _, rows, _ = ctrl.status()
+
+        assert all(r["requirement"] is None for r in rows)
+
+    def test_requirement_populated_when_derive_succeeds(self):
+        ctrl = ToolsController()
+        mock_integration = _make_integration()
+        with (
+            patch(
+                "strata.controllers.tools_controller.IntegrationFactory.create_by_type",
+                return_value=mock_integration,
+            ),
+            patch.object(
+                ctrl,
+                "_derive_required",
+                return_value=({"terraform": "required", "bitwarden": "optional"}, []),
+            ),
+        ):
+            _, rows, _ = ctrl.status(deployment_file="/fake/deploy.yaml")
+
+        by_name = {r["name"]: r for r in rows}
+        assert by_name["terraform"]["requirement"] == "required"
+        assert by_name["bitwarden"]["requirement"] == "optional"
+        assert by_name["git"]["requirement"] is None
+
+    def test_derive_errors_propagated_to_status_errors(self):
+        ctrl = ToolsController()
+        mock_integration = _make_integration()
+        with (
+            patch(
+                "strata.controllers.tools_controller.IntegrationFactory.create_by_type",
+                return_value=mock_integration,
+            ),
+            patch.object(
+                ctrl,
+                "_derive_required",
+                return_value=({}, ["Cannot load deployment file: /bad/path.yaml"]),
+            ),
+        ):
+            success, rows, errors = ctrl.status(deployment_file="/bad/path.yaml")
+
+        assert success is True  # status always returns True
+        assert any("Cannot load" in e for e in errors)
 
     def test_unavailable_integration_returns_false(self):
         ctrl = ToolsController()

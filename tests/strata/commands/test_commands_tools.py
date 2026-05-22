@@ -7,14 +7,64 @@ from click.testing import CliRunner
 from strata.commands.cli_tools import tools_group
 
 _SAMPLE_ROWS = [
-    {"name": "git", "available": True, "version": "2.40.0", "capabilities": ["IRepositoryTool"], "command": "git"},
-    {"name": "docker", "available": False, "version": None, "capabilities": ["IContainerTool"], "command": "docker"},
+    {
+        "name": "git",
+        "available": True,
+        "version": "2.40.0",
+        "capabilities": ["IRepositoryTool"],
+        "command": "git",
+        "requirement": None,
+    },
+    {
+        "name": "docker",
+        "available": False,
+        "version": None,
+        "capabilities": ["IContainerTool"],
+        "command": "docker",
+        "requirement": None,
+    },
     {
         "name": "terraform",
         "available": True,
         "version": "1.9.2",
         "capabilities": ["IInfrastructureTool"],
         "command": "terraform",
+        "requirement": None,
+    },
+]
+
+_SAMPLE_ROWS_WITH_DEPLOYMENT = [
+    {
+        "name": "git",
+        "available": True,
+        "version": "2.40.0",
+        "capabilities": ["IRepositoryTool"],
+        "command": "git",
+        "requirement": None,
+    },
+    {
+        "name": "terraform",
+        "available": True,
+        "version": "1.9.2",
+        "capabilities": ["IInfrastructureTool"],
+        "command": "terraform",
+        "requirement": "required",
+    },
+    {
+        "name": "bitwarden",
+        "available": False,
+        "version": None,
+        "capabilities": ["ISecretStore"],
+        "command": "bws",
+        "requirement": "required",
+    },
+    {
+        "name": "hashicorp_vault",
+        "available": False,
+        "version": None,
+        "capabilities": [],
+        "command": "vault",
+        "requirement": "optional",
     },
 ]
 
@@ -69,6 +119,63 @@ class TestToolsStatus:
             mock_ctrl.return_value.status.return_value = (True, [], [])
             result = runner.invoke(tools_group, ["status", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
+
+    def test_filter_available_shows_only_available(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS, [])
+            result = runner.invoke(tools_group, ["status", "--available", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "git" in result.output
+        assert "terraform" in result.output
+        assert "docker" not in result.output
+
+    def test_filter_missing_shows_only_unavailable(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS, [])
+            result = runner.invoke(tools_group, ["status", "--missing", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0  # no required integrations → exit 0
+        assert "docker" in result.output
+        assert "git" not in result.output
+
+    def test_filter_missing_required_exits_3(self, tmp_path):
+        """--missing with a required unavailable integration → exit 3."""
+        runner = CliRunner()
+        with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS_WITH_DEPLOYMENT, [])
+            result = runner.invoke(
+                tools_group,
+                ["status", "--deployment", "deploy.yaml", "--missing", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 3
+
+    def test_filter_required_shows_only_required(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS_WITH_DEPLOYMENT, [])
+            result = runner.invoke(
+                tools_group,
+                ["status", "--deployment", "deploy.yaml", "--required", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+        assert "terraform" in result.output
+        assert "bitwarden" in result.output
+        assert "git" not in result.output
+        assert "hashicorp_vault" not in result.output
+
+    def test_deployment_mode_shows_requirement_column(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS_WITH_DEPLOYMENT, [])
+            result = runner.invoke(
+                tools_group,
+                ["status", "--deployment", "deploy.yaml", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+        assert "Requirement" in result.output
+        assert "required" in result.output
+        assert "optional" in result.output
 
 
 class TestToolsCheck:

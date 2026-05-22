@@ -190,8 +190,21 @@ Manage and inspect external tool integrations (Terraform, Docker, kubectl, Helm,
 
 `tools install` accepts `--env-file PATH` to write a commented env-var template to a file.
 
+### `tools status` options
+
+| Option              | Description                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------- |
+| `--deployment FILE` | Load a deployment file to add a **Requirement** column (`required` / `optional` / `—`)        |
+| `--required`        | Show only integrations marked `required` by the deployment (requires `--deployment`)          |
+| `--optional`        | Show only integrations marked `optional` by the deployment (requires `--deployment`)          |
+| `--available`       | Show only integrations that are installed and available                                       |
+| `--missing`         | Show only integrations that are not available. Exits **3** if any `required` ones are missing |
+
 ```bash
 strata tools status
+strata tools status --output json
+strata tools status --deployment deployment.yaml
+strata tools status --deployment deployment.yaml --required --missing
 strata tools check terraform
 strata tools install terraform
 strata tools install terraform --env-file .env.template

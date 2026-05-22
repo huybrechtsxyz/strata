@@ -148,8 +148,10 @@ spec:
 Use `strata tools` to inspect integrations at runtime without reading config files:
 
 ```
-strata tools status              # table of all 8 built-in integrations
-strata tools check terraform     # deep-check: availability, env vars, auth
+strata tools status                                        # table of all 8 built-in integrations
+strata tools status --deployment deployment.yaml           # adds Requirement column (required/optional/—)
+strata tools status --deployment deployment.yaml --required --missing  # CI gate: exit 3 if any required are absent
+strata tools check terraform                               # deep-check: availability, env vars, auth
 ```
 
 ---
