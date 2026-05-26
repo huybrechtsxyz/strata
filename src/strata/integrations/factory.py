@@ -164,6 +164,9 @@ class IntegrationFactory:
             "hashicorp_consul": ("strata.integrations.hashicorp_consul", "ConsulIntegration"),
             "azure_keyvault": ("strata.integrations.azure_keyvault", "AzureKeyVaultIntegration"),
             "azure_appconfig": ("strata.integrations.azure_appconfig", "AzureAppConfigIntegration"),
+            "infisical": ("strata.integrations.infisical", "InfisicalIntegration"),
+            "etcd": ("strata.integrations.etcd", "EtcdIntegration"),
+            "flagsmith": ("strata.integrations.flagsmith", "FlagsmithIntegration"),
         }
 
         # Try the registered type_mapping first (supports custom / aliased types)
@@ -215,6 +218,9 @@ def _auto_register_builtin_integrations():
         ("consul", "strata.integrations.hashicorp_consul", "ConsulIntegration"),
         ("vault", "strata.integrations.hashicorp_vault", "VaultIntegration"),
         ("openbao", "strata.integrations.openbao", "OpenBaoIntegration"),
+        ("infisical", "strata.integrations.infisical", "InfisicalIntegration"),
+        ("etcd", "strata.integrations.etcd", "EtcdIntegration"),
+        ("flagsmith", "strata.integrations.flagsmith", "FlagsmithIntegration"),
         # Add more as they are implemented
     ]
 

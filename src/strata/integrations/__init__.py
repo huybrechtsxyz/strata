@@ -17,10 +17,13 @@ from strata.integrations.capabilities import (
     IVariableStore,
 )
 from strata.integrations.docker import DockerIntegration
+from strata.integrations.etcd import EtcdIntegration
 from strata.integrations.factory import IntegrationFactory
+from strata.integrations.flagsmith import FlagsmithIntegration
 from strata.integrations.git import GitIntegration
 from strata.integrations.hashicorp_consul import ConsulIntegration
 from strata.integrations.hashicorp_vault import VaultIntegration
+from strata.integrations.infisical import InfisicalIntegration
 from strata.integrations.openbao import OpenBaoIntegration
 from strata.integrations.opentofu import OpenTofuIntegration
 from strata.integrations.registry import IntegrationRegistry
@@ -54,4 +57,7 @@ __all__ = [
     "VaultIntegration",
     "OpenBaoIntegration",
     "OpenTofuIntegration",
+    "InfisicalIntegration",
+    "EtcdIntegration",
+    "FlagsmithIntegration",
 ]

@@ -10,13 +10,18 @@ Integrations connect the platform to external tools and services (git, terraform
 | --------------------------- | ------------------------------- | ------------------ | -------------------------------------------- |
 | `GitIntegration`            | `integrations.git`              | `git`              | `IRepositoryTool`                            |
 | `TerraformIntegration`      | `integrations.terraform`        | `terraform`        | `IInfrastructureTool`                        |
+| `OpenTofuIntegration`       | `integrations.opentofu`         | `opentofu`         | `IInfrastructureTool`                        |
 | `AnsibleIntegration`        | `integrations.ansible`          | `ansible`          | `IInfrastructureTool`                        |
 | `DockerIntegration`         | `integrations.docker`           | `docker`           | `IContainerTool`                             |
 | `BitwardenIntegration`      | `integrations.bitwarden`        | `bitwarden`        | `ISecretStore`                               |
 | `VaultIntegration`          | `integrations.hashicorp_vault`  | `hashicorp_vault`  | `IVariableStore`, `ISecretStore`, `IKVStore` |
+| `OpenBaoIntegration`        | `integrations.openbao`          | `openbao`          | `IVariableStore`, `ISecretStore`, `IKVStore` |
 | `ConsulIntegration`         | `integrations.hashicorp_consul` | `hashicorp_consul` | `IVariableStore`, `IKVStore`                 |
 | `AzureKeyVaultIntegration`  | `integrations.azure_keyvault`   | `azure_keyvault`   | `ISecretStore`                               |
 | `AzureAppConfigIntegration` | `integrations.azure_appconfig`  | `azure_appconfig`  | `IVariableStore`, `IFeatureStore`            |
+| `InfisicalIntegration`      | `integrations.infisical`        | `infisical`        | `ISecretStore`, `IVariableStore`             |
+| `EtcdIntegration`           | `integrations.etcd`             | `etcd`             | `IVariableStore`, `IKVStore`                 |
+| `FlagsmithIntegration`      | `integrations.flagsmith`        | `flagsmith`        | `IFeatureStore`                              |
 
 ## Creating an Integration
 
@@ -229,6 +234,40 @@ Run `strata tools check terraform` for live status. Run `strata help terraform-c
 
 ---
 
+### OpenTofu
+
+**CLI command:** `tofu`  
+**Install:** <https://opentofu.org/docs/intro/install/>
+
+OpenTofu is the Linux Foundation fork of Terraform (MPL-2.0), offering a drop-in CLI replacement. `type: opentofu` targets the `tofu` binary; everything else (state format, provider ecosystem, env vars) is identical to Terraform.
+
+#### Environment variables
+
+Same as Terraform — see the [Terraform](#terraform) section above.
+
+#### Auth methods
+
+| Method               | Description                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| Environment variable | Set `TERRAFORM_API_TOKEN`. The platform writes a temporary `.terraformrc` during deploy. |
+| Credentials file     | `~/.terraform.d/credentials.tfrc.json` with a token for `app.terraform.io`.              |
+| Interactive login    | Run `tofu login` once; token is stored in the credentials file.                          |
+
+#### Minimal YAML configuration
+
+```yaml
+type: opentofu
+spec:
+  source: path/to/module
+  backend: remote
+```
+
+#### Troubleshooting
+
+Run `strata tools check opentofu` for live status.
+
+---
+
 ### Ansible
 
 **CLI command:** `ansible-playbook`  
@@ -356,6 +395,35 @@ spec:
 
 ---
 
+### OpenBao
+
+**CLI command:** `bao`  
+**Install:** <https://openbao.org/docs/install/>
+
+OpenBao is the Linux Foundation fork of HashiCorp Vault (MPL-2.0), maintaining full API and authentication compatibility. `type: openbao` targets the `bao` binary; secret paths, auth methods, and env vars are the same as Vault.
+
+#### Environment variables
+
+Same as HashiCorp Vault — see the [HashiCorp Vault](#hashicorp-vault) section above.
+
+#### Auth methods
+
+| Method  | Description                                                                |
+| ------- | -------------------------------------------------------------------------- |
+| Token   | Set `VAULT_TOKEN`. Most common method for automation.                      |
+| AppRole | Obtain a token via `bao write auth/approle/login`; then set `VAULT_TOKEN`. |
+
+#### Minimal YAML configuration
+
+```yaml
+type: openbao
+spec:
+  endpoints:
+    address: https://bao.example.com
+```
+
+---
+
 ### HashiCorp Consul
 
 **CLI command:** `consul`  
@@ -457,3 +525,147 @@ spec:
 
 
 Key fields: `name` (str, required), `type` (str, required), `capabilities` (Set[str]), `required` (bool), `enabled` (bool), `validation` (`min_version`, `max_version`), `authentication` (`AuthenticationModel`), `endpoints.address` (str).
+
+---
+
+### Infisical
+
+**CLI command:** `infisical` (optional — falls back to HTTP API when CLI is absent)  
+**Install:** <https://infisical.com/docs/cli/overview>
+
+#### Environment variables
+
+| Variable                  | Purpose                                         | Required |
+| ------------------------- | ----------------------------------------------- | -------- |
+| `INFISICAL_TOKEN`         | Service token for direct authentication         | No       |
+| `INFISICAL_CLIENT_ID`     | Client ID for universal auth (machine identity) | No       |
+| `INFISICAL_CLIENT_SECRET` | Client secret for universal auth                | No       |
+| `INFISICAL_PROJECT_ID`    | Project (workspace) ID to query                 | Yes      |
+| `INFISICAL_ENVIRONMENT`   | Environment slug (defaults to `prod`)           | No       |
+
+Either `INFISICAL_TOKEN` or the `INFISICAL_CLIENT_ID` + `INFISICAL_CLIENT_SECRET` pair is required. Token takes priority.
+
+Env-var names can be overridden via `authentication.api_key.api_key` (token) and `authentication.oauth2.*` (universal auth) in the integration spec.
+
+#### Auth methods
+
+| Method         | Description                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| Service token  | Set `INFISICAL_TOKEN`. Simple, suitable for CI/CD pipelines.                               |
+| Universal auth | Set `INFISICAL_CLIENT_ID` + `INFISICAL_CLIENT_SECRET`. Recommended for machine identities. |
+
+#### Minimal YAML configuration
+
+```yaml
+type: infisical
+spec:
+  endpoints:
+    address: https://app.infisical.com   # or self-hosted URL
+```
+
+#### Using as a secret or variable store
+
+```yaml
+secrets:
+  - key: db_password
+    store: infisical
+    value: DB_PASSWORD             # secret name in Infisical
+
+variables:
+  - key: feature_timeout
+    store: infisical
+    value: FEATURE_TIMEOUT
+```
+
+---
+
+### etcd
+
+**CLI command:** `etcdctl` (optional — falls back to v3 HTTP API when CLI is absent)  
+**Install:** <https://etcd.io/docs/latest/install/>
+
+#### Environment variables
+
+| Variable         | Purpose                                                      | Required |
+| ---------------- | ------------------------------------------------------------ | -------- |
+| `ETCD_ENDPOINTS` | Comma-separated etcd endpoint URLs (e.g. `http://host:2379`) | No       |
+| `ETCD_USERNAME`  | Username for basic authentication                            | No       |
+| `ETCD_PASSWORD`  | Password for basic authentication                            | No       |
+| `ETCD_CA_FILE`   | CA certificate file path for TLS verification                | No       |
+| `ETCD_CERT_FILE` | Client certificate file for mutual TLS                       | No       |
+| `ETCD_KEY_FILE`  | Client private key file for mutual TLS                       | No       |
+
+Defaults to `http://127.0.0.1:2379` if no endpoint is configured. The standard `ETCDCTL_ENDPOINTS`, `ETCDCTL_CACERT`, `ETCDCTL_CERT`, and `ETCDCTL_KEY` env vars are also honoured.
+
+#### Auth methods
+
+| Method     | Description                                                 |
+| ---------- | ----------------------------------------------------------- |
+| Anonymous  | No auth — suitable for trusted networks / development only. |
+| Basic auth | Set `ETCD_USERNAME` + `ETCD_PASSWORD`.                      |
+| mTLS       | Set `ETCD_CA_FILE` + `ETCD_CERT_FILE` + `ETCD_KEY_FILE`.    |
+
+#### Minimal YAML configuration
+
+```yaml
+type: etcd
+spec:
+  endpoints:
+    address: http://etcd.example.com:2379
+```
+
+#### Using as a variable or KV store
+
+```yaml
+variables:
+  - key: db_host
+    store: etcd
+    value: /config/myapp/db_host   # etcd key path
+```
+
+---
+
+### Flagsmith
+
+**CLI command:** none (API-only — no CLI binary required)  
+**Docs:** <https://flagsmith.com/docs>
+
+Flagsmith is checked for availability by probing the HTTP API (`GET /api/v1/flags/`) rather than looking for a binary. `ensure_available()` fails fast if `FLAGSMITH_ENVIRONMENT_KEY` is not set or the API endpoint is unreachable.
+
+`set_feature()` always returns `False` — the environment API key is read-only. Flag modifications require the management API with a server-side key.
+
+#### Environment variables
+
+| Variable                    | Purpose                                          | Required |
+| --------------------------- | ------------------------------------------------ | -------- |
+| `FLAGSMITH_ENVIRONMENT_KEY` | Environment API key (`X-Environment-Key` header) | Yes      |
+
+The env-var name can be overridden via `authentication.api_key.api_key` in the integration spec.
+
+#### Auth methods
+
+| Method              | Description                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| Environment API key | Set `FLAGSMITH_ENVIRONMENT_KEY` to the environment key from the Flagsmith dashboard. |
+
+#### Minimal YAML configuration
+
+```yaml
+type: flagsmith
+spec:
+  endpoints:
+    address: https://edge.api.flagsmith.com   # or self-hosted URL
+```
+
+#### Using as a feature flag store
+
+```yaml
+features:
+  - key: dark_mode
+    store: flagsmith
+    value: dark_mode              # flag name in Flagsmith
+
+  - key: max_upload_size
+    store: flagsmith
+    value: max_upload_size        # returns feature_state_value if set
+```
