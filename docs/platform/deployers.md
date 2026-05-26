@@ -10,6 +10,7 @@ Deployers execute a deployment stage step-by-step against a specific IaC tool or
 | ------------------- | ------------------------------ | --------------- | --------------------------------------------------- |
 | `BaseDeployer`      | `deployers.base_deployer`      | —               | Abstract base — step contracts + constructor        |
 | `TerraformDeployer` | `deployers.terraform_deployer` | Terraform CLI   | Runs init → validate → plan → apply via `terraform` |
+| `AnsibleDeployer`   | `deployers.ansible_deployer`   | Ansible CLI     | Runs galaxy install → syntax-check → check → apply  |
 | `ScriptDeployer`    | `deployers.script_deployer`    | Shell/Python/PS | Executes lifecycle scripts from the deployment YAML |
 
 ---
@@ -128,6 +129,57 @@ Looks up the `TerraformIntegration` instance by name from `IntegrationService` a
 ### Resolved values (TF_VAR injection)
 
 When `resolved_values` is provided, `plan`, `apply`, `destroy`, and `plan_destroy` wrap the Terraform call in `inject_tf_vars(resolved_values)`, which temporarily sets `TF_VAR_*` environment variables for the subprocess.
+
+---
+
+## AnsibleDeployer
+
+Runs a deployment stage using Ansible (galaxy install → syntax-check → check-mode → apply).
+
+### Constructor
+
+```python
+AnsibleDeployer(
+    stage, deployment_service, configuration_service,
+    build_path, work_path,
+    verbose=False, force=False,
+)
+```
+
+### Step → Ansible command mapping
+
+| Step           | Command                                                   |
+| -------------- | --------------------------------------------------------- |
+| `setup`        | `ansible-galaxy collection install -r requirements.yml`   |
+| `check`        | `ansible-playbook <playbook> --syntax-check`              |
+| `plan`         | `ansible-playbook <playbook> --check --diff`              |
+| `apply`        | `ansible-playbook <playbook> [-i inventory] [-e key=val]` |
+| `destroy`      | `ansible-playbook destroy.yml` (requires `force=True`)    |
+| `plan_destroy` | Not supported — returns `(True, {}, [])`                  |
+| `show_plan`    | Not supported — returns `(True, {}, [])`                  |
+| `output`       | Not supported — returns `(True, {}, [])`                  |
+
+### validate_workspace
+
+Resolves the `WorkspaceIacModel` for the stage by matching the first provisioner with `type == ProvisionerType.ANSIBLE`. If `stage.provisioner` is set, looks up by name. Verifies the source directory exists on disk.
+
+### validate_environment
+
+Creates a minimal `AnsibleIntegration` instance and calls `ensure_available()`. Sets `self._ansible` for use in subsequent steps.
+
+### IaC spec options
+
+| Key          | Default     | Description                                     |
+| ------------ | ----------- | ----------------------------------------------- |
+| `playbook`   | `site.yml`  | Main playbook file to execute                   |
+| `inventory`  | auto-detect | Inventory file (`inventory`, `hosts.yml`, etc.) |
+| `extra_vars` | `{}`        | Extra variables passed via `-e key=value`       |
+
+### Auto-discovery
+
+- **Inventory:** looks for `inventory`, `inventory.yml`, `hosts.yml`, `hosts` in the working directory
+- **Requirements:** looks for `requirements.yml` or `collections/requirements.yml`
+- **Destroy playbook:** expects `destroy.yml` in the working directory
 
 ---
 

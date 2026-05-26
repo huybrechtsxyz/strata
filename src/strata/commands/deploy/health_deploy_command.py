@@ -296,8 +296,8 @@ class HealthDeployCommand(BaseDeployCommand):
     # Deployer factory (same as RunDeployCommand / StatusDeployCommand)
     # -------------------------------------------------------------------------
 
-    def _create_deployer(self, stage: DeploymentStageModel) -> Optional[TerraformDeployer]:
-        is_terraform = False
+    def _create_deployer(self, stage: DeploymentStageModel):
+        resolved_type: Optional[str] = None
 
         if stage.provisioner and self._deployment_service is not None:
             workspace_service = self._deployment_service.get_workspace_service()
@@ -308,13 +308,30 @@ class HealthDeployCommand(BaseDeployCommand):
                     None,
                 )
                 if iac and iac.provisioner == ProvisionerType.TERRAFORM:
-                    is_terraform = True
+                    resolved_type = "terraform"
+                elif iac and iac.provisioner == ProvisionerType.ANSIBLE:
+                    resolved_type = "ansible"
 
-        if not is_terraform and stage.type in ("infrastructure", "terraform"):
-            is_terraform = True
+        if resolved_type is None:
+            if stage.type in ("infrastructure", "terraform"):
+                resolved_type = "terraform"
+            elif stage.type in ("configure", "initialize", "ansible"):
+                resolved_type = "ansible"
 
-        if is_terraform:
+        if resolved_type == "terraform":
             return TerraformDeployer(
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+            )
+
+        if resolved_type == "ansible":
+            from strata.deployers.ansible_deployer import AnsibleDeployer
+
+            return AnsibleDeployer(
                 stage=stage,
                 deployment_service=self._deployment_service,  # type: ignore[arg-type]
                 configuration_service=self._configuration_service,  # type: ignore[arg-type]

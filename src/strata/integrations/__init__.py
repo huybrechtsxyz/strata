@@ -1,5 +1,6 @@
 """Integrations package — connects strata to external tools, services, and cloud resources."""
 
+from strata.integrations.ansible import AnsibleIntegration
 from strata.integrations.azure_appconfig import AzureAppConfigIntegration
 from strata.integrations.azure_keyvault import AzureKeyVaultIntegration
 from strata.integrations.base_integration import BaseIntegration
@@ -40,6 +41,7 @@ __all__ = [
     "IntegrationRegistry",
     "IntegrationFactory",
     # Concrete integrations
+    "AnsibleIntegration",
     "BitwardenIntegration",
     "GitIntegration",
     "DockerIntegration",

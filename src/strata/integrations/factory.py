@@ -197,6 +197,7 @@ def _auto_register_builtin_integrations():
         ("git", "strata.integrations.git", "GitIntegration"),
         ("docker", "strata.integrations.docker", "DockerIntegration"),
         ("terraform", "strata.integrations.terraform", "TerraformIntegration"),
+        ("ansible", "strata.integrations.ansible", "AnsibleIntegration"),
         ("bitwarden", "strata.integrations.bitwarden", "BitwardenIntegration"),
         (
             "azure-keyvault",

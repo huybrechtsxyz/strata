@@ -10,6 +10,7 @@ Integrations connect the platform to external tools and services (git, terraform
 | --------------------------- | ------------------------------- | ------------------ | -------------------------------------------- |
 | `GitIntegration`            | `integrations.git`              | `git`              | `IRepositoryTool`                            |
 | `TerraformIntegration`      | `integrations.terraform`        | `terraform`        | `IInfrastructureTool`                        |
+| `AnsibleIntegration`        | `integrations.ansible`          | `ansible`          | `IInfrastructureTool`                        |
 | `DockerIntegration`         | `integrations.docker`           | `docker`           | `IContainerTool`                             |
 | `BitwardenIntegration`      | `integrations.bitwarden`        | `bitwarden`        | `ISecretStore`                               |
 | `VaultIntegration`          | `integrations.hashicorp_vault`  | `hashicorp_vault`  | `IVariableStore`, `ISecretStore`, `IKVStore` |
@@ -225,6 +226,56 @@ spec:
 #### Troubleshooting
 
 Run `strata tools check terraform` for live status. Run `strata help terraform-cloud-auth` for Terraform Cloud setup instructions.
+
+---
+
+### Ansible
+
+**CLI command:** `ansible-playbook`  
+**Install:** <https://docs.ansible.com/ansible/latest/installation_guide/>
+
+#### Environment variables
+
+| Variable                      | Purpose                                          | Required |
+| ----------------------------- | ------------------------------------------------ | -------- |
+| `ANSIBLE_CONFIG`              | Path to a custom `ansible.cfg` file              | No       |
+| `ANSIBLE_INVENTORY`           | Default inventory file or directory              | No       |
+| `ANSIBLE_VAULT_PASSWORD_FILE` | Path to a vault password file for encrypted vars | No       |
+
+#### Auth methods
+
+| Method              | Description                                                                  |
+| ------------------- | ---------------------------------------------------------------------------- |
+| SSH keys            | Configure SSH keys on managed hosts. Ansible connects over SSH by default.   |
+| Vault password file | Set `ANSIBLE_VAULT_PASSWORD_FILE` to decrypt encrypted variables at runtime. |
+| `--ask-become-pass` | Prompt for sudo password (interactive only — not suitable for CI).           |
+
+#### Minimal YAML configuration
+
+```yaml
+type: ansible
+spec:
+  source: ansible/          # directory containing playbooks
+  playbook: site.yml         # main playbook (defaults to site.yml)
+  inventory: hosts.yml       # optional — auto-discovered if not set
+```
+
+#### AnsibleDeployer step mapping
+
+| Deployer Step  | Ansible Command                                         |
+| -------------- | ------------------------------------------------------- |
+| `setup`        | `ansible-galaxy collection install -r requirements.yml` |
+| `check`        | `ansible-playbook <playbook> --syntax-check`            |
+| `plan`         | `ansible-playbook <playbook> --check --diff`            |
+| `apply`        | `ansible-playbook <playbook>`                           |
+| `destroy`      | `ansible-playbook destroy.yml` (requires `--force`)     |
+| `plan_destroy` | Not supported — returns empty                           |
+| `show_plan`    | Not supported — returns empty                           |
+| `output`       | Not supported — returns empty                           |
+
+#### Troubleshooting
+
+Run `strata tools check ansible` for live status. Ensure `ansible-playbook` is in your PATH and that SSH connectivity to managed hosts is configured.
 
 ---
 

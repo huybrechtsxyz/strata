@@ -34,6 +34,7 @@ _STORE_TO_INTEGRATION: dict[str, str] = {
 # Provisioner type value → integration type name
 _PROVISIONER_TO_INTEGRATION: dict[str, str] = {
     "terraform": "terraform",
+    "ansible": "ansible",
 }
 
 

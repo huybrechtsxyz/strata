@@ -67,6 +67,7 @@ class ProvisionerType(str, Enum):
     """Enumeration of supported provisioner names."""
 
     TERRAFORM = "terraform"
+    ANSIBLE = "ansible"
     SCRIPT = "script"
 
 
