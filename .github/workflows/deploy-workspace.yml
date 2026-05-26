@@ -27,12 +27,14 @@ on:
         description: "Deployment configuration and environment file for the workspace"
         required: true
         type: string
-      # Determines if core infra requires updating
-      apply_infrastructure:
-        description: "Apply the infrastructure changes"
+      # Controls whether provisioners apply changes or only plan.
+      # Defaults to true (plan-only / dry run) — safe for PRs and branch builds.
+      # Set to false on the calling workflow to perform a real deployment.
+      dry_run:
+        description: "Run in dry-run mode (plan only, no apply). Set to false to deploy."
         required: false
         type: boolean
-        default: false
+        default: true
       # Azure store credentials (azure-keyvault, azure-appconfig)
       azure_tenant_id:
         description: "Azure tenant ID"
@@ -79,31 +81,15 @@ env:
   PATH_TEMP: /tmp/app
 
 jobs:
-  # Initial validation of inputs and environment before proceeding with deployment.
-  check:
-    name: Input Validation
+  # Single job — validate inputs, build the platform artifact, then deploy.
+  # dry_run=true (default) → plan only (strata deploy run --dry-run).
+  # dry_run=false          → full deploy (all stages applied).
+  run:
+    name: Deploy
     runs-on: ubuntu-latest
-    outputs:
-      deployment_name: ${{ steps.get_name.outputs.deployment_name }}
-      use_bitwarden: ${{ steps.flags.outputs.use_bitwarden }}
-      use_azure: ${{ steps.flags.outputs.use_azure }}
-      use_vault: ${{ steps.flags.outputs.use_vault }}
-      use_consul: ${{ steps.flags.outputs.use_consul }}
     steps:
-      # Check out the repo
       - name: Check Out
         uses: actions/checkout@v4
-
-      # Detect which secret stores are configured based on provided credentials.
-      # Outputs: use_bitwarden, use_azure, use_vault, use_consul (true/false strings)
-      # Downstream jobs use these as: needs.check.outputs.use_bitwarden == 'true'
-      - name: Detect Stores
-        id: flags
-        run: |
-          echo "use_bitwarden=${{ secrets.bitwarden_token != '' }}" >> $GITHUB_OUTPUT
-          echo "use_azure=${{ inputs.azure_client_id != '' && secrets.azure_client_secret != '' }}" >> $GITHUB_OUTPUT
-          echo "use_vault=${{ inputs.vault_address != '' && secrets.vault_token != '' }}" >> $GITHUB_OUTPUT
-          echo "use_consul=${{ inputs.consul_address != '' && secrets.consul_token != '' }}" >> $GITHUB_OUTPUT
 
       # Install yq (used to extract values from YAML deployment files)
       - name: Setup YQ
@@ -144,93 +130,17 @@ jobs:
           consul_address: ${{ inputs.consul_address }}
           consul_token: ${{ secrets.consul_token }}
 
-  # Build the platform artifact from the deployment file.
-  # Always runs — proves the artifact is producible even on PRs.
-  # Uploads build/ as a workflow artifact for the deploy job to consume.
-  build:
-    name: Build
-    needs: check
-    runs-on: ubuntu-latest
-    steps:
-      # Check out the repo
-      - name: Check Out
-        uses: actions/checkout@v4
-
-      # Install uv / python and strata
-      - name: Setup Strata
-        uses: ./.github/actions/setup-strata
-        with:
-          python-version: "3.13"
-
-      # Re-configure store env vars — secrets do not survive across jobs
-      - name: Verify Integrations
-        uses: ./.github/actions/verify-integrations
-        with:
-          bitwarden_token: ${{ secrets.bitwarden_token }}
-          azure_tenant_id: ${{ inputs.azure_tenant_id }}
-          azure_subscription_id: ${{ inputs.azure_subscription_id }}
-          azure_client_id: ${{ inputs.azure_client_id }}
-          azure_client_secret: ${{ secrets.azure_client_secret }}
-          vault_address: ${{ inputs.vault_address }}
-          vault_token: ${{ secrets.vault_token }}
-          consul_address: ${{ inputs.consul_address }}
-          consul_token: ${{ secrets.consul_token }}
-
-      # Assemble platform.json and terraform artifacts into build/
       - name: Build
         run: |
           echo "[*] Building platform artifact ..."
           uv run strata build run --file "${{ inputs.deployment_file }}" --work-path .
           echo "[*] Building platform artifact ... DONE"
 
-      # Store build/ as a workflow artifact so the deploy job can consume it
-      # without re-running the build. Artifact is named after the deployment.
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-${{ needs.check.outputs.deployment_name }}
-          path: build/
-          if-no-files-found: error
-          retention-days: 1
-
-  # Apply the built artifact to the target environment.
-  # Gated on apply_infrastructure=true — skipped by default (safe for PRs).
-  # deploy:
-  #   name: Deploy
-  #   needs: [check, build]
-  #   if: ${{ inputs.apply_infrastructure == true }}
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Check Out
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Setup Strata
-  #       uses: ./.github/actions/setup-strata
-  #       with:
-  #         python-version: "3.13"
-  #
-  #     # Re-configure store env vars — secrets do not survive across jobs
-  #     - name: Verify Integrations
-  #       uses: ./.github/actions/verify-integrations
-  #       with:
-  #         bitwarden_token: ${{ secrets.bitwarden_token }}
-  #         azure_tenant_id: ${{ inputs.azure_tenant_id }}
-  #         azure_subscription_id: ${{ inputs.azure_subscription_id }}
-  #         azure_client_id: ${{ inputs.azure_client_id }}
-  #         azure_client_secret: ${{ secrets.azure_client_secret }}
-  #         vault_address: ${{ inputs.vault_address }}
-  #         vault_token: ${{ secrets.vault_token }}
-  #         consul_address: ${{ inputs.consul_address }}
-  #         consul_token: ${{ secrets.consul_token }}
-  #
-  #     - name: Download Build Artifact
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: build-${{ needs.check.outputs.deployment_name }}
-  #         path: build/
-  #
-  #     - name: Deploy
-  #       run: |
-  #         echo "[*] Deploying ${{ needs.check.outputs.deployment_name }} ..."
-  #         uv run strata deploy run --file "${{ inputs.deployment_file }}" --work-path .
-  #         echo "[*] Deploying ${{ needs.check.outputs.deployment_name }} ... DONE"
+      # dry_run=true (default) → --dry-run: plan only, no apply.
+      # dry_run=false           → no flag:   full deploy (all stages).
+      - name: Deploy
+        run: |
+          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} (dry_run=${{ inputs.dry_run }}) ..."
+          uv run strata deploy run --file "${{ inputs.deployment_file }}" --work-path . $DRY_RUN_FLAG
+          echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} ... DONE"
