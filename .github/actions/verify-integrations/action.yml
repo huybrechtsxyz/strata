@@ -77,43 +77,65 @@ runs:
           echo "::add-mask::${{ inputs.consul_token }}"
         fi
 
-    # Export store credentials as the env vars each integration expects
+    # Export store credentials as the env vars each integration expects.
+    # Each store logs one of three states:
+    #   [+] configured          — credentials present, env vars written
+    #   [!] partially configured — only one of a required pair was supplied (warning)
+    #   [-] not configured      — no credentials provided (ok, store simply won't be used)
     - name: Configure Store Environment Variables
       shell: bash
       run: |
-        # Bitwarden
+        # Bitwarden — single token
         if [ -n "${{ inputs.bitwarden_token }}" ]; then
           echo "BWS_ACCESS_TOKEN=${{ inputs.bitwarden_token }}" >> $GITHUB_ENV
-          echo "[+] Bitwarden configured (BWS_ACCESS_TOKEN)"
+          echo "[+] Bitwarden       : configured"
+        else
+          echo "[-] Bitwarden       : not configured (ok)"
         fi
 
-        # Azure (shared by azure-keyvault and azure-appconfig)
-        if [ -n "${{ inputs.azure_client_id }}" ]; then
+        # Azure — client_id and client_secret must both be present
+        if [ -n "${{ inputs.azure_client_id }}" ] && [ -n "${{ inputs.azure_client_secret }}" ]; then
           echo "AZURE_TENANT_ID=${{ inputs.azure_tenant_id }}" >> $GITHUB_ENV
           echo "AZURE_SUBSCRIPTION_ID=${{ inputs.azure_subscription_id }}" >> $GITHUB_ENV
           echo "AZURE_CLIENT_ID=${{ inputs.azure_client_id }}" >> $GITHUB_ENV
           echo "AZURE_CLIENT_SECRET=${{ inputs.azure_client_secret }}" >> $GITHUB_ENV
-          echo "[+] Azure configured (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)"
+          echo "[+] Azure           : configured"
+        elif [ -n "${{ inputs.azure_client_id }}" ] || [ -n "${{ inputs.azure_client_secret }}" ]; then
+          echo "::warning::[!] Azure : partially configured — azure_client_id and azure_client_secret must both be supplied"
+        else
+          echo "[-] Azure           : not configured (ok)"
         fi
 
-        # HashiCorp Vault
-        if [ -n "${{ inputs.vault_address }}" ]; then
+        # HashiCorp Vault — address and token must both be present
+        if [ -n "${{ inputs.vault_address }}" ] && [ -n "${{ inputs.vault_token }}" ]; then
           echo "VAULT_ADDR=${{ inputs.vault_address }}" >> $GITHUB_ENV
           echo "VAULT_TOKEN=${{ inputs.vault_token }}" >> $GITHUB_ENV
-          echo "[+] HashiCorp Vault configured (VAULT_ADDR, VAULT_TOKEN)"
+          echo "[+] HashiCorp Vault : configured"
+        elif [ -n "${{ inputs.vault_address }}" ] || [ -n "${{ inputs.vault_token }}" ]; then
+          echo "::warning::[!] HashiCorp Vault : partially configured — vault_address and vault_token must both be supplied"
+        else
+          echo "[-] HashiCorp Vault : not configured (ok)"
         fi
 
-        # Consul
-        if [ -n "${{ inputs.consul_address }}" ]; then
+        # Consul — address and token must both be present
+        if [ -n "${{ inputs.consul_address }}" ] && [ -n "${{ inputs.consul_token }}" ]; then
           echo "CONSUL_HTTP_ADDR=${{ inputs.consul_address }}" >> $GITHUB_ENV
           echo "CONSUL_HTTP_TOKEN=${{ inputs.consul_token }}" >> $GITHUB_ENV
-          echo "[+] Consul configured (CONSUL_HTTP_ADDR, CONSUL_HTTP_TOKEN)"
+          echo "[+] Consul          : configured"
+        elif [ -n "${{ inputs.consul_address }}" ] || [ -n "${{ inputs.consul_token }}" ]; then
+          echo "::warning::[!] Consul : partially configured — consul_address and consul_token must both be supplied"
+        else
+          echo "[-] Consul          : not configured (ok)"
         fi
 
-    # Verify all integrations and emit structured JSON output
+    # Verify all integrations and emit a per-integration summary
     - name: Verify Integrations
       shell: bash
       run: |
         echo "[*] Verifying integration status ..."
-        strata tools status --output json | tee /tmp/strata-tools-status.json
+        uv run strata tools status --output json | tee /tmp/strata-tools-status.json
+        echo ""
+        echo "[*] Integration availability:"
+        jq -r '.data.integrations[] | (if .available then "[+]" else "[-]" end) + " " + .name + (if .version then " (" + .version + ")" else " (not found)" end)' \
+          /tmp/strata-tools-status.json
         echo "[*] Verifying integration status ... DONE"
