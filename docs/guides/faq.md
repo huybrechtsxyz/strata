@@ -27,6 +27,50 @@ Terragrunt solves a similar problem (DRY Terraform configuration) but with a dif
 
 ---
 
+## How do I provide an SSH key for Ansible without putting it in the YAML?
+
+Store the private key in your secret store (Bitwarden, HashiCorp Vault, Azure Key Vault, etc.) and reference it by name in `configuration.ssh_private_key_secret`. The key never appears in any YAML file — it is resolved into memory at deploy time and written to a `chmod 600` temp file that is deleted when the step completes.
+
+**1. Store the key in Bitwarden (or any other supported store):**
+
+Keep the full PEM content (from `-----BEGIN OPENSSH PRIVATE KEY-----` to `-----END OPENSSH PRIVATE KEY-----`) as a secure note or password field in your secret store. Note the item ID.
+
+**2. Reference it in the workspace YAML:**
+
+```yaml
+spec:
+  provisioners:
+    - name: haven_init
+      provisioner: ansible
+      source:
+        repository: haven
+        source_path: ansible
+      configuration:
+        playbook: site.yml
+        ssh_private_key_secret: haven_ssh_key   # name used to look up the key at runtime
+  secrets:
+    - key: haven_ssh_key
+      source: bitwarden
+      value: b2f90a12-3c4d-5678-abcd-ef1234567890   # Bitwarden item ID
+```
+
+**3. What happens at deploy time:**
+
+```
+strata deploy run
+  └─ resolves secrets from Bitwarden into memory (ResolvedValues)
+  └─ AnsibleDeployer looks up resolved_values.secrets["haven_ssh_key"]
+  └─ writes PEM to /tmp/ansible_ssh_XXXXX.pem  (chmod 600)
+  └─ ansible-playbook site.yml --private-key /tmp/ansible_ssh_XXXXX.pem
+  └─ temp file deleted (even if the playbook fails)
+```
+
+The key is never written to disk except during the subprocess window, and never logged.
+
+**Host key checking:** Because the runner has no prior trust with freshly provisioned VMs, set `ANSIBLE_HOST_KEY_CHECKING=false` in your CI environment (or in `ansible.cfg`). For fixed infrastructure with stable IPs, populate `~/.ssh/known_hosts` via `ssh-keyscan` and remove the env var.
+
+---
+
 ## Why not Ansible?
 
 Ansible is a configuration management tool. strata is an infrastructure deployment orchestrator. They solve different problems and work well together.
