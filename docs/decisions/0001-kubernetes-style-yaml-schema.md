@@ -59,6 +59,6 @@ Chosen: **Kubernetes-style YAML**, because it provides a proven, immediately rec
 
 ## More Information
 
-The `apiVersion` field follows the domain `platform.huybrechts.xyz/v1`. When breaking changes are required, `v2` documents can coexist with `v1` documents during a migration window. The `kind` field maps to a specific Pydantic model class via the service layer.
+The `apiVersion` field follows the domain `strata.huybrechts.xyz/v1`. When breaking changes are required, `v2` documents can coexist with `v1` documents during a migration window. The `kind` field maps to a specific Pydantic model class via the service layer.
 
 Related: [Configuration Format docs](../config/configuration.md), [Models reference](../platform/models.md)

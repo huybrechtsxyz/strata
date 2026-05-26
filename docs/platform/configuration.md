@@ -62,7 +62,7 @@ Defined in `src/STRATA_platform/models/`. Key fields:
 
 | Field               | Type              | Description                                            |
 | ------------------- | ----------------- | ------------------------------------------------------ |
-| `apiVersion`        | `PlatformVersion` | Always `platform.huybrechts.xyz/v1`                    |
+| `apiVersion`        | `PlatformVersion` | Always `strata.huybrechts.xyz/v1`                    |
 | `kind`              | `PlatformKind`    | Always `configuration`                                 |
 | `meta.name`         | `PlatformName`    | Workspace-scoped identifier                            |
 | `spec.integrations` | list              | Declared integration backends (bitwarden, vault, etc.) |

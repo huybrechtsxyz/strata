@@ -59,7 +59,7 @@ class PlatformKind(str, Enum):
 class PlatformVersion(str, Enum):
     """Enumeration of supported platform versions."""
 
-    v1 = "platform.huybrechts.xyz/v1"
+    v1 = "strata.huybrechts.xyz/v1"
 
 
 # Enumeration of supported provisioner names.

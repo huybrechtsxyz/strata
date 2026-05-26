@@ -59,7 +59,7 @@ class TestResourceService:
         """Test that missing required fields are caught."""
         # Create resource with missing required field
         resource_data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "resource",
             "meta": {"name": "test_resource"},
             "spec": {
@@ -86,7 +86,7 @@ class TestResourceService:
         """Test that optional fields can be omitted."""
         # Create resource without optional field
         resource_data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "resource",
             "meta": {"name": "test_resource"},
             "spec": {
@@ -114,7 +114,7 @@ class TestResourceService:
         """Test that pattern validation catches invalid values."""
         # Create resource with invalid pattern
         resource_data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "resource",
             "meta": {"name": "test_resource"},
             "spec": {
@@ -141,7 +141,7 @@ class TestResourceService:
         """Test that extra fields are rejected when additional_configurations=False."""
         # Create resource with extra field
         resource_data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "resource",
             "meta": {"name": "test_resource"},
             "spec": {
@@ -169,7 +169,7 @@ class TestResourceService:
         """Test that extra fields are permitted when additional_configurations=True."""
         # Create resource with extra field for vm_highmem (which has additional_configurations=true)
         resource_data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "resource",
             "meta": {"name": "test_resource"},
             "spec": {

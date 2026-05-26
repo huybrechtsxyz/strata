@@ -1,4 +1,4 @@
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: module
 meta:
   name: valid_traefik

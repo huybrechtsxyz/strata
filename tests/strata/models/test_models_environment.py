@@ -68,7 +68,7 @@ class TestEnvironmentStoreValidation:
 
         for store_type in valid_stores:
             data = {
-                "apiVersion": "platform.huybrechts.xyz/v1",
+                "apiVersion": "strata.huybrechts.xyz/v1",
                 "kind": "environment",
                 "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
                 "spec": {"variables": [{"key": "TEST_VAR", "store": store_type, "value": "test_value"}]},
@@ -89,7 +89,7 @@ class TestEnvironmentStoreValidation:
 
         for store_type in valid_stores:
             data = {
-                "apiVersion": "platform.huybrechts.xyz/v1",
+                "apiVersion": "strata.huybrechts.xyz/v1",
                 "kind": "environment",
                 "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
                 "spec": {
@@ -111,7 +111,7 @@ class TestEnvironmentStoreValidation:
 
         for store_type in valid_stores:
             data = {
-                "apiVersion": "platform.huybrechts.xyz/v1",
+                "apiVersion": "strata.huybrechts.xyz/v1",
                 "kind": "environment",
                 "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
                 "spec": {
@@ -130,7 +130,7 @@ class TestEnvironmentStoreValidation:
     def test_invalid_variable_store_type(self):
         """Test that invalid variable store types are rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {"variables": [{"key": "TEST_VAR", "store": "invalid_store", "value": "test_value"}]},
@@ -142,7 +142,7 @@ class TestEnvironmentStoreValidation:
     def test_duplicate_variable_keys(self):
         """Test that duplicate variable keys are rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -160,7 +160,7 @@ class TestEnvironmentStoreValidation:
     def test_duplicate_secret_keys(self):
         """Test that duplicate secret keys are rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -182,7 +182,7 @@ class TestEnvironmentStoreValidation:
     def test_duplicate_feature_keys(self):
         """Test that duplicate feature keys are rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -204,7 +204,7 @@ class TestEnvironmentOverrides:
     def test_resource_overrides(self):
         """Test that resource overrides are validated correctly."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -226,7 +226,7 @@ class TestEnvironmentOverrides:
     def test_module_overrides(self):
         """Test that module overrides are validated correctly."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -250,7 +250,7 @@ class TestEnvironmentOverrides:
     def test_duplicate_resource_overrides(self):
         """Test that duplicate resource overrides are rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -270,7 +270,7 @@ class TestEnvironmentOverrides:
     def test_duplicate_provider_overrides(self):
         """Test that duplicate provider overrides are rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -293,7 +293,7 @@ class TestEnvironmentOverrides:
 
         for slot in valid_slots:
             data = {
-                "apiVersion": "platform.huybrechts.xyz/v1",
+                "apiVersion": "strata.huybrechts.xyz/v1",
                 "kind": "environment",
                 "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
                 "spec": {
@@ -318,7 +318,7 @@ class TestEnvironmentIncludes:
     def test_resource_override_with_includes(self):
         """Test that resource overrides can have includes."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -349,7 +349,7 @@ class TestEnvironmentIncludes:
     def test_resource_override_with_merge_strategy(self):
         """Test include with merge strategy."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -386,7 +386,7 @@ class TestEnvironmentIncludes:
     def test_env_wide_includes(self):
         """Test environment-wide includes (on EnvironmentOverridesModel)."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -417,7 +417,7 @@ class TestEnvironmentIncludes:
     def test_include_defaults(self):
         """Test include field defaults (strategy=concatenate, optional=False, order=None)."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -440,7 +440,7 @@ class TestEnvironmentIncludes:
     def test_include_invalid_strategy_rejected(self):
         """Test that invalid strategy values are rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -461,7 +461,7 @@ class TestEnvironmentIncludes:
     def test_include_empty_source_rejected(self):
         """Test that empty source is rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -481,7 +481,7 @@ class TestEnvironmentIncludes:
     def test_include_empty_target_rejected(self):
         """Test that empty target is rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -501,7 +501,7 @@ class TestEnvironmentIncludes:
     def test_include_path_traversal_rejected(self):
         """Test that path traversal in target is rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -522,7 +522,7 @@ class TestEnvironmentIncludes:
     def test_include_negative_order_rejected(self):
         """Test that negative order is rejected."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {
@@ -543,7 +543,7 @@ class TestEnvironmentIncludes:
     def test_include_both_resource_and_env_wide(self):
         """Test that includes can exist at both resource and env-wide levels."""
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "environment",
             "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
             "spec": {

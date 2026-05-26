@@ -168,7 +168,7 @@ class SolutionController(BaseController):
                 self._solution.meta.name = name  # type: ignore[assignment]
         else:
             self._solution = SolutionModel(
-                apiVersion="platform.huybrechts.xyz/v1",
+                apiVersion="strata.huybrechts.xyz/v1",
                 kind="solution",
                 meta={"name": name},  # type: ignore[arg-type]
                 spec={"solution_id": generate_uuid()},  # type: ignore[arg-type]

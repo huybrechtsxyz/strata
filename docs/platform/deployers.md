@@ -251,7 +251,7 @@ Script entries in the lifecycle phase can be:
 ## Deployment YAML for ScriptDeployer
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: deployment
 meta:
   name: my_deployment

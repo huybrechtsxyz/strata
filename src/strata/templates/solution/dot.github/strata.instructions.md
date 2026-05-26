@@ -222,7 +222,7 @@ The `@repo_name` prefix resolves via the solution's repository map. Repositories
 All platform YAML files follow Kubernetes-style structure:
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: <kind>
 meta:
   name: <name>

@@ -5,7 +5,7 @@ Defines network security rules for VMs. YAML files specify allowed/denied traffi
 ## Schema
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: firewall
 meta:
   name: <resource_name> # Required: ^[a-z][a-z0-9_]*$

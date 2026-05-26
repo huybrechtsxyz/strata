@@ -5,7 +5,7 @@ Top-level configuration files defining complete infrastructure deployments. YAML
 ## Schema
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: workspace
 meta:
   name: <workspace_name> # Required: ^[a-z][a-z0-9_]*$

@@ -20,7 +20,7 @@ from strata.models.solution_model import (
 def _make_solution(name: str = "test-solution") -> SolutionModel:
     """Construct a minimal valid SolutionModel for in-memory tests."""
     return SolutionModel(
-        apiVersion="platform.huybrechts.xyz/v1",
+        apiVersion="strata.huybrechts.xyz/v1",
         kind="solution",
         meta=SolutionMetaModel(name=name),
         spec=SolutionSpecModel(solution_id="00000000-0000-0000-0000-000000000001"),

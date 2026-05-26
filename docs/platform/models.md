@@ -7,7 +7,7 @@ Pydantic v2 models validating YAML configuration files with a Kubernetes-inspire
 All YAML files follow this envelope:
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: <kind>
 meta:
   name: <name>           # PlatformName: ^[a-z][a-z0-9_-]*$
@@ -25,7 +25,7 @@ spec:
 | ----------------- | -------------------- | ------------------------------------------------ |
 | `PlatformName`    | `^[a-z][a-z0-9_-]*$` | All `meta.name` fields                           |
 | `PlatformKind`    | enum                 | `kind` field — one of the values below           |
-| `PlatformVersion` | enum                 | `apiVersion` — only `platform.huybrechts.xyz/v1` |
+| `PlatformVersion` | enum                 | `apiVersion` — only `strata.huybrechts.xyz/v1` |
 
 Never use plain `str` for `name` fields — always use `PlatformName` from `common_models`.
 

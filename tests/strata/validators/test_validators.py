@@ -120,7 +120,7 @@ class TestPlatformValidatorBeforeValidate:
 
     def test_missing_kind_returns_false(self, tmp_path):
         f = tmp_path / "nokind.yaml"
-        f.write_text("apiVersion: platform.huybrechts.xyz/v1\nmeta:\n  name: test\n", encoding="utf-8")
+        f.write_text("apiVersion: strata.huybrechts.xyz/v1\nmeta:\n  name: test\n", encoding="utf-8")
         v = PlatformValidator(f)
         result = v.before_validate(tmp_path)
         assert result is False

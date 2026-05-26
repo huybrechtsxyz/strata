@@ -12,7 +12,7 @@ Environment-specific overrides and extensions for workspace deployments. **Works
 ## Schema
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: environment
 meta:
   name: <environment_name> # Required: ^[a-z][a-z0-9_]*$

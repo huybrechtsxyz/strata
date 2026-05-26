@@ -57,7 +57,7 @@ class TestDeploymentService:
 
     def test_validate_in_memory_data(self):
         data = {
-            "apiVersion": "platform.huybrechts.xyz/v1",
+            "apiVersion": "strata.huybrechts.xyz/v1",
             "kind": "deployment",
             "meta": {"name": "test_deploy"},
             "spec": {

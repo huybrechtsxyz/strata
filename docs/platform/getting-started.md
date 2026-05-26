@@ -154,7 +154,7 @@ Use `--dry-run` to preview without writing. Use `--force` to overwrite an existi
 Config files follow a Kubernetes-style format (`apiVersion`, `kind`, `meta`, `spec`):
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: deployment
 meta:
   name: my-environment
