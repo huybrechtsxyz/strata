@@ -214,6 +214,10 @@ class WorkspaceIacModel(BaseModel):
         None,
         description="Backend configuration for state storage (e.g., Terraform Cloud, S3, Azure Storage)",
     )
+    configuration: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Tool-specific configuration (e.g. playbook, inventory, ssh_private_key_secret for Ansible; backend overrides for Terraform).",
+    )
 
 
 class WorkspaceProviderModel(BaseModel):

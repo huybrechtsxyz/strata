@@ -22,12 +22,13 @@ def _make_workspace_service(provisioners=None):
     return ws
 
 
-def _make_provisioner(name="ansible", ptype=ProvisionerType.ANSIBLE, source="ansible/"):
+def _make_provisioner(name="ansible", ptype=ProvisionerType.ANSIBLE, source_path=None):
     p = MagicMock()
     p.name = name
     p.provisioner = ptype
-    p.source = source
-    p.spec = None
+    p.source = MagicMock()
+    p.source.target_path = source_path  # None → falls back to "ansible/<name>"
+    p.configuration = None
     return p
 
 
@@ -97,7 +98,7 @@ class TestAnsibleDeployerValidateWorkspace:
         assert any("no ansible provisioner" in m for m in msgs)
 
     def test_source_path_not_exists_returns_false(self):
-        prov = _make_provisioner(source="ansible/")
+        prov = _make_provisioner(source_path="ansible/")
         d = _make_deployer(provisioners=[prov])
         # Path doesn't exist on disk
         ok, msgs = d.validate_workspace()
@@ -107,7 +108,7 @@ class TestAnsibleDeployerValidateWorkspace:
     def test_valid_workspace_sets_working_dir(self, tmp_path):
         ansible_dir = tmp_path / "ansible"
         ansible_dir.mkdir()
-        prov = _make_provisioner(source="ansible")
+        prov = _make_provisioner(source_path="ansible")
         d = _make_deployer(provisioners=[prov], build_path=tmp_path)
         ok, msgs = d.validate_workspace()
         assert ok is True
@@ -117,7 +118,7 @@ class TestAnsibleDeployerValidateWorkspace:
         """When stage.provisioner is None, picks the first ANSIBLE-typed provisioner."""
         ansible_dir = tmp_path / "playbooks"
         ansible_dir.mkdir()
-        prov = _make_provisioner(name="my_ansible", source="playbooks")
+        prov = _make_provisioner(name="my_ansible", source_path="playbooks")
         stage = _make_stage(provisioner=None)
         d = _make_deployer(stage=stage, provisioners=[prov], build_path=tmp_path)
         ok, msgs = d.validate_workspace()
@@ -303,19 +304,19 @@ class TestAnsibleDeployerHelpers:
     def test_get_playbook_default(self):
         d = _make_deployer()
         d._iac_model = MagicMock()
-        d._iac_model.spec = None
+        d._iac_model.configuration = None
         assert d._get_playbook() == "site.yml"
 
-    def test_get_playbook_from_spec(self):
+    def test_get_playbook_from_configuration(self):
         d = _make_deployer()
         d._iac_model = MagicMock()
-        d._iac_model.spec = {"playbook": "deploy.yml"}
+        d._iac_model.configuration = {"playbook": "deploy.yml"}
         assert d._get_playbook() == "deploy.yml"
 
-    def test_get_inventory_from_spec(self):
+    def test_get_inventory_from_configuration(self):
         d = _make_deployer()
         d._iac_model = MagicMock()
-        d._iac_model.spec = {"inventory": "hosts.yml"}
+        d._iac_model.configuration = {"inventory": "hosts.yml"}
         d._working_dir = Path("/nonexistent")
         assert d._get_inventory() == "hosts.yml"
 
@@ -323,16 +324,29 @@ class TestAnsibleDeployerHelpers:
         (tmp_path / "inventory.yml").write_text("")
         d = _make_deployer()
         d._iac_model = MagicMock()
-        d._iac_model.spec = None
+        d._iac_model.configuration = None
         d._working_dir = tmp_path
         assert d._get_inventory() == "inventory.yml"
 
     def test_get_inventory_returns_none_when_missing(self, tmp_path):
         d = _make_deployer()
         d._iac_model = MagicMock()
-        d._iac_model.spec = None
+        d._iac_model.configuration = None
         d._working_dir = tmp_path
         assert d._get_inventory() is None
+
+    def test_get_extra_vars_from_configuration(self):
+        d = _make_deployer()
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = {"extra_vars": {"env": "prod", "version": 2}}
+        ev = d._get_extra_vars()
+        assert ev == {"env": "prod", "version": "2"}
+
+    def test_get_extra_vars_returns_none_when_absent(self):
+        d = _make_deployer()
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+        assert d._get_extra_vars() is None
 
     def test_get_requirements_file_discovers(self, tmp_path):
         (tmp_path / "requirements.yml").write_text("")
@@ -346,3 +360,46 @@ class TestAnsibleDeployerHelpers:
         d = _make_deployer()
         d._working_dir = tmp_path
         assert d._get_requirements_file() == "collections/requirements.yml"
+
+
+class TestAnsibleDeployerSshKey:
+    def test_ssh_key_context_yields_none_when_no_key(self, tmp_path):
+        d = _make_deployer()
+        d._working_dir = tmp_path
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+        with d._ssh_key_context() as key_file:
+            assert key_file is None
+
+    def test_ssh_key_context_writes_and_cleans_up(self, tmp_path):
+        import os
+        import sys
+
+        from strata.controllers.value_controller import ResolvedValues
+
+        rv = ResolvedValues(secrets={"ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n"})
+        d = _make_deployer()
+        d.resolved_values = rv
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+        captured = {}
+        with d._ssh_key_context() as key_file:
+            assert key_file is not None
+            assert os.path.exists(key_file)
+            # chmod 600 is meaningful only on POSIX — Windows ignores it
+            if sys.platform != "win32":
+                assert oct(os.stat(key_file).st_mode)[-3:] == "600"
+            captured["path"] = key_file
+        # File must be deleted after context exits
+        assert not os.path.exists(captured["path"])
+
+    def test_ssh_key_context_uses_custom_secret_name(self):
+        from strata.controllers.value_controller import ResolvedValues
+
+        rv = ResolvedValues(secrets={"haven_ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n"})
+        d = _make_deployer()
+        d.resolved_values = rv
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = {"ssh_private_key_secret": "haven_ssh_key"}
+        with d._ssh_key_context() as key_file:
+            assert key_file is not None

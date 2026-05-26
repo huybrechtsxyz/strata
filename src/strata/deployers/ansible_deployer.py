@@ -19,8 +19,11 @@ Typical caller sequences:
   second is the raw text line.
 """
 
+import os
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
 from strata.controllers.value_controller import ResolvedValues
 from strata.deployers.base_deployer import (
@@ -131,8 +134,9 @@ class AnsibleDeployer(BaseDeployer):
             )
             return False, messages
 
-        # Resolve working directory
-        source_path = self.build_path / iac.source if iac.source else self.build_path
+        # Resolve working directory from source.target_path (falls back to ansible/<name>)
+        target = Path(iac.source.target_path) if iac.source.target_path else (Path("ansible") / iac.name)
+        source_path = self.build_path / target
         if not source_path.exists():
             messages.append(f"Ansible source path does not exist: {source_path}")
             return False, messages
@@ -172,25 +176,38 @@ class AnsibleDeployer(BaseDeployer):
             return False
         return True
 
+    def _get_configuration(self) -> Optional[Dict[str, Any]]:
+        """Return the provisioner configuration dict, or None."""
+        if self._iac_model is not None and self._iac_model.configuration:
+            return self._iac_model.configuration
+        return None
+
     def _get_playbook(self) -> str:
-        """Resolve the playbook filename from the IaC model or default."""
-        if self._iac_model and self._iac_model.spec:
-            spec = self._iac_model.spec
-            if isinstance(spec, dict) and "playbook" in spec:
-                return spec["playbook"]
+        """Resolve the playbook filename from configuration or default to site.yml."""
+        cfg = self._get_configuration()
+        if cfg and "playbook" in cfg:
+            return cfg["playbook"]
         return "site.yml"
 
     def _get_inventory(self) -> Optional[str]:
-        """Resolve the inventory path from the IaC model or environment."""
-        if self._iac_model and self._iac_model.spec:
-            spec = self._iac_model.spec
-            if isinstance(spec, dict) and "inventory" in spec:
-                return spec["inventory"]
-        # Check if a default inventory exists in the working directory
+        """Resolve the inventory path from configuration or auto-discover."""
+        cfg = self._get_configuration()
+        if cfg and "inventory" in cfg:
+            return cfg["inventory"]
+        # Auto-discover common inventory filenames in the working directory
         if self._working_dir:
             for candidate in ("inventory", "inventory.yml", "hosts.yml", "hosts"):
                 if (self._working_dir / candidate).exists():
                     return candidate
+        return None
+
+    def _get_extra_vars(self) -> Optional[Dict[str, str]]:
+        """Return extra_vars from configuration as a flat str->str dict."""
+        cfg = self._get_configuration()
+        if cfg and "extra_vars" in cfg:
+            ev = cfg["extra_vars"]
+            if isinstance(ev, dict):
+                return {k: str(v) for k, v in ev.items()}
         return None
 
     def _get_requirements_file(self) -> Optional[str]:
@@ -200,6 +217,38 @@ class AnsibleDeployer(BaseDeployer):
                 if (self._working_dir / candidate).exists():
                     return candidate
         return None
+
+    def _get_ssh_key_content(self) -> Optional[str]:
+        """Look up SSH private key content from resolved_values.secrets.
+
+        The secret name defaults to ``ssh_private_key`` but can be overridden
+        via ``configuration["ssh_private_key_secret"]``.
+        """
+        if not self.resolved_values:
+            return None
+        cfg = self._get_configuration()
+        secret_name = cfg.get("ssh_private_key_secret", "ssh_private_key") if cfg else "ssh_private_key"
+        return self.resolved_values.secrets.get(secret_name)
+
+    @contextmanager
+    def _ssh_key_context(self) -> Generator[Optional[str], None, None]:
+        """Write SSH private key to a temp file (chmod 600), yield its path, delete on exit."""
+        key_content = self._get_ssh_key_content()
+        if not key_content:
+            yield None
+            return
+        fd, key_path = tempfile.mkstemp(suffix=".pem", prefix="ansible_ssh_")
+        try:
+            os.close(fd)
+            with open(key_path, "w") as f:
+                f.write(key_content)
+            os.chmod(key_path, 0o600)
+            yield key_path
+        finally:
+            try:
+                os.unlink(key_path)
+            except OSError:
+                pass
 
     # ------------------------------------------------------------------
     # Step methods
@@ -280,11 +329,14 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook --check --diff {playbook}")
 
         try:
-            result = self._ansible.plan(
-                str(self._working_dir),
-                playbook=playbook,
-                inventory=inventory,
-            )
+            with self._ssh_key_context() as key_file:
+                result = self._ansible.plan(
+                    str(self._working_dir),
+                    playbook=playbook,
+                    inventory=inventory,
+                    extra_vars=self._get_extra_vars(),
+                    private_key_file=key_file,
+                )
             if result.returncode != 0:
                 messages.append(f"Check mode failed:\n{result.stderr}")
                 return False, messages
@@ -312,11 +364,14 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook {playbook}")
 
         try:
-            result = self._ansible.apply(
-                str(self._working_dir),
-                playbook=playbook,
-                inventory=inventory,
-            )
+            with self._ssh_key_context() as key_file:
+                result = self._ansible.apply(
+                    str(self._working_dir),
+                    playbook=playbook,
+                    inventory=inventory,
+                    extra_vars=self._get_extra_vars(),
+                    private_key_file=key_file,
+                )
             if result.returncode != 0:
                 messages.append(f"Playbook execution failed:\n{result.stderr}")
                 return False, messages
@@ -352,11 +407,13 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook {destroy_playbook}")
 
         try:
-            result = self._ansible.apply(
-                str(self._working_dir),
-                playbook=destroy_playbook,
-                inventory=inventory,
-            )
+            with self._ssh_key_context() as key_file:
+                result = self._ansible.apply(
+                    str(self._working_dir),
+                    playbook=destroy_playbook,
+                    inventory=inventory,
+                    private_key_file=key_file,
+                )
             if result.returncode != 0:
                 messages.append(f"Destroy playbook failed:\n{result.stderr}")
                 return False, messages
@@ -386,11 +443,13 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook --check --diff {destroy_playbook}")
 
         try:
-            result = self._ansible.plan(
-                str(self._working_dir),
-                playbook=destroy_playbook,
-                inventory=inventory,
-            )
+            with self._ssh_key_context() as key_file:
+                result = self._ansible.plan(
+                    str(self._working_dir),
+                    playbook=destroy_playbook,
+                    inventory=inventory,
+                    private_key_file=key_file,
+                )
             if result.returncode != 0:
                 messages.append(f"Destroy check mode failed:\n{result.stderr}")
                 return False, messages
