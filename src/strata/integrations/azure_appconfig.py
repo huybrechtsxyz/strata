@@ -128,6 +128,20 @@ class AzureAppConfigIntegration(StoreIntegration):
             return auth.api_key.api_key or "APPCONFIG_CONNECTION_STRING"
         return "APPCONFIG_CONNECTION_STRING"
 
+    def _is_cli_logged_in(self) -> bool:
+        """
+        Check whether there is an active Azure CLI login session.
+
+        Returns True if ``az account show`` succeeds (exit code 0), which is
+        the case after running ``az login`` on a developer workstation or when
+        running inside an Azure resource with a Managed Identity assigned.
+        """
+        try:
+            result = self._run_integration(args=["account", "show"], timeout=10)
+            return result.returncode == 0
+        except Exception:
+            return False
+
     # Base integration methods
 
     def get_version_command(self) -> List[str]:
@@ -177,6 +191,10 @@ class AzureAppConfigIntegration(StoreIntegration):
                 {"name": "AZURE_SUBSCRIPTION_ID", "purpose": "Azure subscription ID", "required": True},
             ],
             "auth_methods": [
+                {
+                    "method": "az login (interactive)",
+                    "description": "Run 'az login' on your workstation. No env vars required. Preferred for local development.",
+                },
                 {
                     "method": "Service principal (secret)",
                     "description": "Set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET.",
@@ -238,16 +256,18 @@ class AzureAppConfigIntegration(StoreIntegration):
                 "(e.g., https://myappconfig.azconfig.io)",
             )
 
-        # Check authentication configuration
+        # Check authentication configuration — accept az login, OIDC, or client secret
         has_oidc = self.tenant_id and self.client_id and self.subscription_id
         has_secret = self.tenant_id and self.client_id and self.client_secret
+        has_cli_login = self._is_cli_logged_in()
 
-        if not has_oidc and not has_secret:
+        if not has_oidc and not has_secret and not has_cli_login:
             self._info = f"{self.integration_name} authentication not configured."
             logger.warning("Azure authentication not configured", name=self.integration_name)
             return (
                 False,
                 f"{self.integration_name} authentication not configured. Set either:\n"
+                "  az login (developer workstation)\n"
                 "  Connection String: APPCONFIG_CONNECTION_STRING\n"
                 "  OIDC: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_SUBSCRIPTION_ID\n"
                 "  Secret: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET",
@@ -271,6 +291,7 @@ class AzureAppConfigIntegration(StoreIntegration):
         info = super().get_info()
         info["appconfig_endpoint"] = self.appconfig_endpoint
         info["has_connection_string"] = bool(self.connection_string)
+        info["has_cli_login"] = self._is_cli_logged_in()
         info["has_oidc"] = bool(self.tenant_id and self.client_id and self.subscription_id)
         info["has_secret"] = bool(self.tenant_id and self.client_id and self.client_secret)
         return info

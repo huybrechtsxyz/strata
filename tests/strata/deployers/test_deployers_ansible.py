@@ -129,21 +129,21 @@ class TestAnsibleDeployerValidateWorkspace:
 class TestAnsibleDeployerValidateEnvironment:
     def test_unavailable_returns_false(self):
         d = _make_deployer()
-        with patch("strata.deployers.ansible_deployer.AnsibleIntegration") as MockInt:
+        with patch("strata.deployers.ansible_deployer.AnsibleIntegration") as mock_int:
             instance = MagicMock()
             instance.ensure_available.return_value = (False, "not installed")
-            MockInt.return_value = instance
+            mock_int.return_value = instance
             ok, msgs = d.validate_environment()
         assert ok is False
         assert any("not installed" in m for m in msgs)
 
     def test_available_sets_ansible_instance(self):
         d = _make_deployer()
-        with patch("strata.deployers.ansible_deployer.AnsibleIntegration") as MockInt:
+        with patch("strata.deployers.ansible_deployer.AnsibleIntegration") as mock_int:
             instance = MagicMock()
             instance.ensure_available.return_value = (True, "")
             instance.get_version.return_value = "2.15.4"
-            MockInt.return_value = instance
+            mock_int.return_value = instance
             ok, msgs = d.validate_environment()
         assert ok is True
         assert d._ansible is instance

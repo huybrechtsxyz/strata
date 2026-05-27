@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Unit tests for AzureAppConfigIntegration."""
 
+from unittest.mock import MagicMock, patch
+
 from strata.integrations.azure_appconfig import AzureAppConfigIntegration
 from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.capabilities import IFeatureStore, IVariableStore
@@ -85,3 +87,55 @@ class TestAzureAppConfigGetVariable:
         i = AzureAppConfigIntegration(_cfg())
         result = i.list_variables()
         assert result == []
+
+
+class TestAzureAppConfigCliLogin:
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+
+    def test_is_cli_logged_in_true_when_account_show_succeeds(self):
+        i = AzureAppConfigIntegration(_cfg(address="https://ac.azconfig.io"))
+        proc = MagicMock()
+        proc.returncode = 0
+        with patch.object(i, "_run_integration", return_value=proc):
+            assert i._is_cli_logged_in() is True
+
+    def test_is_cli_logged_in_false_when_account_show_fails(self):
+        i = AzureAppConfigIntegration(_cfg(address="https://ac.azconfig.io"))
+        proc = MagicMock()
+        proc.returncode = 1
+        with patch.object(i, "_run_integration", return_value=proc):
+            assert i._is_cli_logged_in() is False
+
+    def test_is_cli_logged_in_false_on_exception(self):
+        i = AzureAppConfigIntegration(_cfg(address="https://ac.azconfig.io"))
+        with patch.object(i, "_run_integration", side_effect=OSError("no az")):
+            assert i._is_cli_logged_in() is False
+
+    def test_ensure_available_accepts_cli_login_with_no_sp_env_vars(self):
+        i = AzureAppConfigIntegration(_cfg(address="https://ac.azconfig.io"))
+        with (
+            patch.object(i, "is_available", return_value=True),
+            patch.object(i, "validate_version", return_value=(True, "")),
+            patch.object(i, "_is_cli_logged_in", return_value=True),
+        ):
+            ok, msg = i.ensure_available()
+        assert ok is True
+        assert msg == ""
+
+    def test_ensure_available_rejects_when_no_auth_at_all(self):
+        i = AzureAppConfigIntegration(_cfg(address="https://ac.azconfig.io"))
+        with (
+            patch.object(i, "is_available", return_value=True),
+            patch.object(i, "validate_version", return_value=(True, "")),
+            patch.object(i, "_is_cli_logged_in", return_value=False),
+        ):
+            ok, msg = i.ensure_available()
+        assert ok is False
+        assert "az login" in msg
+
+    def test_setup_info_lists_az_login_auth_method(self):
+        i = AzureAppConfigIntegration(_cfg())
+        info = i.get_setup_info()
+        methods = [m["method"] for m in info["auth_methods"]]
+        assert any("az login" in m for m in methods)

@@ -251,9 +251,9 @@ class InfisicalIntegration(StoreIntegration):
         Returns:
             Secret value if found, None otherwise
         """
-        project_id = kwargs.get("project_id", self.project_id)
-        environment = kwargs.get("environment", self.environment)
-        secret_path = kwargs.get("secret_path", "/")
+        project_id: str = kwargs.get("project_id") or self.project_id or ""
+        environment: str = kwargs.get("environment") or self.environment or ""
+        secret_path: str = kwargs.get("secret_path") or "/"
         prefer_cli = kwargs.get("prefer_cli", True)
         timeout = kwargs.get("timeout", 60)
 
@@ -298,9 +298,9 @@ class InfisicalIntegration(StoreIntegration):
         Returns:
             True if successful, False otherwise
         """
-        project_id = kwargs.get("project_id", self.project_id)
-        environment = kwargs.get("environment", self.environment)
-        secret_path = kwargs.get("secret_path", "/")
+        project_id: str = kwargs.get("project_id") or self.project_id or ""
+        environment: str = kwargs.get("environment") or self.environment or ""
+        secret_path: str = kwargs.get("secret_path") or "/"
 
         available, error = self.ensure_available()
         if not available:
@@ -321,9 +321,9 @@ class InfisicalIntegration(StoreIntegration):
         Returns:
             List of secret names
         """
-        project_id = kwargs.get("project_id", self.project_id)
-        environment = kwargs.get("environment", self.environment)
-        secret_path = kwargs.get("secret_path", "/")
+        project_id: str = kwargs.get("project_id") or self.project_id or ""
+        environment: str = kwargs.get("environment") or self.environment or ""
+        secret_path: str = kwargs.get("secret_path") or "/"
 
         available, _ = self.ensure_available()
         if not available:

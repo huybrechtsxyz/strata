@@ -83,7 +83,7 @@ class FlagsmithIntegration(StoreIntegration):
 
     # Base integration overrides
 
-    def is_available(self) -> bool:
+    def is_available(self, use_cache: bool = True) -> bool:
         """
         Check whether Flagsmith is available by probing the flags API endpoint.
 
@@ -109,7 +109,7 @@ class FlagsmithIntegration(StoreIntegration):
         """Return a placeholder version command (no real CLI exists)."""
         return [self.command, "--version"]
 
-    def get_version(self) -> str:
+    def get_version(self, use_cache: bool = True) -> Optional[str]:
         """Return a placeholder version string (API-only, no binary version)."""
         return "api"
 

@@ -104,7 +104,7 @@ class TestAnsibleIntegrationSetupInfo:
         assert "ansible" in info["yaml_example"]
 
 
-class TestAnsibleIntegrationInit_Command:
+class TestAnsibleIntegrationInitCommand:
     def setup_method(self):
         BaseIntegration._instances.clear()
 
@@ -132,7 +132,7 @@ class TestAnsibleIntegrationInit_Command:
         i._version = None
         try:
             i.init("/work", requirements_file="requirements.yml")
-            assert False, "Should have raised"
+            raise AssertionError("Should have raised")
         except RuntimeError as exc:
             assert "not available" in str(exc)
 
