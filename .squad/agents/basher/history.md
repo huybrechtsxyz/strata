@@ -25,6 +25,16 @@ Key paths: `src/xyz_platform/integrations/`, `models/deployment_model.py`.
 - `DockerIntegration`, `BitwardenIntegration`, etc.: registered but NOT reviewed — assumed partially real.
 - **Gap**: No `TerraformIntegration.workspace_select()` or `TerraformIntegration.output()` — needed for multi-workspace Terraform.
 
+### 2026-05-28 — Helm integration design analysis
+- Helm maps to `IInfrastructureTool` (no new `IPackageManager` protocol in Phase 1). `init→dependency_update`, `plan→diff upgrade`, `apply→upgrade --install`.
+- `HelmIntegration`: `COMMAND = "helm"`, singleton keyed by `config.name`. Version from `helm version --short` → regex `v(\d+\.\d+\.\d+)`.
+- Extra methods outside protocol: `install`, `upgrade`, `uninstall`, `diff`, `lint`, `template`, `repo_add`, `repo_update`, `dependency_update`, `status`.
+- Env vars: `KUBECONFIG` (required), `HELM_NAMESPACE`, `HELM_REGISTRY_CONFIG`, `HELM_DATA_HOME`.
+- No `HelmBuilder` in Phase 1 — charts fetched from repos at deploy time, no local file merge phase.
+- `HelmDeployer`: `setup→repo_update+dependency_update`, `check→lint`, `plan→diff` (advisory, graceful if helm-diff plugin absent), `apply→upgrade --install`, `destroy→uninstall` (requires force=True).
+- Files: CREATE `helm.py` integration + `helm_deployer.py`; MODIFY `integrations/__init__.py` + `docs/platform/integrations.md`.
+- Decision filed: `.squad/decisions/inbox/basher-helm-integration.md`
+
 ### 2026-04-22 — Build pipeline: what exists vs what's missing
 - **Exists**: YAML loading + Pydantic validation (ConfigurationService, DeploymentService, WorkspaceService). `@repo/path` path resolution. `DeploymentService.get_build_path()` returns `build/<name>-<version>` path. `RepositoryController.fetch_all_repositories()` copies bundled repos into work_path. `LifecycleController.execute_configuration_phase()` runs scripts per phase.
 - **Missing (build pipeline)**: No `BuildController` or `build` command. No Terraform file merge/assembly from `xyz_infrastructure/terraform/` into a build output directory. No `xyz build` CLI entry point — it's commented out in `cli.py` along with `cli_builders.py` (not yet created). No artifact staging logic.

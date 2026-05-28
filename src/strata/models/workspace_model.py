@@ -84,6 +84,16 @@ class WorkspaceComponentModel(BaseModel):
     ]
 
 
+class WorkspaceNamespaceReferenceModel(BaseModel):
+    """Namespace reference within a topology - links a namespace to this topology."""
+
+    namespace: Annotated[
+        str,
+        StringConstraints(min_length=1, strip_whitespace=True),
+        Field(description="Namespace name reference (must match a namespace defined in spec.namespaces)"),
+    ]
+
+
 class WorkspaceTopologyModel(BaseModel):
     name: PlatformName = Field(..., description="Unique topology name")
     provider: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
@@ -95,11 +105,14 @@ class WorkspaceTopologyModel(BaseModel):
         List[WorkspaceComponentModel],
         Field(min_length=1, description="Topology components"),
     ]
+    namespaces: Optional[List[WorkspaceNamespaceReferenceModel]] = Field(
+        None, description="Namespace references deployed on this topology"
+    )
     volumes: Optional[List[WorkspaceVolumeModel]] = Field(None, description="Topology volumes")
 
     @model_validator(mode="after")
     def validate_unique_names_within_topology(self) -> "WorkspaceTopologyModel":
-        """Validate unique component and volume names within this topology."""
+        """Validate unique component, namespace, and volume names within this topology."""
         errors = []
 
         # Validate unique resource references within topology
@@ -108,6 +121,13 @@ class WorkspaceTopologyModel(BaseModel):
             if len(resource_refs) != len(set(resource_refs)):
                 duplicates = [ref for ref in resource_refs if resource_refs.count(ref) > 1]
                 errors.append(f"Duplicate resource references in topology '{self.name}': {set(duplicates)}")
+
+        # Validate unique namespace references within topology
+        if self.namespaces:
+            namespace_refs = [ns.namespace for ns in self.namespaces]
+            if len(namespace_refs) != len(set(namespace_refs)):
+                duplicates = [ref for ref in namespace_refs if namespace_refs.count(ref) > 1]
+                errors.append(f"Duplicate namespace references in topology '{self.name}': {set(duplicates)}")
 
         # Validate unique volume names within topology
         if self.volumes:
@@ -403,6 +423,35 @@ class WorkspaceSpecModel(BaseModel):
 
         if invalid_refs:
             raise ValueError(f"Invalid resource references in topology: {'; '.join(invalid_refs)}")
+
+        return self
+
+    # Validate topology namespace references
+    @model_validator(mode="after")
+    def validate_topology_namespace_references(self) -> "WorkspaceSpecModel":
+        """Validate that all namespace references in topology exist in namespaces section."""
+        if not self.topology:
+            return self
+
+        # Get all defined namespace names
+        namespace_names = set()
+        if self.namespaces:
+            namespace_names = {ns.name for ns in self.namespaces}
+
+        # Check all topology namespace references
+        invalid_refs = []
+        for topology in self.topology:
+            if not topology.namespaces:
+                continue
+
+            for ns_ref in topology.namespaces:
+                if ns_ref.namespace not in namespace_names:
+                    invalid_refs.append(
+                        f"Topology '{topology.name}' references undefined namespace '{ns_ref.namespace}'"
+                    )
+
+        if invalid_refs:
+            raise ValueError(f"Invalid namespace references in topology: {'; '.join(invalid_refs)}")
 
         return self
 

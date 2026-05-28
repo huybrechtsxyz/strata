@@ -55,6 +55,8 @@ spec:
       components:
         - resource: manager
         - resource: worker
+      namespaces:
+        - namespace: platform_ns
       volumes:
         - name: config
           type: replicated

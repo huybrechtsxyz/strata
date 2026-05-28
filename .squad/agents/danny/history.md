@@ -49,3 +49,19 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 - CI uses composite actions: `.github/actions/install-python` (uv sync --frozen) and `.github/actions/test-python` (lint + types + pytest).
 - Testing pattern: plain pytest classes (`class TestConfigSet:`) — no `unittest.TestCase`.
 - copilot-instructions.md updated 2026-05-06.
+
+### 2026-05-28 — Helm architecture analysis
+
+**Requested by:** Vincent Huybrechts.
+
+**Finding — No new `kind`:** Helm fits inside the existing `DeploymentModel` with `stage.type = "helm"`. A `kind: helm-deployment` would be over-engineering.
+
+**Finding — `ProvisionerType` enum:** Add `HELM = "helm"` in `src/strata/models/common_models.py`. Mirrors how `TERRAFORM` and `ANSIBLE` are declared.
+
+**Finding — `WorkspaceHelmModel`:** Helm cluster config (chart, repo_url, namespace, release_name, values_files, kubeconfig, kube_context, wait, atomic, timeout) belongs in the workspace spec as `helm: Optional[List[WorkspaceHelmModel]]`, adjacent to `provisioners`. Stage references by name via the existing `stage.provisioner: Optional[str]` field.
+
+**Finding — `_create_deployer` duplication:** This method is copy-pasted in 4 deploy command files (`run_deploy_command.py`, `destroy_deploy_command.py`, `health_deploy_command.py`, `status_deploy_command.py`). Adding Helm without fixing this would require 4 edits. Recommend Basher extracts a `DeployerFactory` or moves `_create_deployer` to `BaseDeployCommand` as part of the Helm PR.
+
+**Delegated to Basher:** `HelmIntegration` in `integrations/helm.py` — methods: `repo_add`, `repo_update`, `pull`, `upgrade_install`, `uninstall`, `status`, `list_releases`. Step sequence: `setup → check → plan → apply` (same contract as `TerraformDeployer`).
+
+**Decision written:** `.squad/decisions/inbox/danny-helm-architecture.md`
