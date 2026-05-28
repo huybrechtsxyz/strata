@@ -1,0 +1,27 @@
+# ===============================================================================
+# Action Name  : test-python
+# Description  : Run ruff lint, ruff format check, mypy type-check, and pytest.
+#                Requires install-python to have run first.
+# ===============================================================================
+
+name: "Test Python"
+description: "Run ruff lint, ruff format check, mypy, and pytest."
+
+runs:
+  using: composite
+  steps:
+    - name: Ruff lint
+      shell: bash
+      run: uv run ruff check ./src ./tests
+
+    - name: Ruff format
+      shell: bash
+      run: uv run ruff format --check ./src ./tests
+
+    - name: Mypy type check
+      shell: bash
+      run: uv run python -m mypy ./src ./tests
+
+    - name: Pytest
+      shell: bash
+      run: uv run pytest tests/
