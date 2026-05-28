@@ -7,7 +7,8 @@
 #     - [ ] push
 #     - [ ] pull_request
 #     - [ ] schedule
-#     - [x] workflow_dispatch
+#     - [ ] workflow_dispatch
+#     - [x] workflow_call
 #
 # Environment :
 #     - OS        : ubuntu-latest
@@ -76,9 +77,11 @@ on:
 permissions:
   contents: read
 
-# Environment variables for the pipeline
-env:
-  PATH_TEMP: /tmp/app
+# Prevent concurrent deploys of the same workspace (Terraform state locks, etc.)
+# cancel-in-progress: false — let the running deploy finish rather than leaving infra mid-apply.
+concurrency:
+  group: deploy-${{ inputs.deployment_file }}
+  cancel-in-progress: false
 
 jobs:
   # Single job — validate inputs, build the platform artifact, then deploy.
@@ -88,6 +91,7 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     steps:
+      # Checkout the repository to access deployment files and actions.
       - name: Check Out
         uses: actions/checkout@v4
 
@@ -105,7 +109,7 @@ jobs:
       - name: Validate Deployment
         run: |
           echo "[*] Validating deployment file ..."
-          uv run strata validate "${{ inputs.deployment_file }}"
+          strata validate "${{ inputs.deployment_file }}"
           echo "[*] Validating deployment file ... DONE"
 
       # Extract the deployment name from the file for use in downstream jobs
@@ -130,10 +134,11 @@ jobs:
           consul_address: ${{ inputs.consul_address }}
           consul_token: ${{ secrets.consul_token }}
 
+      # Build the platform artifact using the deployment file (generates a .strata directory with all necessary files for deployment).
       - name: Build
         run: |
           echo "[*] Building platform artifact ..."
-          uv run strata build run --file "${{ inputs.deployment_file }}" --work-path .
+          strata build run --file "${{ inputs.deployment_file }}" --work-path .
           echo "[*] Building platform artifact ... DONE"
 
       # dry_run=true (default) → --dry-run: plan only, no apply.
@@ -142,5 +147,5 @@ jobs:
         run: |
           DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
           echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} (dry_run=${{ inputs.dry_run }}) ..."
-          uv run strata deploy run --file "${{ inputs.deployment_file }}" --work-path . $DRY_RUN_FLAG
+          strata deploy run --file "${{ inputs.deployment_file }}" --work-path . $DRY_RUN_FLAG
           echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} ... DONE"

@@ -133,7 +133,7 @@ runs:
       shell: bash
       run: |
         echo "[*] Verifying integration status ..."
-        uv run strata tools status --output json | tee /tmp/strata-tools-status.json
+        strata tools status --output json | tee /tmp/strata-tools-status.json
         echo ""
         echo "[*] Integration availability:"
         jq -r '.data.integrations[] | (if .available then "[+]" else "[-]" end) + " " + .name + (if .version then " (" + .version + ")" else " (not found)" end)' \
