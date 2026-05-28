@@ -29,4 +29,4 @@ runs:
 
     - name: Sync dependencies
       shell: bash
-      run: uv sync --frozen
+      run: uv sync
