@@ -316,7 +316,7 @@ class TestTerraformBuilderWorkspaceVars:
         platform.meta.name = "dep"
         platform.meta.annotations = {}
         platform.meta.tags = []
-        platform.apiVersion = "platform.huybrechts.xyz/v1"
+        platform.apiVersion = "strata.huybrechts.xyz/v1"
         return platform
 
     def test_workspace_name_in_result(self):

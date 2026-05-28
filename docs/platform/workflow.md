@@ -1,4 +1,4 @@
-﻿# strata — DevOps Workflow Guide
+# strata — DevOps Workflow Guide
 
 > **Audience:** DevOps engineer (Basher) working with VS Code, multiple repositories, and a
 > dedicated workspace repo. This guide walks through the complete lifecycle of a platform
@@ -79,7 +79,7 @@ strata sln init --name xyz-workspace --template ./templates/standard-three-repo.
 **Template file format** (`standard-three-repo.yaml`):
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: workspace-template
 meta:
   name: standard-three-repo

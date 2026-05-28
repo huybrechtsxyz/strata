@@ -1,0 +1,151 @@
+# ==============================================================================
+# Workflow Name : Deploy Workspace
+# Description   : This workflow manages the lifecycle of a workspace, including
+#                 setup, validation, and teardown.
+#
+# Triggers :
+#     - [ ] push
+#     - [ ] pull_request
+#     - [ ] schedule
+#     - [ ] workflow_dispatch
+#     - [x] workflow_call
+#
+# Environment :
+#     - OS        : ubuntu-latest
+#     - Language  : Bash / Python
+#
+# Notes :
+#     - This workflow is designed to be reusable across different workspaces.
+# ==============================================================================
+
+name: Deploy Workspace
+
+on:
+  workflow_call:
+    inputs:
+      # Determines what workspace to deploy
+      deployment_file:
+        description: "Deployment configuration and environment file for the workspace"
+        required: true
+        type: string
+      # Controls whether provisioners apply changes or only plan.
+      # Defaults to true (plan-only / dry run) — safe for PRs and branch builds.
+      # Set to false on the calling workflow to perform a real deployment.
+      dry_run:
+        description: "Run in dry-run mode (plan only, no apply). Set to false to deploy."
+        required: false
+        type: boolean
+        default: true
+      # Azure store credentials (azure-keyvault, azure-appconfig)
+      azure_tenant_id:
+        description: "Azure tenant ID"
+        required: false
+        type: string
+      azure_subscription_id:
+        description: "Azure subscription ID"
+        required: false
+        type: string
+      azure_client_id:
+        description: "Azure service principal client ID"
+        required: false
+        type: string
+      # HashiCorp Vault store address
+      vault_address:
+        description: "HashiCorp Vault server address"
+        required: false
+        type: string
+      # Consul store address
+      consul_address:
+        description: "Consul server address"
+        required: false
+        type: string
+    secrets:
+      # Bitwarden store (bitwarden)
+      bitwarden_token:
+        required: false
+      # Azure store credentials (azure-keyvault, azure-appconfig)
+      azure_client_secret:
+        required: false
+      # HashiCorp Vault store token (vault)
+      vault_token:
+        required: false
+      # Consul store token (consul)
+      consul_token:
+        required: false
+
+# Permissions for the workflow
+permissions:
+  contents: read
+
+# Prevent concurrent deploys of the same workspace (Terraform state locks, etc.)
+# cancel-in-progress: false — let the running deploy finish rather than leaving infra mid-apply.
+concurrency:
+  group: deploy-${{ inputs.deployment_file }}
+  cancel-in-progress: false
+
+jobs:
+  # Single job — validate inputs, build the platform artifact, then deploy.
+  # dry_run=true (default) → plan only (strata deploy run --dry-run).
+  # dry_run=false          → full deploy (all stages applied).
+  run:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the repository to access deployment files and actions.
+      - name: Check Out
+        uses: actions/checkout@v4
+
+      # Install yq (used to extract values from YAML deployment files)
+      - name: Setup YQ
+        uses: ./.github/actions/setup-yq
+
+      # Install uv / python and strata
+      - name: Setup Strata
+        uses: ./.github/actions/setup-strata
+        with:
+          python-version: "3.13"
+
+      # Validate the deployment file structure and schema
+      - name: Validate Deployment
+        run: |
+          echo "[*] Validating deployment file ..."
+          strata validate "${{ inputs.deployment_file }}"
+          echo "[*] Validating deployment file ... DONE"
+
+      # Extract the deployment name from the file for use in downstream jobs
+      - name: Get Deployment Name
+        id: get_name
+        run: |
+          DEPLOYMENT_NAME=$(yq e '.meta.name' "${{ inputs.deployment_file }}")
+          echo "deployment_name=$DEPLOYMENT_NAME" >> $GITHUB_OUTPUT
+          echo "[*] Deployment name: $DEPLOYMENT_NAME"
+
+      # Verify all configured store integrations are reachable before proceeding
+      - name: Verify Integrations
+        uses: ./.github/actions/verify-integrations
+        with:
+          bitwarden_token: ${{ secrets.bitwarden_token }}
+          azure_tenant_id: ${{ inputs.azure_tenant_id }}
+          azure_subscription_id: ${{ inputs.azure_subscription_id }}
+          azure_client_id: ${{ inputs.azure_client_id }}
+          azure_client_secret: ${{ secrets.azure_client_secret }}
+          vault_address: ${{ inputs.vault_address }}
+          vault_token: ${{ secrets.vault_token }}
+          consul_address: ${{ inputs.consul_address }}
+          consul_token: ${{ secrets.consul_token }}
+
+      # Build the platform artifact using the deployment file (generates a .strata directory with all necessary files for deployment).
+      - name: Build
+        run: |
+          echo "[*] Building platform artifact ..."
+          strata build run --file "${{ inputs.deployment_file }}" --work-path .
+          echo "[*] Building platform artifact ... DONE"
+
+      # dry_run=true (default) → --dry-run: plan only, no apply.
+      # dry_run=false           → no flag:   full deploy (all stages).
+      - name: Deploy
+        run: |
+          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} (dry_run=${{ inputs.dry_run }}) ..."
+          strata deploy run --file "${{ inputs.deployment_file }}" --work-path . $DRY_RUN_FLAG
+          echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} ... DONE"

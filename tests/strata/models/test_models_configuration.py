@@ -75,7 +75,7 @@ class TestConfigurationLifecycleModel:
         script2.write_text("Write-Host 'Cleanup'\nexit 0")
 
         config_content = f"""
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config
@@ -102,7 +102,7 @@ spec:
         script_path = os.path.join(SCRIPTS_FOLDER, "validate-before.ps1")
 
         config_content = f"""
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config
@@ -130,7 +130,7 @@ spec:
     def test_lifecycle_phase_without_scripts(self, tmp_path):
         """Test lifecycle phase with only description."""
         config_content = """
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config
@@ -159,7 +159,7 @@ spec:
         script2 = os.path.join(SCRIPTS_FOLDER, "validate-after.ps1")
 
         config_content = f"""
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config
@@ -207,7 +207,7 @@ spec:
         script3 = os.path.join(SCRIPTS_FOLDER, "mock_validate.sh")
 
         config_content = f"""
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config
@@ -238,7 +238,7 @@ spec:
     def test_configuration_without_lifecycle(self, tmp_path):
         """Test configuration without lifecycle section."""
         config_content = """
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config
@@ -262,7 +262,7 @@ spec:
         script2 = os.path.join(SCRIPTS_FOLDER, "mock_validate.sh")
 
         config_content = f"""
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config
@@ -303,7 +303,7 @@ spec:
         ]
 
         config_content = """
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config

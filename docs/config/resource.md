@@ -5,7 +5,7 @@ Defines infrastructure resources (e.g., VMs) deployed by the platform. YAML file
 ## Schema
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: resource
 meta:
   name: <resource_name> # Required: ^[a-z][a-z0-9_]*$

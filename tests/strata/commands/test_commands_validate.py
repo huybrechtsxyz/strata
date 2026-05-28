@@ -16,7 +16,7 @@ class TestValidateCommand:
 
     def test_valid_file_mocked_success(self, tmp_path):
         target = tmp_path / "workspace.yaml"
-        target.write_text("apiVersion: platform.huybrechts.xyz/v1\nkind: workspace\n")
+        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\n")
         runner = CliRunner()
         with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=True):
             result = runner.invoke(validate_command, [str(target), "--work-path", str(tmp_path)])
@@ -24,7 +24,7 @@ class TestValidateCommand:
 
     def test_deep_flag_accepted(self, tmp_path):
         target = tmp_path / "workspace.yaml"
-        target.write_text("apiVersion: platform.huybrechts.xyz/v1\nkind: workspace\n")
+        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\n")
         runner = CliRunner()
         with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=True):
             result = runner.invoke(validate_command, [str(target), "--deep", "--work-path", str(tmp_path)])
@@ -73,7 +73,7 @@ class TestValidateStructuredErrors:
 
     def test_unknown_kind_produces_structured_error(self, tmp_path):
         target = tmp_path / "bad.yaml"
-        target.write_text("apiVersion: platform.huybrechts.xyz/v1\nkind: unknownkind\n")
+        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: unknownkind\n")
         runner = CliRunner()
         result = runner.invoke(
             validate_command,
@@ -89,7 +89,7 @@ class TestValidateStructuredErrors:
 
     def test_missing_kind_field_produces_structured_error(self, tmp_path):
         target = tmp_path / "nokind.yaml"
-        target.write_text("apiVersion: platform.huybrechts.xyz/v1\nspec:\n  name: test\n")
+        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nspec:\n  name: test\n")
         runner = CliRunner()
         result = runner.invoke(
             validate_command,
@@ -116,7 +116,7 @@ class TestValidateStructuredErrors:
 
     def test_valid_file_has_empty_errors_list(self, tmp_path):
         target = tmp_path / "workspace.yaml"
-        target.write_text("apiVersion: platform.huybrechts.xyz/v1\nkind: workspace\nspec:\n  name: test\n")
+        target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nspec:\n  name: test\n")
         runner = CliRunner()
         with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=True):
             result = runner.invoke(
@@ -131,7 +131,7 @@ class TestValidateStructuredErrors:
         target = tmp_path / "bad_env.yaml"
         # meta.name must match PlatformName: ^[a-z][a-z0-9_-]*$ — uppercase breaks it
         target.write_text(
-            "apiVersion: platform.huybrechts.xyz/v1\nkind: environment\nmeta:\n  name: UPPERCASE_NAME\nspec: {}\n"
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: environment\nmeta:\n  name: UPPERCASE_NAME\nspec: {}\n"
         )
         runner = CliRunner()
         result = runner.invoke(

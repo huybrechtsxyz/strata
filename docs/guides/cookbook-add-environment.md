@@ -23,7 +23,7 @@ cp envs/env-prd.yaml envs/env-stg.yaml
 Change the name, description, and any environment-specific values:
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: environment
 meta:
   name: haven_env_stg                          # ← unique name
@@ -65,7 +65,7 @@ cp deploy/deploy-prd.yaml deploy/deploy-stg.yaml
 Edit it to reference the new environment:
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: deployment
 meta:
   name: haven_deploy_stg                       # ← unique name

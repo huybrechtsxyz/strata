@@ -3,7 +3,7 @@
 #
 # Usage: cp config/template/firewalls/template-firewall.yaml config/{platform}/firewalls/{name}-firewall.yaml
 
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: firewall
 meta:
   name: ${name}

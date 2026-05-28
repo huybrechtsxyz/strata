@@ -29,6 +29,8 @@ class VariableStoreType(str, Enum):
     - AZURE_APPCONFIG: "azure-appconfig" integration type
     - HASHICORP_CONSUL: "consul" integration type
     - HASHICORP_VAULT: "vault" integration type
+    - INFISICAL: "infisical" integration type
+    - ETCD: "etcd" integration type
     """
 
     CONSTANT = "constant"
@@ -36,6 +38,8 @@ class VariableStoreType(str, Enum):
     AZURE_APPCONFIG = "azure-appconfig"
     HASHICORP_CONSUL = "consul"
     HASHICORP_VAULT = "vault"
+    INFISICAL = "infisical"
+    ETCD = "etcd"
 
 
 # Enumeration of supported secret store types.
@@ -48,6 +52,7 @@ class SecretStoreType(str, Enum):
     - AZURE_KEYVAULT: "azure-keyvault" integration type
     - BITWARDEN: "bitwarden" integration type
     - HASHICORP_VAULT: "vault" integration type
+    - INFISICAL: "infisical" integration type
     """
 
     CONSTANT = "constant"
@@ -55,6 +60,7 @@ class SecretStoreType(str, Enum):
     AZURE_KEYVAULT = "azure-keyvault"
     BITWARDEN = "bitwarden"
     HASHICORP_VAULT = "vault"
+    INFISICAL = "infisical"
 
 
 # Enumeration of supported feature flag store types.
@@ -65,14 +71,13 @@ class FeatureStoreType(str, Enum):
     Store types map to integration types registered in IntegrationFactory:
     - CONSTANT/ENVIRONMENT: Built-in resolvers (no integration required)
     - AZURE_APPCONFIG: "azure-appconfig" integration type
-
-    Can be expanded to include more feature flag services:
-    - LaunchDarkly, Split, Unleash, etc.
+    - FLAGSMITH: "flagsmith" integration type
     """
 
     CONSTANT = "constant"
     ENVIRONMENT = "environment"
     AZURE_APPCONFIG = "azure-appconfig"
+    FLAGSMITH = "flagsmith"
 
 
 # Model for secret definitions.

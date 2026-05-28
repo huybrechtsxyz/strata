@@ -222,7 +222,7 @@ The `@repo_name` prefix resolves via the solution's repository map. Repositories
 All platform YAML files follow Kubernetes-style structure:
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: <kind>
 meta:
   name: <name>
@@ -235,6 +235,72 @@ spec:
 ```
 
 Valid kinds: `deployment`, `workspace`, `configuration`, `environment`, `namespace`, `module`, `resource`, `provider`, `firewall`, `datacenter`.
+
+---
+
+## Provisioner Types
+
+Workspace YAML files support two IaC provisioners under `spec.provisioners[]`:
+
+| Type | Tool | When to use |
+|-----------|------------------|-----------------------------------------------|
+| `terraform` | Terraform CLI | Provision cloud infrastructure (VMs, networks) |
+| `ansible` | ansible-playbook | Configure servers after they are provisioned |
+
+### Terraform provisioner
+
+```yaml
+provisioners:
+  - name: infra
+    provisioner: terraform
+    source:
+      repository: haven
+      source_path: terraform
+    backend:
+      type: terraform_cloud
+      configuration:
+        organization: myorg
+        workspace: haven-prd
+```
+
+### Ansible provisioner
+
+```yaml
+provisioners:
+  - name: configure
+    provisioner: ansible
+    source:
+      repository: haven
+      source_path: ansible
+    configuration:
+      playbook: site.yml               # default: site.yml
+      inventory: inventory/hosts.yml   # auto-discovered if omitted
+      ssh_private_key_secret: haven_ssh_key   # key name in resolved secrets (see below)
+      extra_vars:
+        env: production
+```
+
+### SSH key pattern — never put keys in YAML
+
+Store the private key in the secret store and reference it by name. strata resolves it at deploy time, writes it to a `chmod 600` temp file for the duration of the subprocess call, then deletes it.
+
+```yaml
+spec:
+  provisioners:
+    - name: configure
+      provisioner: ansible
+      source:
+        repository: haven
+        source_path: ansible
+      configuration:
+        ssh_private_key_secret: haven_ssh_key   # name used to look up the key
+  secrets:
+    - key: haven_ssh_key
+      source: bitwarden
+      value: <bitwarden-item-id>   # item holds the full PEM content
+```
+
+The default secret name is `ssh_private_key`. Override it via `configuration.ssh_private_key_secret`.
 
 ---
 
@@ -275,9 +341,10 @@ These are available in lifecycle scripts during build/deploy:
 5. **Use `--dry-run`** — available on `build run`, `build clean`, `deploy run`, `deploy destroy`.
 6. **Use `--force` for automation** — skips interactive confirmation prompts.
 7. **Use `strata audit list --last --output json`** — inspect what the last command actually did.
-8. **Use `strata tools status`** — verify required tools (terraform, git, docker) are available before operations.
+8. **Use `strata tools status`** — verify required tools (terraform, ansible, git, docker) are available before operations.
 9. **Long operations produce no streaming output** — `deploy run` and `build run` may take minutes. Set appropriate timeouts.
 10. **Profile must be active for deep validation** — activate with `strata profile activate <name>` before `validate --deep`.
+11. **Never put SSH private keys in YAML** — use `configuration.ssh_private_key_secret` to reference a key stored in the secret store. strata handles the temp file lifecycle.
 
 ---
 
@@ -297,6 +364,16 @@ strata validate deploy/deploy-prd.yaml --output json
 strata build run -f deploy/deploy-prd.yaml --output json
 strata deploy run -f deploy/deploy-prd.yaml --dry-run --output json
 strata deploy run -f deploy/deploy-prd.yaml --force --output json
+```
+
+### Terraform + Ansible (provision then configure)
+```bash
+# Stage 1: provision infrastructure with Terraform
+strata deploy run -f deploy/deploy-prd.yaml --stage infrastructure --force --output json
+
+# Stage 2: configure servers with Ansible
+# SSH key resolved from secret store; no key file on disk before/after
+strata deploy run -f deploy/deploy-prd.yaml --stage configuration --force --output json
 ```
 
 ### Troubleshooting a Failed Deploy

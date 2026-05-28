@@ -1,4 +1,4 @@
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: provider
 meta:
   name: xyz_dc_eu_fr

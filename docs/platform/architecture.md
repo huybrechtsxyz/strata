@@ -63,7 +63,7 @@ Load order (later overrides earlier):
 **1. Define Infrastructure (workspace.yaml):**
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: workspace
 spec:
   providers:
@@ -81,7 +81,7 @@ spec:
 **2. Customize for Environment (environment.yaml):**
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: environment
 spec:
   workspace: workspaces/platform.yaml
@@ -96,7 +96,7 @@ spec:
 **3. Create Deployment Instance (deployment.yaml):**
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: deployment
 meta:
   name: platform_prod_2024_q1

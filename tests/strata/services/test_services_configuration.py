@@ -219,7 +219,7 @@ class TestConfigurationServiceLifecyclePhases:
         script2 = os.path.join(scripts_dir, "validate-after.ps1")
 
         config_content = f"""
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config
@@ -246,7 +246,7 @@ spec:
     def config_without_lifecycle(self, tmp_path):
         """Create configuration file without lifecycle phases."""
         config_content = """
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config_no_lifecycle
@@ -324,7 +324,7 @@ spec:
     def test_get_lifecycle_phase_empty_phase(self, service, tmp_path):
         """Test lifecycle phase with no scripts."""
         config_content = """
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: test_config

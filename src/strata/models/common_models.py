@@ -59,7 +59,7 @@ class PlatformKind(str, Enum):
 class PlatformVersion(str, Enum):
     """Enumeration of supported platform versions."""
 
-    v1 = "platform.huybrechts.xyz/v1"
+    v1 = "strata.huybrechts.xyz/v1"
 
 
 # Enumeration of supported provisioner names.
@@ -67,6 +67,17 @@ class ProvisionerType(str, Enum):
     """Enumeration of supported provisioner names."""
 
     TERRAFORM = "terraform"
+    ANSIBLE = "ansible"
+    SCRIPT = "script"
+
+
+# Enumeration of supported service deployer types (for module-level service deployment).
+class ServiceDeployerType(str, Enum):
+    """Enumeration of supported service deployer types for module deployment."""
+
+    HELM = "helm"
+    COMPOSE = "compose"
+    ARGOCD = "argocd"
     SCRIPT = "script"
 
 

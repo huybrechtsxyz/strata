@@ -5,7 +5,7 @@ Top-level configuration files defining complete infrastructure deployments. YAML
 ## Schema
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: workspace
 meta:
   name: <workspace_name> # Required: ^[a-z][a-z0-9_]*$
@@ -67,14 +67,28 @@ providers:
 ```yaml
 provisioners:
   - name: <provisioner_name>
-    provisioner: terraform # terraform, scripts
+    provisioner: terraform | ansible   # IaC tool
     source:
-      type: <source_type> # local, gitops, image, script
-      repository: <repository>
-      reference: <reference>
-      source_path: <source_path>
-      deploy_path: <deploy_path>
+      repository: <repository_name>    # must match a repo in configuration
+      source_path: <path>              # path within the repo
+      target_path: <path>              # optional: path in the build output
+    backend:                           # Terraform only — state storage
+      type: terraform_cloud | azurerm | s3 | ...
+      configuration: {}
+    configuration:                     # tool-specific options (see below)
+      playbook: site.yml               # Ansible: main playbook (default: site.yml)
+      inventory: inventory/hosts.yml   # Ansible: inventory file (auto-discovered if omitted)
+      ssh_private_key_secret: <name>   # Ansible: secret key name in resolved_values.secrets
+      extra_vars:                      # Ansible: extra -e variables
+        key: value
 ```
+
+### Provisioner types
+
+| Type        | Tool             | Deployer            | Stage types that activate it         |
+| ----------- | ---------------- | ------------------- | ------------------------------------ |
+| `terraform` | Terraform CLI    | `TerraformDeployer` | `infrastructure`, `terraform`        |
+| `ansible`   | ansible-playbook | `AnsibleDeployer`   | `configure`, `initialize`, `ansible` |
 
 ## Topology
 
@@ -169,7 +183,7 @@ spec:
             count: 1
 ```
 
-**Single Topology:**
+**Single Topology (Terraform only):**
 
 ```yaml
 meta:
@@ -227,7 +241,63 @@ spec:
       value: d47e736b-2db8-47d5-b46b-b2c8016ece73
 ```
 
-**Multi-Topology:**
+**Terraform + Ansible (infrastructure then configuration):**
+
+```yaml
+meta:
+  name: haven
+  labels:
+    version: "1.0.0"
+spec:
+  providers:
+    - name: kamatera_europe
+      file: config/providers/kamatera-eu-fr.yaml
+  provisioners:
+    - name: haven_infrastructure
+      provisioner: terraform
+      source:
+        repository: haven
+        source_path: terraform
+      backend:
+        type: terraform_cloud
+        configuration:
+          organization: myorg
+          workspace: haven-prd
+    - name: haven_init
+      provisioner: ansible
+      source:
+        repository: haven
+        source_path: ansible
+      configuration:
+        playbook: site.yml
+        inventory: inventory/hosts.yml
+        ssh_private_key_secret: haven_ssh_key   # resolved from the secret store at deploy time
+        extra_vars:
+          env: production
+  topology:
+    - name: haven_swarm
+      provider: kamatera_europe
+      provisioner: terraform
+      type: docker-swarm
+      components:
+        - name: manager
+          role: manager
+          resource:
+            file: config/resources/vm-manager.yaml
+            count: 1
+        - name: worker
+          role: worker
+          resource:
+            file: config/resources/vm-worker.yaml
+            count: 3
+  secrets:
+    - key: haven_ssh_key
+      source: bitwarden
+      value: b2f90a12-3c4d-5678-abcd-ef1234567890   # Bitwarden item ID holding the PEM key
+    - key: TERRAFORM_API_TOKEN
+      source: bitwarden
+      value: d47e736b-2db8-47d5-b46b-b2c8016ece73
+```
 
 ```yaml
 meta:

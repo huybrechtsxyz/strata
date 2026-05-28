@@ -1,4 +1,4 @@
-﻿# strata
+# strata
 
 strata is a **modular, multi-repository infrastructure platform** for managing workspaces and cluster orchestration. It uses a separation-of-concerns architecture where configuration, modules, and deployments live in separate version-controlled repositories, enabling repeatable, audit-ready infrastructure deployments.
 
@@ -127,7 +127,7 @@ strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 Platform YAML files follow a Kubernetes-style schema:
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: workspace          # workspace | deployment | environment | provider | resource | ...
 meta:
   name: my-workspace

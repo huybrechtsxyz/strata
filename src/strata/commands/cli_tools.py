@@ -5,6 +5,7 @@ from typing import Optional
 import click
 
 from strata.commands.cli_common import (
+    click_output_format,
     click_output_quiet,
     click_output_verbose,
     click_work_path,
@@ -23,14 +24,62 @@ def tools_group():
 
 @tools_group.command(name="status", help="List all known integrations and their availability.")
 @click_work_path
+@click_output_format
 @click_output_verbose
 @click_output_quiet
+@click.option(
+    "--deployment",
+    "deployment_file",
+    default=None,
+    metavar="FILE",
+    help="Deployment file to derive required/optional integration context.",
+)
+@click.option(
+    "--required",
+    "filter_required",
+    is_flag=True,
+    default=False,
+    help="Show only integrations required by the deployment.",
+)
+@click.option(
+    "--optional",
+    "filter_optional",
+    is_flag=True,
+    default=False,
+    help="Show only optional integrations referenced by the deployment.",
+)
+@click.option(
+    "--available", "filter_available", is_flag=True, default=False, help="Show only available (installed) integrations."
+)
+@click.option(
+    "--missing",
+    "filter_missing",
+    is_flag=True,
+    default=False,
+    help="Show only unavailable integrations. Exits with code 3 if any required ones are missing.",
+)
 def tools_status(
     work_path: Optional[str] = None,
+    output: Optional[str] = None,
     verbose: bool = False,
     quiet: bool = False,
+    deployment_file: Optional[str] = None,
+    filter_required: bool = False,
+    filter_optional: bool = False,
+    filter_available: bool = False,
+    filter_missing: bool = False,
 ) -> None:
-    command = StatusToolsCommand(work_path=work_path, verbose=verbose, quiet=quiet)
+    command = StatusToolsCommand(
+        deployment_file=deployment_file,
+        filter_required=filter_required,
+        filter_optional=filter_optional,
+        filter_available=filter_available,
+        filter_missing=filter_missing,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
     success = command.execute()
     handle_command_exit(command, success)
 

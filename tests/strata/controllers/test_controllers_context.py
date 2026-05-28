@@ -8,7 +8,7 @@ from strata.models.solution_model import SolutionMetaModel, SolutionModel, Solut
 
 def _make_solution(context=None) -> SolutionModel:
     return SolutionModel(
-        apiVersion="platform.huybrechts.xyz/v1",
+        apiVersion="strata.huybrechts.xyz/v1",
         kind="solution",
         meta=SolutionMetaModel(name="test-solution"),
         spec=SolutionSpecModel(

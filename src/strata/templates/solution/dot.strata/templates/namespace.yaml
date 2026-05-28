@@ -3,7 +3,7 @@
 #
 # Usage: cp config/template/namespaces/template-namespace.yaml config/{platform}/namespaces/{name}-namespace.yaml
 
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: namespace
 meta:
   name: ${name}

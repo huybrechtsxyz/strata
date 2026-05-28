@@ -130,7 +130,7 @@ Work path is resolved once before `main()` runs and stored in `ctx.obj["work_pat
 All YAML config files follow Kubernetes-style structure:
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: <kind>          # deployment | workspace | configuration | environment | ...
 meta:
   name: <name>        # PlatformName: lowercase, letters/numbers/underscores/hyphens

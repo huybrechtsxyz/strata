@@ -9,7 +9,7 @@ Define **validation rules** for providers/resources/topologies, establish **plat
 ## Schema
 
 ```yaml
-apiVersion: platform.huybrechts.xyz/v1
+apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
   name: <name> # ^[a-z][a-z0-9_]*$

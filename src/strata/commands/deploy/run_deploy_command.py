@@ -341,14 +341,12 @@ class RunDeployCommand(BaseDeployCommand):
     def _create_deployer(self, stage: DeploymentStageModel):
         """Instantiate and return the deployer for *stage*, or None.
 
-        Type resolution (same logic as old _select_deployer, but now the
-        deployer receives full context via its constructor):
-          stage.provisioner resolves to a terraform IaC entry  → TerraformDeployer
-          stage.type == 'infrastructure' or 'terraform'        → TerraformDeployer
-
-        TODO: extend with additional deployer types as they are implemented.
+        Type resolution:
+          stage.provisioner resolves to an IaC entry → match on ProvisionerType
+          stage.type == 'infrastructure' or 'terraform'    → TerraformDeployer
+          stage.type == 'configure' or 'ansible'           → AnsibleDeployer
         """
-        is_terraform = False
+        resolved_type: Optional[str] = None
 
         if stage.provisioner and self._deployment_service is not None:
             workspace_service = self._deployment_service.get_workspace_service()
@@ -359,13 +357,33 @@ class RunDeployCommand(BaseDeployCommand):
                     None,
                 )
                 if iac and iac.provisioner == ProvisionerType.TERRAFORM:
-                    is_terraform = True
+                    resolved_type = "terraform"
+                elif iac and iac.provisioner == ProvisionerType.ANSIBLE:
+                    resolved_type = "ansible"
 
-        if not is_terraform and stage.type in ("infrastructure", "terraform"):
-            is_terraform = True
+        # Convention-based fallback from stage.type
+        if resolved_type is None:
+            if stage.type in ("infrastructure", "terraform"):
+                resolved_type = "terraform"
+            elif stage.type in ("configure", "initialize", "ansible"):
+                resolved_type = "ansible"
 
-        if is_terraform:
+        if resolved_type == "terraform":
             return TerraformDeployer(
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+                force=self._force,
+                resolved_values=self._resolved_values,
+            )
+
+        if resolved_type == "ansible":
+            from strata.deployers.ansible_deployer import AnsibleDeployer
+
+            return AnsibleDeployer(
                 stage=stage,
                 deployment_service=self._deployment_service,  # type: ignore[arg-type]
                 configuration_service=self._configuration_service,  # type: ignore[arg-type]

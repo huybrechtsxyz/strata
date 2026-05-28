@@ -157,11 +157,16 @@ class IntegrationFactory:
             "git": ("strata.integrations.git", "GitIntegration"),
             "docker": ("strata.integrations.docker", "DockerIntegration"),
             "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
+            "opentofu": ("strata.integrations.opentofu", "OpenTofuIntegration"),
             "bitwarden": ("strata.integrations.bitwarden", "BitwardenIntegration"),
             "hashicorp_vault": ("strata.integrations.hashicorp_vault", "VaultIntegration"),
+            "openbao": ("strata.integrations.openbao", "OpenBaoIntegration"),
             "hashicorp_consul": ("strata.integrations.hashicorp_consul", "ConsulIntegration"),
             "azure_keyvault": ("strata.integrations.azure_keyvault", "AzureKeyVaultIntegration"),
             "azure_appconfig": ("strata.integrations.azure_appconfig", "AzureAppConfigIntegration"),
+            "infisical": ("strata.integrations.infisical", "InfisicalIntegration"),
+            "etcd": ("strata.integrations.etcd", "EtcdIntegration"),
+            "flagsmith": ("strata.integrations.flagsmith", "FlagsmithIntegration"),
         }
 
         # Try the registered type_mapping first (supports custom / aliased types)
@@ -197,6 +202,8 @@ def _auto_register_builtin_integrations():
         ("git", "strata.integrations.git", "GitIntegration"),
         ("docker", "strata.integrations.docker", "DockerIntegration"),
         ("terraform", "strata.integrations.terraform", "TerraformIntegration"),
+        ("opentofu", "strata.integrations.opentofu", "OpenTofuIntegration"),
+        ("ansible", "strata.integrations.ansible", "AnsibleIntegration"),
         ("bitwarden", "strata.integrations.bitwarden", "BitwardenIntegration"),
         (
             "azure-keyvault",
@@ -210,6 +217,10 @@ def _auto_register_builtin_integrations():
         ),
         ("consul", "strata.integrations.hashicorp_consul", "ConsulIntegration"),
         ("vault", "strata.integrations.hashicorp_vault", "VaultIntegration"),
+        ("openbao", "strata.integrations.openbao", "OpenBaoIntegration"),
+        ("infisical", "strata.integrations.infisical", "InfisicalIntegration"),
+        ("etcd", "strata.integrations.etcd", "EtcdIntegration"),
+        ("flagsmith", "strata.integrations.flagsmith", "FlagsmithIntegration"),
         # Add more as they are implemented
     ]
 
