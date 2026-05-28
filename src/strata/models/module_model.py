@@ -15,6 +15,7 @@ from strata.models.common_models import (
     PlatformName,
     PlatformVersion,
     SecretRefs,
+    ServiceDeployerType,
     SourceModel,
     VariableRefs,
 )
@@ -86,6 +87,10 @@ class ModuleSpecModel(BaseModel):
     """Model for module spec (lifecycle, modules, validation)."""
 
     source: SourceModel = Field(description="Module deployment configuration")
+    type: Optional[ServiceDeployerType] = Field(
+        None,
+        description="Service deployer type for this module (helm, compose, argocd, script). Required for service deployment commands.",
+    )
     lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Module-specific lifecycle hooks")
     properties: Optional[ModulePropertiesModel] = Field(
         None, description="Module-specific properties and configurations"

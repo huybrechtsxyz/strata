@@ -71,6 +71,16 @@ class ProvisionerType(str, Enum):
     SCRIPT = "script"
 
 
+# Enumeration of supported service deployer types (for module-level service deployment).
+class ServiceDeployerType(str, Enum):
+    """Enumeration of supported service deployer types for module deployment."""
+
+    HELM = "helm"
+    COMPOSE = "compose"
+    ARGOCD = "argocd"
+    SCRIPT = "script"
+
+
 # Model for individual script with scope and execution metadata
 class ScriptPathModel(BaseModel):
     """Individual script with scope and execution metadata."""
