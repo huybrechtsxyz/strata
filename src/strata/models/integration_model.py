@@ -61,7 +61,7 @@ class IntegrationModel(BaseModel):
     )
     capabilities: Set[str] = Field(
         default_factory=set,
-        description="Set of capabilities this integration provides: repository, infrastructure, secrets, variables, features, keyvalue, api",
+        description="Set of capabilities this integration provides: api, container, features, infrastructure, keyvalue, repository, secrets, variables",
     )
     description: Optional[str] = Field(None, description="Human-readable description of the integration")
     required: bool = Field(

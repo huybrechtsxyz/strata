@@ -119,14 +119,16 @@ if isinstance(integration, ISecretStore):
     secret = integration.get_secret("my/secret")
 ```
 
-| Protocol              | Methods                                          |
-| --------------------- | ------------------------------------------------ |
-| `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` |
-| `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       |
-| `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    |
-| `IKVStore`            | `get_kv`, `set_kv`                               |
-| `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            |
-| `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               |
+| YAML capability string | Protocol              | Methods                                          |
+| ---------------------- | --------------------- | ------------------------------------------------ |
+| `variables`            | `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` |
+| `secrets`              | `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       |
+| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    |
+| `keyvalue`             | `IKVStore`            | `get_kv`, `set_kv`                               |
+| `repository`           | `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            |
+| `infrastructure`       | `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               |
+| `container`            | `IContainerTool`      | `build`, `run`, `push`, `pull`                   |
+| `api`                  | *(no protocol)*       | Generic REST/HTTP — no capability interface      |
 
 `StoreIntegration` (base for all store-type integrations) provides no-op default implementations for all store methods — subclasses override only what they support.
 
