@@ -404,8 +404,9 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
     # Service Methods
 
     def get_validation_errors(self) -> List[str]:
-        """Return the list of validation errors after loading related services."""
-        return self._validation_errors
+        """Return all validation errors: Phase 1 (Pydantic) errors from _errors plus
+        dynamic errors accumulated in _validation_errors."""
+        return self._errors + self._validation_errors
 
     def load_workspace_services(
         self, objects_path: Optional[str] = None, repo_map: Optional[Dict[str, str]] = None
