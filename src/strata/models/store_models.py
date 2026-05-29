@@ -7,7 +7,7 @@ Store type enums map to integration types registered in IntegrationFactory.
 from enum import Enum
 from typing import Annotated, Any, List, Optional
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 
 # Enumeration of store backend source categories.
@@ -49,6 +49,7 @@ class SecretStoreType(str, Enum):
 
     Store types map to integration types registered in IntegrationFactory:
     - CONSTANT/ENVIRONMENT: Built-in resolvers (no integration required)
+    - GITHUB: Built-in resolver — env vars injected by GitHub Actions runner (no integration required)
     - AZURE_KEYVAULT: "azure-keyvault" integration type
     - BITWARDEN: "bitwarden" integration type
     - HASHICORP_VAULT: "vault" integration type
@@ -57,6 +58,7 @@ class SecretStoreType(str, Enum):
 
     CONSTANT = "constant"
     ENVIRONMENT = "environment"
+    GITHUB = "github"
     AZURE_KEYVAULT = "azure-keyvault"
     BITWARDEN = "bitwarden"
     HASHICORP_VAULT = "vault"
@@ -94,16 +96,27 @@ class SecretStoreModel(BaseModel):
         description="Secret key name for referencing in configurations"
     )
     store: SecretStoreType = Field(
-        description="Secret store type: constant, environment, azure-keyvault, bitwarden, or vault"
+        description="Secret store type: constant, environment, github, azure-keyvault, bitwarden, or vault"
     )
     value: Any = Field(
-        description="Secret identifier: literal value for constant, env var name for environment, secret path/ID for integration stores"
+        description="Secret identifier: literal value for constant, env var name for environment, "
+        "GitHub Actions secret name (env var name injected by the runner, e.g. MY_API_KEY) for github, "
+        "secret path/ID for integration stores"
     )
     version: Optional[str] = Field(
         None,
         description="Optional version for store-based secrets (supported by some integrations)",
     )
     description: Optional[str] = Field(None, description="Optional description for documentation purposes")
+
+    @model_validator(mode="after")
+    def validate_version_not_set_for_github(self) -> "SecretStoreModel":
+        if self.store == SecretStoreType.GITHUB and self.version is not None:
+            raise ValueError(
+                f"Secret '{self.key}': 'version' is not supported for store type 'github'. "
+                f"GitHub Secrets are not versioned."
+            )
+        return self
 
 
 # Model for variable definitions.

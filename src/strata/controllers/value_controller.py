@@ -211,6 +211,22 @@ class ValueController(BaseController):
                 return None, (f"Secret '{item.key}': env var '{item.value}' is not set.")
             return env_val, None
 
+        if store == SecretStoreType.GITHUB:
+            if os.environ.get("GITHUB_ACTIONS") != "true":
+                logger.warning(
+                    "Resolving 'github' store secret outside GitHub Actions",
+                    key=item.key,
+                    hint="Set the env var manually for local runs, or run inside a GitHub Actions workflow.",
+                )
+            env_key = str(item.value).upper()
+            env_val = os.environ.get(env_key)
+            if env_val is None:
+                return None, (
+                    f"Secret '{item.key}': GitHub Actions env var '{env_key}' is not set. "
+                    f"Ensure the secret is declared in your GitHub Actions workflow and the workflow is running."
+                )
+            return env_val, None
+
         integration = self._get_integration_by_type(store.value)
         if integration is None:
             return None, (f"Secret '{item.key}': no integration registered for store type '{store.value}'.")

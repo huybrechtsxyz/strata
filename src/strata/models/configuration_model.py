@@ -20,7 +20,7 @@ class ConfigurationSecurityModel(BaseModel):
 
     allowed_secret_stores: Optional[List[str]] = Field(
         None,
-        description="Allowed secret store types. If None, all stores are allowed (dev mode). For production, restrict to secure stores only.",
+        description="Allowed secret store types. If None, all stores are allowed (dev mode). Valid values: constant, environment, github, azure-keyvault, bitwarden, vault, infisical. For production, restrict to secure stores only. 'github' and 'environment' are pipeline-trust stores (resolved from environment variables) — add them explicitly to permit use.",
     )
     allowed_variable_stores: Optional[List[str]] = Field(
         None,

@@ -95,6 +95,57 @@ Multiple configs merge: built-in → 00-_.yaml → 10-_.yaml → 99-\*.yaml
 - Unique provider/topology names after merge
 - Defined regions/resources when additional\_\* = false
 
+## Secret Stores
+
+Secrets in `spec.secrets` are resolved at build time by the `strata build` command. The `store` field controls which backend is used. The following stores are supported:
+
+| `store` value    | Resolver type | Integration required? | Notes                                      |
+| ---------------- | ------------- | --------------------- | ------------------------------------------ |
+| `constant`       | Built-in      | No                    | Literal value — avoid for real secrets     |
+| `environment`    | Built-in      | No                    | Reads a named env var from the local shell |
+| `github`         | Built-in      | No                    | Reads a GitHub Actions injected env var    |
+| `azure-keyvault` | Integration   | Yes                   | Azure Key Vault secret                     |
+| `bitwarden`      | Integration   | Yes                   | Bitwarden Secrets Manager item             |
+| `vault`          | Integration   | Yes                   | HashiCorp Vault / OpenBao secret           |
+| `infisical`      | Integration   | Yes                   | Infisical secret                           |
+
+### `github` — GitHub Actions secrets
+
+GitHub Actions secrets are injected into the runner's environment as plain environment variables before each job step executes. The `github` store type reads from those environment variables.
+
+```yaml
+spec:
+  secrets:
+    - key: db_password
+      store: github
+      value: DB_PASSWORD          # GitHub secret name (env var injected by Actions)
+      description: "Database password from GitHub Secrets"
+```
+
+**How it works:** The `value` field is the environment variable name. GitHub Actions maps your repository secret `DB_PASSWORD` to the env var `DB_PASSWORD` when you reference it in the workflow's `env:` block. The resolver calls `os.environ.get("DB_PASSWORD")` at build time.
+
+**Uppercase normalization:** GitHub uppercases all secret names at storage time. The resolver automatically uppercases `value` before the lookup — so `value: db_password` and `value: DB_PASSWORD` are equivalent.
+
+**Local development:** Running `strata build` locally with `store: github` secrets emits a warning because `GITHUB_ACTIONS` is not set. Set the env vars manually for local testing:
+
+```powershell
+$env:DB_PASSWORD = "local-test-value"
+```
+
+**`version` field:** Not supported for `store: github`. GitHub Secrets are not versioned. Specifying `version` raises a validation error.
+
+**Production policy:** If your configuration defines `security.allowed_secret_stores`, add `"github"` explicitly:
+
+```yaml
+spec:
+  security:
+    allowed_secret_stores:
+      - github
+      - azure-keyvault
+```
+
+---
+
 ## Notes
 
 - Built-in default in `src/STRATA_platform/data/configuration.yaml` always loads first
