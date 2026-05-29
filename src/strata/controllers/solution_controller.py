@@ -1047,6 +1047,8 @@ class SolutionController(BaseController):
         for src in sorted(solution_tpl.rglob("*")):
             if not src.is_file():
                 continue
+            if "__pycache__" in src.parts or src.suffix in (".pyc", ".pyo"):
+                continue
             rel_parts = [_dest_name(p) for p in src.relative_to(solution_tpl).parts]
             dest = self._work_path / Path(*rel_parts)
             if dest.exists():
@@ -1124,6 +1126,8 @@ class SolutionController(BaseController):
 
         for src in sorted(solution_tpl.rglob("*")):
             if not src.is_file():
+                continue
+            if "__pycache__" in src.parts or src.suffix in (".pyc", ".pyo"):
                 continue
             rel_parts = [_dest_name(p) for p in src.relative_to(solution_tpl).parts]
             rel_path = str(Path(*rel_parts)).replace("\\", "/")
