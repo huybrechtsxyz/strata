@@ -34,6 +34,28 @@ Key paths: `tests/xyz_platform/`, `conftest.py`, `noxfile.py`.
 **Test file location:** `tests/xyz_platform/controllers/test_controllers_solution.py`
 **Import added:** `from pathlib import Path` and `from unittest.mock import patch`
 
+### 2026-05-29 — github secret store tests
+
+**What was added:**
+- `tests/strata/models/test_store_models.py` (new file) — `TestSecretStoreTypeGithub` class with 4 tests.
+- `TestValueControllerGithubStore` class appended to `tests/strata/controllers/test_controllers_value.py` with 5 tests.
+
+**Patterns followed:**
+- Model tests use `pytest.raises(ValidationError)` with `exc_info` inspection — assert against `str(exc_info.value)`.
+- Controller tests call `ctrl._resolve_secret(item)` directly on a `ValueController()` instance.
+- Env var isolation via `monkeypatch.setenv` / `monkeypatch.delenv` — no manual cleanup needed.
+- Logger warning capture via `unittest.mock.patch("strata.controllers.value_controller.logger")` as context manager; inspect `.warning.assert_called_once()` / `.warning.assert_not_called()`.
+- Added `patch` to the existing `from unittest.mock import MagicMock` import line.
+
+**Key implementation facts confirmed:**
+- `SecretStoreType.GITHUB = "github"` is live in `src/strata/models/store_models.py`.
+- `SecretStoreModel` has `@model_validator(mode="after")` that raises `ValueError` when `version` is set for github store.
+- `_resolve_secret` in `value_controller.py` applies `.upper()` normalization: `env_key = str(item.value).upper()`.
+- Warning fires when `os.environ.get("GITHUB_ACTIONS") != "true"`; silent when it equals `"true"`.
+- Error message for missing env var contains `"GitHub Actions"`.
+
+**All 35 tests pass (31 pre-existing + 4 model + 5 controller).**
+
 ### 2026-05-19 — sln group test pattern
 
 **Pattern for testing sln subcommands:**

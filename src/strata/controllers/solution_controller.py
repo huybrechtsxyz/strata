@@ -189,6 +189,42 @@ class SolutionController(BaseController):
         self._add_message(f"Solution '{name}' initialised at {self._work_path}")
         return True, []
 
+    def update(self) -> Tuple[bool, List[str]]:
+        """Update package-owned files in an existing solution workspace.
+
+        Overwrites files that ship with the strata package (schemas,
+        devcontainer, CI workflows, example templates) while preserving
+        user-customised files (.code-workspace, .vscode/, cli.yaml, etc.).
+
+        This is intended to be run after upgrading the strata package so the
+        workspace picks up new schemas, template improvements, and CI changes.
+
+        Returns:
+            (success, errors)
+        """
+        state_dir = SolutionController.get_state_dir(self._work_path)
+        if not state_dir.exists():
+            self._add_error("No .strata/ directory found — workspace not initialised. Run 'strata sln init' first.")
+            return False, self.get_errors()
+
+        # Load the solution so we have solution_name for template substitutions
+        ok, errors = self.load()
+        if not ok:
+            return ok, errors
+
+        # Phase 1: Update package-owned scaffold files (overwrite existing)
+        ok, errors = self._update_scaffold_files()
+        if not ok:
+            return ok, errors
+
+        # Phase 2: Regenerate JSON schemas (always derived from models)
+        ok, errors = self._generate_schemas()
+        if not ok:
+            return ok, errors
+
+        self._add_message("Solution workspace updated successfully")
+        return True, []
+
     def clean_solution(
         self,
         work_path: Path,
@@ -652,227 +688,231 @@ class SolutionController(BaseController):
         }
 
         workspace_path = self._work_path / f"{name}{SOLUTION_WORKSPACE_SUFFIX}"
-        try:
-            workspace_path.write_text(
-                json.dumps(workspace_data, indent=2),
-                encoding="utf-8",
-            )
-            self.logger.info("VS Code workspace written", path=str(workspace_path))
-            self._add_message(f"Workspace file written: {workspace_path.name}")
-
-            # Create a small `.vscode/` scaffold. Prefer rendering templates from
-            # package templates/vscode/*.template.* when available; fall
-            # back to the inline scaffold if templates are missing.
+        if workspace_path.exists():
+            self.logger.debug("Workspace file already exists — skipping", path=str(workspace_path))
+            self._add_message(f"Workspace file exists (not overwritten): {workspace_path.name}")
+        else:
             try:
-                vscode_dir = self._work_path / ".vscode"
-                vscode_dir.mkdir(parents=True, exist_ok=True)
-
-                templates_vscode = get_pkg_templates_path() / "vscode"
-                if templates_vscode.exists() and templates_vscode.is_dir():
-                    # Render template files into the workspace .vscode directory.
-                    processor = TemplateProcessor(templates_vscode, cleanup_templates=False)
-                    # Temporarily expose solution name to the template processor
-                    prev = os.environ.get("SOLUTION_NAME")
-                    os.environ["SOLUTION_NAME"] = name
-                    try:
-                        for tpl in templates_vscode.iterdir():
-                            if not tpl.is_file() or ".template." not in tpl.name:
-                                continue
-                            try:
-                                content = tpl.read_text(encoding="utf-8")
-                                processed = processor._substitute_environment_variables(content)
-                                out_name = tpl.name.replace(".template.", ".")
-                                out_path = vscode_dir / out_name
-                                if not out_path.exists():
-                                    out_path.write_text(processed, encoding="utf-8")
-                                    self._add_message(f"Created: {out_path.relative_to(self._work_path)}")
-                                else:
-                                    self.logger.debug(".vscode template output exists — skipping", path=str(out_path))
-                            except Exception as e:
-                                self.logger.warning(
-                                    "Failed to render vscode template", extra={"template": str(tpl), "error": str(e)}
-                                )
-                    finally:
-                        # restore environment
-                        if prev is None:
-                            del os.environ["SOLUTION_NAME"]
-                        else:
-                            os.environ["SOLUTION_NAME"] = prev
-                else:
-                    # No templates available; fall back to inline scaffolding (non-destructive)
-                    extensions = {
-                        "recommendations": [
-                            "ms-python.python",
-                            "ms-python.vscode-pylance",
-                            "charliermarsh.ruff",
-                            "ms-vscode.powershell",
-                            "ms-vscode-remote.remote-containers",
-                            "redhat.vscode-yaml",
-                            "hashicorp.terraform",
-                            "streetsidesoftware.code-spell-checker",
-                            "eamodio.gitlens",
-                            "vscode-icons-team.vscode-icons",
-                            "EditorConfig.EditorConfig",
-                        ],
-                        "unwantedRecommendations": [
-                            "ms-python.black-formatter",
-                            "ms-python.isort",
-                        ],
-                    }
-                    ext_file = vscode_dir / "extensions.json"
-                    if not ext_file.exists():
-                        ext_file.write_text(json.dumps(extensions, indent=2), encoding="utf-8")
-                        self._add_message(f"Created: {ext_file.relative_to(self._work_path)}")
-                    else:
-                        self.logger.debug(".vscode/extensions.json already exists — skipping", path=str(ext_file))
-
-                    settings = {
-                        "[python]": {
-                            "editor.insertSpaces": True,
-                            "editor.tabSize": 4,
-                            "editor.defaultFormatter": "charliermarsh.ruff",
-                            "editor.formatOnSave": True,
-                            "editor.codeActionsOnSave": {
-                                "source.fixAll.ruff": "explicit",
-                                "source.organizeImports.ruff": "explicit",
-                            },
-                        },
-                        "[yaml]": {
-                            "editor.insertSpaces": True,
-                            "editor.tabSize": 2,
-                            "editor.defaultFormatter": "redhat.vscode-yaml",
-                            "editor.formatOnSave": True,
-                        },
-                        "python.testing.pytestEnabled": True,
-                        "python.testing.pytestArgs": ["tests"],
-                        "python.envFile": "${workspaceFolder}/.env",
-                        "python.testing.cwd": "${workspaceFolder}",
-                        "editor.formatOnSave": True,
-                        "files.eol": "\n",
-                        "files.exclude": {
-                            "**/.git": True,
-                            ".ruff_cache": True,
-                            ".mypy_cache": True,
-                            ".nox": True,
-                            ".pytest_cache": True,
-                            ".coverage": True,
-                        },
-                    }
-                    settings_file = vscode_dir / "settings.json"
-                    if not settings_file.exists():
-                        settings_file.write_text(json.dumps(settings, indent=2), encoding="utf-8")
-                        self._add_message(f"Created: {settings_file.relative_to(self._work_path)}")
-                    else:
-                        self.logger.debug(".vscode/settings.json already exists — skipping", path=str(settings_file))
-
-                    launch = {
-                        "version": "0.2.0",
-                        "configurations": [
-                            {
-                                "name": f"Run: {name}",
-                                "type": "debugpy",
-                                "request": "launch",
-                                "program": "${workspaceFolder}/src/strata/__main__.py",
-                                "args": "${input:cliArgs}",
-                                "cwd": "${workspaceFolder}",
-                                "env": {"PYTHONPATH": "${workspaceFolder}/src"},
-                                "console": "integratedTerminal",
-                                "justMyCode": True,
-                            },
-                            {
-                                "name": f"Debug: {name}",
-                                "type": "debugpy",
-                                "request": "launch",
-                                "program": "${workspaceFolder}/src/strata/__main__.py",
-                                "args": "${input:cliArgs}",
-                                "cwd": "${workspaceFolder}",
-                                "env": {"PYTHONPATH": "${workspaceFolder}/src"},
-                                "console": "integratedTerminal",
-                                "justMyCode": False,
-                            },
-                        ],
-                        "inputs": [
-                            {
-                                "id": "cliArgs",
-                                "type": "promptString",
-                                "description": "CLI arguments (e.g. --help, version, deploy platform.yaml)",
-                                "default": "--help",
-                            }
-                        ],
-                    }
-                    launch_file = vscode_dir / "launch.json"
-                    if not launch_file.exists():
-                        launch_file.write_text(json.dumps(launch, indent=2), encoding="utf-8")
-                        self._add_message(f"Created: {launch_file.relative_to(self._work_path)}")
-                    else:
-                        self.logger.debug(".vscode/launch.json already exists — skipping", path=str(launch_file))
-
-                    tasks = {
-                        "version": "2.0.0",
-                        "tasks": [
-                            {
-                                "label": f"Run: {name}",
-                                "type": "shell",
-                                "command": "strata ${input:cliArgs}",
-                                "group": "build",
-                                "presentation": {
-                                    "echo": True,
-                                    "reveal": "always",
-                                    "focus": True,
-                                    "panel": "shared",
-                                    "clear": True,
-                                },
-                                "problemMatcher": [],
-                            },
-                            {
-                                "label": "Check: lint + format + types",
-                                "type": "shell",
-                                "command": "scripts/Check.ps1",
-                                "options": {"shell": {"executable": "pwsh", "args": ["-NoProfile", "-File"]}},
-                                "group": "build",
-                                "presentation": {
-                                    "echo": True,
-                                    "reveal": "always",
-                                    "focus": True,
-                                    "panel": "shared",
-                                    "clear": True,
-                                },
-                                "problemMatcher": [],
-                            },
-                        ],
-                        "inputs": [
-                            {
-                                "id": "cliArgs",
-                                "type": "promptString",
-                                "description": "CLI arguments (e.g. version, deploy platform.yaml)",
-                                "default": "version",
-                            }
-                        ],
-                    }
-                    tasks_file = vscode_dir / "tasks.json"
-                    if not tasks_file.exists():
-                        tasks_file.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
-                        self._add_message(f"Created: {tasks_file.relative_to(self._work_path)}")
-                    else:
-                        self.logger.debug(".vscode/tasks.json already exists — skipping", path=str(tasks_file))
-
-                    readme_file = vscode_dir / "README.md"
-                    if not readme_file.exists():
-                        readme_file.write_text(
-                            "# VS Code workspace settings\n\nThis folder contains recommended extensions, settings, tasks and launch configurations for this workspace.\n",
-                            encoding="utf-8",
-                        )
-                        self._add_message(f"Created: {readme_file.relative_to(self._work_path)}")
-                    else:
-                        self.logger.debug(".vscode/README.md already exists — skipping", path=str(readme_file))
+                workspace_path.write_text(
+                    json.dumps(workspace_data, indent=2),
+                    encoding="utf-8",
+                )
+                self.logger.info("VS Code workspace written", path=str(workspace_path))
+                self._add_message(f"Workspace file written: {workspace_path.name}")
             except Exception as e:
-                self.logger.warning("Failed to write .vscode scaffolding", extra={"error": str(e)})
+                msg = f"Failed to write workspace file: {e}"
+                self._add_error(msg)
+                return False, self.get_errors()
 
-            return True, []
+        # Create a small `.vscode/` scaffold. Prefer rendering templates from
+        # package templates/vscode/*.template.* when available; fall
+        # back to the inline scaffold if templates are missing.
+        try:
+            vscode_dir = self._work_path / ".vscode"
+            vscode_dir.mkdir(parents=True, exist_ok=True)
+
+            templates_vscode = get_pkg_templates_path() / "vscode"
+            if templates_vscode.exists() and templates_vscode.is_dir():
+                # Render template files into the workspace .vscode directory.
+                processor = TemplateProcessor(templates_vscode, cleanup_templates=False)
+                # Temporarily expose solution name to the template processor
+                prev = os.environ.get("SOLUTION_NAME")
+                os.environ["SOLUTION_NAME"] = name
+                try:
+                    for tpl in templates_vscode.iterdir():
+                        if not tpl.is_file() or ".template." not in tpl.name:
+                            continue
+                        try:
+                            content = tpl.read_text(encoding="utf-8")
+                            processed = processor._substitute_environment_variables(content)
+                            out_name = tpl.name.replace(".template.", ".")
+                            out_path = vscode_dir / out_name
+                            if not out_path.exists():
+                                out_path.write_text(processed, encoding="utf-8")
+                                self._add_message(f"Created: {out_path.relative_to(self._work_path)}")
+                            else:
+                                self.logger.debug(".vscode template output exists — skipping", path=str(out_path))
+                        except Exception as e:
+                            self.logger.warning(
+                                "Failed to render vscode template", extra={"template": str(tpl), "error": str(e)}
+                            )
+                finally:
+                    # restore environment
+                    if prev is None:
+                        del os.environ["SOLUTION_NAME"]
+                    else:
+                        os.environ["SOLUTION_NAME"] = prev
+            else:
+                # No templates available; fall back to inline scaffolding (non-destructive)
+                extensions = {
+                    "recommendations": [
+                        "ms-python.python",
+                        "ms-python.vscode-pylance",
+                        "charliermarsh.ruff",
+                        "ms-vscode.powershell",
+                        "ms-vscode-remote.remote-containers",
+                        "redhat.vscode-yaml",
+                        "hashicorp.terraform",
+                        "streetsidesoftware.code-spell-checker",
+                        "eamodio.gitlens",
+                        "vscode-icons-team.vscode-icons",
+                        "EditorConfig.EditorConfig",
+                    ],
+                    "unwantedRecommendations": [
+                        "ms-python.black-formatter",
+                        "ms-python.isort",
+                    ],
+                }
+                ext_file = vscode_dir / "extensions.json"
+                if not ext_file.exists():
+                    ext_file.write_text(json.dumps(extensions, indent=2), encoding="utf-8")
+                    self._add_message(f"Created: {ext_file.relative_to(self._work_path)}")
+                else:
+                    self.logger.debug(".vscode/extensions.json already exists — skipping", path=str(ext_file))
+
+                settings = {
+                    "[python]": {
+                        "editor.insertSpaces": True,
+                        "editor.tabSize": 4,
+                        "editor.defaultFormatter": "charliermarsh.ruff",
+                        "editor.formatOnSave": True,
+                        "editor.codeActionsOnSave": {
+                            "source.fixAll.ruff": "explicit",
+                            "source.organizeImports.ruff": "explicit",
+                        },
+                    },
+                    "[yaml]": {
+                        "editor.insertSpaces": True,
+                        "editor.tabSize": 2,
+                        "editor.defaultFormatter": "redhat.vscode-yaml",
+                        "editor.formatOnSave": True,
+                    },
+                    "python.testing.pytestEnabled": True,
+                    "python.testing.pytestArgs": ["tests"],
+                    "python.envFile": "${workspaceFolder}/.env",
+                    "python.testing.cwd": "${workspaceFolder}",
+                    "editor.formatOnSave": True,
+                    "files.eol": "\n",
+                    "files.exclude": {
+                        "**/.git": True,
+                        ".ruff_cache": True,
+                        ".mypy_cache": True,
+                        ".nox": True,
+                        ".pytest_cache": True,
+                        ".coverage": True,
+                    },
+                }
+                settings_file = vscode_dir / "settings.json"
+                if not settings_file.exists():
+                    settings_file.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+                    self._add_message(f"Created: {settings_file.relative_to(self._work_path)}")
+                else:
+                    self.logger.debug(".vscode/settings.json already exists — skipping", path=str(settings_file))
+
+                launch = {
+                    "version": "0.2.0",
+                    "configurations": [
+                        {
+                            "name": f"Run: {name}",
+                            "type": "debugpy",
+                            "request": "launch",
+                            "program": "${workspaceFolder}/src/strata/__main__.py",
+                            "args": "${input:cliArgs}",
+                            "cwd": "${workspaceFolder}",
+                            "env": {"PYTHONPATH": "${workspaceFolder}/src"},
+                            "console": "integratedTerminal",
+                            "justMyCode": True,
+                        },
+                        {
+                            "name": f"Debug: {name}",
+                            "type": "debugpy",
+                            "request": "launch",
+                            "program": "${workspaceFolder}/src/strata/__main__.py",
+                            "args": "${input:cliArgs}",
+                            "cwd": "${workspaceFolder}",
+                            "env": {"PYTHONPATH": "${workspaceFolder}/src"},
+                            "console": "integratedTerminal",
+                            "justMyCode": False,
+                        },
+                    ],
+                    "inputs": [
+                        {
+                            "id": "cliArgs",
+                            "type": "promptString",
+                            "description": "CLI arguments (e.g. --help, version, deploy platform.yaml)",
+                            "default": "--help",
+                        }
+                    ],
+                }
+                launch_file = vscode_dir / "launch.json"
+                if not launch_file.exists():
+                    launch_file.write_text(json.dumps(launch, indent=2), encoding="utf-8")
+                    self._add_message(f"Created: {launch_file.relative_to(self._work_path)}")
+                else:
+                    self.logger.debug(".vscode/launch.json already exists — skipping", path=str(launch_file))
+
+                tasks = {
+                    "version": "2.0.0",
+                    "tasks": [
+                        {
+                            "label": f"Run: {name}",
+                            "type": "shell",
+                            "command": "strata ${input:cliArgs}",
+                            "group": "build",
+                            "presentation": {
+                                "echo": True,
+                                "reveal": "always",
+                                "focus": True,
+                                "panel": "shared",
+                                "clear": True,
+                            },
+                            "problemMatcher": [],
+                        },
+                        {
+                            "label": "Check: lint + format + types",
+                            "type": "shell",
+                            "command": "scripts/Check.ps1",
+                            "options": {"shell": {"executable": "pwsh", "args": ["-NoProfile", "-File"]}},
+                            "group": "build",
+                            "presentation": {
+                                "echo": True,
+                                "reveal": "always",
+                                "focus": True,
+                                "panel": "shared",
+                                "clear": True,
+                            },
+                            "problemMatcher": [],
+                        },
+                    ],
+                    "inputs": [
+                        {
+                            "id": "cliArgs",
+                            "type": "promptString",
+                            "description": "CLI arguments (e.g. version, deploy platform.yaml)",
+                            "default": "version",
+                        }
+                    ],
+                }
+                tasks_file = vscode_dir / "tasks.json"
+                if not tasks_file.exists():
+                    tasks_file.write_text(json.dumps(tasks, indent=2), encoding="utf-8")
+                    self._add_message(f"Created: {tasks_file.relative_to(self._work_path)}")
+                else:
+                    self.logger.debug(".vscode/tasks.json already exists — skipping", path=str(tasks_file))
+
+                readme_file = vscode_dir / "README.md"
+                if not readme_file.exists():
+                    readme_file.write_text(
+                        "# VS Code workspace settings\n\nThis folder contains recommended extensions, settings, tasks and launch configurations for this workspace.\n",
+                        encoding="utf-8",
+                    )
+                    self._add_message(f"Created: {readme_file.relative_to(self._work_path)}")
+                else:
+                    self.logger.debug(".vscode/README.md already exists — skipping", path=str(readme_file))
         except Exception as e:
-            msg = f"Failed to write workspace file: {e}"
-            self._add_error(msg)
-            return False, self.get_errors()
+            self.logger.warning("Failed to write .vscode scaffolding", extra={"error": str(e)})
+
+        return True, []
 
     # ------------------------------------------------------------------
     # Others (e.g. validation) can be added here as needed
@@ -1007,6 +1047,8 @@ class SolutionController(BaseController):
         for src in sorted(solution_tpl.rglob("*")):
             if not src.is_file():
                 continue
+            if "__pycache__" in src.parts or src.suffix in (".pyc", ".pyo"):
+                continue
             rel_parts = [_dest_name(p) for p in src.relative_to(solution_tpl).parts]
             dest = self._work_path / Path(*rel_parts)
             if dest.exists():
@@ -1030,8 +1072,95 @@ class SolutionController(BaseController):
         # Ensure .strata/logs/ exists (not a template file — just a directory)
         (state_dir / "logs").mkdir(parents=True, exist_ok=True)
 
-        # Generate JSON Schemas for all platform document kinds → .strata/schemas/
-        # These are derived artifacts (regenerated, not user-edited), so we always overwrite.
+        # Generate JSON Schemas
+        ok, errors = self._generate_schemas()
+        if not ok:
+            return ok, errors
+
+        return True, []
+
+    # ------------------------------------------------------------------
+    # Package-owned file sets
+    # ------------------------------------------------------------------
+
+    # Relative paths (after dot. → . renaming) that are owned by the strata
+    # package and safe to overwrite on ``sln update``.  User-owned files are
+    # everything else from the scaffold — they are only written on first init.
+    _PACKAGE_OWNED_PREFIXES: Tuple[str, ...] = (
+        ".strata/README.md",
+        ".strata/.gitignore",
+        ".strata/integrations/",
+        ".strata/templates/",
+        ".devcontainer/",
+        ".github/",
+        ".gitignore",
+    )
+
+    # Paths that are explicitly user-owned and must never be overwritten.
+    _USER_OWNED_PREFIXES: Tuple[str, ...] = (
+        ".strata/cli.yaml",
+        ".strata/logging.yaml",
+        ".vscode/",
+        "README.md",
+    )
+
+    @classmethod
+    def _is_package_owned(cls, rel_path: str) -> bool:
+        """Return True if *rel_path* is a package-owned file safe to overwrite."""
+        for prefix in cls._PACKAGE_OWNED_PREFIXES:
+            if rel_path == prefix or rel_path.startswith(prefix):
+                return True
+        return False
+
+    def _update_scaffold_files(self) -> Tuple[bool, List[str]]:
+        """Overwrite package-owned scaffold files; skip user-owned ones.
+
+        Called by ``update()`` to refresh files that ship with the package.
+        """
+        solution_tpl = get_pkg_templates_path() / "solution"
+        solution_name = str(self._solution.meta.name) if self._solution else ""
+        state_dir = SolutionController.get_state_dir(self._work_path)
+
+        def _dest_name(part: str) -> str:
+            return "." + part[4:] if part.startswith("dot.") else part
+
+        for src in sorted(solution_tpl.rglob("*")):
+            if not src.is_file():
+                continue
+            if "__pycache__" in src.parts or src.suffix in (".pyc", ".pyo"):
+                continue
+            rel_parts = [_dest_name(p) for p in src.relative_to(solution_tpl).parts]
+            rel_path = str(Path(*rel_parts)).replace("\\", "/")
+            dest = self._work_path / Path(*rel_parts)
+
+            if not self._is_package_owned(rel_path):
+                self.logger.debug("User-owned file — skipping", path=rel_path)
+                self._add_message(f"Skipped: {rel_path} (user-owned)")
+                continue
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                content = src.read_text(encoding="utf-8")
+                content = content.replace("${SOLUTION_NAME}", solution_name)
+                if dest.name == SOLUTION_LOGGING_FILE:
+                    log_file = (state_dir / "logs" / "application.json").as_posix()
+                    content = content.replace(".strata/logs/application.json", log_file)
+                dest.write_text(content, encoding="utf-8")
+                self.logger.info("Package file updated", path=rel_path)
+                self._add_message(f"Updated: {rel_path}")
+            except Exception as e:
+                msg = f"Failed to write scaffold file {dest}: {e}"
+                self._add_error(msg)
+                return False, self.get_errors()
+
+        return True, []
+
+    def _generate_schemas(self) -> Tuple[bool, List[str]]:
+        """Generate JSON Schemas for all platform document kinds → .strata/schemas/.
+
+        These are derived artifacts (regenerated, not user-edited), so we always overwrite.
+        """
+        state_dir = SolutionController.get_state_dir(self._work_path)
         try:
             from strata.models.configuration_model import ConfigurationModel
             from strata.models.deployment_model import DeploymentModel
@@ -1065,7 +1194,7 @@ class SolutionController(BaseController):
                     self.logger.debug("Schema written", kind=kind_name)
                 except Exception as schema_exc:
                     self.logger.warning("Failed to write schema", kind=kind_name, error=str(schema_exc))
-            self._add_message(f"Created: {schemas_dir.relative_to(self._work_path)} (JSON Schemas for all kinds)")
+            self._add_message("Updated: .strata/schemas/ (JSON Schemas for all kinds)")
         except Exception as e:
             self.logger.warning("Schema generation skipped", error=str(e))
 

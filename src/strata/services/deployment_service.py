@@ -319,8 +319,9 @@ class DeploymentService(BaseService["DeploymentModel"]):
         return build_path / f"{deployment_name}-{deployment_version}"
 
     def get_validation_errors(self) -> List[str]:
-        """Return the list of validation errors after loading related services."""
-        return self._validation_errors
+        """Return all validation errors: Phase 1 (Pydantic) errors from _errors plus
+        dynamic errors accumulated in _validation_errors."""
+        return self._errors + self._validation_errors
 
     def apply_environment_overrides(self) -> Tuple[bool, List[str]]:
         """

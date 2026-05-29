@@ -130,7 +130,7 @@ class TestMainGroup:
         from strata.commands.cli_sln import sln_group
 
         sln_cmds = set(sln_group.commands.keys())
-        assert {"init", "clean", "status", "export"} == sln_cmds
+        assert {"init", "update", "clean", "status", "export"} == sln_cmds
 
 
 # ---------------------------------------------------------------------------

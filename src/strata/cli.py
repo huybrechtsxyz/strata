@@ -132,6 +132,16 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 @click.pass_context
 def main(ctx: click.Context) -> None:
     """Strata CLI entry point."""
+    # Force UTF-8 on Windows so emoji and box-drawing characters survive
+    # piping/redirection (e.g. `strata validate ... | Select-String`).
+    # reconfigure() is a no-op on non-Windows or when stdout is already UTF-8.
+    # Must run before any output — including Click's own help text.
+    if sys.platform == "win32":
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+
     # Fallback to WARNING level console logging
     logging_config = system.get_pkg_logging_path()
     if logging_config.exists():
@@ -182,16 +192,6 @@ main.add_command(tools_group, name="tools")
 
 if __name__ == "__main__":
     try:
-        # Force UTF-8 encoding for Windows console to support emoji characters
-        if sys.platform == "win32":
-            # Set console to UTF-8 mode
-            os.environ["PYTHONIOENCODING"] = "utf-8"
-            # Reconfigure stdout/stderr for UTF-8
-            if hasattr(sys.stdout, "reconfigure"):
-                sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore
-            if hasattr(sys.stderr, "reconfigure"):
-                sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore
-
         main()
     except click.UsageError as e:
         click.echo(f"Error: {e}", err=True)

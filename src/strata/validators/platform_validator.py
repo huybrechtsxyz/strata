@@ -204,6 +204,11 @@ class PlatformValidator(BaseValidator):
         if not service.is_validated():
             plain = service.get_validation_errors()
             structured = service.get_structured_errors()
+            if not plain:
+                # Service is invalid but provided no error details — synthesize a fallback
+                fallback = f"{service_class.__name__}: Phase 1 validation failed (no error details available)"
+                plain = [fallback]
+                structured = [ValidationError(code="PHASE1_VALIDATION_ERROR", message=fallback, phase=1)]
             for i, msg in enumerate(plain):
                 self._errors.append(msg)
                 if i < len(structured):

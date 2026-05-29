@@ -68,7 +68,7 @@ Write-Host ""
 
 # ── 4. Build Sphinx HTML ─────────────────────────────────────────────────────
 Write-Host "[*] Building Sphinx HTML documentation..." -ForegroundColor Blue
-uv run sphinx-build -b html docs/ "$outDir" -W --keep-going
+uv run python -m sphinx -b html docs/ "$outDir" -W --keep-going
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] Documentation build failed." -ForegroundColor Red
     exit 1

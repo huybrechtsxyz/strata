@@ -61,7 +61,12 @@ class IntegrationModel(BaseModel):
     )
     capabilities: Set[str] = Field(
         default_factory=set,
-        description="Set of capabilities this integration provides: repository, infrastructure, secrets, variables, features, keyvalue, api",
+        description=(
+            "Set of capabilities this integration provides. "
+            "Valid values: api, container, features, infrastructure, keyvalue, repository, secrets, variables. "
+            "Use 'infrastructure' for IaC and configuration-management tools (Terraform, Ansible, OpenTofu). "
+            "Use 'container' for container runtimes and container-native deployment tools (Docker, Helm, Podman)."
+        ),
     )
     description: Optional[str] = Field(None, description="Human-readable description of the integration")
     required: bool = Field(

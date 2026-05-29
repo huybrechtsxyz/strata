@@ -162,6 +162,8 @@ class InitSolutionCommand(BaseCommand):
         for src_file in sorted(scaffold_dir.rglob("*")):
             if not src_file.is_file():
                 continue
+            if "__pycache__" in src_file.parts or src_file.suffix in (".pyc", ".pyo"):
+                continue
 
             rel_str = str(src_file.relative_to(scaffold_dir))
             rel_str = _substitute(rel_str, variables)

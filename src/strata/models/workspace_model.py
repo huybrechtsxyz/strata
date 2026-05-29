@@ -178,6 +178,14 @@ class WorkspaceResourceModel(BaseModel):
         None,
         description="List of resource names this resource depends on (workspace-specific gluing)",
     )
+
+    @field_validator("depends_on", mode="before")
+    @classmethod
+    def coerce_depends_on(cls, v):
+        if isinstance(v, str):
+            return [v]
+        return v
+
     references: Optional[Dict[str, str]] = Field(
         None,
         description="Cross-resource value references (e.g., {'storage_connection': 'contoso_storage.connection_string'})",

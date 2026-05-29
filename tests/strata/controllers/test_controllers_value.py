@@ -1,7 +1,7 @@
 """Tests for ValueController, ResolvedValues, and inject_tf_vars."""
 
 import os
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from strata.controllers.value_controller import (
     ResolvedValues,
@@ -226,3 +226,65 @@ class TestValueControllerResolveValues:
         assert ok is True
         assert resolved.is_empty() is True
         assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# ValueController._resolve_secret — github store
+# ---------------------------------------------------------------------------
+
+
+class TestValueControllerGithubStore:
+    def test_github_store_resolves_when_env_var_present_and_github_actions_true(self, monkeypatch):
+        """Success path: env var present, GITHUB_ACTIONS=true — returns value, no error."""
+        monkeypatch.setenv("MY_SECRET", "s3cr3t")
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        ctrl = ValueController()
+        item = SecretStoreModel(key="my_secret", store=SecretStoreType.GITHUB, value="MY_SECRET")
+        val, err = ctrl._resolve_secret(item)
+        assert err is None
+        assert val == "s3cr3t"
+
+    def test_github_store_normalizes_value_to_uppercase(self, monkeypatch):
+        """value 'my_secret' (lowercase) resolves via env var 'MY_SECRET' (.upper() applied)."""
+        monkeypatch.setenv("MY_SECRET", "s3cr3t")
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        ctrl = ValueController()
+        item = SecretStoreModel(key="db_password", store=SecretStoreType.GITHUB, value="my_secret")
+        val, err = ctrl._resolve_secret(item)
+        assert err is None
+        assert val == "s3cr3t"
+
+    def test_github_store_missing_env_var_returns_error(self, monkeypatch):
+        """Env var absent — returns (None, error) with 'GitHub Actions' in the message."""
+        monkeypatch.delenv("MISSING_GH_SECRET", raising=False)
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        ctrl = ValueController()
+        item = SecretStoreModel(key="token", store=SecretStoreType.GITHUB, value="MISSING_GH_SECRET")
+        val, err = ctrl._resolve_secret(item)
+        assert val is None
+        assert err is not None
+        assert "GitHub Actions" in err
+
+    def test_github_store_warns_when_github_actions_not_set(self, monkeypatch):
+        """Warning emitted when GITHUB_ACTIONS is absent; resolution still succeeds."""
+        monkeypatch.setenv("MY_SECRET", "s3cr3t")
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+        ctrl = ValueController()
+        item = SecretStoreModel(key="my_secret", store=SecretStoreType.GITHUB, value="MY_SECRET")
+        with patch("strata.controllers.value_controller.logger") as mock_logger:
+            val, err = ctrl._resolve_secret(item)
+        assert err is None
+        assert val == "s3cr3t"
+        mock_logger.warning.assert_called_once()
+
+    def test_github_store_no_warning_when_github_actions_true(self, monkeypatch):
+        """No warning emitted when GITHUB_ACTIONS=true."""
+        monkeypatch.setenv("MY_SECRET", "s3cr3t")
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        ctrl = ValueController()
+        item = SecretStoreModel(key="my_secret", store=SecretStoreType.GITHUB, value="MY_SECRET")
+        with patch("strata.controllers.value_controller.logger") as mock_logger:
+            val, err = ctrl._resolve_secret(item)
+        assert err is None
+        assert val == "s3cr3t"
+        mock_logger.warning.assert_not_called()

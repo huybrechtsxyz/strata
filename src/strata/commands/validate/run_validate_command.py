@@ -136,6 +136,7 @@ class ValidateCommand(BaseCommand):
             ("validate", self._validator.validate),
             ("after_validate", self._validator.after_validate),
         ]
+        all_phases_passed = True
         for phase_name, phase_fn in phases:
             self.logger.debug("Running validator phase", phase=phase_name, file=str(self._resolved_file))
             result = phase_fn(work_path)
@@ -145,10 +146,11 @@ class ValidateCommand(BaseCommand):
                     phase=phase_name,
                     file=str(self._resolved_file),
                 )
+                all_phases_passed = False
                 break
 
         self._detected_kind = self._validator.detected_kind.value if self._validator.detected_kind else None
-        validation_passed = not self._validator.has_errors()
+        validation_passed = all_phases_passed and not self._validator.has_errors()
 
         self.logger.debug(
             "Validation complete",

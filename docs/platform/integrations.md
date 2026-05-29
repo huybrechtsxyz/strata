@@ -119,16 +119,20 @@ if isinstance(integration, ISecretStore):
     secret = integration.get_secret("my/secret")
 ```
 
-| Protocol              | Methods                                          |
-| --------------------- | ------------------------------------------------ |
-| `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` |
-| `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       |
-| `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    |
-| `IKVStore`            | `get_kv`, `set_kv`                               |
-| `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            |
-| `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               |
+| YAML capability string | Protocol              | Methods                                          | Covers (examples)                                                                                                     |
+| ---------------------- | --------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `variables`            | `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` | Consul, Azure App Configuration, Vault                                                                                |
+| `secrets`              | `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       | Vault, Azure KeyVault, Bitwarden, Infisical — **`github` and `environment` are built-in resolvers, not integrations** |
+| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    | Azure App Configuration, Flagsmith                                                                                    |
+| `keyvalue`             | `IKVStore`            | `get_kv`, `set_kv`                               | Consul, Vault KV, etcd                                                                                                |
+| `repository`           | `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            | Git, Mercurial                                                                                                        |
+| `infrastructure`       | `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               | Terraform, OpenTofu, **Ansible**, Pulumi *(umbrella for all IaC + config-management tools — not `configuration`)*     |
+| `container`            | `IContainerTool`      | `build`, `run`, `push`, `pull`                   | Docker, Podman, **Helm** *(umbrella for all container + container-native deployment tools — not `deployment`)*        |
+| `api`                  | *(no protocol)*       | Generic REST/HTTP — no capability interface      | Any REST/HTTP endpoint                                                                                                |
 
 `StoreIntegration` (base for all store-type integrations) provides no-op default implementations for all store methods — subclasses override only what they support.
+
+> **Built-in secret resolvers (`constant`, `environment`, `github`)** do not use the integration system at all — they are resolved inline by the `ValueController` without any registered integration. `github` reads environment variables that GitHub Actions injects into the runner before each step. See [configuration.md — Secret Stores](../config/configuration.md#secret-stores) for full details on `store: github`.
 
 ## `IntegrationModel` Configuration
 
