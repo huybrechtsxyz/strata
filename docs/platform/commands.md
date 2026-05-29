@@ -92,6 +92,47 @@ strata sln init --name my-platform --template .strata/templates/my-corp-base/
 
 > **Dev container:** After `strata sln init`, open the workspace in VS Code and select **Reopen in Container** to start a pre-configured environment with all tools installed. The container also works with GitHub Codespaces.
 
+### `sln update`
+
+Refresh package-owned files in an existing workspace after upgrading the strata package. Overwrites files that ship with the package (schemas, example templates, CI workflows, devcontainer config) while leaving user-customised files untouched.
+
+```
+strata sln update [standard options]
+```
+
+Requires an initialized workspace (`solution.json` must exist).
+
+**Files updated (package-owned — always overwritten):**
+
+| Path / Pattern                   | Description                                     |
+| -------------------------------- | ----------------------------------------------- |
+| `.strata/schemas/*.json`         | JSON Schemas derived from Pydantic models       |
+| `.strata/README.md`              | Package documentation stub                      |
+| `.strata/.gitignore`             | Package-standard ignore rules                   |
+| `.strata/integrations/`          | Example custom integration starter              |
+| `.strata/templates/`             | Example YAML document templates                 |
+| `.devcontainer/`                 | Dev container definition and post-create script |
+| `.github/workflows/`             | CI/CD workflow templates                        |
+| `.github/strata.instructions.md` | Copilot instructions                            |
+| `.gitignore` (root)              | Package-standard root ignore rules              |
+
+**Files preserved (user-owned — never overwritten):**
+
+| Path / Pattern          | Description                                      |
+| ----------------------- | ------------------------------------------------ |
+| `<name>.code-workspace` | User-customised VS Code workspace file           |
+| `.vscode/`              | User VS Code settings, tasks, and launch configs |
+| `.strata/cli.yaml`      | User CLI preferences                             |
+| `.strata/logging.yaml`  | User logging configuration                       |
+| `README.md` (root)      | User solution documentation                      |
+
+**Exit codes:** 0 success · 1 failure (workspace not initialised, or file write error)
+
+```bash
+strata sln update
+strata sln update --work-path /path/to/workspace
+```
+
 ### `sln clean`
 
 Remove workspace artifacts (log files, temp files) without touching solution state.
