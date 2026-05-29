@@ -8,6 +8,7 @@ from pydantic import (
     BaseModel,
     Field,
     StringConstraints,
+    field_validator,
     model_validator,
 )
 
@@ -189,6 +190,14 @@ class DeploymentStageModel(BaseModel):
         None,
         description="List of stage names this stage depends on (enables DAG execution)",
     )
+
+    @field_validator("depends_on", mode="before")
+    @classmethod
+    def coerce_depends_on(cls, v):
+        if isinstance(v, str):
+            return [v]
+        return v
+
     on_failure: Literal["stop", "rollback", "continue"] = Field(
         default="stop",
         description="Action to take on stage failure: 'stop' halts pipeline, 'rollback' reverts, 'continue' proceeds",

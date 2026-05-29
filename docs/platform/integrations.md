@@ -119,16 +119,16 @@ if isinstance(integration, ISecretStore):
     secret = integration.get_secret("my/secret")
 ```
 
-| YAML capability string | Protocol              | Methods                                          |
-| ---------------------- | --------------------- | ------------------------------------------------ |
-| `variables`            | `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` |
-| `secrets`              | `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       |
-| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    |
-| `keyvalue`             | `IKVStore`            | `get_kv`, `set_kv`                               |
-| `repository`           | `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            |
-| `infrastructure`       | `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               |
-| `container`            | `IContainerTool`      | `build`, `run`, `push`, `pull`                   |
-| `api`                  | *(no protocol)*       | Generic REST/HTTP — no capability interface      |
+| YAML capability string | Protocol              | Methods                                          | Covers (examples)                                                                                                 |
+| ---------------------- | --------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `variables`            | `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` | Consul, Azure App Configuration, Vault                                                                            |
+| `secrets`              | `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       | Vault, Azure KeyVault, Bitwarden, Infisical                                                                       |
+| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    | Azure App Configuration, Flagsmith                                                                                |
+| `keyvalue`             | `IKVStore`            | `get_kv`, `set_kv`                               | Consul, Vault KV, etcd                                                                                            |
+| `repository`           | `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            | Git, Mercurial                                                                                                    |
+| `infrastructure`       | `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               | Terraform, OpenTofu, **Ansible**, Pulumi *(umbrella for all IaC + config-management tools — not `configuration`)* |
+| `container`            | `IContainerTool`      | `build`, `run`, `push`, `pull`                   | Docker, Podman, **Helm** *(umbrella for all container + container-native deployment tools — not `deployment`)*    |
+| `api`                  | *(no protocol)*       | Generic REST/HTTP — no capability interface      | Any REST/HTTP endpoint                                                                                            |
 
 `StoreIntegration` (base for all store-type integrations) provides no-op default implementations for all store methods — subclasses override only what they support.
 

@@ -142,12 +142,18 @@ class IRepositoryTool(Protocol):
 @runtime_checkable
 class IInfrastructureTool(Protocol):
     """
-    Capability: Integration supports infrastructure provisioning.
+    Capability: Integration supports infrastructure provisioning and configuration management.
 
     Integrations implementing this interface can provision, plan, and
-    destroy infrastructure resources.
+    destroy infrastructure resources, or apply configuration management
+    to existing hosts (e.g. Ansible playbooks, Salt states).
 
-    Examples: Terraform, Pulumi, CloudFormation
+    Use ``infrastructure`` as the capability name for any IaC or configuration
+    management tool — Terraform, OpenTofu, Ansible, Pulumi, CloudFormation, etc.
+    There is no separate ``configuration`` capability; ``infrastructure`` is the
+    umbrella term for all infrastructure and configuration-as-code tools.
+
+    Examples: Terraform, OpenTofu, Ansible, Pulumi, CloudFormation
     """
 
     def init(self, working_dir: str, **kwargs) -> Any:
@@ -166,12 +172,18 @@ class IInfrastructureTool(Protocol):
 @runtime_checkable
 class IContainerTool(Protocol):
     """
-    Capability: Integration supports container operations.
+    Capability: Integration supports container and container-orchestration operations.
 
     Integrations implementing this interface can build, run, push, pull, and
-    manage container images and containers.
+    manage container images and containers, or deploy packaged applications
+    to container platforms (e.g. Helm chart releases to Kubernetes).
 
-    Examples: Docker, Podman, Containerd
+    Use ``container`` as the capability name for any container runtime or
+    container-native deployment tool — Docker, Podman, Helm, etc.  There is
+    no separate ``deployment`` capability; ``container`` is the umbrella term
+    for all container and container-orchestration tooling.
+
+    Examples: Docker, Podman, Helm, Containerd
     """
 
     def build(self, context_dir: str, tag: str, **kwargs) -> Any:
@@ -219,14 +231,14 @@ CAPABILITY_REGISTRY = {
         "examples": ["Git", "Mercurial"],
     },
     "IInfrastructureTool": {
-        "description": "Infrastructure provisioning operations",
+        "description": "Infrastructure provisioning and configuration management operations (IaC, CM)",
         "methods": ["init", "plan", "apply"],
-        "examples": ["Terraform", "Pulumi"],
+        "examples": ["Terraform", "OpenTofu", "Ansible", "Pulumi"],
     },
     "IContainerTool": {
-        "description": "Container management operations",
+        "description": "Container management and container-native deployment operations",
         "methods": ["build", "run", "push", "pull"],
-        "examples": ["Docker", "Podman"],
+        "examples": ["Docker", "Podman", "Helm"],
     },
 }
 

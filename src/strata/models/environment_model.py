@@ -103,6 +103,14 @@ class EnvironmentResourceOverrideModel(BaseModel):
         None,
         description="Override resource dependencies",
     )
+
+    @field_validator("depends_on", mode="before")
+    @classmethod
+    def coerce_depends_on(cls, v):
+        if isinstance(v, str):
+            return [v]
+        return v
+
     references: Optional[Dict[str, str]] = Field(
         None,
         description="Override cross-resource value references",
