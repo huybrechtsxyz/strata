@@ -129,6 +129,14 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
         "auto_envvar_prefix": "STRATA",
     },
 )
+@click.version_option(
+    None,
+    "--version",
+    "-v",
+    package_name="xyz-strata",
+    prog_name="strata",
+    message="%(prog)s %(version)s",
+)
 @click.pass_context
 def main(ctx: click.Context) -> None:
     """Strata CLI entry point."""

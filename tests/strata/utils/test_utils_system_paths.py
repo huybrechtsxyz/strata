@@ -117,6 +117,48 @@ class TestResolvePathPlain:
 
 
 # ---------------------------------------------------------------------------
+# resolve_path — Windows backslash guard
+# ---------------------------------------------------------------------------
+
+
+class TestResolvePathBackslashGuard:
+    """resolve_path raises on Windows-style backslash paths when not on Windows."""
+
+    @pytest.mark.skipif(
+        __import__("os").name == "nt",
+        reason="Backslash is a valid separator on Windows",
+    )
+    def test_backslash_only_path_raises_on_linux(self, tmp_path):
+        """target_path with '\\' and no '/' raises ValueError on non-Windows."""
+        with pytest.raises(ValueError, match="Windows backslash separators"):
+            resolve_path(str(tmp_path), "config\\workspace.yaml")
+
+    @pytest.mark.skipif(
+        __import__("os").name == "nt",
+        reason="Backslash is a valid separator on Windows",
+    )
+    def test_nested_backslash_path_raises_on_linux(self, tmp_path):
+        """Nested Windows path like 'sub\\dir\\file.yaml' raises on non-Windows."""
+        with pytest.raises(ValueError, match="forward slashes"):
+            resolve_path(str(tmp_path), "sub\\dir\\file.yaml")
+
+    @pytest.mark.skipif(
+        __import__("os").name == "nt",
+        reason="Backslash is a valid separator on Windows",
+    )
+    def test_mixed_slash_path_not_raised(self, tmp_path):
+        """A path with both '/' and '\\' is not flagged (e.g. escaped chars)."""
+        # Should not raise — forward slash present means it's not a pure Windows path
+        result = resolve_path(str(tmp_path), "sub/dir\\file.yaml")
+        assert result is not None
+
+    def test_forward_slash_path_always_ok(self, tmp_path):
+        """Paths with only forward slashes are always accepted."""
+        result = resolve_path(str(tmp_path), "config/workspace.yaml")
+        assert result == tmp_path / "config" / "workspace.yaml"
+
+
+# ---------------------------------------------------------------------------
 # normalize_path
 # ---------------------------------------------------------------------------
 

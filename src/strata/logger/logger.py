@@ -212,6 +212,23 @@ def _configure_from_yaml(config_path: str) -> None:
                     if "LogstashHandler" in class_path:
                         handler_config["()"] = LogstashHandler
 
+        # Ensure parent directories for file-based handlers exist before
+        # dictConfig opens them — RotatingFileHandler / FileHandler fail if
+        # the directory doesn't exist and they don't create it themselves.
+        # Also catch Windows backslash paths on non-Windows before dictConfig
+        # tries to open them and produces a confusing error.
+        if "handlers" in config:
+            for handler_name, handler_config in config["handlers"].items():
+                if isinstance(handler_config, dict) and "filename" in handler_config:
+                    filename = handler_config["filename"]
+                    if os.name != "nt" and "\\" in filename and "/" not in filename:
+                        raise ValueError(
+                            f"Log handler '{handler_name}' filename '{filename}' uses "
+                            f"Windows backslash separators. Use forward slashes (/) "
+                            f"for cross-platform compatibility."
+                        )
+                    Path(filename).parent.mkdir(parents=True, exist_ok=True)
+
         logging.config.dictConfig(config)
 
         # Azure Monitor requires separate setup (OpenTelemetry integration)
