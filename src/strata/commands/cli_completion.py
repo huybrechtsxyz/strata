@@ -89,11 +89,13 @@ def _completion_source(shell: str) -> str:
 
     if shell == "powershell":
         try:
-            from click.shell_completion import PowerShellComplete  # Click ≥ 8.1
+            from click.shell_completion import PowerShellComplete  # type: ignore[attr-defined]  # Click ≥ 8.1
 
             cls = PowerShellComplete
-        except ImportError:
-            raise click.ClickException("PowerShell completion requires Click >= 8.1. Upgrade with: uv add 'click>=8.1'")
+        except ImportError as err:
+            raise click.ClickException(
+                "PowerShell completion requires Click >= 8.1. Upgrade with: uv add 'click>=8.1'"
+            ) from err
     else:
         cls = _classes[shell]
 

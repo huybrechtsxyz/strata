@@ -1,6 +1,7 @@
 """Unit tests for deployment model — DeploymentStageTimeoutsModel."""
 
 import pytest
+from pydantic import ValidationError
 
 from strata.models.deployment_model import DeploymentStageModel, DeploymentStageTimeoutsModel
 
@@ -31,7 +32,7 @@ class TestDeploymentStageTimeoutsModel:
         assert t.destroy == 900
 
     def test_invalid_type_rejected(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             DeploymentStageTimeoutsModel(plan="fast")
 
     def test_old_field_names_not_accepted(self):
