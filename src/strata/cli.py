@@ -138,9 +138,22 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
     prog_name="strata",
     message="%(prog)s %(version)s",
 )
+@click.option(
+    "--no-color",
+    is_flag=True,
+    default=False,
+    help="Disable ANSI color output. Also respects the NO_COLOR env var (no-color.org).",
+)
 @click.pass_context
-def main(ctx: click.Context) -> None:
+def main(ctx: click.Context, no_color: bool = False) -> None:
     """Strata CLI entry point."""
+    # Honour NO_COLOR env var (https://no-color.org) and --no-color flag.
+    # Must run before configure_logging() so the structlog formatter sees it.
+    # `setdefault` leaves an existing NO_COLOR value untouched.
+    if no_color or "NO_COLOR" in os.environ:
+        os.environ.setdefault("NO_COLOR", "1")
+        ctx.color = False
+
     # Force UTF-8 on Windows so emoji and box-drawing characters survive
     # piping/redirection (e.g. `strata validate ... | Select-String`).
     # reconfigure() is a no-op on non-Windows or when stdout is already UTF-8.
