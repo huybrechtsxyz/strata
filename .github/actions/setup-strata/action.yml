@@ -7,6 +7,10 @@
 name: "Setup Strata"
 description: "Install Python, uv, and the strata CLI. Required before any other strata action."
 
+branding:
+  icon: 'terminal'
+  color: 'blue'
+
 inputs:
   strata-version:
     description: "Strata version to install (e.g., 'latest', '2.1.0', '>=2.0'). Use 'local' to install from the current repo."

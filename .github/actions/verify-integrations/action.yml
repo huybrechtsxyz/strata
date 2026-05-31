@@ -15,6 +15,10 @@
 name: "Verify Integrations"
 description: "Configure store env vars and verify integration availability via strata tools status."
 
+branding:
+  icon: 'check-circle'
+  color: 'green'
+
 inputs:
   # Bitwarden store
   bitwarden_token:

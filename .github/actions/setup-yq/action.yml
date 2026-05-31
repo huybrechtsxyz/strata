@@ -6,6 +6,16 @@
 name: Get YQ CLI
 description: Install YQ (Mike Farah version)
 
+branding:
+  icon: 'code'
+  color: 'yellow'
+
+inputs:
+  yq-version:
+    description: "yq version to install (e.g. 'v4.44.6'). Defaults to a known stable version."
+    required: false
+    default: "v4.44.6"
+
 runs:
   using: composite
   steps:
@@ -13,11 +23,7 @@ runs:
     - name: Download YQ
       shell: bash
       run: |
-        # Fetch the latest version tag from GitHub API
-        YQ_VERSION=$(curl -s https://api.github.com/repos/mikefarah/yq/releases/latest | grep tag_name | cut -d '"' -f 4)
-        # Download the Linux amd64 binary for the latest version
-        curl -L "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -o /usr/local/bin/yq
-        # Make the binary executable
+        curl -L "https://github.com/mikefarah/yq/releases/download/${{ inputs.yq-version }}/yq_linux_amd64" -o /usr/local/bin/yq
         chmod +x /usr/local/bin/yq
 
     # Verify the installed yq version to confirm installation success
