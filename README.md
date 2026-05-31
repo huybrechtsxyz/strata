@@ -1,6 +1,6 @@
 ﻿# strata
 
-You already have Terraform. The problem is you have eight environment folders — `dev`, `staging`, `prd`, `prd-eu`, `prd-us`, `dr`, `sandbox`, `perf` — and they are 90% identical. Every change gets applied to one folder, forgotten in three others, and you only find out when production drifts. `strata` (planned rename: `ruck`) is a YAML config layer over Terraform, Helm, and scripts that treats your environments as data, not as copy-pasted folders. One source of truth, one command to validate it, one command to deploy it.
+You already have Terraform. The problem is you have eight environment folders — `dev`, `staging`, `prd`, `prd-eu`, `prd-us`, `dr`, `sandbox`, `perf` — and they are 90% identical. Every change gets applied to one folder, forgotten in three others, and you only find out when production drifts. `strata` is a YAML config layer over Terraform, Helm, and scripts that treats your environments as data, not as copy-pasted folders. One source of truth, one command to validate it, one command to deploy it.
 
 📖 **[Full documentation](docs/README.md)**
 
