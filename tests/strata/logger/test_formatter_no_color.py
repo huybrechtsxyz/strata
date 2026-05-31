@@ -1,9 +1,5 @@
 """Tests for NO_COLOR support in the structlog console formatter."""
 
-import os
-
-import pytest
-
 from strata.logger.formatters import make_console_formatter
 
 

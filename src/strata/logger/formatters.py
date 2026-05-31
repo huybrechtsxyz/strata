@@ -39,9 +39,7 @@ def make_console_formatter() -> structlog.stdlib.ProcessorFormatter:
     """
     # Respect the NO_COLOR env var (https://no-color.org) — any presence of
     # the variable, regardless of its value, disables ANSI colour output.
-    renderer = structlog.dev.ConsoleRenderer(
-        colors=sys.stdout.isatty() and "NO_COLOR" not in os.environ
-    )
+    renderer = structlog.dev.ConsoleRenderer(colors=sys.stdout.isatty() and "NO_COLOR" not in os.environ)
     return structlog.stdlib.ProcessorFormatter(
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,

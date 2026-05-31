@@ -1,8 +1,5 @@
 """Tests for --no-color flag and NO_COLOR env var support on the main CLI group."""
 
-import os
-
-import pytest
 from click.testing import CliRunner
 
 from strata.cli import main

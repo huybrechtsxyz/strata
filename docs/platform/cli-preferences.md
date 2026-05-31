@@ -6,12 +6,16 @@ Some CLI options apply across many commands — output format, verbosity, quiet 
 
 Set env vars in your shell profile (local dev) or pipeline definition (CI/CD). These are read at startup and used as defaults when the corresponding flag is not explicitly passed.
 
-| Env var         | Equivalent flag | Example value             |
-| --------------- | --------------- | ------------------------- |
-| `STRATA_OUTPUT`    | `--output`      | `json`, `text`, `console` |
-| `STRATA_VERBOSE`   | `--verbose`     | `true`, `1`               |
-| `STRATA_QUIET`     | `--quiet`       | `true`, `1`               |
-| `STRATA_WORK_PATH` | `--work-path`   | `/path/to/workspace`      |
+| Env var            | Equivalent flag  | Example value             |
+| ------------------ | ---------------- | ------------------------- |
+| `STRATA_OUTPUT`    | `--output`       | `json`, `text`, `console` |
+| `STRATA_VERBOSE`   | `--verbose`      | `true`, `1`               |
+| `STRATA_QUIET`     | `--quiet`        | `true`, `1`               |
+| `STRATA_WORK_PATH` | `--work-path`    | `/path/to/workspace`      |
+| `STRATA_NO_COLOR`  | `--no-color`     | `1`, `true`               |
+| `NO_COLOR`         | `--no-color`     | any value (see below)     |
+
+> **`NO_COLOR` standard:** strata respects the cross-tool [`NO_COLOR`](https://no-color.org) convention — setting `NO_COLOR` to *any* value (including empty string) disables all ANSI color output from both the CLI and the structured logger. Use `STRATA_NO_COLOR` for strata-specific control, or `NO_COLOR` when you want a single env var to silence color across all tools in a pipeline.
 
 **Local dev — PowerShell profile (`$PROFILE`):**
 

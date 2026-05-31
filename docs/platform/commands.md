@@ -12,6 +12,7 @@ These options are accepted by every command and subcommand:
 | `--output FORMAT`  | `console`\|`text`\|`json` | `console`     | Output format. Defaults to `console` (human-readable) when omitted. `json` returns a structured envelope `{"success": bool, "data": ...}`. Mutually exclusive with `--quiet`. |
 | `--verbose`        | flag                      | off           | Enable verbose output.                                                                                                                                                        |
 | `--quiet`          | flag                      | off           | Suppress console output.                                                                                                                                                      |
+| `--no-color`       | flag                      | off           | Disable all ANSI color output. Also honoured via the `NO_COLOR` env var ([no-color.org](https://no-color.org)) or `STRATA_NO_COLOR`.                                          |
 
 > **Automation / AI agents:** Always use `--output json` (or set `STRATA_OUTPUT=json`). Every CLI flag has an `XYZ_<OPTION>` environment-variable equivalent — set them once rather than passing flags on every call. In console mode, errors are written to **stderr**; the JSON envelope always goes to **stdout**.
 
@@ -48,6 +49,7 @@ These options are accepted by every command and subcommand:
 | `tools`     | `status` `check` `install`                                                   | Manage and inspect external tool integrations           |
 | `new` †     | —                                                                            | Create a platform config file from a template           |
 | `version`   | —                                                                            | Show CLI version                                        |
+| `completion`| `bash` `zsh` `fish` `powershell`                                             | Output shell completion script for the given shell      |
 | `help`      | —                                                                            | Show help topics                                        |
 
 > **†** Requires an initialized workspace (`.strata/` directory). Run `strata sln init --name NAME` first.
