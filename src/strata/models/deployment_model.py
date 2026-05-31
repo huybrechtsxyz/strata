@@ -144,6 +144,46 @@ class HealthCheckModel(BaseModel):
         return self
 
 
+class DeploymentStageTimeoutsModel(BaseModel):
+    """Per-step subprocess timeouts for a deployment stage (all deployer types).
+
+    Field names match deployer step names so the same schema works for
+    Terraform, Ansible, and script-based stages.  All fields are optional;
+    omitting a field keeps the deployer's built-in default.
+
+    Examples (YAML)::
+
+        stages:
+          - name: infrastructure
+            type: infrastructure
+            timeouts:
+              setup: 120   # fail fast if backend is unreachable
+              plan: 300
+              apply: 1200  # 20 min — tighter than the 30 min default
+    """
+
+    setup: Optional[int] = Field(
+        None,
+        description="Timeout in seconds for the setup step (tf init / galaxy install / deploy_setup). Default varies by deployer.",
+    )
+    check: Optional[int] = Field(
+        None,
+        description="Timeout in seconds for the check step (tf validate / syntax-check / deploy_check). Default varies by deployer.",
+    )
+    plan: Optional[int] = Field(
+        None,
+        description="Timeout in seconds for the plan step. Default varies by deployer.",
+    )
+    apply: Optional[int] = Field(
+        None,
+        description="Timeout in seconds for the apply step. Default varies by deployer.",
+    )
+    destroy: Optional[int] = Field(
+        None,
+        description="Timeout in seconds for the destroy step. Default varies by deployer.",
+    )
+
+
 class DeploymentStageModel(BaseModel):
     """Model for a deployment stage (pipeline execution step).
 
@@ -210,6 +250,11 @@ class DeploymentStageModel(BaseModel):
         None,
         description="Per-stage approval override: list of approver keys from spec.approvals.approvers. "
         "Absent means no stage-level restriction — spec-level approvers apply as-is.",
+    )
+    timeouts: Optional[DeploymentStageTimeoutsModel] = Field(
+        None,
+        description="Per-operation subprocess timeouts. Overrides TerraformIntegration defaults "
+        "(init=300s, validate=60s, plan=600s, apply=1800s, destroy=1800s).",
     )
 
     @model_validator(mode="after")

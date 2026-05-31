@@ -6,6 +6,7 @@ from typing import Optional
 from unittest.mock import MagicMock, patch
 
 from strata.deployers.terraform_deployer import TerraformDeployer
+from strata.models.deployment_model import DeploymentStageTimeoutsModel
 
 
 def _ok(stdout="", stderr="", returncode=0):
@@ -597,3 +598,100 @@ class TestTerraformDeployerGetWorkingDir:
         iac.name = "my_prov"
         result = d._get_working_dir(svc, tmp_path, iac)
         assert result == tmp_path / "build" / "terraform" / "my_prov"
+
+
+class TestTerraformDeployerTimeouts:
+    """Verify _get_timeout drives the timeout= kwarg on TerraformIntegration calls."""
+
+    def test_setup_uses_default_when_timeouts_none(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d.stage.timeouts = None
+        d._tf.init.return_value = _ok()
+        d.setup()
+        call_kwargs = d._tf.init.call_args[1]
+        assert call_kwargs.get("timeout") == 300
+
+    def test_setup_uses_custom_timeout(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(setup=60)
+        d._tf.init.return_value = _ok()
+        d.setup()
+        call_kwargs = d._tf.init.call_args[1]
+        assert call_kwargs.get("timeout") == 60
+
+    def test_check_uses_default_when_timeouts_none(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d.stage.timeouts = None
+        d._tf.validate.return_value = _ok()
+        d.check()
+        call_kwargs = d._tf.validate.call_args[1]
+        assert call_kwargs.get("timeout") == 60
+
+    def test_check_uses_custom_timeout(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(check=30)
+        d._tf.validate.return_value = _ok()
+        d.check()
+        call_kwargs = d._tf.validate.call_args[1]
+        assert call_kwargs.get("timeout") == 30
+
+    def test_plan_uses_default_when_timeouts_none(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d.stage.timeouts = None
+        d._tf.plan.return_value = _ok()
+        d.plan()
+        call_kwargs = d._tf.plan.call_args[1]
+        assert call_kwargs.get("timeout") == 600
+
+    def test_plan_uses_custom_timeout(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(plan=120)
+        d._tf.plan.return_value = _ok()
+        d.plan()
+        call_kwargs = d._tf.plan.call_args[1]
+        assert call_kwargs.get("timeout") == 120
+
+    def test_apply_uses_default_when_timeouts_none(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d.stage.timeouts = None
+        d._tf.apply.return_value = _ok()
+        d.apply()
+        call_kwargs = d._tf.apply.call_args[1]
+        assert call_kwargs.get("timeout") == 1800
+
+    def test_apply_uses_custom_timeout(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(apply=900)
+        d._tf.apply.return_value = _ok()
+        d.apply()
+        call_kwargs = d._tf.apply.call_args[1]
+        assert call_kwargs.get("timeout") == 900
+
+    def test_destroy_uses_default_when_timeouts_none(self, tmp_path):
+        d = _make_deployer(tmp_path, force=True)
+        d.stage.timeouts = None
+        d._tf.destroy.return_value = _ok()
+        d.destroy()
+        call_kwargs = d._tf.destroy.call_args[1]
+        assert call_kwargs.get("timeout") == 1800
+
+    def test_destroy_uses_custom_timeout(self, tmp_path):
+        d = _make_deployer(tmp_path, force=True)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(destroy=600)
+        d._tf.destroy.return_value = _ok()
+        d.destroy()
+        call_kwargs = d._tf.destroy.call_args[1]
+        assert call_kwargs.get("timeout") == 600
+
+    def test_partial_timeouts_uses_default_for_unset_fields(self, tmp_path):
+        """Only plan overridden — setup and apply should still use defaults."""
+        d = _make_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(plan=99)
+
+        d._tf.init.return_value = _ok()
+        d.setup()
+        assert d._tf.init.call_args[1].get("timeout") == 300  # default
+
+        d._tf.plan.return_value = _ok()
+        d.plan()
+        assert d._tf.plan.call_args[1].get("timeout") == 99  # override

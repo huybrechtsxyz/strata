@@ -275,6 +275,7 @@ class AnsibleDeployer(BaseDeployer):
             result = self._ansible.init(
                 str(self._working_dir),
                 requirements_file=requirements,
+                timeout=self._get_timeout("setup", 300),
             )
             if result.get("returncode", 0) != 0:
                 messages.append(f"ansible-galaxy install failed:\n{result.get('stderr', '')}")
@@ -303,6 +304,7 @@ class AnsibleDeployer(BaseDeployer):
             result = self._ansible.syntax_check(
                 str(self._working_dir),
                 playbook=playbook,
+                timeout=self._get_timeout("check", 60),
             )
             if result.returncode != 0:
                 messages.append(f"Syntax check failed:\n{result.stderr}")
@@ -336,6 +338,7 @@ class AnsibleDeployer(BaseDeployer):
                     inventory=inventory,
                     extra_vars=self._get_extra_vars(),
                     private_key_file=key_file,
+                    timeout=self._get_timeout("plan", 600),
                 )
             if result.returncode != 0:
                 messages.append(f"Check mode failed:\n{result.stderr}")
@@ -371,6 +374,7 @@ class AnsibleDeployer(BaseDeployer):
                     inventory=inventory,
                     extra_vars=self._get_extra_vars(),
                     private_key_file=key_file,
+                    timeout=self._get_timeout("apply", 1800),
                 )
             if result.returncode != 0:
                 messages.append(f"Playbook execution failed:\n{result.stderr}")
@@ -413,6 +417,7 @@ class AnsibleDeployer(BaseDeployer):
                     playbook=destroy_playbook,
                     inventory=inventory,
                     private_key_file=key_file,
+                    timeout=self._get_timeout("destroy", 1800),
                 )
             if result.returncode != 0:
                 messages.append(f"Destroy playbook failed:\n{result.stderr}")
@@ -449,6 +454,7 @@ class AnsibleDeployer(BaseDeployer):
                     playbook=destroy_playbook,
                     inventory=inventory,
                     private_key_file=key_file,
+                    timeout=self._get_timeout("plan", 600),
                 )
             if result.returncode != 0:
                 messages.append(f"Destroy check mode failed:\n{result.stderr}")

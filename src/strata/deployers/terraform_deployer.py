@@ -187,6 +187,7 @@ class TerraformDeployer(BaseDeployer):
                 backend_config=backend_config or None,
                 reconfigure=bool(backend_config),
                 line_callback=line_callback,
+                timeout=self._get_timeout("setup", 300),
             )
             if result.returncode != 0:
                 messages.append(f"terraform init failed:\n{result.stderr}")
@@ -213,7 +214,10 @@ class TerraformDeployer(BaseDeployer):
         messages.append("terraform validate")
 
         try:
-            result = self._tf.validate(str(self._working_dir))
+            result = self._tf.validate(
+                str(self._working_dir),
+                timeout=self._get_timeout("check", 60),
+            )
             if result.returncode != 0:
                 messages.append(f"terraform validate failed:\n{result.stderr}")
                 return False, messages
@@ -246,6 +250,7 @@ class TerraformDeployer(BaseDeployer):
                     str(self._working_dir),
                     out_file=str(self._plan_file),
                     line_callback=line_callback,
+                    timeout=self._get_timeout("plan", 600),
                 )
             if result.returncode != 0:
                 messages.append(f"terraform plan failed:\n{result.stderr}")
@@ -279,6 +284,7 @@ class TerraformDeployer(BaseDeployer):
                     str(self._working_dir),
                     plan_file=str(self._plan_file),
                     line_callback=line_callback,
+                    timeout=self._get_timeout("apply", 1800),
                 )
             if result.returncode != 0:
                 messages.append(f"terraform apply failed:\n{result.stderr}")
@@ -312,6 +318,7 @@ class TerraformDeployer(BaseDeployer):
                     str(self._working_dir),
                     auto_approve=self.force,
                     line_callback=line_callback,
+                    timeout=self._get_timeout("destroy", 1800),
                 )
             if result.returncode != 0:
                 messages.append(f"terraform destroy failed:\n{result.stderr}")

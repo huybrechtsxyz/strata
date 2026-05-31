@@ -173,3 +173,15 @@ class BaseDeployer(ABC):
             (success, outputs_dict, messages)
         """
         raise NotImplementedError
+
+    # ------------------------------------------------------------------
+    # Timeout helpers
+    # ------------------------------------------------------------------
+
+    def _get_timeout(self, step: str, default: int) -> int:
+        """Return the per-step timeout from stage.timeouts, or *default* if not set."""
+        t = getattr(self.stage, "timeouts", None)
+        if t is None:
+            return default
+        val = getattr(t, step, None)
+        return val if val is not None else default

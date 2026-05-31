@@ -51,8 +51,19 @@ _STEP_TO_PHASE: Dict[str, str] = {
     STEP_OUTPUT: "deploy_output",
 }
 
-# Timeout (seconds) for a single script subprocess.
+# Default timeout (seconds) for a single script subprocess.
 _SCRIPT_TIMEOUT = 300
+
+# Map step names to the timeout field on DeploymentStageTimeoutsModel.
+_STEP_TIMEOUT_DEFAULTS: Dict[str, int] = {
+    STEP_SETUP: 300,
+    STEP_CHECK: 300,
+    STEP_PLAN: 300,
+    STEP_APPLY: 1800,
+    STEP_DESTROY: 1800,
+    STEP_PLAN_DESTROY: 300,
+    STEP_OUTPUT: 300,
+}
 
 
 class ScriptDeployer(BaseDeployer):
@@ -139,28 +150,34 @@ class ScriptDeployer(BaseDeployer):
     # ------------------------------------------------------------------
 
     def setup(self) -> Tuple[bool, List[str]]:
-        return self._run_phase(STEP_SETUP)
+        return self._run_phase(STEP_SETUP, self._get_timeout(STEP_SETUP, _STEP_TIMEOUT_DEFAULTS[STEP_SETUP]))
 
     def check(self) -> Tuple[bool, List[str]]:
-        return self._run_phase(STEP_CHECK)
+        return self._run_phase(STEP_CHECK, self._get_timeout(STEP_CHECK, _STEP_TIMEOUT_DEFAULTS[STEP_CHECK]))
 
     def plan(self) -> Tuple[bool, List[str]]:
-        return self._run_phase(STEP_PLAN)
+        return self._run_phase(STEP_PLAN, self._get_timeout(STEP_PLAN, _STEP_TIMEOUT_DEFAULTS[STEP_PLAN]))
 
     def apply(self) -> Tuple[bool, List[str]]:
-        success, messages = self._run_phase(STEP_APPLY)
+        success, messages = self._run_phase(
+            STEP_APPLY, self._get_timeout(STEP_APPLY, _STEP_TIMEOUT_DEFAULTS[STEP_APPLY])
+        )
         if success:
             messages.append(f"✓ Stage '{self.stage.name}' applied successfully.")
         return success, messages
 
     def destroy(self) -> Tuple[bool, List[str]]:
-        success, messages = self._run_phase(STEP_DESTROY)
+        success, messages = self._run_phase(
+            STEP_DESTROY, self._get_timeout(STEP_DESTROY, _STEP_TIMEOUT_DEFAULTS[STEP_DESTROY])
+        )
         if success:
             messages.append(f"✓ Stage '{self.stage.name}' destroyed successfully.")
         return success, messages
 
     def plan_destroy(self) -> Tuple[bool, List[str]]:
-        return self._run_phase(STEP_PLAN_DESTROY)
+        return self._run_phase(
+            STEP_PLAN_DESTROY, self._get_timeout(STEP_PLAN, _STEP_TIMEOUT_DEFAULTS[STEP_PLAN_DESTROY])
+        )
 
     def show_plan(self) -> Tuple[bool, Dict[str, Any], List[str]]:
         """Not applicable for script deployer — returns empty plan data."""
@@ -175,7 +192,7 @@ class ScriptDeployer(BaseDeployer):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _run_phase(self, step: str) -> Tuple[bool, List[str]]:
+    def _run_phase(self, step: str, timeout: int = _SCRIPT_TIMEOUT) -> Tuple[bool, List[str]]:
         """Map a step name to a lifecycle phase and execute its scripts."""
         phase_name = _STEP_TO_PHASE.get(step)
         if phase_name is None:
@@ -188,12 +205,13 @@ class ScriptDeployer(BaseDeployer):
             return True, [f"No lifecycle defined, skipping '{phase_name}'"]
 
         lifecycle_phases = lifecycle.root
-        return self._execute_lifecycle_phase(lifecycle_phases, phase_name)
+        return self._execute_lifecycle_phase(lifecycle_phases, phase_name, timeout)
 
     def _execute_lifecycle_phase(
         self,
         lifecycle_phases: dict,
         phase_name: str,
+        timeout: int = _SCRIPT_TIMEOUT,
     ) -> Tuple[bool, List[str]]:
         """Execute all scripts for one lifecycle phase."""
         messages: List[str] = []
@@ -220,7 +238,7 @@ class ScriptDeployer(BaseDeployer):
             if self.verbose:
                 messages.append(f"  [{idx}/{len(phase.scripts)}] Running: {script_file.name}")
 
-            success, script_messages = self._execute_script(script_file)
+            success, script_messages = self._execute_script(script_file, timeout)
             messages.extend(script_messages)
 
             if not success:
@@ -230,7 +248,7 @@ class ScriptDeployer(BaseDeployer):
         messages.append(f"Phase '{phase_name}' completed successfully")
         return True, messages
 
-    def _execute_script(self, script_path: Path) -> Tuple[bool, List[str]]:
+    def _execute_script(self, script_path: Path, timeout: int = _SCRIPT_TIMEOUT) -> Tuple[bool, List[str]]:
         """Execute a single script file."""
         messages: List[str] = []
 
@@ -257,10 +275,10 @@ class ScriptDeployer(BaseDeployer):
                 env=env,
                 capture_output=True,
                 text=True,
-                timeout=_SCRIPT_TIMEOUT,
+                timeout=timeout,
             )
         except subprocess.TimeoutExpired:
-            messages.append(f"Script timed out after {_SCRIPT_TIMEOUT}s: {script_path}")
+            messages.append(f"Script timed out after {timeout}s: {script_path}")
             return False, messages
         except FileNotFoundError:
             messages.append(f"Interpreter not found for script: {script_path}")
