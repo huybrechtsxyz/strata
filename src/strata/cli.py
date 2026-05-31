@@ -25,6 +25,7 @@ import click
 import yaml
 
 from strata.commands.cli_builders import build as build_group
+from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
 from strata.commands.cli_deploy import deploy as deploy_group
 from strata.commands.cli_diff import diff_command
@@ -179,6 +180,7 @@ def main(ctx: click.Context) -> None:
 #
 
 main.add_command(version_command, name="version")
+main.add_command(completion_command, name="completion")
 main.add_command(help_command, name="help")
 main.add_command(sln_group, name="sln")
 main.add_command(config_group, name="config")
