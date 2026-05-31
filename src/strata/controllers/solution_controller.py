@@ -4,7 +4,11 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from strata.models.workspace_model import WorkspaceIacModel
+    from strata.services.deployment_service import DeploymentService
 
 from strata.controllers.base_controller import BaseController
 from strata.logger.logger import get_active_log_file
@@ -387,6 +391,34 @@ class SolutionController(BaseController):
                 # git repo: cloned into work_path / r.path
                 repo_map[str(r.name)] = str(self._work_path / r.path)
         return repo_map
+
+    # ------------------------------------------------------------------
+    # Canonical build path helpers
+    # ------------------------------------------------------------------
+
+    def get_platform_path(self, deployment_service: "DeploymentService", build_path: Path) -> Path:
+        """Return the path to ``platform.json`` inside the deployment build output."""
+        return deployment_service.get_build_path(build_path) / "platform.json"
+
+    def get_platform_yaml_path(self, deployment_service: "DeploymentService", build_path: Path) -> Path:
+        """Return the path to ``platform.yaml`` inside the deployment build output."""
+        return deployment_service.get_build_path(build_path) / "platform.yaml"
+
+    def get_provisioner_path(
+        self,
+        deployment_service: "DeploymentService",
+        build_path: Path,
+        iac: "WorkspaceIacModel",
+    ) -> Path:
+        """Return the canonical IaC working directory inside the deployment build output.
+
+        Single source of truth used by both the builder (copy destination) and
+        the deployer (working directory).  Resolution order:
+          1. ``iac.source.target_path`` — explicit override
+          2. ``iac.source.source_path`` — default (matches what the builder copies)
+        """
+        target = iac.source.target_path or iac.source.source_path
+        return deployment_service.get_build_path(build_path) / target
 
     # ------------------------------------------------------------------
     # Profile management

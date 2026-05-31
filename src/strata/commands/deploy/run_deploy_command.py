@@ -378,6 +378,7 @@ class RunDeployCommand(BaseDeployCommand):
                 verbose=self._is_verbose(),
                 force=self._force,
                 resolved_values=self._resolved_values,
+                solution_controller=self._solution_controller,
             )
 
         if resolved_type == "ansible":
@@ -392,6 +393,7 @@ class RunDeployCommand(BaseDeployCommand):
                 verbose=self._is_verbose(),
                 force=self._force,
                 resolved_values=self._resolved_values,
+                solution_controller=self._solution_controller,
             )
 
         return None

@@ -2,12 +2,15 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from strata.logger import get_logger
 from strata.models.deployment_model import DeploymentStageModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
+
+if TYPE_CHECKING:
+    from strata.controllers.solution_controller import SolutionController
 
 # Canonical step name constants — use these in get_supported_steps() and callers.
 STEP_SETUP = "setup"
@@ -46,6 +49,7 @@ class BaseDeployer(ABC):
         work_path: Path,
         verbose: bool = False,
         force: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
     ):
         self.stage = stage
         self.deployment_service = deployment_service
@@ -54,6 +58,7 @@ class BaseDeployer(ABC):
         self.work_path = work_path
         self.verbose = verbose
         self.force = force
+        self.solution_controller = solution_controller
         self.logger = get_logger(self.__class__.__module__)
 
     # ------------------------------------------------------------------

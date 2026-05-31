@@ -110,6 +110,7 @@ class RunBuildCommand(BaseBuildCommand):
             deployment_service=self._deployment_service,
             work_path=self._work_path,
             build_path=self._build_path,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(builder.drain_messages())
         if not ok:
@@ -121,6 +122,7 @@ class RunBuildCommand(BaseBuildCommand):
             work_path=self._work_path,
             build_path=self._build_path,
             dry_run=self._dry_run,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(builder.drain_messages())
         if not ok:
@@ -135,6 +137,7 @@ class RunBuildCommand(BaseBuildCommand):
             work_path=self._work_path,
             build_path=self._build_path,
             dry_run=self._dry_run,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(builder.drain_messages())
         if not ok:
@@ -156,6 +159,7 @@ class RunBuildCommand(BaseBuildCommand):
             work_path=self._work_path,
             build_path=self._build_path,
             dry_run=self._dry_run,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(builder.drain_messages())
         if not ok:
@@ -169,6 +173,7 @@ class RunBuildCommand(BaseBuildCommand):
             dry_run=self._dry_run,
             platform_model=getattr(self, "_platform_model", None),
             repo_map=repo_map,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(builder.drain_messages())
         if not ok:
@@ -180,6 +185,7 @@ class RunBuildCommand(BaseBuildCommand):
             work_path=self._work_path,
             build_path=self._build_path,
             dry_run=self._dry_run,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(builder.drain_messages())
         if not ok:
