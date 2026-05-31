@@ -8,7 +8,7 @@ import json
 import shutil
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from strata.builders.base_builder import BaseBuilder
 from strata.models.environment_model import IncludeMergeStrategy
@@ -16,6 +16,9 @@ from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
 from strata.utils.terraform_loader import TerraformLoader
+
+if TYPE_CHECKING:
+    from strata.controllers.solution_controller import SolutionController
 
 
 class TerraformBuilder(BaseBuilder):
@@ -37,6 +40,7 @@ class TerraformBuilder(BaseBuilder):
         dry_run: bool = False,
         platform_model: Optional["PlatformArtifactModel"] = None,
         repo_map: Optional[Dict[str, str]] = None,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Build Terraform tfvars files from ``platform.json``.
 
@@ -70,7 +74,11 @@ class TerraformBuilder(BaseBuilder):
                     )
                     self._messages.append(f"Using pre-assembled platform model: {model_name}")
             else:
-                platform_path = deployment_build_path / "platform.json"
+                platform_path = (
+                    solution_controller.get_platform_path(deployment_service, build_path)
+                    if solution_controller is not None
+                    else deployment_service.get_build_path(build_path) / "platform.json"
+                )
 
                 if not platform_path.exists():
                     self._errors.append("Platform model not found. Run platform build first.")
@@ -94,7 +102,12 @@ class TerraformBuilder(BaseBuilder):
             terraform_vars = self._build_terraform_vars(platform_model, deployment_service, [])
 
             if dry_run:
-                terraform_path = deployment_build_path / "terraform"
+                terraform_paths = self._resolve_terraform_paths(deployment_service, build_path, solution_controller)
+                terraform_path = (
+                    terraform_paths[0]
+                    if terraform_paths
+                    else deployment_service.get_build_path(build_path) / "terraform"
+                )
                 planned = [
                     "workspace.auto.tfvars.json",
                     "providers.auto.tfvars.json",
@@ -127,6 +140,7 @@ class TerraformBuilder(BaseBuilder):
                     work_path=work_path,
                     repo_map=repo_map or {},
                     dry_run=True,
+                    solution_controller=solution_controller,
                 )
                 if not copy_ok:
                     return False
@@ -138,13 +152,16 @@ class TerraformBuilder(BaseBuilder):
                     work_path=work_path,
                     repo_map=repo_map or {},
                     dry_run=True,
+                    solution_controller=solution_controller,
                 )
                 if not include_ok:
                     return False
 
                 return True
 
-            self._messages.extend(self._save_terraform_vars(terraform_vars, deployment_service, build_path))
+            self._messages.extend(
+                self._save_terraform_vars(terraform_vars, deployment_service, build_path, solution_controller)
+            )
 
             # Copy terraform source files from the provisioner source_path into the build
             copy_ok = self._copy_provisioner_source(
@@ -153,6 +170,7 @@ class TerraformBuilder(BaseBuilder):
                 work_path=work_path,
                 repo_map=repo_map or {},
                 dry_run=False,
+                solution_controller=solution_controller,
             )
             if not copy_ok:
                 return False
@@ -164,6 +182,7 @@ class TerraformBuilder(BaseBuilder):
                 work_path=work_path,
                 repo_map=repo_map or {},
                 dry_run=False,
+                solution_controller=solution_controller,
             )
             if not include_ok:
                 return False
@@ -182,6 +201,7 @@ class TerraformBuilder(BaseBuilder):
         work_path: Path,
         build_path: Path,
         dry_run: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Hook executed before build starts."""
         if not deployment_service.is_validated():
@@ -189,8 +209,11 @@ class TerraformBuilder(BaseBuilder):
             return False
 
         if not dry_run:
-            deployment_build_path = deployment_service.get_build_path(build_path)
-            platform_path = deployment_build_path / "platform.json"
+            platform_path = (
+                solution_controller.get_platform_path(deployment_service, build_path)
+                if solution_controller is not None
+                else deployment_service.get_build_path(build_path) / "platform.json"
+            )
 
             if not platform_path.exists():
                 self._errors.append(f"Platform model not found at: {platform_path}. Run platform build first.")
@@ -207,6 +230,7 @@ class TerraformBuilder(BaseBuilder):
         work_path: Path,
         build_path: Path,
         dry_run: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Hook executed after build completes."""
         if dry_run:
@@ -214,8 +238,10 @@ class TerraformBuilder(BaseBuilder):
                 self._messages.append("[DRY-RUN] Skipping Terraform artifact file-existence check")
             return True
 
-        deployment_build_path = deployment_service.get_build_path(build_path)
-        terraform_path = deployment_build_path / "terraform"
+        terraform_paths = self._resolve_terraform_paths(deployment_service, build_path, solution_controller)
+        if not terraform_paths:
+            terraform_paths = [deployment_service.get_build_path(build_path) / "terraform"]
+        terraform_path = terraform_paths[0]
 
         base_files = [
             "workspace.auto.tfvars.json",
@@ -514,53 +540,81 @@ class TerraformBuilder(BaseBuilder):
     def _document_required_secrets(self) -> Dict[str, Any]:
         return {"secrets": list(self.secret_refs.values())}
 
+    def _resolve_terraform_paths(
+        self,
+        deployment_service: DeploymentService,
+        build_path: Path,
+        solution_controller: Optional["SolutionController"],
+    ) -> List[Path]:
+        """Return canonical paths for all terraform provisioners in the workspace.
+
+        Used by build, after_build and dry-run display to locate per-provisioner
+        artifact directories without doing inline path arithmetic.
+        """
+        if solution_controller is None:
+            return []
+        workspace_service = deployment_service.get_workspace_service()
+        if workspace_service is None or workspace_service.model is None:
+            return []
+        provisioners = workspace_service.model.spec.provisioners or []
+        return [
+            solution_controller.get_provisioner_path(deployment_service, build_path, prov)
+            for prov in provisioners
+            if prov.provisioner.value == "terraform"
+        ]
+
     def _save_terraform_vars(
         self,
         terraform_vars: Dict[str, Any],
         deployment_service: DeploymentService,
         build_path: Path,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> List[str]:
         """Write all Terraform payload files."""
         messages: List[str] = []
 
         try:
-            deployment_build_path = deployment_service.get_build_path(build_path)
-            terraform_path = deployment_build_path / "terraform"
-            terraform_path.mkdir(parents=True, exist_ok=True)
+            terraform_paths = self._resolve_terraform_paths(deployment_service, build_path, solution_controller)
+            if not terraform_paths:
+                # Fallback: legacy single directory
+                terraform_paths = [deployment_service.get_build_path(build_path) / "terraform"]
 
-            self._write_json(
-                terraform_path / "workspace.auto.tfvars.json",
-                terraform_vars["workspace"],
-            )
-            self._write_json(
-                terraform_path / "providers.auto.tfvars.json",
-                terraform_vars["providers"],
-            )
-            self._write_json(
-                terraform_path / "topologies.auto.tfvars.json",
-                terraform_vars["topologies"],
-            )
-            self._write_json(terraform_path / "modules.auto.tfvars.json", terraform_vars["modules"])
-            self._write_json(terraform_path / "namespaces.auto.tfvars.json", terraform_vars["namespaces"])
-            self._write_json(terraform_path / "firewalls.auto.tfvars.json", terraform_vars["firewalls"])
+            for terraform_path in terraform_paths:
+                terraform_path.mkdir(parents=True, exist_ok=True)
 
-            for resource_type, payload in terraform_vars["resources_by_category"].items():
-                self._write_json(terraform_path / f"resx_{resource_type}.auto.tfvars.json", payload)
+                self._write_json(
+                    terraform_path / "workspace.auto.tfvars.json",
+                    terraform_vars["workspace"],
+                )
+                self._write_json(
+                    terraform_path / "providers.auto.tfvars.json",
+                    terraform_vars["providers"],
+                )
+                self._write_json(
+                    terraform_path / "topologies.auto.tfvars.json",
+                    terraform_vars["topologies"],
+                )
+                self._write_json(terraform_path / "modules.auto.tfvars.json", terraform_vars["modules"])
+                self._write_json(terraform_path / "namespaces.auto.tfvars.json", terraform_vars["namespaces"])
+                self._write_json(terraform_path / "firewalls.auto.tfvars.json", terraform_vars["firewalls"])
 
-            self._write_json(
-                terraform_path / "tf_required_variables.json",
-                terraform_vars["required_variables"],
-            )
-            self._write_json(
-                terraform_path / "tf_required_features.json",
-                terraform_vars["required_features"],
-            )
-            self._write_json(
-                terraform_path / "tf_required_secrets.json",
-                terraform_vars["required_secrets"],
-            )
+                for resource_type, payload in terraform_vars["resources_by_category"].items():
+                    self._write_json(terraform_path / f"resx_{resource_type}.auto.tfvars.json", payload)
 
-            messages.append(f"✓ Terraform artifacts saved to: {terraform_path}")
+                self._write_json(
+                    terraform_path / "tf_required_variables.json",
+                    terraform_vars["required_variables"],
+                )
+                self._write_json(
+                    terraform_path / "tf_required_features.json",
+                    terraform_vars["required_features"],
+                )
+                self._write_json(
+                    terraform_path / "tf_required_secrets.json",
+                    terraform_vars["required_secrets"],
+                )
+
+                messages.append(f"✓ Terraform artifacts saved to: {terraform_path}")
 
         except Exception as exc:
             error_msg = f"Failed to save Terraform artifacts: {exc}"
@@ -583,12 +637,13 @@ class TerraformBuilder(BaseBuilder):
         work_path: Path,
         repo_map: Dict[str, str],
         dry_run: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Copy terraform source files from each provisioner's source_path into the build.
 
         For each terraform provisioner declared in the workspace:
           source  = repo_root / source_path   (repo_root = work_path when repo not in repo_map)
-          dest    = deployment_build_path / (target_path or source_path)
+          dest    = solution_controller.get_provisioner_path(deployment_service, build_path, prov)
 
         In dry_run mode only logs the planned copy; no files are written.
         """
@@ -613,7 +668,11 @@ class TerraformBuilder(BaseBuilder):
                 repo_root = work_path
 
             src_dir = repo_root / source.source_path
-            dest_dir = deployment_build_path / (source.target_path or source.source_path)
+            dest_dir = (
+                solution_controller.get_provisioner_path(deployment_service, build_path, prov)
+                if solution_controller is not None
+                else deployment_build_path / (source.target_path or source.source_path)
+            )
 
             if dry_run:
                 self._messages.append(f"[DRY-RUN] Would copy terraform source: {src_dir} → {dest_dir}")
@@ -643,6 +702,7 @@ class TerraformBuilder(BaseBuilder):
         work_path: Path,
         repo_map: Dict[str, str],
         dry_run: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Validate and execute terraform file includes from environment model.
 
@@ -690,8 +750,10 @@ class TerraformBuilder(BaseBuilder):
             return True
 
         # Resolve output directory
-        deployment_build_path = deployment_service.get_build_path(build_path)
-        terraform_path = deployment_build_path / "terraform"
+        terraform_paths = self._resolve_terraform_paths(deployment_service, build_path, solution_controller)
+        terraform_path = (
+            terraform_paths[0] if terraform_paths else deployment_service.get_build_path(build_path) / "terraform"
+        )
 
         # Phase 1: Validate all includes
         resolved_tasks: List[Dict[str, Any]] = []

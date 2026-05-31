@@ -94,6 +94,15 @@ def resolve_path(
     if target_path is not None:
         target_path = str(target_path)
 
+    # On non-Windows, backslashes are not path separators. A path authored on
+    # Windows using '\' silently resolves to a single-component filename on
+    # Linux, producing a confusing "file not found" error later. Catch it here.
+    if os.name != "nt" and target_path and "\\" in target_path and "/" not in target_path:
+        raise ValueError(
+            f"Path '{target_path}' uses Windows backslash separators. "
+            f"Use forward slashes (/) in YAML config files for cross-platform compatibility."
+        )
+
     # Resolve @repo_name/... cross-repo references
     if target_path and target_path.startswith("@"):
         repo_name, _, rest = target_path[1:].partition("/")

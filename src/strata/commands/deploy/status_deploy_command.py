@@ -284,6 +284,7 @@ class StatusDeployCommand(BaseDeployCommand):
                 build_path=self._build_path,
                 work_path=self._work_path,
                 verbose=self._is_verbose(),
+                solution_controller=self._solution_controller,
             )
 
         if resolved_type == "ansible":
@@ -296,6 +297,7 @@ class StatusDeployCommand(BaseDeployCommand):
                 build_path=self._build_path,
                 work_path=self._work_path,
                 verbose=self._is_verbose(),
+                solution_controller=self._solution_controller,
             )
 
         return None

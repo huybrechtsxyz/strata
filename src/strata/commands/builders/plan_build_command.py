@@ -142,6 +142,7 @@ class PlanBuildCommand(BaseBuildCommand):
             deployment_service=self._deployment_service,
             work_path=self._work_path,
             build_path=tmp_build_path,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(pb.get_messages())
         if not ok:
@@ -153,6 +154,7 @@ class PlanBuildCommand(BaseBuildCommand):
             work_path=self._work_path,
             build_path=tmp_build_path,
             dry_run=False,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(pb.get_messages())
         if not ok:
@@ -166,6 +168,7 @@ class PlanBuildCommand(BaseBuildCommand):
             work_path=self._work_path,
             build_path=tmp_build_path,
             dry_run=False,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(pb.get_messages())
         if not ok:
@@ -180,6 +183,7 @@ class PlanBuildCommand(BaseBuildCommand):
             work_path=self._work_path,
             build_path=tmp_build_path,
             dry_run=False,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(tb.get_messages())
         if not ok:
@@ -192,6 +196,7 @@ class PlanBuildCommand(BaseBuildCommand):
             build_path=tmp_build_path,
             dry_run=False,
             platform_model=platform_model,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(tb.get_messages())
         if not ok:
@@ -203,6 +208,7 @@ class PlanBuildCommand(BaseBuildCommand):
             work_path=self._work_path,
             build_path=tmp_build_path,
             dry_run=False,
+            solution_controller=self._solution_controller,
         )
         self._messages.extend(tb.get_messages())
         if not ok:
@@ -304,6 +310,7 @@ class PlanBuildCommand(BaseBuildCommand):
             verbose=True,  # always capture full terraform output
             force=False,
             resolved_values=resolved,
+            solution_controller=self._solution_controller,
         )
 
         for label, validate_fn in (

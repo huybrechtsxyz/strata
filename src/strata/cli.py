@@ -25,6 +25,7 @@ import click
 import yaml
 
 from strata.commands.cli_builders import build as build_group
+from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
 from strata.commands.cli_deploy import deploy as deploy_group
 from strata.commands.cli_diff import diff_command
@@ -129,9 +130,30 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
         "auto_envvar_prefix": "STRATA",
     },
 )
+@click.version_option(
+    None,
+    "--version",
+    "-v",
+    package_name="xyz-strata",
+    prog_name="strata",
+    message="%(prog)s %(version)s",
+)
+@click.option(
+    "--no-color",
+    is_flag=True,
+    default=False,
+    help="Disable ANSI color output. Also respects the NO_COLOR env var (no-color.org).",
+)
 @click.pass_context
-def main(ctx: click.Context) -> None:
+def main(ctx: click.Context, no_color: bool = False) -> None:
     """Strata CLI entry point."""
+    # Honour NO_COLOR env var (https://no-color.org) and --no-color flag.
+    # Must run before configure_logging() so the structlog formatter sees it.
+    # `setdefault` leaves an existing NO_COLOR value untouched.
+    if no_color or "NO_COLOR" in os.environ:
+        os.environ.setdefault("NO_COLOR", "1")
+        ctx.color = False
+
     # Force UTF-8 on Windows so emoji and box-drawing characters survive
     # piping/redirection (e.g. `strata validate ... | Select-String`).
     # reconfigure() is a no-op on non-Windows or when stdout is already UTF-8.
@@ -171,6 +193,7 @@ def main(ctx: click.Context) -> None:
 #
 
 main.add_command(version_command, name="version")
+main.add_command(completion_command, name="completion")
 main.add_command(help_command, name="help")
 main.add_command(sln_group, name="sln")
 main.add_command(config_group, name="config")

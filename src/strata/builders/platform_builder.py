@@ -2,9 +2,12 @@
 
 import shutil
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from strata.builders.base_builder import BaseBuilder
+
+if TYPE_CHECKING:
+    from strata.controllers.solution_controller import SolutionController
 from strata.models.platform_artifact_model import (
     PlatformArtifactModel,
     PlatformComponentModel,
@@ -48,6 +51,7 @@ class PlatformBuilder(BaseBuilder):
         work_path: Path,
         build_path: Path,
         dry_run: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Assemble and persist the platform model.
 
@@ -76,15 +80,21 @@ class PlatformBuilder(BaseBuilder):
 
             if dry_run:
                 deployment_build_path = deployment_service.get_build_path(build_path)
-                self._messages.append(
-                    f"[DRY-RUN] Would write platform model to: {deployment_build_path / 'platform.json'}"
+                json_path = (
+                    solution_controller.get_platform_path(deployment_service, build_path)
+                    if solution_controller is not None
+                    else deployment_build_path / "platform.json"
                 )
-                self._messages.append(
-                    f"[DRY-RUN] Would write platform model to: {deployment_build_path / 'platform.yaml'}"
+                yaml_path = (
+                    solution_controller.get_platform_yaml_path(deployment_service, build_path)
+                    if solution_controller is not None
+                    else deployment_build_path / "platform.yaml"
                 )
+                self._messages.append(f"[DRY-RUN] Would write platform model to: {json_path}")
+                self._messages.append(f"[DRY-RUN] Would write platform model to: {yaml_path}")
                 return True
 
-            save_messages = self._save_platform(platform, deployment_service, build_path)
+            save_messages = self._save_platform(platform, deployment_service, build_path, solution_controller)
             self._messages.extend(save_messages)
 
             return True
@@ -100,6 +110,7 @@ class PlatformBuilder(BaseBuilder):
         deployment_service: DeploymentService,
         work_path: Path,
         build_path: Path,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Pre-build validation hook.
 
@@ -141,6 +152,7 @@ class PlatformBuilder(BaseBuilder):
         work_path: Path,
         build_path: Path,
         dry_run: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Post-build verification hook.
 
@@ -152,6 +164,7 @@ class PlatformBuilder(BaseBuilder):
             work_path: Working directory path.
             build_path: Build output directory path.
             dry_run: When True, skip output file existence checks.
+            solution_controller: Controller providing canonical path helpers.
 
         Returns:
             bool: True on success, False on failure.
@@ -162,8 +175,16 @@ class PlatformBuilder(BaseBuilder):
             return True
 
         deployment_build_path = deployment_service.get_build_path(build_path)
-        json_path = deployment_build_path / "platform.json"
-        yaml_path = deployment_build_path / "platform.yaml"
+        json_path = (
+            solution_controller.get_platform_path(deployment_service, build_path)
+            if solution_controller is not None
+            else deployment_build_path / "platform.json"
+        )
+        yaml_path = (
+            solution_controller.get_platform_yaml_path(deployment_service, build_path)
+            if solution_controller is not None
+            else deployment_build_path / "platform.yaml"
+        )
 
         if json_path.exists() and yaml_path.exists():
             if self.verbose:
@@ -451,17 +472,9 @@ class PlatformBuilder(BaseBuilder):
         platform: PlatformArtifactModel,
         deployment_service: DeploymentService,
         build_path: Path,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> List[str]:
-        """Persist the PlatformModel to JSON and YAML.
-
-        Args:
-            platform: Assembled platform model.
-            deployment_service: Used to resolve the deployment build path.
-            build_path: Root build directory.
-
-        Returns:
-            List[str]: Progress / error messages.
-        """
+        """Persist the PlatformModel to JSON and YAML."""
         messages: List[str] = []
 
         try:
@@ -471,8 +484,16 @@ class PlatformBuilder(BaseBuilder):
             service = PlatformService(path=None, data=None)
             service.verbose = self.verbose
 
-            json_path = deployment_build_path / "platform.json"
-            yaml_path = deployment_build_path / "platform.yaml"
+            json_path = (
+                solution_controller.get_platform_path(deployment_service, build_path)
+                if solution_controller is not None
+                else deployment_build_path / "platform.json"
+            )
+            yaml_path = (
+                solution_controller.get_platform_yaml_path(deployment_service, build_path)
+                if solution_controller is not None
+                else deployment_build_path / "platform.yaml"
+            )
 
             service.save_both_formats(platform, json_path, yaml_path)
 

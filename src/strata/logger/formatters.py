@@ -6,6 +6,7 @@ SHARED_PROCESSORS is the single source of truth for the common processor
 pipeline used by both structlog.configure() and stdlib ProcessorFormatter.
 """
 
+import os
 import sys
 
 import structlog
@@ -36,7 +37,9 @@ def make_console_formatter() -> structlog.stdlib.ProcessorFormatter:
     structlog's ConsoleRenderer produces the familiar dev-friendly output
     with colors, level badges, and key=value pairs on one line.
     """
-    renderer = structlog.dev.ConsoleRenderer(colors=sys.stdout.isatty())
+    # Respect the NO_COLOR env var (https://no-color.org) — any presence of
+    # the variable, regardless of its value, disables ANSI colour output.
+    renderer = structlog.dev.ConsoleRenderer(colors=sys.stdout.isatty() and "NO_COLOR" not in os.environ)
     return structlog.stdlib.ProcessorFormatter(
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,

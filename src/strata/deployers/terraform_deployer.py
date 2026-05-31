@@ -62,6 +62,7 @@ class TerraformDeployer(BaseDeployer):
         verbose: bool = False,
         force: bool = False,
         resolved_values: Optional[ResolvedValues] = None,
+        solution_controller=None,
     ) -> None:
         super().__init__(
             stage=stage,
@@ -71,6 +72,7 @@ class TerraformDeployer(BaseDeployer):
             work_path=work_path,
             verbose=verbose,
             force=force,
+            solution_controller=solution_controller,
         )
         self.resolved_values = resolved_values
         self._iac_model: Optional[WorkspaceIacModel] = None
@@ -119,7 +121,12 @@ class TerraformDeployer(BaseDeployer):
             )
             return False, messages
 
-        self._working_dir = self._get_working_dir(self.deployment_service, self.build_path, self._iac_model)
+        if self.solution_controller is not None:
+            self._working_dir = self.solution_controller.get_provisioner_path(
+                self.deployment_service, self.build_path, self._iac_model
+            )
+        else:
+            self._working_dir = self._get_working_dir(self.deployment_service, self.build_path, self._iac_model)
         self._plan_file = self._working_dir / f"{self.stage.name}.tfplan"
 
         if not self._working_dir.exists():
@@ -187,6 +194,7 @@ class TerraformDeployer(BaseDeployer):
                 backend_config=backend_config or None,
                 reconfigure=bool(backend_config),
                 line_callback=line_callback,
+                timeout=self._get_timeout("setup", 300),
             )
             if result.returncode != 0:
                 messages.append(f"terraform init failed:\n{result.stderr}")
@@ -213,7 +221,10 @@ class TerraformDeployer(BaseDeployer):
         messages.append("terraform validate")
 
         try:
-            result = self._tf.validate(str(self._working_dir))
+            result = self._tf.validate(
+                str(self._working_dir),
+                timeout=self._get_timeout("check", 60),
+            )
             if result.returncode != 0:
                 messages.append(f"terraform validate failed:\n{result.stderr}")
                 return False, messages
@@ -246,6 +257,7 @@ class TerraformDeployer(BaseDeployer):
                     str(self._working_dir),
                     out_file=str(self._plan_file),
                     line_callback=line_callback,
+                    timeout=self._get_timeout("plan", 600),
                 )
             if result.returncode != 0:
                 messages.append(f"terraform plan failed:\n{result.stderr}")
@@ -279,6 +291,7 @@ class TerraformDeployer(BaseDeployer):
                     str(self._working_dir),
                     plan_file=str(self._plan_file),
                     line_callback=line_callback,
+                    timeout=self._get_timeout("apply", 1800),
                 )
             if result.returncode != 0:
                 messages.append(f"terraform apply failed:\n{result.stderr}")
@@ -312,6 +325,7 @@ class TerraformDeployer(BaseDeployer):
                     str(self._working_dir),
                     auto_approve=self.force,
                     line_callback=line_callback,
+                    timeout=self._get_timeout("destroy", 1800),
                 )
             if result.returncode != 0:
                 messages.append(f"terraform destroy failed:\n{result.stderr}")

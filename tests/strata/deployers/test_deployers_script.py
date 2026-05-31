@@ -6,6 +6,7 @@ from typing import Optional
 from unittest.mock import MagicMock, patch
 
 from strata.deployers.script_deployer import _STEP_TO_PHASE, ScriptDeployer
+from strata.models.deployment_model import DeploymentStageTimeoutsModel
 
 
 def _make_deployer(
@@ -195,7 +196,7 @@ class TestScriptDeployerRunPhase:
 
         call_count = 0
 
-        def side_effect(path):
+        def side_effect(path, timeout=300):
             nonlocal call_count
             call_count += 1
             return (False, ["failed"])
@@ -388,3 +389,93 @@ class TestStepToPhaseMapping:
     def test_show_plan_not_in_mapping(self):
         # show_plan has no lifecycle equivalent — handled directly
         assert "show_plan" not in _STEP_TO_PHASE
+
+
+class TestScriptDeployerTimeouts:
+    """Verify stage.timeouts is forwarded as timeout= to subprocess.run."""
+
+    def _phase_with_script(self, tmp_path, name="run.sh"):
+        script = tmp_path / name
+        script.write_text("#!/bin/bash\nexit 0")
+        phase = MagicMock()
+        phase.scripts = [str(script)]
+        return phase
+
+    def _mock_ok(self):
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        r.stderr = ""
+        return r
+
+    def test_apply_uses_default_timeout_when_none(self, tmp_path):
+        phase = self._phase_with_script(tmp_path)
+        d = _make_deployer(lifecycle_root={"deploy_apply": phase}, tmp_path=tmp_path)
+        d.stage.timeouts = None
+        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+            d.apply()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs.get("timeout") == 1800
+
+    def test_apply_uses_custom_timeout(self, tmp_path):
+        phase = self._phase_with_script(tmp_path)
+        d = _make_deployer(lifecycle_root={"deploy_apply": phase}, tmp_path=tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(apply=900)
+        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+            d.apply()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs.get("timeout") == 900
+
+    def test_setup_uses_default_timeout(self, tmp_path):
+        phase = self._phase_with_script(tmp_path)
+        d = _make_deployer(lifecycle_root={"deploy_setup": phase}, tmp_path=tmp_path)
+        d.stage.timeouts = None
+        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+            d.setup()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs.get("timeout") == 300
+
+    def test_setup_uses_custom_timeout(self, tmp_path):
+        phase = self._phase_with_script(tmp_path)
+        d = _make_deployer(lifecycle_root={"deploy_setup": phase}, tmp_path=tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(setup=60)
+        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+            d.setup()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs.get("timeout") == 60
+
+    def test_destroy_uses_default_timeout(self, tmp_path):
+        phase = self._phase_with_script(tmp_path)
+        d = _make_deployer(lifecycle_root={"deploy_destroy": phase}, tmp_path=tmp_path)
+        d.stage.timeouts = None
+        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+            d.destroy()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs.get("timeout") == 1800
+
+    def test_destroy_uses_custom_timeout(self, tmp_path):
+        phase = self._phase_with_script(tmp_path)
+        d = _make_deployer(lifecycle_root={"deploy_destroy": phase}, tmp_path=tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(destroy=600)
+        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+            d.destroy()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs.get("timeout") == 600
+
+    def test_partial_timeouts_uses_default_for_unset(self, tmp_path):
+        """Only apply overridden — setup should still use default."""
+        apply_phase = self._phase_with_script(tmp_path, "apply.sh")
+        setup_phase = self._phase_with_script(tmp_path, "setup.sh")
+        d = _make_deployer(
+            lifecycle_root={"deploy_apply": apply_phase, "deploy_setup": setup_phase},
+            tmp_path=tmp_path,
+        )
+        d.stage.timeouts = DeploymentStageTimeoutsModel(apply=999)
+
+        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+            d.setup()
+        assert mock_run.call_args[1].get("timeout") == 300  # default
+
+        with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
+            d.apply()
+        assert mock_run.call_args[1].get("timeout") == 999  # override

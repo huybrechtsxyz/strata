@@ -1,0 +1,67 @@
+"""Unit tests for deployment model — DeploymentStageTimeoutsModel."""
+
+import pytest
+from pydantic import ValidationError
+
+from strata.models.deployment_model import DeploymentStageModel, DeploymentStageTimeoutsModel
+
+
+class TestDeploymentStageTimeoutsModel:
+    def test_all_fields_optional(self):
+        t = DeploymentStageTimeoutsModel()
+        assert t.setup is None
+        assert t.check is None
+        assert t.plan is None
+        assert t.apply is None
+        assert t.destroy is None
+
+    def test_partial_override(self):
+        t = DeploymentStageTimeoutsModel(plan=300, apply=1200)
+        assert t.setup is None
+        assert t.check is None
+        assert t.plan == 300
+        assert t.apply == 1200
+        assert t.destroy is None
+
+    def test_all_fields_set(self):
+        t = DeploymentStageTimeoutsModel(setup=60, check=30, plan=300, apply=900, destroy=900)
+        assert t.setup == 60
+        assert t.check == 30
+        assert t.plan == 300
+        assert t.apply == 900
+        assert t.destroy == 900
+
+    def test_invalid_type_rejected(self):
+        with pytest.raises(ValidationError):
+            DeploymentStageTimeoutsModel(plan="fast")
+
+    def test_old_field_names_not_accepted(self):
+        """init and validate were renamed to setup and check — should be ignored by Pydantic (extra='ignore')."""
+        # Pydantic v2 ignores extra fields by default, but the values must NOT leak
+        # into setup/check to avoid silent mis-configuration.
+        t = DeploymentStageTimeoutsModel(init=999, validate=999)  # type: ignore[call-arg]
+        assert t.setup is None
+        assert t.check is None
+
+
+class TestDeploymentStageModelTimeoutsField:
+    def test_timeouts_optional(self):
+        stage = DeploymentStageModel(name="prod", type="infrastructure")
+        assert stage.timeouts is None
+
+    def test_timeouts_parsed_from_dict(self):
+        stage = DeploymentStageModel(
+            name="prod",
+            type="infrastructure",
+            timeouts={"setup": 120, "apply": 1200},
+        )
+        assert stage.timeouts is not None
+        assert stage.timeouts.setup == 120
+        assert stage.timeouts.apply == 1200
+        assert stage.timeouts.plan is None
+
+    def test_timeouts_model_instance_accepted(self):
+        t = DeploymentStageTimeoutsModel(plan=600)
+        stage = DeploymentStageModel(name="prod", type="infrastructure", timeouts=t)
+        assert stage.timeouts is not None
+        assert stage.timeouts.plan == 600

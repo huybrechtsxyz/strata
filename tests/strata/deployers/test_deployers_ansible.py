@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from strata.deployers.ansible_deployer import AnsibleDeployer
 from strata.models.common_models import ProvisionerType
+from strata.models.deployment_model import DeploymentStageTimeoutsModel
 
 
 def _make_stage(name="configure", provisioner=None, stage_type="configure"):
@@ -403,3 +404,92 @@ class TestAnsibleDeployerSshKey:
         d._iac_model.configuration = {"ssh_private_key_secret": "haven_ssh_key"}
         with d._ssh_key_context() as key_file:
             assert key_file is not None
+
+
+class TestAnsibleDeployerTimeouts:
+    """Verify _get_timeout drives the timeout= kwarg on AnsibleIntegration calls."""
+
+    def _ready_deployer(self, tmp_path):
+        (tmp_path / "requirements.yml").write_text("collections: []")
+        (tmp_path / "site.yml").write_text("---")
+        (tmp_path / "destroy.yml").write_text("---")
+        d = _make_deployer(force=True)
+        d._working_dir = tmp_path
+        d._ansible = MagicMock()
+        d._ansible.init.return_value = {"returncode": 0, "stdout": "", "stderr": ""}
+        d._ansible.syntax_check.return_value = MagicMock(returncode=0, stderr="")
+        d._ansible.plan.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        d._ansible.apply.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+        return d
+
+    def test_setup_default_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = None
+        d.setup()
+        call_kwargs = d._ansible.init.call_args[1]
+        assert call_kwargs.get("timeout") == 300
+
+    def test_setup_custom_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(setup=60)
+        d.setup()
+        call_kwargs = d._ansible.init.call_args[1]
+        assert call_kwargs.get("timeout") == 60
+
+    def test_check_default_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = None
+        d.check()
+        call_kwargs = d._ansible.syntax_check.call_args[1]
+        assert call_kwargs.get("timeout") == 60
+
+    def test_check_custom_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(check=15)
+        d.check()
+        call_kwargs = d._ansible.syntax_check.call_args[1]
+        assert call_kwargs.get("timeout") == 15
+
+    def test_plan_default_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = None
+        d.plan()
+        call_kwargs = d._ansible.plan.call_args[1]
+        assert call_kwargs.get("timeout") == 600
+
+    def test_plan_custom_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(plan=120)
+        d.plan()
+        call_kwargs = d._ansible.plan.call_args[1]
+        assert call_kwargs.get("timeout") == 120
+
+    def test_apply_default_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = None
+        d.apply()
+        call_kwargs = d._ansible.apply.call_args[1]
+        assert call_kwargs.get("timeout") == 1800
+
+    def test_apply_custom_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(apply=900)
+        d.apply()
+        call_kwargs = d._ansible.apply.call_args[1]
+        assert call_kwargs.get("timeout") == 900
+
+    def test_destroy_default_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = None
+        d.destroy()
+        call_kwargs = d._ansible.apply.call_args[1]
+        assert call_kwargs.get("timeout") == 1800
+
+    def test_destroy_custom_timeout(self, tmp_path):
+        d = self._ready_deployer(tmp_path)
+        d.stage.timeouts = DeploymentStageTimeoutsModel(destroy=600)
+        d.destroy()
+        call_kwargs = d._ansible.apply.call_args[1]
+        assert call_kwargs.get("timeout") == 600

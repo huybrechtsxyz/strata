@@ -67,6 +67,7 @@ class AnsibleDeployer(BaseDeployer):
         verbose: bool = False,
         force: bool = False,
         resolved_values: Optional[ResolvedValues] = None,
+        solution_controller=None,
     ) -> None:
         super().__init__(
             stage=stage,
@@ -76,6 +77,7 @@ class AnsibleDeployer(BaseDeployer):
             work_path=work_path,
             verbose=verbose,
             force=force,
+            solution_controller=solution_controller,
         )
         self.resolved_values = resolved_values
         self._iac_model: Optional[WorkspaceIacModel] = None
@@ -134,9 +136,12 @@ class AnsibleDeployer(BaseDeployer):
             )
             return False, messages
 
-        # Resolve working directory from source.target_path (falls back to ansible/<name>)
-        target = Path(iac.source.target_path) if iac.source.target_path else (Path("ansible") / iac.name)
-        source_path = self.build_path / target
+        # Resolve working directory from source path via canonical helper
+        if self.solution_controller is not None:
+            source_path = self.solution_controller.get_provisioner_path(self.deployment_service, self.build_path, iac)
+        else:
+            target = Path(iac.source.target_path) if iac.source.target_path else (Path("ansible") / iac.name)
+            source_path = self.build_path / target
         if not source_path.exists():
             messages.append(f"Ansible source path does not exist: {source_path}")
             return False, messages
@@ -275,6 +280,7 @@ class AnsibleDeployer(BaseDeployer):
             result = self._ansible.init(
                 str(self._working_dir),
                 requirements_file=requirements,
+                timeout=self._get_timeout("setup", 300),
             )
             if result.get("returncode", 0) != 0:
                 messages.append(f"ansible-galaxy install failed:\n{result.get('stderr', '')}")
@@ -303,6 +309,7 @@ class AnsibleDeployer(BaseDeployer):
             result = self._ansible.syntax_check(
                 str(self._working_dir),
                 playbook=playbook,
+                timeout=self._get_timeout("check", 60),
             )
             if result.returncode != 0:
                 messages.append(f"Syntax check failed:\n{result.stderr}")
@@ -336,6 +343,7 @@ class AnsibleDeployer(BaseDeployer):
                     inventory=inventory,
                     extra_vars=self._get_extra_vars(),
                     private_key_file=key_file,
+                    timeout=self._get_timeout("plan", 600),
                 )
             if result.returncode != 0:
                 messages.append(f"Check mode failed:\n{result.stderr}")
@@ -371,6 +379,7 @@ class AnsibleDeployer(BaseDeployer):
                     inventory=inventory,
                     extra_vars=self._get_extra_vars(),
                     private_key_file=key_file,
+                    timeout=self._get_timeout("apply", 1800),
                 )
             if result.returncode != 0:
                 messages.append(f"Playbook execution failed:\n{result.stderr}")
@@ -413,6 +422,7 @@ class AnsibleDeployer(BaseDeployer):
                     playbook=destroy_playbook,
                     inventory=inventory,
                     private_key_file=key_file,
+                    timeout=self._get_timeout("destroy", 1800),
                 )
             if result.returncode != 0:
                 messages.append(f"Destroy playbook failed:\n{result.stderr}")
@@ -449,6 +459,7 @@ class AnsibleDeployer(BaseDeployer):
                     playbook=destroy_playbook,
                     inventory=inventory,
                     private_key_file=key_file,
+                    timeout=self._get_timeout("plan", 600),
                 )
             if result.returncode != 0:
                 messages.append(f"Destroy check mode failed:\n{result.stderr}")

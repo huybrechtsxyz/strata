@@ -5,6 +5,7 @@ from typing import Optional
 import click
 
 from strata.commands.cli_common import (
+    click_file,
     click_output_format,
     click_output_quiet,
     click_output_verbose,
@@ -15,7 +16,7 @@ from strata.commands.validate.run_validate_command import ValidateCommand
 
 
 @click.command(name="validate")
-@click.argument("file_path")
+@click_file
 @click.option(
     "--deep",
     is_flag=True,
@@ -31,16 +32,23 @@ from strata.commands.validate.run_validate_command import ValidateCommand
 @click_output_verbose
 @click_output_quiet
 def validate_command(
-    file_path: str,
+    file: Optional[str] = None,
     deep: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
     quiet: bool = False,
 ) -> None:
-    """Validate a platform YAML file against its kind-specific schema."""
+    """Validate a platform YAML file against its kind-specific schema.
+
+    Specify the file with -f / --file (or set STRATA_FILE):
+
+        strata validate -f config/deployment.yaml
+    """
+    if not file:
+        raise click.UsageError("Missing option '-f' / '--file'. Specify the deployment YAML file path.")
     command = ValidateCommand(
-        file_path=file_path,
+        file=file,
         deep=deep,
         work_path=work_path,
         output=output,

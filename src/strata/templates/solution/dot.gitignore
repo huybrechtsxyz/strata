@@ -40,5 +40,8 @@ __pycache__/
 .terraformrc
 terraform.rc
 
+# Build output
+build/
+
 # Node (if tooling is ever added)
 node_modules/

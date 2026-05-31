@@ -19,7 +19,7 @@ class TestValidateCommand:
         target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\n")
         runner = CliRunner()
         with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=True):
-            result = runner.invoke(validate_command, [str(target), "--work-path", str(tmp_path)])
+            result = runner.invoke(validate_command, ["-f", str(target), "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
     def test_deep_flag_accepted(self, tmp_path):
@@ -27,7 +27,7 @@ class TestValidateCommand:
         target.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\n")
         runner = CliRunner()
         with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=True):
-            result = runner.invoke(validate_command, [str(target), "--deep", "--work-path", str(tmp_path)])
+            result = runner.invoke(validate_command, ["-f", str(target), "--deep", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
     def test_execute_false_returns_nonzero(self, tmp_path):
@@ -35,7 +35,7 @@ class TestValidateCommand:
         target.write_text("not: valid: yaml: content")
         runner = CliRunner()
         with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=False):
-            result = runner.invoke(validate_command, [str(target), "--work-path", str(tmp_path)])
+            result = runner.invoke(validate_command, ["-f", str(target), "--work-path", str(tmp_path)])
         assert result.exit_code != 0
 
     def test_validation_errors_produce_exit_3(self, tmp_path):
@@ -47,7 +47,7 @@ class TestValidateCommand:
                 "strata.commands.validate.run_validate_command.ValidateCommand.has_validation_errors",
                 return_value=True,
             ):
-                result = runner.invoke(validate_command, [str(target), "--work-path", str(tmp_path)])
+                result = runner.invoke(validate_command, ["-f", str(target), "--work-path", str(tmp_path)])
         assert result.exit_code == 3
 
 
@@ -61,7 +61,7 @@ class TestValidateStructuredErrors:
         runner = CliRunner()
         result = runner.invoke(
             validate_command,
-            [str(target), "--output", "json", "--work-path", str(tmp_path)],
+            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
         )
         data = json.loads(result.output)
         errors = data["data"]["errors"]
@@ -77,7 +77,7 @@ class TestValidateStructuredErrors:
         runner = CliRunner()
         result = runner.invoke(
             validate_command,
-            [str(target), "--output", "json", "--work-path", str(tmp_path)],
+            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
         )
         data = json.loads(result.output)
         errors = data["data"]["errors"]
@@ -93,7 +93,7 @@ class TestValidateStructuredErrors:
         runner = CliRunner()
         result = runner.invoke(
             validate_command,
-            [str(target), "--output", "json", "--work-path", str(tmp_path)],
+            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
         )
         data = json.loads(result.output)
         errors = data["data"]["errors"]
@@ -106,7 +106,7 @@ class TestValidateStructuredErrors:
         runner = CliRunner()
         result = runner.invoke(
             validate_command,
-            [str(target), "--output", "json", "--work-path", str(tmp_path)],
+            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
         )
         data = json.loads(result.output)
         for err in data["data"]["errors"]:
@@ -121,7 +121,7 @@ class TestValidateStructuredErrors:
         with patch("strata.commands.validate.run_validate_command.ValidateCommand.execute", return_value=True):
             result = runner.invoke(
                 validate_command,
-                [str(target), "--output", "json", "--work-path", str(tmp_path)],
+                ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
             )
         # When execute is mocked to True the command succeeds with no errors recorded
         assert result.exit_code == 0
@@ -136,7 +136,7 @@ class TestValidateStructuredErrors:
         runner = CliRunner()
         result = runner.invoke(
             validate_command,
-            [str(target), "--output", "json", "--work-path", str(tmp_path)],
+            ["-f", str(target), "--output", "json", "--work-path", str(tmp_path)],
         )
         data = json.loads(result.output)
         errors = data["data"]["errors"]

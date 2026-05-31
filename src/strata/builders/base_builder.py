@@ -2,10 +2,13 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING, List, Optional
 
 from strata.logger import get_logger
 from strata.services.deployment_service import DeploymentService
+
+if TYPE_CHECKING:
+    from strata.controllers.solution_controller import SolutionController
 
 
 class BaseBuilder(ABC):
@@ -42,6 +45,7 @@ class BaseBuilder(ABC):
         work_path: Path,
         build_path: Path,
         dry_run: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Build the workspace according to the builder's logic."""
         raise NotImplementedError
@@ -52,6 +56,7 @@ class BaseBuilder(ABC):
         deployment_service: DeploymentService,
         work_path: Path,
         build_path: Path,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Hook executed before the build process starts."""
         raise NotImplementedError
@@ -63,6 +68,7 @@ class BaseBuilder(ABC):
         work_path: Path,
         build_path: Path,
         dry_run: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Hook executed after the build process completes."""
         raise NotImplementedError
