@@ -23,7 +23,7 @@ class ValidateCommand(BaseCommand):
 
     def __init__(
         self,
-        file_path: str,
+        file: Optional[str] = None,
         deep: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
@@ -31,7 +31,7 @@ class ValidateCommand(BaseCommand):
         quiet: bool = False,
     ) -> None:
         super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
-        self._file_path_raw: str = file_path
+        self._file_path_raw: Optional[str] = file
         self._deep: bool = deep
         self._resolved_file: Optional[Path] = None
         self._validator: Optional[PlatformValidator] = None
@@ -91,6 +91,9 @@ class ValidateCommand(BaseCommand):
         """Resolve file_path to an absolute Path and verify it exists."""
         if not super()._before_execute():
             return False
+
+        if not self._file_path_raw:
+            raise click.UsageError("Missing option '-f' / '--file'. Specify the deployment YAML file path.")
 
         if self._file_path_raw.startswith("@"):
             try:
