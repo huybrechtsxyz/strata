@@ -31,26 +31,26 @@ These options are accepted by every command and subcommand:
 
 ## Command Groups
 
-| Group       | Subcommands                                                                  | Description                                             |
-| ----------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `sln`       | `init` `clean` `status` `export`                                             | Solution workspace lifecycle                            |
-| `config`    | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config |
-| `log` †     | `list`                                                                       | View execution logs (read-only)                         |
-| `profile` † | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                             |
-| `ref` †     | `env` `config` `data` `secret`                                               | Manage file references within profiles                  |
-| `repo` †    | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                     |
-| `build` †   | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                  |
-| `validate`  | —                                                                            | Validate a single platform YAML file                    |
-| `schema`    | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds            |
-| `deploy` †  | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                      |
-| `diff` †    | —                                                                            | Preview what would change before deploying              |
-| `values` †  | `list` `get`                                                                 | Inspect resolved deployment values                      |
-| `vars` †    | `set` `unset` `list`                                                         | Manage team-shared template variables                   |
-| `tools`     | `status` `check` `install`                                                   | Manage and inspect external tool integrations           |
-| `new` †     | —                                                                            | Create a platform config file from a template           |
-| `version`   | —                                                                            | Show CLI version                                        |
-| `completion`| `bash` `zsh` `fish` `powershell`                                             | Output shell completion script for the given shell      |
-| `help`      | —                                                                            | Show help topics                                        |
+| Group        | Subcommands                                                                  | Description                                             |
+| ------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `sln`        | `init` `clean` `status` `export`                                             | Solution workspace lifecycle                            |
+| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config |
+| `log` †      | `list`                                                                       | View execution logs (read-only)                         |
+| `profile` †  | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                             |
+| `ref` †      | `env` `config` `data` `secret`                                               | Manage file references within profiles                  |
+| `repo` †     | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                     |
+| `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                  |
+| `validate`   | —                                                                            | Validate a single platform YAML file                    |
+| `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds            |
+| `deploy` †   | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                      |
+| `diff` †     | —                                                                            | Preview what would change before deploying              |
+| `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                      |
+| `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                   |
+| `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations           |
+| `new` †      | —                                                                            | Create a platform config file from a template           |
+| `version`    | —                                                                            | Show CLI version                                        |
+| `completion` | `bash` `zsh` `fish` `powershell`                                             | Output shell completion script for the given shell      |
+| `help`       | —                                                                            | Show help topics                                        |
 
 > **†** Requires an initialized workspace (`.strata/` directory). Run `strata sln init --name NAME` first.
 
