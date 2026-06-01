@@ -3,21 +3,36 @@
     Bumps VERSION.txt on a release branch, tags, and guides through the PR workflow.
 .DESCRIPTION
     Creates a release/vX.Y.Z branch from main, updates VERSION.txt, commits, pushes
-    the branch, and creates an annotated tag locally. Because main is protected, the
-    tag must be pushed AFTER the PR is merged and ci-build passes on the PR commit —
-    that is the commit ci-release will look up to download the dist artifact.
+    the branch, and creates an annotated tag locally. Because main is protected, both
+    tags must be pushed AFTER the PR is merged and ci-build passes on the PR commit.
+
+    Two tags are maintained per release:
+      - Exact tag   (e.g. v0.0.5) — triggers ci-release; use for auditable pinning.
+      - Major tag   (e.g. v0)     — moving tag, always points to the latest release in
+                                    the major line. GitHub Action consumers pin to this
+                                    tag to receive non-breaking updates automatically
+                                    without changing their workflow refs.
+
+    The @v0 refs inside deploy-workspace.yml and all composite actions resolve via the
+    major tag — no file edits are needed on each release.
 .PARAMETER Version
-    The version number to release (e.g. 0.0.2). Must be in X.Y.Z format.
+    The version number to release (e.g. 0.0.5). Must be in X.Y.Z format.
 .EXAMPLE
-    .\scripts\Release.ps1 -Version "0.0.2"
+    .\scripts\Release.ps1 -Version "0.0.5"
 
     Then follow the printed instructions:
       1. Open the PR URL printed by this script.
       2. Wait for ci-build to pass on the PR.
-      3. Merge the PR (squash or merge commit — note the merge commit SHA).
-      4. Push the tag from the merge commit: git push origin v0.0.2
+      3. Merge the PR into main.
+      4. Move both tags to the merge commit and push:
+           git checkout main
+           git pull --ff-only origin main
+           git tag -f v0.0.5
+           git tag -f v0
+           git push origin v0.0.5
+           git push origin v0 --force
 .NOTES
-    The tag push is intentionally separate — ci-release requires a successful
+    The tag pushes are intentionally separate — ci-release requires a successful
     ci-build run for the tagged commit before it can download the dist artifact.
 #>
 
@@ -127,13 +142,8 @@ if ($LASTEXITCODE -ne 0) {
 Set-Content -Path $versionFile -Value $Version -NoNewline
 
 # 3. Pin all @main action refs in deploy-workspace.yml to the release tag
-$workflowFile = Join-Path $projectRoot ".github" "workflows" "deploy-workspace.yml"
-Write-Host "[*] Pinning action refs: @main → $tag" -ForegroundColor Yellow
-(Get-Content $workflowFile -Raw) -replace '@main', "@$tag" | Set-Content $workflowFile -NoNewline
-
 # 4. Stage and commit
 git add VERSION.txt
-git add .github/workflows/deploy-workspace.yml
 git commit -m "chore: release $tag"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] git commit failed." -ForegroundColor Red

@@ -97,30 +97,30 @@ jobs:
 
       # Install yq (used to extract values from YAML deployment files)
       - name: Setup YQ
-        uses: huybrechtsxyz/strata/.github/actions/setup-yq@main
+        uses: huybrechtsxyz/strata/.github/actions/setup-yq@v0
 
       # Install uv / python and strata
       - name: Setup Strata
-        uses: huybrechtsxyz/strata/.github/actions/setup-strata@main
+        uses: huybrechtsxyz/strata/.github/actions/setup-strata@v0
         with:
           python-version: "3.13"
 
       # Validate the deployment file structure and schema
       - name: Validate Deployment
-        uses: huybrechtsxyz/strata/.github/actions/validate-deployment@main
+        uses: huybrechtsxyz/strata/.github/actions/validate-deployment@v0
         with:
           deployment_file: ${{ inputs.deployment_file }}
 
       # Extract the deployment name from the file for use in downstream steps
       - name: Get Deployment Name
         id: get_name
-        uses: huybrechtsxyz/strata/.github/actions/get-deployment-name@main
+        uses: huybrechtsxyz/strata/.github/actions/get-deployment-name@v0
         with:
           deployment_file: ${{ inputs.deployment_file }}
 
       # Verify all configured store integrations are reachable before proceeding
       - name: Verify Integrations
-        uses: huybrechtsxyz/strata/.github/actions/verify-integrations@main
+        uses: huybrechtsxyz/strata/.github/actions/verify-integrations@v0
         with:
           bitwarden_token: ${{ secrets.bitwarden_token }}
           azure_tenant_id: ${{ inputs.azure_tenant_id }}
@@ -134,13 +134,13 @@ jobs:
 
       # Build the platform artifact (writes output to .strata/)
       - name: Build
-        uses: huybrechtsxyz/strata/.github/actions/build-deployment@main
+        uses: huybrechtsxyz/strata/.github/actions/build-deployment@v0
         with:
           deployment_file: ${{ inputs.deployment_file }}
 
       # dry_run=true (default) → plan only. dry_run=false → full deploy.
       - name: Deploy
-        uses: huybrechtsxyz/strata/.github/actions/run-deployment@main
+        uses: huybrechtsxyz/strata/.github/actions/run-deployment@v0
         with:
           deployment_file: ${{ inputs.deployment_file }}
           deployment_name: ${{ steps.get_name.outputs.deployment_name }}
