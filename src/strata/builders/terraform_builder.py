@@ -501,6 +501,18 @@ class TerraformBuilder(BaseBuilder):
 
         return {"namespaces": namespaces_dict}
 
+    def _normalize_firewall_rule(self, rule: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize a firewall rule for Terraform consumption.
+
+        Terraform requires all elements in a list(object({...})) to have the
+        same concrete type for each field. Since port can be a scalar (int/str)
+        or a list, we always normalize it to a list so the type is uniform.
+        """
+        if "port" in rule and rule["port"] is not None:
+            if not isinstance(rule["port"], list):
+                rule["port"] = [rule["port"]]
+        return rule
+
     def _build_firewall_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
         """Build firewall tfvars payload."""
         firewalls_dict: Dict[str, Any] = {}
@@ -512,10 +524,10 @@ class TerraformBuilder(BaseBuilder):
                     "defaults": [r.model_dump(exclude_none=True, by_alias=True) for r in firewall.defaults]
                     if firewall.defaults
                     else [],
-                    "deny": [r.model_dump(exclude_none=True, by_alias=True) for r in firewall.deny]
+                    "deny": [self._normalize_firewall_rule(r.model_dump(exclude_none=True, by_alias=True)) for r in firewall.deny]
                     if firewall.deny
                     else [],
-                    "allow": [r.model_dump(exclude_none=True, by_alias=True) for r in firewall.allow]
+                    "allow": [self._normalize_firewall_rule(r.model_dump(exclude_none=True, by_alias=True)) for r in firewall.allow]
                     if firewall.allow
                     else [],
                 }
