@@ -1,0 +1,82 @@
+# ===============================================================================
+# Action Name  : get-deployment-info
+# Description  : Extract metadata from a strata deployment YAML file and expose
+#                it as individual outputs and a compact JSON blob.
+#
+# Useful for:
+#   - Step summary enrichment (deployment name, kind, version)
+#   - Matrix strategies that branch on deployment kind or environment
+#   - PR comments and audit trails that need human-readable deployment metadata
+#   - External workflows (e.g. the calling team's pipeline) that need to know
+#     what they're deploying before committing to a full run
+#
+# Requires: setup-yq must have run first.
+# ===============================================================================
+
+name: "Get Deployment Info"
+description: "Extract metadata (name, kind, version, description) from a strata deployment file as individual outputs and JSON. Requires setup-yq."
+
+branding:
+  icon: "info"
+  color: "blue"
+
+inputs:
+  deployment_file:
+    description: "Path to the strata deployment YAML file."
+    required: true
+
+outputs:
+  # Individual fields — usable directly in workflow expressions.
+  name:
+    description: "Deployment name from .meta.name"
+    value: ${{ steps.extract.outputs.name }}
+  kind:
+    description: "Document kind from .kind (e.g. deployment, workspace)"
+    value: ${{ steps.extract.outputs.kind }}
+  api_version:
+    description: "API version from .apiVersion"
+    value: ${{ steps.extract.outputs.api_version }}
+  description:
+    description: "Human-readable description from .meta.annotations.description"
+    value: ${{ steps.extract.outputs.description }}
+  version:
+    description: "Deployment version label from .meta.labels.version"
+    value: ${{ steps.extract.outputs.version }}
+  # Compact JSON — parse with fromJSON() in workflow expressions or jq in scripts.
+  info_json:
+    description: "All metadata fields as a compact JSON object."
+    value: ${{ steps.extract.outputs.info_json }}
+
+runs:
+  using: composite
+  steps:
+    - name: Extract
+      id: extract
+      shell: bash
+      env:
+        DEPLOYMENT_FILE: ${{ inputs.deployment_file }}
+      run: |
+        NAME=$(yq e '.meta.name // ""' "$DEPLOYMENT_FILE")
+        KIND=$(yq e '.kind // ""' "$DEPLOYMENT_FILE")
+        API_VERSION=$(yq e '.apiVersion // ""' "$DEPLOYMENT_FILE")
+        DESCRIPTION=$(yq e '.meta.annotations.description // ""' "$DEPLOYMENT_FILE")
+        VERSION=$(yq e '.meta.labels.version // ""' "$DEPLOYMENT_FILE")
+
+        # Write individual outputs
+        echo "name=${NAME}"          >> "$GITHUB_OUTPUT"
+        echo "kind=${KIND}"          >> "$GITHUB_OUTPUT"
+        echo "api_version=${API_VERSION}" >> "$GITHUB_OUTPUT"
+        echo "description=${DESCRIPTION}" >> "$GITHUB_OUTPUT"
+        echo "version=${VERSION}"    >> "$GITHUB_OUTPUT"
+
+        # Compose compact JSON — values are already plain strings so printf is safe
+        INFO_JSON=$(printf '{"name":"%s","kind":"%s","apiVersion":"%s","description":"%s","version":"%s"}' \
+          "$NAME" "$KIND" "$API_VERSION" "$DESCRIPTION" "$VERSION")
+        echo "info_json=${INFO_JSON}" >> "$GITHUB_OUTPUT"
+
+        echo "[*] Deployment info:"
+        echo "    name        : $NAME"
+        echo "    kind        : $KIND"
+        echo "    apiVersion  : $API_VERSION"
+        echo "    description : $DESCRIPTION"
+        echo "    version     : $VERSION"

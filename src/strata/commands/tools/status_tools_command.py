@@ -59,11 +59,26 @@ class StatusToolsCommand(BaseCommand):
             for err in errors:
                 self._errors.append(err)
 
-            # Apply filters (requirement filters only apply when a deployment is given)
-            if self._filter_required and self._deployment_file:
-                rows = [r for r in rows if r.get("requirement") == "required"]
-            elif self._filter_optional and self._deployment_file:
-                rows = [r for r in rows if r.get("requirement") == "optional"]
+            # Warn when requirement filters are used without --file context
+            if (self._filter_required or self._filter_optional) and not self._deployment_file:
+                click.echo(
+                    "Warning: --required/--optional require --file to have any effect. "
+                    "No deployment context — all integrations have no requirement level.",
+                    err=True,
+                )
+
+            # Apply filters
+            if self._deployment_file and not self._filter_required and not self._filter_optional:
+                # --file given with no requirement filter: show only configured integrations
+                rows = [r for r in rows if r.get("requirement") is not None]
+            elif self._filter_required or self._filter_optional:
+                # Requirement filter(s): show union of selected levels (combinable)
+                allowed = set()
+                if self._filter_required:
+                    allowed.add("required")
+                if self._filter_optional:
+                    allowed.add("optional")
+                rows = [r for r in rows if r.get("requirement") in allowed]
             if self._filter_available:
                 rows = [r for r in rows if r["available"]]
             if self._filter_missing:

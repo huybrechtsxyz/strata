@@ -1,0 +1,35 @@
+# ===============================================================================
+# Action Name  : get-deployment-name
+# Description  : Extract the deployment name from a strata deployment YAML file
+#                using yq. Requires setup-yq to have run first.
+# ===============================================================================
+
+name: "Get Deployment Name"
+description: "Extract the deployment name from a strata deployment file. Requires setup-yq."
+
+branding:
+  icon: "tag"
+  color: "blue"
+
+inputs:
+  deployment_file:
+    description: "Path to the strata deployment YAML file."
+    required: true
+
+outputs:
+  deployment_name:
+    description: "The deployment name extracted from .meta.name in the file."
+    value: ${{ steps.extract.outputs.deployment_name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Extract
+      id: extract
+      shell: bash
+      env:
+        DEPLOYMENT_FILE: ${{ inputs.deployment_file }}
+      run: |
+        DEPLOYMENT_NAME=$(yq e '.meta.name' "$DEPLOYMENT_FILE")
+        echo "deployment_name=$DEPLOYMENT_NAME" >> $GITHUB_OUTPUT
+        echo "[*] Deployment name: $DEPLOYMENT_NAME"

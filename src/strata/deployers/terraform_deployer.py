@@ -197,7 +197,8 @@ class TerraformDeployer(BaseDeployer):
                 timeout=self._get_timeout("setup", 300),
             )
             if result.returncode != 0:
-                messages.append(f"terraform init failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform init failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -226,7 +227,8 @@ class TerraformDeployer(BaseDeployer):
                 timeout=self._get_timeout("check", 60),
             )
             if result.returncode != 0:
-                messages.append(f"terraform validate failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform validate failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -260,7 +262,8 @@ class TerraformDeployer(BaseDeployer):
                     timeout=self._get_timeout("plan", 600),
                 )
             if result.returncode != 0:
-                messages.append(f"terraform plan failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform plan failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -294,7 +297,8 @@ class TerraformDeployer(BaseDeployer):
                     timeout=self._get_timeout("apply", 1800),
                 )
             if result.returncode != 0:
-                messages.append(f"terraform apply failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform apply failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -328,7 +332,8 @@ class TerraformDeployer(BaseDeployer):
                     timeout=self._get_timeout("destroy", 1800),
                 )
             if result.returncode != 0:
-                messages.append(f"terraform destroy failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform destroy failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -359,7 +364,8 @@ class TerraformDeployer(BaseDeployer):
                     destroy=True,
                 )
             if result.returncode != 0:
-                messages.append(f"terraform plan -destroy failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform plan -destroy failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip():
                 messages.append(result.stdout.strip())
@@ -427,6 +433,23 @@ class TerraformDeployer(BaseDeployer):
             return False, data, messages
 
         return True, data, messages
+
+    def save_plan_json(self) -> Tuple[bool, Optional[Path], List[str]]:
+        """Save the plan as JSON alongside the binary: {stage}.tfplan → {stage}.tfplan.json.
+
+        Calls show_plan() internally; the plan step must have run first.
+        """
+        ok, data, msgs = self.show_plan()
+        if not ok or not data:
+            return False, None, msgs
+        assert self._plan_file is not None  # guaranteed by show_plan() / _ready()
+        out_path = self._plan_file.parent / f"{self.stage.name}.tfplan.json"
+        try:
+            out_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except OSError as exc:
+            msgs.append(f"Could not write plan JSON: {exc}")
+            return False, None, msgs
+        return True, out_path, msgs
 
     # ------------------------------------------------------------------
     # Internal helpers

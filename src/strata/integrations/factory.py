@@ -1,6 +1,6 @@
 """Factory for creating integration instances from IntegrationModel configuration."""
 
-from typing import Dict, Type
+from typing import Dict, List, Type
 
 from strata.integrations.base_integration import BaseIntegration
 from strata.logger import get_logger
@@ -20,6 +20,31 @@ class IntegrationFactory:
     # Type mapping: integration type -> integration class
     # This will be populated as integrations are created
     _type_mapping: Dict[str, Type[BaseIntegration]] = {}
+
+    # Aliases registered in _type_mapping for backwards-compat with YAML configs
+    # that use short/hyphenated names (e.g. type: consul). These are excluded from
+    # get_known_types() so status output only shows canonical names.
+    _BUILTIN_ALIASES: set = {"azure-keyvault", "azure-appconfig", "consul", "vault"}
+
+    # Built-in class map: type string -> (module_path, class_name)
+    # This is the canonical source of truth for all built-in integrations.
+    # Custom integrations registered at runtime appear in _type_mapping instead.
+    _BUILTIN_CLASS_MAP: Dict[str, tuple] = {
+        "ansible": ("strata.integrations.ansible", "AnsibleIntegration"),
+        "azure_appconfig": ("strata.integrations.azure_appconfig", "AzureAppConfigIntegration"),
+        "azure_keyvault": ("strata.integrations.azure_keyvault", "AzureKeyVaultIntegration"),
+        "bitwarden": ("strata.integrations.bitwarden", "BitwardenIntegration"),
+        "docker": ("strata.integrations.docker", "DockerIntegration"),
+        "etcd": ("strata.integrations.etcd", "EtcdIntegration"),
+        "flagsmith": ("strata.integrations.flagsmith", "FlagsmithIntegration"),
+        "git": ("strata.integrations.git", "GitIntegration"),
+        "hashicorp_consul": ("strata.integrations.hashicorp_consul", "ConsulIntegration"),
+        "hashicorp_vault": ("strata.integrations.hashicorp_vault", "VaultIntegration"),
+        "infisical": ("strata.integrations.infisical", "InfisicalIntegration"),
+        "openbao": ("strata.integrations.openbao", "OpenBaoIntegration"),
+        "opentofu": ("strata.integrations.opentofu", "OpenTofuIntegration"),
+        "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
+    }
 
     @classmethod
     def register_type(cls, integration_type: str, integration_class: Type[BaseIntegration]):
@@ -133,6 +158,23 @@ class IntegrationFactory:
         logger.debug("Integration factory reset")
 
     @classmethod
+    def get_known_types(cls) -> List[str]:
+        """Return all known integration type strings — built-in and custom-registered.
+
+        Built-in types come from ``_BUILTIN_CLASS_MAP``.
+        Custom types registered at runtime (e.g. from ``.strata/integrations/``)
+        come from ``_type_mapping``, excluding known aliases.
+        The union is returned sorted.
+        """
+        custom_registered = set(cls._type_mapping.keys()) - cls._BUILTIN_ALIASES
+        return sorted(set(cls._BUILTIN_CLASS_MAP.keys()) | custom_registered)
+
+    @classmethod
+    def is_known_type(cls, type_str: str) -> bool:
+        """Return True if *type_str* is a known built-in or registered custom type."""
+        return type_str in cls._BUILTIN_CLASS_MAP or type_str in cls._type_mapping
+
+    @classmethod
     def create_by_type(cls, type_str: str) -> BaseIntegration:
         """
         Create a minimal integration instance by friendly type name.
@@ -152,23 +194,6 @@ class IntegrationFactory:
         """
         import importlib as _importlib
 
-        # Canonical class map keyed by friendly type strings
-        _class_map: dict = {
-            "git": ("strata.integrations.git", "GitIntegration"),
-            "docker": ("strata.integrations.docker", "DockerIntegration"),
-            "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
-            "opentofu": ("strata.integrations.opentofu", "OpenTofuIntegration"),
-            "bitwarden": ("strata.integrations.bitwarden", "BitwardenIntegration"),
-            "hashicorp_vault": ("strata.integrations.hashicorp_vault", "VaultIntegration"),
-            "openbao": ("strata.integrations.openbao", "OpenBaoIntegration"),
-            "hashicorp_consul": ("strata.integrations.hashicorp_consul", "ConsulIntegration"),
-            "azure_keyvault": ("strata.integrations.azure_keyvault", "AzureKeyVaultIntegration"),
-            "azure_appconfig": ("strata.integrations.azure_appconfig", "AzureAppConfigIntegration"),
-            "infisical": ("strata.integrations.infisical", "InfisicalIntegration"),
-            "etcd": ("strata.integrations.etcd", "EtcdIntegration"),
-            "flagsmith": ("strata.integrations.flagsmith", "FlagsmithIntegration"),
-        }
-
         # Try the registered type_mapping first (supports custom / aliased types)
         if type_str in cls._type_mapping:
             integration_class = cls._type_mapping[type_str]
@@ -176,15 +201,14 @@ class IntegrationFactory:
             return integration_class(config=config)
 
         # Fall back to the built-in class map
-        if type_str in _class_map:
-            module_path, class_name = _class_map[type_str]
+        if type_str in cls._BUILTIN_CLASS_MAP:
+            module_path, class_name = cls._BUILTIN_CLASS_MAP[type_str]
             module = _importlib.import_module(module_path)
             integration_class = getattr(module, class_name)
             config = IntegrationModel(name=type_str, type=type_str)
             return integration_class(config=config)
 
-        known = sorted(set(list(cls._type_mapping.keys()) + list(_class_map.keys())))
-        raise ValueError(f"Unknown integration type: '{type_str}'. Known types: {', '.join(known)}")
+        raise ValueError(f"Unknown integration type: '{type_str}'. Known types: {', '.join(cls.get_known_types())}")
 
 
 # Auto-registration of built-in integration types

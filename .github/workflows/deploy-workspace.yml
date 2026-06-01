@@ -74,8 +74,11 @@ on:
         required: false
 
 # Permissions for the workflow
+# id-token: write is required for OIDC authentication with Azure.
+# It is harmless when client-secret auth is used instead.
 permissions:
   contents: read
+  id-token: write
 
 # Prevent concurrent deploys of the same workspace (Terraform state locks, etc.)
 # cancel-in-progress: false — let the running deploy finish rather than leaving infra mid-apply.
@@ -97,32 +100,41 @@ jobs:
 
       # Install yq (used to extract values from YAML deployment files)
       - name: Setup YQ
-        uses: ./.github/actions/setup-yq
+        uses: huybrechtsxyz/strata/.github/actions/setup-yq@deployment-bugs
 
       # Install uv / python and strata
       - name: Setup Strata
-        uses: ./.github/actions/setup-strata
+        uses: huybrechtsxyz/strata/.github/actions/setup-strata@deployment-bugs
         with:
           python-version: "3.13"
 
       # Validate the deployment file structure and schema
       - name: Validate Deployment
-        run: |
-          echo "[*] Validating deployment file ..."
-          strata validate "${{ inputs.deployment_file }}"
-          echo "[*] Validating deployment file ... DONE"
+        uses: huybrechtsxyz/strata/.github/actions/validate-deployment@deployment-bugs
+        with:
+          deployment_file: ${{ inputs.deployment_file }}
 
-      # Extract the deployment name from the file for use in downstream jobs
-      - name: Get Deployment Name
+      # Extract deployment metadata (name, kind, version, description) for use in
+      # downstream steps and step summaries.
+      - name: Get Deployment Info
         id: get_name
-        run: |
-          DEPLOYMENT_NAME=$(yq e '.meta.name' "${{ inputs.deployment_file }}")
-          echo "deployment_name=$DEPLOYMENT_NAME" >> $GITHUB_OUTPUT
-          echo "[*] Deployment name: $DEPLOYMENT_NAME"
+        uses: huybrechtsxyz/strata/.github/actions/get-deployment-info@deployment-bugs
+        with:
+          deployment_file: ${{ inputs.deployment_file }}
+
+      # Authenticate with Azure (OIDC or client secret — mode is auto-detected).
+      # Must run before Verify Integrations so the az CLI session is active.
+      - name: Azure Login
+        uses: huybrechtsxyz/strata/.github/actions/azure-login@deployment-bugs
+        with:
+          azure_tenant_id: ${{ inputs.azure_tenant_id }}
+          azure_subscription_id: ${{ inputs.azure_subscription_id }}
+          azure_client_id: ${{ inputs.azure_client_id }}
+          azure_client_secret: ${{ secrets.azure_client_secret }}
 
       # Verify all configured store integrations are reachable before proceeding
       - name: Verify Integrations
-        uses: ./.github/actions/verify-integrations
+        uses: huybrechtsxyz/strata/.github/actions/verify-integrations@deployment-bugs
         with:
           bitwarden_token: ${{ secrets.bitwarden_token }}
           azure_tenant_id: ${{ inputs.azure_tenant_id }}
@@ -134,18 +146,19 @@ jobs:
           consul_address: ${{ inputs.consul_address }}
           consul_token: ${{ secrets.consul_token }}
 
-      # Build the platform artifact using the deployment file (generates a .strata directory with all necessary files for deployment).
+      # Build the platform artifact (writes output to .strata/).
+      # The .strata/ directory is uploaded as artifact strata-build-{name} for
+      # debugging and audit purposes (available even when deploy fails).
       - name: Build
-        run: |
-          echo "[*] Building platform artifact ..."
-          strata build run --file "${{ inputs.deployment_file }}" --work-path .
-          echo "[*] Building platform artifact ... DONE"
+        uses: huybrechtsxyz/strata/.github/actions/build-deployment@deployment-bugs
+        with:
+          deployment_file: ${{ inputs.deployment_file }}
+          deployment_name: ${{ steps.get_name.outputs.name }}
 
-      # dry_run=true (default) → --dry-run: plan only, no apply.
-      # dry_run=false           → no flag:   full deploy (all stages).
+      # dry_run=true (default) → plan only. dry_run=false → full deploy.
       - name: Deploy
-        run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
-          echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} (dry_run=${{ inputs.dry_run }}) ..."
-          strata deploy run --file "${{ inputs.deployment_file }}" --work-path . $DRY_RUN_FLAG
-          echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} ... DONE"
+        uses: huybrechtsxyz/strata/.github/actions/run-deployment@deployment-bugs
+        with:
+          deployment_file: ${{ inputs.deployment_file }}
+          deployment_name: ${{ steps.get_name.outputs.name }}
+          dry_run: ${{ inputs.dry_run }}

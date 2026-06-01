@@ -146,7 +146,7 @@ class TestToolsStatus:
             mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS_WITH_DEPLOYMENT, [])
             result = runner.invoke(
                 tools_group,
-                ["status", "--deployment", "deploy.yaml", "--missing", "--work-path", str(tmp_path)],
+                ["status", "--file", "deploy.yaml", "--missing", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 3
 
@@ -156,7 +156,7 @@ class TestToolsStatus:
             mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS_WITH_DEPLOYMENT, [])
             result = runner.invoke(
                 tools_group,
-                ["status", "--deployment", "deploy.yaml", "--required", "--work-path", str(tmp_path)],
+                ["status", "--file", "deploy.yaml", "--required", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
         assert "terraform" in result.output
@@ -164,18 +164,57 @@ class TestToolsStatus:
         assert "git" not in result.output
         assert "hashicorp_vault" not in result.output
 
-    def test_deployment_mode_shows_requirement_column(self, tmp_path):
+    def test_file_mode_shows_requirement_column(self, tmp_path):
         runner = CliRunner()
         with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
             mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS_WITH_DEPLOYMENT, [])
             result = runner.invoke(
                 tools_group,
-                ["status", "--deployment", "deploy.yaml", "--work-path", str(tmp_path)],
+                ["status", "--file", "deploy.yaml", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
         assert "Requirement" in result.output
         assert "required" in result.output
         assert "optional" in result.output
+        # git has requirement=None — filtered out when --file is given
+        assert "git" not in result.output
+
+    def test_required_without_file_warns(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS, [])
+            result = runner.invoke(
+                tools_group,
+                ["status", "--required", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+        assert "--required/--optional require --file" in result.output
+
+    def test_optional_without_file_warns(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS, [])
+            result = runner.invoke(
+                tools_group,
+                ["status", "--optional", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+        assert "--required/--optional require --file" in result.output
+
+    def test_required_and_optional_combined(self, tmp_path):
+        """--required --optional together shows both required and optional integrations."""
+        runner = CliRunner()
+        with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS_WITH_DEPLOYMENT, [])
+            result = runner.invoke(
+                tools_group,
+                ["status", "--file", "deploy.yaml", "--required", "--optional", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+        assert "terraform" in result.output
+        assert "bitwarden" in result.output
+        assert "hashicorp_vault" in result.output
+        assert "git" not in result.output
 
 
 class TestToolsCheck:

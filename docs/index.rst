@@ -82,6 +82,7 @@ strata
    guides/cookbook-add-environment
    guides/pattern-cross-env-changes
    guides/troubleshooting-what-changed
+   guides/setup-azure-oidc
 
 .. :orphan:
 

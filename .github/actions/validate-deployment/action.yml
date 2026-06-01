@@ -1,0 +1,39 @@
+# ===============================================================================
+# Action Name  : validate-deployment
+# Description  : Validate a strata deployment file against its schema and
+#                cross-reference rules. Requires setup-strata to have run first.
+# ===============================================================================
+
+name: "Validate Deployment"
+description: "Validate a strata deployment file. Requires setup-strata."
+
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  deployment_file:
+    description: "Path to the strata deployment YAML file to validate."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate
+      shell: bash
+      env:
+        DEPLOYMENT_FILE: ${{ inputs.deployment_file }}
+      run: |
+        echo "[*] Validating deployment file ..."
+        set +e
+        strata validate --file "$DEPLOYMENT_FILE"
+        _EXIT=$?
+        set -e
+        if [ $_EXIT -eq 0 ]; then
+          printf '## \u2705 Deployment Validated\n\n**File:** `%s`\n' "$DEPLOYMENT_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "[*] Validating deployment file ... DONE"
+        else
+          printf '## \u274c Validation Failed\n\n**File:** `%s`\n' "$DEPLOYMENT_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "[*] Validating deployment file ... FAILED"
+        fi
+        exit $_EXIT

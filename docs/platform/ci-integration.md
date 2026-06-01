@@ -119,13 +119,30 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      id-token: write  # required for OIDC; harmless when using client-secret mode
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv tool install xyz-strata
+      - uses: huybrechtsxyz/strata/.github/actions/azure-login@v0
+        with:
+          azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+          azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+          # azure_client_secret: ${{ secrets.AZURE_CLIENT_SECRET }}  # omit for OIDC
       - run: strata build run --file $STRATA_FILE
       - run: strata deploy run --file $STRATA_FILE --force
 ```
+
+---
+
+### Azure authentication
+
+The `azure-login` composite action supports two authentication modes, selected automatically from the inputs you provide. In OIDC mode (preferred), no secret is stored in GitHub — Azure issues a short-lived token scoped to that specific run, which is auditable in Azure Entra ID sign-in logs; this requires `permissions: id-token: write` on the calling job and a federated credential configured in your App Registration (see the [Setting Up Azure OIDC guide](../guides/setup-azure-oidc.md)). In client-secret mode (fallback), pass `azure_client_secret: ${{ secrets.AZURE_CLIENT_SECRET }}` — the action detects the input and switches modes automatically, with no other changes required. If no Azure stores are configured for your deployment, omit all `azure_*` inputs and remove the login step entirely.
+
+> **Tip:** Start with client-secret mode to validate the role assignments and pipeline wiring, then switch to OIDC once everything works — it requires only removing the secret and adding the federated credential in Azure.
 
 ---
 

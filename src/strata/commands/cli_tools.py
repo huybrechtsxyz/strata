@@ -28,7 +28,7 @@ def tools_group():
 @click_output_verbose
 @click_output_quiet
 @click.option(
-    "--deployment",
+    "--file",
     "deployment_file",
     default=None,
     metavar="FILE",
