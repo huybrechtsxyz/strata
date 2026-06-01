@@ -43,5 +43,5 @@ runs:
         DRY_RUN_FLAG=""
         if [ "$DRY_RUN" = "true" ]; then DRY_RUN_FLAG="--dry-run"; fi
         echo "[*] Deploying $DEPLOYMENT_NAME (dry_run=$DRY_RUN) ..."
-        strata deploy run --file "$DEPLOYMENT_FILE" --work-path "$WORK_PATH" $DRY_RUN_FLAG
+        strata deploy run --file "$DEPLOYMENT_FILE" --work-path "$WORK_PATH" --verbose $DRY_RUN_FLAG
         echo "[*] Deploying $DEPLOYMENT_NAME ... DONE"
