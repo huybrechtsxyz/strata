@@ -170,6 +170,18 @@ class BaseDeployer(ABC):
         """
         raise NotImplementedError
 
+    def save_plan_json(self) -> Tuple[bool, Optional[Path], List[str]]:
+        """Persist the plan as a human-readable JSON file alongside the binary plan.
+
+        Default implementation is a no-op for deployers that do not produce a
+        structured plan file (e.g. Ansible). Override in deployers that do
+        (e.g. TerraformDeployer).
+
+        Returns:
+            (success, path_or_None, messages)
+        """
+        return True, None, []
+
     @abstractmethod
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:
         """Retrieve infrastructure outputs (e.g. terraform output).
