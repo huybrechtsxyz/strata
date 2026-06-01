@@ -6,12 +6,13 @@ Deployers execute a deployment stage step-by-step against a specific IaC tool or
 
 **Available deployers:**
 
-| Class               | Module                         | Backend         | Purpose                                             |
-| ------------------- | ------------------------------ | --------------- | --------------------------------------------------- |
-| `BaseDeployer`      | `deployers.base_deployer`      | —               | Abstract base — step contracts + constructor        |
-| `TerraformDeployer` | `deployers.terraform_deployer` | Terraform CLI   | Runs init → validate → plan → apply via `terraform` |
-| `AnsibleDeployer`   | `deployers.ansible_deployer`   | Ansible CLI     | Runs galaxy install → syntax-check → check → apply  |
-| `ScriptDeployer`    | `deployers.script_deployer`    | Shell/Python/PS | Executes lifecycle scripts from the deployment YAML |
+| Class               | Module                         | Backend         | Purpose                                                           |
+| ------------------- | ------------------------------ | --------------- | ----------------------------------------------------------------- |
+| `BaseDeployer`      | `deployers.base_deployer`      | —               | Abstract base — step contracts + constructor                      |
+| `TerraformDeployer` | `deployers.terraform_deployer` | Terraform CLI   | Runs init → validate → plan → apply via `terraform`               |
+| `AnsibleDeployer`   | `deployers.ansible_deployer`   | Ansible CLI     | Runs galaxy install → syntax-check → check → apply                |
+| `HelmDeployer`      | `deployers.helm_deployer`      | Helm CLI        | Deploys per-namespace, per-module Helm releases from build output |
+| `ScriptDeployer`    | `deployers.script_deployer`    | Shell/Python/PS | Executes lifecycle scripts from the deployment YAML               |
 
 ---
 
@@ -275,3 +276,49 @@ spec:
       scripts:
         - scripts/destroy.sh
 ```
+
+---
+
+## HelmDeployer
+
+Deploys per-namespace, per-module Helm releases from build output produced by `HelmBuilder`. For each module with `type: helm`, reads `values.yaml` and `meta.yaml` from the build path and runs `helm upgrade --install`.
+
+### Step → Helm command mapping
+
+| Step           | Helm command                                                                         |
+| -------------- | ------------------------------------------------------------------------------------ |
+| `setup`        | `helm repo add <alias> <url>` + `helm repo update` (registry charts only)            |
+| `check`        | `helm lint <chart_ref>` (local charts only; registry charts skipped)                 |
+| `plan`         | `helm upgrade --dry-run --install -n <ns> -f values.yaml <release> <chart>`          |
+| `apply`        | `helm upgrade --install --create-namespace -n <ns> -f values.yaml <release> <chart>` |
+| `destroy`      | `helm uninstall -n <ns> <release>` (requires `--force`)                              |
+| `plan_destroy` | `helm get manifest -n <ns> <release>`                                                |
+| `output`       | `helm get values -n <ns> <release>`                                                  |
+| `show_plan`    | No-op — returns empty dict                                                           |
+
+### validate_workspace
+
+Iterates all namespace/module pairs in the build path. Only processes modules where `module.spec.type == ServiceDeployerType.HELM`. For each qualifying module, reads `values.yaml` and `meta.yaml` from the build output.
+
+### validate_environment
+
+Calls `HelmIntegration.ensure_available()`.
+
+### Chart source resolution
+
+`meta.yaml` carries `releaseName` and `namespace`. The chart reference is derived from `module.spec.source`:
+
+- `chart_repository + chart_name` → registry chart
+- `repository + source_path` → local chart path in the build directory
+
+### Deployment YAML example
+
+```yaml
+spec:
+  stages:
+    - name: platform
+      provisioner: xyz_iac
+      steps: [apply]
+```
+
+Where `xyz_iac` references a provisioner with `provisioner: helm` in the workspace YAML.

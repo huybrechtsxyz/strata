@@ -50,6 +50,22 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 - Testing pattern: plain pytest classes (`class TestConfigSet:`) — no `unittest.TestCase`.
 - copilot-instructions.md updated 2026-05-06.
 
+### 2026-06-01 — Helm integration completeness review
+
+**Requested by:** Vincent Huybrechts.
+
+**Finding — HelmIntegration (helm.py):** Structurally correct. Follows AnsibleIntegration pattern exactly. `ensure_available()` and `validate_version()` (via BaseIntegration) both present. Three abstract methods implemented. No named domain methods (repo_add, upgrade_install, etc.) — deployer calls `_run_integration` directly. Not a blocker but violates convention.
+
+**Finding — HelmDeployer (helm_deployer.py):** All 8 steps implemented and structurally correct. `validate_workspace` correctly iterates namespace services and loads modules. `destroy` force-guard present. `setup` gracefully handles no-registry case. **Bug:** `check()` runs `helm lint -f values.yaml {repo_name}/{chart_name}` for registry charts — `helm lint` requires a local path; this step would fail at runtime for any registry-sourced chart.
+
+**Finding — validate_environment factory bypass:** HelmDeployer instantiates `HelmIntegration(config=IntegrationModel(name="helm", type="helm"))` directly, bypassing `IntegrationFactory.create()`. Currently necessary because "helm" is not registered. Once factory registration is fixed, this should be updated to use the factory.
+
+**Finding — _create_deployer (4 command files):** All four commands correctly detect `ProvisionerType.HELM` and instantiate `HelmDeployer` with the correct constructor args for each command variant. Minor stale error message in `run_deploy_command.py` and `destroy_deploy_command.py` still says `"Supported: terraform, ansible."` — should include compose and helm.
+
+**Finding — factory.py not updated:** `"helm"` is absent from `factory._BUILTIN_CLASS_MAP`. `HelmIntegration` is absent from `integrations/__init__.py`. This means `strata tools`, `IntegrationController`, and any `IntegrationFactory.create()` call for type "helm" will raise ValueError. The deploy commands work only because they bypass the factory.
+
+**Priority fix order:** (1) factory.py + __init__.py registration — 4 lines; (2) stale error messages in run/destroy _create_deployer — 2 lines; (3) helm lint bug for registry charts in check() — requires logic change; (4) named methods on HelmIntegration — low priority.
+
 ### 2026-05-28 — Helm architecture analysis
 
 **Requested by:** Vincent Huybrechts.

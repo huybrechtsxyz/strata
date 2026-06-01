@@ -334,12 +334,24 @@ production-deployment.yaml:
 2. Resolve sources → Fetch workspace/environment/config files
 3. Merge configurations → Apply merge order
 4. Validate → Validate merged config
-5. Generate artifacts → Create Terraform/manifests
+5. Generate artifacts → Create Terraform/manifests/Helm values
 6. Execute lifecycle → Run workspace phases
 7. Provision infrastructure → Deploy infrastructure
 8. Deploy applications → Deploy namespaces/modules
 9. Verify → Run health checks
 10. Register → Register deployment instance
+
+## Provisioner Stage Types
+
+Stages reference a provisioner by name. The backend tool used by that provisioner determines which deployer executes the stage.
+
+| Type        | Deployer            | Notes                                                                                                            |
+| ----------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `terraform` | `TerraformDeployer` | Requires `terraform` CLI                                                                                         |
+| `opentofu`  | `TerraformDeployer` | Requires `tofu` CLI                                                                                              |
+| `ansible`   | `AnsibleDeployer`   | Requires `ansible-playbook` CLI                                                                                  |
+| `helm`      | `HelmDeployer`      | Requires `helm` CLI; deploys per-module Helm releases. See [HelmDeployer](../platform/deployers.md#helmdeployer) |
+| `script`    | `ScriptDeployer`    | Executes lifecycle scripts; no external CLI required                                                             |
 
 ## Source Types
 

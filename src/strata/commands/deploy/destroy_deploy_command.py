@@ -245,6 +245,10 @@ class DestroyDeployCommand(BaseDeployCommand):
                     resolved_type = "terraform"
                 elif _iac and _iac.provisioner == ProvisionerType.ANSIBLE:
                     resolved_type = "ansible"
+                elif _iac and _iac.provisioner == ProvisionerType.COMPOSE:
+                    resolved_type = "compose"
+                elif _iac and _iac.provisioner == ProvisionerType.HELM:
+                    resolved_type = "helm"
 
         if resolved_type is None:
             if not stage.provisioner:
@@ -260,7 +264,7 @@ class DestroyDeployCommand(BaseDeployCommand):
             else:
                 self._errors.append(
                     f"Stage '{stage.name}': provisioner '{stage.provisioner}' has unsupported type "
-                    f"'{_iac.provisioner}'. Supported: terraform, ansible."
+                    f"'{_iac.provisioner}'. Supported: terraform, ansible, compose, helm."
                 )
             return None
 
@@ -280,6 +284,34 @@ class DestroyDeployCommand(BaseDeployCommand):
             from strata.deployers.ansible_deployer import AnsibleDeployer
 
             return AnsibleDeployer(
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+                force=self._force,
+                resolved_values=self._resolved_values,
+            )
+
+        if resolved_type == "compose":
+            from strata.deployers.compose_deployer import ComposeDeployer
+
+            return ComposeDeployer(
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+                force=self._force,
+                resolved_values=self._resolved_values,
+            )
+
+        if resolved_type == "helm":
+            from strata.deployers.helm_deployer import HelmDeployer
+
+            return HelmDeployer(
                 stage=stage,
                 deployment_service=self._deployment_service,  # type: ignore[arg-type]
                 configuration_service=self._configuration_service,  # type: ignore[arg-type]

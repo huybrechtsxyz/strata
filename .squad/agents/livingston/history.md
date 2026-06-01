@@ -87,3 +87,68 @@ Key paths: `tests/xyz_platform/`, `conftest.py`, `noxfile.py`.
 - Error cases: file not found → False + "not found" error; validation failed → False + "validation failed" error.
 
 **Implementation status:** `HelmBuilder` not yet written. All tests are currently skipped via `pytestmark`.
+
+### 2026-06-01 — Helm test coverage gap analysis
+
+**Gap confirmed:** Neither `tests/strata/integrations/test_integrations_helm.py` nor `tests/strata/deployers/test_deployers_helm.py` exist.
+
+**Existing Helm-related coverage:**
+- `tests/strata/builders/test_builders_helm.py` — 27 tests, ALL currently skipped via `pytestmark` (HelmBuilder not yet implemented).
+- No integration-layer tests for `HelmIntegration`.
+- No deployer-layer tests for `HelmDeployer`.
+
+**Missing test files to create:**
+
+**1. `tests/strata/integrations/test_integrations_helm.py` (13 tests needed)**
+- `TestHelmIntegrationMetadata`: `test_command_is_helm`, `test_capabilities_include_infrastructure`, `test_version_command`
+- `TestHelmIntegrationParseVersion`: `test_parse_buildinfo_format`, `test_parse_with_v_prefix`, `test_parse_plain_semver`, `test_parse_fallback_returns_stripped`
+- `TestHelmIntegrationEnsureAvailable`: `test_ensure_available_success`, `test_ensure_available_not_installed`, `test_ensure_available_version_invalid`
+- `TestHelmIntegrationSetupInfo`: `test_setup_info_returns_dict`, `test_setup_info_has_required_keys`, `test_setup_info_has_yaml_example`
+
+**2. `tests/strata/deployers/test_deployers_helm.py` (~45 tests needed)**
+- `TestHelmDeployerMetadata` (2)
+- `TestHelmDeployerValidateWorkspace` (6): no namespaces, file not found continues, validation failed continues, non-helm skipped, missing build artifacts skipped, registry source happy path
+- `TestHelmDeployerValidateEnvironment` (2): unavailable, available sets `_helm`
+- `TestHelmDeployerStepsNotReady` (5): one per step (setup, check, plan, apply, destroy) — all guard via `_ready()`
+- `TestHelmDeployerSetup` (3): no registries skips update, registry calls repo add + update, deduplication
+- `TestHelmDeployerCheck` (3): no modules, lint passes, lint fails
+- `TestHelmDeployerPlan` (4): no modules, dry-run succeeds, dry-run fails, chart version appended
+- `TestHelmDeployerApply` (4): no modules, install succeeds, install fails, chart version appended
+- `TestHelmDeployerDestroy` (4): requires force, no modules, uninstall succeeds, uninstall fails
+- `TestHelmDeployerPlanDestroy` (3): no modules, module installed, module not installed
+- `TestHelmDeployerOutput` (3): no modules, parses yaml values, failed returns empty dict per module
+- `TestHelmDeployerShowPlan` (1): always returns empty dict
+- `TestSanitizeRepoName` (5): strips https, strips http, replaces non-alphanumeric, truncates to 20 chars, no leading/trailing dashes
+
+**Key mock patterns for test_deployers_helm.py:**
+- `_make_deployer(build_path, work_path, verbose, force)` factory — mirrors AnsibleDeployer pattern exactly
+- `_make_target(ns_name, module_name, ...)` factory returns a `HelmModuleTarget` dataclass instance
+- For `validate_workspace`: patch `strata.deployers.helm_deployer.resolve_path` + `strata.deployers.helm_deployer.ModuleService.load`; write real `meta.yaml` + `values.yaml` to `tmp_path` for filesystem checks
+- For `validate_environment`: patch `strata.deployers.helm_deployer.HelmIntegration`
+- For all step tests: inject `d._helm = MagicMock()` and `d._helm_modules = [_make_target()]` directly — skip validate calls
+- `d._helm._run_integration.return_value = MagicMock(returncode=0, stdout="", stderr="")` for success
+- `d._helm._run_integration.return_value = MagicMock(returncode=1, stderr="error text")` for failure
+
+**Priority ranking:**
+1. **P1 (block deploy path):** `TestHelmDeployerValidateEnvironment`, `TestHelmDeployerStepsNotReady`, `TestHelmDeployerApply`, `TestHelmDeployerDestroy` (force guard), `TestHelmIntegrationEnsureAvailable`
+2. **P2 (core correctness):** `TestHelmDeployerValidateWorkspace`, `TestHelmDeployerSetup`, `TestHelmDeployerCheck`, `TestHelmDeployerPlan`, `TestHelmIntegrationParseVersion`
+3. **P3 (edge cases + output):** `TestHelmDeployerPlanDestroy`, `TestHelmDeployerOutput`, `TestHelmDeployerShowPlan`, `TestSanitizeRepoName`, `TestHelmIntegrationMetadata`, `TestHelmIntegrationSetupInfo`
+
+### 2026-06-02 — Helm integration + deployer tests written
+
+**What was added:**
+- `tests/strata/integrations/test_integrations_helm.py` (13 tests) — all passing.
+- `tests/strata/deployers/test_deployers_helm.py` (42 tests) — all passing.
+- Full suite: 1655 passed, 3 skipped (pre-existing HelmBuilder skips), 0 regressions.
+
+**Patterns followed:**
+- `test_integrations_helm.py` mirrors `test_integrations_ansible.py` exactly: `setup_method` clears `BaseIntegration._instances`, `_make_integration(name)` helper, same class structure.
+- `test_deployers_helm.py` mirrors `test_deployers_ansible.py`: `_make_deployer(tmp_path, force, verbose)` and `_make_target(...)` helpers, inject `d._helm = MagicMock()` and `d._helm_modules = [...]` directly into the deployer before calling step methods.
+- `patch.object(i, "is_available", return_value=True)` for `ensure_available` tests — avoids subprocess calls while testing the Helm-specific override logic.
+- `patch("strata.deployers.helm_deployer.HelmIntegration")` replaces the entire class in the deployer module's namespace — `mock_int.return_value = instance` controls the constructed object.
+- `_run_helm` wraps `self._helm._run_integration(...)` — mocking `d._helm._run_integration` covers both direct calls and `_run_helm`-mediated calls in one mock.
+- `call_args_list` inspection: `[c[0][0] for c in d._helm._run_integration.call_args_list]` extracts positional arg lists for multi-call verification (repo add + repo update deduplication).
+- `output()` and `show_plan()` return 3-tuple `(bool, dict, list)` — unpack accordingly in tests.
+- `_sanitize_repo_name` is importable directly from `strata.deployers.helm_deployer` (module-level function).
+- `HelmIntegration.ensure_available()` returns `(True, "")` on success (empty string, NOT a version message) — version message is composed in `validate_environment` separately.
+- `plan_destroy()` treats `returncode=1` as "not installed" info, not an error — step still returns `(True, [...])`.

@@ -42,6 +42,7 @@ class IntegrationFactory:
         "hashicorp_vault": ("strata.integrations.hashicorp_vault", "VaultIntegration"),
         "infisical": ("strata.integrations.infisical", "InfisicalIntegration"),
         "openbao": ("strata.integrations.openbao", "OpenBaoIntegration"),
+        "helm": ("strata.integrations.helm", "HelmIntegration"),
         "opentofu": ("strata.integrations.opentofu", "OpenTofuIntegration"),
         "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
     }

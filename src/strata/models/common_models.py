@@ -70,6 +70,8 @@ class ProvisionerType(str, Enum):
     TERRAFORM = "terraform"
     ANSIBLE = "ansible"
     SCRIPT = "script"
+    COMPOSE = "compose"
+    HELM = "helm"
 
 
 # Enumeration of supported service deployer types (for module-level service deployment).

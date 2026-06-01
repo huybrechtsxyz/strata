@@ -46,3 +46,34 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 - **`docs/platform/builders.md`** — Appended a new `## ComposeBuilder` section. Updated the overview table to include the new builder. Coverage: purpose statement; output path pattern; service naming rules table; environment variable source types (value/var/secret/feature) and what gets emitted; volume conventions (named vs bind); healthcheck type mapping; a full YAML module example with two services; the generated `docker-compose.yml` for that example; `.env` injection note; `configuration:` escape hatch with example; three-phase pipeline summary.
 - **Style decisions:** Kept structure parallel to existing `TerraformBuilder` section — overview → security callout → tables → examples → three-phase pipeline. Used tables for naming rules, env sources, volumes, and healthchecks (scannable for ops engineers). Placed generated output directly after the input YAML so the transformation is immediately visible.
 - **Key fact to preserve:** `after_build` always returns `True` — no compose modules in a namespace is intentionally not an error. Secret/var/feature references are always emitted as `${KEY}` tokens, never resolved. Volume naming pattern: `{namespace}_{module}_{volume_ref}`.
+
+### 2026-06-01 — Helm deployer/integration documentation audit
+
+**Audit scope:** `docs/platform/deployers.md`, `docs/platform/integrations.md`, `docs/platform/commands.md`, `docs/config/deployment.md`.
+
+**Key facts about the Helm implementation (for use when writing the docs):**
+- `HelmDeployer` lives in `deployers/helm_deployer.py`. All 8 steps supported: `setup` (helm repo update), `check` (helm lint per module), `plan` (helm upgrade --dry-run --install), `apply` (helm upgrade --install -n {ns} -f values.yaml {release} {chart}), `destroy` (helm uninstall, requires force=True), `plan_destroy` (helm get manifest), `output` (helm get values), `show_plan` (no-op).
+- `validate_workspace` iterates all namespace/module pairs in the build path; only processes modules where `module.spec.type == ServiceDeployerType.HELM`. Reads `values.yaml` + `meta.yaml` per module from build output.
+- `validate_environment` calls `HelmIntegration.ensure_available()`.
+- Chart source resolution: `meta.yaml` provides `releaseName` and `namespace`. Chart ref comes from `module.spec.source`: chart_repository + chart_name → registry chart; repository + source_path → local chart path.
+- `resolved_values` injected at plan/apply/destroy via `--set` flags (or secrets values file).
+- `HelmIntegration` uses `CAPABILITIES = [IInfrastructureTool]` — NOT `IContainerTool`. The integrations.md capability table currently lists Helm under `IContainerTool`, which is wrong.
+- Stage type token is `"helm"` (`ProvisionerType.HELM`). Written in deployment YAML as `type: helm` in a stage.
+- `ServiceDeployerType.HELM` is the module-level deployer type (used by HelmBuilder and HelmDeployer).
+
+**Gaps found:**
+- `deployers.md`: No `HelmDeployer` row in overview table. No `## HelmDeployer` section. Zero mentions of helm. **Biggest gap.**
+- `integrations.md`: `HelmIntegration` missing from overview table entirely. No per-integration `### Helm` reference section. Wrong capability classification in the Protocols table (Helm listed under `IContainerTool`, should be `IInfrastructureTool`).
+- `deployment.md`: No mention of `type: helm` as a valid stage type. Workflow description references only "Terraform/manifests". The deploy command note says "requires Terraform CLI" with no Helm caveat.
+- `commands.md`: Minor — deploy section note references only Terraform; no `type: helm` example. Incidental Helm mentions exist (devcontainer description, tools section) but nothing about Helm deployment.
+
+**Priority order for updates:** (1) `deployers.md` — missing entire section; (2) `integrations.md` — missing entry + wrong capability; (3) `deployment.md` — no stage type documented; (4) `commands.md` — minor note update.
+
+### 2026-06-02 — Helm deployer/integration documentation (implementation)
+
+- **`docs/platform/deployers.md`** — Added `HelmDeployer` row to overview table (after `AnsibleDeployer`). Appended new `## HelmDeployer` section with: one-paragraph description; step → Helm command table (all 8 steps); `### validate_workspace`, `### validate_environment`, `### Chart source resolution`, and `### Deployment YAML example` subsections matching TerraformDeployer/AnsibleDeployer section structure.
+- **`docs/platform/integrations.md`** — Three changes: (1) Fixed capability table — moved Helm from `IContainerTool` to `IInfrastructureTool` row; (2) Added `HelmIntegration` row to the overview table after `DockerIntegration`; (3) Added `### Helm` per-integration reference section (after Docker, before Bitwarden) with env vars, auth methods, which deployer uses it, and troubleshooting tip.
+- **`docs/config/deployment.md`** — Two changes: (1) Updated Deployment Workflow step 5 from "Create Terraform/manifests" to "Create Terraform/manifests/Helm values"; (2) Added new `## Provisioner Stage Types` section (between Deployment Workflow and Source Types) with a 3-column table listing all 5 stage types (`terraform`, `opentofu`, `ansible`, `helm`, `script`) and a cross-reference to deployers.md.
+- **`docs/platform/commands.md`** — Updated the `## deploy` section blockquote note from Terraform-specific language to general: now references all provisioner CLIs and directs users to `strata tools status`.
+- **Key structural decision:** `deployment.md` had no stage types section at all — added `## Provisioner Stage Types` as a new section rather than shoehorning content into the existing schema block. This is the canonical location in deployment.md for stage type documentation.
+- **Bug fixed:** `HelmIntegration` was classified under `IContainerTool` in the capabilities table — corrected to `IInfrastructureTool` (matches `CAPABILITIES = [IInfrastructureTool]` in `src/strata/integrations/helm.py`).
