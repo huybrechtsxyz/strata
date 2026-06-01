@@ -9,8 +9,9 @@ Builders assemble and persist deployment artifacts from fully-loaded services. T
 | Class              | Module                       | Purpose                                                              |
 | ------------------ | ---------------------------- | -------------------------------------------------------------------- |
 | `BaseBuilder`      | `builders.base_builder`      | Abstract base — error/message accumulation + lifecycle hooks         |
-| `PlatformBuilder`  | `builders.strata_builder`  | Assembles `platform.json` / `platform.yaml` from services            |
+| `PlatformBuilder`  | `builders.strata_builder`    | Assembles `platform.json` / `platform.yaml` from services            |
 | `TerraformBuilder` | `builders.terraform_builder` | Generates `.tfvars.json` files for Terraform from the platform model |
+| `ComposeBuilder`   | `builders.compose_builder`   | Generates `docker-compose.yml` per namespace for compose modules     |
 
 ---
 
@@ -195,6 +196,161 @@ All files are written to `{deployment_build_path}/terraform/`:
 | `tf_required_variables.json`   | Required variable keys (no values)                  |
 | `tf_required_features.json`    | Required feature flag keys (no values)              |
 | `tf_required_secrets.json`     | Required secret keys (no values)                    |
+
+---
+
+## ComposeBuilder
+
+Generates a `docker-compose.yml` file for each namespace that contains at least one module with `spec.type: compose`.
+
+> **Security note:** `ComposeBuilder` NEVER writes resolved secret, variable, or feature values. References are emitted as `${KEY}` substitution tokens and injected by the deployer via a `.env` file at deploy time.
+
+### Output Location
+
+```
+{deployment_build_path}/{namespace}/docker-compose.yml
+```
+
+One file per namespace. All compose modules in the same namespace are merged into a single file.
+
+### Service Naming
+
+| Condition                     | Service name in compose |
+| ----------------------------- | ----------------------- |
+| `module.name != service.name` | `{module}-{service}`    |
+| `module.name == service.name` | `{service}` (no prefix) |
+
+Entries in `depends_on` are automatically rewritten from their short module-local names to their full prefixed form using the same rule.
+
+### Environment Variable Sources
+
+| YAML source field | Value emitted in compose                      |
+| ----------------- | --------------------------------------------- |
+| `value: "foo"`    | `KEY: foo` (literal string)                   |
+| `var: MY_VAR`     | `KEY: ${MY_VAR}` (substituted at deploy time) |
+| `secret: MY_SEC`  | `KEY: ${MY_SEC}` (substituted at deploy time) |
+| `feature: MY_FLG` | `KEY: ${MY_FLG}` (substituted at deploy time) |
+
+### Volume Conventions
+
+| Mount type          | YAML field                | Compose entry                               | Top-level volume declared?   |
+| ------------------- | ------------------------- | ------------------------------------------- | ---------------------------- |
+| Named Docker volume | `volume_ref: redis-data`  | `{namespace}_{module}_{volume_ref}:/target` | Yes — `{ns}_{mod}_{ref}: {}` |
+| Bind mount          | `source_path: /host/path` | `/host/path:/target`                        | No                           |
+
+### Healthcheck Types
+
+| `type` field | `command` field | Docker Compose `test` emitted                |
+| ------------ | --------------- | -------------------------------------------- |
+| any          | `["cmd", ...]`  | `[CMD, cmd, ...]`                            |
+| `http`       | —               | `[CMD-SHELL, curl -sf {target} \|\| exit 1]` |
+| `tcp`        | —               | `[CMD-SHELL, nc -z {target} \|\| exit 1]`    |
+
+### Module YAML Example
+
+```yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: module
+meta:
+  name: mymod
+spec:
+  type: compose
+  services:
+    - name: redis
+      image: redis:7-alpine
+      restart: unless-stopped
+      environment:
+        - key: REDIS_PASSWORD
+          secret: REDIS_PASSWORD
+      ports:
+        - "6379:6379"
+      mounts:
+        - volume_ref: redis-data
+          target_path: /data
+      healthcheck:
+        type: command
+        command: ["redis-cli", "ping"]
+        interval: 30s
+        timeout: 5s
+        retries: 3
+    - name: api
+      image: myapp:latest
+      depends_on: [redis]
+      environment:
+        - key: REDIS_URL
+          value: redis://redis:6379
+```
+
+### Generated `docker-compose.yml`
+
+Given the module above in namespace `myns`:
+
+```yaml
+services:
+  mymod-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - myns_mymod_redis-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  mymod-api:
+    image: myapp:latest
+    depends_on:
+      - mymod-redis
+    environment:
+      REDIS_URL: redis://redis:6379
+volumes:
+  myns_mymod_redis-data: {}
+```
+
+### `.env` File and Secret Injection
+
+All `${KEY}` tokens in the generated compose file are resolved by Docker Compose at startup from a `.env` file placed next to `docker-compose.yml`. The deployer is responsible for writing that file — `ComposeBuilder` produces no `.env` output. See the deployer documentation for how secrets and variables are sourced and written at deploy time.
+
+### `configuration:` Escape Hatch
+
+Any keys placed under `configuration:` on a service entry are merged verbatim into the generated compose service block (last-wins). Use this for compose-specific fields that the Strata module model does not natively expose — for example `logging`, `cap_add`, or `sysctls`:
+
+```yaml
+spec:
+  services:
+    - name: api
+      image: myapp:latest
+      configuration:
+        logging:
+          driver: json-file
+          options:
+            max-size: "10m"
+        cap_add:
+          - NET_ADMIN
+```
+
+### Three-Phase Pipeline
+
+#### `before_build` → `bool`
+
+1. Verifies `deployment_service.is_validated()` — error if not validated
+2. Verifies `deployment_service.get_workspace_service()` returns a workspace — error if None
+
+#### `build(deployment_service, work_path, build_path, dry_run=False)` → `bool`
+
+1. Iterates all namespaces from `deployment_service.get_namespace_services()`
+2. For each namespace: loads each referenced module, skips modules where `spec.type != compose`
+3. Renders services and named volumes into a compose document
+4. If `dry_run=True`: logs the planned output path (when verbose), returns `True` without writing
+5. If `dry_run=False`: writes `docker-compose.yml` to `{deployment_build_path}/{namespace}/`
+
+#### `after_build` → `bool`
+
+Always returns `True`. A namespace that contains no compose modules is not an error condition.
 
 ---
 
