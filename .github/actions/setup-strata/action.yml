@@ -8,8 +8,8 @@ name: "Setup Strata"
 description: "Install Python, uv, and the strata CLI. Required before any other strata action."
 
 branding:
-  icon: 'terminal'
-  color: 'blue'
+  icon: "terminal"
+  color: "blue"
 
 inputs:
   strata-version:
@@ -45,15 +45,18 @@ runs:
 
     - name: Install strata
       shell: bash
+      env:
+        _STRATA_REF: ${{ inputs.strata-ref }}
+        _STRATA_VERSION: ${{ inputs.strata-version }}
       run: |
-        if [ -n "${{ inputs.strata-ref }}" ]; then
-          uv tool install "xyz-strata @ git+https://github.com/huybrechtsxyz/strata.git@${{ inputs.strata-ref }}"
-        elif [ "${{ inputs.strata-version }}" = "local" ]; then
+        if [ -n "$_STRATA_REF" ]; then
+          uv tool install "xyz-strata @ git+https://github.com/huybrechtsxyz/strata.git@${_STRATA_REF}"
+        elif [ "$_STRATA_VERSION" = "local" ]; then
           uv tool install --from .
-        elif [ "${{ inputs.strata-version }}" = "latest" ]; then
+        elif [ "$_STRATA_VERSION" = "latest" ]; then
           uv tool install xyz-strata
         else
-          uv tool install "xyz-strata${{ inputs.strata-version }}"
+          uv tool install "xyz-strata${_STRATA_VERSION}"
         fi
 
     - name: Verify installation
