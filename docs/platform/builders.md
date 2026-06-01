@@ -12,6 +12,7 @@ Builders assemble and persist deployment artifacts from fully-loaded services. T
 | `PlatformBuilder`  | `builders.strata_builder`    | Assembles `platform.json` / `platform.yaml` from services            |
 | `TerraformBuilder` | `builders.terraform_builder` | Generates `.tfvars.json` files for Terraform from the platform model |
 | `ComposeBuilder`   | `builders.compose_builder`   | Generates `docker-compose.yml` per namespace for compose modules     |
+| `HelmBuilder`      | `builders.helm_builder`      | Generates `values.yaml` and `meta.yaml` per Helm module              |
 
 ---
 
@@ -351,6 +352,167 @@ spec:
 #### `after_build` → `bool`
 
 Always returns `True`. A namespace that contains no compose modules is not an error condition.
+
+---
+
+## HelmBuilder
+
+Generates `values.yaml` and `meta.yaml` artifacts for each module with `spec.type: helm`, ready for use with `helm install --values`.
+
+> **Security note:** `HelmBuilder` NEVER writes resolved variable, secret, or feature values. References are emitted as `${KEY}` substitution tokens and injected by the deployer via `helm install --set` flags or a secrets values file at deploy time.
+
+### Output Location
+
+```
+{deployment_build_path}/{namespace_name}/{module_name}/values.yaml
+{deployment_build_path}/{namespace_name}/{module_name}/meta.yaml
+```
+
+Two files per module. Each module with `spec.type: helm` produces its own pair.
+
+### Service Naming
+
+Service keys in `values.yaml` follow the same prefix rule as `ComposeBuilder`:
+
+| Condition                     | Key in `values.yaml`    |
+| ----------------------------- | ----------------------- |
+| `module.name != service.name` | `{module}-{service}`    |
+| `module.name == service.name` | `{service}` (no prefix) |
+
+### Environment Variable Sources
+
+| YAML source field | Value emitted in `values.yaml`        |
+| ----------------- | ------------------------------------- |
+| `value: "foo"`    | `KEY: foo` (literal string)           |
+| `var: MY_VAR`     | `KEY: ${MY_VAR}` (injected at deploy) |
+| `secret: MY_SEC`  | `KEY: ${MY_SEC}` (injected at deploy) |
+| `feature: MY_FLG` | `KEY: ${MY_FLG}` (injected at deploy) |
+
+### PVC Persistence
+
+Mounts with a `storage_class` field generate a `persistence.{mount_name}` block in the service entry. Bind mounts and volume refs are not emitted by `HelmBuilder` — only Kubernetes PVC mounts produce output.
+
+| Mount field     | `persistence` key        |
+| --------------- | ------------------------ |
+| `name`          | block key (e.g. `media`) |
+| `storage_class` | `storageClass`           |
+| `access_mode`   | `accessMode`             |
+| `storage_size`  | `size`                   |
+
+### `meta.yaml` Contents
+
+| Field         | Source                      | Fallback              |
+| ------------- | --------------------------- | --------------------- |
+| `releaseName` | `spec.release_name`         | module name           |
+| `namespace`   | `spec.kubernetes_namespace` | strata namespace name |
+
+### Module YAML Example
+
+```yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: module
+meta:
+  name: authentik
+spec:
+  type: helm
+  release_name: authentik
+  kubernetes_namespace: auth
+  references:
+    secrets: [AUTHENTIK_SECRET_KEY, DB_PASSWORD]
+    variables: [AUTHENTIK_VERSION]
+  services:
+    - name: server
+      image: ghcr.io/goauthentik/server:latest
+      environment:
+        - key: AUTHENTIK_SECRET_KEY
+          secret: AUTHENTIK_SECRET_KEY
+        - key: VERSION
+          var: AUTHENTIK_VERSION
+      mounts:
+        - name: media
+          storage_class: standard
+          access_mode: ReadWriteOnce
+          storage_size: 5Gi
+          target_path: /media
+    - name: worker
+      image: ghcr.io/goauthentik/server:latest
+      command: [worker]
+      environment:
+        - key: AUTHENTIK_SECRET_KEY
+          secret: AUTHENTIK_SECRET_KEY
+```
+
+Given the module above in namespace `myns`:
+
+### Generated `myns/authentik/values.yaml`
+
+```yaml
+authentik-server:
+  env:
+    AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+    VERSION: ${AUTHENTIK_VERSION}
+  persistence:
+    media:
+      storageClass: standard
+      accessMode: ReadWriteOnce
+      size: 5Gi
+authentik-worker:
+  env:
+    AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+```
+
+### Generated `myns/authentik/meta.yaml`
+
+```yaml
+releaseName: authentik
+namespace: auth
+```
+
+### `${KEY}` Injection at Deploy Time
+
+All `${KEY}` tokens in `values.yaml` are not resolved by the builder. At deploy time the deployer substitutes them either via:
+
+- `helm install --set KEY=value ...` flags, or
+- a secrets values file passed as `helm install --values secrets.yaml`
+
+`HelmBuilder` produces no secrets output of its own. See the deployer documentation for how variables and secrets are sourced and injected.
+
+### `configuration:` Escape Hatch
+
+Any keys placed under `configuration:` on a service entry are merged verbatim into that service's block in `values.yaml` (last-wins). Use this for chart-specific fields that the Strata module model does not natively expose:
+
+```yaml
+spec:
+  services:
+    - name: server
+      image: ghcr.io/goauthentik/server:latest
+      configuration:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        podAnnotations:
+          prometheus.io/scrape: "true"
+```
+
+### Three-Phase Pipeline
+
+#### `before_build` → `bool`
+
+1. Verifies `deployment_service.is_validated()` — error if not validated
+2. Verifies `deployment_service.get_workspace_service()` returns a workspace — error if None
+
+#### `build(deployment_service, work_path, build_path, dry_run=False)` → `bool`
+
+1. Iterates all namespaces from `deployment_service.get_namespace_services()`
+2. For each namespace: loads each referenced module, skips modules where `spec.type != helm`
+3. For each helm module: renders `values.yaml` and `meta.yaml` in memory
+4. If `dry_run=True`: logs the planned output paths (when verbose), returns `True` without writing
+5. If `dry_run=False`: writes both files to `{deployment_build_path}/{namespace}/{module}/`
+
+#### `after_build` → `bool`
+
+Always returns `True`. A namespace that contains no helm modules is not an error condition.
 
 ---
 

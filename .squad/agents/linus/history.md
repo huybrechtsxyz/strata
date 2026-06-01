@@ -8,6 +8,20 @@ Key paths: `src/xyz_platform/cli.py`, `commands/cli_common.py`, `models/`, `serv
 
 ## Learnings
 
+### 2026-06-01 — HelmBuilder implementation
+
+**Files created/modified:**
+- `src/strata/builders/helm_builder.py` — new builder following exact `ComposeBuilder` skeleton
+- `src/strata/commands/builders/run_build_command.py` — added `HelmBuilder` import, `_execute_helm_build()`, and call in `execute()` after compose
+
+**Key patterns:**
+- Output is per-module (not per-namespace) because Helm deploys are release-scoped; `meta.yaml` carries `releaseName`/`namespace` as per-module metadata
+- Service key prefix logic: `{module}-{service}`, prefix omitted when names match (same as ComposeBuilder)
+- `values.yaml` structure: `env` dict (literals direct, `var`/`secret`/`feature` as `${KEY}` tokens), `persistence` dict (only for mounts with `storage_class`), `configuration` merged verbatim
+- `after_build` always returns True — absence of helm modules is not an error
+- `before_build` validates `deployment_service.is_validated()` and workspace service presence
+- Dry-run logs per-file messages if verbose; never skips error accumulation
+
 ### 2026-04-22 — CLI/models code review
 
 **cli.py**

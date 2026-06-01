@@ -35,6 +35,12 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 - **Key fact to preserve:** `store: github` is NOT an integration — it is a built-in resolver in `ValueController` that reads `os.environ.get(value.upper())`. GitHub Actions injects secrets as env vars before each step. `GITHUB_ACTIONS != "true"` triggers a warning; missing env var returns an error.
 - `version` field raises a validation error for `store: github` (enforced in `SecretStoreModel` via `model_validator`).
 
+### 2026-06-01 — HelmBuilder documentation
+
+- **`docs/platform/builders.md`** — Added `HelmBuilder` to the overview table. Appended a new `## HelmBuilder` section. Coverage: purpose sentence + security callout; output path pattern (two files per module: `values.yaml` + `meta.yaml`); service key naming table (same prefix rule as ComposeBuilder); environment variable source types table (value/var/secret/feature → literal or `${KEY}`); PVC persistence block (storage_class mounts → `persistence.{name}` with storageClass/accessMode/size); `meta.yaml` contents table with fallback defaults; full authentik YAML module example with two generated outputs; deploy-time `${KEY}` injection note (`--set` or secrets values file); `configuration:` escape hatch with example; three-phase pipeline summary.
+- **Style decisions:** Mirrored `## ComposeBuilder` section structure exactly — security callout first, then reference tables, then example with generated output, then pipeline. Placed `meta.yaml` fields in a table (source + fallback) for quick scanning.
+- **Key fact to preserve:** Service key naming rule is identical to ComposeBuilder: `{module}-{service}` unless module name equals service name, in which case just `{service}`. Only mounts with `storage_class` produce a `persistence` block — bind mounts and volume refs are not emitted. `releaseName` falls back to module name; `namespace` falls back to the strata namespace name.
+
 ### 2026-06-01 — ComposeBuilder documentation
 
 - **`docs/platform/builders.md`** — Appended a new `## ComposeBuilder` section. Updated the overview table to include the new builder. Coverage: purpose statement; output path pattern; service naming rules table; environment variable source types (value/var/secret/feature) and what gets emitted; volume conventions (named vs bind); healthcheck type mapping; a full YAML module example with two services; the generated `docker-compose.yml` for that example; `.env` injection note; `configuration:` escape hatch with example; three-phase pipeline summary.

@@ -65,3 +65,25 @@ Key paths: `tests/xyz_platform/`, `conftest.py`, `noxfile.py`.
 - New subcommand tests (e.g., `test_commands_sln_export.py`) live in `tests/strata/commands/` — same directory as other command tests.
 - New subcommand modules live under `src/strata/commands/sln/` — import path: `from strata.commands.sln.export_template_command import ...`.
 - **25 sln command tests passing after this session.**
+
+### 2026-06-01 — HelmBuilder tests (anticipatory)
+
+**What was added:** `tests/strata/builders/test_builders_helm.py` (new file) — full test suite written from the design spec before the implementation exists.
+
+**Patterns followed:**
+- Mirrors `test_builders_compose.py` exactly: same helper names (`_mock_deployment_service`, `_mock_namespace_service`, `_module_ref`, `_make_service`, `_make_mod_service`), same `_run_build` inner-helper pattern inside the output test class.
+- `IMPL_MISSING` guard: imports `HelmBuilder` in a try/except; if `ImportError`, `pytestmark = pytest.mark.skipif(IMPL_MISSING, ...)` skips the whole module gracefully so CI doesn't break.
+- `_make_helm_module` adds `release_name` and `kubernetes_namespace` params for `meta.yaml` tests.
+- `_make_pvc_mount` helper constructs a `ModuleMountModel` mock with `storage_class`, `access_mode`, `storage_size` for PVC persistence tests.
+- `patch` target for `resolve_path` and `ModuleService.load` must be `strata.builders.helm_builder.*` (not compose_builder).
+
+**Key design decisions captured in tests:**
+- Service key: `{module}-{service}` normally; just `{service}` when names are equal.
+- `env` block under service key for all four env types (value, var, secret, feature).
+- `persistence` block only when mount has `storage_class`; non-PVC mounts excluded.
+- `configuration` dict merged verbatim into the service key at top level.
+- `meta.yaml`: `releaseName` = `spec.release_name` or `module_name`; `namespace` = `spec.kubernetes_namespace` or `namespace_name`.
+- `dry_run=True`: no files written.
+- Error cases: file not found → False + "not found" error; validation failed → False + "validation failed" error.
+
+**Implementation status:** `HelmBuilder` not yet written. All tests are currently skipped via `pytestmark`.
