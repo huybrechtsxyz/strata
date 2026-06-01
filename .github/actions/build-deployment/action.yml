@@ -20,6 +20,14 @@ inputs:
     description: "Working directory for the build output (.strata/ is written here)."
     required: false
     default: "."
+  deployment_name:
+    description: "Name used for the uploaded artifact (strata-build-{name}). Defaults to the deployment file basename."
+    required: false
+    default: ""
+  upload_artifact:
+    description: "Upload the .strata/ build output as a GitHub Actions artifact. Set to 'false' to skip."
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -43,3 +51,14 @@ runs:
           echo "[*] Building platform artifact ... FAILED"
         fi
         exit $_EXIT
+
+    # Upload the .strata/ build output so it is available for inspection and
+    # debugging even when the deploy step fails. Runs after both success and
+    # failure; skipped only when upload_artifact is explicitly set to 'false'.
+    - name: Upload Build Artifact
+      if: ${{ always() && inputs.upload_artifact != 'false' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: strata-build-${{ inputs.deployment_name || github.run_id }}
+        path: ${{ inputs.work_path }}/.strata/
+        if-no-files-found: ignore

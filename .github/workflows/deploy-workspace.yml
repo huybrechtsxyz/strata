@@ -146,11 +146,14 @@ jobs:
           consul_address: ${{ inputs.consul_address }}
           consul_token: ${{ secrets.consul_token }}
 
-      # Build the platform artifact (writes output to .strata/)
+      # Build the platform artifact (writes output to .strata/).
+      # The .strata/ directory is uploaded as artifact strata-build-{name} for
+      # debugging and audit purposes (available even when deploy fails).
       - name: Build
         uses: huybrechtsxyz/strata/.github/actions/build-deployment@deployment-bugs
         with:
           deployment_file: ${{ inputs.deployment_file }}
+          deployment_name: ${{ steps.get_name.outputs.name }}
 
       # dry_run=true (default) → plan only. dry_run=false → full deploy.
       - name: Deploy
