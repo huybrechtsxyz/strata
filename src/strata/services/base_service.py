@@ -122,6 +122,24 @@ class BaseService(ABC, Generic[ModelT]):
         # Abstract implementation - override in subclasses for specific validation
         return True, []
 
+    def _validate_self(self) -> Tuple[bool, List[str]]:
+        """
+        Phase 1.5: Self-consistency checks that always run (no external dependencies).
+
+        Called after Pydantic structural validation and before Phase 2 dynamic validation.
+        Use this for intra-document consistency checks: cross-field references that are
+        only resolvable within the same file (e.g. service depends_on entries must name
+        real services in the same module).
+
+        This is intentionally separate from _validate_dynamic so that Phase 1 structural
+        validation (BaseService.load()) remains cheap and purely Pydantic-based, while
+        intra-document checks are still always enforced without needing a configuration_model.
+
+        Returns:
+            Tuple[bool, List[str]]: (success, list of error messages)
+        """
+        return True, []
+
     # Validation
 
     def get_validation_errors(self) -> List[str]:
@@ -183,6 +201,20 @@ class BaseService(ABC, Generic[ModelT]):
             model_class: Type[BaseModel] = self._get_model_class()
             self.model = cast(ModelT, model_class.model_validate(self.data))
 
+            # Phase 1.5: always run self-consistency checks (no external dependencies).
+            self_valid, self_errors = self._validate_self()
+            if not self_valid:
+                self.model = None
+                self._validated = False
+                self.logger.warning(
+                    "Self-consistency validation failed",
+                    service_class=self.__class__.__name__,
+                    error_count=len(self_errors),
+                )
+                errors.extend(self_errors)
+                return False, errors
+
+            # Phase 2: run dynamic validation only when configuration_model is provided.
             if configuration_model:
                 # Store solution repo_map so _validate_dynamic can access it via self._repo_map
                 self._repo_map = repo_map

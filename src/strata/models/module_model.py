@@ -136,7 +136,6 @@ class ModuleServiceEnvironmentModel(BaseModel):
     value: Optional[str] = Field(None, description="Literal environment variable value")
     var: Optional[str] = Field(
         None,
-        alias="variable",
         description="Variable key from module references.variables — resolved at build time",
     )
     secret: Optional[str] = Field(
