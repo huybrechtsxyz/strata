@@ -16,6 +16,10 @@ inputs:
     description: "Strata version to install (e.g., 'latest', '2.1.0', '>=2.0'). Use 'local' to install from the current repo."
     required: false
     default: "latest"
+  strata-ref:
+    description: "Git branch/tag/SHA to install strata from (e.g., 'deployment-bugs'). Overrides strata-version when set."
+    required: false
+    default: ""
   python-version:
     description: "Python version to install."
     required: false
@@ -42,7 +46,9 @@ runs:
     - name: Install strata
       shell: bash
       run: |
-        if [ "${{ inputs.strata-version }}" = "local" ]; then
+        if [ -n "${{ inputs.strata-ref }}" ]; then
+          uv tool install "xyz-strata @ git+https://github.com/huybrechtsxyz/strata.git@${{ inputs.strata-ref }}"
+        elif [ "${{ inputs.strata-version }}" = "local" ]; then
           uv tool install --from .
         elif [ "${{ inputs.strata-version }}" = "latest" ]; then
           uv tool install xyz-strata
