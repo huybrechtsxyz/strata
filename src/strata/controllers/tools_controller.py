@@ -10,18 +10,6 @@ from strata.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Friendly type strings supported by create_by_type()
-_BUILTIN_TYPES = [
-    "git",
-    "terraform",
-    "docker",
-    "bitwarden",
-    "hashicorp_vault",
-    "hashicorp_consul",
-    "azure_keyvault",
-    "azure_appconfig",
-]
-
 # Store enum value → integration type name (None-valued stores need no integration)
 _STORE_TO_INTEGRATION: dict[str, str] = {
     "bitwarden": "bitwarden",
@@ -71,7 +59,7 @@ class ToolsController(BaseController):
             errors.extend(derive_errors)
 
         rows = []
-        for type_str in _BUILTIN_TYPES:
+        for type_str in IntegrationFactory.get_known_types():
             try:
                 integration = IntegrationFactory.create_by_type(type_str)
                 available = integration.is_available()
@@ -195,8 +183,12 @@ class ToolsController(BaseController):
         Returns:
             Tuple of (success, setup_info_dict, errors).
         """
-        if name not in _BUILTIN_TYPES:
-            return False, {}, [f"Unknown integration: '{name}'. Known: {', '.join(_BUILTIN_TYPES)}"]
+        if not IntegrationFactory.is_known_type(name):
+            return (
+                False,
+                {},
+                [f"Unknown integration: '{name}'. Known: {', '.join(IntegrationFactory.get_known_types())}"],
+            )
 
         try:
             integration = IntegrationFactory.create_by_type(name)
@@ -213,8 +205,12 @@ class ToolsController(BaseController):
             Tuple of (success, detail_dict, errors).
             detail_dict includes setup_info + runtime availability + version.
         """
-        if name not in _BUILTIN_TYPES:
-            return False, {}, [f"Unknown integration: '{name}'. Known: {', '.join(_BUILTIN_TYPES)}"]
+        if not IntegrationFactory.is_known_type(name):
+            return (
+                False,
+                {},
+                [f"Unknown integration: '{name}'. Known: {', '.join(IntegrationFactory.get_known_types())}"],
+            )
 
         try:
             integration = IntegrationFactory.create_by_type(name)

@@ -2,7 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
-from strata.controllers.tools_controller import _BUILTIN_TYPES, ToolsController
+from strata.controllers.tools_controller import ToolsController
+from strata.integrations.factory import IntegrationFactory
 
 
 def _make_integration(available=True, version="1.0.0", capabilities=None, command="tool"):
@@ -32,7 +33,7 @@ class TestToolsControllerStatus:
             success, rows, errors = ctrl.status()
 
         assert success is True
-        assert len(rows) == len(_BUILTIN_TYPES)
+        assert len(rows) == len(IntegrationFactory.get_known_types())
         assert errors == []
 
     def test_row_shape(self):
@@ -124,7 +125,7 @@ class TestToolsControllerStatus:
             success, rows, errors = ctrl.status()
 
         assert success is True  # status() always returns True even with errors
-        assert len(rows) == len(_BUILTIN_TYPES)
+        assert len(rows) == len(IntegrationFactory.get_known_types())
         for row in rows:
             assert row["available"] is False
 
