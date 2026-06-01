@@ -197,7 +197,8 @@ class TerraformDeployer(BaseDeployer):
                 timeout=self._get_timeout("setup", 300),
             )
             if result.returncode != 0:
-                messages.append(f"terraform init failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform init failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -226,7 +227,8 @@ class TerraformDeployer(BaseDeployer):
                 timeout=self._get_timeout("check", 60),
             )
             if result.returncode != 0:
-                messages.append(f"terraform validate failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform validate failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -260,7 +262,8 @@ class TerraformDeployer(BaseDeployer):
                     timeout=self._get_timeout("plan", 600),
                 )
             if result.returncode != 0:
-                messages.append(f"terraform plan failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform plan failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -294,7 +297,8 @@ class TerraformDeployer(BaseDeployer):
                     timeout=self._get_timeout("apply", 1800),
                 )
             if result.returncode != 0:
-                messages.append(f"terraform apply failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform apply failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -328,7 +332,8 @@ class TerraformDeployer(BaseDeployer):
                     timeout=self._get_timeout("destroy", 1800),
                 )
             if result.returncode != 0:
-                messages.append(f"terraform destroy failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform destroy failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip() and line_callback is None:
                 messages.append(result.stdout.strip())
@@ -359,7 +364,8 @@ class TerraformDeployer(BaseDeployer):
                     destroy=True,
                 )
             if result.returncode != 0:
-                messages.append(f"terraform plan -destroy failed:\n{result.stderr}")
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform plan -destroy failed:\n{output}")
                 return False, messages
             if self.verbose and result.stdout.strip():
                 messages.append(result.stdout.strip())
