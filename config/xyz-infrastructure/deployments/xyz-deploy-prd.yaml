@@ -8,17 +8,16 @@ meta:
     version: "1.0.0"
   tags: [xyz, production, deployment]
 spec:
-
   configurations: null
-  
+
   lifecycle: null
 
   layers:
     environment: prd
-  
+
   properties:
     environment: prd
-  
+
   workspace:
     name: xyz_platform
     description: Huybrechts XYZ Platform Workspace
@@ -26,11 +25,11 @@ spec:
 
   environments:
     - "@xyz_configuration/environments/xyz-env-prd.yaml"
-  
+
   stages:
-    # Infrastructure provisioning stage - uses Terraform via convention
     - name: infrastructure
-      type: infrastructure  # Convention: auto-selects Terraform provisioner
+      type: infrastructure
+      provisioner: xyz_iac
       scope: all
       depends_on: null
       on_failure: stop

@@ -168,11 +168,6 @@ class DestroyDeployCommand(BaseDeployCommand):
     def _execute_stage_destroy(self, stage: DeploymentStageModel) -> bool:
         deployer = self._create_deployer(stage)
         if deployer is None:
-            self._errors.append(
-                f"Stage '{stage.name}': no deployer available for "
-                f"type='{stage.type}' / provisioner='{stage.provisioner}'. "
-                "Currently supported: infrastructure (terraform)."
-            )
             return False
 
         # Pre-flight validation
@@ -229,26 +224,45 @@ class DestroyDeployCommand(BaseDeployCommand):
         return True
 
     def _create_deployer(self, stage: DeploymentStageModel):
+        """Instantiate and return the deployer for *stage*, or None.
+
+        Resolution: stage.provisioner → workspace provisioners list → deployer type.
+        'provisioner' is required on every stage; convention-based fallback is not
+        supported. An error is appended to self._errors when resolution fails.
+        """
         resolved_type: Optional[str] = None
+        _iac = None
+        _available: List[str] = []
 
         if stage.provisioner and self._deployment_service is not None:
             workspace_service = self._deployment_service.get_workspace_service()
             if workspace_service:
                 spec = workspace_service.model.spec  # type: ignore[union-attr]
-                iac = next(
-                    (p for p in (spec.provisioners or []) if p.name == stage.provisioner),
-                    None,
-                )
-                if iac and iac.provisioner == ProvisionerType.TERRAFORM:
+                _provisioners = spec.provisioners or []
+                _available = [str(p.name) for p in _provisioners]
+                _iac = next((p for p in _provisioners if p.name == stage.provisioner), None)
+                if _iac and _iac.provisioner == ProvisionerType.TERRAFORM:
                     resolved_type = "terraform"
-                elif iac and iac.provisioner == ProvisionerType.ANSIBLE:
+                elif _iac and _iac.provisioner == ProvisionerType.ANSIBLE:
                     resolved_type = "ansible"
 
         if resolved_type is None:
-            if stage.type in ("infrastructure", "terraform"):
-                resolved_type = "terraform"
-            elif stage.type in ("configure", "initialize", "ansible"):
-                resolved_type = "ansible"
+            if not stage.provisioner:
+                self._errors.append(
+                    f"Stage '{stage.name}': 'provisioner' is required — "
+                    "add a provisioner name matching an entry in the workspace provisioners list."
+                )
+            elif _iac is None:
+                self._errors.append(
+                    f"Stage '{stage.name}': provisioner '{stage.provisioner}' not found in workspace. "
+                    f"Available: {_available if _available else ['(none defined)']}"
+                )
+            else:
+                self._errors.append(
+                    f"Stage '{stage.name}': provisioner '{stage.provisioner}' has unsupported type "
+                    f"'{_iac.provisioner}'. Supported: terraform, ansible."
+                )
+            return None
 
         if resolved_type == "terraform":
             return TerraformDeployer(
