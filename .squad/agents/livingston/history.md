@@ -152,3 +152,22 @@ Key paths: `tests/xyz_platform/`, `conftest.py`, `noxfile.py`.
 - `_sanitize_repo_name` is importable directly from `strata.deployers.helm_deployer` (module-level function).
 - `HelmIntegration.ensure_available()` returns `(True, "")` on success (empty string, NOT a version message) — version message is composed in `validate_environment` separately.
 - `plan_destroy()` treats `returncode=1` as "not installed" info, not an error — step still returns `(True, [...])`.
+
+### 2026-06-02 — ComposeDeployer tests written
+
+**What was added:**
+- `tests/strata/deployers/test_deployers_compose.py` (38 tests, 12 classes) — all passing.
+- Full suite: 1693 passed, 3 skipped (pre-existing HelmBuilder skips), 0 regressions.
+
+**Patterns followed:**
+- Mirrors `test_deployers_helm.py` exactly: `_make_deployer(tmp_path, force, verbose)` helper, no `_make_target` needed (compose uses `_compose_files: Dict[str, Path]` directly).
+- Inject `d._docker = MagicMock()` + `d._compose_files = {...}` directly before calling step methods — no `validate_*` calls in step tests.
+- `d._docker._run_integration.return_value = MagicMock(returncode=0, stdout="", stderr="")` for success; `returncode=1` for failure.
+- `validate_workspace` tests: patch `d.deployment_service` mock attributes directly (`.get_build_path.return_value`, `.get_namespace_services.return_value`) — no `patch()` context manager needed.
+- `validate_environment` test: `patch("strata.deployers.compose_deployer.DockerIntegration")` replaces the class in the module namespace; `mock_int.return_value = instance` controls the constructed object.
+- `test_failure_aborts_loop` (apply): uses `assert d._docker._run_integration.call_count == 1` to verify the early-return on first failure — first failure stops the loop before second stack is reached.
+- `test_parse_error_logged_not_raised` (plan): writing malformed YAML to the compose file still returns `(True, [...])` with "could not parse" in messages — exceptions are caught internally.
+- `output()` returns 3-tuple `(bool, dict, list)` — unpack accordingly in tests.
+- `plan_destroy()` treats `returncode=1` (docker stack ls failure) as non-fatal — still returns `(True, [...])`.
+- `destroy()` force guard checked BEFORE iterating files — `force=False` with files populated still returns immediately with `(False, ["--force is required..."])`.
+- ruff check and format: no changes needed after file creation.

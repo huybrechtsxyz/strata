@@ -11,6 +11,7 @@ Deployers execute a deployment stage step-by-step against a specific IaC tool or
 | `BaseDeployer`      | `deployers.base_deployer`      | —               | Abstract base — step contracts + constructor                      |
 | `TerraformDeployer` | `deployers.terraform_deployer` | Terraform CLI   | Runs init → validate → plan → apply via `terraform`               |
 | `AnsibleDeployer`   | `deployers.ansible_deployer`   | Ansible CLI     | Runs galaxy install → syntax-check → check → apply                |
+| `ComposeDeployer`   | `deployers.compose_deployer`   | Docker CLI      | Deploys per-namespace Docker Compose/Stack from build output      |
 | `HelmDeployer`      | `deployers.helm_deployer`      | Helm CLI        | Deploys per-namespace, per-module Helm releases from build output |
 | `ScriptDeployer`    | `deployers.script_deployer`    | Shell/Python/PS | Executes lifecycle scripts from the deployment YAML               |
 
@@ -276,6 +277,49 @@ spec:
       scripts:
         - scripts/destroy.sh
 ```
+
+---
+
+## ComposeDeployer
+
+Deploys Docker Compose/Stack artifacts produced by `ComposeBuilder`. For each namespace that has a `docker-compose.yml` in the build path, `ComposeDeployer` runs `docker stack deploy`. Because Docker Stack is the Swarm-mode orchestrator, **Docker must be running in Swarm mode** (`docker swarm init` or join an existing swarm) before any steps are executed.
+
+> **Note:** `docker stack` commands require Docker Swarm mode. Running `docker stack deploy` against a daemon that is not a Swarm manager returns an error.
+
+### Step → Docker command mapping
+
+| Step           | Docker command                                                                      |
+| -------------- | ----------------------------------------------------------------------------------- |
+| `setup`        | `docker info` — verifies the daemon is reachable                                    |
+| `check`        | Verifies `docker-compose.yml` exists on disk for each namespace                     |
+| `plan`         | Parses compose files locally and counts services per namespace (no subprocess)      |
+| `apply`        | `docker stack deploy --with-registry-auth -c {file} {namespace}` per namespace      |
+| `destroy`      | `docker stack rm {namespace}` per namespace (requires `--force`)                   |
+| `plan_destroy` | `docker stack ls` — lists running stacks matching namespace names                  |
+| `output`       | `docker stack services {namespace}` per namespace                                  |
+| `show_plan`    | No-op — returns empty dict                                                          |
+
+### validate_workspace
+
+Iterates all namespace services from the deployment. For each namespace, looks for `{build_path}/{deployment_name}/{namespace}/docker-compose.yml`. Namespaces with no compose file are silently skipped — a missing file is not an error at this stage. Only namespaces where the file exists are registered for subsequent steps; if no files are found at all, a warning message is returned (but validation still passes).
+
+### validate_environment
+
+Calls `DockerIntegration.ensure_available()`. Sets `self._docker` for subsequent steps. Fails with an error message if Docker is not on PATH or the daemon is unreachable.
+
+### Deployment YAML example
+
+```yaml
+spec:
+  stages:
+    - name: production
+      provisioner: xyz_swarm
+      steps: [apply]
+```
+
+Where `xyz_swarm` references a provisioner with `provisioner: compose` in the workspace YAML.
+
+See also: [DockerIntegration](../platform/integrations.md#docker)
 
 ---
 

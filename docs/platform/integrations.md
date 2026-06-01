@@ -339,6 +339,8 @@ No environment variables required. Docker communicates with the local daemon.
 | Docker daemon  | Docker Desktop or the Docker daemon must be running. No env vars required.                  |
 | `docker login` | Run `docker login <registry>` to authenticate to a private registry before pushing/pulling. |
 
+Used by `ComposeDeployer` for Docker Stack deployments.
+
 ---
 
 ### Helm

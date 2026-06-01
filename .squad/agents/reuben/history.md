@@ -69,6 +69,14 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 
 **Priority order for updates:** (1) `deployers.md` — missing entire section; (2) `integrations.md` — missing entry + wrong capability; (3) `deployment.md` — no stage type documented; (4) `commands.md` — minor note update.
 
+### 2026-06-02 — ComposeDeployer documentation
+
+- **`docs/platform/deployers.md`** — Added `ComposeDeployer` row to overview table (between AnsibleDeployer and HelmDeployer, alphabetical order). Inserted new `## ComposeDeployer` section immediately before `## HelmDeployer`. Section structure mirrors HelmDeployer: one-paragraph description + Swarm mode callout; step → Docker command table (all 8 steps); `### validate_workspace` (build path discovery, missing files silently skipped, empty-found warning); `### validate_environment` (DockerIntegration.ensure_available); `### Deployment YAML example`; "See also: DockerIntegration" cross-reference.
+- **`docs/config/deployment.md`** — Added `compose` row to the `## Provisioner Stage Types` table (between `ansible` and `helm`, alphabetical). Notes Docker Swarm requirement and links to ComposeDeployer section.
+- **`docs/platform/integrations.md`** — Added "Used by `ComposeDeployer` for Docker Stack deployments." sentence at the end of the Docker section (before the `---` separator), matching the Helm section's "Which deployer uses it" pattern without adding a new heading (targeted minimal edit as instructed).
+- **Key structural decision:** Placed ComposeDeployer before HelmDeployer in deployers.md to maintain alphabetical order (Ansible → Compose → Helm → Script → Terraform). The HelmDeployer section was added at the end yesterday — this insertion restores alphabetical ordering.
+- **Swarm mode callout:** Added as a blockquote directly after the opening paragraph in `## ComposeDeployer` — DevOps engineers running plain Docker Engine without swarm init will get the error immediately before they waste time debugging step failures.
+
 ### 2026-06-02 — Helm deployer/integration documentation (implementation)
 
 - **`docs/platform/deployers.md`** — Added `HelmDeployer` row to overview table (after `AnsibleDeployer`). Appended new `## HelmDeployer` section with: one-paragraph description; step → Helm command table (all 8 steps); `### validate_workspace`, `### validate_environment`, `### Chart source resolution`, and `### Deployment YAML example` subsections matching TerraformDeployer/AnsibleDeployer section structure.
