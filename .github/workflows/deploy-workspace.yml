@@ -74,8 +74,11 @@ on:
         required: false
 
 # Permissions for the workflow
+# id-token: write is required for OIDC authentication with Azure.
+# It is harmless when client-secret auth is used instead.
 permissions:
   contents: read
+  id-token: write
 
 # Prevent concurrent deploys of the same workspace (Terraform state locks, etc.)
 # cancel-in-progress: false — let the running deploy finish rather than leaving infra mid-apply.
@@ -117,6 +120,16 @@ jobs:
         uses: huybrechtsxyz/strata/.github/actions/get-deployment-name@deployment-bugs
         with:
           deployment_file: ${{ inputs.deployment_file }}
+
+      # Authenticate with Azure (OIDC or client secret — mode is auto-detected).
+      # Must run before Verify Integrations so the az CLI session is active.
+      - name: Azure Login
+        uses: huybrechtsxyz/strata/.github/actions/azure-login@deployment-bugs
+        with:
+          azure_tenant_id: ${{ inputs.azure_tenant_id }}
+          azure_subscription_id: ${{ inputs.azure_subscription_id }}
+          azure_client_id: ${{ inputs.azure_client_id }}
+          azure_client_secret: ${{ secrets.azure_client_secret }}
 
       # Verify all configured store integrations are reachable before proceeding
       - name: Verify Integrations

@@ -125,15 +125,26 @@ runs:
           echo "[-] Bitwarden       : not configured (ok)"
         fi
 
-        # Azure — client_id and client_secret must both be present
+        # Azure — supports two auth modes:
+        #   Client secret: client_id + client_secret both set
+        #   OIDC:          client_id set, client_secret empty
+        #     OIDC requires the azure-login action to have run first so the
+        #     az CLI session is already active. Only the three non-secret env
+        #     vars are written; strata's has_oidc / has_cli_login paths both
+        #     satisfy authentication.
         if [ -n "$_AZURE_CLIENT_ID" ] && [ -n "$_AZURE_CLIENT_SECRET" ]; then
           _write_env AZURE_TENANT_ID       "$_AZURE_TENANT_ID"
           _write_env AZURE_SUBSCRIPTION_ID "$_AZURE_SUBSCRIPTION_ID"
           _write_env AZURE_CLIENT_ID       "$_AZURE_CLIENT_ID"
           _write_env AZURE_CLIENT_SECRET   "$_AZURE_CLIENT_SECRET"
-          echo "[+] Azure           : configured"
-        elif [ -n "$_AZURE_CLIENT_ID" ] || [ -n "$_AZURE_CLIENT_SECRET" ]; then
-          echo "::warning::[!] Azure : partially configured — azure_client_id and azure_client_secret must both be supplied"
+          echo "[+] Azure (secret)  : configured"
+        elif [ -n "$_AZURE_CLIENT_ID" ]; then
+          _write_env AZURE_TENANT_ID       "$_AZURE_TENANT_ID"
+          _write_env AZURE_SUBSCRIPTION_ID "$_AZURE_SUBSCRIPTION_ID"
+          _write_env AZURE_CLIENT_ID       "$_AZURE_CLIENT_ID"
+          echo "[+] Azure (OIDC)    : configured — az CLI authenticated via azure-login action"
+        elif [ -n "$_AZURE_CLIENT_SECRET" ]; then
+          echo "::warning::[!] Azure : azure_client_secret supplied without azure_client_id — skipping"
         else
           echo "[-] Azure           : not configured (ok)"
         fi

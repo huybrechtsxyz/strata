@@ -1,0 +1,78 @@
+# ===============================================================================
+# Action Name  : azure-login
+# Description  : Authenticate with Azure using OIDC (preferred, no secrets) or
+#                client secret (fallback for teams not yet using OIDC).
+#
+# Mode selection is automatic — determined by which inputs are supplied:
+#
+#   OIDC (preferred)
+#     azure_client_id set, azure_client_secret empty.
+#     Requires: permissions.id-token: write on the calling job.
+#     Requires: a federated credential configured in Azure Entra ID for this
+#               repo / environment / branch.
+#     No secret needs to be stored in GitHub — GitHub mints a short-lived JWT
+#     per run, which Azure AD exchanges for an access token.
+#
+#   Client Secret (fallback)
+#     azure_client_id and azure_client_secret both set.
+#     Works without any Azure Entra ID federated credential setup.
+#     The azure_client_secret must be stored as a GitHub Actions secret.
+#
+#   No Azure auth
+#     azure_client_id is empty — both steps are skipped.
+#     Use this when no Azure store is configured for the deployment.
+#
+# After this action completes the az CLI session is active for the remainder
+# of the job, so strata's _is_cli_logged_in() check returns true and all
+# azure-keyvault / azure-appconfig operations proceed without explicit creds.
+# ===============================================================================
+
+name: "Azure Login"
+description: "Authenticate with Azure using OIDC (no secrets) or client secret. Mode is selected automatically based on supplied inputs."
+
+branding:
+  icon: "log-in"
+  color: "blue"
+
+inputs:
+  azure_tenant_id:
+    description: "Azure tenant ID"
+    required: false
+    default: ""
+  azure_subscription_id:
+    description: "Azure subscription ID"
+    required: false
+    default: ""
+  azure_client_id:
+    description: "Azure service principal / app registration client ID"
+    required: false
+    default: ""
+  azure_client_secret:
+    description: "Azure client secret. Omit (or leave empty) to use OIDC."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # OIDC mode: client_id is set but no client_secret is supplied.
+    # GitHub mints a short-lived OIDC JWT that Azure AD exchanges for a token.
+    # The calling job must declare: permissions: id-token: write
+    - name: Login (OIDC)
+      if: ${{ inputs.azure_client_id != '' && inputs.azure_client_secret == '' }}
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.azure_client_id }}
+        tenant-id: ${{ inputs.azure_tenant_id }}
+        subscription-id: ${{ inputs.azure_subscription_id }}
+
+    # Client secret mode: both client_id and client_secret are supplied.
+    # The azure_client_secret must be stored as a GitHub Actions secret.
+    - name: Login (Client Secret)
+      if: ${{ inputs.azure_client_id != '' && inputs.azure_client_secret != '' }}
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.azure_client_id }}
+        tenant-id: ${{ inputs.azure_tenant_id }}
+        subscription-id: ${{ inputs.azure_subscription_id }}
+        client-secret: ${{ inputs.azure_client_secret }}
