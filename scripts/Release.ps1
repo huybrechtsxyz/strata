@@ -126,8 +126,14 @@ if ($LASTEXITCODE -ne 0) {
 # 2. Write new version
 Set-Content -Path $versionFile -Value $Version -NoNewline
 
-# 3. Stage and commit
+# 3. Pin all @main action refs in deploy-workspace.yml to the release tag
+$workflowFile = Join-Path $projectRoot ".github" "workflows" "deploy-workspace.yml"
+Write-Host "[*] Pinning action refs: @main → $tag" -ForegroundColor Yellow
+(Get-Content $workflowFile -Raw) -replace '@main', "@$tag" | Set-Content $workflowFile -NoNewline
+
+# 4. Stage and commit
 git add VERSION.txt
+git add .github/workflows/deploy-workspace.yml
 git commit -m "chore: release $tag"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] git commit failed." -ForegroundColor Red

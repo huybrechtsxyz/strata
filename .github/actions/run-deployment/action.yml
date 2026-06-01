@@ -1,0 +1,47 @@
+# ===============================================================================
+# Action Name  : run-deployment
+# Description  : Execute a strata deployment (plan or apply) from a built
+#                platform artifact. Requires setup-strata and build-deployment
+#                to have run first.
+# ===============================================================================
+
+name: "Run Deployment"
+description: "Execute a strata deployment (plan or apply). Requires setup-strata and build-deployment."
+
+branding:
+  icon: "play"
+  color: "blue"
+
+inputs:
+  deployment_file:
+    description: "Path to the strata deployment YAML file."
+    required: true
+  deployment_name:
+    description: "Human-readable name of the deployment (used for log output)."
+    required: false
+    default: ""
+  dry_run:
+    description: "Run in dry-run mode (plan only, no apply). Set to 'false' to deploy."
+    required: false
+    default: "true"
+  work_path:
+    description: "Working directory containing the built .strata/ artifact."
+    required: false
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy
+      shell: bash
+      env:
+        DEPLOYMENT_FILE: ${{ inputs.deployment_file }}
+        DEPLOYMENT_NAME: ${{ inputs.deployment_name }}
+        DRY_RUN: ${{ inputs.dry_run }}
+        WORK_PATH: ${{ inputs.work_path }}
+      run: |
+        DRY_RUN_FLAG=""
+        if [ "$DRY_RUN" = "true" ]; then DRY_RUN_FLAG="--dry-run"; fi
+        echo "[*] Deploying $DEPLOYMENT_NAME (dry_run=$DRY_RUN) ..."
+        strata deploy run --file "$DEPLOYMENT_FILE" --work-path "$WORK_PATH" $DRY_RUN_FLAG
+        echo "[*] Deploying $DEPLOYMENT_NAME ... DONE"

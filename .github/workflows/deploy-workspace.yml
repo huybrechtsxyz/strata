@@ -107,18 +107,16 @@ jobs:
 
       # Validate the deployment file structure and schema
       - name: Validate Deployment
-        run: |
-          echo "[*] Validating deployment file ..."
-          strata validate "${{ inputs.deployment_file }}"
-          echo "[*] Validating deployment file ... DONE"
+        uses: huybrechtsxyz/strata/.github/actions/validate-deployment@main
+        with:
+          deployment_file: ${{ inputs.deployment_file }}
 
-      # Extract the deployment name from the file for use in downstream jobs
+      # Extract the deployment name from the file for use in downstream steps
       - name: Get Deployment Name
         id: get_name
-        run: |
-          DEPLOYMENT_NAME=$(yq e '.meta.name' "${{ inputs.deployment_file }}")
-          echo "deployment_name=$DEPLOYMENT_NAME" >> $GITHUB_OUTPUT
-          echo "[*] Deployment name: $DEPLOYMENT_NAME"
+        uses: huybrechtsxyz/strata/.github/actions/get-deployment-name@main
+        with:
+          deployment_file: ${{ inputs.deployment_file }}
 
       # Verify all configured store integrations are reachable before proceeding
       - name: Verify Integrations
@@ -134,18 +132,16 @@ jobs:
           consul_address: ${{ inputs.consul_address }}
           consul_token: ${{ secrets.consul_token }}
 
-      # Build the platform artifact using the deployment file (generates a .strata directory with all necessary files for deployment).
+      # Build the platform artifact (writes output to .strata/)
       - name: Build
-        run: |
-          echo "[*] Building platform artifact ..."
-          strata build run --file "${{ inputs.deployment_file }}" --work-path .
-          echo "[*] Building platform artifact ... DONE"
+        uses: huybrechtsxyz/strata/.github/actions/build-deployment@main
+        with:
+          deployment_file: ${{ inputs.deployment_file }}
 
-      # dry_run=true (default) → --dry-run: plan only, no apply.
-      # dry_run=false           → no flag:   full deploy (all stages).
+      # dry_run=true (default) → plan only. dry_run=false → full deploy.
       - name: Deploy
-        run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
-          echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} (dry_run=${{ inputs.dry_run }}) ..."
-          strata deploy run --file "${{ inputs.deployment_file }}" --work-path . $DRY_RUN_FLAG
-          echo "[*] Deploying ${{ steps.get_name.outputs.deployment_name }} ... DONE"
+        uses: huybrechtsxyz/strata/.github/actions/run-deployment@main
+        with:
+          deployment_file: ${{ inputs.deployment_file }}
+          deployment_name: ${{ steps.get_name.outputs.deployment_name }}
+          dry_run: ${{ inputs.dry_run }}
