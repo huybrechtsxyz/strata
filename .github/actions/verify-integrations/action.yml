@@ -16,8 +16,8 @@ name: "Verify Integrations"
 description: "Configure store env vars and verify integration availability via strata tools status."
 
 branding:
-  icon: 'check-circle'
-  color: 'green'
+  icon: "check-circle"
+  color: "green"
 
 inputs:
   # Bitwarden store
@@ -64,69 +64,97 @@ inputs:
 runs:
   using: composite
   steps:
-    # Mask secrets so they never appear in logs
+    # Mask secrets so they never appear in logs.
+    # Secrets are passed via env: to prevent command injection — a token
+    # containing $(cmd) would execute before the mask if interpolated directly
+    # into run: via ${{ inputs.* }}.
     - name: Mask Secrets
       shell: bash
+      env:
+        _BITWARDEN_TOKEN: ${{ inputs.bitwarden_token }}
+        _AZURE_CLIENT_SECRET: ${{ inputs.azure_client_secret }}
+        _VAULT_TOKEN: ${{ inputs.vault_token }}
+        _CONSUL_TOKEN: ${{ inputs.consul_token }}
       run: |
-        if [ -n "${{ inputs.bitwarden_token }}" ]; then
-          echo "::add-mask::${{ inputs.bitwarden_token }}"
-        fi
-        if [ -n "${{ inputs.azure_client_secret }}" ]; then
-          echo "::add-mask::${{ inputs.azure_client_secret }}"
-        fi
-        if [ -n "${{ inputs.vault_token }}" ]; then
-          echo "::add-mask::${{ inputs.vault_token }}"
-        fi
-        if [ -n "${{ inputs.consul_token }}" ]; then
-          echo "::add-mask::${{ inputs.consul_token }}"
-        fi
+        [ -n "$_BITWARDEN_TOKEN" ]     && echo "::add-mask::$_BITWARDEN_TOKEN"
+        [ -n "$_AZURE_CLIENT_SECRET" ] && echo "::add-mask::$_AZURE_CLIENT_SECRET"
+        [ -n "$_VAULT_TOKEN" ]         && echo "::add-mask::$_VAULT_TOKEN"
+        [ -n "$_CONSUL_TOKEN" ]        && echo "::add-mask::$_CONSUL_TOKEN"
+        true
 
     # Export store credentials as the env vars each integration expects.
     # Each store logs one of three states:
     #   [+] configured          — credentials present, env vars written
     #   [!] partially configured — only one of a required pair was supplied (warning)
     #   [-] not configured      — no credentials provided (ok, store simply won't be used)
+    #
+    # All inputs are passed via env: to prevent two injection classes:
+    #   1. Command injection — ${{ inputs.* }} is expanded by the Actions template
+    #      engine before the shell runs; a value containing $(cmd) would execute.
+    #   2. Newline injection into GITHUB_ENV — echo "VAR=${{ inputs.* }}" splits on
+    #      embedded newlines, letting a secret inject arbitrary env vars downstream.
+    #
+    # GITHUB_ENV writes use the EOF delimiter format so values containing newlines
+    # are stored verbatim without splitting into extra variables.
     - name: Configure Store Environment Variables
       shell: bash
+      env:
+        _BITWARDEN_TOKEN: ${{ inputs.bitwarden_token }}
+        _AZURE_TENANT_ID: ${{ inputs.azure_tenant_id }}
+        _AZURE_SUBSCRIPTION_ID: ${{ inputs.azure_subscription_id }}
+        _AZURE_CLIENT_ID: ${{ inputs.azure_client_id }}
+        _AZURE_CLIENT_SECRET: ${{ inputs.azure_client_secret }}
+        _VAULT_ADDRESS: ${{ inputs.vault_address }}
+        _VAULT_TOKEN: ${{ inputs.vault_token }}
+        _CONSUL_ADDRESS: ${{ inputs.consul_address }}
+        _CONSUL_TOKEN: ${{ inputs.consul_token }}
       run: |
+        # Write VAR=value to GITHUB_ENV using the EOF delimiter format.
+        # This is safe against newline injection: the value is written verbatim
+        # between the delimiters regardless of embedded newlines.
+        _write_env() {
+          local name="$1" value="$2"
+          printf '%s<<__STRATA_DELIM__\n%s\n__STRATA_DELIM__\n' "$name" "$value" >> "$GITHUB_ENV"
+        }
+
         # Bitwarden — single token
-        if [ -n "${{ inputs.bitwarden_token }}" ]; then
-          echo "BWS_ACCESS_TOKEN=${{ inputs.bitwarden_token }}" >> $GITHUB_ENV
+        if [ -n "$_BITWARDEN_TOKEN" ]; then
+          _write_env BWS_ACCESS_TOKEN "$_BITWARDEN_TOKEN"
           echo "[+] Bitwarden       : configured"
         else
           echo "[-] Bitwarden       : not configured (ok)"
         fi
 
         # Azure — client_id and client_secret must both be present
-        if [ -n "${{ inputs.azure_client_id }}" ] && [ -n "${{ inputs.azure_client_secret }}" ]; then
-          echo "AZURE_TENANT_ID=${{ inputs.azure_tenant_id }}" >> $GITHUB_ENV
-          echo "AZURE_SUBSCRIPTION_ID=${{ inputs.azure_subscription_id }}" >> $GITHUB_ENV
-          echo "AZURE_CLIENT_ID=${{ inputs.azure_client_id }}" >> $GITHUB_ENV
-          echo "AZURE_CLIENT_SECRET=${{ inputs.azure_client_secret }}" >> $GITHUB_ENV
+        if [ -n "$_AZURE_CLIENT_ID" ] && [ -n "$_AZURE_CLIENT_SECRET" ]; then
+          _write_env AZURE_TENANT_ID       "$_AZURE_TENANT_ID"
+          _write_env AZURE_SUBSCRIPTION_ID "$_AZURE_SUBSCRIPTION_ID"
+          _write_env AZURE_CLIENT_ID       "$_AZURE_CLIENT_ID"
+          _write_env AZURE_CLIENT_SECRET   "$_AZURE_CLIENT_SECRET"
           echo "[+] Azure           : configured"
-        elif [ -n "${{ inputs.azure_client_id }}" ] || [ -n "${{ inputs.azure_client_secret }}" ]; then
+        elif [ -n "$_AZURE_CLIENT_ID" ] || [ -n "$_AZURE_CLIENT_SECRET" ]; then
           echo "::warning::[!] Azure : partially configured — azure_client_id and azure_client_secret must both be supplied"
         else
           echo "[-] Azure           : not configured (ok)"
         fi
 
         # HashiCorp Vault — address and token must both be present
-        if [ -n "${{ inputs.vault_address }}" ] && [ -n "${{ inputs.vault_token }}" ]; then
-          echo "VAULT_ADDR=${{ inputs.vault_address }}" >> $GITHUB_ENV
-          echo "VAULT_TOKEN=${{ inputs.vault_token }}" >> $GITHUB_ENV
+        if [ -n "$_VAULT_ADDRESS" ] && [ -n "$_VAULT_TOKEN" ]; then
+          _write_env VAULT_ADDR  "$_VAULT_ADDRESS"
+          _write_env VAULT_TOKEN "$_VAULT_TOKEN"
           echo "[+] HashiCorp Vault : configured"
-        elif [ -n "${{ inputs.vault_address }}" ] || [ -n "${{ inputs.vault_token }}" ]; then
+        elif [ -n "$_VAULT_ADDRESS" ] || [ -n "$_VAULT_TOKEN" ]; then
           echo "::warning::[!] HashiCorp Vault : partially configured — vault_address and vault_token must both be supplied"
         else
           echo "[-] HashiCorp Vault : not configured (ok)"
         fi
 
         # Consul — address and token must both be present
-        if [ -n "${{ inputs.consul_address }}" ] && [ -n "${{ inputs.consul_token }}" ]; then
-          echo "CONSUL_HTTP_ADDR=${{ inputs.consul_address }}" >> $GITHUB_ENV
-          echo "CONSUL_HTTP_TOKEN=${{ inputs.consul_token }}" >> $GITHUB_ENV
+        if [ -n "$_CONSUL_ADDRESS" ] && [ -n "$_CONSUL_TOKEN" ]; then
+          _write_env CONSUL_HTTP_ADDR  "$_CONSUL_ADDRESS"
+          _write_env CONSUL_HTTP_TOKEN "$_CONSUL_TOKEN"
           echo "[+] Consul          : configured"
-        elif [ -n "${{ inputs.consul_address }}" ] || [ -n "${{ inputs.consul_token }}" ]; then
+        elif [ -n "$_CONSUL_ADDRESS" ] || [ -n "$_CONSUL_TOKEN" ]; then
           echo "::warning::[!] Consul : partially configured — consul_address and consul_token must both be supplied"
         else
           echo "[-] Consul          : not configured (ok)"
