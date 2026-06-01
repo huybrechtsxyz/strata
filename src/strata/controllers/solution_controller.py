@@ -418,6 +418,8 @@ class SolutionController(BaseController):
           2. ``iac.source.source_path`` — default (matches what the builder copies)
         """
         target = iac.source.target_path or iac.source.source_path
+        if target is None:
+            raise ValueError(f"Provisioner '{iac.name}' source has no source_path or target_path defined.")
         return deployment_service.get_build_path(build_path) / target
 
     # ------------------------------------------------------------------
