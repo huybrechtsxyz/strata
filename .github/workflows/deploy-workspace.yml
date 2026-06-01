@@ -114,10 +114,11 @@ jobs:
         with:
           deployment_file: ${{ inputs.deployment_file }}
 
-      # Extract the deployment name from the file for use in downstream steps
-      - name: Get Deployment Name
+      # Extract deployment metadata (name, kind, version, description) for use in
+      # downstream steps and step summaries.
+      - name: Get Deployment Info
         id: get_name
-        uses: huybrechtsxyz/strata/.github/actions/get-deployment-name@deployment-bugs
+        uses: huybrechtsxyz/strata/.github/actions/get-deployment-info@deployment-bugs
         with:
           deployment_file: ${{ inputs.deployment_file }}
 
@@ -156,5 +157,5 @@ jobs:
         uses: huybrechtsxyz/strata/.github/actions/run-deployment@deployment-bugs
         with:
           deployment_file: ${{ inputs.deployment_file }}
-          deployment_name: ${{ steps.get_name.outputs.deployment_name }}
+          deployment_name: ${{ steps.get_name.outputs.name }}
           dry_run: ${{ inputs.dry_run }}
