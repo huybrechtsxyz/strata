@@ -25,5 +25,5 @@ runs:
         DEPLOYMENT_FILE: ${{ inputs.deployment_file }}
       run: |
         echo "[*] Validating deployment file ..."
-        strata validate "$DEPLOYMENT_FILE"
+        strata validate --file "$DEPLOYMENT_FILE"
         echo "[*] Validating deployment file ... DONE"
