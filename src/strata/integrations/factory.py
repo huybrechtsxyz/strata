@@ -21,6 +21,11 @@ class IntegrationFactory:
     # This will be populated as integrations are created
     _type_mapping: Dict[str, Type[BaseIntegration]] = {}
 
+    # Aliases registered in _type_mapping for backwards-compat with YAML configs
+    # that use short/hyphenated names (e.g. type: consul). These are excluded from
+    # get_known_types() so status output only shows canonical names.
+    _BUILTIN_ALIASES: set = {"azure-keyvault", "azure-appconfig", "consul", "vault"}
+
     # Built-in class map: type string -> (module_path, class_name)
     # This is the canonical source of truth for all built-in integrations.
     # Custom integrations registered at runtime appear in _type_mapping instead.
@@ -158,9 +163,11 @@ class IntegrationFactory:
 
         Built-in types come from ``_BUILTIN_CLASS_MAP``.
         Custom types registered at runtime (e.g. from ``.strata/integrations/``)
-        come from ``_type_mapping``.  The union is returned sorted.
+        come from ``_type_mapping``, excluding known aliases.
+        The union is returned sorted.
         """
-        return sorted(set(cls._BUILTIN_CLASS_MAP.keys()) | set(cls._type_mapping.keys()))
+        custom_registered = set(cls._type_mapping.keys()) - cls._BUILTIN_ALIASES
+        return sorted(set(cls._BUILTIN_CLASS_MAP.keys()) | custom_registered)
 
     @classmethod
     def is_known_type(cls, type_str: str) -> bool:
