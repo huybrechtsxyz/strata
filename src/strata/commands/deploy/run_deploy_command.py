@@ -326,6 +326,16 @@ class RunDeployCommand(BaseDeployCommand):
                     }
                 )
 
+        # --- save plan JSON for artifact upload / downstream use ---
+        if STEP_PLAN in steps_to_run and isinstance(deployer, TerraformDeployer):
+            ok_save, plan_json_path, save_msgs = deployer.save_plan_json()
+            self._messages.extend(save_msgs)
+            if self._is_console_output():
+                for msg in save_msgs:
+                    click.echo(f"      {msg}")
+                if ok_save and plan_json_path:
+                    click.echo(f"    plan JSON \u2192 {plan_json_path}")
+
         if self._is_ndjson_output():
             self.emit_ndjson(
                 {

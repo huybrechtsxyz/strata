@@ -434,6 +434,23 @@ class TerraformDeployer(BaseDeployer):
 
         return True, data, messages
 
+    def save_plan_json(self) -> Tuple[bool, Optional[Path], List[str]]:
+        """Save the plan as JSON alongside the binary: {stage}.tfplan → {stage}.tfplan.json.
+
+        Calls show_plan() internally; the plan step must have run first.
+        """
+        ok, data, msgs = self.show_plan()
+        if not ok or not data:
+            return False, None, msgs
+        assert self._plan_file is not None  # guaranteed by show_plan() / _ready()
+        out_path = self._plan_file.parent / f"{self.stage.name}.tfplan.json"
+        try:
+            out_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except OSError as exc:
+            msgs.append(f"Could not write plan JSON: {exc}")
+            return False, None, msgs
+        return True, out_path, msgs
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

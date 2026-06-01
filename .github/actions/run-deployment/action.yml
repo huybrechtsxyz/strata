@@ -45,3 +45,11 @@ runs:
         echo "[*] Deploying $DEPLOYMENT_NAME (dry_run=$DRY_RUN) ..."
         strata deploy run --file "$DEPLOYMENT_FILE" --work-path "$WORK_PATH" --verbose $DRY_RUN_FLAG
         echo "[*] Deploying $DEPLOYMENT_NAME ... DONE"
+
+    - name: Upload plan artifacts
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: terraform-plans-${{ inputs.deployment_name || 'deploy' }}
+        path: "**/*.tfplan.json"
+        if-no-files-found: ignore
