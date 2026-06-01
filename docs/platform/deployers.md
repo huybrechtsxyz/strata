@@ -288,16 +288,16 @@ Deploys Docker Compose/Stack artifacts produced by `ComposeBuilder`. For each na
 
 ### Step → Docker command mapping
 
-| Step           | Docker command                                                                      |
-| -------------- | ----------------------------------------------------------------------------------- |
-| `setup`        | `docker info` — verifies the daemon is reachable                                    |
-| `check`        | Verifies `docker-compose.yml` exists on disk for each namespace                     |
-| `plan`         | Parses compose files locally and counts services per namespace (no subprocess)      |
-| `apply`        | `docker stack deploy --with-registry-auth -c {file} {namespace}` per namespace      |
-| `destroy`      | `docker stack rm {namespace}` per namespace (requires `--force`)                   |
-| `plan_destroy` | `docker stack ls` — lists running stacks matching namespace names                  |
-| `output`       | `docker stack services {namespace}` per namespace                                  |
-| `show_plan`    | No-op — returns empty dict                                                          |
+| Step           | Docker command                                                                 |
+| -------------- | ------------------------------------------------------------------------------ |
+| `setup`        | `docker info` — verifies the daemon is reachable                               |
+| `check`        | Verifies `docker-compose.yml` exists on disk for each namespace                |
+| `plan`         | Parses compose files locally and counts services per namespace (no subprocess) |
+| `apply`        | `docker stack deploy --with-registry-auth -c {file} {namespace}` per namespace |
+| `destroy`      | `docker stack rm {namespace}` per namespace (requires `--force`)               |
+| `plan_destroy` | `docker stack ls` — lists running stacks matching namespace names              |
+| `output`       | `docker stack services {namespace}` per namespace                              |
+| `show_plan`    | No-op — returns empty dict                                                     |
 
 ### validate_workspace
 

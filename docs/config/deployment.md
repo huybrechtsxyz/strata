@@ -345,14 +345,14 @@ production-deployment.yaml:
 
 Stages reference a provisioner by name. The backend tool used by that provisioner determines which deployer executes the stage.
 
-| Type        | Deployer            | Notes                                                                                                            |
-| ----------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `terraform` | `TerraformDeployer` | Requires `terraform` CLI                                                                                         |
-| `opentofu`  | `TerraformDeployer` | Requires `tofu` CLI                                                                                              |
-| `ansible`   | `AnsibleDeployer`   | Requires `ansible-playbook` CLI                                                                                  |
+| Type        | Deployer            | Notes                                                                                                                                              |
+| ----------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `terraform` | `TerraformDeployer` | Requires `terraform` CLI                                                                                                                           |
+| `opentofu`  | `TerraformDeployer` | Requires `tofu` CLI                                                                                                                                |
+| `ansible`   | `AnsibleDeployer`   | Requires `ansible-playbook` CLI                                                                                                                    |
 | `compose`   | `ComposeDeployer`   | Requires Docker with Swarm mode; deploys per-namespace `docker-compose.yml` files. See [ComposeDeployer](../platform/deployers.md#composedeployer) |
-| `helm`      | `HelmDeployer`      | Requires `helm` CLI; deploys per-module Helm releases. See [HelmDeployer](../platform/deployers.md#helmdeployer) |
-| `script`    | `ScriptDeployer`    | Executes lifecycle scripts; no external CLI required                                                             |
+| `helm`      | `HelmDeployer`      | Requires `helm` CLI; deploys per-module Helm releases. See [HelmDeployer](../platform/deployers.md#helmdeployer)                                   |
+| `script`    | `ScriptDeployer`    | Executes lifecycle scripts; no external CLI required                                                                                               |
 
 ## Source Types
 
