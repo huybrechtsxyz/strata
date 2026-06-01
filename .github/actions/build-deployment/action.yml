@@ -31,5 +31,15 @@ runs:
         WORK_PATH: ${{ inputs.work_path }}
       run: |
         echo "[*] Building platform artifact ..."
+        set +e
         strata build run --file "$DEPLOYMENT_FILE" --work-path "$WORK_PATH"
-        echo "[*] Building platform artifact ... DONE"
+        _EXIT=$?
+        set -e
+        if [ $_EXIT -eq 0 ]; then
+          printf '## \u2705 Build Succeeded\n\n**File:** `%s`\n' "$DEPLOYMENT_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "[*] Building platform artifact ... DONE"
+        else
+          printf '## \u274c Build Failed\n\n**File:** `%s`\n' "$DEPLOYMENT_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "[*] Building platform artifact ... FAILED"
+        fi
+        exit $_EXIT

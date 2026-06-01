@@ -41,10 +41,27 @@ runs:
         WORK_PATH: ${{ inputs.work_path }}
       run: |
         DRY_RUN_FLAG=""
-        if [ "$DRY_RUN" = "true" ]; then DRY_RUN_FLAG="--dry-run"; fi
+        MODE_LABEL=$'\U0001F680 Production'
+        if [ "$DRY_RUN" = "true" ]; then
+          DRY_RUN_FLAG="--dry-run"
+          MODE_LABEL=$'\u26a0\ufe0f Dry Run'
+        fi
         echo "[*] Deploying $DEPLOYMENT_NAME (dry_run=$DRY_RUN) ..."
+        set +e
         strata deploy run --file "$DEPLOYMENT_FILE" --work-path "$WORK_PATH" --verbose $DRY_RUN_FLAG
-        echo "[*] Deploying $DEPLOYMENT_NAME ... DONE"
+        _EXIT=$?
+        set -e
+        RESULT=$'\u2705 Success'
+        [ $_EXIT -ne 0 ] && RESULT=$'\u274c Failed'
+        {
+          printf '## Deployment: %s\n\n' "$DEPLOYMENT_NAME"
+          printf '| | |\n|---|---|\n'
+          printf '| **File** | `%s` |\n' "$DEPLOYMENT_FILE"
+          printf '| **Mode** | %s |\n' "$MODE_LABEL"
+          printf '| **Result** | %s |\n' "$RESULT"
+        } >> "$GITHUB_STEP_SUMMARY"
+        echo "[*] Deploying $DEPLOYMENT_NAME ... $([ $_EXIT -eq 0 ] && echo DONE || echo FAILED)"
+        exit $_EXIT
 
     - name: Upload plan artifacts
       if: always()

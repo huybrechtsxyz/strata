@@ -171,3 +171,15 @@ runs:
         jq -r '.data.integrations[] | (if .available then "[+]" else "[-]" end) + " " + .name + (if .version then " (" + .version + ")" else " (not found)" end)' \
           /tmp/strata-tools-status.json
         echo "[*] Verifying integration status ... DONE"
+        # Write step summary — markdown table of all integrations
+        {
+          printf '## Integration Status\n\n'
+          printf '| Integration | Available | Version |\n'
+          printf '|-------------|:---------:|---------|\n'
+          jq -r '.data.integrations[] | "| " + .name + " | " + (if .available then "\u2705" else "\u274c" end) + " | " + (.version // "\u2014") + " |"' \
+            /tmp/strata-tools-status.json
+          printf '\n'
+          TOTAL=$(jq '.data.integrations | length' /tmp/strata-tools-status.json)
+          AVAIL=$(jq '[.data.integrations[] | select(.available)] | length' /tmp/strata-tools-status.json)
+          printf '_%s/%s integrations available_\n' "$AVAIL" "$TOTAL"
+        } >> "$GITHUB_STEP_SUMMARY"

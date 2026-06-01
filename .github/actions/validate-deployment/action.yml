@@ -25,5 +25,15 @@ runs:
         DEPLOYMENT_FILE: ${{ inputs.deployment_file }}
       run: |
         echo "[*] Validating deployment file ..."
+        set +e
         strata validate --file "$DEPLOYMENT_FILE"
-        echo "[*] Validating deployment file ... DONE"
+        _EXIT=$?
+        set -e
+        if [ $_EXIT -eq 0 ]; then
+          printf '## \u2705 Deployment Validated\n\n**File:** `%s`\n' "$DEPLOYMENT_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "[*] Validating deployment file ... DONE"
+        else
+          printf '## \u274c Validation Failed\n\n**File:** `%s`\n' "$DEPLOYMENT_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "[*] Validating deployment file ... FAILED"
+        fi
+        exit $_EXIT

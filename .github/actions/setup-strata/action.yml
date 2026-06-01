@@ -66,3 +66,4 @@ runs:
         VERSION=$(strata version --quiet 2>/dev/null || strata --version | head -1)
         echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
         echo "✅ strata ${VERSION} installed"
+        printf '**strata %s** installed ✅\n' "$VERSION" >> "$GITHUB_STEP_SUMMARY"
