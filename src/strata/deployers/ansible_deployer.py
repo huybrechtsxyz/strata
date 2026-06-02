@@ -88,6 +88,7 @@ class AnsibleDeployer(BaseDeployer):
         self._iac_model: Optional[WorkspaceIacModel] = None
         self._working_dir: Optional[Path] = None
         self._ansible: Optional[AnsibleIntegration] = None
+        self._dynamic_inventory: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Metadata
@@ -143,6 +144,24 @@ class AnsibleDeployer(BaseDeployer):
 
         self._iac_model = iac
         self._working_dir = source_path
+
+        # When arriving via topology, build the inventory from stage_outputs
+        if self.stage.topology:
+            cfg = iac.configuration or {}
+            ip_output_key = cfg.get("ip_output_key", "server_ip")
+            outputs = self.resolved_values.stage_outputs if self.resolved_values else {}
+            ip = outputs.get(ip_output_key)
+            if not ip:
+                messages.append(
+                    f"Stage '{self.stage.name}': topology '{self.stage.topology}' requires "
+                    f"output '{ip_output_key}' from a previous stage — "
+                    "run the infrastructure stage first."
+                )
+                return False, messages
+            hosts = ",".join(ip) if isinstance(ip, list) else str(ip)
+            self._dynamic_inventory = f"{hosts},"
+            messages.append(f"Dynamic inventory from stage outputs: {self._dynamic_inventory}")
+
         messages.append(f"Ansible workspace validated: {source_path}")
         return True, messages
 
@@ -181,12 +200,15 @@ class AnsibleDeployer(BaseDeployer):
         if self._working_dir is None:
             return []
         playbook = self._get_playbook()
-        inventory = self._get_inventory()
         lines = [f"playbook:   {self._working_dir / playbook}"]
-        if inventory:
-            lines.append(f"inventory:  {self._working_dir / inventory}")
+        if self._dynamic_inventory is not None:
+            lines.append(f"inventory:  {self._dynamic_inventory}  (dynamic — from stage outputs)")
         else:
-            lines.append("inventory:  (none — Ansible will use its default discovery)")
+            inventory = self._get_inventory()
+            if inventory:
+                lines.append(f"inventory:  {self._working_dir / inventory}")
+            else:
+                lines.append("inventory:  (none — Ansible will use its default discovery)")
         return lines
 
     def _get_configuration(self) -> Optional[Dict[str, Any]]:
@@ -203,7 +225,9 @@ class AnsibleDeployer(BaseDeployer):
         return "site.yml"
 
     def _get_inventory(self) -> Optional[str]:
-        """Resolve the inventory path from configuration or auto-discover."""
+        """Resolve the inventory: dynamic (from stage outputs) → config → auto-discover."""
+        if self._dynamic_inventory is not None:
+            return self._dynamic_inventory
         cfg = self._get_configuration()
         if cfg and "inventory" in cfg:
             return cfg["inventory"]

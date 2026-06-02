@@ -13,6 +13,7 @@ def _make_stage(name="configure", provisioner=None):
     stage = MagicMock()
     stage.name = name
     stage.provisioner = provisioner
+    stage.topology = None
     return stage
 
 
