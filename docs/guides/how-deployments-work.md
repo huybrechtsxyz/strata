@@ -7,13 +7,13 @@
 
 ## The five things you need to know
 
-| Thing           | What it is                                                                                                                                                 |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Workspace**   | Declares *what infrastructure tools exist* and how to use them.                                                                                            |
-| **Provisioner** | One entry in the workspace — a named IaC tool (Terraform, Ansible, Helm, …) with its source code location.                                                 |
-| **Topology**    | An optional named group in the workspace that says "these servers are managed together by this provisioner, and the server IP comes from this output key." |
-| **Deployment**  | Declares *what to do* — which environment to target, and a list of stages to run in order.                                                                 |
-| **Stage**       | One step in the deployment. Points to a provisioner (or a topology) and runs a deployer (Terraform, Ansible, …).                                           |
+| Thing           | What it is                                                                                                                                                                                                                                                                        |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workspace**   | Declares *what infrastructure tools exist* and how to use them.                                                                                                                                                                                                                   |
+| **Provisioner** | One entry in the workspace — a named IaC tool (Terraform, Ansible, Helm, …) with its source code location.                                                                                                                                                                        |
+| **Topology**    | An optional named group in the workspace that says "these servers were created by this provisioner." When a stage uses `topology:`, strata derives the Ansible inventory from that provisioner's `stage_outputs` at runtime — so no static inventory file is needed or consulted. |
+| **Deployment**  | Declares *what to do* — which environment to target, and a list of stages to run in order.                                                                                                                                                                                        |
+| **Stage**       | One step in the deployment. Points to a provisioner (or a topology) and runs a deployer (Terraform, Ansible, …).                                                                                                                                                                  |
 
 Stages run **in order**. Each stage can read the **outputs of every stage that ran before it**.
 
@@ -135,6 +135,8 @@ Both point the stage to the right deployer. The difference is what Ansible does 
 | Direct link to the Ansible IaC entry.                                                        | Indirect: strata first looks up `my_server`, finds it uses `my_iac`, then finds the Ansible IaC entry.                                         |
 | Ansible uses a **static inventory file** from the playbook directory (e.g. `inventory.yml`). | Ansible uses a **dynamic inventory**: the IP is read from `stage_outputs["server_ip"]` at runtime and passed inline. No inventory file needed. |
 | Use this when the host list is known ahead of time.                                          | Use this when the servers were just created by a previous stage and their IPs are only known at runtime.                                       |
+
+> **Why not combine them?** A static inventory file in the playbook directory is never consulted when using `topology:`. This is intentional — if a stage is skipped in a partial re-run, a stale inventory file would silently point Ansible at servers from a previous run. The split makes the host source unambiguous: either you own a static file, or strata derives the hosts from fresh Terraform output.
 
 ---
 
