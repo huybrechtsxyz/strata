@@ -123,7 +123,7 @@ class StatusDeployCommand(BaseDeployCommand):
     def _fetch_stage_outputs(self, stage: DeploymentStageModel) -> Tuple[bool, Dict[str, Any], List[str]]:
         deployer = self._create_deployer(stage)
         if deployer is None:
-            return False, {}, [f"Stage '{stage.name}': unsupported provisioner type '{stage.type}'."]
+            return False, {}, [f"Stage '{stage.name}': unsupported provisioner type."]
 
         for validate_fn in (deployer.validate_workspace, deployer.validate_environment):
             ok, msgs = validate_fn()
@@ -198,7 +198,7 @@ class StatusDeployCommand(BaseDeployCommand):
     def _fetch_stage_plan(self, stage: DeploymentStageModel) -> Tuple[bool, Dict[str, Any], List[str]]:
         deployer = self._create_deployer(stage)
         if deployer is None:
-            return False, {}, [f"Stage '{stage.name}': unsupported provisioner type '{stage.type}'."]
+            return False, {}, [f"Stage '{stage.name}': unsupported provisioner type."]
 
         ok, msgs = deployer.validate_workspace()
         if not ok:

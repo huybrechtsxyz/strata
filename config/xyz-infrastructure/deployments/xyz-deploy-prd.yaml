@@ -28,7 +28,6 @@ spec:
 
   stages:
     - name: infrastructure
-      type: infrastructure
       provisioner: xyz_iac
       scope: all
       depends_on: null

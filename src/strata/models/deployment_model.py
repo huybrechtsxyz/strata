@@ -204,9 +204,9 @@ class DeploymentStageModel(BaseModel):
     name: PlatformName = Field(
         description="Unique stage name - pipeline step identifier (e.g., 'provision', 'configure', 'verify')"
     )
-    type: str = Field(
-        ...,  # Required
-        description="Stage type - determines provisioner selection strategy and execution semantics",
+    description: Optional[str] = Field(
+        None,
+        description="Optional human-readable description of what this stage does (informational only — does not affect routing)",
     )
     provisioner: Optional[str] = Field(
         None,

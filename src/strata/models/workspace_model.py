@@ -99,7 +99,9 @@ class WorkspaceTopologyModel(BaseModel):
     provider: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         ..., description="Provider name used for this topology"
     )
-    provisioner: ProvisionerType = Field(..., description="IaC tool used for provisioning")
+    provisioner: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        ..., description="IaC provisioner name reference (must match a provisioner defined in spec.provisioners)"
+    )
     type: PlatformName = Field(..., description="Topology type (e.g., dockerswarm, kubernetes, azure-native)")
     components: Annotated[
         List[WorkspaceComponentModel],
@@ -460,6 +462,27 @@ class WorkspaceSpecModel(BaseModel):
 
         if invalid_refs:
             raise ValueError(f"Invalid namespace references in topology: {'; '.join(invalid_refs)}")
+
+        return self
+
+    # Validate topology provisioner name references
+    @model_validator(mode="after")
+    def validate_topology_provisioner_references(self) -> "WorkspaceSpecModel":
+        """Validate that all provisioner references in topology exist in spec.provisioners by name."""
+        if not self.topology:
+            return self
+
+        provisioner_names = {prov.name for prov in self.provisioners}
+
+        invalid_refs = []
+        for topology in self.topology:
+            if topology.provisioner not in provisioner_names:
+                invalid_refs.append(
+                    f"Topology '{topology.name}' references undefined provisioner '{topology.provisioner}'"
+                )
+
+        if invalid_refs:
+            raise ValueError(f"Invalid provisioner references in topology: {'; '.join(invalid_refs)}")
 
         return self
 

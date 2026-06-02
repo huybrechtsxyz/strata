@@ -9,11 +9,10 @@ from strata.models.common_models import ProvisionerType
 from strata.models.deployment_model import DeploymentStageTimeoutsModel
 
 
-def _make_stage(name="configure", provisioner=None, stage_type="configure"):
+def _make_stage(name="configure", provisioner=None):
     stage = MagicMock()
     stage.name = name
     stage.provisioner = provisioner
-    stage.type = stage_type
     return stage
 
 

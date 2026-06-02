@@ -34,11 +34,9 @@ spec:
 
   stages:
     - name: staging
-      type: infrastructure
       # No approval override — all spec-level approvers apply
 
     - name: production
-      type: infrastructure
       # Stage-level override — only these approvers apply to this stage
       approval:
         approvers:

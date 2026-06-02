@@ -159,7 +159,7 @@ class DestroyDeployCommand(BaseDeployCommand):
 
         for stage in stages_to_run:
             if self._is_console_output():
-                label = f"[{stage.type}]"
+                label = f"[{stage.name}]"
                 if stage.provisioner:
                     label += f" via {stage.provisioner}"
                 elif stage.topology:
@@ -285,22 +285,14 @@ class DestroyDeployCommand(BaseDeployCommand):
                     f"Available: {_topo_names if _topo_names else ['(none defined)']}"
                 )
                 return None
-            matching = [p for p in _provisioners if p.provisioner == topo.provisioner]
-            if not matching:
+            # topo.provisioner is a name reference — look up the IaC entry directly by name
+            _iac = next((p for p in _provisioners if p.name == topo.provisioner), None)
+            if _iac is None:
                 self._errors.append(
-                    f"Stage '{stage.name}': topology '{stage.topology}' requires provisioner type "
-                    f"'{topo.provisioner.value}' but no matching provisioner is defined in the workspace."
+                    f"Stage '{stage.name}': topology '{stage.topology}' references provisioner "
+                    f"'{topo.provisioner}' which is not defined in the workspace."
                 )
                 return None
-            if len(matching) > 1:
-                names = [str(p.name) for p in matching]
-                self._errors.append(
-                    f"Stage '{stage.name}': topology '{stage.topology}' is ambiguous — "
-                    f"multiple '{topo.provisioner.value}' provisioners found: {names}. "
-                    "Specify 'provisioner' explicitly to disambiguate."
-                )
-                return None
-            _iac = matching[0]
             if _iac.provisioner == ProvisionerType.TERRAFORM:
                 resolved_type = "terraform"
             elif _iac.provisioner == ProvisionerType.ANSIBLE:
