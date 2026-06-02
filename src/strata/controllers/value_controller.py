@@ -27,20 +27,25 @@ class ResolvedValues:
     """Concrete runtime values resolved from variables, secrets, and feature flags.
 
     Attributes:
-        variables     (Dict[str, Any]):          Resolved configuration variables.
-        secrets       (Dict[str, Any]):          Resolved secrets  (treat as sensitive).
-        features      (Dict[str, Optional[bool]]): Resolved feature-flag booleans.
-        stage_outputs (Dict[str, Any]):          Flat outputs collected from preceding
-                                                  deployment stages (last-stage-wins on
-                                                  key collision). Injected as TF_VAR_*
-                                                  / verbatim env vars for downstream stages.
-        errors        (List[str]):               Resolution errors / warnings.
+        variables              (Dict[str, Any]):          Resolved configuration variables.
+        secrets                (Dict[str, Any]):          Resolved secrets  (treat as sensitive).
+        features               (Dict[str, Optional[bool]]): Resolved feature-flag booleans.
+        stage_outputs          (Dict[str, Any]):          Non-sensitive outputs collected from
+                                                           preceding deployment stages.
+                                                           Injected as TF_VAR_* / verbatim env
+                                                           vars into every subsequent stage.
+        stage_outputs_sensitive (Dict[str, Any]):         Sensitive outputs from preceding stages
+                                                           (e.g. Terraform ``sensitive = true``).
+                                                           Available internally but never injected
+                                                           into subprocess environments.
+        errors                 (List[str]):               Resolution errors / warnings.
     """
 
     variables: Dict[str, Any] = field(default_factory=dict)
     secrets: Dict[str, Any] = field(default_factory=dict)
     features: Dict[str, Optional[bool]] = field(default_factory=dict)
     stage_outputs: Dict[str, Any] = field(default_factory=dict)
+    stage_outputs_sensitive: Dict[str, Any] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
 
     def is_empty(self) -> bool:

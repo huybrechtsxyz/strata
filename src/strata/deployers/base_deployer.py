@@ -182,20 +182,28 @@ class BaseDeployer(ABC):
         """
         return True, None, []
 
-    def collect_outputs(self) -> Tuple[bool, Dict[str, Any], List[str]]:
+    def collect_outputs(self) -> Tuple[bool, Dict[str, Any], Dict[str, Any], List[str]]:
         """Collect outputs produced by this stage after a successful apply.
 
         Called by the deploy pipeline after ``apply`` completes.  The returned
-        dict is merged into ``ResolvedValues.stage_outputs`` and made available
-        to all subsequent stages as ``TF_VAR_<key>`` / verbatim env-var injection.
+        dicts are merged into ``ResolvedValues.stage_outputs`` (non-sensitive)
+        and ``ResolvedValues.stage_outputs_sensitive`` (sensitive) and made
+        available to all subsequent stages.
 
-        Default implementation returns an empty dict (no outputs).  Override in
-        deployers that produce structured outputs (e.g. TerraformDeployer).
+        Non-sensitive outputs are injected as ``TF_VAR_<key>`` / verbatim env
+        vars into every subsequent stage subprocess.  Sensitive outputs are
+        held internally by the system but never injected into subprocess
+        environments, preventing accidental secret leakage.
+
+        Sensitivity is determined by the deployer:
+        - Terraform: reads the ``sensitive`` flag from ``terraform output -json``
+        - Other deployers: underscore-prefix convention (``_key`` → sensitive)
+        - Default (no outputs): returns empty dicts for both buckets
 
         Returns:
-            (success, outputs_dict, messages)
+            (success, non_sensitive_outputs, sensitive_outputs, messages)
         """
-        return True, {}, []
+        return True, {}, {}, []
 
     @abstractmethod
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:

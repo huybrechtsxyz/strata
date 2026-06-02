@@ -37,20 +37,21 @@ BaseDeployer(
 
 ### Abstract interface
 
-| Method                   | Returns                        | Description                            |
-| ------------------------ | ------------------------------ | -------------------------------------- |
-| `get_deployer_name()`    | `str`                          | Canonical name (e.g. `"terraform"`)    |
-| `get_supported_steps()`  | `List[str]`                    | Ordered step names                     |
-| `validate_workspace()`   | `Tuple[bool, List[str]]`       | Verify IaC artefacts / lifecycle exist |
-| `validate_environment()` | `Tuple[bool, List[str]]`       | Verify tool binary / auth              |
-| `setup()`                | `Tuple[bool, List[str]]`       | Initialise the tool                    |
-| `check()`                | `Tuple[bool, List[str]]`       | Validate configuration                 |
-| `plan()`                 | `Tuple[bool, List[str]]`       | Preview changes                        |
-| `apply()`                | `Tuple[bool, List[str]]`       | Apply changes                          |
-| `destroy()`              | `Tuple[bool, List[str]]`       | Tear down resources                    |
-| `plan_destroy()`         | `Tuple[bool, List[str]]`       | Preview what destroy would remove      |
-| `show_plan()`            | `Tuple[bool, Dict, List[str]]` | Decode the saved plan file             |
-| `output()`               | `Tuple[bool, Dict, List[str]]` | Retrieve infrastructure outputs        |
+| Method                   | Returns                              | Description                                                                                                                           |
+| ------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_deployer_name()`    | `str`                                | Canonical name (e.g. `"terraform"`)                                                                                                   |
+| `get_supported_steps()`  | `List[str]`                          | Ordered step names                                                                                                                    |
+| `validate_workspace()`   | `Tuple[bool, List[str]]`             | Verify IaC artefacts / lifecycle exist                                                                                                |
+| `validate_environment()` | `Tuple[bool, List[str]]`             | Verify tool binary / auth                                                                                                             |
+| `setup()`                | `Tuple[bool, List[str]]`             | Initialise the tool                                                                                                                   |
+| `check()`                | `Tuple[bool, List[str]]`             | Validate configuration                                                                                                                |
+| `plan()`                 | `Tuple[bool, List[str]]`             | Preview changes                                                                                                                       |
+| `apply()`                | `Tuple[bool, List[str]]`             | Apply changes                                                                                                                         |
+| `destroy()`              | `Tuple[bool, List[str]]`             | Tear down resources                                                                                                                   |
+| `plan_destroy()`         | `Tuple[bool, List[str]]`             | Preview what destroy would remove                                                                                                     |
+| `show_plan()`            | `Tuple[bool, Dict, List[str]]`       | Decode the saved plan file                                                                                                            |
+| `output()`               | `Tuple[bool, Dict, List[str]]`       | Retrieve infrastructure outputs (values only, no sensitivity)                                                                         |
+| `collect_outputs()`      | `Tuple[bool, Dict, Dict, List[str]]` | Collect outputs split by sensitivity — `(ok, non_sensitive, sensitive, msgs)`. Used by the deploy pipeline for cross-stage injection. |
 
 ### Step constants
 
@@ -117,6 +118,22 @@ Resolves the `WorkspaceIacModel` for the stage (priority: explicit `stage.provis
 ### validate_environment
 
 Looks up the `TerraformIntegration` instance by name from `IntegrationService` and calls `is_available()`. Must be called after `validate_workspace()`.
+
+### collect_outputs
+
+Reads the raw `terraform output -json` descriptor format to split outputs by sensitivity:
+
+```json
+{
+  "cluster_endpoint": { "value": "https://...", "type": "string", "sensitive": false },
+  "kubeconfig":        { "value": "...",         "type": "string", "sensitive": true  }
+}
+```
+
+- `sensitive: false` (or absent) → returned in the **first** dict (`non_sensitive`). The deploy pipeline injects these as `TF_VAR_<key>` for subsequent stages.
+- `sensitive: true` → returned in the **second** dict (`sensitive`). Held in memory only — never written to environment variables.
+
+Note: `collect_outputs()` runs `terraform output -json` independently of the `output()` step method. The `output()` step strips the descriptor envelope before returning values, making the `sensitive` flag inaccessible. `collect_outputs()` reads the raw form to preserve it.
 
 ### IaC model resolution priority
 

@@ -341,6 +341,114 @@ production-deployment.yaml:
 9. Verify → Run health checks
 10. Register → Register deployment instance
 
+## Stages
+
+Deployment stages are the unit of execution. Each stage maps to exactly one deployer run (one IaC tool, one lifecycle context). Stages execute sequentially in declaration order.
+
+```yaml
+stages:
+  - name: network          # Unique label within the deployment
+    provisioner: my_tf     # Name of a provisioner in workspace.spec.provisioners
+    # topology: k8s_aks   # Alternative to provisioner — resolved via topology map
+    # scope: infra        # Optional label for --scope CLI filtering (see deploy run --scope)
+    steps:                 # Which steps to run (default: all supported steps)
+      - setup
+      - check
+      - plan
+      - apply
+    timeouts:              # Per-step overrides (seconds)
+      setup: 120
+      plan: 600
+      apply: 3600
+```
+
+### `provisioner` vs `topology`
+
+Exactly one of `provisioner` or `topology` must be set (or omitted when the workspace has a single provisioner and the deployer can infer it).
+
+| Field         | Behaviour                                                                                                                                                                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provisioner` | Matches a provisioner entry in `workspace.spec.provisioners` by **name**. Direct, explicit.                                                                                                                                                               |
+| `topology`    | Looks up a topology entry in `workspace.spec.topology` by name, reads its `provisioner` type, then finds the matching provisioner. Use when stages should be expressed in logical terms (e.g. "kubernetes") rather than tooling names (e.g. "my_aks_tf"). |
+
+If both are set, `provisioner` takes precedence. If neither is set and the workspace has a single provisioner, that one is used as a fallback.
+
+### `scope` — stage filtering
+
+`scope` is an optional free-form label. Assign the same label to stages that belong to the same logical group, then use `--scope <label>` on the CLI to run only that group:
+
+```bash
+strata deploy run  --scope infra   # only stages with scope: infra
+strata deploy run  --scope apps    # only stages with scope: apps
+strata deploy run                  # all stages (no scope filter)
+```
+
+Stages without a `scope` field are skipped when `--scope` is set. This is intentional — unlabelled stages are treated as "always run" only when no filter is active.
+
+### Steps
+
+Each step name maps directly to a deployer method. When `steps` is omitted the deployer's default set is used.
+
+| Step           | Deployer method  | Typical purpose                         |
+| -------------- | ---------------- | --------------------------------------- |
+| `setup`        | `setup()`        | Initialise tool (e.g. `terraform init`) |
+| `check`        | `check()`        | Validate configuration                  |
+| `plan`         | `plan()`         | Preview changes                         |
+| `apply`        | `apply()`        | Apply changes                           |
+| `destroy`      | `destroy()`      | Tear down resources                     |
+| `plan_destroy` | `plan_destroy()` | Preview destroy                         |
+| `output`       | `output()`       | Emit infrastructure outputs             |
+| `show_plan`    | `show_plan()`    | Display saved plan                      |
+
+---
+
+## Cross-Stage Outputs
+
+After a stage's `apply` step completes, the deployer collects its outputs and makes them available to all **subsequent** stages in the same deployment run. This requires zero YAML configuration — the pipeline handles injection automatically.
+
+### How it works
+
+1. After `apply`, `RunDeployCommand` calls `deployer.collect_outputs()` on the just-completed stage.
+2. Non-sensitive outputs are stored in `ResolvedValues.stage_outputs` and injected into every subsequent stage via `TF_VAR_<key>` (Terraform) or bare `<KEY>` (Compose).
+3. Sensitive outputs are stored in `ResolvedValues.stage_outputs_sensitive` and **never injected** — they are held in memory for internal use only.
+
+### Sensitive output handling
+
+Sensitivity is determined by the IaC tool, not by YAML configuration.
+
+**Terraform** — reads the `sensitive` flag from `terraform output -json`:
+
+```hcl
+output "cluster_endpoint" {
+  value     = azurerm_kubernetes_cluster.main.kube_config[0].host
+  sensitive = false  # → injected as TF_VAR_cluster_endpoint in downstream stages
+}
+
+output "kubeconfig" {
+  value     = azurerm_kubernetes_cluster.main.kube_config_raw
+  sensitive = true   # → held internally, never injected
+}
+```
+
+**Other deployers** — use underscore-prefix convention: keys starting with `_` are treated as sensitive.
+
+### Injection format
+
+| Deployer type        | Injection format               | Example                               |
+| -------------------- | ------------------------------ | ------------------------------------- |
+| Terraform / OpenTofu | `TF_VAR_<key>` env var         | `TF_VAR_cluster_endpoint=https://...` |
+| Docker Compose       | Bare key env var + `.env` file | `CLUSTER_ENDPOINT=https://...`        |
+
+Dictionaries and lists are JSON-encoded before injection.
+
+### Console output
+
+```
+✓  Collected 3 output(s), 1 sensitive (not injected) for downstream stages.
+```
+
+---
+
 ## Provisioner Stage Types
 
 Stages reference a provisioner by name. The backend tool used by that provisioner determines which deployer executes the stage.

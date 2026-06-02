@@ -382,3 +382,122 @@ class TestValueControllerGithubStore:
         assert err is None
         assert val == "s3cr3t"
         mock_logger.warning.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# ResolvedValues — stage_outputs and stage_outputs_sensitive
+# ---------------------------------------------------------------------------
+
+
+class TestResolvedValuesStageOutputs:
+    # --- is_empty ---
+
+    def test_is_empty_false_with_stage_outputs(self):
+        rv = ResolvedValues(stage_outputs={"cluster_ip": "1.2.3.4"})
+        assert rv.is_empty() is False
+
+    def test_is_empty_true_with_only_sensitive_outputs(self):
+        # stage_outputs_sensitive alone does not flip is_empty — sensitive values
+        # are never injected, so there is nothing to "do" from the env perspective.
+        rv = ResolvedValues(stage_outputs_sensitive={"admin_token": "secret"})
+        assert rv.is_empty() is True
+
+    # --- as_tf_vars: non-sensitive outputs ARE injected ---
+
+    def test_stage_outputs_present_in_tf_vars(self):
+        rv = ResolvedValues(stage_outputs={"cluster_ip": "10.0.0.1"})
+        tf = rv.as_tf_vars()
+        assert tf["TF_VAR_cluster_ip"] == "10.0.0.1"
+
+    def test_stage_outputs_dict_value_json_encoded_in_tf_vars(self):
+        rv = ResolvedValues(stage_outputs={"config": {"host": "db", "port": 5432}})
+        tf = rv.as_tf_vars()
+        import json
+
+        assert tf["TF_VAR_config"] == json.dumps({"host": "db", "port": 5432})
+
+    def test_stage_outputs_list_value_json_encoded_in_tf_vars(self):
+        rv = ResolvedValues(stage_outputs={"zones": ["a", "b", "c"]})
+        tf = rv.as_tf_vars()
+        import json
+
+        assert tf["TF_VAR_zones"] == json.dumps(["a", "b", "c"])
+
+    def test_stage_outputs_none_value_skipped_in_tf_vars(self):
+        rv = ResolvedValues(stage_outputs={"key": None})
+        tf = rv.as_tf_vars()
+        assert "TF_VAR_key" not in tf
+
+    # --- as_tf_vars: sensitive outputs are NOT injected ---
+
+    def test_stage_outputs_sensitive_absent_from_tf_vars(self):
+        rv = ResolvedValues(stage_outputs_sensitive={"admin_token": "secret"})
+        tf = rv.as_tf_vars()
+        assert "TF_VAR_admin_token" not in tf
+
+    def test_stage_outputs_sensitive_absent_even_with_other_vars(self):
+        rv = ResolvedValues(
+            variables={"region": "eu"},
+            stage_outputs={"endpoint": "https://x"},
+            stage_outputs_sensitive={"token": "s3cr3t"},
+        )
+        tf = rv.as_tf_vars()
+        assert "TF_VAR_region" in tf
+        assert "TF_VAR_endpoint" in tf
+        assert "TF_VAR_token" not in tf
+
+    # --- as_compose_env: non-sensitive outputs ARE injected verbatim ---
+
+    def test_stage_outputs_present_in_compose_env(self):
+        rv = ResolvedValues(stage_outputs={"DB_HOST": "postgres"})
+        env = rv.as_compose_env()
+        assert env["DB_HOST"] == "postgres"
+        assert "TF_VAR_DB_HOST" not in env
+
+    def test_stage_outputs_dict_value_json_encoded_in_compose_env(self):
+        rv = ResolvedValues(stage_outputs={"config": {"a": 1}})
+        env = rv.as_compose_env()
+        import json
+
+        assert env["config"] == json.dumps({"a": 1})
+
+    def test_stage_outputs_none_value_skipped_in_compose_env(self):
+        rv = ResolvedValues(stage_outputs={"missing": None})
+        env = rv.as_compose_env()
+        assert "missing" not in env
+
+    # --- as_compose_env: sensitive outputs are NOT injected ---
+
+    def test_stage_outputs_sensitive_absent_from_compose_env(self):
+        rv = ResolvedValues(stage_outputs_sensitive={"DB_PASSWORD": "hunter2"})
+        env = rv.as_compose_env()
+        assert "DB_PASSWORD" not in env
+
+    # --- injection context manager picks up stage_outputs ---
+
+    def test_inject_tf_vars_injects_stage_outputs(self):
+        rv = ResolvedValues(stage_outputs={"cluster_ip": "1.2.3.4"})
+        os.environ.pop("TF_VAR_cluster_ip", None)
+        with inject_tf_vars(rv):
+            assert os.environ.get("TF_VAR_cluster_ip") == "1.2.3.4"
+        assert "TF_VAR_cluster_ip" not in os.environ
+
+    def test_inject_tf_vars_does_not_inject_sensitive(self):
+        rv = ResolvedValues(stage_outputs_sensitive={"admin_token": "secret"})
+        os.environ.pop("TF_VAR_admin_token", None)
+        with inject_tf_vars(rv):
+            assert "TF_VAR_admin_token" not in os.environ
+        assert "TF_VAR_admin_token" not in os.environ
+
+    def test_inject_compose_env_injects_stage_outputs(self):
+        rv = ResolvedValues(stage_outputs={"DB_HOST": "postgres"})
+        os.environ.pop("DB_HOST", None)
+        with inject_compose_env(rv):
+            assert os.environ.get("DB_HOST") == "postgres"
+        assert "DB_HOST" not in os.environ
+
+    def test_inject_compose_env_does_not_inject_sensitive(self):
+        rv = ResolvedValues(stage_outputs_sensitive={"DB_PASSWORD": "hunter2"})
+        os.environ.pop("DB_PASSWORD", None)
+        with inject_compose_env(rv):
+            assert "DB_PASSWORD" not in os.environ

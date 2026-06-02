@@ -375,14 +375,45 @@ class TerraformDeployer(BaseDeployer):
 
         return True, messages
 
-    def collect_outputs(self) -> Tuple[bool, Dict[str, Any], List[str]]:
-        """Collect Terraform outputs after a successful apply and return as a flat dict.
+    def collect_outputs(self) -> Tuple[bool, Dict[str, Any], Dict[str, Any], List[str]]:
+        """Collect Terraform outputs after a successful apply, split by sensitivity.
 
-        Delegates to :meth:`output` (``terraform output -json``).  Values are
-        unwrapped from the Terraform ``{value, type}`` envelope so callers receive
-        a plain ``{name: value}`` dict suitable for env-var injection.
+        Runs ``terraform output -json`` and reads the ``sensitive`` flag on each
+        output descriptor.  Non-sensitive outputs are returned in the first dict
+        and will be injected as ``TF_VAR_<key>`` env vars for downstream stages.
+        Sensitive outputs (``sensitive = true`` in Terraform) are returned in the
+        second dict — the pipeline holds them internally but never injects them
+        into subprocess environments.
+
+        Returns:
+            (success, non_sensitive_outputs, sensitive_outputs, messages)
         """
-        return self.output()
+        messages: List[str] = []
+        non_sensitive: Dict[str, Any] = {}
+        sensitive: Dict[str, Any] = {}
+
+        if not self._ready(messages):
+            return False, non_sensitive, sensitive, messages
+        assert self._working_dir is not None
+        assert self._tf is not None
+
+        try:
+            result = self._tf.output(str(self._working_dir))
+            if result.returncode != 0:
+                messages.append(f"terraform output failed:\n{result.stderr}")
+                return False, non_sensitive, sensitive, messages
+            raw: Dict[str, Any] = json.loads(result.stdout or "{}")
+            for key, descriptor in raw.items():
+                val = descriptor.get("value")
+                if descriptor.get("sensitive", False):
+                    sensitive[key] = val
+                else:
+                    non_sensitive[key] = val
+        except (RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            messages.append(f"terraform output error: {exc}")
+            return False, non_sensitive, sensitive, messages
+
+        return True, non_sensitive, sensitive, messages
 
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:
         """terraform output -json -> {name: value} dict"""

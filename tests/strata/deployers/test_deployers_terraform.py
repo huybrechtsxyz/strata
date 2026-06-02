@@ -695,3 +695,127 @@ class TestTerraformDeployerTimeouts:
         d._tf.plan.return_value = _ok()
         d.plan()
         assert d._tf.plan.call_args[1].get("timeout") == 99  # override
+
+
+# ---------------------------------------------------------------------------
+# TerraformDeployer.collect_outputs
+# ---------------------------------------------------------------------------
+
+
+class TestTerraformDeployerCollectOutputs:
+    """collect_outputs splits Terraform outputs by the 'sensitive' flag.
+
+    Non-sensitive outputs are returned in the first dict (will be injected
+    as TF_VAR_* env vars for downstream stages).  Sensitive outputs are
+    returned in the second dict (held internally, never injected).
+    """
+
+    def test_non_sensitive_output_in_first_dict(self, tmp_path):
+        raw = json.dumps({"vpc_id": {"value": "vpc-123", "type": "string", "sensitive": False}})
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout=raw)
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is True
+        assert non_sensitive == {"vpc_id": "vpc-123"}
+        assert sensitive == {}
+
+    def test_sensitive_output_in_second_dict(self, tmp_path):
+        raw = json.dumps({"admin_token": {"value": "s3cr3t", "type": "string", "sensitive": True}})
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout=raw)
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is True
+        assert non_sensitive == {}
+        assert sensitive == {"admin_token": "s3cr3t"}
+
+    def test_mixed_outputs_split_correctly(self, tmp_path):
+        raw = json.dumps(
+            {
+                "cluster_ip": {"value": "10.0.0.1", "type": "string", "sensitive": False},
+                "kubeconfig": {"value": "YAML...", "type": "string", "sensitive": True},
+                "db_host": {"value": "db.local", "type": "string", "sensitive": False},
+                "db_password": {"value": "hunter2", "type": "string", "sensitive": True},
+            }
+        )
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout=raw)
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is True
+        assert set(non_sensitive.keys()) == {"cluster_ip", "db_host"}
+        assert non_sensitive["cluster_ip"] == "10.0.0.1"
+        assert set(sensitive.keys()) == {"kubeconfig", "db_password"}
+        assert sensitive["db_password"] == "hunter2"
+
+    def test_all_sensitive_returns_empty_non_sensitive(self, tmp_path):
+        raw = json.dumps(
+            {
+                "token": {"value": "abc", "type": "string", "sensitive": True},
+            }
+        )
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout=raw)
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is True
+        assert non_sensitive == {}
+        assert sensitive == {"token": "abc"}
+
+    def test_all_non_sensitive_returns_empty_sensitive(self, tmp_path):
+        raw = json.dumps(
+            {
+                "endpoint": {"value": "https://x", "type": "string", "sensitive": False},
+            }
+        )
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout=raw)
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is True
+        assert non_sensitive == {"endpoint": "https://x"}
+        assert sensitive == {}
+
+    def test_missing_sensitive_flag_treated_as_non_sensitive(self, tmp_path):
+        """Outputs that lack a 'sensitive' field default to non-sensitive."""
+        raw = json.dumps({"vpc_id": {"value": "vpc-abc", "type": "string"}})
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout=raw)
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is True
+        assert non_sensitive == {"vpc_id": "vpc-abc"}
+        assert sensitive == {}
+
+    def test_empty_output_returns_empty_dicts(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout="{}")
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is True
+        assert non_sensitive == {}
+        assert sensitive == {}
+
+    def test_complex_non_sensitive_value_preserved(self, tmp_path):
+        raw = json.dumps(
+            {
+                "subnet_ids": {"value": ["subnet-1", "subnet-2"], "type": "list", "sensitive": False},
+            }
+        )
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout=raw)
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is True
+        assert non_sensitive["subnet_ids"] == ["subnet-1", "subnet-2"]
+
+    def test_failure_returns_false_and_empty_dicts(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _fail("no state file")
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is False
+        assert non_sensitive == {}
+        assert sensitive == {}
+        assert any("terraform output failed" in m for m in msgs)
+
+    def test_invalid_json_returns_false(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d._tf.output.return_value = _ok(stdout="not json")
+        ok, non_sensitive, sensitive, msgs = d.collect_outputs()
+        assert ok is False
+        assert non_sensitive == {}
+        assert sensitive == {}
+        assert any("terraform output error" in m for m in msgs)

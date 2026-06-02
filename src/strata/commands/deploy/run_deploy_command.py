@@ -351,12 +351,15 @@ class RunDeployCommand(BaseDeployCommand):
 
         # --- collect outputs for downstream stages ---
         if STEP_APPLY in steps_to_run:
-            _ok_out, _outputs, _out_msgs = deployer.collect_outputs()
-            if _ok_out and _outputs:
-                if self._resolved_values is not None:
+            _ok_out, _outputs, _sensitive, _out_msgs = deployer.collect_outputs()
+            if _ok_out and self._resolved_values is not None:
+                if _outputs:
                     self._resolved_values.stage_outputs.update(_outputs)
-                if self._is_console_output():
-                    click.echo(f"    \u2713  Collected {len(_outputs)} output(s): {list(_outputs.keys())}")
+                if _sensitive:
+                    self._resolved_values.stage_outputs_sensitive.update(_sensitive)
+                if self._is_console_output() and (_outputs or _sensitive):
+                    _sens_note = f", {len(_sensitive)} sensitive (not injected)" if _sensitive else ""
+                    click.echo(f"    \u2713  Collected {len(_outputs)} output(s){_sens_note} for downstream stages.")
         elif self._dry_run and self._is_console_output():
             click.echo("    [DRY-RUN] Stage outputs not captured \u2014 apply did not run.")
 
