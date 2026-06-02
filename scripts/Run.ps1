@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Runs the XYZ Platform CLI, forwarding all arguments.
+    Runs the strata CLI, forwarding all arguments.
 .DESCRIPTION
     Executes the strata CLI via uv. All arguments are forwarded to the CLI.
 .PARAMETER Clean

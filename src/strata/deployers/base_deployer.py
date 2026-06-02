@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from strata.logger import get_logger
 from strata.models.deployment_model import DeploymentStageModel
+from strata.models.workspace_model import WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 
@@ -170,6 +171,18 @@ class BaseDeployer(ABC):
         """
         raise NotImplementedError
 
+    def describe_plan(self) -> List[str]:
+        """Return human-readable lines describing what this deployer would execute.
+
+        Called by the deploy pipeline in dry-run mode after validation succeeds,
+        before any steps run.  Override in deployers that can surface meaningful
+        plan context (e.g. AnsibleDeployer emits playbook and inventory paths).
+
+        Returns:
+            List of descriptive strings — empty list if nothing to report.
+        """
+        return []
+
     def save_plan_json(self) -> Tuple[bool, Optional[Path], List[str]]:
         """Persist the plan as a human-readable JSON file alongside the binary plan.
 
@@ -181,6 +194,29 @@ class BaseDeployer(ABC):
             (success, path_or_None, messages)
         """
         return True, None, []
+
+    def collect_outputs(self) -> Tuple[bool, Dict[str, Any], Dict[str, Any], List[str]]:
+        """Collect outputs produced by this stage after a successful apply.
+
+        Called by the deploy pipeline after ``apply`` completes.  The returned
+        dicts are merged into ``ResolvedValues.stage_outputs`` (non-sensitive)
+        and ``ResolvedValues.stage_outputs_sensitive`` (sensitive) and made
+        available to all subsequent stages.
+
+        Non-sensitive outputs are injected as ``TF_VAR_<key>`` / verbatim env
+        vars into every subsequent stage subprocess.  Sensitive outputs are
+        held internally by the system but never injected into subprocess
+        environments, preventing accidental secret leakage.
+
+        Sensitivity is determined by the deployer:
+        - Terraform: reads the ``sensitive`` flag from ``terraform output -json``
+        - Other deployers: underscore-prefix convention (``_key`` → sensitive)
+        - Default (no outputs): returns empty dicts for both buckets
+
+        Returns:
+            (success, non_sensitive_outputs, sensitive_outputs, messages)
+        """
+        return True, {}, {}, []
 
     @abstractmethod
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:
@@ -202,3 +238,64 @@ class BaseDeployer(ABC):
             return default
         val = getattr(t, step, None)
         return val if val is not None else default
+
+    def _resolve_iac_model(
+        self,
+        stage: DeploymentStageModel,
+        workspace_service,
+    ) -> Optional[WorkspaceIacModel]:
+        """Resolve the WorkspaceIacModel for a stage.
+
+        Priority:
+        1. stage.provisioner set — match workspace.spec.provisioners by name.
+        2. stage.topology set   — find topology by name; topo.provisioner is a
+                                  name reference, so look up the IaC entry by name.
+        3. Single provisioner   — use it unconditionally.
+        """
+        spec = workspace_service.model.spec
+        provisioners = spec.provisioners or []
+
+        if not provisioners:
+            return None
+
+        # Priority 1: explicit provisioner name on stage
+        if stage.provisioner:
+            match = next((p for p in provisioners if p.name == stage.provisioner), None)
+            if match:
+                return match
+            self.logger.warning(
+                "stage.provisioner name not found in workspace.spec.provisioners",
+                stage=stage.name,
+                provisioner=stage.provisioner,
+            )
+
+        # Priority 2: resolve via topology (topo.provisioner is a name reference)
+        if stage.topology:
+            topo = next(
+                (t for t in (spec.topology or []) if t.name == stage.topology),
+                None,
+            )
+            if topo:
+                match = next(
+                    (p for p in provisioners if p.name == topo.provisioner),
+                    None,
+                )
+                if match:
+                    return match
+                self.logger.warning(
+                    "No workspace provisioner matches topology.provisioner name",
+                    stage=stage.name,
+                    topology=stage.topology,
+                    provisioner_name=str(topo.provisioner),
+                )
+
+        # Priority 3: single provisioner — use it directly
+        if len(provisioners) == 1:
+            self.logger.debug(
+                "Using sole workspace provisioner for stage (no explicit reference)",
+                stage=stage.name,
+                provisioner=provisioners[0].name,
+            )
+            return provisioners[0]
+
+        return None

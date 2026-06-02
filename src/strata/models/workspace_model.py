@@ -99,7 +99,9 @@ class WorkspaceTopologyModel(BaseModel):
     provider: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         ..., description="Provider name used for this topology"
     )
-    provisioner: ProvisionerType = Field(..., description="IaC tool used for provisioning")
+    provisioner: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        ..., description="IaC provisioner name reference (must match a provisioner defined in spec.provisioners)"
+    )
     type: PlatformName = Field(..., description="Topology type (e.g., dockerswarm, kubernetes, azure-native)")
     components: Annotated[
         List[WorkspaceComponentModel],
@@ -230,6 +232,27 @@ class WorkspaceIacBackendModel(BaseModel):
     )
 
 
+class WorkspaceIacAnsiblePropertiesModel(BaseModel):
+    """Typed properties for an Ansible provisioner entry."""
+
+    playbook: Optional[str] = Field(
+        None,
+        description="Playbook file to run, relative to the playbook directory (default: site.yml)",
+    )
+    inventory: Optional[str] = Field(
+        None,
+        description="Static inventory file path, relative to the playbook directory",
+    )
+    ssh_private_key_secret: Optional[str] = Field(
+        None,
+        description="Name of the secret holding the SSH private key (default: ssh_private_key)",
+    )
+    extra_vars: Optional[Dict[str, str]] = Field(
+        None,
+        description="Extra variables passed to ansible-playbook via --extra-vars",
+    )
+
+
 class WorkspaceIacModel(BaseModel):
     name: PlatformName
     description: Optional[str] = Field(
@@ -242,10 +265,24 @@ class WorkspaceIacModel(BaseModel):
         None,
         description="Backend configuration for state storage (e.g., Terraform Cloud, S3, Azure Storage)",
     )
+    properties: Optional[WorkspaceIacAnsiblePropertiesModel] = Field(
+        None,
+        description="Provisioner-specific typed properties (currently supported: ansible)",
+    )
     configuration: Optional[Dict[str, Any]] = Field(
         None,
         description="Tool-specific configuration (e.g. playbook, inventory, ssh_private_key_secret for Ansible; backend overrides for Terraform).",
     )
+
+    @model_validator(mode="after")
+    def validate_properties_provisioner_type(self) -> "WorkspaceIacModel":
+        """Ensure properties is only set for provisioner types that support it."""
+        if self.properties is not None and self.provisioner != ProvisionerType.ANSIBLE:
+            raise ValueError(
+                f"Provisioner '{self.name}': 'properties' is only supported for ansible provisioners "
+                f"(got provisioner='{self.provisioner.value}')"
+            )
+        return self
 
 
 class WorkspaceProviderModel(BaseModel):
@@ -460,6 +497,27 @@ class WorkspaceSpecModel(BaseModel):
 
         if invalid_refs:
             raise ValueError(f"Invalid namespace references in topology: {'; '.join(invalid_refs)}")
+
+        return self
+
+    # Validate topology provisioner name references
+    @model_validator(mode="after")
+    def validate_topology_provisioner_references(self) -> "WorkspaceSpecModel":
+        """Validate that all provisioner references in topology exist in spec.provisioners by name."""
+        if not self.topology:
+            return self
+
+        provisioner_names = {prov.name for prov in self.provisioners}
+
+        invalid_refs = []
+        for topology in self.topology:
+            if topology.provisioner not in provisioner_names:
+                invalid_refs.append(
+                    f"Topology '{topology.name}' references undefined provisioner '{topology.provisioner}'"
+                )
+
+        if invalid_refs:
+            raise ValueError(f"Invalid provisioner references in topology: {'; '.join(invalid_refs)}")
 
         return self
 

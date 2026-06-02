@@ -334,12 +334,176 @@ production-deployment.yaml:
 2. Resolve sources → Fetch workspace/environment/config files
 3. Merge configurations → Apply merge order
 4. Validate → Validate merged config
-5. Generate artifacts → Create Terraform/manifests
+5. Generate artifacts → Create Terraform/manifests/Helm values
 6. Execute lifecycle → Run workspace phases
 7. Provision infrastructure → Deploy infrastructure
 8. Deploy applications → Deploy namespaces/modules
 9. Verify → Run health checks
 10. Register → Register deployment instance
+
+## Stages
+
+Deployment stages are the unit of execution. Each stage maps to exactly one deployer run (one IaC tool, one lifecycle context). Stages execute sequentially in declaration order.
+
+```yaml
+stages:
+  - name: network          # Unique label within the deployment
+    provisioner: my_tf     # Name of a provisioner in workspace.spec.provisioners
+    # topology: k8s_aks   # Alternative to provisioner — resolved via topology map
+    # scope: infra        # Optional label for --scope CLI filtering (see deploy run --scope)
+    secrets:               # Allowlist of secrets this stage may access (default-deny)
+      - hetzner_api_token
+    steps:                 # Which steps to run (default: all supported steps)
+      - setup
+      - check
+      - plan
+      - apply
+    timeouts:              # Per-step overrides (seconds)
+      setup: 120
+      plan: 600
+      apply: 3600
+```
+
+### `provisioner` vs `topology`
+
+Exactly one of `provisioner` or `topology` must be set (or omitted when the workspace has a single provisioner and the deployer can infer it).
+
+| Field         | Behaviour                                                                                                                                                                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provisioner` | Matches a provisioner entry in `workspace.spec.provisioners` by **name**. Direct, explicit.                                                                                                                                                               |
+| `topology`    | Looks up a topology entry in `workspace.spec.topology` by name, reads its `provisioner` type, then finds the matching provisioner. Use when stages should be expressed in logical terms (e.g. "kubernetes") rather than tooling names (e.g. "my_aks_tf"). |
+
+If both are set, `provisioner` takes precedence. If neither is set and the workspace has a single provisioner, that one is used as a fallback.
+
+### `scope` — stage filtering
+
+`scope` is an optional free-form label. Assign the same label to stages that belong to the same logical group, then use `--scope <label>` on the CLI to run only that group:
+
+```bash
+strata deploy run  --scope infra   # only stages with scope: infra
+strata deploy run  --scope apps    # only stages with scope: apps
+strata deploy run                  # all stages (no scope filter)
+```
+
+Stages without a `scope` field are skipped when `--scope` is set. This is intentional — unlabelled stages are treated as "always run" only when no filter is active.
+
+### Steps
+
+Each step name maps directly to a deployer method. When `steps` is omitted the deployer's default set is used.
+
+| Step           | Deployer method  | Typical purpose                         |
+| -------------- | ---------------- | --------------------------------------- |
+| `setup`        | `setup()`        | Initialise tool (e.g. `terraform init`) |
+| `check`        | `check()`        | Validate configuration                  |
+| `plan`         | `plan()`         | Preview changes                         |
+| `apply`        | `apply()`        | Apply changes                           |
+| `destroy`      | `destroy()`      | Tear down resources                     |
+| `plan_destroy` | `plan_destroy()` | Preview destroy                         |
+| `output`       | `output()`       | Emit infrastructure outputs             |
+| `show_plan`    | `show_plan()`    | Display saved plan                      |
+
+---
+
+## Cross-Stage Outputs
+
+After a stage's `apply` step completes, the deployer collects its outputs and makes them available to all **subsequent** stages in the same deployment run. This requires zero YAML configuration — the pipeline handles injection automatically.
+
+### STRATA_CONTEXT and STRATA_SENSITIVE
+
+Two runtime dictionaries flow through the deployment pipeline:
+
+| Name                 | Contents                                           | Injected into subprocesses                 | Logged |
+| -------------------- | -------------------------------------------------- | ------------------------------------------ | ------ |
+| **STRATA_CONTEXT**   | variables + features + non-sensitive stage outputs | Yes (`TF_VAR_*`, `--extra-vars`, env vars) | Yes    |
+| **STRATA_SENSITIVE** | secrets + sensitive stage outputs                  | Only keys declared per stage               | Never  |
+
+**STRATA_CONTEXT** is seeded with environment variables and features before the first stage runs. After each stage completes, its non-sensitive outputs are added. Every subsequent stage receives the full accumulated context automatically.
+
+**STRATA_SENSITIVE** is seeded with secrets before the first stage runs. Sensitive stage outputs accumulate after each stage. Access is **default-deny** — a stage receives only the secret keys it declares in its `secrets` allowlist.
+
+### Stage secret scoping
+
+Each stage declares which secrets it may access. This is a security measure — stages only see what they need.
+
+```yaml
+stages:
+  - name: provision
+    provisioner: terraform_hetzner
+    secrets:
+      - hetzner_api_token        # Only this secret is visible
+
+  - name: configure
+    topology: hetzner_servers
+    secrets:
+      - ssh_private_key          # Only SSH key visible, not the API token
+
+  - name: verify
+    provisioner: script_healthcheck
+    # No secrets declared → no sensitive values available
+```
+
+| `secrets` value      | Behaviour                                              |
+| -------------------- | ------------------------------------------------------ |
+| Omitted / `null`     | No secrets — default-deny                              |
+| `[]` (empty list)    | No secrets — explicit deny                             |
+| `["key_a", "key_b"]` | Only those keys from secrets + sensitive stage outputs |
+| `["*"]`              | All secrets + all sensitive outputs (escape hatch)     |
+
+### How it works
+
+1. After `apply`, `RunDeployCommand` calls `deployer.collect_outputs()` on the just-completed stage.
+2. Non-sensitive outputs are stored in `ResolvedValues.stage_outputs` and injected into every subsequent stage via `TF_VAR_<key>` (Terraform) or bare `<KEY>` (Compose).
+3. Sensitive outputs are stored in `ResolvedValues.stage_outputs_sensitive` and filtered by the next stage's `secrets` allowlist before injection.
+
+### Sensitive output handling
+
+Sensitivity is determined by the IaC tool, not by YAML configuration.
+
+**Terraform** — reads the `sensitive` flag from `terraform output -json`:
+
+```hcl
+output "cluster_endpoint" {
+  value     = azurerm_kubernetes_cluster.main.kube_config[0].host
+  sensitive = false  # → injected as TF_VAR_cluster_endpoint in downstream stages
+}
+
+output "kubeconfig" {
+  value     = azurerm_kubernetes_cluster.main.kube_config_raw
+  sensitive = true   # → held internally, never injected
+}
+```
+
+**Other deployers** — use underscore-prefix convention: keys starting with `_` are treated as sensitive.
+
+### Injection format
+
+| Deployer type        | Injection format               | Example                               |
+| -------------------- | ------------------------------ | ------------------------------------- |
+| Terraform / OpenTofu | `TF_VAR_<key>` env var         | `TF_VAR_cluster_endpoint=https://...` |
+| Docker Compose       | Bare key env var + `.env` file | `CLUSTER_ENDPOINT=https://...`        |
+
+Dictionaries and lists are JSON-encoded before injection.
+
+### Console output
+
+```
+✓  Collected 3 output(s), 1 sensitive (not injected) for downstream stages.
+```
+
+---
+
+## Provisioner Stage Types
+
+Stages reference a provisioner by name. The backend tool used by that provisioner determines which deployer executes the stage.
+
+| Type        | Deployer            | Notes                                                                                                                                              |
+| ----------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `terraform` | `TerraformDeployer` | Requires `terraform` CLI                                                                                                                           |
+| `opentofu`  | `TerraformDeployer` | Requires `tofu` CLI                                                                                                                                |
+| `ansible`   | `AnsibleDeployer`   | Requires `ansible-playbook` CLI                                                                                                                    |
+| `compose`   | `ComposeDeployer`   | Requires Docker with Swarm mode; deploys per-namespace `docker-compose.yml` files. See [ComposeDeployer](../platform/deployers.md#composedeployer) |
+| `helm`      | `HelmDeployer`      | Requires `helm` CLI; deploys per-module Helm releases. See [HelmDeployer](../platform/deployers.md#helmdeployer)                                   |
+| `script`    | `ScriptDeployer`    | Executes lifecycle scripts; no external CLI required                                                                                               |
 
 ## Source Types
 

@@ -1,6 +1,6 @@
-# XYZ Platform - Security Policy
+# strata - Security Policy
 
-Thank you for helping keep Platform XYZ secure. Please do not open public issue trackers for security vulnerabilities.
+Thank you for helping keep strata secure. Please do not open public issue trackers for security vulnerabilities.
 
 ## Reporting a Vulnerability
 

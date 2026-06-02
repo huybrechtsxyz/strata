@@ -1,6 +1,6 @@
-# XYZ Platform - Code of Conduct
+# strata - Code of Conduct
 
-All participants in the Platform XYZ project are expected to follow this Code of Conduct. Its purpose is to ensure a welcoming, inclusive, and respectful community.
+All participants in the strata project are expected to follow this Code of Conduct. Its purpose is to ensure a welcoming, inclusive, and respectful community.
 
 ## Our standards
 

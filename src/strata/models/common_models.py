@@ -13,6 +13,7 @@ from pydantic import (
     RootModel,
     StringConstraints,
     field_validator,
+    model_validator,
 )
 
 from strata.utils.config import SCRIPT_EXTENSIONS
@@ -69,6 +70,8 @@ class ProvisionerType(str, Enum):
     TERRAFORM = "terraform"
     ANSIBLE = "ansible"
     SCRIPT = "script"
+    COMPOSE = "compose"
+    HELM = "helm"
 
 
 # Enumeration of supported service deployer types (for module-level service deployment).
@@ -164,30 +167,76 @@ class CommonLifecycleModel(RootModel):
     root: Dict[str, CommonLifecyclePhaseModel] = {}
 
 
-# Model for source configuration referencing a repository
+# Model for source configuration referencing a repository or Helm chart registry
 class SourceModel(BaseModel):
     """
-    Reusable model for source configuration that references a repository.
+    Reusable model for source configuration.
 
-    Used by resources, modules, and other components to specify where their
-    source artifacts come from and where they should be deployed/built.
+    Two modes (mutually exclusive, validated):
+      1. Git-based: repository + source_path  — used for Terraform modules, local charts, etc.
+      2. Chart-based: chart_repository + chart_name  — used for Helm/ArgoCD chart registry pulls.
 
-    Example usage in a resource:
+    Example — git-based:
         source:
           repository: my-infra-repo
           source_path: terraform/modules/vpc
           target_path: build/vpc
+
+    Example — Helm chart registry:
+        source:
+          chart_name: authentik
+          chart_version: "2024.12.0"
+          chart_repository: https://charts.goauthentik.io
     """
 
-    repository: PlatformName = Field(description="Name of the repository from configuration's repositories list")
-    source_path: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
-        description="Path to the source artifacts within the repository (relative path)"
+    repository: Optional[PlatformName] = Field(
+        None, description="Name of the repository from configuration's repositories list"
+    )
+    source_path: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
+        None,
+        description="Path to the source artifacts within the repository (relative path)",
     )
     target_path: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
         description="Target path where artifacts should be built/deployed (relative to build/deploy directory)",
     )
     description: Optional[str] = Field(None, description="Optional description for documentation purposes")
+
+    # Helm / ArgoCD chart registry fields
+    chart_name: Optional[str] = Field(
+        None,
+        description="Helm chart name (e.g. 'authentik'). Required when using chart_repository.",
+    )
+    chart_version: Optional[str] = Field(
+        None,
+        description="Helm chart version (e.g. '2024.12.0'). Omit to use latest.",
+    )
+    chart_repository: Optional[str] = Field(
+        None,
+        description="Helm chart repository URL or OCI reference (e.g. 'https://charts.goauthentik.io' or 'oci://ghcr.io/org/charts').",
+    )
+
+    @model_validator(mode="after")
+    def validate_source_mode(self) -> "SourceModel":
+        """Ensure exactly one source mode is specified: git-based or chart-based."""
+        has_git = self.repository is not None or self.source_path is not None
+        has_chart = self.chart_repository is not None or self.chart_name is not None
+
+        if not has_git and not has_chart:
+            raise ValueError(
+                "SourceModel requires either a git-based source (repository + source_path) "
+                "or a chart-based source (chart_repository + chart_name)."
+            )
+        if has_git and has_chart:
+            raise ValueError(
+                "SourceModel cannot mix git-based (repository/source_path) and "
+                "chart-based (chart_repository/chart_name) fields. Use one mode only."
+            )
+        if has_git and self.source_path is None:
+            raise ValueError("source_path is required when repository is specified.")
+        if has_chart and self.chart_name is None:
+            raise ValueError("chart_name is required when chart_repository is specified.")
+        return self
 
     @field_validator("source_path", "target_path")
     @classmethod

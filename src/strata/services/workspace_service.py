@@ -87,8 +87,8 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         # Get workspace provider names and create provider map
         workspace_provider_names = {p.name for p in self.model.spec.providers}
 
-        # Get workspace provisioner types
-        workspace_provisioner_types = {p.provisioner for p in self.model.spec.provisioners}
+        # Get workspace provisioner names (topology references provisioners by name)
+        workspace_provisioner_names = {p.name for p in self.model.spec.provisioners}
 
         # Build repository map from configuration
         config_repository_names = set()
@@ -109,7 +109,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
                     self._structured_errors.append(error)
                     errors.append(str(error))
 
-        # STEP 2: Provisioner validity is already validated by ProvisionerType enum
+        # STEP 2: Provisioner name validity is validated by the WorkspaceSpecModel model validator
 
         # STEP 3: Validate module repository references (if modules are defined in resources)
         if self.model and self.model.spec.resources:
@@ -168,13 +168,13 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
                 self._structured_errors.append(error)
                 errors.append(str(error))
 
-            # Check provisioner reference
-            if topology.provisioner not in workspace_provisioner_types:
+            # Check provisioner reference (by name)
+            if topology.provisioner not in workspace_provisioner_names:
                 error = InvalidReferenceError(
                     source_type="Topology",
                     source_name=topology.name,
                     reference_type="provisioner",
-                    reference_value=topology.provisioner.value,
+                    reference_value=topology.provisioner,
                 )
                 self._structured_errors.append(error)
                 errors.append(str(error))

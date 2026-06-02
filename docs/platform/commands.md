@@ -624,7 +624,7 @@ strata schema get environment --output text
 
 ## `deploy`
 
-> **Note:** `deploy` requires the Terraform CLI and configured integration credentials (Bitwarden, Vault, Azure Key Vault, etc.). Use `--dry-run` to run `terraform init → validate → plan` without applying any changes.
+> **Note:** Requires the CLI tool for the provisioner used by each stage (`terraform`, `helm`, `ansible-playbook`). Use `strata tools status` to verify availability. Configure integration credentials (Bitwarden, Vault, Azure Key Vault, etc.) before running. Use `--dry-run` to validate and plan without applying any changes.
 
 Deploy platform infrastructure using provisioners defined in a deployment YAML file.
 

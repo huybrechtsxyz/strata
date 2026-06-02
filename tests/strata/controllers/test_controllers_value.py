@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from strata.controllers.value_controller import (
     ResolvedValues,
     ValueController,
+    inject_compose_env,
     inject_tf_vars,
 )
 from strata.models.store_models import (
@@ -100,6 +101,176 @@ class TestInjectTfVars:
     def test_none_resolved_noop(self):
         with inject_tf_vars(None):
             pass
+
+
+# ---------------------------------------------------------------------------
+# ResolvedValues.as_compose_env
+# ---------------------------------------------------------------------------
+
+
+class TestResolvedValuesAsComposeEnv:
+    def test_variables_use_bare_key(self):
+        rv = ResolvedValues(variables={"DB_HOST": "localhost"})
+        env = rv.as_compose_env()
+        assert env["DB_HOST"] == "localhost"
+        assert "TF_VAR_DB_HOST" not in env
+
+    def test_secrets_use_bare_key(self):
+        rv = ResolvedValues(secrets={"DB_PASSWORD": "hunter2"})
+        env = rv.as_compose_env()
+        assert env["DB_PASSWORD"] == "hunter2"
+
+    def test_features_serialized_as_lowercase_bool(self):
+        rv = ResolvedValues(features={"ENABLE_METRICS": True, "DEBUG": False})
+        env = rv.as_compose_env()
+        assert env["ENABLE_METRICS"] == "true"
+        assert env["DEBUG"] == "false"
+
+    def test_none_feature_skipped(self):
+        rv = ResolvedValues(features={"FLAG": None})
+        env = rv.as_compose_env()
+        assert "FLAG" not in env
+
+    def test_secrets_win_over_variables_on_collision(self):
+        rv = ResolvedValues(variables={"KEY": "from_var"}, secrets={"KEY": "from_secret"})
+        env = rv.as_compose_env()
+        assert env["KEY"] == "from_secret"
+
+    def test_variables_win_over_features_on_collision(self):
+        rv = ResolvedValues(features={"KEY": True}, variables={"KEY": "from_var"})
+        env = rv.as_compose_env()
+        assert env["KEY"] == "from_var"
+
+    def test_empty_produces_empty_dict(self):
+        rv = ResolvedValues()
+        assert rv.as_compose_env() == {}
+
+
+# ---------------------------------------------------------------------------
+# inject_compose_env context manager
+# ---------------------------------------------------------------------------
+
+
+class TestInjectComposeEnv:
+    def test_sets_vars_inside_context(self):
+        rv = ResolvedValues(variables={"COMPOSE_TEST_VAR": "hello"})
+        with inject_compose_env(rv):
+            assert os.environ.get("COMPOSE_TEST_VAR") == "hello"
+
+    def test_restores_vars_after_context(self):
+        rv = ResolvedValues(variables={"COMPOSE_RESTORE_VAR": "value"})
+        os.environ.pop("COMPOSE_RESTORE_VAR", None)
+        with inject_compose_env(rv):
+            pass
+        assert "COMPOSE_RESTORE_VAR" not in os.environ
+
+    def test_restores_original_value_after_context(self):
+        os.environ["COMPOSE_OVERWRITE_TEST"] = "original"
+        rv = ResolvedValues(variables={"COMPOSE_OVERWRITE_TEST": "new"})
+        with inject_compose_env(rv):
+            assert os.environ["COMPOSE_OVERWRITE_TEST"] == "new"
+        assert os.environ["COMPOSE_OVERWRITE_TEST"] == "original"
+        del os.environ["COMPOSE_OVERWRITE_TEST"]
+
+    def test_empty_resolved_noop(self):
+        rv = ResolvedValues()
+        with inject_compose_env(rv):
+            pass
+
+    def test_none_resolved_noop(self):
+        with inject_compose_env(None):
+            pass
+
+    def test_secrets_injected_inside_context(self):
+        rv = ResolvedValues(secrets={"DB_PASSWORD": "secret123"})
+        os.environ.pop("DB_PASSWORD", None)
+        with inject_compose_env(rv):
+            assert os.environ.get("DB_PASSWORD") == "secret123"
+        assert "DB_PASSWORD" not in os.environ
+
+    def test_features_injected_as_lowercase(self):
+        rv = ResolvedValues(features={"ENABLE_X": True})
+        os.environ.pop("ENABLE_X", None)
+        with inject_compose_env(rv):
+            assert os.environ.get("ENABLE_X") == "true"
+        assert "ENABLE_X" not in os.environ
+
+
+# ---------------------------------------------------------------------------
+# ResolvedValues.for_stage — secret scoping
+# ---------------------------------------------------------------------------
+
+
+class TestResolvedValuesForStage:
+    def _full_rv(self):
+        return ResolvedValues(
+            variables={"region": "eu-west-1"},
+            secrets={"db_pass": "hunter2", "api_key": "abc123", "ssh_key": "PRIVATE"},
+            features={"enable_x": True},
+            stage_outputs={"server_ip": "10.0.0.1"},
+            stage_outputs_sensitive={"kubeconfig": "YAML", "token": "tok123"},
+        )
+
+    def test_none_secrets_strips_all_sensitive(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(None)
+        assert scoped.variables == {"region": "eu-west-1"}
+        assert scoped.features == {"enable_x": True}
+        assert scoped.stage_outputs == {"server_ip": "10.0.0.1"}
+        assert scoped.secrets == {}
+        assert scoped.stage_outputs_sensitive == {}
+
+    def test_empty_list_strips_all_sensitive(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage([])
+        assert scoped.secrets == {}
+        assert scoped.stage_outputs_sensitive == {}
+
+    def test_wildcard_passes_all(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["*"])
+        assert scoped.secrets == rv.secrets
+        assert scoped.stage_outputs_sensitive == rv.stage_outputs_sensitive
+        assert scoped.variables == rv.variables
+
+    def test_specific_keys_filters_secrets(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["db_pass", "ssh_key"])
+        assert scoped.secrets == {"db_pass": "hunter2", "ssh_key": "PRIVATE"}
+        assert "api_key" not in scoped.secrets
+
+    def test_specific_keys_filters_sensitive_outputs(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["kubeconfig"])
+        assert scoped.stage_outputs_sensitive == {"kubeconfig": "YAML"}
+        assert "token" not in scoped.stage_outputs_sensitive
+        # secrets filtered too — only kubeconfig key, which isn't in secrets
+        assert scoped.secrets == {}
+
+    def test_nonexistent_key_produces_empty(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["does_not_exist"])
+        assert scoped.secrets == {}
+        assert scoped.stage_outputs_sensitive == {}
+
+    def test_context_always_passes_through(self):
+        rv = self._full_rv()
+        for allowed in [None, [], ["db_pass"], ["*"]]:
+            scoped = rv.for_stage(allowed)
+            assert scoped.variables == rv.variables
+            assert scoped.features == rv.features
+            assert scoped.stage_outputs == rv.stage_outputs
+
+    def test_returns_independent_copy(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["*"])
+        scoped.variables["new_key"] = "new_val"
+        assert "new_key" not in rv.variables
+
+    def test_errors_preserved(self):
+        rv = ResolvedValues(errors=["some warning"])
+        scoped = rv.for_stage(None)
+        assert scoped.errors == ["some warning"]
 
 
 # ---------------------------------------------------------------------------
@@ -288,3 +459,122 @@ class TestValueControllerGithubStore:
         assert err is None
         assert val == "s3cr3t"
         mock_logger.warning.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# ResolvedValues — stage_outputs and stage_outputs_sensitive
+# ---------------------------------------------------------------------------
+
+
+class TestResolvedValuesStageOutputs:
+    # --- is_empty ---
+
+    def test_is_empty_false_with_stage_outputs(self):
+        rv = ResolvedValues(stage_outputs={"cluster_ip": "1.2.3.4"})
+        assert rv.is_empty() is False
+
+    def test_is_empty_true_with_only_sensitive_outputs(self):
+        # stage_outputs_sensitive alone does not flip is_empty — sensitive values
+        # are never injected, so there is nothing to "do" from the env perspective.
+        rv = ResolvedValues(stage_outputs_sensitive={"admin_token": "secret"})
+        assert rv.is_empty() is True
+
+    # --- as_tf_vars: non-sensitive outputs ARE injected ---
+
+    def test_stage_outputs_present_in_tf_vars(self):
+        rv = ResolvedValues(stage_outputs={"cluster_ip": "10.0.0.1"})
+        tf = rv.as_tf_vars()
+        assert tf["TF_VAR_cluster_ip"] == "10.0.0.1"
+
+    def test_stage_outputs_dict_value_json_encoded_in_tf_vars(self):
+        rv = ResolvedValues(stage_outputs={"config": {"host": "db", "port": 5432}})
+        tf = rv.as_tf_vars()
+        import json
+
+        assert tf["TF_VAR_config"] == json.dumps({"host": "db", "port": 5432})
+
+    def test_stage_outputs_list_value_json_encoded_in_tf_vars(self):
+        rv = ResolvedValues(stage_outputs={"zones": ["a", "b", "c"]})
+        tf = rv.as_tf_vars()
+        import json
+
+        assert tf["TF_VAR_zones"] == json.dumps(["a", "b", "c"])
+
+    def test_stage_outputs_none_value_skipped_in_tf_vars(self):
+        rv = ResolvedValues(stage_outputs={"key": None})
+        tf = rv.as_tf_vars()
+        assert "TF_VAR_key" not in tf
+
+    # --- as_tf_vars: sensitive outputs are NOT injected ---
+
+    def test_stage_outputs_sensitive_absent_from_tf_vars(self):
+        rv = ResolvedValues(stage_outputs_sensitive={"admin_token": "secret"})
+        tf = rv.as_tf_vars()
+        assert "TF_VAR_admin_token" not in tf
+
+    def test_stage_outputs_sensitive_absent_even_with_other_vars(self):
+        rv = ResolvedValues(
+            variables={"region": "eu"},
+            stage_outputs={"endpoint": "https://x"},
+            stage_outputs_sensitive={"token": "s3cr3t"},
+        )
+        tf = rv.as_tf_vars()
+        assert "TF_VAR_region" in tf
+        assert "TF_VAR_endpoint" in tf
+        assert "TF_VAR_token" not in tf
+
+    # --- as_compose_env: non-sensitive outputs ARE injected verbatim ---
+
+    def test_stage_outputs_present_in_compose_env(self):
+        rv = ResolvedValues(stage_outputs={"DB_HOST": "postgres"})
+        env = rv.as_compose_env()
+        assert env["DB_HOST"] == "postgres"
+        assert "TF_VAR_DB_HOST" not in env
+
+    def test_stage_outputs_dict_value_json_encoded_in_compose_env(self):
+        rv = ResolvedValues(stage_outputs={"config": {"a": 1}})
+        env = rv.as_compose_env()
+        import json
+
+        assert env["config"] == json.dumps({"a": 1})
+
+    def test_stage_outputs_none_value_skipped_in_compose_env(self):
+        rv = ResolvedValues(stage_outputs={"missing": None})
+        env = rv.as_compose_env()
+        assert "missing" not in env
+
+    # --- as_compose_env: sensitive outputs are NOT injected ---
+
+    def test_stage_outputs_sensitive_absent_from_compose_env(self):
+        rv = ResolvedValues(stage_outputs_sensitive={"DB_PASSWORD": "hunter2"})
+        env = rv.as_compose_env()
+        assert "DB_PASSWORD" not in env
+
+    # --- injection context manager picks up stage_outputs ---
+
+    def test_inject_tf_vars_injects_stage_outputs(self):
+        rv = ResolvedValues(stage_outputs={"cluster_ip": "1.2.3.4"})
+        os.environ.pop("TF_VAR_cluster_ip", None)
+        with inject_tf_vars(rv):
+            assert os.environ.get("TF_VAR_cluster_ip") == "1.2.3.4"
+        assert "TF_VAR_cluster_ip" not in os.environ
+
+    def test_inject_tf_vars_does_not_inject_sensitive(self):
+        rv = ResolvedValues(stage_outputs_sensitive={"admin_token": "secret"})
+        os.environ.pop("TF_VAR_admin_token", None)
+        with inject_tf_vars(rv):
+            assert "TF_VAR_admin_token" not in os.environ
+        assert "TF_VAR_admin_token" not in os.environ
+
+    def test_inject_compose_env_injects_stage_outputs(self):
+        rv = ResolvedValues(stage_outputs={"DB_HOST": "postgres"})
+        os.environ.pop("DB_HOST", None)
+        with inject_compose_env(rv):
+            assert os.environ.get("DB_HOST") == "postgres"
+        assert "DB_HOST" not in os.environ
+
+    def test_inject_compose_env_does_not_inject_sensitive(self):
+        rv = ResolvedValues(stage_outputs_sensitive={"DB_PASSWORD": "hunter2"})
+        os.environ.pop("DB_PASSWORD", None)
+        with inject_compose_env(rv):
+            assert "DB_PASSWORD" not in os.environ

@@ -2,7 +2,7 @@
 
 ## Core Context
 
-Lead / Architect for xyz-platform. Python DevOps CLI tool built with Click + Pydantic.
+Lead / Architect for strata. Python DevOps CLI tool built with Click + Pydantic.
 User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog, pytest.
 
 ## Learnings
@@ -15,7 +15,7 @@ The "session" terminology in cli.py comments diverges from the "project" termino
 
 **Models:** Complete and solid. 16 model files covering every YAML kind. `ConfigurationModel` is the
 richest — providers, topologies, layering, security, repositories all Pydantic-validated.
-`ProjectModel` handles the `.xyz_platform/project.json` workspace state file.
+`ProjectModel` handles the `.strata/solution.json` workspace state file.
 
 **Services:** Very solid. `BaseService` has 2-phase validate (Pydantic + `_validate_dynamic`),
 load-with-cache via `service_cache.py`, lifecycle hooks. All domain services implemented:
@@ -41,14 +41,30 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 
 ### 2026-05-06 — copilot-instructions.md accuracy review
 
-- Confirmed `.platform/` (not `.xyz_platform/`) is the workspace state directory — `SOLUTION_DIR = ".platform"` in `utils/config.py`.
+- Confirmed `.strata/` is the workspace state directory — `SOLUTION_DIR = ".strata"` in `utils/config.py`.
 - `xyz init` (not `xyz project init`) — flat CLI structure per 2026-05-05 decisions.md decision.
-- `xyz config set|unset|list` (not `xyz set`) — confirmed in `commands/cli_config.py`.
+- `strata config set|unset|list` (not `xyz set`) — confirmed in `commands/cli_config.py`.
 - Workspace state file is `solution.json` (`SolutionModel`) — not `project.json`.
 - `resolve_work_path()` in `utils/system.py` walks up from CWD for `.platform/` — implemented, falls back to CWD (error path not yet raised).
 - CI uses composite actions: `.github/actions/install-python` (uv sync --frozen) and `.github/actions/test-python` (lint + types + pytest).
 - Testing pattern: plain pytest classes (`class TestConfigSet:`) — no `unittest.TestCase`.
 - copilot-instructions.md updated 2026-05-06.
+
+### 2026-06-01 — Helm integration completeness review
+
+**Requested by:** Vincent Huybrechts.
+
+**Finding — HelmIntegration (helm.py):** Structurally correct. Follows AnsibleIntegration pattern exactly. `ensure_available()` and `validate_version()` (via BaseIntegration) both present. Three abstract methods implemented. No named domain methods (repo_add, upgrade_install, etc.) — deployer calls `_run_integration` directly. Not a blocker but violates convention.
+
+**Finding — HelmDeployer (helm_deployer.py):** All 8 steps implemented and structurally correct. `validate_workspace` correctly iterates namespace services and loads modules. `destroy` force-guard present. `setup` gracefully handles no-registry case. **Bug:** `check()` runs `helm lint -f values.yaml {repo_name}/{chart_name}` for registry charts — `helm lint` requires a local path; this step would fail at runtime for any registry-sourced chart.
+
+**Finding — validate_environment factory bypass:** HelmDeployer instantiates `HelmIntegration(config=IntegrationModel(name="helm", type="helm"))` directly, bypassing `IntegrationFactory.create()`. Currently necessary because "helm" is not registered. Once factory registration is fixed, this should be updated to use the factory.
+
+**Finding — _create_deployer (4 command files):** All four commands correctly detect `ProvisionerType.HELM` and instantiate `HelmDeployer` with the correct constructor args for each command variant. Minor stale error message in `run_deploy_command.py` and `destroy_deploy_command.py` still says `"Supported: terraform, ansible."` — should include compose and helm.
+
+**Finding — factory.py not updated:** `"helm"` is absent from `factory._BUILTIN_CLASS_MAP`. `HelmIntegration` is absent from `integrations/__init__.py`. This means `strata tools`, `IntegrationController`, and any `IntegrationFactory.create()` call for type "helm" will raise ValueError. The deploy commands work only because they bypass the factory.
+
+**Priority fix order:** (1) factory.py + __init__.py registration — 4 lines; (2) stale error messages in run/destroy _create_deployer — 2 lines; (3) helm lint bug for registry charts in check() — requires logic change; (4) named methods on HelmIntegration — low priority.
 
 ### 2026-05-28 — Helm architecture analysis
 

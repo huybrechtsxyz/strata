@@ -13,17 +13,34 @@ spec:
       file: "@${solution_name}/config/${solution_name}-config.yaml"
 
   provisioners:
+    # Terraform provisions the AKS cluster and supporting infrastructure
     - name: terraform
       provisioner: terraform
       source:
         repository: ${solution_name}
         source_path: terraform
 
+    # Helm deploys application charts onto the provisioned cluster
+    - name: helm
+      provisioner: helm
+      source:
+        repository: ${solution_name}
+        source_path: stack
+
   topology:
     - name: aks_cluster
+      provider: azure
+      provisioner: terraform
       type: kubernetes
-      region: westeurope
-      description: "AKS cluster — West Europe"
+      components:
+        - resource: aks_cluster
+      namespaces:
+        - namespace: base
+
+  resources:
+    - name: aks_cluster
+      file: "@${solution_name}/stack/res-aks.yaml"
+      description: Azure Kubernetes Service cluster
 
   namespaces:
     - name: base

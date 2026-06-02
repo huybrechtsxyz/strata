@@ -375,6 +375,46 @@ class TerraformDeployer(BaseDeployer):
 
         return True, messages
 
+    def collect_outputs(self) -> Tuple[bool, Dict[str, Any], Dict[str, Any], List[str]]:
+        """Collect Terraform outputs after a successful apply, split by sensitivity.
+
+        Runs ``terraform output -json`` and reads the ``sensitive`` flag on each
+        output descriptor.  Non-sensitive outputs are returned in the first dict
+        and will be injected as ``TF_VAR_<key>`` env vars for downstream stages.
+        Sensitive outputs (``sensitive = true`` in Terraform) are returned in the
+        second dict — the pipeline holds them internally but never injects them
+        into subprocess environments.
+
+        Returns:
+            (success, non_sensitive_outputs, sensitive_outputs, messages)
+        """
+        messages: List[str] = []
+        non_sensitive: Dict[str, Any] = {}
+        sensitive: Dict[str, Any] = {}
+
+        if not self._ready(messages):
+            return False, non_sensitive, sensitive, messages
+        assert self._working_dir is not None
+        assert self._tf is not None
+
+        try:
+            result = self._tf.output(str(self._working_dir))
+            if result.returncode != 0:
+                messages.append(f"terraform output failed:\n{result.stderr}")
+                return False, non_sensitive, sensitive, messages
+            raw: Dict[str, Any] = json.loads(result.stdout or "{}")
+            for key, descriptor in raw.items():
+                val = descriptor.get("value")
+                if descriptor.get("sensitive", False):
+                    sensitive[key] = val
+                else:
+                    non_sensitive[key] = val
+        except (RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            messages.append(f"terraform output error: {exc}")
+            return False, non_sensitive, sensitive, messages
+
+        return True, non_sensitive, sensitive, messages
+
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:
         """terraform output -json -> {name: value} dict"""
         messages: List[str] = []
@@ -464,67 +504,6 @@ class TerraformDeployer(BaseDeployer):
             messages.append("validate_environment() must be called before running steps")
             return False
         return True
-
-    def _resolve_iac_model(
-        self,
-        stage: DeploymentStageModel,
-        workspace_service,
-    ) -> Optional[WorkspaceIacModel]:
-        """Resolve the WorkspaceIacModel for a stage.
-
-        Priority:
-        1. stage.provisioner set → match workspace.spec.provisioners by name
-        2. stage.topology set   → find topology → get its ProvisionerType
-                                 → match workspace.spec.provisioners by .provisioner type
-        3. Single provisioner workspace → use it unconditionally
-        """
-        spec = workspace_service.model.spec
-        provisioners = spec.provisioners or []
-
-        if not provisioners:
-            return None
-
-        # Priority 1: explicit provisioner name on stage
-        if stage.provisioner:
-            match = next((p for p in provisioners if p.name == stage.provisioner), None)
-            if match:
-                return match
-            self.logger.warning(
-                "stage.provisioner name not found in workspace.spec.provisioners",
-                stage=stage.name,
-                provisioner=stage.provisioner,
-            )
-
-        # Priority 2: resolve via topology
-        if stage.topology:
-            topo = next(
-                (t for t in (spec.topology or []) if t.name == stage.topology),
-                None,
-            )
-            if topo:
-                match = next(
-                    (p for p in provisioners if p.provisioner == topo.provisioner),
-                    None,
-                )
-                if match:
-                    return match
-                self.logger.warning(
-                    "No workspace provisioner matches topology.provisioner type",
-                    stage=stage.name,
-                    topology=stage.topology,
-                    provisioner_type=str(topo.provisioner),
-                )
-
-        # Priority 3: single provisioner — use it directly
-        if len(provisioners) == 1:
-            self.logger.debug(
-                "Using sole workspace provisioner for stage (no explicit reference)",
-                stage=stage.name,
-                provisioner=provisioners[0].name,
-            )
-            return provisioners[0]
-
-        return None
 
     def _get_working_dir(
         self,

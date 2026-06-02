@@ -1,11 +1,11 @@
 ---
-description: Instructions for AI agents working with the xyz-platform CLI tool to manage infrastructure deployments
+description: Instructions for AI agents working with the strata CLI tool to manage infrastructure deployments
 applyTo: '**'
 ---
 
-# xyz-platform — Agent Operating Instructions
+# strata — Agent Operating Instructions
 
-You are working with **xyz-platform**, a DevOps CLI tool for managing infrastructure-as-code deployments. This file tells you how to use the CLI effectively as an AI agent.
+You are working with **strata**, a DevOps CLI tool for managing infrastructure-as-code deployments. This file tells you how to use the CLI effectively as an AI agent.
 
 ---
 
@@ -13,26 +13,26 @@ You are working with **xyz-platform**, a DevOps CLI tool for managing infrastruc
 
 ```bash
 # Always use JSON output for machine-readable responses
-export XYZ_OUTPUT=json
+export STRATA_OUTPUT=json
 
-# Point to workspace (or let auto-discovery find .platform/)
-export XYZ_WORK_PATH=/path/to/workspace
+# Point to workspace (or let auto-discovery find .strata/)
+export STRATA_WORK_PATH=/path/to/workspace
 
 # Validate before any deploy
-xyz validate <file> --output json
+strata validate <file> --output json
 
 # Build artifacts
-xyz build run -f <deployment.yaml> --output json
+strata build run -f <deployment.yaml> --output json
 
 # Deploy (with dry-run first)
-xyz deploy run -f <deployment.yaml> --dry-run --output json
+strata deploy run -f <deployment.yaml> --dry-run --output json
 ```
 
 ---
 
 ## CLI Structure
 
-Commands follow a flat `xyz <group> <command>` pattern:
+Commands follow a flat `strata <group> <command>` pattern:
 
 | Group | Key Commands | Purpose |
 |-------|-------------|---------|
@@ -59,12 +59,12 @@ Every command accepts these:
 
 | Flag | Env Var | Default | Purpose |
 |------|---------|---------|---------|
-| `--work-path PATH` | `XYZ_WORK_PATH` | auto-detected | Workspace root |
-| `--output FORMAT` | `XYZ_OUTPUT` | `console` | Output format: `console`, `text`, `json` |
-| `--verbose` | `XYZ_VERBOSE` | off | Verbose output |
-| `--quiet` | `XYZ_QUIET` | off | Suppress output |
+| `--work-path PATH` | `STRATA_WORK_PATH` | auto-detected | Workspace root |
+| `--output FORMAT` | `STRATA_OUTPUT` | `console` | Output format: `console`, `text`, `json` |
+| `--verbose` | `STRATA_VERBOSE` | off | Verbose output |
+| `--quiet` | `STRATA_QUIET` | off | Suppress output |
 
-**Priority:** explicit flag → env var → `.platform/cli.yaml` → built-in default.
+**Priority:** explicit flag → env var → `.strata/cli.yaml` → built-in default.
 
 ---
 

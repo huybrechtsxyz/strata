@@ -2,10 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run: xyz-platform",
+      "name": "Run: strata",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}\\src\\xyz_platform\\__main__.py",
+      "program": "${workspaceFolder}\\src\\strata\\__main__.py",
       "args": "${input:cliArgs}",
       "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
       "cwd": "${workspaceFolder}",
@@ -16,10 +16,10 @@
       "justMyCode": true
     },
     {
-      "name": "Debug: xyz-platform",
+      "name": "Debug: strata",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}\\src\\xyz_platform\\__main__.py",
+      "program": "${workspaceFolder}\\src\\strata\\__main__.py",
       "args": "${input:cliArgs}",
       "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
       "cwd": "${workspaceFolder}",

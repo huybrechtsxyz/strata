@@ -33,7 +33,7 @@ spec:
   topology:
     - name: test_swarm
       provider: kamatera_eu_fr
-      provisioner: terraform
+      provisioner: test_iac
       type: docker_swarm
       components:
         - resource: manager

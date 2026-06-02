@@ -35,6 +35,12 @@ def deploy():
     help="Limit execution to a specific deployment stage by name.",
 )
 @click.option(
+    "--scope",
+    default=None,
+    metavar="LABEL",
+    help="Run only deployment stages whose scope field matches this label.",
+)
+@click.option(
     "--force",
     is_flag=True,
     default=False,
@@ -53,6 +59,7 @@ def deploy_run(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
+    scope: Optional[str] = None,
     force: bool = False,
     dry_run: bool = False,
     output: Optional[str] = None,
@@ -64,6 +71,7 @@ def deploy_run(
         file=file,
         work_path=work_path,
         stage=stage,
+        scope=scope,
         force=force,
         dry_run=dry_run,
         output=output,
@@ -84,6 +92,12 @@ def deploy_run(
     help="Limit destruction to a specific deployment stage by name.",
 )
 @click.option(
+    "--scope",
+    default=None,
+    metavar="LABEL",
+    help="Destroy only deployment stages whose scope field matches this label.",
+)
+@click.option(
     "--force",
     is_flag=True,
     default=False,
@@ -102,6 +116,7 @@ def deploy_destroy(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
+    scope: Optional[str] = None,
     force: bool = False,
     dry_run: bool = False,
     output: Optional[str] = None,
@@ -113,6 +128,7 @@ def deploy_destroy(
         file=file,
         work_path=work_path,
         stage=stage,
+        scope=scope,
         force=force,
         dry_run=dry_run,
         output=output,

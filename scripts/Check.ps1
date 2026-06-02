@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Code quality check script for XYZ Platform - equivalent to "Build" in C#.
+    Code quality check script for strata - equivalent to "Build" in C#.
 .DESCRIPTION
     Runs ruff (lint + format), mypy (type checking), and optionally builds the package.
     Exit code is non-zero if any check fails.
@@ -25,7 +25,7 @@ $projectRoot = Get-ProjectRoot
 Set-Location $projectRoot
 
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
-Write-Host "[*] XYZ Platform - Code Quality Check" -ForegroundColor Cyan
+Write-Host "[*] strata - Code Quality Check" -ForegroundColor Cyan
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host ""
 

@@ -2,7 +2,7 @@
 
 ## Project Context
 
-**Project:** xyz-platform
+**Project:** strata
 **User:** Vincent Huybrechts
 **Stack:** Python CLI, Sphinx (docs/), reStructuredText + Markdown
 **Purpose:** DevOps profile management tool — manages multiple repos, merges terraform/ansible/config files across repos, builds unified deployment artifacts, executes deployments in correct order.

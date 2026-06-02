@@ -297,26 +297,31 @@ class HealthDeployCommand(BaseDeployCommand):
     # -------------------------------------------------------------------------
 
     def _create_deployer(self, stage: DeploymentStageModel):
+        """Instantiate and return the deployer for *stage*, or None.
+
+        Resolution: stage.provisioner → workspace provisioners list → deployer type.
+        Returns None silently when no provisioner is configured (health checks
+        run without live deployer output in that case).
+        """
         resolved_type: Optional[str] = None
 
         if stage.provisioner and self._deployment_service is not None:
             workspace_service = self._deployment_service.get_workspace_service()
             if workspace_service:
                 spec = workspace_service.model.spec  # type: ignore[union-attr]
-                iac = next(
-                    (p for p in (spec.provisioners or []) if p.name == stage.provisioner),
-                    None,
-                )
-                if iac and iac.provisioner == ProvisionerType.TERRAFORM:
+                _provisioners = spec.provisioners or []
+                _iac = next((p for p in _provisioners if p.name == stage.provisioner), None)
+                if _iac and _iac.provisioner == ProvisionerType.TERRAFORM:
                     resolved_type = "terraform"
-                elif iac and iac.provisioner == ProvisionerType.ANSIBLE:
+                elif _iac and _iac.provisioner == ProvisionerType.ANSIBLE:
                     resolved_type = "ansible"
+                elif _iac and _iac.provisioner == ProvisionerType.COMPOSE:
+                    resolved_type = "compose"
+                elif _iac and _iac.provisioner == ProvisionerType.HELM:
+                    resolved_type = "helm"
 
         if resolved_type is None:
-            if stage.type in ("infrastructure", "terraform"):
-                resolved_type = "terraform"
-            elif stage.type in ("configure", "initialize", "ansible"):
-                resolved_type = "ansible"
+            return None
 
         if resolved_type == "terraform":
             return TerraformDeployer(
@@ -332,6 +337,30 @@ class HealthDeployCommand(BaseDeployCommand):
             from strata.deployers.ansible_deployer import AnsibleDeployer
 
             return AnsibleDeployer(
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+            )
+
+        if resolved_type == "compose":
+            from strata.deployers.compose_deployer import ComposeDeployer
+
+            return ComposeDeployer(
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+            )
+
+        if resolved_type == "helm":
+            from strata.deployers.helm_deployer import HelmDeployer
+
+            return HelmDeployer(
                 stage=stage,
                 deployment_service=self._deployment_service,  # type: ignore[arg-type]
                 configuration_service=self._configuration_service,  # type: ignore[arg-type]

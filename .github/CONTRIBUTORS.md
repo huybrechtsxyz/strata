@@ -1,6 +1,6 @@
-# XYZ Platform - Contributors
+# strata - Contributors
 
-Thank you to everyone who has contributed to Platform XYZ. This file lists people who have made direct code, documentation, design, testing, or other valuable contributions.
+Thank you to everyone who has contributed to strata. This file lists people who have made direct code, documentation, design, testing, or other valuable contributions.
 
 ## Core maintainers
 

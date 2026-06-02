@@ -1,6 +1,6 @@
-# XYZ Platform - Acknowledgments
+# strata - Acknowledgments
 
-Thank you to everyone who has supported and contributed to Platform XYZ. This project benefits from many people's time, expertise, and generosity.
+Thank you to everyone who has supported and contributed to strata. This project benefits from many people's time, expertise, and generosity.
 
 We'd especially like to acknowledge:
 

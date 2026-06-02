@@ -1,6 +1,6 @@
 # Project Context
 
-- **Project:** xyz-platform
+- **Project:** strata
 - **Created:** 2026-04-22
 
 ## Core Context

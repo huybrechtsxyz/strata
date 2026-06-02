@@ -9,7 +9,7 @@ meta:
     version: "1.0.0"
     environment: "production"
     customer: "example-xyz"
-  tags: [ "platform", "infrastructure", "kamatera" ]
+  tags: ["platform", "infrastructure", "kamatera"]
 spec:
   layers:
     environment: prod
@@ -31,7 +31,6 @@ spec:
     - tests/data/environments/environment-standard.yaml
   stages:
     - name: production
-      type: infrastructure
   configurations:
     - name: configuration
       description: Standard configuration

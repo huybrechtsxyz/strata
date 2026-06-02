@@ -2,16 +2,16 @@
 
 ## Project Context
 
-**Project:** xyz-platform
+**Project:** strata
 **User:** Vincent Huybrechts
 **Stack:** Python CLI, Click, Pydantic, uv, YAML-driven configuration
 **Purpose:** DevOps profile management tool — manages multiple repos, merges terraform/ansible/config files across repos, builds unified deployment artifacts, executes deployments in correct order.
 
 ## Responsibilities
 
-- Integration implementations in `src/xyz_platform/integrations/`
+- Integration implementations in `src/strata/integrations/`
 - Git operations (clone, fetch, sync repos)
-- Terraform file merging and `tf.exe` execution
+- Terraform file merging and `terraform` execution
 - Ansible playbook merging and `ansible` execution
 - Docker, HashiCorp Vault/Consul, Azure Key Vault, Bitwarden integrations
 - Build pipeline: parse multi-repo configs → merge → single output artifact
@@ -20,7 +20,7 @@
 
 ## Domain Knowledge
 
-- Integrations directory: `src/xyz_platform/integrations/`
+- Integrations directory: `src/strata/integrations/`
   - `git.py` — repo operations
   - `terraform.py` — terraform file handling and execution
   - `docker.py` — docker operations
@@ -29,7 +29,7 @@
   - `bitwarden.py` — secret management
   - `factory.py`, `registry.py` — integration factory pattern
   - `capabilities.py` — integration capability flags
-- Deployment model: `src/xyz_platform/models/deployment_model.py`
+- Deployment model: `src/strata/models/deployment_model.py`
 - Build output: merged terraform/ansible/config files in a staging directory
 - Deploy order is defined in the deployment configuration YAML
 

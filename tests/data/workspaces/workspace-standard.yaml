@@ -50,7 +50,7 @@ spec:
   topology:
     - name: platform_swarm
       provider: kamatera_europe
-      provisioner: terraform
+      provisioner: platform_infrastructure
       type: dockerswarm
       components:
         - resource: manager

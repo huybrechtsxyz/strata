@@ -20,12 +20,14 @@ Typical caller sequences:
 """
 
 import os
+import re
+import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
-from strata.controllers.value_controller import ResolvedValues
+from strata.controllers.value_controller import ResolvedValues, inject_compose_env
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -38,6 +40,7 @@ from strata.deployers.base_deployer import (
     BaseDeployer,
 )
 from strata.integrations.ansible import AnsibleIntegration
+from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
 from strata.models.workspace_model import WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
@@ -47,6 +50,8 @@ try:
     from strata.models.deployment_model import DeploymentStageModel
 except ImportError:  # pragma: no cover
     pass
+
+logger = get_logger(__name__)
 
 
 class AnsibleDeployer(BaseDeployer):
@@ -83,6 +88,7 @@ class AnsibleDeployer(BaseDeployer):
         self._iac_model: Optional[WorkspaceIacModel] = None
         self._working_dir: Optional[Path] = None
         self._ansible: Optional[AnsibleIntegration] = None
+        self._dynamic_inventory: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Metadata
@@ -116,23 +122,13 @@ class AnsibleDeployer(BaseDeployer):
             messages.append("No workspace service available")
             return False, messages
 
-        spec = workspace_service.model.spec  # type: ignore[union-attr]
-        provisioners = spec.provisioners or []
-
-        # Find the ansible IaC entry matching the stage provisioner name
-        iac: Optional[WorkspaceIacModel] = None
-        if self.stage.provisioner:
-            iac = next((p for p in provisioners if p.name == self.stage.provisioner), None)
-        else:
-            # Convention: first ansible provisioner
-            from strata.models.common_models import ProvisionerType
-
-            iac = next((p for p in provisioners if p.provisioner == ProvisionerType.ANSIBLE), None)
+        # Resolve IaC model via stage.provisioner, stage.topology, or single-provisioner fallback
+        iac = self._resolve_iac_model(self.stage, workspace_service)
 
         if iac is None:
             messages.append(
                 f"Stage '{self.stage.name}': no ansible provisioner found in workspace "
-                f"(looked for provisioner='{self.stage.provisioner}')."
+                f"(stage.provisioner='{self.stage.provisioner}', stage.topology='{self.stage.topology}')."
             )
             return False, messages
 
@@ -148,6 +144,24 @@ class AnsibleDeployer(BaseDeployer):
 
         self._iac_model = iac
         self._working_dir = source_path
+
+        # When arriving via topology, build the inventory from stage_outputs
+        if self.stage.topology:
+            cfg = iac.configuration or {}
+            ip_output_key = cfg.get("ip_output_key", "server_ip")
+            outputs = self.resolved_values.stage_outputs if self.resolved_values else {}
+            ip = outputs.get(ip_output_key)
+            if not ip:
+                messages.append(
+                    f"Stage '{self.stage.name}': topology '{self.stage.topology}' requires "
+                    f"output '{ip_output_key}' from a previous stage — "
+                    "run the infrastructure stage first."
+                )
+                return False, messages
+            hosts = ",".join(ip) if isinstance(ip, list) else str(ip)
+            self._dynamic_inventory = f"{hosts},"
+            messages.append(f"Dynamic inventory from stage outputs: {self._dynamic_inventory}")
+
         messages.append(f"Ansible workspace validated: {source_path}")
         return True, messages
 
@@ -181,6 +195,22 @@ class AnsibleDeployer(BaseDeployer):
             return False
         return True
 
+    def describe_plan(self) -> List[str]:
+        """Return the resolved playbook and inventory paths for dry-run display."""
+        if self._working_dir is None:
+            return []
+        playbook = self._get_playbook()
+        lines = [f"playbook:   {self._working_dir / playbook}"]
+        if self._dynamic_inventory is not None:
+            lines.append(f"inventory:  {self._dynamic_inventory}  (dynamic — from stage outputs)")
+        else:
+            inventory = self._get_inventory()
+            if inventory:
+                lines.append(f"inventory:  {self._working_dir / inventory}")
+            else:
+                lines.append("inventory:  (none — Ansible will use its default discovery)")
+        return lines
+
     def _get_configuration(self) -> Optional[Dict[str, Any]]:
         """Return the provisioner configuration dict, or None."""
         if self._iac_model is not None and self._iac_model.configuration:
@@ -195,7 +225,9 @@ class AnsibleDeployer(BaseDeployer):
         return "site.yml"
 
     def _get_inventory(self) -> Optional[str]:
-        """Resolve the inventory path from configuration or auto-discover."""
+        """Resolve the inventory: dynamic (from stage outputs) → config → auto-discover."""
+        if self._dynamic_inventory is not None:
+            return self._dynamic_inventory
         cfg = self._get_configuration()
         if cfg and "inventory" in cfg:
             return cfg["inventory"]
@@ -224,24 +256,93 @@ class AnsibleDeployer(BaseDeployer):
         return None
 
     def _get_ssh_key_content(self) -> Optional[str]:
-        """Look up SSH private key content from resolved_values.secrets.
+        """Look up SSH private key content from resolved_values.secrets, then os.environ.
 
         The secret name defaults to ``ssh_private_key`` but can be overridden
         via ``configuration["ssh_private_key_secret"]``.
+        Falls back to ``os.environ[secret_name.upper()]`` — e.g. ``HETZNER_PRIVATE_KEY``
+        when the secret name is ``hetzner_private_key``.
         """
-        if not self.resolved_values:
-            return None
         cfg = self._get_configuration()
         secret_name = cfg.get("ssh_private_key_secret", "ssh_private_key") if cfg else "ssh_private_key"
-        return self.resolved_values.secrets.get(secret_name)
+        if self.resolved_values:
+            key = self.resolved_values.secrets.get(secret_name)
+            if key:
+                return key
+        return os.environ.get(secret_name.upper())
 
     @contextmanager
     def _ssh_key_context(self) -> Generator[Optional[str], None, None]:
-        """Write SSH private key to a temp file (chmod 600), yield its path, delete on exit."""
+        """Load SSH private key into a temporary ssh-agent (no disk write).
+
+        Yields ``None`` when the agent is used — Ansible picks up ``SSH_AUTH_SOCK``
+        automatically and no ``--private-key`` flag is needed.
+        Falls back to a chmod-600 tempfile if ssh-agent or ssh-add is unavailable,
+        yielding the key file path in that case.
+        """
         key_content = self._get_ssh_key_content()
         if not key_content:
             yield None
             return
+
+        # --- Try ssh-agent: key lives in agent memory, never written to disk ---
+        try:
+            agent_result = subprocess.run(
+                ["ssh-agent", "-s"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if agent_result.returncode == 0:
+                # Parse socket/pid — handles POSIX, CMD, and PowerShell output formats
+                sock_match = re.search(r"SSH_AUTH_SOCK=([^;\s]+)", agent_result.stdout) or re.search(
+                    r"SSH_AUTH_SOCK\s*=\s*'([^']+)'", agent_result.stdout
+                )
+                pid_match = re.search(r"SSH_AGENT_PID=(\d+)", agent_result.stdout) or re.search(
+                    r"SSH_AGENT_PID\s*=\s*'(\d+)'", agent_result.stdout
+                )
+                if sock_match and pid_match:
+                    agent_sock = sock_match.group(1)
+                    agent_pid = pid_match.group(1)
+                    agent_env = {"SSH_AUTH_SOCK": agent_sock, "SSH_AGENT_PID": agent_pid}
+                    add_result = subprocess.run(
+                        ["ssh-add", "-"],
+                        input=key_content,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        env={**os.environ, **agent_env},
+                    )
+                    if add_result.returncode == 0:
+                        old_sock = os.environ.get("SSH_AUTH_SOCK")
+                        old_pid = os.environ.get("SSH_AGENT_PID")
+                        os.environ["SSH_AUTH_SOCK"] = agent_sock
+                        os.environ["SSH_AGENT_PID"] = agent_pid
+                        try:
+                            yield None  # Ansible uses agent; no --private-key flag
+                        finally:
+                            subprocess.run(["ssh-agent", "-k"], capture_output=True, timeout=5)
+                            if old_sock is None:
+                                os.environ.pop("SSH_AUTH_SOCK", None)
+                            else:
+                                os.environ["SSH_AUTH_SOCK"] = old_sock
+                            if old_pid is None:
+                                os.environ.pop("SSH_AGENT_PID", None)
+                            else:
+                                os.environ["SSH_AGENT_PID"] = old_pid
+                        return
+                    else:
+                        logger.warning("ssh-add failed — falling back to tempfile", stderr=add_result.stderr.strip())
+                        subprocess.run(
+                            ["ssh-agent", "-k"],
+                            capture_output=True,
+                            env={**os.environ, **agent_env},
+                            timeout=5,
+                        )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            logger.warning("ssh-agent unavailable — falling back to tempfile for SSH key")
+
+        # --- Fallback: tempfile with chmod 600 ---
         fd, key_path = tempfile.mkstemp(suffix=".pem", prefix="ansible_ssh_")
         try:
             os.close(fd)
@@ -336,15 +437,16 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook --check --diff {playbook}")
 
         try:
-            with self._ssh_key_context() as key_file:
-                result = self._ansible.plan(
-                    str(self._working_dir),
-                    playbook=playbook,
-                    inventory=inventory,
-                    extra_vars=self._get_extra_vars(),
-                    private_key_file=key_file,
-                    timeout=self._get_timeout("plan", 600),
-                )
+            with inject_compose_env(self.resolved_values):
+                with self._ssh_key_context() as key_file:
+                    result = self._ansible.plan(
+                        str(self._working_dir),
+                        playbook=playbook,
+                        inventory=inventory,
+                        extra_vars=self._get_extra_vars(),
+                        private_key_file=key_file,
+                        timeout=self._get_timeout("plan", 600),
+                    )
             if result.returncode != 0:
                 messages.append(f"Check mode failed:\n{result.stderr}")
                 return False, messages
@@ -372,15 +474,16 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook {playbook}")
 
         try:
-            with self._ssh_key_context() as key_file:
-                result = self._ansible.apply(
-                    str(self._working_dir),
-                    playbook=playbook,
-                    inventory=inventory,
-                    extra_vars=self._get_extra_vars(),
-                    private_key_file=key_file,
-                    timeout=self._get_timeout("apply", 1800),
-                )
+            with inject_compose_env(self.resolved_values):
+                with self._ssh_key_context() as key_file:
+                    result = self._ansible.apply(
+                        str(self._working_dir),
+                        playbook=playbook,
+                        inventory=inventory,
+                        extra_vars=self._get_extra_vars(),
+                        private_key_file=key_file,
+                        timeout=self._get_timeout("apply", 1800),
+                    )
             if result.returncode != 0:
                 messages.append(f"Playbook execution failed:\n{result.stderr}")
                 return False, messages
@@ -416,14 +519,15 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook {destroy_playbook}")
 
         try:
-            with self._ssh_key_context() as key_file:
-                result = self._ansible.apply(
-                    str(self._working_dir),
-                    playbook=destroy_playbook,
-                    inventory=inventory,
-                    private_key_file=key_file,
-                    timeout=self._get_timeout("destroy", 1800),
-                )
+            with inject_compose_env(self.resolved_values):
+                with self._ssh_key_context() as key_file:
+                    result = self._ansible.apply(
+                        str(self._working_dir),
+                        playbook=destroy_playbook,
+                        inventory=inventory,
+                        private_key_file=key_file,
+                        timeout=self._get_timeout("destroy", 1800),
+                    )
             if result.returncode != 0:
                 messages.append(f"Destroy playbook failed:\n{result.stderr}")
                 return False, messages
@@ -453,14 +557,15 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook --check --diff {destroy_playbook}")
 
         try:
-            with self._ssh_key_context() as key_file:
-                result = self._ansible.plan(
-                    str(self._working_dir),
-                    playbook=destroy_playbook,
-                    inventory=inventory,
-                    private_key_file=key_file,
-                    timeout=self._get_timeout("plan", 600),
-                )
+            with inject_compose_env(self.resolved_values):
+                with self._ssh_key_context() as key_file:
+                    result = self._ansible.plan(
+                        str(self._working_dir),
+                        playbook=destroy_playbook,
+                        inventory=inventory,
+                        private_key_file=key_file,
+                        timeout=self._get_timeout("plan", 600),
+                    )
             if result.returncode != 0:
                 messages.append(f"Destroy check mode failed:\n{result.stderr}")
                 return False, messages

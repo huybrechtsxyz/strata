@@ -659,10 +659,17 @@ class TerraformBuilder(BaseBuilder):
                 continue
 
             source = prov.source
-            repo_name = str(source.repository)
+            if source.source_path is None:
+                self._errors.append(
+                    f"Provisioner '{prov.name}' has no source_path — "
+                    "provisioner sources must use a git-based source (repository + source_path)."
+                )
+                return False
+
+            repo_name = str(source.repository) if source.repository else ""
 
             # Resolve repository root: use repo_map when available, fall back to work_path
-            if repo_map and repo_name in repo_map:
+            if repo_map and repo_name and repo_name in repo_map:
                 repo_root = Path(repo_map[repo_name])
             else:
                 repo_root = work_path

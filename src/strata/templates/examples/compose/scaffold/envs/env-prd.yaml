@@ -1,0 +1,35 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: ${solution_name}_env_prd
+  annotations:
+    description: Production environment variables for ${solution_name}
+  labels:
+    version: "1.0.0"
+  tags: [${solution_name}, production, environment]
+spec:
+  variables:
+    - key: WORKSPACE
+      store: constant
+      value: ${solution_name}
+    - key: ENVIRONMENT
+      store: constant
+      value: prd
+    - key: DATABASE_URL
+      store: constant
+      value: postgresql://postgres:5432/app
+    - key: APP_PORT
+      store: constant
+      value: "8080"
+
+  secrets:
+    # Set DB_PASSWORD in the environment before deploying:
+    #   $env:DB_PASSWORD = "..."
+    - key: DB_PASSWORD
+      store: env
+      value: DB_PASSWORD
+
+  features:
+    - key: ENABLE_DEBUG
+      store: constant
+      value: "false"

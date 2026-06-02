@@ -28,6 +28,7 @@ class RunDeployCommand(BaseDeployCommand):
         file: Optional[str] = None,
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
+        scope: Optional[str] = None,
         force: bool = False,
         dry_run: bool = False,
         output: Optional[str] = None,
@@ -42,6 +43,7 @@ class RunDeployCommand(BaseDeployCommand):
             quiet=quiet,
         )
         self._stage = stage
+        self._scope = scope
         self._force = force
         self._dry_run = dry_run
         self._resolved_values: Optional[ResolvedValues] = None
@@ -148,6 +150,23 @@ class RunDeployCommand(BaseDeployCommand):
                 f"{len(resolved.features)} feature(s)."
             )
 
+        # Always log STRATA_CONTEXT/STRATA_SENSITIVE at DEBUG; show under --verbose
+        self.logger.debug("strata_context_resolved", **resolved.debug_summary())
+        if self._is_verbose() and self._is_console_output() and not resolved.is_empty():
+            summary = resolved.debug_summary()
+            ctx = summary["strata_context"]
+            sens = summary["strata_sensitive"]
+            click.echo("  STRATA_CONTEXT:")
+            for section, values in ctx.items():
+                if values:
+                    for k, v in values.items():
+                        click.echo(f"    [{section}] {k} = {v}")
+            click.echo("  STRATA_SENSITIVE (keys only):")
+            for section, masked in sens.items():
+                if masked:
+                    for k in masked:
+                        click.echo(f"    [{section}] {k} = ***")
+
         # ok is always True in non-strict mode — keep going even with warnings
         return True
 
@@ -173,6 +192,16 @@ class RunDeployCommand(BaseDeployCommand):
             )
             return False
 
+        # Filter by --scope label when supplied
+        if self._scope:
+            stages_to_run = [s for s in stages_to_run if s.scope == self._scope]
+            if not stages_to_run:
+                self._errors.append(
+                    f"No stages match scope '{self._scope}'. "
+                    f"Available scopes: {[s.scope for s in all_stages if s.scope]}"
+                )
+                return False
+
         if self._is_console_output():
             click.echo(f"\n🚀  Deploying {len(stages_to_run)} stage(s)…")
 
@@ -183,7 +212,11 @@ class RunDeployCommand(BaseDeployCommand):
 
         for stage in stages_to_run:
             if self._is_console_output():
-                label = f"[{stage.type}]" + (f" via {stage.provisioner}" if stage.provisioner else "")
+                label = f"[{stage.name}]"
+                if stage.provisioner:
+                    label += f" via {stage.provisioner}"
+                elif stage.topology:
+                    label += f" topology:{stage.topology}"
                 prefix = "[DRY-RUN] " if self._dry_run else ""
                 click.echo(f"\n  ▶  {prefix}Stage: {stage.name}  {label}")
 
@@ -212,11 +245,6 @@ class RunDeployCommand(BaseDeployCommand):
         """
         deployer = self._create_deployer(stage)
         if deployer is None:
-            self._errors.append(
-                f"Stage '{stage.name}': no deployer available for "
-                f"type='{stage.type}' / provisioner='{stage.provisioner}'. "
-                "Currently supported: infrastructure (terraform)."
-            )
             return False
 
         # --- pre-flight validation ---
@@ -238,6 +266,11 @@ class RunDeployCommand(BaseDeployCommand):
             steps_to_run = [STEP_SETUP, STEP_CHECK, STEP_PLAN]
         else:
             steps_to_run = [STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY]
+
+        # --- dry-run: surface deployer-specific plan context before steps run ---
+        if self._dry_run and self._is_console_output():
+            for line in deployer.describe_plan():
+                click.echo(f"    [DRY-RUN] {line}")
 
         supported = deployer.get_supported_steps()
 
@@ -301,6 +334,8 @@ class RunDeployCommand(BaseDeployCommand):
             if self._is_console_output():
                 for msg in msgs:
                     click.echo(f"      {msg}")
+                if self._dry_run and not msgs:
+                    click.echo(f"      (no extra information available for '{step_name}' in dry run)")
             if not ok:
                 self._errors.extend(msgs)
                 if self._is_ndjson_output():
@@ -336,6 +371,33 @@ class RunDeployCommand(BaseDeployCommand):
                 if ok_save and plan_json_path:
                     click.echo(f"    plan JSON \u2192 {plan_json_path}")
 
+        # --- collect outputs for downstream stages ---
+        if STEP_APPLY in steps_to_run:
+            _ok_out, _outputs, _sensitive, _out_msgs = deployer.collect_outputs()
+            if _ok_out and self._resolved_values is not None:
+                if _outputs:
+                    self._resolved_values.stage_outputs.update(_outputs)
+                if _sensitive:
+                    self._resolved_values.stage_outputs_sensitive.update(_sensitive)
+                if self._is_console_output() and (_outputs or _sensitive):
+                    _sens_note = f", {len(_sensitive)} sensitive (not injected)" if _sensitive else ""
+                    click.echo(f"    \u2713  Collected {len(_outputs)} output(s){_sens_note} for downstream stages.")
+                if _outputs or _sensitive:
+                    self.logger.debug(
+                        "stage_outputs_collected",
+                        stage=stage.name,
+                        **self._resolved_values.debug_summary(),
+                    )
+                    if self._is_verbose() and self._is_console_output():
+                        if _outputs:
+                            for k, v in _outputs.items():
+                                click.echo(f"      [stage_output] {k} = {v}")
+                        if _sensitive:
+                            for k in _sensitive:
+                                click.echo(f"      [stage_output_sensitive] {k} = ***")
+        elif self._dry_run and self._is_console_output():
+            click.echo("    [DRY-RUN] Stage outputs not captured \u2014 apply did not run.")
+
         if self._is_ndjson_output():
             self.emit_ndjson(
                 {
@@ -351,32 +413,87 @@ class RunDeployCommand(BaseDeployCommand):
     def _create_deployer(self, stage: DeploymentStageModel):
         """Instantiate and return the deployer for *stage*, or None.
 
-        Type resolution:
-          stage.provisioner resolves to an IaC entry → match on ProvisionerType
-          stage.type == 'infrastructure' or 'terraform'    → TerraformDeployer
-          stage.type == 'configure' or 'ansible'           → AnsibleDeployer
+        Resolution (mutually exclusive — exactly one required at runtime):
+        - stage.provisioner → look up named provisioner entry in workspace
+        - stage.topology    → look up topology by name → derive provisioner type
+                              (errors if topology not found or provisioner is ambiguous)
+        An error is appended to self._errors when resolution fails.
         """
         resolved_type: Optional[str] = None
+        _iac = None
 
-        if stage.provisioner and self._deployment_service is not None:
-            workspace_service = self._deployment_service.get_workspace_service()
-            if workspace_service:
-                spec = workspace_service.model.spec  # type: ignore[union-attr]
-                iac = next(
-                    (p for p in (spec.provisioners or []) if p.name == stage.provisioner),
-                    None,
-                )
-                if iac and iac.provisioner == ProvisionerType.TERRAFORM:
-                    resolved_type = "terraform"
-                elif iac and iac.provisioner == ProvisionerType.ANSIBLE:
-                    resolved_type = "ansible"
+        if self._deployment_service is None:
+            self._errors.append(f"Stage '{stage.name}': deployment service not loaded.")
+            return None
 
-        # Convention-based fallback from stage.type
-        if resolved_type is None:
-            if stage.type in ("infrastructure", "terraform"):
+        workspace_service = self._deployment_service.get_workspace_service()
+        if workspace_service is None:
+            self._errors.append(f"Stage '{stage.name}': workspace service not loaded.")
+            return None
+
+        spec = workspace_service.model.spec  # type: ignore[union-attr]
+        _provisioners = spec.provisioners or []
+        _available = [str(p.name) for p in _provisioners]
+
+        if stage.provisioner:
+            _iac = next((p for p in _provisioners if p.name == stage.provisioner), None)
+            if _iac and _iac.provisioner == ProvisionerType.TERRAFORM:
                 resolved_type = "terraform"
-            elif stage.type in ("configure", "initialize", "ansible"):
+            elif _iac and _iac.provisioner == ProvisionerType.ANSIBLE:
                 resolved_type = "ansible"
+            elif _iac and _iac.provisioner == ProvisionerType.COMPOSE:
+                resolved_type = "compose"
+            elif _iac and _iac.provisioner == ProvisionerType.HELM:
+                resolved_type = "helm"
+
+        elif stage.topology:
+            _topologies = spec.topology or []
+            topo = next((t for t in _topologies if str(t.name) == stage.topology), None)
+            if topo is None:
+                _topo_names = [str(t.name) for t in _topologies]
+                self._errors.append(
+                    f"Stage '{stage.name}': topology '{stage.topology}' not found in workspace. "
+                    f"Available: {_topo_names if _topo_names else ['(none defined)']}"
+                )
+                return None
+            # topo.provisioner is a name reference — look up the IaC entry directly by name
+            _iac = next((p for p in _provisioners if p.name == topo.provisioner), None)
+            if _iac is None:
+                self._errors.append(
+                    f"Stage '{stage.name}': topology '{stage.topology}' references provisioner "
+                    f"'{topo.provisioner}' which is not defined in the workspace."
+                )
+                return None
+            if _iac.provisioner == ProvisionerType.TERRAFORM:
+                resolved_type = "terraform"
+            elif _iac.provisioner == ProvisionerType.ANSIBLE:
+                resolved_type = "ansible"
+            elif _iac.provisioner == ProvisionerType.COMPOSE:
+                resolved_type = "compose"
+            elif _iac.provisioner == ProvisionerType.HELM:
+                resolved_type = "helm"
+
+        if resolved_type is None:
+            if not stage.provisioner and not stage.topology:
+                self._errors.append(
+                    f"Stage '{stage.name}': either 'provisioner' or 'topology' is required — "
+                    "name a workspace provisioner entry directly, or name a workspace topology "
+                    "to derive the provisioner from the topology definition."
+                )
+            elif stage.provisioner and _iac is None:
+                self._errors.append(
+                    f"Stage '{stage.name}': provisioner '{stage.provisioner}' not found in workspace. "
+                    f"Available: {_available if _available else ['(none defined)']}"
+                )
+            elif _iac is not None:
+                self._errors.append(
+                    f"Stage '{stage.name}': provisioner has unsupported type "
+                    f"'{_iac.provisioner}'. Supported: terraform, ansible, compose, helm."
+                )
+            return None
+
+        # Filter STRATA_SENSITIVE to only secrets declared by this stage
+        _stage_values = self._resolved_values.for_stage(stage.secrets) if self._resolved_values else None
 
         if resolved_type == "terraform":
             return TerraformDeployer(
@@ -387,7 +504,7 @@ class RunDeployCommand(BaseDeployCommand):
                 work_path=self._work_path,
                 verbose=self._is_verbose(),
                 force=self._force,
-                resolved_values=self._resolved_values,
+                resolved_values=_stage_values,
                 solution_controller=self._solution_controller,
             )
 
@@ -402,7 +519,37 @@ class RunDeployCommand(BaseDeployCommand):
                 work_path=self._work_path,
                 verbose=self._is_verbose(),
                 force=self._force,
-                resolved_values=self._resolved_values,
+                resolved_values=_stage_values,
+                solution_controller=self._solution_controller,
+            )
+
+        if resolved_type == "compose":
+            from strata.deployers.compose_deployer import ComposeDeployer
+
+            return ComposeDeployer(
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+                force=self._force,
+                resolved_values=_stage_values,
+                solution_controller=self._solution_controller,
+            )
+
+        if resolved_type == "helm":
+            from strata.deployers.helm_deployer import HelmDeployer
+
+            return HelmDeployer(
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+                force=self._force,
+                resolved_values=_stage_values,
                 solution_controller=self._solution_controller,
             )
 

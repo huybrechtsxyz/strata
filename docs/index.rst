@@ -78,6 +78,7 @@ strata
    :maxdepth: 2
    :caption: Guides:
 
+   guides/how-deployments-work
    guides/faq
    guides/cookbook-add-environment
    guides/pattern-cross-env-changes

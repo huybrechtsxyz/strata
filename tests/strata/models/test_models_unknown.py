@@ -5,7 +5,7 @@ Script Name   : test_models_unknown.py
 Author        : Vincent Huybrechts
 Version       : 1.0.0
 Python Version: 3.12+
-Description   : Tests for unknown models in XYZ Platform.
+Description   : Tests for unknown models in strata.
 ===============================================================================
 """
 

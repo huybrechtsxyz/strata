@@ -118,11 +118,61 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 
 
 #
+# SECTIONED HELP GROUP
+#
+
+_HELP_SECTIONS: list[tuple[str, list[str]]] = [
+    ("Workspace Setup", ["sln", "profile", "new"]),
+    ("Configuration", ["config", "ref", "repo", "vars", "values"]),
+    ("Build & Deploy", ["build", "diff", "deploy"]),
+    ("Inspection & Validation", ["validate", "schema", "tools"]),
+    ("Utility", ["version", "help", "log", "completion"]),
+]
+
+
+class SectionedGroup(click.Group):
+    """Click Group that renders ``--help`` commands in named sections."""
+
+    def __init__(self, *args, sections: list[tuple[str, list[str]]] | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._sections = sections or []
+
+    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        all_commands: dict[str, click.Command] = {
+            name: cmd for name in self.list_commands(ctx) if (cmd := self.commands.get(name)) and not cmd.hidden
+        }
+
+        assigned: set[str] = set()
+
+        for title, names in self._sections:
+            entries = [
+                (name, all_commands[name].get_short_help_str(limit=formatter.width))
+                for name in names
+                if name in all_commands
+            ]
+            if entries:
+                with formatter.section(title):
+                    formatter.write_dl(entries)
+                assigned.update(n for n, _ in entries)
+
+        leftover = [
+            (name, all_commands[name].get_short_help_str(limit=formatter.width))
+            for name in sorted(all_commands)
+            if name not in assigned
+        ]
+        if leftover:
+            with formatter.section("Other Commands"):
+                formatter.write_dl(leftover)
+
+
+#
 # MAIN CLI GROUP
 #
 
 
 @click.group(
+    cls=SectionedGroup,
+    sections=_HELP_SECTIONS,
     name="main",
     help=("Strata CLI.\n\nAutomates workspace preparation, configuration, and deployment for the Strata platform.\n\n"),
     context_settings={

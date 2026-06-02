@@ -551,7 +551,7 @@ ipython_config.py
 # Squad: SubSquad activation file (local to this machine)
 .squad-workstream
 
-# xyz-platform workspace state — commit solution.json, ignore personal CLI prefs
+# strata workspace state — commit solution.json, ignore personal CLI prefs
 .platform/cli.yaml
 .platform/logs/
 .platform/*.log

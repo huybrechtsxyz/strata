@@ -1,0 +1,55 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: ${solution_name}_config
+  annotations:
+    description: Docker Compose services platform configuration for ${solution_name}
+  labels:
+    version: "1.0.0"
+  tags: [${solution_name}, configuration, compose]
+spec:
+  # Deployment hierarchy — maps to properties in the deployment spec
+  layering:
+    - name: environment
+      description: "Deployment environment (dev, staging, prd)"
+      required: true
+
+  # Required properties for every deployment referencing this config
+  deployment:
+    additional_properties: false
+    properties:
+      environment:
+        pattern: "^(dev|staging|prd)$"
+        required: true
+        description: "Target environment"
+
+  # Repositories available via @${solution_name}/... references
+  repositories:
+    - name: ${solution_name}
+      type: gitops
+      repository: git@github.com:your-org/${solution_name}-config.git
+      reference: main
+      source_path: .
+      deploy_path: .
+
+  # Integrations
+  integrations:
+    - name: git
+      type: git
+      capabilities: [repository]
+      required: true
+      validation:
+        command: git --version
+        min_version: "2.30.0"
+      authentication:
+        method: cli
+
+    - name: docker
+      type: docker
+      capabilities: [container]
+      required: true
+      validation:
+        command: docker --version
+        min_version: "24.0.0"
+      authentication:
+        method: cli

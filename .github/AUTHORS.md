@@ -1,4 +1,4 @@
-# XYZ Platform - Authors
+# strata - Authors
 
 This project was created and is maintained by the contributors listed below. This file records primary authors and major contributors for attribution.
 

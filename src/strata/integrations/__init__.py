@@ -23,6 +23,7 @@ from strata.integrations.flagsmith import FlagsmithIntegration
 from strata.integrations.git import GitIntegration
 from strata.integrations.hashicorp_consul import ConsulIntegration
 from strata.integrations.hashicorp_vault import VaultIntegration
+from strata.integrations.helm import HelmIntegration
 from strata.integrations.infisical import InfisicalIntegration
 from strata.integrations.openbao import OpenBaoIntegration
 from strata.integrations.opentofu import OpenTofuIntegration
@@ -50,6 +51,7 @@ __all__ = [
     "BitwardenIntegration",
     "GitIntegration",
     "DockerIntegration",
+    "HelmIntegration",
     "TerraformIntegration",
     "AzureKeyVaultIntegration",
     "AzureAppConfigIntegration",

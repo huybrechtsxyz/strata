@@ -20,6 +20,64 @@ class ModuleService(BaseService["ModuleModel"]):
         """Return the ModuleModel class for validation."""
         return ModuleModel
 
+    def _validate_self(self) -> Tuple[bool, List[str]]:
+        """
+        Phase 1.5: Self-consistency checks — no external dependencies required.
+
+        Validates intra-document constraints that Pydantic model validators cannot check:
+        - services[].depends_on entries must reference real service names in this module
+        - services[].environment var/secret/feature refs must exist in spec.references
+
+        Returns:
+            Tuple[bool, List[str]]: (success, list of error messages)
+        """
+        if not self.model:
+            return True, []
+
+        errors: List[str] = []
+        spec = self.model.spec
+        services = spec.services
+        if not services:
+            return True, []
+
+        module_name = self.model.meta.name
+        service_names = {s.name for s in services}
+
+        # Build reference sets for cross-validation
+        declared_variables = set(spec.references.variables or []) if spec.references else set()
+        declared_secrets = set(spec.references.secrets or []) if spec.references else set()
+        declared_features = set(spec.references.features or []) if spec.references else set()
+
+        for service in services:
+            # Validate depends_on: all entries must be service names within this module
+            for dep in service.depends_on or []:
+                if dep not in service_names:
+                    errors.append(
+                        f"Module '{module_name}', service '{service.name}': "
+                        f"depends_on '{dep}' is not a service defined in this module. "
+                        f"Available services: {sorted(service_names)}."
+                    )
+
+            # Validate environment refs exist in spec.references
+            for env in service.environment or []:
+                if env.var is not None and env.var not in declared_variables:
+                    errors.append(
+                        f"Module '{module_name}', service '{service.name}', "
+                        f"env '{env.key}': var '{env.var}' is not declared in spec.references.variables."
+                    )
+                if env.secret is not None and env.secret not in declared_secrets:
+                    errors.append(
+                        f"Module '{module_name}', service '{service.name}', "
+                        f"env '{env.key}': secret '{env.secret}' is not declared in spec.references.secrets."
+                    )
+                if env.feature is not None and env.feature not in declared_features:
+                    errors.append(
+                        f"Module '{module_name}', service '{service.name}', "
+                        f"env '{env.key}': feature '{env.feature}' is not declared in spec.references.features."
+                    )
+
+        return len(errors) == 0, errors
+
     def _validate_dynamic(
         self,
         configuration_model: Optional["ConfigurationModel"] = None,
@@ -28,23 +86,10 @@ class ModuleService(BaseService["ModuleModel"]):
         """
         Phase 2: Dynamic validation against configuration.
 
-        Module validation is intentionally minimal since:
-        - Source validation is complete (SourceModel validates paths, formats, security)
-        - Lifecycle scripts validated by ScriptsModel (FilePath + extensions)
-        - Modules are standalone definitions (no cross-references)
-        - Referenced by workspace components (workspace validates FilePath references)
-        - No variable/secret references (modules don't use dynamic values)
-
-        All validation is handled by MODEL validators:
-        - SourceModel: repository format, reference format, relative paths, security
-        - ScriptsModel: lifecycle phase scripts (exists, valid extensions)
-        - Required fields and types
-
-        Args:
-            configuration_model: Optional ConfigurationModel for cross-validation
+        Module cross-references (provider, workspace topology, etc.) would go here.
+        Currently no module-level cross-service checks are needed.
 
         Returns:
             Tuple[bool, List[str]]: (success, list of error messages)
         """
-        # No cross-reference validation needed for module
         return True, []

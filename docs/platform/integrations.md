@@ -13,6 +13,7 @@ Integrations connect the platform to external tools and services (git, terraform
 | `OpenTofuIntegration`       | `integrations.opentofu`         | `opentofu`         | `IInfrastructureTool`                        |
 | `AnsibleIntegration`        | `integrations.ansible`          | `ansible`          | `IInfrastructureTool`                        |
 | `DockerIntegration`         | `integrations.docker`           | `docker`           | `IContainerTool`                             |
+| `HelmIntegration`           | `integrations.helm`             | `helm`             | `IInfrastructureTool`                        |
 | `BitwardenIntegration`      | `integrations.bitwarden`        | `bitwarden`        | `ISecretStore`                               |
 | `VaultIntegration`          | `integrations.hashicorp_vault`  | `hashicorp_vault`  | `IVariableStore`, `ISecretStore`, `IKVStore` |
 | `OpenBaoIntegration`        | `integrations.openbao`          | `openbao`          | `IVariableStore`, `ISecretStore`, `IKVStore` |
@@ -119,16 +120,16 @@ if isinstance(integration, ISecretStore):
     secret = integration.get_secret("my/secret")
 ```
 
-| YAML capability string | Protocol              | Methods                                          | Covers (examples)                                                                                                     |
-| ---------------------- | --------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `variables`            | `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` | Consul, Azure App Configuration, Vault                                                                                |
-| `secrets`              | `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       | Vault, Azure KeyVault, Bitwarden, Infisical — **`github` and `environment` are built-in resolvers, not integrations** |
-| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    | Azure App Configuration, Flagsmith                                                                                    |
-| `keyvalue`             | `IKVStore`            | `get_kv`, `set_kv`                               | Consul, Vault KV, etcd                                                                                                |
-| `repository`           | `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            | Git, Mercurial                                                                                                        |
-| `infrastructure`       | `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               | Terraform, OpenTofu, **Ansible**, Pulumi *(umbrella for all IaC + config-management tools — not `configuration`)*     |
-| `container`            | `IContainerTool`      | `build`, `run`, `push`, `pull`                   | Docker, Podman, **Helm** *(umbrella for all container + container-native deployment tools — not `deployment`)*        |
-| `api`                  | *(no protocol)*       | Generic REST/HTTP — no capability interface      | Any REST/HTTP endpoint                                                                                                |
+| YAML capability string | Protocol              | Methods                                          | Covers (examples)                                                                                                           |
+| ---------------------- | --------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `variables`            | `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` | Consul, Azure App Configuration, Vault                                                                                      |
+| `secrets`              | `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       | Vault, Azure KeyVault, Bitwarden, Infisical — **`github` and `environment` are built-in resolvers, not integrations**       |
+| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    | Azure App Configuration, Flagsmith                                                                                          |
+| `keyvalue`             | `IKVStore`            | `get_kv`, `set_kv`                               | Consul, Vault KV, etcd                                                                                                      |
+| `repository`           | `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            | Git, Mercurial                                                                                                              |
+| `infrastructure`       | `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               | Terraform, OpenTofu, **Ansible**, **Helm**, Pulumi *(umbrella for all IaC + config-management tools — not `configuration`)* |
+| `container`            | `IContainerTool`      | `build`, `run`, `push`, `pull`                   | Docker, Podman *(umbrella for all container + container-native deployment tools — not `deployment`)*                        |
+| `api`                  | *(no protocol)*       | Generic REST/HTTP — no capability interface      | Any REST/HTTP endpoint                                                                                                      |
 
 `StoreIntegration` (base for all store-type integrations) provides no-op default implementations for all store methods — subclasses override only what they support.
 
@@ -337,6 +338,37 @@ No environment variables required. Docker communicates with the local daemon.
 | -------------- | ------------------------------------------------------------------------------------------- |
 | Docker daemon  | Docker Desktop or the Docker daemon must be running. No env vars required.                  |
 | `docker login` | Run `docker login <registry>` to authenticate to a private registry before pushing/pulling. |
+
+Used by `ComposeDeployer` for Docker Stack deployments.
+
+---
+
+### Helm
+
+**CLI command:** `helm`  
+**Install:** <https://helm.sh/docs/intro/install/>
+
+#### Environment variables
+
+| Variable         | Purpose                                                | Required |
+| ---------------- | ------------------------------------------------------ | -------- |
+| `KUBECONFIG`     | Path to kubeconfig file (defaults to `~/.kube/config`) | No       |
+| `HELM_NAMESPACE` | Optional default namespace for Helm operations         | No       |
+
+#### Auth methods
+
+| Method                     | Description                                                                        |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| kubeconfig                 | Service account token, OIDC, or exec plugin — configured in `~/.kube/config`.      |
+| In-cluster service account | When running inside a Kubernetes pod, Helm uses the mounted service account token. |
+
+#### Which deployer uses it
+
+`HelmDeployer`
+
+#### Troubleshooting
+
+Run `strata tools check helm` for live status. Ensure `helm` is in your PATH and that `kubectl` can reach your cluster (`kubectl cluster-info`).
 
 ---
 

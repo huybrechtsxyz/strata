@@ -16,7 +16,7 @@ $projectRoot = Get-ProjectRoot
 Set-Location $projectRoot
 
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
-Write-Host "[*] XYZ Platform - Clean" -ForegroundColor Cyan
+Write-Host "[*] strata - Clean" -ForegroundColor Cyan
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host ""
 

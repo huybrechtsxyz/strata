@@ -23,8 +23,9 @@ Environment variables injected into every script subprocess:
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+from strata.controllers.value_controller import ResolvedValues
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -89,6 +90,7 @@ class ScriptDeployer(BaseDeployer):
         work_path: Path,
         verbose: bool = False,
         force: bool = False,
+        resolved_values: Optional[ResolvedValues] = None,
     ) -> None:
         super().__init__(
             stage=stage,
@@ -99,6 +101,7 @@ class ScriptDeployer(BaseDeployer):
             verbose=verbose,
             force=force,
         )
+        self.resolved_values = resolved_values
 
     # ------------------------------------------------------------------
     # Metadata
@@ -264,6 +267,9 @@ class ScriptDeployer(BaseDeployer):
             return False, messages
 
         env = os.environ.copy()
+        if self.resolved_values is not None:
+            env.update(self.resolved_values.as_compose_env())
+        # Fixed keys always win — set after resolved values
         env["WORK_PATH"] = str(self.work_path)
         env["BUILD_PATH"] = str(self.build_path)
         env["STAGE_NAME"] = self.stage.name

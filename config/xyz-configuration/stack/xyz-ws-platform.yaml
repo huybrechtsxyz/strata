@@ -22,7 +22,7 @@ spec:
   topology:
     - name: xzy_swarm
       provider: kamatera_eu_fr
-      provisioner: terraform
+      provisioner: xyz_iac
       type: docker_swarm
       volumes:
         - name: config
@@ -40,7 +40,7 @@ spec:
         - resource: xyz_vm_manager
         - resource: xyz_vm_infra
         - resource: xyz_vm_worker
-  
+
   resources:
     - name: xyz_vm_manager
       file: "@xyz_configuration/stack/xyz-rx-vm-manager.yaml"
