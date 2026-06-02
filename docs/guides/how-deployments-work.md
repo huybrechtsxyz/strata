@@ -242,7 +242,7 @@ output "subnet_id" {
 }
 ```
 
-```hcl
+```
 # terraform/servers/outputs.tf
 output "server_ips" {
   value = [for s in aws_instance.app : s.private_ip]  # list of IPs

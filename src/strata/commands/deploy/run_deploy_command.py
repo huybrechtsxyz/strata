@@ -472,14 +472,6 @@ class RunDeployCommand(BaseDeployCommand):
                 resolved_type = "compose"
             elif _iac.provisioner == ProvisionerType.HELM:
                 resolved_type = "helm"
-            if not matching:
-                resolved_type = "terraform"
-            elif _iac.provisioner == ProvisionerType.ANSIBLE:
-                resolved_type = "ansible"
-            elif _iac.provisioner == ProvisionerType.COMPOSE:
-                resolved_type = "compose"
-            elif _iac.provisioner == ProvisionerType.HELM:
-                resolved_type = "helm"
 
         if resolved_type is None:
             if not stage.provisioner and not stage.topology:
