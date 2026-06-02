@@ -20,6 +20,8 @@ Typical caller sequences:
 """
 
 import os
+import re
+import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -38,6 +40,7 @@ from strata.deployers.base_deployer import (
     BaseDeployer,
 )
 from strata.integrations.ansible import AnsibleIntegration
+from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
 from strata.models.workspace_model import WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
@@ -47,6 +50,8 @@ try:
     from strata.models.deployment_model import DeploymentStageModel
 except ImportError:  # pragma: no cover
     pass
+
+logger = get_logger(__name__)
 
 
 class AnsibleDeployer(BaseDeployer):
@@ -237,24 +242,93 @@ class AnsibleDeployer(BaseDeployer):
         return None
 
     def _get_ssh_key_content(self) -> Optional[str]:
-        """Look up SSH private key content from resolved_values.secrets.
+        """Look up SSH private key content from resolved_values.secrets, then os.environ.
 
         The secret name defaults to ``ssh_private_key`` but can be overridden
         via ``configuration["ssh_private_key_secret"]``.
+        Falls back to ``os.environ[secret_name.upper()]`` — e.g. ``HETZNER_PRIVATE_KEY``
+        when the secret name is ``hetzner_private_key``.
         """
-        if not self.resolved_values:
-            return None
         cfg = self._get_configuration()
         secret_name = cfg.get("ssh_private_key_secret", "ssh_private_key") if cfg else "ssh_private_key"
-        return self.resolved_values.secrets.get(secret_name)
+        if self.resolved_values:
+            key = self.resolved_values.secrets.get(secret_name)
+            if key:
+                return key
+        return os.environ.get(secret_name.upper())
 
     @contextmanager
     def _ssh_key_context(self) -> Generator[Optional[str], None, None]:
-        """Write SSH private key to a temp file (chmod 600), yield its path, delete on exit."""
+        """Load SSH private key into a temporary ssh-agent (no disk write).
+
+        Yields ``None`` when the agent is used — Ansible picks up ``SSH_AUTH_SOCK``
+        automatically and no ``--private-key`` flag is needed.
+        Falls back to a chmod-600 tempfile if ssh-agent or ssh-add is unavailable,
+        yielding the key file path in that case.
+        """
         key_content = self._get_ssh_key_content()
         if not key_content:
             yield None
             return
+
+        # --- Try ssh-agent: key lives in agent memory, never written to disk ---
+        try:
+            agent_result = subprocess.run(
+                ["ssh-agent", "-s"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if agent_result.returncode == 0:
+                # Parse socket/pid — handles POSIX, CMD, and PowerShell output formats
+                sock_match = re.search(r"SSH_AUTH_SOCK=([^;\s]+)", agent_result.stdout) or re.search(
+                    r"SSH_AUTH_SOCK\s*=\s*'([^']+)'", agent_result.stdout
+                )
+                pid_match = re.search(r"SSH_AGENT_PID=(\d+)", agent_result.stdout) or re.search(
+                    r"SSH_AGENT_PID\s*=\s*'(\d+)'", agent_result.stdout
+                )
+                if sock_match and pid_match:
+                    agent_sock = sock_match.group(1)
+                    agent_pid = pid_match.group(1)
+                    agent_env = {"SSH_AUTH_SOCK": agent_sock, "SSH_AGENT_PID": agent_pid}
+                    add_result = subprocess.run(
+                        ["ssh-add", "-"],
+                        input=key_content,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        env={**os.environ, **agent_env},
+                    )
+                    if add_result.returncode == 0:
+                        old_sock = os.environ.get("SSH_AUTH_SOCK")
+                        old_pid = os.environ.get("SSH_AGENT_PID")
+                        os.environ["SSH_AUTH_SOCK"] = agent_sock
+                        os.environ["SSH_AGENT_PID"] = agent_pid
+                        try:
+                            yield None  # Ansible uses agent; no --private-key flag
+                        finally:
+                            subprocess.run(["ssh-agent", "-k"], capture_output=True, timeout=5)
+                            if old_sock is None:
+                                os.environ.pop("SSH_AUTH_SOCK", None)
+                            else:
+                                os.environ["SSH_AUTH_SOCK"] = old_sock
+                            if old_pid is None:
+                                os.environ.pop("SSH_AGENT_PID", None)
+                            else:
+                                os.environ["SSH_AGENT_PID"] = old_pid
+                        return
+                    else:
+                        logger.warning("ssh-add failed — falling back to tempfile", stderr=add_result.stderr.strip())
+                        subprocess.run(
+                            ["ssh-agent", "-k"],
+                            capture_output=True,
+                            env={**os.environ, **agent_env},
+                            timeout=5,
+                        )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            logger.warning("ssh-agent unavailable — falling back to tempfile for SSH key")
+
+        # --- Fallback: tempfile with chmod 600 ---
         fd, key_path = tempfile.mkstemp(suffix=".pem", prefix="ansible_ssh_")
         try:
             os.close(fd)

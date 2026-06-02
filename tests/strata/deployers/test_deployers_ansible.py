@@ -373,6 +373,7 @@ class TestAnsibleDeployerSshKey:
             assert key_file is None
 
     def test_ssh_key_context_writes_and_cleans_up(self, tmp_path):
+        """Tempfile fallback: used when ssh-agent is unavailable."""
         import os
         import sys
 
@@ -384,14 +385,13 @@ class TestAnsibleDeployerSshKey:
         d._iac_model = MagicMock()
         d._iac_model.configuration = None
         captured = {}
-        with d._ssh_key_context() as key_file:
-            assert key_file is not None
-            assert os.path.exists(key_file)
-            # chmod 600 is meaningful only on POSIX — Windows ignores it
-            if sys.platform != "win32":
-                assert oct(os.stat(key_file).st_mode)[-3:] == "600"
-            captured["path"] = key_file
-        # File must be deleted after context exits
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            with d._ssh_key_context() as key_file:
+                assert key_file is not None
+                assert os.path.exists(key_file)
+                if sys.platform != "win32":
+                    assert oct(os.stat(key_file).st_mode)[-3:] == "600"
+                captured["path"] = key_file
         assert not os.path.exists(captured["path"])
 
     def test_ssh_key_context_uses_custom_secret_name(self):
@@ -402,8 +402,105 @@ class TestAnsibleDeployerSshKey:
         d.resolved_values = rv
         d._iac_model = MagicMock()
         d._iac_model.configuration = {"ssh_private_key_secret": "haven_ssh_key"}
-        with d._ssh_key_context() as key_file:
-            assert key_file is not None
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            with d._ssh_key_context() as key_file:
+                assert key_file is not None  # tempfile fallback path
+
+    def test_ssh_key_context_uses_agent_when_available(self):
+        """When ssh-agent and ssh-add succeed, key_file is None (agent mode)."""
+        import os
+
+        from strata.controllers.value_controller import ResolvedValues
+
+        rv = ResolvedValues(secrets={"ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n"})
+        d = _make_deployer()
+        d.resolved_values = rv
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+
+        def _mock_run(args, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            result.stderr = ""
+            if args[:2] == ["ssh-agent", "-s"]:
+                result.stdout = (
+                    "SSH_AUTH_SOCK=/tmp/ssh-test/agent.99999; export SSH_AUTH_SOCK;\n"
+                    "SSH_AGENT_PID=99999; export SSH_AGENT_PID;\n"
+                )
+            else:
+                result.stdout = ""
+            return result
+
+        env_before = os.environ.copy()
+        with patch("subprocess.run", side_effect=_mock_run):
+            with d._ssh_key_context() as key_file:
+                assert key_file is None  # agent mode — no file path
+                assert os.environ.get("SSH_AUTH_SOCK") == "/tmp/ssh-test/agent.99999"
+        # env restored after context exits
+        assert os.environ.get("SSH_AUTH_SOCK") == env_before.get("SSH_AUTH_SOCK")
+        assert os.environ.get("SSH_AGENT_PID") == env_before.get("SSH_AGENT_PID")
+
+    def test_ssh_key_context_falls_back_when_ssh_add_fails(self, tmp_path):
+        """If ssh-add returns non-zero, fall back to tempfile."""
+        import os
+
+        from strata.controllers.value_controller import ResolvedValues
+
+        rv = ResolvedValues(secrets={"ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n"})
+        d = _make_deployer()
+        d.resolved_values = rv
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+
+        def _mock_run(args, **kwargs):
+            result = MagicMock()
+            if args[:2] == ["ssh-agent", "-s"]:
+                result.returncode = 0
+                result.stdout = (
+                    "SSH_AUTH_SOCK=/tmp/ssh-test/agent.99999; export SSH_AUTH_SOCK;\n"
+                    "SSH_AGENT_PID=99999; export SSH_AGENT_PID;\n"
+                )
+            elif args[0] == "ssh-add":
+                result.returncode = 1
+                result.stderr = "Could not add identity"
+                result.stdout = ""
+            else:
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+            return result
+
+        with patch("subprocess.run", side_effect=_mock_run):
+            with d._ssh_key_context() as key_file:
+                assert key_file is not None  # fell back to tempfile
+                assert os.path.exists(key_file)
+
+    def test_get_ssh_key_content_reads_from_env_fallback(self):
+        """When no resolved_values, reads from os.environ using secret name uppercased."""
+        import os
+
+        d = _make_deployer()
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = {"ssh_private_key_secret": "hetzner_private_key"}
+        env_key = "-----BEGIN OPENSSH PRIVATE KEY-----\nfromenv\n"
+        with patch.dict(os.environ, {"HETZNER_PRIVATE_KEY": env_key}):
+            assert d._get_ssh_key_content() == env_key
+
+    def test_get_ssh_key_content_secrets_takes_priority_over_env(self):
+        """resolved_values.secrets wins over os.environ when both are present."""
+        import os
+
+        from strata.controllers.value_controller import ResolvedValues
+
+        secret_key = "-----BEGIN OPENSSH PRIVATE KEY-----\nfromsecret\n"
+        env_key = "-----BEGIN OPENSSH PRIVATE KEY-----\nfromenv\n"
+        rv = ResolvedValues(secrets={"ssh_private_key": secret_key})
+        d = _make_deployer()
+        d.resolved_values = rv
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+        with patch.dict(os.environ, {"SSH_PRIVATE_KEY": env_key}):
+            assert d._get_ssh_key_content() == secret_key
 
 
 class TestAnsibleDeployerTimeouts:
