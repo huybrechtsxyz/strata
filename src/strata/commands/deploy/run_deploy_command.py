@@ -150,6 +150,23 @@ class RunDeployCommand(BaseDeployCommand):
                 f"{len(resolved.features)} feature(s)."
             )
 
+        # Always log STRATA_CONTEXT/STRATA_SENSITIVE at DEBUG; show under --verbose
+        self.logger.debug("strata_context_resolved", **resolved.debug_summary())
+        if self._is_verbose() and self._is_console_output() and not resolved.is_empty():
+            summary = resolved.debug_summary()
+            ctx = summary["strata_context"]
+            sens = summary["strata_sensitive"]
+            click.echo("  STRATA_CONTEXT:")
+            for section, values in ctx.items():
+                if values:
+                    for k, v in values.items():
+                        click.echo(f"    [{section}] {k} = {v}")
+            click.echo("  STRATA_SENSITIVE (keys only):")
+            for section, masked in sens.items():
+                if masked:
+                    for k in masked:
+                        click.echo(f"    [{section}] {k} = ***")
+
         # ok is always True in non-strict mode — keep going even with warnings
         return True
 
@@ -365,6 +382,19 @@ class RunDeployCommand(BaseDeployCommand):
                 if self._is_console_output() and (_outputs or _sensitive):
                     _sens_note = f", {len(_sensitive)} sensitive (not injected)" if _sensitive else ""
                     click.echo(f"    \u2713  Collected {len(_outputs)} output(s){_sens_note} for downstream stages.")
+                if _outputs or _sensitive:
+                    self.logger.debug(
+                        "stage_outputs_collected",
+                        stage=stage.name,
+                        **self._resolved_values.debug_summary(),
+                    )
+                    if self._is_verbose() and self._is_console_output():
+                        if _outputs:
+                            for k, v in _outputs.items():
+                                click.echo(f"      [stage_output] {k} = {v}")
+                        if _sensitive:
+                            for k in _sensitive:
+                                click.echo(f"      [stage_output_sensitive] {k} = ***")
         elif self._dry_run and self._is_console_output():
             click.echo("    [DRY-RUN] Stage outputs not captured \u2014 apply did not run.")
 

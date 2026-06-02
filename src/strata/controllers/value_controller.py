@@ -95,6 +95,25 @@ class ResolvedValues:
             errors=list(self.errors),
         )
 
+    def debug_summary(self) -> Dict[str, Any]:
+        """Return a debug-safe representation of STRATA_CONTEXT and STRATA_SENSITIVE.
+
+        STRATA_CONTEXT (variables, features, stage_outputs) — values shown as-is.
+        STRATA_SENSITIVE (secrets, stage_outputs_sensitive) — keys listed, values masked as '***'.
+        Safe to pass to structured logging; never write to stdout without --verbose.
+        """
+        return {
+            "strata_context": {
+                "variables": dict(self.variables),
+                "features": {k: v for k, v in self.features.items() if v is not None},
+                "stage_outputs": dict(self.stage_outputs),
+            },
+            "strata_sensitive": {
+                "secrets": {k: "***" for k in self.secrets},
+                "stage_outputs_sensitive": {k: "***" for k in self.stage_outputs_sensitive},
+            },
+        }
+
     def as_compose_env(self) -> Dict[str, str]:
         """Return all resolved values as a flat env-var dict for Docker Compose ``${KEY}`` substitution.
 
