@@ -9,6 +9,7 @@ from typing import Annotated, Dict, List, Optional
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     RootModel,
     StringConstraints,
@@ -188,6 +189,8 @@ class SourceModel(BaseModel):
           chart_version: "2024.12.0"
           chart_repository: https://charts.goauthentik.io
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     repository: Optional[PlatformName] = Field(
         None, description="Name of the repository from configuration's repositories list"
