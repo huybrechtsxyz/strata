@@ -181,6 +181,10 @@ class ComposeBuilder(BaseBuilder):
 
         compose_services: Dict[str, Any] = {}
         top_volumes: Dict[str, Any] = {}
+        # Pass-through mode: resolved path to an externally-supplied compose file.
+        # Exactly one per namespace; cannot be mixed with generative services.
+        passthrough_file: Optional[Path] = None
+        passthrough_module: Optional[str] = None
 
         for module_ref in modules:
             try:
@@ -211,11 +215,38 @@ class ComposeBuilder(BaseBuilder):
                 # Not a compose module — skip silently
                 continue
 
-            if not module.spec.services:
-                # Compose module declared but no services — skip
+            module_name = str(module.meta.name)
+
+            # Pass-through: explicit external compose file reference
+            if module.spec.compose_file:
+                if passthrough_file is not None:
+                    self._errors.append(
+                        f"Namespace '{namespace_name}': only one compose_file per namespace is allowed "
+                        f"('{passthrough_module}' and '{module_name}' both set compose_file)."
+                    )
+                    return False
+                try:
+                    resolved = resolve_path(str(work_path), module.spec.compose_file)
+                except (ValueError, Exception) as exc:
+                    self._errors.append(
+                        f"Namespace '{namespace_name}', module '{module_name}': "
+                        f"cannot resolve compose_file '{module.spec.compose_file}': {exc}"
+                    )
+                    return False
+                if not resolved.exists():
+                    self._errors.append(
+                        f"Namespace '{namespace_name}', module '{module_name}': compose_file not found: '{resolved}'"
+                    )
+                    return False
+                passthrough_file = resolved
+                passthrough_module = module_name
                 continue
 
-            module_name = str(module.meta.name)
+            # Generative: build from spec.services
+            if not module.spec.services:
+                # Compose module declared but no services and no compose_file — skip
+                continue
+
             svc_entries, vol_entries = self._render_module_services(
                 namespace_name=namespace_name,
                 module_name=module_name,
@@ -223,6 +254,34 @@ class ComposeBuilder(BaseBuilder):
             )
             compose_services.update(svc_entries)
             top_volumes.update(vol_entries)
+
+        # Cannot mix pass-through and generative in the same namespace
+        if passthrough_file is not None and compose_services:
+            self._errors.append(
+                f"Namespace '{namespace_name}': cannot mix compose_file (pass-through) and "
+                f"spec.services (generative) in the same namespace."
+            )
+            return False
+
+        # Pass-through: copy the external compose file verbatim
+        if passthrough_file is not None:
+            ns_path = deployment_build_path / namespace_name / "docker-compose.yml"
+            if dry_run:
+                if self.verbose:
+                    self._messages.append(f"[DRY-RUN] Would copy: {passthrough_file} → {ns_path}")
+                return True
+            ns_dir = deployment_build_path / namespace_name
+            ns_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                import shutil
+
+                shutil.copy2(passthrough_file, ns_path)
+            except OSError as exc:
+                self._errors.append(f"Failed to copy '{passthrough_file}' to '{ns_path}': {exc}")
+                return False
+            if self.verbose:
+                self._messages.append(f"Copied compose file: {passthrough_file} → {ns_path}")
+            return True
 
         if not compose_services:
             # No compose modules in this namespace — nothing to write

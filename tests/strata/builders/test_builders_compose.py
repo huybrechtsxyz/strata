@@ -1,5 +1,6 @@
 """Unit tests for ComposeBuilder."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import yaml
@@ -53,6 +54,7 @@ def _make_compose_module(name: str, services):
     mod.spec = MagicMock()
     mod.spec.type = ServiceDeployerType.COMPOSE
     mod.spec.services = services
+    mod.spec.compose_file = None  # generative mode — no external file
     return mod
 
 
@@ -432,3 +434,201 @@ class TestComposeBuilderBuildErrors:
 
         assert ok is False
         assert any("validation failed" in e for e in builder.get_errors())
+
+
+# ---------------------------------------------------------------------------
+# build — pass-through mode (compose_file)
+# ---------------------------------------------------------------------------
+
+
+def _make_passthrough_module(name: str, compose_file: str):
+    """Return a mock compose module with compose_file set (no services)."""
+    mod = MagicMock()
+    mod.meta = MagicMock()
+    mod.meta.name = name
+    mod.spec = MagicMock()
+    mod.spec.type = ServiceDeployerType.COMPOSE
+    mod.spec.services = None
+    mod.spec.compose_file = compose_file
+    return mod
+
+
+class TestComposeBuilderPassThrough:
+    def _run_passthrough(
+        self,
+        tmp_path,
+        *,
+        compose_file_path,
+        namespace="testns",
+        module_name="traefik",
+    ):
+        """Build helper: one namespace, one pass-through module."""
+        pt_module = _make_passthrough_module(module_name, compose_file=str(compose_file_path))
+        mod_service = _make_mod_service(module=pt_module)
+        mod_ref = _module_ref(module_name, "module.yaml")
+
+        module_yaml = tmp_path / "module.yaml"
+        module_yaml.write_text("")
+
+        ns_svc = _mock_namespace_service([mod_ref])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={namespace: ns_svc})
+
+        builder = ComposeBuilder()
+
+        # resolve_path is called twice: once for the module file, once for compose_file.
+        def _resolve(base, ref):
+            if ref == str(compose_file_path):
+                return Path(ref)
+            return module_yaml
+
+        with (
+            patch("strata.builders.compose_builder.resolve_path", side_effect=_resolve),
+            patch("strata.builders.compose_builder.ModuleService.load", return_value=mod_service),
+        ):
+            ok = builder.build(dep_svc, tmp_path, tmp_path)
+
+        return ok, builder
+
+    def test_compose_file_copied_verbatim(self, tmp_path):
+        """An explicit compose_file is copied to the build path unchanged."""
+        src_compose = tmp_path / "src-docker-compose.yml"
+        src_compose.write_text("services:\n  proxy:\n    image: traefik:v3\n")
+
+        ok, builder = self._run_passthrough(tmp_path, compose_file_path=src_compose)
+
+        assert ok is True, builder.get_errors()
+        out = tmp_path / "testns" / "docker-compose.yml"
+        assert out.exists()
+        assert "traefik:v3" in out.read_text()
+
+    def test_compose_file_not_found_returns_error(self, tmp_path):
+        """A compose_file that does not exist on disk is an error."""
+        missing = tmp_path / "does-not-exist" / "docker-compose.yml"
+
+        ok, builder = self._run_passthrough(tmp_path, compose_file_path=missing)
+
+        assert ok is False
+        assert any("not found" in e for e in builder.get_errors())
+
+    def test_dry_run_no_file_copied(self, tmp_path):
+        """In dry-run mode the compose_file is not written to disk."""
+        src_compose = tmp_path / "src-docker-compose.yml"
+        src_compose.write_text("services:\n  proxy:\n    image: traefik:v3\n")
+
+        pt_module = _make_passthrough_module("traefik", compose_file=str(src_compose))
+        mod_service = _make_mod_service(module=pt_module)
+        mod_ref = _module_ref("traefik", "module.yaml")
+
+        module_yaml = tmp_path / "module.yaml"
+        module_yaml.write_text("")
+
+        ns_svc = _mock_namespace_service([mod_ref])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={"testns": ns_svc})
+
+        builder = ComposeBuilder()
+
+        def _resolve(base, ref):
+            if ref == str(src_compose):
+                return src_compose
+            return module_yaml
+
+        with (
+            patch("strata.builders.compose_builder.resolve_path", side_effect=_resolve),
+            patch("strata.builders.compose_builder.ModuleService.load", return_value=mod_service),
+        ):
+            ok = builder.build(dep_svc, tmp_path, tmp_path, dry_run=True)
+
+        assert ok is True
+        assert not (tmp_path / "testns" / "docker-compose.yml").exists()
+
+    def test_two_passthrough_modules_same_namespace_error(self, tmp_path):
+        """Two modules with compose_file in the same namespace is an error."""
+        src1 = tmp_path / "docker-compose-1.yml"
+        src2 = tmp_path / "docker-compose-2.yml"
+        src1.write_text("services:\n  a:\n    image: img:1\n")
+        src2.write_text("services:\n  b:\n    image: img:2\n")
+
+        pt1 = _make_passthrough_module("mod-a", compose_file=str(src1))
+        pt2 = _make_passthrough_module("mod-b", compose_file=str(src2))
+
+        mod_svc1 = _make_mod_service(module=pt1)
+        mod_svc2 = _make_mod_service(module=pt2)
+
+        ref1 = _module_ref("mod-a", "mod-a.yaml")
+        ref2 = _module_ref("mod-b", "mod-b.yaml")
+
+        dummy1 = tmp_path / "mod-a.yaml"
+        dummy2 = tmp_path / "mod-b.yaml"
+        dummy1.write_text("")
+        dummy2.write_text("")
+
+        ns_svc = _mock_namespace_service([ref1, ref2])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={"testns": ns_svc})
+
+        builder = ComposeBuilder()
+        call_count = [0]
+        mod_services = [mod_svc1, mod_svc2]
+
+        def _resolve(base, ref):
+            if ref in (str(src1), str(src2)):
+                return Path(ref)
+            return dummy1 if "mod-a" in ref else dummy2
+
+        def _load(path, validate):
+            idx = call_count[0] % 2
+            call_count[0] += 1
+            return mod_services[idx]
+
+        with (
+            patch("strata.builders.compose_builder.resolve_path", side_effect=_resolve),
+            patch("strata.builders.compose_builder.ModuleService.load", side_effect=_load),
+        ):
+            ok = builder.build(dep_svc, tmp_path, tmp_path)
+
+        assert ok is False
+        assert any("only one compose_file" in e for e in builder.get_errors())
+
+    def test_passthrough_and_generative_same_namespace_error(self, tmp_path):
+        """Mixing compose_file and spec.services in the same namespace is an error."""
+        src = tmp_path / "docker-compose.yml"
+        src.write_text("services:\n  proxy:\n    image: traefik:v3\n")
+
+        pt_module = _make_passthrough_module("proxy", compose_file=str(src))
+        gen_module = _make_compose_module("db", services=[_make_service("db", image="postgres:16")])
+
+        mod_svc_pt = _make_mod_service(module=pt_module)
+        mod_svc_gen = _make_mod_service(module=gen_module)
+
+        ref_pt = _module_ref("proxy", "proxy.yaml")
+        ref_gen = _module_ref("db", "db.yaml")
+
+        dummy_pt = tmp_path / "proxy.yaml"
+        dummy_gen = tmp_path / "db.yaml"
+        dummy_pt.write_text("")
+        dummy_gen.write_text("")
+
+        ns_svc = _mock_namespace_service([ref_pt, ref_gen])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={"testns": ns_svc})
+
+        builder = ComposeBuilder()
+        call_count = [0]
+        mod_services = [mod_svc_pt, mod_svc_gen]
+
+        def _resolve(base, ref):
+            if ref == str(src):
+                return src
+            return dummy_pt if "proxy" in ref else dummy_gen
+
+        def _load(path, validate):
+            idx = call_count[0] % 2
+            call_count[0] += 1
+            return mod_services[idx]
+
+        with (
+            patch("strata.builders.compose_builder.resolve_path", side_effect=_resolve),
+            patch("strata.builders.compose_builder.ModuleService.load", side_effect=_load),
+        ):
+            ok = builder.build(dep_svc, tmp_path, tmp_path)
+
+        assert ok is False
+        assert any("cannot mix" in e for e in builder.get_errors())

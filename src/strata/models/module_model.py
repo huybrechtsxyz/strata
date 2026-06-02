@@ -255,6 +255,17 @@ class ModuleSpecModel(BaseModel):
         "When present, each entry defines one container (compose) or sub-chart section (helm).",
     )
 
+    # Compose pass-through mode
+    compose_file: Optional[str] = Field(
+        None,
+        description=(
+            "Explicit path reference to an external docker-compose.yml file "
+            "(@repo/path/to/docker-compose.yml or workspace-relative path). "
+            "When set, ComposeBuilder copies this file verbatim to the build path instead of "
+            "generating one from spec.services. Mutually exclusive with spec.services."
+        ),
+    )
+
     # Helm / ArgoCD deploy identity
     release_name: Optional[str] = Field(
         None,
@@ -277,6 +288,17 @@ class ModuleSpecModel(BaseModel):
                     f"Duplicate service names in module: {', '.join(set(duplicates))}. "
                     "Each service must have a unique name within the module."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_compose_file_exclusive(self) -> "ModuleSpecModel":
+        """compose_file and services are mutually exclusive."""
+        if self.compose_file and self.services:
+            raise ValueError(
+                "compose_file and services are mutually exclusive — "
+                "use compose_file to reference an external docker-compose.yml, "
+                "or services to generate one from the module spec."
+            )
         return self
 
 

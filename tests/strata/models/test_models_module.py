@@ -304,3 +304,51 @@ class TestModuleSpecModelServices:
         model = ModuleModel.model_validate(data)
         assert model.spec.source.chart_name == "traefik"
         assert model.spec.source.chart_version == "26.0.0"
+
+
+# ---------------------------------------------------------------------------
+# ModuleSpecModel — compose_file field
+# ---------------------------------------------------------------------------
+
+
+class TestModuleSpecModelComposeFile:
+    def _base_data(self):
+        return {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "module",
+            "meta": {"name": "traefik"},
+            "spec": {
+                "type": "compose",
+                "source": {"repository": "infra-repo", "source_path": "services/traefik"},
+            },
+        }
+
+    def test_compose_file_alone_is_valid(self):
+        data = self._base_data()
+        data["spec"]["compose_file"] = "@infra-repo/services/traefik/docker-compose.yml"
+        model = ModuleModel.model_validate(data)
+        assert model.spec.compose_file == "@infra-repo/services/traefik/docker-compose.yml"
+        assert model.spec.services is None
+
+    def test_compose_file_defaults_to_none(self):
+        data = self._base_data()
+        model = ModuleModel.model_validate(data)
+        assert model.spec.compose_file is None
+
+    def test_compose_file_and_services_mutually_exclusive(self):
+        data = self._base_data()
+        data["spec"]["compose_file"] = "@infra-repo/services/traefik/docker-compose.yml"
+        data["spec"]["services"] = [
+            {"name": "proxy", "image": "traefik:v3"},
+        ]
+        with pytest.raises(ValidationError, match="mutually exclusive"):
+            ModuleModel.model_validate(data)
+
+    def test_services_without_compose_file_still_valid(self):
+        data = self._base_data()
+        data["spec"]["services"] = [
+            {"name": "proxy", "image": "traefik:v3"},
+        ]
+        model = ModuleModel.model_validate(data)
+        assert model.spec.compose_file is None
+        assert len(model.spec.services) == 1
