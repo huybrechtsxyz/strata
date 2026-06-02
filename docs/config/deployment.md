@@ -351,6 +351,8 @@ stages:
     provisioner: my_tf     # Name of a provisioner in workspace.spec.provisioners
     # topology: k8s_aks   # Alternative to provisioner — resolved via topology map
     # scope: infra        # Optional label for --scope CLI filtering (see deploy run --scope)
+    secrets:               # Allowlist of secrets this stage may access (default-deny)
+      - hetzner_api_token
     steps:                 # Which steps to run (default: all supported steps)
       - setup
       - check
@@ -406,11 +408,52 @@ Each step name maps directly to a deployer method. When `steps` is omitted the d
 
 After a stage's `apply` step completes, the deployer collects its outputs and makes them available to all **subsequent** stages in the same deployment run. This requires zero YAML configuration — the pipeline handles injection automatically.
 
+### STRATA_CONTEXT and STRATA_SENSITIVE
+
+Two runtime dictionaries flow through the deployment pipeline:
+
+| Name                 | Contents                                           | Injected into subprocesses                 | Logged |
+| -------------------- | -------------------------------------------------- | ------------------------------------------ | ------ |
+| **STRATA_CONTEXT**   | variables + features + non-sensitive stage outputs | Yes (`TF_VAR_*`, `--extra-vars`, env vars) | Yes    |
+| **STRATA_SENSITIVE** | secrets + sensitive stage outputs                  | Only keys declared per stage               | Never  |
+
+**STRATA_CONTEXT** is seeded with environment variables and features before the first stage runs. After each stage completes, its non-sensitive outputs are added. Every subsequent stage receives the full accumulated context automatically.
+
+**STRATA_SENSITIVE** is seeded with secrets before the first stage runs. Sensitive stage outputs accumulate after each stage. Access is **default-deny** — a stage receives only the secret keys it declares in its `secrets` allowlist.
+
+### Stage secret scoping
+
+Each stage declares which secrets it may access. This is a security measure — stages only see what they need.
+
+```yaml
+stages:
+  - name: provision
+    provisioner: terraform_hetzner
+    secrets:
+      - hetzner_api_token        # Only this secret is visible
+
+  - name: configure
+    topology: hetzner_servers
+    secrets:
+      - ssh_private_key          # Only SSH key visible, not the API token
+
+  - name: verify
+    provisioner: script_healthcheck
+    # No secrets declared → no sensitive values available
+```
+
+| `secrets` value      | Behaviour                                              |
+| -------------------- | ------------------------------------------------------ |
+| Omitted / `null`     | No secrets — default-deny                              |
+| `[]` (empty list)    | No secrets — explicit deny                             |
+| `["key_a", "key_b"]` | Only those keys from secrets + sensitive stage outputs |
+| `["*"]`              | All secrets + all sensitive outputs (escape hatch)     |
+
 ### How it works
 
 1. After `apply`, `RunDeployCommand` calls `deployer.collect_outputs()` on the just-completed stage.
 2. Non-sensitive outputs are stored in `ResolvedValues.stage_outputs` and injected into every subsequent stage via `TF_VAR_<key>` (Terraform) or bare `<KEY>` (Compose).
-3. Sensitive outputs are stored in `ResolvedValues.stage_outputs_sensitive` and **never injected** — they are held in memory for internal use only.
+3. Sensitive outputs are stored in `ResolvedValues.stage_outputs_sensitive` and filtered by the next stage's `secrets` allowlist before injection.
 
 ### Sensitive output handling
 

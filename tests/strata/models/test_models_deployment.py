@@ -65,3 +65,32 @@ class TestDeploymentStageModelTimeoutsField:
         stage = DeploymentStageModel(name="prod", type="infrastructure", timeouts=t)
         assert stage.timeouts is not None
         assert stage.timeouts.plan == 600
+
+
+class TestDeploymentStageModelSecretsField:
+    def test_secrets_optional_defaults_none(self):
+        stage = DeploymentStageModel(name="prod")
+        assert stage.secrets is None
+
+    def test_secrets_empty_list(self):
+        stage = DeploymentStageModel(name="prod", secrets=[])
+        assert stage.secrets == []
+
+    def test_secrets_specific_keys(self):
+        stage = DeploymentStageModel(name="prod", secrets=["db_pass", "api_key"])
+        assert stage.secrets == ["db_pass", "api_key"]
+
+    def test_secrets_wildcard(self):
+        stage = DeploymentStageModel(name="prod", secrets=["*"])
+        assert stage.secrets == ["*"]
+
+    def test_secrets_roundtrip_with_other_fields(self):
+        stage = DeploymentStageModel(
+            name="infra",
+            provisioner="my_tf",
+            secrets=["hetzner_api_token"],
+            timeouts={"apply": 1200},
+        )
+        assert stage.secrets == ["hetzner_api_token"]
+        assert stage.timeouts is not None
+        assert stage.timeouts.apply == 1200

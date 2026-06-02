@@ -75,10 +75,14 @@ spec:
     # Stage 1 — create the server
     - name: infrastructure
       provisioner: my_iac        # direct: "use this provisioner by name"
+      secrets:
+        - hetzner_api_token      # only this secret is available
 
     # Stage 2 — configure the server
     - name: configure
       provisioner: my_ansible    # direct: "use this provisioner by name"
+      secrets:
+        - ssh_private_key        # only SSH key, not the API token
       # OR — using topology (see below):
       # topology: my_server
 ```
@@ -197,18 +201,27 @@ spec:
   stages:
     - name: network
       provisioner: network_iac
+      secrets:
+        - cloud_api_key
 
     - name: servers
       provisioner: server_iac
+      secrets:
+        - cloud_api_key
 
     - name: configure
       topology: app_servers       # ← no static inventory; IPs come from stage 'servers'
+      secrets:
+        - ssh_private_key
 
     - name: deploy
       provisioner: app_helm
+      # no secrets needed — Helm values come from STRATA_CONTEXT
 
     - name: smoketest
       topology: app_servers       # ← same topology, same dynamic inventory
+      secrets:
+        - ssh_private_key
 ```
 
 ### Terraform outputs.tf (complex)
@@ -295,12 +308,35 @@ Ansible inline inventory format: `"10.0.1.10,10.0.1.11,10.0.1.12,"`.
 
 Terraform outputs are collected after every `apply` and split into two buckets:
 
-| Bucket        | Key in code               | Injected into subprocesses?                                                    | Example                         |
-| ------------- | ------------------------- | ------------------------------------------------------------------------------ | ------------------------------- |
-| Non-sensitive | `stage_outputs`           | Yes — as `TF_VAR_<key>` for Terraform stages, bare env var for Ansible/Compose | `server_ip`, `vpc_id`           |
-| Sensitive     | `stage_outputs_sensitive` | **Never**                                                                      | passwords, tokens, private keys |
+| Bucket        | Key in code                                  | Injected into subprocesses?                                                    | Example                         |
+| ------------- | -------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------- |
+| Non-sensitive | `stage_outputs` (STRATA_CONTEXT)             | Yes — as `TF_VAR_<key>` for Terraform stages, bare env var for Ansible/Compose | `server_ip`, `vpc_id`           |
+| Sensitive     | `stage_outputs_sensitive` (STRATA_SENSITIVE) | Only if the stage declares the key in `secrets:`                               | passwords, tokens, private keys |
 
-Every stage that runs after a Terraform stage automatically has its non-sensitive outputs available. Nothing extra to configure.
+Every stage that runs after a Terraform stage automatically has its non-sensitive outputs available (via STRATA_CONTEXT). Sensitive outputs require the downstream stage to declare the key in its `secrets:` allowlist.
+
+### STRATA_CONTEXT seed
+
+Before the first stage runs, STRATA_CONTEXT is seeded with the resolved **environment variables** and **feature flags**. After each stage, its non-sensitive outputs are added. Every subsequent stage receives the full accumulated context.
+
+### STRATA_SENSITIVE seed and scoping
+
+Before the first stage runs, STRATA_SENSITIVE is seeded with resolved **secrets**. Access is default-deny: a stage only receives secrets it declares in `secrets:`.
+
+```yaml
+stages:
+  - name: provision
+    provisioner: my_tf
+    secrets:
+      - hetzner_api_token    # only this secret visible
+  - name: configure
+    provisioner: my_ansible
+    secrets:
+      - ssh_private_key      # only SSH key visible, not the API token
+  - name: verify
+    provisioner: script_check
+    # no secrets → no sensitive values at all
+```
 
 ---
 

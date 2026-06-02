@@ -52,6 +52,49 @@ class ResolvedValues:
         """Return True when no values were resolved."""
         return not (self.variables or self.secrets or self.features or self.stage_outputs)
 
+    def for_stage(self, allowed_secrets: Optional[List[str]] = None) -> "ResolvedValues":
+        """Return a copy scoped to the given stage's secret allowlist.
+
+        STRATA_CONTEXT (variables, features, stage_outputs) passes through unfiltered.
+        STRATA_SENSITIVE (secrets, stage_outputs_sensitive) is filtered to only
+        the keys in ``allowed_secrets``.
+
+        Args:
+            allowed_secrets: List of secret key names this stage may access.
+                - ``None`` or ``[]`` → no secrets, no sensitive outputs.
+                - ``['*']``          → all secrets + all sensitive outputs (escape hatch).
+                - ``['a', 'b']``     → only those keys from secrets + stage_outputs_sensitive.
+        """
+        if not allowed_secrets:
+            return ResolvedValues(
+                variables=dict(self.variables),
+                secrets={},
+                features=dict(self.features),
+                stage_outputs=dict(self.stage_outputs),
+                stage_outputs_sensitive={},
+                errors=list(self.errors),
+            )
+
+        if allowed_secrets == ["*"]:
+            return ResolvedValues(
+                variables=dict(self.variables),
+                secrets=dict(self.secrets),
+                features=dict(self.features),
+                stage_outputs=dict(self.stage_outputs),
+                stage_outputs_sensitive=dict(self.stage_outputs_sensitive),
+                errors=list(self.errors),
+            )
+
+        allowed = set(allowed_secrets)
+        return ResolvedValues(
+            variables=dict(self.variables),
+            secrets={k: v for k, v in self.secrets.items() if k in allowed},
+            features=dict(self.features),
+            stage_outputs=dict(self.stage_outputs),
+            stage_outputs_sensitive={k: v for k, v in self.stage_outputs_sensitive.items() if k in allowed},
+            errors=list(self.errors),
+        )
+
     def as_compose_env(self) -> Dict[str, str]:
         """Return all resolved values as a flat env-var dict for Docker Compose ``${KEY}`` substitution.
 

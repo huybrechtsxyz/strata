@@ -35,9 +35,14 @@ spec:
   stages:
     - name: staging
       # No approval override — all spec-level approvers apply
+      secrets:
+        - deploy_token
 
     - name: production
       # Stage-level override — only these approvers apply to this stage
+      secrets:
+        - deploy_token
+        - db_password
       approval:
         approvers:
           - platform-team

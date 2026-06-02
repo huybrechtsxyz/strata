@@ -321,6 +321,9 @@ class DestroyDeployCommand(BaseDeployCommand):
                 )
             return None
 
+        # Filter STRATA_SENSITIVE to only secrets declared by this stage
+        _stage_values = self._resolved_values.for_stage(stage.secrets) if self._resolved_values else None
+
         if resolved_type == "terraform":
             return TerraformDeployer(
                 stage=stage,
@@ -330,7 +333,7 @@ class DestroyDeployCommand(BaseDeployCommand):
                 work_path=self._work_path,
                 verbose=self._is_verbose(),
                 force=self._force,
-                resolved_values=self._resolved_values,
+                resolved_values=_stage_values,
             )
 
         if resolved_type == "ansible":
@@ -344,7 +347,7 @@ class DestroyDeployCommand(BaseDeployCommand):
                 work_path=self._work_path,
                 verbose=self._is_verbose(),
                 force=self._force,
-                resolved_values=self._resolved_values,
+                resolved_values=_stage_values,
             )
 
         if resolved_type == "compose":
@@ -358,7 +361,7 @@ class DestroyDeployCommand(BaseDeployCommand):
                 work_path=self._work_path,
                 verbose=self._is_verbose(),
                 force=self._force,
-                resolved_values=self._resolved_values,
+                resolved_values=_stage_values,
             )
 
         if resolved_type == "helm":
@@ -372,7 +375,7 @@ class DestroyDeployCommand(BaseDeployCommand):
                 work_path=self._work_path,
                 verbose=self._is_verbose(),
                 force=self._force,
-                resolved_values=self._resolved_values,
+                resolved_values=_stage_values,
             )
 
         return None

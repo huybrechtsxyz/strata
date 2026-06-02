@@ -262,6 +262,15 @@ class DeploymentStageModel(BaseModel):
         description="Per-operation subprocess timeouts. Overrides TerraformIntegration defaults "
         "(init=300s, validate=60s, plan=600s, apply=1800s, destroy=1800s).",
     )
+    secrets: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Allowlist of secret keys this stage may access from STRATA_SENSITIVE. "
+            "Only these keys are passed to the deployer. "
+            "Omit or set to null for no secret access. "
+            "Use ['*'] to grant access to all secrets (escape hatch)."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_provisioner_selection(self) -> "DeploymentStageModel":

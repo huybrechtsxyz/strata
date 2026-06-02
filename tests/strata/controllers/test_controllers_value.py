@@ -197,6 +197,83 @@ class TestInjectComposeEnv:
 
 
 # ---------------------------------------------------------------------------
+# ResolvedValues.for_stage — secret scoping
+# ---------------------------------------------------------------------------
+
+
+class TestResolvedValuesForStage:
+    def _full_rv(self):
+        return ResolvedValues(
+            variables={"region": "eu-west-1"},
+            secrets={"db_pass": "hunter2", "api_key": "abc123", "ssh_key": "PRIVATE"},
+            features={"enable_x": True},
+            stage_outputs={"server_ip": "10.0.0.1"},
+            stage_outputs_sensitive={"kubeconfig": "YAML", "token": "tok123"},
+        )
+
+    def test_none_secrets_strips_all_sensitive(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(None)
+        assert scoped.variables == {"region": "eu-west-1"}
+        assert scoped.features == {"enable_x": True}
+        assert scoped.stage_outputs == {"server_ip": "10.0.0.1"}
+        assert scoped.secrets == {}
+        assert scoped.stage_outputs_sensitive == {}
+
+    def test_empty_list_strips_all_sensitive(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage([])
+        assert scoped.secrets == {}
+        assert scoped.stage_outputs_sensitive == {}
+
+    def test_wildcard_passes_all(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["*"])
+        assert scoped.secrets == rv.secrets
+        assert scoped.stage_outputs_sensitive == rv.stage_outputs_sensitive
+        assert scoped.variables == rv.variables
+
+    def test_specific_keys_filters_secrets(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["db_pass", "ssh_key"])
+        assert scoped.secrets == {"db_pass": "hunter2", "ssh_key": "PRIVATE"}
+        assert "api_key" not in scoped.secrets
+
+    def test_specific_keys_filters_sensitive_outputs(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["kubeconfig"])
+        assert scoped.stage_outputs_sensitive == {"kubeconfig": "YAML"}
+        assert "token" not in scoped.stage_outputs_sensitive
+        # secrets filtered too — only kubeconfig key, which isn't in secrets
+        assert scoped.secrets == {}
+
+    def test_nonexistent_key_produces_empty(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["does_not_exist"])
+        assert scoped.secrets == {}
+        assert scoped.stage_outputs_sensitive == {}
+
+    def test_context_always_passes_through(self):
+        rv = self._full_rv()
+        for allowed in [None, [], ["db_pass"], ["*"]]:
+            scoped = rv.for_stage(allowed)
+            assert scoped.variables == rv.variables
+            assert scoped.features == rv.features
+            assert scoped.stage_outputs == rv.stage_outputs
+
+    def test_returns_independent_copy(self):
+        rv = self._full_rv()
+        scoped = rv.for_stage(["*"])
+        scoped.variables["new_key"] = "new_val"
+        assert "new_key" not in rv.variables
+
+    def test_errors_preserved(self):
+        rv = ResolvedValues(errors=["some warning"])
+        scoped = rv.for_stage(None)
+        assert scoped.errors == ["some warning"]
+
+
+# ---------------------------------------------------------------------------
 # ValueController._resolve_variable
 # ---------------------------------------------------------------------------
 
