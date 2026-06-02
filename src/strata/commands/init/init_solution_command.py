@@ -209,6 +209,8 @@ class InitSolutionCommand(BaseCommand):
 
     def _after_execute(self) -> bool:
         if self._is_console_output():
+            from strata.utils.config import DOCS_URL
+
             click.echo(f"\n✅  Solution '{self._solution_name}' initialised")
             click.echo(f"    • Work path    : {self._work_path}")
             click.echo(f"    • Solution ID  : {self._output_data.get('solution_id', '')}")
@@ -217,21 +219,40 @@ class InitSolutionCommand(BaseCommand):
                 scaffold_files = [m for m in self._messages if m.startswith("Created:")]
                 click.echo(f"    • Template     : {manifest_name}")
                 click.echo(f"    • Files created: {len(scaffold_files)}")
+            n = self._solution_name
             click.echo("")
-            click.echo("Next steps:")
-            if self._scaffold_dir is not None:
-                click.echo(f"    1. Register your repo:   strata repo add {self._solution_name} <git-url> --clone")
-                click.echo("    2. Add a profile:        strata profile add prd --activate")
-                click.echo("    3. Validate:             strata validate --file deploy/deploy-prd.yaml")
-                click.echo("    4. Deploy:               strata deploy run --file deploy/deploy-prd.yaml")
-            else:
+            click.echo(f"  Workspace '{n}' is ready. Standard workflow:")
+            click.echo("")
+            click.echo("  CONFIGURE")
+            if self._scaffold_dir is None:
+                click.echo(f"    1. Scaffold config files:   strata sln init --name {n} --template aks")
+                click.echo(f"    2. Register your repo:      strata repo add {n} <git-url> --clone")
                 click.echo(
-                    f"    1. Add a template:         strata sln init --name {self._solution_name} --template aks"
+                    f'    3. Add your config:         strata ref config add {n}-config --path "@{n}/config/{n}-config.yaml"'
                 )
-                click.echo(f"    2. Register your repo:     strata repo add {self._solution_name} <git-url> --clone")
-                click.echo("    3. Add a profile:          strata profile add prd --activate")
+                click.echo(
+                    f'    4. Add your environment:    strata ref env add {n}-env --path "@{n}/envs/env-prd.yaml"'
+                )
+                click.echo("    5. Activate a profile:      strata profile add prd --activate")
+            else:
+                click.echo(f"    1. Register your repo:      strata repo add {n} <git-url> --clone")
+                click.echo(
+                    f'    2. Add your config:         strata ref config add {n}-config --path "@{n}/config/{n}-config.yaml"'
+                )
+                click.echo(
+                    f'    3. Add your environment:    strata ref env add {n}-env --path "@{n}/envs/env-prd.yaml"'
+                )
+                click.echo("    4. Activate a profile:      strata profile add prd --activate")
             click.echo("")
-            click.echo("    📄 See GETTING_STARTED.md for the full setup and lifecycle guide.")
+            click.echo("  DEVELOP")
+            click.echo("    · Validate files:           strata validate --file deploy/deploy-prd.yaml")
+            click.echo("    · Check workspace status:   strata sln status")
+            click.echo("")
+            click.echo("  DEPLOY")
+            click.echo("    · Build an artifact:        strata build run --file deploy/deploy-prd.yaml")
+            click.echo("    · Deploy:                   strata deploy run --file deploy/deploy-prd.yaml")
+            click.echo("")
+            click.echo(f"  📄 See GETTING_STARTED.md or {DOCS_URL}/getting-started")
             click.echo("")
         return super()._after_execute()
 
