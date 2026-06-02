@@ -476,7 +476,9 @@ class TerraformBuilder(BaseBuilder):
                 topologies_dict[topology.name] = {
                     "type": topology.type,
                     "provider": topology.provider,
-                    "provisioner": topology.provisioner if isinstance(topology.provisioner, str) else topology.provisioner.value,
+                    "provisioner": topology.provisioner
+                    if isinstance(topology.provisioner, str)
+                    else topology.provisioner.value,
                     "components": components,
                     "volumes": volumes,
                 }
@@ -653,6 +655,7 @@ class TerraformBuilder(BaseBuilder):
 
         provisioners = workspace_service.model.spec.provisioners or []
         deployment_build_path = deployment_service.get_build_path(build_path)
+        template_context = self._build_template_context(deployment_service)
 
         for prov in provisioners:
             if prov.provisioner.value != "terraform":
@@ -694,6 +697,7 @@ class TerraformBuilder(BaseBuilder):
 
             dest_dir.mkdir(parents=True, exist_ok=True)
             shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
+            self._apply_templates_to_dir(dest_dir, template_context)
             self._messages.append(f"Copied terraform source: {src_dir} → {dest_dir}")
 
         return True
