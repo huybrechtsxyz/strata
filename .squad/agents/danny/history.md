@@ -2,7 +2,7 @@
 
 ## Core Context
 
-Lead / Architect for xyz-platform. Python DevOps CLI tool built with Click + Pydantic.
+Lead / Architect for strata. Python DevOps CLI tool built with Click + Pydantic.
 User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog, pytest.
 
 ## Learnings
@@ -15,7 +15,7 @@ The "session" terminology in cli.py comments diverges from the "project" termino
 
 **Models:** Complete and solid. 16 model files covering every YAML kind. `ConfigurationModel` is the
 richest — providers, topologies, layering, security, repositories all Pydantic-validated.
-`ProjectModel` handles the `.xyz_platform/project.json` workspace state file.
+`ProjectModel` handles the `.strata/solution.json` workspace state file.
 
 **Services:** Very solid. `BaseService` has 2-phase validate (Pydantic + `_validate_dynamic`),
 load-with-cache via `service_cache.py`, lifecycle hooks. All domain services implemented:
@@ -41,9 +41,9 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 
 ### 2026-05-06 — copilot-instructions.md accuracy review
 
-- Confirmed `.platform/` (not `.xyz_platform/`) is the workspace state directory — `SOLUTION_DIR = ".platform"` in `utils/config.py`.
+- Confirmed `.strata/` is the workspace state directory — `SOLUTION_DIR = ".strata"` in `utils/config.py`.
 - `xyz init` (not `xyz project init`) — flat CLI structure per 2026-05-05 decisions.md decision.
-- `xyz config set|unset|list` (not `xyz set`) — confirmed in `commands/cli_config.py`.
+- `strata config set|unset|list` (not `xyz set`) — confirmed in `commands/cli_config.py`.
 - Workspace state file is `solution.json` (`SolutionModel`) — not `project.json`.
 - `resolve_work_path()` in `utils/system.py` walks up from CWD for `.platform/` — implemented, falls back to CWD (error path not yet raised).
 - CI uses composite actions: `.github/actions/install-python` (uv sync --frozen) and `.github/actions/test-python` (lint + types + pytest).

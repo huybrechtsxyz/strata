@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Setup script for the XYZ Platform on Windows.
+    Setup script for strata on Windows.
 .DESCRIPTION
     Installs uv, creates a virtual environment, and installs project dependencies.
 .PARAMETER UseProGet
@@ -21,7 +21,7 @@ function Get-ProjectRoot {
 }
 
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
-Write-Host "[*] XYZ Platform - Setup" -ForegroundColor Cyan
+Write-Host "[*] strata - Setup" -ForegroundColor Cyan
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host ""
 

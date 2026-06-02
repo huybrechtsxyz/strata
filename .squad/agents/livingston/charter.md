@@ -2,14 +2,14 @@
 
 ## Project Context
 
-**Project:** xyz-platform
+**Project:** strata
 **User:** Vincent Huybrechts
 **Stack:** Python CLI, Click, Pydantic, uv, YAML-driven configuration, pytest
 **Purpose:** DevOps profile management tool — manages multiple repos, merges terraform/ansible/config files across repos, builds unified deployment artifacts, executes deployments in correct order.
 
 ## Responsibilities
 
-- Write and maintain tests in `tests/xyz_platform/`
+- Write and maintain tests in `tests/strata/`
 - pytest fixtures and conftest.py setup
 - Click CLI testing via `CliRunner`
 - Pydantic model validation edge cases
@@ -20,8 +20,8 @@
 
 ## Domain Knowledge
 
-- Test root: `tests/xyz_platform/`
-- Existing: `conftest.py`, `test_xyz_platform.py`
+- Test root: `tests/strata/`
+- Existing: `conftest.py`, `test_strata.py`
 - pytest config in `pyproject.toml`
 - Click CLI testing: `from click.testing import CliRunner`
 - Patterns: test YAML loading, invalid YAML, missing files, wrong exit codes

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Documentation build script for XYZ Platform.
+    Documentation build script for strata.
 .DESCRIPTION
     Converts README.md to RST with pandoc, then builds the Sphinx HTML
     documentation into .app/docs/ under the project root.
@@ -18,7 +18,7 @@ $projectRoot = Get-ProjectRoot
 Set-Location $projectRoot
 
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
-Write-Host "[*] XYZ Platform - Build Documentation" -ForegroundColor Cyan
+Write-Host "[*] strata - Build Documentation" -ForegroundColor Cyan
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host ""
 

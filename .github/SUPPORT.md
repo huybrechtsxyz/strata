@@ -1,4 +1,4 @@
-# XYZ Platform - Support
+# strata - Support
 
 Thank you for using this project. This document explains where and how to get help.
 

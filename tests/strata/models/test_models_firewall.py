@@ -5,7 +5,7 @@ Script Name   : test_models_firewall.py
 Author        : Vincent Huybrechts
 Version       : 1.0.0
 Python Version: 3.12+
-Description   : Tests for firewall models in XYZ Platform.
+Description   : Tests for firewall models in strata.
 ===============================================================================
 """
 
