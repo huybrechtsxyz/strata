@@ -1,5 +1,6 @@
 """Resolves variables, secrets, and feature flags from configured store integrations into concrete runtime values."""
 
+import json
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -26,20 +27,25 @@ class ResolvedValues:
     """Concrete runtime values resolved from variables, secrets, and feature flags.
 
     Attributes:
-        variables (Dict[str, Any]):          Resolved configuration variables.
-        secrets   (Dict[str, Any]):          Resolved secrets  (treat as sensitive).
-        features  (Dict[str, Optional[bool]]): Resolved feature-flag booleans.
-        errors    (List[str]):               Resolution errors / warnings.
+        variables     (Dict[str, Any]):          Resolved configuration variables.
+        secrets       (Dict[str, Any]):          Resolved secrets  (treat as sensitive).
+        features      (Dict[str, Optional[bool]]): Resolved feature-flag booleans.
+        stage_outputs (Dict[str, Any]):          Flat outputs collected from preceding
+                                                  deployment stages (last-stage-wins on
+                                                  key collision). Injected as TF_VAR_*
+                                                  / verbatim env vars for downstream stages.
+        errors        (List[str]):               Resolution errors / warnings.
     """
 
     variables: Dict[str, Any] = field(default_factory=dict)
     secrets: Dict[str, Any] = field(default_factory=dict)
     features: Dict[str, Optional[bool]] = field(default_factory=dict)
+    stage_outputs: Dict[str, Any] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         """Return True when no values were resolved."""
-        return not (self.variables or self.secrets or self.features)
+        return not (self.variables or self.secrets or self.features or self.stage_outputs)
 
     def as_compose_env(self) -> Dict[str, str]:
         """Return all resolved values as a flat env-var dict for Docker Compose ``${KEY}`` substitution.
@@ -48,7 +54,7 @@ class ResolvedValues:
         the process environment.
 
         Merge order (later entry wins on key collision):
-          features → variables → secrets
+          features → variables → secrets → stage_outputs
 
         Feature flags with a ``None`` value are skipped.
         Secrets are included; callers should avoid logging this dict.
@@ -61,6 +67,9 @@ class ResolvedValues:
             result[key] = str(val)
         for key, val in self.secrets.items():
             result[key] = str(val)
+        for key, val in self.stage_outputs.items():
+            if val is not None:
+                result[key] = json.dumps(val) if isinstance(val, (dict, list)) else str(val)
         return result
 
     def as_tf_vars(self) -> Dict[str, str]:
@@ -71,9 +80,10 @@ class ResolvedValues:
         but callers should avoid logging this dict.
 
         Naming:
-          - variables → TF_VAR_<key>
-          - secrets   → TF_VAR_<key>
-          - features  → TF_VAR_<key>  (bool serialised as "true" / "false")
+          - variables     → TF_VAR_<key>
+          - secrets       → TF_VAR_<key>
+          - features      → TF_VAR_<key>  (bool serialised as "true" / "false")
+          - stage_outputs → TF_VAR_<key>  (complex values JSON-encoded)
         """
         result: Dict[str, str] = {}
         for key, val in self.variables.items():
@@ -83,6 +93,9 @@ class ResolvedValues:
                 result[f"TF_VAR_{key}"] = str(val).lower()  # "true" / "false"
         for key, val in self.secrets.items():
             result[f"TF_VAR_{key}"] = str(val)
+        for key, val in self.stage_outputs.items():
+            if val is not None:
+                result[f"TF_VAR_{key}"] = json.dumps(val) if isinstance(val, (dict, list)) else str(val)
         return result
 
 

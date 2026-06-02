@@ -349,6 +349,17 @@ class RunDeployCommand(BaseDeployCommand):
                 if ok_save and plan_json_path:
                     click.echo(f"    plan JSON \u2192 {plan_json_path}")
 
+        # --- collect outputs for downstream stages ---
+        if STEP_APPLY in steps_to_run:
+            _ok_out, _outputs, _out_msgs = deployer.collect_outputs()
+            if _ok_out and _outputs:
+                if self._resolved_values is not None:
+                    self._resolved_values.stage_outputs.update(_outputs)
+                if self._is_console_output():
+                    click.echo(f"    \u2713  Collected {len(_outputs)} output(s): {list(_outputs.keys())}")
+        elif self._dry_run and self._is_console_output():
+            click.echo("    [DRY-RUN] Stage outputs not captured \u2014 apply did not run.")
+
         if self._is_ndjson_output():
             self.emit_ndjson(
                 {

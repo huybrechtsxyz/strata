@@ -182,6 +182,21 @@ class BaseDeployer(ABC):
         """
         return True, None, []
 
+    def collect_outputs(self) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """Collect outputs produced by this stage after a successful apply.
+
+        Called by the deploy pipeline after ``apply`` completes.  The returned
+        dict is merged into ``ResolvedValues.stage_outputs`` and made available
+        to all subsequent stages as ``TF_VAR_<key>`` / verbatim env-var injection.
+
+        Default implementation returns an empty dict (no outputs).  Override in
+        deployers that produce structured outputs (e.g. TerraformDeployer).
+
+        Returns:
+            (success, outputs_dict, messages)
+        """
+        return True, {}, []
+
     @abstractmethod
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:
         """Retrieve infrastructure outputs (e.g. terraform output).

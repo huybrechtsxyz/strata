@@ -375,6 +375,15 @@ class TerraformDeployer(BaseDeployer):
 
         return True, messages
 
+    def collect_outputs(self) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """Collect Terraform outputs after a successful apply and return as a flat dict.
+
+        Delegates to :meth:`output` (``terraform output -json``).  Values are
+        unwrapped from the Terraform ``{value, type}`` envelope so callers receive
+        a plain ``{name: value}`` dict suitable for env-var injection.
+        """
+        return self.output()
+
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:
         """terraform output -json -> {name: value} dict"""
         messages: List[str] = []
