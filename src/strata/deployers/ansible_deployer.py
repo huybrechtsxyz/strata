@@ -121,23 +121,13 @@ class AnsibleDeployer(BaseDeployer):
             messages.append("No workspace service available")
             return False, messages
 
-        spec = workspace_service.model.spec  # type: ignore[union-attr]
-        provisioners = spec.provisioners or []
-
-        # Find the ansible IaC entry matching the stage provisioner name
-        iac: Optional[WorkspaceIacModel] = None
-        if self.stage.provisioner:
-            iac = next((p for p in provisioners if p.name == self.stage.provisioner), None)
-        else:
-            # Convention: first ansible provisioner
-            from strata.models.common_models import ProvisionerType
-
-            iac = next((p for p in provisioners if p.provisioner == ProvisionerType.ANSIBLE), None)
+        # Resolve IaC model via stage.provisioner, stage.topology, or single-provisioner fallback
+        iac = self._resolve_iac_model(self.stage, workspace_service)
 
         if iac is None:
             messages.append(
                 f"Stage '{self.stage.name}': no ansible provisioner found in workspace "
-                f"(looked for provisioner='{self.stage.provisioner}')."
+                f"(stage.provisioner='{self.stage.provisioner}', stage.topology='{self.stage.topology}')."
             )
             return False, messages
 
