@@ -6,7 +6,6 @@ from pathlib import PurePosixPath
 from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
-    BaseModel,
     Field,
     StringConstraints,
     field_validator,
@@ -16,6 +15,7 @@ from pydantic import (
 from strata.models.common_models import (
     CommonLifecycleModel,
     FeatureRefs,
+    PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
@@ -24,7 +24,7 @@ from strata.models.common_models import (
 )
 
 
-class ResourceDependencyModel(BaseModel):
+class ResourceDependencyModel(PlatformBaseModel):
     """
     Capability-based resource dependency model.
 
@@ -64,7 +64,7 @@ class ResourceDependencyModel(BaseModel):
         return self
 
 
-class ResourceVolumesModel(BaseModel):
+class ResourceVolumesModel(PlatformBaseModel):
     """
     Model for defining resource volume mounts (name, path).
     """
@@ -75,7 +75,7 @@ class ResourceVolumesModel(BaseModel):
     )
 
 
-class ResourceDiskModel(BaseModel):
+class ResourceDiskModel(PlatformBaseModel):
     """
     Model for defining resource disk configuration (size, label, mount).
     Validates label format and mount path.
@@ -158,7 +158,7 @@ class ResourceDiskModel(BaseModel):
         return v
 
 
-class ResourceStorageModel(BaseModel):
+class ResourceStorageModel(PlatformBaseModel):
     """
     Generic storage configuration for resources that need persistent storage.
     Applies to VMs, containers, databases, etc.
@@ -228,7 +228,7 @@ class ResourceStorageModel(BaseModel):
         return self
 
 
-class ResourcePropertiesModel(BaseModel):
+class ResourcePropertiesModel(PlatformBaseModel):
     """
     Model for resource properties (unit cost, installpoint, configuration).
     """
@@ -268,7 +268,7 @@ class ResourcePropertiesModel(BaseModel):
         return v
 
 
-class ResourceReferencesModel(BaseModel):
+class ResourceReferencesModel(PlatformBaseModel):
     """
     References to variables, secrets, and features required by this resource.
 
@@ -287,7 +287,7 @@ class ResourceReferencesModel(BaseModel):
     )
 
 
-class ResourceSpecModel(BaseModel):
+class ResourceSpecModel(PlatformBaseModel):
     """
     Resource specification containing properties, references, and lifecycle configuration.
     """
@@ -321,7 +321,7 @@ class ResourceSpecModel(BaseModel):
         return self
 
 
-class ResourceMetaModel(BaseModel):
+class ResourceMetaModel(PlatformBaseModel):
     """Model for resource metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique resource name")
@@ -335,7 +335,7 @@ class ResourceMetaModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
 
-class ResourceModel(BaseModel):
+class ResourceModel(PlatformBaseModel):
     """
     Top-level model for a resource definition.
     Includes metadata, specification, and validation for provider configuration requirements.

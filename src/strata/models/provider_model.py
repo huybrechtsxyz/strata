@@ -4,7 +4,6 @@
 from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
-    BaseModel,
     Field,
     StringConstraints,
     field_validator,
@@ -14,6 +13,7 @@ from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import (
     CommonLifecycleModel,
     FeatureRefs,
+    PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
@@ -22,7 +22,7 @@ from strata.models.common_models import (
 )
 
 
-class ProviderReferencesModel(BaseModel):
+class ProviderReferencesModel(PlatformBaseModel):
     """
     References to variables, secrets, and features required by this provider.
 
@@ -41,7 +41,7 @@ class ProviderReferencesModel(BaseModel):
     )
 
 
-class ProviderPropertiesModel(BaseModel):
+class ProviderPropertiesModel(PlatformBaseModel):
     """
     Provider configuration: cloud provider and datacenter location.
     """
@@ -51,6 +51,14 @@ class ProviderPropertiesModel(BaseModel):
     )
     region: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         description="Region of the datacenter used by the provider API to select the datacenter"
+    )
+    location: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
+        None,
+        description="Optional location of the datacenter (e.g., 'West US', 'eu-west-1'). Used for documentation and may be used by some providers for resource naming or tagging, but is not required for provider validation.",
+    )
+    organization: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
+        None,
+        description="Optional organization or subscription name/ID for this provider. Used for documentation and may be used by some providers for resource naming or tagging, but is not required for provider validation.",
     )
     engine: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
@@ -82,7 +90,7 @@ class ProviderPropertiesModel(BaseModel):
         return v
 
 
-class ProviderSpecModel(BaseModel):
+class ProviderSpecModel(PlatformBaseModel):
     """
     Provider specification containing properties, references, and lifecycle configuration.
     """
@@ -108,7 +116,7 @@ class ProviderSpecModel(BaseModel):
     )
 
 
-class ProviderMetaModel(BaseModel):
+class ProviderMetaModel(PlatformBaseModel):
     """Provider metadata including name, annotations, labels, and tags."""
 
     name: PlatformName = Field(description="Unique provider name")
@@ -122,7 +130,7 @@ class ProviderMetaModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
 
-class ProviderModel(BaseModel):
+class ProviderModel(PlatformBaseModel):
     """Root model for a provider configuration file."""
 
     apiVersion: PlatformVersion = Field(

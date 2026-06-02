@@ -5,7 +5,6 @@ import warnings
 from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
-    BaseModel,
     Field,
     StringConstraints,
     model_validator,
@@ -14,6 +13,7 @@ from pydantic import (
 from strata.models.common_models import (
     CommonLifecycleModel,
     FeatureRefs,
+    PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
@@ -22,7 +22,7 @@ from strata.models.common_models import (
 )
 
 
-class NamespaceReferenceModel(BaseModel):
+class NamespaceReferenceModel(PlatformBaseModel):
     """
     References to variables, secrets, and features required by this namespace.
 
@@ -41,7 +41,7 @@ class NamespaceReferenceModel(BaseModel):
     )
 
 
-class NamespaceModuleModel(BaseModel):
+class NamespaceModuleModel(PlatformBaseModel):
     """Model for a namespace module (name, description, properties, lifecycle, labels, tags)."""
 
     name: PlatformName = Field(description="Unique module name within the namespace")
@@ -51,7 +51,7 @@ class NamespaceModuleModel(BaseModel):
     file: str = Field(description="File reference for the module configuration or script")
 
 
-class NamespaceSpecModel(BaseModel):
+class NamespaceSpecModel(PlatformBaseModel):
     """Model for namespace spec (lifecycle, modules, validation)."""
 
     lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Namespace lifecycle phases")
@@ -91,7 +91,7 @@ class NamespaceSpecModel(BaseModel):
         return self
 
 
-class NamespaceMetaModel(BaseModel):
+class NamespaceMetaModel(PlatformBaseModel):
     """Model for namespace metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique namespace name")
@@ -105,7 +105,7 @@ class NamespaceMetaModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional list of tags")
 
 
-class NamespaceModel(BaseModel):
+class NamespaceModel(PlatformBaseModel):
     """Top-level model for a namespace resource."""
 
     apiVersion: PlatformVersion = Field(

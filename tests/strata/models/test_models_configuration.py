@@ -243,8 +243,7 @@ kind: configuration
 meta:
   name: test_config
 spec:
-  defaults:
-    build_path: build/
+  additional_topologies: false
 """
         config_file = tmp_path / "test-config.yaml"
         config_file.write_text(config_content)

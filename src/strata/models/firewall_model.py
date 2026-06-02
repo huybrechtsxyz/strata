@@ -7,7 +7,6 @@ from enum import Enum
 from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import (
-    BaseModel,
     ConfigDict,
     Field,
     field_validator,
@@ -15,6 +14,7 @@ from pydantic import (
 )
 
 from strata.models.common_models import (
+    PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
@@ -43,14 +43,14 @@ class FirewallProtocol(str, Enum):
     ICMP = "icmp"
 
 
-class FirewallRuleModel(BaseModel):
+class FirewallRuleModel(PlatformBaseModel):
     """
     Model for an individual firewall rule.
     Supports direction, protocol, port(s), interface, source/destination, and comments.
     Validates IP/CIDR, port formats, and interface names.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     direction: FirewallDirection = Field(..., description="Direction of traffic: 'in' for inbound, 'out' for outbound.")
     proto: Optional[FirewallProtocol] = Field(
@@ -132,7 +132,7 @@ class FirewallRuleModel(BaseModel):
         return value
 
 
-class FirewallDefaultsModel(BaseModel):
+class FirewallDefaultsModel(PlatformBaseModel):
     """
     Model for a default firewall rule (direction, permission, comment).
     Used to set baseline allow/deny behavior for inbound/outbound traffic.
@@ -143,7 +143,7 @@ class FirewallDefaultsModel(BaseModel):
     comment: Optional[str] = Field(None, description="Optional comment or documentation for the default rule.")
 
 
-class FirewallSpecModel(BaseModel):
+class FirewallSpecModel(PlatformBaseModel):
     """
     Model for a firewall ruleset specification.
     Includes default rules, allow/deny lists, and validation for uniqueness and conflicts.
@@ -183,7 +183,7 @@ class FirewallSpecModel(BaseModel):
         return self
 
 
-class FirewallMetaModel(BaseModel):
+class FirewallMetaModel(PlatformBaseModel):
     """
     Model for firewall resource metadata (name, annotations, labels, tags).
     """
@@ -196,7 +196,7 @@ class FirewallMetaModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional list of tags for the firewall resource.")
 
 
-class FirewallModel(BaseModel):
+class FirewallModel(PlatformBaseModel):
     """
     Top-level model for a firewall ruleset resource.
     Includes metadata and specification for validation and orchestration.

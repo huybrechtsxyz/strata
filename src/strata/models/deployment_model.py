@@ -5,7 +5,6 @@ from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import (
-    BaseModel,
     Field,
     StringConstraints,
     field_validator,
@@ -14,6 +13,7 @@ from pydantic import (
 
 from strata.models.common_models import (
     CommonLifecycleModel,
+    PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
@@ -21,7 +21,7 @@ from strata.models.common_models import (
 )
 
 
-class DeploymentFileReference(BaseModel):
+class DeploymentFileReference(PlatformBaseModel):
     """Reference to a local deployment file that must exist."""
 
     name: Annotated[
@@ -58,14 +58,14 @@ class ApproverType(str, Enum):
     USER = "user"
 
 
-class ApproverRef(BaseModel):
+class ApproverRef(PlatformBaseModel):
     """A single named approver entry."""
 
     type: ApproverType = Field(description="Approver identity type: github-team | ado-group | user")
     value: str = Field(description="Approver identifier — team slug, group name, or user address")
 
 
-class DeploymentApprovalModel(BaseModel):
+class DeploymentApprovalModel(PlatformBaseModel):
     """Deployment-level approval metadata.
 
     Presence of this block signals that approvals are declared for this deployment.
@@ -79,7 +79,7 @@ class DeploymentApprovalModel(BaseModel):
     )
 
 
-class DeploymentStageApprovalModel(BaseModel):
+class DeploymentStageApprovalModel(PlatformBaseModel):
     """Per-stage approval override: restricts which spec-level approvers apply to this stage."""
 
     approvers: List[str] = Field(
@@ -87,7 +87,7 @@ class DeploymentStageApprovalModel(BaseModel):
     )
 
 
-class HealthCheckModel(BaseModel):
+class HealthCheckModel(PlatformBaseModel):
     """A single health check applied to a deployment stage after provisioning.
 
     Two check types:
@@ -144,7 +144,7 @@ class HealthCheckModel(BaseModel):
         return self
 
 
-class DeploymentStageTimeoutsModel(BaseModel):
+class DeploymentStageTimeoutsModel(PlatformBaseModel):
     """Per-step subprocess timeouts for a deployment stage (all deployer types).
 
     Field names match deployer step names so the same schema works for
@@ -184,7 +184,7 @@ class DeploymentStageTimeoutsModel(BaseModel):
     )
 
 
-class DeploymentStageModel(BaseModel):
+class DeploymentStageModel(PlatformBaseModel):
     """Model for a deployment stage (pipeline execution step).
 
     Stages enable:
@@ -290,7 +290,7 @@ class DeploymentStageModel(BaseModel):
         return self
 
 
-class DeploymentSpecModel(BaseModel):
+class DeploymentSpecModel(PlatformBaseModel):
     """Model for deployment specification (properties, workspace, stages)."""
 
     configurations: Optional[List[DeploymentConfigurationModel]] = Field(
@@ -409,7 +409,7 @@ class DeploymentSpecModel(BaseModel):
         return self
 
 
-class DeploymentMetaModel(BaseModel):
+class DeploymentMetaModel(PlatformBaseModel):
     """Model for deployment metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique deployment name")
@@ -423,7 +423,7 @@ class DeploymentMetaModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
 
-class DeploymentModel(BaseModel):
+class DeploymentModel(PlatformBaseModel):
     """Root model for a deployment configuration file."""
 
     apiVersion: PlatformVersion = Field(

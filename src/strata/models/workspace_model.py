@@ -5,7 +5,6 @@ from enum import Enum
 from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
-    BaseModel,
     Field,
     StringConstraints,
     field_validator,
@@ -14,6 +13,7 @@ from pydantic import (
 
 from strata.models.common_models import (
     CommonLifecycleModel,
+    PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
@@ -32,28 +32,28 @@ class WorkspaceVolumeType(str, Enum):
     distributed = "distributed"
 
 
-class WorkspaceNamespaceModel(BaseModel):
+class WorkspaceNamespaceModel(PlatformBaseModel):
     """Model for a workspace namespace."""
 
     name: PlatformName = Field(description="Unique namespace name")
     file: str = Field(description="File reference for the namespace configuration")
 
 
-class WorkspaceFirewallModel(BaseModel):
+class WorkspaceFirewallModel(PlatformBaseModel):
     """Model for a workspace firewall."""
 
     name: PlatformName = Field(description="Unique firewall name")
     file: str = Field(description="File reference for the firewall configuration")
 
 
-class WorkspaceVolumeModel(BaseModel):
+class WorkspaceVolumeModel(PlatformBaseModel):
     """Model for a workspace volume."""
 
     name: PlatformName = Field(description="Unique volume name within the topology")
     type: WorkspaceVolumeType = Field(default=WorkspaceVolumeType.local, description="Type of the volume")
 
 
-class WorkspaceModuleReferenceModel(BaseModel):
+class WorkspaceModuleReferenceModel(PlatformBaseModel):
     """Module reference for a resource - links code/app to infrastructure."""
 
     name: PlatformName = Field(description="Unique module name within this resource")
@@ -74,7 +74,7 @@ class WorkspaceModuleReferenceModel(BaseModel):
         return validate_slot_type(v)
 
 
-class WorkspaceComponentModel(BaseModel):
+class WorkspaceComponentModel(PlatformBaseModel):
     """Component model - simple resource name reference."""
 
     resource: Annotated[
@@ -84,7 +84,7 @@ class WorkspaceComponentModel(BaseModel):
     ]
 
 
-class WorkspaceNamespaceReferenceModel(BaseModel):
+class WorkspaceNamespaceReferenceModel(PlatformBaseModel):
     """Namespace reference within a topology - links a namespace to this topology."""
 
     namespace: Annotated[
@@ -94,7 +94,7 @@ class WorkspaceNamespaceReferenceModel(BaseModel):
     ]
 
 
-class WorkspaceTopologyModel(BaseModel):
+class WorkspaceTopologyModel(PlatformBaseModel):
     name: PlatformName = Field(..., description="Unique topology name")
     provider: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         ..., description="Provider name used for this topology"
@@ -144,7 +144,7 @@ class WorkspaceTopologyModel(BaseModel):
         return self
 
 
-class WorkspaceResourceModel(BaseModel):
+class WorkspaceResourceModel(PlatformBaseModel):
     """Model for workspace resource definition (gluing layer)."""
 
     name: PlatformName = Field(description="Unique resource name")
@@ -221,7 +221,7 @@ class WorkspaceResourceModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
 
-class WorkspaceIacBackendModel(BaseModel):
+class WorkspaceIacBackendModel(PlatformBaseModel):
     """Model for IaC backend configuration (state storage)."""
 
     type: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
@@ -232,7 +232,7 @@ class WorkspaceIacBackendModel(BaseModel):
     )
 
 
-class WorkspaceIacAnsiblePropertiesModel(BaseModel):
+class WorkspaceIacAnsiblePropertiesModel(PlatformBaseModel):
     """Typed properties for an Ansible provisioner entry."""
 
     playbook: Optional[str] = Field(
@@ -253,7 +253,7 @@ class WorkspaceIacAnsiblePropertiesModel(BaseModel):
     )
 
 
-class WorkspaceIacModel(BaseModel):
+class WorkspaceIacModel(PlatformBaseModel):
     name: PlatformName
     description: Optional[str] = Field(
         None,
@@ -285,7 +285,7 @@ class WorkspaceIacModel(BaseModel):
         return self
 
 
-class WorkspaceProviderModel(BaseModel):
+class WorkspaceProviderModel(PlatformBaseModel):
     name: PlatformName = Field(description="Unique provider name")
     file: str = Field(description="Path to the provider configuration file")
     description: Optional[str] = Field(
@@ -294,7 +294,7 @@ class WorkspaceProviderModel(BaseModel):
     )
 
 
-class WorkspaceSpecModel(BaseModel):
+class WorkspaceSpecModel(PlatformBaseModel):
     """Workspace specification model."""
 
     lifecycle: Optional[CommonLifecycleModel] = Field(
@@ -522,7 +522,7 @@ class WorkspaceSpecModel(BaseModel):
         return self
 
 
-class WorkspaceMetaModel(BaseModel):
+class WorkspaceMetaModel(PlatformBaseModel):
     """Model for workspace metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique workspace name")
@@ -536,7 +536,7 @@ class WorkspaceMetaModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
 
-class WorkspaceModel(BaseModel):
+class WorkspaceModel(PlatformBaseModel):
     """Root model for a workspace configuration file."""
 
     apiVersion: PlatformVersion = Field(

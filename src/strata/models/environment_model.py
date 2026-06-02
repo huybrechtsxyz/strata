@@ -5,7 +5,6 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import (
-    BaseModel,
     Field,
     field_validator,
     model_validator,
@@ -13,6 +12,7 @@ from pydantic import (
 
 from strata.models.common_models import (
     CommonLifecycleModel,
+    PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
@@ -35,7 +35,7 @@ class IncludeMergeStrategy(str, Enum):
     MERGE = "merge"
 
 
-class EnvironmentIncludeModel(BaseModel):
+class EnvironmentIncludeModel(PlatformBaseModel):
     """
     Terraform file include definition for merging during build.
 
@@ -76,7 +76,7 @@ class EnvironmentIncludeModel(BaseModel):
         return v
 
 
-class EnvironmentResourceOverrideModel(BaseModel):
+class EnvironmentResourceOverrideModel(PlatformBaseModel):
     """
     Environment-specific resource overrides.
 
@@ -135,7 +135,7 @@ class EnvironmentResourceOverrideModel(BaseModel):
     )
 
 
-class EnvironmentModuleOverrideModel(BaseModel):
+class EnvironmentModuleOverrideModel(PlatformBaseModel):
     """
     Environment-specific module overrides (for modules within workspace resources).
 
@@ -165,7 +165,7 @@ class EnvironmentModuleOverrideModel(BaseModel):
         return validate_slot_type(v)
 
 
-class EnvironmentProviderOverrideModel(BaseModel):
+class EnvironmentProviderOverrideModel(PlatformBaseModel):
     """
     Environment-specific provider overrides.
 
@@ -179,9 +179,13 @@ class EnvironmentProviderOverrideModel(BaseModel):
         None,
         description="Override provider description",
     )
+    configuration: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Environment-specific provider configuration overrides (merged with workspace provider config)",
+    )
 
 
-class EnvironmentOverridesModel(BaseModel):
+class EnvironmentOverridesModel(PlatformBaseModel):
     """Model for environment overrides on workspace configurations."""
 
     resources: Optional[List[EnvironmentResourceOverrideModel]] = Field(
@@ -233,7 +237,7 @@ class EnvironmentOverridesModel(BaseModel):
         return self
 
 
-class EnvironmentSpecModel(BaseModel):
+class EnvironmentSpecModel(PlatformBaseModel):
     """Model for environment specification with workspace overrides."""
 
     lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Environment lifecycle phases")
@@ -267,7 +271,7 @@ class EnvironmentSpecModel(BaseModel):
         return self
 
 
-class EnvironmentMetaModel(BaseModel):
+class EnvironmentMetaModel(PlatformBaseModel):
     """Model for environment metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique environment name")
@@ -280,7 +284,7 @@ class EnvironmentMetaModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
 
 
-class EnvironmentModel(BaseModel):
+class EnvironmentModel(PlatformBaseModel):
     """Root model for a environment configuration file."""
 
     apiVersion: PlatformVersion = Field(

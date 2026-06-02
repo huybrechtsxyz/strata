@@ -64,7 +64,7 @@ class TestDeploymentService:
                 "workspace": {"name": "test_workspace", "file": "workspace.yaml"},
                 "environments": ["environment.yaml"],
                 "layers": {"environment": "dev"},
-                "stages": [{"name": "dev", "type": "infrastructure"}],
+                "stages": [{"name": "dev"}],
             },
         }
         service = DeploymentService(data=data)
