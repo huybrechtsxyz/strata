@@ -476,7 +476,7 @@ class TerraformBuilder(BaseBuilder):
                 topologies_dict[topology.name] = {
                     "type": topology.type,
                     "provider": topology.provider,
-                    "provisioner": topology.provisioner.value,
+                    "provisioner": topology.provisioner if isinstance(topology.provisioner, str) else topology.provisioner.value,
                     "components": components,
                     "volumes": volumes,
                 }
