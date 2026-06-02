@@ -40,8 +40,6 @@ spec:
       source:
         repository: my_infra
         source_path: terraform
-      configuration:
-        ip_output_key: server_ip    # name of the Terraform output that holds the IP
 
     # Tool 2: Ansible — knows how to configure the server
     - name: my_ansible
@@ -49,6 +47,9 @@ spec:
       source:
         repository: my_infra
         source_path: ansible
+      properties:
+        playbook: site.yml
+        ssh_private_key_secret: ssh_private_key
 
   topology:
     # "my_server" is a name for the concept "one server managed by my_iac".
@@ -169,12 +170,15 @@ spec:
       source:
         repository: infra
         source_path: terraform/servers
-      configuration:
-        ip_output_key: server_ips   # which Terraform output holds the server IP list
+
+    - name: configure_ansible
       provisioner: ansible
       source:
         repository: infra
         source_path: ansible/configure
+      properties:
+        playbook: site.yml
+        ssh_private_key_secret: ssh_private_key
 
     - name: app_helm
       provisioner: helm
