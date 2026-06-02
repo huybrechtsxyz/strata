@@ -81,7 +81,7 @@ def schema_get(kind: str, output: Optional[str] = None) -> None:
     if model_cls is None:
         raise click.UsageError(f"No schema available for kind '{kind}'.")
 
-    schema = model_cls.model_json_schema()
+    schema = model_cls.model_json_schema()  # type: ignore[attr-defined]
 
     if output in (None, "json"):
         click.echo(json.dumps(schema, indent=2))
@@ -127,7 +127,7 @@ def schema_export(output_dir: str) -> None:
     for kind, model_cls in _KIND_TO_MODEL.items():
         schema_file = output_path / f"{kind.value}.json"
         try:
-            schema_file.write_text(json.dumps(model_cls.model_json_schema(), indent=2), encoding="utf-8")
+            schema_file.write_text(json.dumps(model_cls.model_json_schema(), indent=2), encoding="utf-8")  # type: ignore[attr-defined]
             written.append(schema_file)
         except Exception as exc:
             errors.append(f"  {kind.value}: {exc}")
