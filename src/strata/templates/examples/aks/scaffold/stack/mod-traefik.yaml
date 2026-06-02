@@ -9,13 +9,14 @@ meta:
   tags: [${solution_name}, module, traefik, ingress]
 spec:
   type: helm
-  chart:
-    repository: https://helm.traefik.io/traefik
-    name: traefik
-    version: "26.0.0"
-  namespace: traefik
-  values:
-    - key: ingressClass.enabled
-      value: "true"
-    - key: ingressClass.isDefaultClass
-      value: "true"
+  source:
+    chart_repository: https://helm.traefik.io/traefik
+    chart_name: traefik
+    chart_version: "26.0.0"
+  kubernetes_namespace: traefik
+  services:
+    - name: traefik
+      configuration:
+        ingressClass:
+          enabled: true
+          isDefaultClass: true

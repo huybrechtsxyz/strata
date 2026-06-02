@@ -1,0 +1,6 @@
+name: compose
+description: Docker Compose / Swarm services starter workspace
+variables:
+  - name: solution_name
+    description: Logical name for your solution (lowercase, hyphens ok)
+    default: my-services

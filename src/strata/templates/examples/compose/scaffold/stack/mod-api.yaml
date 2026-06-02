@@ -1,0 +1,57 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: module
+meta:
+  name: ${solution_name}_mod_api
+  annotations:
+    description: REST API and database services for ${solution_name}
+  labels:
+    version: "1.0.0"
+  tags: [${solution_name}, module, api, compose]
+spec:
+  type: compose
+  source:
+    repository: ${solution_name}
+    source_path: stack
+  references:
+    variables:
+      - DATABASE_URL
+      - APP_PORT
+    secrets:
+      - DB_PASSWORD
+    features:
+      - ENABLE_DEBUG
+  services:
+    - name: api
+      image: "${solution_name}-api:latest"
+      restart: unless-stopped
+      ports:
+        - "8080:8080"
+      environment:
+        - key: DATABASE_URL
+          var: DATABASE_URL
+        - key: DB_PASSWORD
+          secret: DB_PASSWORD
+        - key: DEBUG
+          feature: ENABLE_DEBUG
+      depends_on: [db]
+      healthcheck:
+        name: api-health
+        type: http
+        interval: "30s"
+        timeout: "5s"
+        retries: 3
+        command: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+
+    - name: db
+      image: postgres:16-alpine
+      restart: unless-stopped
+      environment:
+        - key: POSTGRES_PASSWORD
+          secret: DB_PASSWORD
+        - key: POSTGRES_DB
+          value: app
+      mounts:
+        - name: db_data
+          type: volume
+          target_path: /var/lib/postgresql/data
+          volume_ref: db_data

@@ -225,9 +225,13 @@ class InitSolutionCommand(BaseCommand):
                 click.echo("    3. Validate:             strata validate --file deploy/deploy-prd.yaml")
                 click.echo("    4. Deploy:               strata deploy run --file deploy/deploy-prd.yaml")
             else:
-                click.echo("    1. Scaffold config files:  strata init --name <name> --template aks")
+                click.echo(
+                    f"    1. Add a template:         strata sln init --name {self._solution_name} --template aks"
+                )
                 click.echo(f"    2. Register your repo:     strata repo add {self._solution_name} <git-url> --clone")
                 click.echo("    3. Add a profile:          strata profile add prd --activate")
+            click.echo("")
+            click.echo("    📄 See GETTING_STARTED.md for the full setup and lifecycle guide.")
             click.echo("")
         return super()._after_execute()
 
