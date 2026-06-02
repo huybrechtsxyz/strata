@@ -27,7 +27,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 
-from strata.controllers.value_controller import ResolvedValues
+from strata.controllers.value_controller import ResolvedValues, inject_compose_env
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -366,27 +366,28 @@ class HelmDeployer(BaseDeployer):
             messages.append("No helm modules to plan")
             return True, messages
 
-        for target in self._helm_modules:
-            messages.append(
-                f"helm upgrade --dry-run --install {target.release_name} -n {target.chart_namespace} {target.chart_ref}"
-            )
-            args = [
-                "upgrade",
-                "--dry-run",
-                "--install",
-                "--namespace",
-                target.chart_namespace,
-                "-f",
-                str(target.values_file),
-                target.release_name,
-                target.chart_ref,
-            ]
-            if target.chart_version:
-                args += ["--version", target.chart_version]
-            ok, run_messages = self._run_helm(args, line_callback=line_callback)
-            messages.extend(run_messages)
-            if not ok:
-                return False, messages
+        with inject_compose_env(self.resolved_values):
+            for target in self._helm_modules:
+                messages.append(
+                    f"helm upgrade --dry-run --install {target.release_name} -n {target.chart_namespace} {target.chart_ref}"
+                )
+                args = [
+                    "upgrade",
+                    "--dry-run",
+                    "--install",
+                    "--namespace",
+                    target.chart_namespace,
+                    "-f",
+                    str(target.values_file),
+                    target.release_name,
+                    target.chart_ref,
+                ]
+                if target.chart_version:
+                    args += ["--version", target.chart_version]
+                ok, run_messages = self._run_helm(args, line_callback=line_callback)
+                messages.extend(run_messages)
+                if not ok:
+                    return False, messages
 
         return True, messages
 
@@ -403,27 +404,28 @@ class HelmDeployer(BaseDeployer):
             messages.append("No helm modules to deploy")
             return True, messages
 
-        for target in self._helm_modules:
-            messages.append(
-                f"helm upgrade --install {target.release_name} -n {target.chart_namespace} {target.chart_ref}"
-            )
-            args = [
-                "upgrade",
-                "--install",
-                "--create-namespace",
-                "--namespace",
-                target.chart_namespace,
-                "-f",
-                str(target.values_file),
-                target.release_name,
-                target.chart_ref,
-            ]
-            if target.chart_version:
-                args += ["--version", target.chart_version]
-            ok, run_messages = self._run_helm(args, line_callback=line_callback)
-            messages.extend(run_messages)
-            if not ok:
-                return False, messages
+        with inject_compose_env(self.resolved_values):
+            for target in self._helm_modules:
+                messages.append(
+                    f"helm upgrade --install {target.release_name} -n {target.chart_namespace} {target.chart_ref}"
+                )
+                args = [
+                    "upgrade",
+                    "--install",
+                    "--create-namespace",
+                    "--namespace",
+                    target.chart_namespace,
+                    "-f",
+                    str(target.values_file),
+                    target.release_name,
+                    target.chart_ref,
+                ]
+                if target.chart_version:
+                    args += ["--version", target.chart_version]
+                ok, run_messages = self._run_helm(args, line_callback=line_callback)
+                messages.extend(run_messages)
+                if not ok:
+                    return False, messages
 
         return True, messages
 
@@ -444,15 +446,16 @@ class HelmDeployer(BaseDeployer):
             messages.append("No helm modules to destroy")
             return True, messages
 
-        for target in self._helm_modules:
-            messages.append(f"helm uninstall {target.release_name} -n {target.chart_namespace}")
-            ok, run_messages = self._run_helm(
-                ["uninstall", "--namespace", target.chart_namespace, target.release_name],
-                line_callback=line_callback,
-            )
-            messages.extend(run_messages)
-            if not ok:
-                return False, messages
+        with inject_compose_env(self.resolved_values):
+            for target in self._helm_modules:
+                messages.append(f"helm uninstall {target.release_name} -n {target.chart_namespace}")
+                ok, run_messages = self._run_helm(
+                    ["uninstall", "--namespace", target.chart_namespace, target.release_name],
+                    line_callback=line_callback,
+                )
+                messages.extend(run_messages)
+                if not ok:
+                    return False, messages
 
         return True, messages
 
@@ -469,17 +472,18 @@ class HelmDeployer(BaseDeployer):
             messages.append("No helm modules to inspect")
             return True, messages
 
-        for target in self._helm_modules:
-            messages.append(f"helm get manifest {target.release_name} -n {target.chart_namespace}")
-            result = self._helm._run_integration(  # type: ignore[union-attr]
-                ["get", "manifest", "--namespace", target.chart_namespace, target.release_name],
-                cwd=str(self.build_path),
-                timeout=60,
-            )
-            if result.returncode == 0:
-                messages.append(f"  {target.ns_name}/{target.module_name}: installed (would uninstall)")
-            else:
-                messages.append(f"  {target.ns_name}/{target.module_name}: not installed")
+        with inject_compose_env(self.resolved_values):
+            for target in self._helm_modules:
+                messages.append(f"helm get manifest {target.release_name} -n {target.chart_namespace}")
+                result = self._helm._run_integration(  # type: ignore[union-attr]
+                    ["get", "manifest", "--namespace", target.chart_namespace, target.release_name],
+                    cwd=str(self.build_path),
+                    timeout=60,
+                )
+                if result.returncode == 0:
+                    messages.append(f"  {target.ns_name}/{target.module_name}: installed (would uninstall)")
+                else:
+                    messages.append(f"  {target.ns_name}/{target.module_name}: not installed")
 
         return True, messages
 

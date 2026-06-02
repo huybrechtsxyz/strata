@@ -250,6 +250,11 @@ class RunDeployCommand(BaseDeployCommand):
         else:
             steps_to_run = [STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY]
 
+        # --- dry-run: surface deployer-specific plan context before steps run ---
+        if self._dry_run and self._is_console_output():
+            for line in deployer.describe_plan():
+                click.echo(f"    [DRY-RUN] {line}")
+
         supported = deployer.get_supported_steps()
 
         # --- emit stage-start event (NDJSON) ---

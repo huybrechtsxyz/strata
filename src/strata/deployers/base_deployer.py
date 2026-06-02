@@ -170,6 +170,18 @@ class BaseDeployer(ABC):
         """
         raise NotImplementedError
 
+    def describe_plan(self) -> List[str]:
+        """Return human-readable lines describing what this deployer would execute.
+
+        Called by the deploy pipeline in dry-run mode after validation succeeds,
+        before any steps run.  Override in deployers that can surface meaningful
+        plan context (e.g. AnsibleDeployer emits playbook and inventory paths).
+
+        Returns:
+            List of descriptive strings — empty list if nothing to report.
+        """
+        return []
+
     def save_plan_json(self) -> Tuple[bool, Optional[Path], List[str]]:
         """Persist the plan as a human-readable JSON file alongside the binary plan.
 

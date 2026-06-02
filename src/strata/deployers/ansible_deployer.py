@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
-from strata.controllers.value_controller import ResolvedValues
+from strata.controllers.value_controller import ResolvedValues, inject_compose_env
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -180,6 +180,19 @@ class AnsibleDeployer(BaseDeployer):
             messages.append("Deployer not initialized — call validate_workspace/validate_environment first.")
             return False
         return True
+
+    def describe_plan(self) -> List[str]:
+        """Return the resolved playbook and inventory paths for dry-run display."""
+        if self._working_dir is None:
+            return []
+        playbook = self._get_playbook()
+        inventory = self._get_inventory()
+        lines = [f"playbook:   {self._working_dir / playbook}"]
+        if inventory:
+            lines.append(f"inventory:  {self._working_dir / inventory}")
+        else:
+            lines.append("inventory:  (none — Ansible will use its default discovery)")
+        return lines
 
     def _get_configuration(self) -> Optional[Dict[str, Any]]:
         """Return the provisioner configuration dict, or None."""
@@ -336,15 +349,16 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook --check --diff {playbook}")
 
         try:
-            with self._ssh_key_context() as key_file:
-                result = self._ansible.plan(
-                    str(self._working_dir),
-                    playbook=playbook,
-                    inventory=inventory,
-                    extra_vars=self._get_extra_vars(),
-                    private_key_file=key_file,
-                    timeout=self._get_timeout("plan", 600),
-                )
+            with inject_compose_env(self.resolved_values):
+                with self._ssh_key_context() as key_file:
+                    result = self._ansible.plan(
+                        str(self._working_dir),
+                        playbook=playbook,
+                        inventory=inventory,
+                        extra_vars=self._get_extra_vars(),
+                        private_key_file=key_file,
+                        timeout=self._get_timeout("plan", 600),
+                    )
             if result.returncode != 0:
                 messages.append(f"Check mode failed:\n{result.stderr}")
                 return False, messages
@@ -372,15 +386,16 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook {playbook}")
 
         try:
-            with self._ssh_key_context() as key_file:
-                result = self._ansible.apply(
-                    str(self._working_dir),
-                    playbook=playbook,
-                    inventory=inventory,
-                    extra_vars=self._get_extra_vars(),
-                    private_key_file=key_file,
-                    timeout=self._get_timeout("apply", 1800),
-                )
+            with inject_compose_env(self.resolved_values):
+                with self._ssh_key_context() as key_file:
+                    result = self._ansible.apply(
+                        str(self._working_dir),
+                        playbook=playbook,
+                        inventory=inventory,
+                        extra_vars=self._get_extra_vars(),
+                        private_key_file=key_file,
+                        timeout=self._get_timeout("apply", 1800),
+                    )
             if result.returncode != 0:
                 messages.append(f"Playbook execution failed:\n{result.stderr}")
                 return False, messages
@@ -416,14 +431,15 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook {destroy_playbook}")
 
         try:
-            with self._ssh_key_context() as key_file:
-                result = self._ansible.apply(
-                    str(self._working_dir),
-                    playbook=destroy_playbook,
-                    inventory=inventory,
-                    private_key_file=key_file,
-                    timeout=self._get_timeout("destroy", 1800),
-                )
+            with inject_compose_env(self.resolved_values):
+                with self._ssh_key_context() as key_file:
+                    result = self._ansible.apply(
+                        str(self._working_dir),
+                        playbook=destroy_playbook,
+                        inventory=inventory,
+                        private_key_file=key_file,
+                        timeout=self._get_timeout("destroy", 1800),
+                    )
             if result.returncode != 0:
                 messages.append(f"Destroy playbook failed:\n{result.stderr}")
                 return False, messages
@@ -453,14 +469,15 @@ class AnsibleDeployer(BaseDeployer):
         messages.append(f"ansible-playbook --check --diff {destroy_playbook}")
 
         try:
-            with self._ssh_key_context() as key_file:
-                result = self._ansible.plan(
-                    str(self._working_dir),
-                    playbook=destroy_playbook,
-                    inventory=inventory,
-                    private_key_file=key_file,
-                    timeout=self._get_timeout("plan", 600),
-                )
+            with inject_compose_env(self.resolved_values):
+                with self._ssh_key_context() as key_file:
+                    result = self._ansible.plan(
+                        str(self._working_dir),
+                        playbook=destroy_playbook,
+                        inventory=inventory,
+                        private_key_file=key_file,
+                        timeout=self._get_timeout("plan", 600),
+                    )
             if result.returncode != 0:
                 messages.append(f"Destroy check mode failed:\n{result.stderr}")
                 return False, messages
