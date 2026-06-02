@@ -297,7 +297,18 @@ Deploys Docker Compose/Stack artifacts produced by `ComposeBuilder`. For each na
 | `destroy`      | `docker stack rm {namespace}` per namespace (requires `--force`)               |
 | `plan_destroy` | `docker stack ls` — lists running stacks matching namespace names              |
 | `output`       | `docker stack services {namespace}` per namespace                              |
-| `show_plan`    | No-op — returns empty dict                                                     |
+| `show_plan`    | Informational — no persisted plan format; returns an explanatory message       |
+
+### Constructor
+
+```python
+ComposeDeployer(
+    stage, deployment_service, configuration_service,
+    build_path, work_path,
+    verbose=False, force=False,
+    resolved_values=None,  # ResolvedValues — injected as bare KEY env vars during apply
+)
+```
 
 ### validate_workspace
 
@@ -306,6 +317,22 @@ Iterates all namespace services from the deployment. For each namespace, looks f
 ### validate_environment
 
 Calls `DockerIntegration.ensure_available()`. Sets `self._docker` for subsequent steps. Fails with an error message if Docker is not on PATH or the daemon is unreachable.
+
+### Resolved values (compose env injection)
+
+When `resolved_values` is provided, `apply` does two things for each namespace:
+
+1. **Writes a `.env` file** alongside `docker-compose.yml` — consumed by `docker compose up` for local workflows.
+2. **Injects vars into `os.environ`** via `inject_compose_env()` for the duration of the `docker stack deploy` subprocess — required because `docker stack` does **not** read `.env` files.
+
+| Aspect           | Detail                                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Key format       | Bare key — no prefix (e.g. `DB_HOST`, not `TF_VAR_DB_HOST`)                                              |
+| Merge order      | features → variables → secrets (secrets win on collision)                                                |
+| Feature booleans | Lowercased (`"true"` / `"false"`); `None` features are skipped                                           |
+| `.env` file      | Always written to the namespace directory, even when empty                                               |
+| Secret values    | Written to `.env` — the build directory must be protected                                                |
+| Logging          | Counts are logged (`Injecting X variable(s), Y feature(s), Z secret(s)`) — secret names are never logged |
 
 ### Deployment YAML example
 

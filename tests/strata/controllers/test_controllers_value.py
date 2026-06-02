@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from strata.controllers.value_controller import (
     ResolvedValues,
     ValueController,
+    inject_compose_env,
     inject_tf_vars,
 )
 from strata.models.store_models import (
@@ -100,6 +101,99 @@ class TestInjectTfVars:
     def test_none_resolved_noop(self):
         with inject_tf_vars(None):
             pass
+
+
+# ---------------------------------------------------------------------------
+# ResolvedValues.as_compose_env
+# ---------------------------------------------------------------------------
+
+
+class TestResolvedValuesAsComposeEnv:
+    def test_variables_use_bare_key(self):
+        rv = ResolvedValues(variables={"DB_HOST": "localhost"})
+        env = rv.as_compose_env()
+        assert env["DB_HOST"] == "localhost"
+        assert "TF_VAR_DB_HOST" not in env
+
+    def test_secrets_use_bare_key(self):
+        rv = ResolvedValues(secrets={"DB_PASSWORD": "hunter2"})
+        env = rv.as_compose_env()
+        assert env["DB_PASSWORD"] == "hunter2"
+
+    def test_features_serialized_as_lowercase_bool(self):
+        rv = ResolvedValues(features={"ENABLE_METRICS": True, "DEBUG": False})
+        env = rv.as_compose_env()
+        assert env["ENABLE_METRICS"] == "true"
+        assert env["DEBUG"] == "false"
+
+    def test_none_feature_skipped(self):
+        rv = ResolvedValues(features={"FLAG": None})
+        env = rv.as_compose_env()
+        assert "FLAG" not in env
+
+    def test_secrets_win_over_variables_on_collision(self):
+        rv = ResolvedValues(variables={"KEY": "from_var"}, secrets={"KEY": "from_secret"})
+        env = rv.as_compose_env()
+        assert env["KEY"] == "from_secret"
+
+    def test_variables_win_over_features_on_collision(self):
+        rv = ResolvedValues(features={"KEY": True}, variables={"KEY": "from_var"})
+        env = rv.as_compose_env()
+        assert env["KEY"] == "from_var"
+
+    def test_empty_produces_empty_dict(self):
+        rv = ResolvedValues()
+        assert rv.as_compose_env() == {}
+
+
+# ---------------------------------------------------------------------------
+# inject_compose_env context manager
+# ---------------------------------------------------------------------------
+
+
+class TestInjectComposeEnv:
+    def test_sets_vars_inside_context(self):
+        rv = ResolvedValues(variables={"COMPOSE_TEST_VAR": "hello"})
+        with inject_compose_env(rv):
+            assert os.environ.get("COMPOSE_TEST_VAR") == "hello"
+
+    def test_restores_vars_after_context(self):
+        rv = ResolvedValues(variables={"COMPOSE_RESTORE_VAR": "value"})
+        os.environ.pop("COMPOSE_RESTORE_VAR", None)
+        with inject_compose_env(rv):
+            pass
+        assert "COMPOSE_RESTORE_VAR" not in os.environ
+
+    def test_restores_original_value_after_context(self):
+        os.environ["COMPOSE_OVERWRITE_TEST"] = "original"
+        rv = ResolvedValues(variables={"COMPOSE_OVERWRITE_TEST": "new"})
+        with inject_compose_env(rv):
+            assert os.environ["COMPOSE_OVERWRITE_TEST"] == "new"
+        assert os.environ["COMPOSE_OVERWRITE_TEST"] == "original"
+        del os.environ["COMPOSE_OVERWRITE_TEST"]
+
+    def test_empty_resolved_noop(self):
+        rv = ResolvedValues()
+        with inject_compose_env(rv):
+            pass
+
+    def test_none_resolved_noop(self):
+        with inject_compose_env(None):
+            pass
+
+    def test_secrets_injected_inside_context(self):
+        rv = ResolvedValues(secrets={"DB_PASSWORD": "secret123"})
+        os.environ.pop("DB_PASSWORD", None)
+        with inject_compose_env(rv):
+            assert os.environ.get("DB_PASSWORD") == "secret123"
+        assert "DB_PASSWORD" not in os.environ
+
+    def test_features_injected_as_lowercase(self):
+        rv = ResolvedValues(features={"ENABLE_X": True})
+        os.environ.pop("ENABLE_X", None)
+        with inject_compose_env(rv):
+            assert os.environ.get("ENABLE_X") == "true"
+        assert "ENABLE_X" not in os.environ
 
 
 # ---------------------------------------------------------------------------

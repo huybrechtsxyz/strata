@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 from unittest.mock import MagicMock, patch
 
+from strata.controllers.value_controller import ResolvedValues
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -25,6 +26,7 @@ def _make_deployer(
     tmp_path: Optional[Path] = None,
     force: bool = False,
     verbose: bool = False,
+    resolved_values: Optional[ResolvedValues] = None,
 ) -> ComposeDeployer:
     """Build a ComposeDeployer backed by mock services."""
     stage = MagicMock()
@@ -40,6 +42,7 @@ def _make_deployer(
         work_path=work_path,
         verbose=verbose,
         force=force,
+        resolved_values=resolved_values,
     )
 
 
@@ -284,7 +287,8 @@ class TestComposeDeployerPlan:
         d._docker = MagicMock()
         compose_file = tmp_path / "docker-compose.yml"
         compose_file.write_text(
-            "version: '3'\nservices:\n  web:\n    image: nginx\n  db:\n    image: postgres\n  cache:\n    image: redis\n"
+            "version: '3'\nservices:\n  web:\n    image: nginx\n"
+            "  db:\n    image: postgres\n  cache:\n    image: redis\n"
         )
         d._compose_files = {"prod": compose_file}
         ok, msgs = d.plan()
@@ -314,6 +318,7 @@ class TestComposeDeployerApply:
         d._compose_files = {}
         ok, msgs = d.apply()
         assert ok is True
+        assert any("no action required" in m.lower() for m in msgs)
 
     def test_stack_deploy_command_constructed(self, tmp_path):
         d = _make_deployer(tmp_path=tmp_path)
@@ -329,6 +334,88 @@ class TestComposeDeployerApply:
         assert "deploy" in args
         assert "--with-registry-auth" in args
         assert "-c" in args
+
+    def test_env_file_written_alongside_compose(self, tmp_path):
+        rv = ResolvedValues(variables={"DB_HOST": "localhost"})
+        d = _make_deployer(tmp_path=tmp_path, resolved_values=rv)
+        d._docker = MagicMock()
+        d._docker._run_integration.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3'\n")
+        d._compose_files = {"prod": compose_file}
+        ok, msgs = d.apply()
+        assert ok is True
+        env_file = tmp_path / ".env"
+        assert env_file.exists()
+        assert "DB_HOST=localhost" in env_file.read_text()
+
+    def test_env_file_written_even_when_empty(self, tmp_path):
+        d = _make_deployer(tmp_path=tmp_path)  # no resolved_values
+        d._docker = MagicMock()
+        d._docker._run_integration.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3'\n")
+        d._compose_files = {"prod": compose_file}
+        ok, msgs = d.apply()
+        assert ok is True
+        env_file = tmp_path / ".env"
+        assert env_file.exists()
+        assert env_file.read_text() == ""
+
+    def test_injection_counts_logged(self, tmp_path):
+        rv = ResolvedValues(
+            variables={"DB_HOST": "localhost", "PORT": "5432"},
+            features={"ENABLE_METRICS": True},
+            secrets={"DB_PASS": "secret", "API_KEY": "key"},
+        )
+        d = _make_deployer(tmp_path=tmp_path, resolved_values=rv)
+        d._docker = MagicMock()
+        d._docker._run_integration.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3'\n")
+        d._compose_files = {"prod": compose_file}
+        ok, msgs = d.apply()
+        assert ok is True
+        injection_msg = next((m for m in msgs if "Injecting" in m), None)
+        assert injection_msg is not None
+        assert "2 variable(s)" in injection_msg
+        assert "1 feature(s)" in injection_msg
+        assert "2 secret(s)" in injection_msg
+
+    def test_no_injection_log_when_no_resolved_values(self, tmp_path):
+        d = _make_deployer(tmp_path=tmp_path)  # no resolved_values
+        d._docker = MagicMock()
+        d._docker._run_integration.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3'\n")
+        d._compose_files = {"prod": compose_file}
+        ok, msgs = d.apply()
+        assert ok is True
+        assert not any("Injecting" in m for m in msgs)
+
+    def test_secrets_injected_into_env_during_deploy(self, tmp_path):
+        """Secrets from resolved_values must be present in os.environ during the subprocess call."""
+        import os
+
+        captured_env: dict = {}
+
+        rv = ResolvedValues(secrets={"MY_SECRET": "super-secret"})
+        d = _make_deployer(tmp_path=tmp_path, resolved_values=rv)
+        d._docker = MagicMock()
+
+        def capture_and_succeed(args, **kwargs):
+            captured_env["MY_SECRET"] = os.environ.get("MY_SECRET")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        d._docker._run_integration.side_effect = capture_and_succeed
+        compose_file = tmp_path / "docker-compose.yml"
+        compose_file.write_text("version: '3'\n")
+        d._compose_files = {"prod": compose_file}
+        ok, msgs = d.apply()
+        assert ok is True
+        assert captured_env["MY_SECRET"] == "super-secret"
+        # Cleaned up after context exits
+        assert os.environ.get("MY_SECRET") is None
 
     def test_failure_aborts_loop(self, tmp_path):
         d = _make_deployer(tmp_path=tmp_path)
@@ -467,9 +554,14 @@ class TestComposeDeployerOutput:
 
 
 class TestComposeDeployerShowPlan:
-    def test_always_returns_empty_dict(self):
+    def test_returns_ok_with_empty_dict(self):
         d = _make_deployer()
         ok, data, msgs = d.show_plan()
         assert ok is True
         assert data == {}
-        assert msgs == []
+
+    def test_returns_informational_message(self):
+        d = _make_deployer()
+        ok, data, msgs = d.show_plan()
+        assert len(msgs) > 0
+        assert any("plan" in m.lower() for m in msgs)

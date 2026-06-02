@@ -11,7 +11,7 @@ Supported steps (in execution order):
   destroy  — docker stack rm {namespace}  (requires force=True)
   plan_destroy — list currently running stacks matching namespace names
   output   — docker stack services {namespace}
-  show_plan    — no-op, returns empty dict
+  show_plan    — informational message (no persisted plan format for Compose)
 
 Working directory: build_path/{deployment_name}/{namespace}/docker-compose.yml
 """
@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 
-from strata.controllers.value_controller import ResolvedValues
+from strata.controllers.value_controller import ResolvedValues, inject_compose_env
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -173,6 +173,25 @@ class ComposeDeployer(BaseDeployer):
             messages.append(result.stdout.strip())
         return True, messages
 
+    def _write_env_file(self, ns_dir: Path) -> List[str]:
+        """Write a ``.env`` file alongside docker-compose.yml.
+
+        Always written — even when resolved_values is empty — so the file is
+        predictably present in every build namespace directory.
+        Secret values are written to the file; callers must protect the
+        build directory accordingly.
+        """
+        messages: List[str] = []
+        env_vars = self.resolved_values.as_compose_env() if self.resolved_values else {}
+        env_path = ns_dir / ".env"
+        try:
+            with env_path.open("w", encoding="utf-8") as fh:
+                for key, val in env_vars.items():
+                    fh.write(f"{key}={val}\n")
+        except OSError as exc:
+            messages.append(f"Warning: could not write .env file '{env_path}': {exc}")
+        return messages
+
     # ------------------------------------------------------------------
     # Step methods
     # ------------------------------------------------------------------
@@ -257,15 +276,29 @@ class ComposeDeployer(BaseDeployer):
 
         compose_files = self._get_compose_files()
         if not compose_files:
-            messages.append("No compose files found — nothing to deploy")
+            messages.append("No compose files found — no action required")
             return True, messages
 
-        for ns_name, compose_file in compose_files.items():
-            messages.append(f"docker stack deploy {ns_name}")
-            ok, run_messages = self._run_docker(
-                ["stack", "deploy", "--with-registry-auth", "-c", str(compose_file), ns_name],
-                line_callback=line_callback,
+        # Log injection counts (secrets counted but not named)
+        if self.resolved_values and not self.resolved_values.is_empty():
+            var_count = len(self.resolved_values.variables)
+            feat_count = sum(1 for v in self.resolved_values.features.values() if v is not None)
+            sec_count = len(self.resolved_values.secrets)
+            messages.append(
+                f"Injecting {var_count} variable(s), {feat_count} feature(s), {sec_count} secret(s) into environment"
             )
+
+        for ns_name, compose_file in compose_files.items():
+            # Write .env alongside compose file (always, even if empty)
+            env_messages = self._write_env_file(compose_file.parent)
+            messages.extend(env_messages)
+
+            messages.append(f"docker stack deploy {ns_name}")
+            with inject_compose_env(self.resolved_values):
+                ok, run_messages = self._run_docker(
+                    ["stack", "deploy", "--with-registry-auth", "-c", str(compose_file), ns_name],
+                    line_callback=line_callback,
+                )
             messages.extend(run_messages)
             if not ok:
                 return False, messages
@@ -367,5 +400,5 @@ class ComposeDeployer(BaseDeployer):
         return True, outputs, messages
 
     def show_plan(self) -> Tuple[bool, Dict[str, Any], List[str]]:
-        """No-op — compose has no persisted plan format."""
-        return True, {}, []
+        """No persisted plan format for compose deployments."""
+        return True, {}, ["Compose deployments have no persisted plan. Use 'plan' for a pre-deploy summary."]

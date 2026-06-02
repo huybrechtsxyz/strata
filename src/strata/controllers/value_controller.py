@@ -41,6 +41,28 @@ class ResolvedValues:
         """Return True when no values were resolved."""
         return not (self.variables or self.secrets or self.features)
 
+    def as_compose_env(self) -> Dict[str, str]:
+        """Return all resolved values as a flat env-var dict for Docker Compose ``${KEY}`` substitution.
+
+        Key names are used verbatim (no prefix) — Docker reads them directly from
+        the process environment.
+
+        Merge order (later entry wins on key collision):
+          features → variables → secrets
+
+        Feature flags with a ``None`` value are skipped.
+        Secrets are included; callers should avoid logging this dict.
+        """
+        result: Dict[str, str] = {}
+        for key, val in self.features.items():
+            if val is not None:
+                result[key] = str(val).lower()  # "true" / "false"
+        for key, val in self.variables.items():
+            result[key] = str(val)
+        for key, val in self.secrets.items():
+            result[key] = str(val)
+        return result
+
     def as_tf_vars(self) -> Dict[str, str]:
         """Return all resolved values as a ``TF_VAR_*`` environment-variable dict.
 
@@ -62,6 +84,34 @@ class ResolvedValues:
         for key, val in self.secrets.items():
             result[f"TF_VAR_{key}"] = str(val)
         return result
+
+
+@contextmanager
+def inject_compose_env(resolved: Optional[ResolvedValues]) -> Generator[None, None, None]:
+    """Context manager that injects compose env vars into ``os.environ`` and removes them on exit.
+
+    Unlike ``inject_tf_vars``, keys are used verbatim (no ``TF_VAR_`` prefix).
+    Accepts ``None`` for convenience — behaves as a no-op when ``resolved`` is ``None``
+    or when ``as_compose_env()`` returns an empty dict.
+    """
+    env_vars = resolved.as_compose_env() if resolved else {}
+    if not env_vars:
+        yield
+        return
+
+    prev: Dict[str, Optional[str]] = {}
+    for key, val in env_vars.items():
+        prev[key] = os.environ.get(key)
+        os.environ[key] = val
+
+    try:
+        yield
+    finally:
+        for key, original in prev.items():
+            if original is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = original
 
 
 @contextmanager
