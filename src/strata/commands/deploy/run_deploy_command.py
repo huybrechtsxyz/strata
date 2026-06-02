@@ -28,6 +28,7 @@ class RunDeployCommand(BaseDeployCommand):
         file: Optional[str] = None,
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
+        scope: Optional[str] = None,
         force: bool = False,
         dry_run: bool = False,
         output: Optional[str] = None,
@@ -42,6 +43,7 @@ class RunDeployCommand(BaseDeployCommand):
             quiet=quiet,
         )
         self._stage = stage
+        self._scope = scope
         self._force = force
         self._dry_run = dry_run
         self._resolved_values: Optional[ResolvedValues] = None
@@ -173,6 +175,16 @@ class RunDeployCommand(BaseDeployCommand):
             )
             return False
 
+        # Filter by --scope label when supplied
+        if self._scope:
+            stages_to_run = [s for s in stages_to_run if s.scope == self._scope]
+            if not stages_to_run:
+                self._errors.append(
+                    f"No stages match scope '{self._scope}'. "
+                    f"Available scopes: {[s.scope for s in all_stages if s.scope]}"
+                )
+                return False
+
         if self._is_console_output():
             click.echo(f"\n🚀  Deploying {len(stages_to_run)} stage(s)…")
 
@@ -183,7 +195,11 @@ class RunDeployCommand(BaseDeployCommand):
 
         for stage in stages_to_run:
             if self._is_console_output():
-                label = f"[{stage.type}]" + (f" via {stage.provisioner}" if stage.provisioner else "")
+                label = f"[{stage.type}]"
+                if stage.provisioner:
+                    label += f" via {stage.provisioner}"
+                elif stage.topology:
+                    label += f" topology:{stage.topology}"
                 prefix = "[DRY-RUN] " if self._dry_run else ""
                 click.echo(f"\n  ▶  {prefix}Stage: {stage.name}  {label}")
 
@@ -296,6 +312,8 @@ class RunDeployCommand(BaseDeployCommand):
             if self._is_console_output():
                 for msg in msgs:
                     click.echo(f"      {msg}")
+                if self._dry_run and not msgs:
+                    click.echo(f"      (no extra information available for '{step_name}' in dry run)")
             if not ok:
                 self._errors.extend(msgs)
                 if self._is_ndjson_output():
@@ -346,44 +364,89 @@ class RunDeployCommand(BaseDeployCommand):
     def _create_deployer(self, stage: DeploymentStageModel):
         """Instantiate and return the deployer for *stage*, or None.
 
-        Resolution: stage.provisioner → workspace provisioners list → deployer type.
-        'provisioner' is required on every stage; convention-based fallback is not
-        supported. An error is appended to self._errors when resolution fails.
+        Resolution (mutually exclusive — exactly one required at runtime):
+        - stage.provisioner → look up named provisioner entry in workspace
+        - stage.topology    → look up topology by name → derive provisioner type
+                              (errors if topology not found or provisioner is ambiguous)
+        An error is appended to self._errors when resolution fails.
         """
         resolved_type: Optional[str] = None
         _iac = None
-        _available: List[str] = []
 
-        if stage.provisioner and self._deployment_service is not None:
-            workspace_service = self._deployment_service.get_workspace_service()
-            if workspace_service:
-                spec = workspace_service.model.spec  # type: ignore[union-attr]
-                _provisioners = spec.provisioners or []
-                _available = [str(p.name) for p in _provisioners]
-                _iac = next((p for p in _provisioners if p.name == stage.provisioner), None)
-                if _iac and _iac.provisioner == ProvisionerType.TERRAFORM:
-                    resolved_type = "terraform"
-                elif _iac and _iac.provisioner == ProvisionerType.ANSIBLE:
-                    resolved_type = "ansible"
-                elif _iac and _iac.provisioner == ProvisionerType.COMPOSE:
-                    resolved_type = "compose"
-                elif _iac and _iac.provisioner == ProvisionerType.HELM:
-                    resolved_type = "helm"
+        if self._deployment_service is None:
+            self._errors.append(f"Stage '{stage.name}': deployment service not loaded.")
+            return None
+
+        workspace_service = self._deployment_service.get_workspace_service()
+        if workspace_service is None:
+            self._errors.append(f"Stage '{stage.name}': workspace service not loaded.")
+            return None
+
+        spec = workspace_service.model.spec  # type: ignore[union-attr]
+        _provisioners = spec.provisioners or []
+        _available = [str(p.name) for p in _provisioners]
+
+        if stage.provisioner:
+            _iac = next((p for p in _provisioners if p.name == stage.provisioner), None)
+            if _iac and _iac.provisioner == ProvisionerType.TERRAFORM:
+                resolved_type = "terraform"
+            elif _iac and _iac.provisioner == ProvisionerType.ANSIBLE:
+                resolved_type = "ansible"
+            elif _iac and _iac.provisioner == ProvisionerType.COMPOSE:
+                resolved_type = "compose"
+            elif _iac and _iac.provisioner == ProvisionerType.HELM:
+                resolved_type = "helm"
+
+        elif stage.topology:
+            _topologies = spec.topology or []
+            topo = next((t for t in _topologies if str(t.name) == stage.topology), None)
+            if topo is None:
+                _topo_names = [str(t.name) for t in _topologies]
+                self._errors.append(
+                    f"Stage '{stage.name}': topology '{stage.topology}' not found in workspace. "
+                    f"Available: {_topo_names if _topo_names else ['(none defined)']}"
+                )
+                return None
+            matching = [p for p in _provisioners if p.provisioner == topo.provisioner]
+            if not matching:
+                self._errors.append(
+                    f"Stage '{stage.name}': topology '{stage.topology}' requires provisioner type "
+                    f"'{topo.provisioner.value}' but no matching provisioner is defined in the workspace."
+                )
+                return None
+            if len(matching) > 1:
+                names = [str(p.name) for p in matching]
+                self._errors.append(
+                    f"Stage '{stage.name}': topology '{stage.topology}' is ambiguous — "
+                    f"multiple '{topo.provisioner.value}' provisioners found: {names}. "
+                    "Specify 'provisioner' explicitly to disambiguate."
+                )
+                return None
+            _iac = matching[0]
+            if _iac.provisioner == ProvisionerType.TERRAFORM:
+                resolved_type = "terraform"
+            elif _iac.provisioner == ProvisionerType.ANSIBLE:
+                resolved_type = "ansible"
+            elif _iac.provisioner == ProvisionerType.COMPOSE:
+                resolved_type = "compose"
+            elif _iac.provisioner == ProvisionerType.HELM:
+                resolved_type = "helm"
 
         if resolved_type is None:
-            if not stage.provisioner:
+            if not stage.provisioner and not stage.topology:
                 self._errors.append(
-                    f"Stage '{stage.name}': 'provisioner' is required — "
-                    "add a provisioner name matching an entry in the workspace provisioners list."
+                    f"Stage '{stage.name}': either 'provisioner' or 'topology' is required — "
+                    "name a workspace provisioner entry directly, or name a workspace topology "
+                    "to derive the provisioner from the topology definition."
                 )
-            elif _iac is None:
+            elif stage.provisioner and _iac is None:
                 self._errors.append(
                     f"Stage '{stage.name}': provisioner '{stage.provisioner}' not found in workspace. "
                     f"Available: {_available if _available else ['(none defined)']}"
                 )
-            else:
+            elif _iac is not None:
                 self._errors.append(
-                    f"Stage '{stage.name}': provisioner '{stage.provisioner}' has unsupported type "
+                    f"Stage '{stage.name}': provisioner has unsupported type "
                     f"'{_iac.provisioner}'. Supported: terraform, ansible, compose, helm."
                 )
             return None

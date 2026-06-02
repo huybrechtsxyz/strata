@@ -191,13 +191,11 @@ class DeploymentStageModel(BaseModel):
     - Sequential multi-step execution (e.g., provision → configure → verify)
     - Execution ordering and dependency management (DAG execution via depends_on)
     - Failure handling per stage
-    - Semantic provisioner selection via type with explicit override options
 
-    Provisioner Selection Priority:
-    1. Explicit 'provisioner' field (highest priority)
-    2. Explicit 'topology' field (topology defines provisioner)
-    3. Convention from 'type' field (auto-select based on stage type)
-    4. ERROR if ambiguous (multiple provisioners match type)
+    Provisioner Selection (mutually exclusive — exactly one required at runtime):
+    - 'provisioner': name of a workspace provisioner entry (explicit, no filtering)
+    - 'topology':    name of a workspace topology entry; derives the provisioner
+                     type from the topology definition and filters to its resources
 
     Stages do NOT define environments or approvals - those are deployment-level.
     Stages do NOT affect artifact paths - use deployment.spec.deployment for layering.
@@ -216,11 +214,19 @@ class DeploymentStageModel(BaseModel):
     )
     topology: Optional[str] = Field(
         None,
-        description="Explicit topology name from workspace (alternative to provisioner - topology defines provisioner and resources)",
+        description=(
+            "Topology name from workspace (mutually exclusive with 'provisioner'). "
+            "Derives the provisioner type from the topology definition and scopes "
+            "execution to that topology's resources."
+        ),
     )
-    scope: str = Field(
-        default="all",
-        description="Resource scope filter: 'all' (deploy everything), 'changed' (incremental), 'tagged' (filtered)",
+    scope: Optional[str] = Field(
+        None,
+        description=(
+            "Free-form label for CLI-level stage filtering. "
+            "Pass --scope <label> to strata deploy run to execute only stages "
+            "whose scope matches the supplied value. Omit to run all stages."
+        ),
     )
     scripts: Optional[ScriptsModel] = Field(
         None,
@@ -263,20 +269,15 @@ class DeploymentStageModel(BaseModel):
 
         Rules:
         1. Cannot specify both 'provisioner' and 'topology' (mutually exclusive)
-        2. If type='custom', should have scripts defined (warning-level, not error)
-        3. Actual provisioner existence validation happens in deployment controller
-           (requires workspace context not available here)
+        2. Workspace-level existence checks happen at runtime in the deployer
+           (workspace context is not available inside the model validator)
         """
-        # Rule 1: Mutually exclusive provisioner and topology
         if self.provisioner and self.topology:
             raise ValueError(
-                f"Stage '{self.name}': Cannot specify both 'provisioner' and 'topology' - they are mutually exclusive. "
-                f"Use 'topology' to scope to infrastructure, or 'provisioner' to specify IaC tool directly."
+                f"Stage '{self.name}': 'provisioner' and 'topology' are mutually exclusive — "
+                "use 'topology' to derive the provisioner from the workspace topology definition, "
+                "or 'provisioner' to name a workspace provisioner entry directly."
             )
-
-        # Rule 2: Custom type should have scripts (soft validation)
-        # This is enforced at deployment controller level with proper warning
-
         return self
 
 
