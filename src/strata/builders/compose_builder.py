@@ -68,6 +68,7 @@ class ComposeBuilder(BaseBuilder):
                 return True
 
             deployment_build_path = deployment_service.get_build_path(build_path)
+            template_context = self._build_template_context(deployment_service)
 
             for ns_name, ns_service in namespace_services.items():
                 if not ns_service.is_validated() or not ns_service.model:
@@ -78,6 +79,17 @@ class ComposeBuilder(BaseBuilder):
                     ns_service=ns_service,
                     work_path=work_path,
                     deployment_build_path=deployment_build_path,
+                    dry_run=dry_run,
+                )
+                if not ok:
+                    return False
+
+                ok = self._copy_namespace_module_files(
+                    namespace_name=str(ns_name),
+                    ns_service=ns_service,
+                    work_path=work_path,
+                    deployment_build_path=deployment_build_path,
+                    template_context=template_context,
                     dry_run=dry_run,
                 )
                 if not ok:
@@ -316,6 +328,68 @@ class ComposeBuilder(BaseBuilder):
 
         if self.verbose:
             self._messages.append(f"Wrote compose file: {compose_path}")
+
+        return True
+
+    def _copy_namespace_module_files(
+        self,
+        namespace_name: str,
+        ns_service: Any,
+        work_path: Path,
+        deployment_build_path: Path,
+        template_context: Dict[str, str],
+        dry_run: bool,
+    ) -> bool:
+        """Copy ``spec.files`` entries for all compose modules in one namespace.
+
+        Output lands in ``{build}/{namespace}/{module}/`` alongside the compose file.
+
+        Args:
+            namespace_name: Name of the namespace.
+            ns_service: NamespaceService instance.
+            work_path: Workspace root for resolving file references.
+            deployment_build_path: Resolved build output directory.
+            template_context: STRATA_* substitution variables.
+            dry_run: When True, log what would happen but skip file I/O.
+
+        Returns:
+            bool: True on success, False on failure.
+        """
+        modules = ns_service.model.spec.modules
+        if not modules:
+            return True
+
+        for module_ref in modules:
+            try:
+                module_path = resolve_path(str(work_path), module_ref.file)
+            except (ValueError, Exception):
+                continue  # already reported by _build_namespace
+            if not module_path.exists():
+                continue
+
+            mod_service = ModuleService.load(str(module_path), validate=True)
+            if not mod_service.is_validated() or not mod_service.model:
+                continue
+
+            module = mod_service.model
+            if module.spec.type != ServiceDeployerType.COMPOSE:
+                continue
+            if not module.spec.files:
+                continue
+
+            module_name = str(module.meta.name)
+            dest_dir = deployment_build_path / namespace_name / module_name
+            label = f"Namespace '{namespace_name}', module '{module_name}'"
+
+            if not self._copy_module_files(
+                files=module.spec.files,
+                work_path=work_path,
+                dest_dir=dest_dir,
+                template_context=template_context,
+                module_label=label,
+                dry_run=dry_run,
+            ):
+                return False
 
         return True
 
