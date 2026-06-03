@@ -79,6 +79,8 @@ class TerraformDeployer(BaseDeployer):
         self._working_dir: Optional[Path] = None
         self._plan_file: Optional[Path] = None
         self._tf: Optional[TerraformIntegration] = None
+        # Set by plan(); None = plan not yet run, False = no changes, True = changes present
+        self._plan_has_changes: Optional[bool] = None
 
     # ------------------------------------------------------------------
     # Metadata
@@ -242,7 +244,13 @@ class TerraformDeployer(BaseDeployer):
         self,
         line_callback: Optional[Callable[[str, str], None]] = None,
     ) -> Tuple[bool, List[str]]:
-        """terraform plan -out=<stage>.tfplan"""
+        """terraform plan -detailed-exitcode -out=<stage>.tfplan
+
+        Uses ``-detailed-exitcode`` so the exit code carries change-detection:
+          0 = success, no changes  → sets _plan_has_changes = False
+          1 = error
+          2 = success, changes present → sets _plan_has_changes = True
+        """
         messages: List[str] = []
         if not self._ready(messages):
             return False, messages
@@ -258,10 +266,17 @@ class TerraformDeployer(BaseDeployer):
                 result = self._tf.plan(
                     str(self._working_dir),
                     out_file=str(self._plan_file),
+                    detailed_exitcode=True,
                     line_callback=line_callback,
                     timeout=self._get_timeout("plan", 600),
                 )
-            if result.returncode != 0:
+            # -detailed-exitcode contract: 0=no changes, 1=error, 2=changes present
+            if result.returncode == 0:
+                self._plan_has_changes = False
+                messages.append("\u21b3 No changes \u2014 infrastructure is already up to date.")
+            elif result.returncode == 2:
+                self._plan_has_changes = True
+            else:
                 output = "\n".join(filter(None, [result.stderr, result.stdout]))
                 messages.append(f"terraform plan failed:\n{output}")
                 return False, messages
@@ -277,13 +292,21 @@ class TerraformDeployer(BaseDeployer):
         self,
         line_callback: Optional[Callable[[str, str], None]] = None,
     ) -> Tuple[bool, List[str]]:
-        """terraform apply <stage>.tfplan"""
+        """terraform apply <stage>.tfplan
+
+        Short-circuits when ``plan()`` determined there are no changes
+        (_plan_has_changes is False).  Downstream stages still run.
+        """
         messages: List[str] = []
         if not self._ready(messages):
             return False, messages
         assert self._working_dir is not None
         assert self._plan_file is not None
         assert self._tf is not None
+
+        if self._plan_has_changes is False:
+            messages.append("\u21b3 No changes \u2014 apply skipped.")
+            return True, messages
 
         messages.append(f"terraform apply  {self._plan_file.name}")
 
