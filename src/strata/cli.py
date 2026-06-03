@@ -36,6 +36,7 @@ from strata.commands.cli_profile import profile_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
 from strata.commands.cli_schema import schema_group
+from strata.commands.cli_service import service_group
 from strata.commands.cli_sln import sln_group
 from strata.commands.cli_tools import tools_group
 from strata.commands.cli_validate import validate_command
@@ -124,7 +125,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Workspace Setup", ["sln", "profile", "new"]),
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
-    ("Build & Deploy", ["build", "diff", "deploy"]),
+    ("Build & Deploy", ["build", "diff", "deploy", "service"]),
     ("Inspection & Validation", ["validate", "schema", "tools"]),
     ("Utility", ["version", "help", "log", "completion"]),
 ]
@@ -260,6 +261,7 @@ main.add_command(deploy_group, name="deploy")
 main.add_command(diff_command, name="diff")
 main.add_command(values_group, name="values")
 main.add_command(tools_group, name="tools")
+main.add_command(service_group, name="service")
 # ENTRY POINT
 #
 
