@@ -3,10 +3,11 @@
 
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import (
     CommonLifecycleModel,
+    PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
@@ -15,7 +16,7 @@ from strata.models.integration_model import IntegrationModel
 from strata.models.repository_model import RepositoryModel
 
 
-class ConfigurationSecurityModel(BaseModel):
+class ConfigurationSecurityModel(PlatformBaseModel):
     """Model for security policies and constraints."""
 
     allowed_secret_stores: Optional[List[str]] = Field(
@@ -32,7 +33,7 @@ class ConfigurationSecurityModel(BaseModel):
     )
 
 
-class ConfigurationComponentModel(BaseModel):
+class ConfigurationComponentModel(PlatformBaseModel):
     """Model for a topology component configuration."""
 
     role: PlatformName = Field(..., description="Unique role for the topology component.")
@@ -69,7 +70,7 @@ class ConfigurationComponentModel(BaseModel):
         return self
 
 
-class ConfigurationTopologyModel(BaseModel):
+class ConfigurationTopologyModel(PlatformBaseModel):
     """Model for a provider topology configuration."""
 
     type: PlatformName = Field(..., description="Unique type definition for the topology configuration.")
@@ -93,7 +94,7 @@ class ConfigurationTopologyModel(BaseModel):
         return self
 
 
-class ConfigurationSchemaField(BaseModel):
+class ConfigurationSchemaField(PlatformBaseModel):
     """Model for a configuration schema field with pattern and required flag."""
 
     pattern: str = Field(..., description="Regex pattern that field values must match")
@@ -101,7 +102,7 @@ class ConfigurationSchemaField(BaseModel):
     description: Optional[str] = Field(None, description="Description of what this field represents")
 
 
-class ConfigurationProviderResourceModel(BaseModel):
+class ConfigurationProviderResourceModel(PlatformBaseModel):
     """Model for a provider resource configuration."""
 
     name: PlatformName = Field(..., description="Unique name for the configuration resource.")
@@ -121,7 +122,7 @@ class ConfigurationProviderResourceModel(BaseModel):
     )
 
 
-class ConfigurationProviderModel(BaseModel):
+class ConfigurationProviderModel(PlatformBaseModel):
     """Model for a provider configuration."""
 
     name: PlatformName = Field(..., description="Provider name (e.g., kamatera, azure)")
@@ -174,7 +175,7 @@ class ConfigurationProviderModel(BaseModel):
         return self
 
 
-class ConfigurationLayerModel(BaseModel):
+class ConfigurationLayerModel(PlatformBaseModel):
     """Definition of a single layer in the deployment hierarchy."""
 
     name: PlatformName = Field(description="Layer name (must be valid identifier: lowercase, alphanumeric, hyphens)")
@@ -200,7 +201,7 @@ class ConfigurationLayerModel(BaseModel):
         return self
 
 
-class ConfigurationLoggingModel(BaseModel):
+class ConfigurationLoggingModel(PlatformBaseModel):
     """Model for logging configuration."""
 
     file: Optional[str] = Field(
@@ -209,7 +210,7 @@ class ConfigurationLoggingModel(BaseModel):
     )
 
 
-class ConfigurationDeploymentModel(BaseModel):
+class ConfigurationDeploymentModel(PlatformBaseModel):
     """Model for deployment configuration and schema definition.
 
     Defines required and optional properties that deployments must provide,
@@ -244,7 +245,7 @@ class ConfigurationDeploymentModel(BaseModel):
     )
 
 
-class ConfigurationSpecModel(BaseModel):
+class ConfigurationSpecModel(PlatformBaseModel):
     """Specification for the configuration model."""
 
     logging: Optional[ConfigurationLoggingModel] = Field(None, description="Logging configuration for the platform")
@@ -315,7 +316,7 @@ class ConfigurationSpecModel(BaseModel):
         return self
 
 
-class ConfigurationMetaModel(BaseModel):
+class ConfigurationMetaModel(PlatformBaseModel):
     """Metadata for the configuration model."""
 
     name: PlatformName = Field(..., description="Unique name for the configuration resource.")
@@ -326,7 +327,7 @@ class ConfigurationMetaModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional list of tags.")
 
 
-class ConfigurationModel(BaseModel):
+class ConfigurationModel(PlatformBaseModel):
     """
     Top-level model for a configuration file.
     """

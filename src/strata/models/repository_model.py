@@ -7,14 +7,13 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 from pydantic import (
-    BaseModel,
     Field,
     StringConstraints,
     field_validator,
     model_validator,
 )
 
-from strata.models.common_models import PlatformName
+from strata.models.common_models import PlatformBaseModel, PlatformName
 
 
 class RepositoryType(str, Enum):
@@ -32,7 +31,7 @@ class RepositoryType(str, Enum):
 
 
 # Model for deployment configuration.
-class RepositoryModel(BaseModel):
+class RepositoryModel(PlatformBaseModel):
     """
     Model for deployment source configuration.
 
@@ -61,6 +60,7 @@ class RepositoryModel(BaseModel):
     """
 
     name: Optional[PlatformName] = Field(None, description="Optional name for the source configuration")
+    description: Optional[str] = Field(None, description="Human-readable description of this repository")
     type: RepositoryType = Field(description="Source type: bundled (platform-bundled) or gitops (Git repository)")
     repository: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         description="Source repository or image for the deployment"

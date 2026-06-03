@@ -3,10 +3,12 @@
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from strata.models.common_models import PlatformBaseModel
 
 
-class ScaffoldTemplateVariable(BaseModel):
+class ScaffoldTemplateVariable(PlatformBaseModel):
     """A single substitution variable declared in a template manifest."""
 
     name: str = Field(..., description="Variable name, used as ${name} in scaffold files")
@@ -14,7 +16,7 @@ class ScaffoldTemplateVariable(BaseModel):
     default: str = Field("", description="Default value used when no override is provided")
 
 
-class ScaffoldTemplateModel(BaseModel):
+class ScaffoldTemplateModel(PlatformBaseModel):
     """
     Manifest for a scaffold template folder.
 

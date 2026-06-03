@@ -36,23 +36,19 @@ class TestDeploymentStageTimeoutsModel:
             DeploymentStageTimeoutsModel(plan="fast")
 
     def test_old_field_names_not_accepted(self):
-        """init and validate were renamed to setup and check — should be ignored by Pydantic (extra='ignore')."""
-        # Pydantic v2 ignores extra fields by default, but the values must NOT leak
-        # into setup/check to avoid silent mis-configuration.
-        t = DeploymentStageTimeoutsModel(init=999, validate=999)  # type: ignore[call-arg]
-        assert t.setup is None
-        assert t.check is None
+        """init and validate were renamed to setup and check — extra='forbid' now rejects them."""
+        with pytest.raises(ValidationError):
+            DeploymentStageTimeoutsModel(init=999, validate=999)  # type: ignore[call-arg]
 
 
 class TestDeploymentStageModelTimeoutsField:
     def test_timeouts_optional(self):
-        stage = DeploymentStageModel(name="prod", type="infrastructure")
+        stage = DeploymentStageModel(name="prod")
         assert stage.timeouts is None
 
     def test_timeouts_parsed_from_dict(self):
         stage = DeploymentStageModel(
             name="prod",
-            type="infrastructure",
             timeouts={"setup": 120, "apply": 1200},
         )
         assert stage.timeouts is not None
@@ -62,7 +58,7 @@ class TestDeploymentStageModelTimeoutsField:
 
     def test_timeouts_model_instance_accepted(self):
         t = DeploymentStageTimeoutsModel(plan=600)
-        stage = DeploymentStageModel(name="prod", type="infrastructure", timeouts=t)
+        stage = DeploymentStageModel(name="prod", timeouts=t)
         assert stage.timeouts is not None
         assert stage.timeouts.plan == 600
 

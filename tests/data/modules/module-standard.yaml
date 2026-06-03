@@ -15,7 +15,7 @@ spec:
     source_path: services/traefik
     target_path: modules/traefik
     description: Traefik module source from platform modules repository
-  
+
   lifecycle:
     service_start_before:
       scripts: ["../data/scripts/mock_init.sh"]
@@ -31,7 +31,7 @@ spec:
       scripts: ["../data/scripts/mock_protect.sh"]
     deploy_destroy_after:
       scripts: ["../data/scripts/mock_destroy.sh"]
-  
+
   references:
     variables:
       - traefik_version
@@ -43,7 +43,7 @@ spec:
     features:
       - enable_dashboard
       - enable_metrics
-  
+
   properties:
     endpoints:
       - name: http
@@ -64,7 +64,7 @@ spec:
         type: http
         port: 8080
         protocol: tcp
-    
+
     checks:
       - name: api_health
         label: API Health Check
@@ -80,21 +80,21 @@ spec:
         interval: 60s
         timeout: 10s
         retries: 2
-    
+
     mounts:
       - name: config
         type: bind
         source_path: ./config/traefik.yml
         target_path: /etc/traefik/traefik.yml
-        change_mod: "644"
+        chmod: "644"
         description: Main Traefik configuration file
       - name: certificates
         type: volume
         source_path: traefik-certs
         target_path: /certs
-        change_mod: "600"
+        chmod: "600"
         description: SSL/TLS certificates volume
-  
+
   configuration:
     entrypoints:
       web:

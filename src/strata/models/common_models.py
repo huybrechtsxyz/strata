@@ -9,6 +9,7 @@ from typing import Annotated, Dict, List, Optional
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     RootModel,
     StringConstraints,
@@ -84,8 +85,18 @@ class ServiceDeployerType(str, Enum):
     SCRIPT = "script"
 
 
+class PlatformBaseModel(BaseModel):
+    """Base for all user-authored YAML document models.
+
+    Forbids extra fields at parse time — typos and wrong-model fields are
+    caught immediately instead of silently dropped.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
 # Model for individual script with scope and execution metadata
-class ScriptPathModel(BaseModel):
+class ScriptPathModel(PlatformBaseModel):
     """Individual script with scope and execution metadata."""
 
     file: str = Field(description="Path to script file")
@@ -119,7 +130,7 @@ class ScriptPathModel(BaseModel):
 
 
 # Model for validating script paths with scope support
-class ScriptsModel(BaseModel):
+class ScriptsModel(PlatformBaseModel):
     """Model for validating script paths with scope-aware execution."""
 
     description: Optional[str] = Field(None, description="Optional description for documentation purposes")
@@ -168,7 +179,7 @@ class CommonLifecycleModel(RootModel):
 
 
 # Model for source configuration referencing a repository or Helm chart registry
-class SourceModel(BaseModel):
+class SourceModel(PlatformBaseModel):
     """
     Reusable model for source configuration.
 

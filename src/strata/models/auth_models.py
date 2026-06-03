@@ -5,12 +5,14 @@ All fields are key references resolved at runtime from centralized
 environment variable, secret, and feature declarations.
 """
 
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from strata.models.common_models import PlatformBaseModel
 
 
-class OAuth2AuthenticationModel(BaseModel):
+class OAuth2AuthenticationModel(PlatformBaseModel):
     """
     OAuth2/OpenID Connect authentication.
 
@@ -29,7 +31,7 @@ class OAuth2AuthenticationModel(BaseModel):
     scope: Optional[str] = Field(None, description="Key reference for OAuth2 scopes (space-separated)")
 
 
-class AWSAuthenticationModel(BaseModel):
+class AWSAuthenticationModel(PlatformBaseModel):
     """
     AWS access key authentication.
 
@@ -46,7 +48,7 @@ class AWSAuthenticationModel(BaseModel):
     role_arn: Optional[str] = Field(None, description="Key reference for AWS IAM role ARN for AssumeRole")
 
 
-class GCPAuthenticationModel(BaseModel):
+class GCPAuthenticationModel(PlatformBaseModel):
     """
     Google Cloud Platform service account authentication.
 
@@ -65,7 +67,7 @@ class GCPAuthenticationModel(BaseModel):
     service_account_email: Optional[str] = Field(None, description="Key reference for GCP service account email")
 
 
-class APIKeyAuthenticationModel(BaseModel):
+class APIKeyAuthenticationModel(PlatformBaseModel):
     """
     API key authentication.
 
@@ -74,13 +76,15 @@ class APIKeyAuthenticationModel(BaseModel):
     """
 
     api_key: str = Field(description="Key reference for API key value")
+    api_secret: Optional[str] = Field(None, description="Key reference for API secret (used alongside the API key)")
+    endpoint: Optional[str] = Field(None, description="Key reference for API endpoint URL")
     header_name: Optional[str] = Field(
         None,
         description="Key reference for HTTP header name (default: 'X-API-Key')",
     )
 
 
-class CertificateAuthenticationModel(BaseModel):
+class CertificateAuthenticationModel(PlatformBaseModel):
     """
     Certificate-based authentication (mTLS).
 
@@ -96,7 +100,7 @@ class CertificateAuthenticationModel(BaseModel):
     )
 
 
-class SAMLAuthenticationModel(BaseModel):
+class SAMLAuthenticationModel(PlatformBaseModel):
     """
     SAML 2.0 authentication.
 
@@ -109,7 +113,7 @@ class SAMLAuthenticationModel(BaseModel):
     certificate_path: Optional[str] = Field(None, description="Key reference for SAML certificate file path")
 
 
-class CLIAuthenticationModel(BaseModel):
+class CLIAuthenticationModel(PlatformBaseModel):
     """
     CLI-based authentication using local credentials.
 
@@ -123,7 +127,7 @@ class CLIAuthenticationModel(BaseModel):
     )
 
 
-class ManagedIdentityAuthenticationModel(BaseModel):
+class ManagedIdentityAuthenticationModel(PlatformBaseModel):
     """
     Managed/Workload Identity authentication.
 
@@ -142,7 +146,7 @@ class ManagedIdentityAuthenticationModel(BaseModel):
     )
 
 
-class AuthenticationModel(BaseModel):
+class AuthenticationModel(PlatformBaseModel):
     """
     Authentication configuration for cloud provider or integration access.
 
@@ -173,4 +177,18 @@ class AuthenticationModel(BaseModel):
     cli: Optional[CLIAuthenticationModel] = Field(None, description="CLI-based authentication")
     managed_identity: Optional[ManagedIdentityAuthenticationModel] = Field(
         None, description="Managed/Workload Identity authentication"
+    )
+
+    # Operator documentation fields (not used by the runtime — for human reference only)
+    description: Optional[str] = Field(
+        None,
+        description="Human-readable description of this authentication configuration and setup instructions",
+    )
+    env_vars: Optional[List[str]] = Field(
+        None,
+        description="List of environment variable names that must be set for this authentication method",
+    )
+    env_var: Optional[str] = Field(
+        None,
+        description="Single environment variable name required for this authentication method",
     )

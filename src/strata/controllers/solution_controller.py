@@ -1224,7 +1224,7 @@ class SolutionController(BaseController):
             for kind_name, model_cls in _schema_map.items():
                 schema_file = schemas_dir / f"{kind_name}.json"
                 try:
-                    schema_file.write_text(json.dumps(model_cls.model_json_schema(), indent=2), encoding="utf-8")
+                    schema_file.write_text(json.dumps(model_cls.model_json_schema(), indent=2), encoding="utf-8")  # type: ignore[attr-defined]
                     self.logger.debug("Schema written", kind=kind_name)
                 except Exception as schema_exc:
                     self.logger.warning("Failed to write schema", kind=kind_name, error=str(schema_exc))

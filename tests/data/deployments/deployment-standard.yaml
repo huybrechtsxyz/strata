@@ -35,6 +35,3 @@ spec:
     - name: configuration
       description: Standard configuration
       file: tests/data/configurations/configuration-standard.yaml
-  features: null
-  variables: null
-  secrets: null

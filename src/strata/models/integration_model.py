@@ -7,13 +7,13 @@ extend its capabilities (e.g. git, terraform, bitwarden, vault).
 
 from typing import Optional, Set
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.auth_models import AuthenticationModel
-from strata.models.common_models import CommonLifecycleModel
+from strata.models.common_models import CommonLifecycleModel, PlatformBaseModel
 
 
-class IntegrationValidationSpecModel(BaseModel):
+class IntegrationValidationSpecModel(PlatformBaseModel):
     """Validation specification for integration availability checking."""
 
     command: str = Field(
@@ -24,7 +24,7 @@ class IntegrationValidationSpecModel(BaseModel):
     max_version: Optional[str] = Field(None, description="Maximum supported version (e.g., '2.40.0')")
 
 
-class IntegrationEndpointsSpecModel(BaseModel):
+class IntegrationEndpointsSpecModel(PlatformBaseModel):
     """Endpoint specification for remote integrations."""
 
     address: str = Field(
@@ -33,7 +33,7 @@ class IntegrationEndpointsSpecModel(BaseModel):
     )
 
 
-class IntegrationModel(BaseModel):
+class IntegrationModel(PlatformBaseModel):
     """
     Model for external integration configuration.
 

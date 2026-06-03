@@ -4,7 +4,6 @@
 from typing import Any, Dict, List, Optional
 
 from pydantic import (
-    BaseModel,
     Field,
     model_validator,
 )
@@ -12,6 +11,7 @@ from pydantic import (
 from strata.models.common_models import (
     CommonLifecycleModel,
     FeatureRefs,
+    PlatformBaseModel,
     PlatformKind,
     PlatformName,
     PlatformVersion,
@@ -22,7 +22,7 @@ from strata.models.common_models import (
 )
 
 
-class ModuleReferenceModel(BaseModel):
+class ModuleReferenceModel(PlatformBaseModel):
     """
     References to variables, secrets, and features required by this module.
 
@@ -41,18 +41,19 @@ class ModuleReferenceModel(BaseModel):
     )
 
 
-class ModuleEndpointModel(BaseModel):
+class ModuleEndpointModel(PlatformBaseModel):
     """Model for a module endpoint configuration."""
 
     name: Optional[PlatformName] = Field(None, description="Name of the endpoint")
     label: Optional[str] = Field(None, description="Label for the endpoint")
     url: Optional[str] = Field(None, description="URL or address of the endpoint")
+    description: Optional[str] = Field(None, description="Human-readable description of the endpoint")
     type: Optional[str] = Field(None, description="Type of endpoint (e.g., http, tcp)")
     port: Optional[int] = Field(None, description="Port number for the endpoint")
     protocol: Optional[str] = Field(None, description="Protocol for the endpoint (e.g., tcp, udp)")
 
 
-class ModuleCheckModel(BaseModel):
+class ModuleCheckModel(PlatformBaseModel):
     """Model for a module health check configuration."""
 
     name: PlatformName = Field(description="Name of the health check")
@@ -62,15 +63,16 @@ class ModuleCheckModel(BaseModel):
     interval: Optional[str] = Field(None, description="Interval between health checks (e.g., '30s')")
     timeout: Optional[str] = Field(None, description="Timeout for each health check (e.g., '5s')")
     retries: Optional[int] = Field(None, description="Number of retries before marking as unhealthy")
+    endpoint: Optional[str] = Field(None, description="Endpoint URL for HTTP-type health checks")
     command: Optional[List[str]] = Field(None, description="Command to run for 'command' type health checks")
 
 
-class ModuleMountModel(BaseModel):
+class ModuleMountModel(PlatformBaseModel):
     """Model for a module mount configuration."""
 
     name: Optional[PlatformName] = Field(None, description="Name of the mount")
     type: Optional[str] = Field(None, description="Type of the mount (e.g., volume, bind)")
-    change_mod: Optional[str] = Field(None, description="Permissions for the mount (e.g., '755')")
+    chmod: Optional[str] = Field(None, description="Permissions for the mount (e.g., '0644', '0600')")
     target_path: Optional[str] = Field(None, description="Path inside the module")
     source_path: Optional[str] = Field(None, description="Source path of the mount (bind mount host path)")
     description: Optional[str] = Field(None, description="Description of the mount")
@@ -110,7 +112,7 @@ class ModuleMountModel(BaseModel):
         return self
 
 
-class ModuleServiceEnvironmentModel(BaseModel):
+class ModuleServiceEnvironmentModel(PlatformBaseModel):
     """
     One environment variable on a service container.
 
@@ -163,7 +165,7 @@ class ModuleServiceEnvironmentModel(BaseModel):
         return self
 
 
-class ModuleServiceModel(BaseModel):
+class ModuleServiceModel(PlatformBaseModel):
     """
     One container (or sub-chart component) within a module.
 
@@ -222,7 +224,7 @@ class ModuleServiceModel(BaseModel):
     )
 
 
-class ModulePropertiesModel(BaseModel):
+class ModulePropertiesModel(PlatformBaseModel):
     """Model for module-specific properties and configurations."""
 
     mounts: Optional[List[ModuleMountModel]] = Field(None, description="List of module mount configurations")
@@ -230,7 +232,7 @@ class ModulePropertiesModel(BaseModel):
     endpoints: Optional[List[ModuleEndpointModel]] = Field(None, description="List of module endpoint configurations")
 
 
-class ModuleSpecModel(BaseModel):
+class ModuleSpecModel(PlatformBaseModel):
     """Model for module spec (lifecycle, modules, validation)."""
 
     source: SourceModel = Field(description="Module deployment configuration")
@@ -302,7 +304,7 @@ class ModuleSpecModel(BaseModel):
         return self
 
 
-class ModuleMetaModel(BaseModel):
+class ModuleMetaModel(PlatformBaseModel):
     """Model for module metadata (name, annotations, labels, tags)."""
 
     name: PlatformName = Field(description="Unique module name")
@@ -316,7 +318,7 @@ class ModuleMetaModel(BaseModel):
     tags: Optional[List[Any]] = Field(None, description="Optional list of tags for the module")
 
 
-class ModuleModel(BaseModel):
+class ModuleModel(PlatformBaseModel):
     """Top-level model for a module resource."""
 
     apiVersion: PlatformVersion = Field(
