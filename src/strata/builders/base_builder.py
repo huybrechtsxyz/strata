@@ -1,8 +1,9 @@
 """Base class for deployment builders."""
 
+import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from strata.logger import get_logger
 from strata.services.deployment_service import DeploymentService
@@ -154,3 +155,122 @@ class BaseBuilder(ABC):
                 files_changed=changed,
                 directory=str(dest_dir),
             )
+
+    def _apply_template_to_file(self, path: Path, context: Dict[str, str]) -> None:
+        """Apply STRATA_* template substitution to a single text file.
+
+        Binary files and unreadable files are silently skipped.
+        """
+        if not context:
+            return
+        try:
+            content = path.read_text(encoding="utf-8")
+            rendered = TemplateProcessor.render(content, context)
+            if rendered != content:
+                path.write_text(rendered, encoding="utf-8")
+                self.logger.debug("Applied template substitution", file=str(path))
+        except (UnicodeDecodeError, PermissionError):
+            pass
+
+    def _copy_module_files(
+        self,
+        files: List[Any],
+        work_path: Path,
+        dest_dir: Path,
+        template_context: Dict[str, str],
+        module_label: str,
+        dry_run: bool = False,
+    ) -> bool:
+        """Copy extra module files (with glob and template support) into *dest_dir*.
+
+        Each entry in *files* is a ``ModuleFileModel`` with ``source`` and ``target``
+        fields.  ``source`` may contain glob characters (``*``, ``?``, ``[``).
+        When it does, ``target`` must end with ``/`` to indicate a destination directory.
+        Template substitution is applied to every copied text file.
+
+        Args:
+            files: List of ``ModuleFileModel`` instances describing what to copy.
+            work_path: Workspace root used to resolve plain and ``@repo/`` paths.
+            dest_dir: Root output directory for this module's build artifacts.
+            template_context: STRATA_* substitution variables.
+            module_label: Human-readable label used in error messages.
+            dry_run: When True, log what would happen but skip all file I/O.
+
+        Returns:
+            bool: True on success, False when any file operation fails.
+        """
+        from strata.utils.system import resolve_path
+
+        for file_spec in files:
+            source: str = file_spec.source
+            target: str = file_spec.target
+            is_glob = any(c in source for c in ("*", "?", "["))
+
+            try:
+                if is_glob:
+                    # Split source into base-dir part and glob pattern.
+                    # Works for both plain paths and @repo/ references.
+                    # Example: "@repo/services/traefik/*" → base="@repo/services/traefik", pattern="*"
+                    # Example: "scripts/**/*.sh"           → base="scripts",                pattern="**/*.sh"
+                    normalized = source.replace("\\", "/")
+                    parts = normalized.split("/")
+                    glob_idx = next(i for i, p in enumerate(parts) if any(c in p for c in ("*", "?", "[")))
+                    base_ref = "/".join(parts[:glob_idx]) if glob_idx > 0 else "."
+                    glob_pattern = "/".join(parts[glob_idx:])
+
+                    if base_ref == ".":
+                        base_dir = work_path
+                    else:
+                        base_dir = resolve_path(str(work_path), base_ref)
+
+                    matched = sorted(f for f in base_dir.glob(glob_pattern) if f.is_file())
+
+                    if not matched:
+                        self._errors.append(f"{module_label}: glob '{source}' matched no files")
+                        return False
+
+                    target_dir = dest_dir / target.rstrip("/")
+
+                    if dry_run:
+                        if self.verbose:
+                            for m in matched:
+                                self._messages.append(f"[DRY-RUN] Would copy: {m} → {target_dir / m.name}")
+                        continue
+
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    for m in matched:
+                        dest_file = target_dir / m.name
+                        shutil.copy2(m, dest_file)
+                        self._apply_template_to_file(dest_file, template_context)
+                        if self.verbose:
+                            self._messages.append(f"Copied file: {m} → {dest_file}")
+
+                else:
+                    # Single file — resolve exact path
+                    src_file = resolve_path(str(work_path), source)
+
+                    if not src_file.exists():
+                        self._errors.append(f"{module_label}: source file not found: '{src_file}'")
+                        return False
+
+                    if target.endswith("/"):
+                        dest_file = dest_dir / target.rstrip("/") / src_file.name
+                    else:
+                        dest_file = dest_dir / target
+
+                    if dry_run:
+                        if self.verbose:
+                            self._messages.append(f"[DRY-RUN] Would copy: {src_file} → {dest_file}")
+                        continue
+
+                    dest_file.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src_file, dest_file)
+                    self._apply_template_to_file(dest_file, template_context)
+                    if self.verbose:
+                        self._messages.append(f"Copied file: {src_file} → {dest_file}")
+
+            except (ValueError, Exception) as exc:
+                self._errors.append(f"{module_label}: failed to copy '{source}': {exc}")
+                return False
+
+        return True

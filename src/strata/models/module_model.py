@@ -22,6 +22,47 @@ from strata.models.common_models import (
 )
 
 
+class ModuleFileModel(PlatformBaseModel):
+    """One file or glob pattern to copy verbatim into the module's build output directory.
+
+    Template substitution (STRATA_* variables) is applied to all copied text files.
+
+    Examples::
+
+        files:
+          - source: "services/traefik/traefik.yaml"
+            target: "traefik.yaml"
+          - source: "@infra/services/traefik/*"
+            target: "config/"
+    """
+
+    source: str = Field(
+        description=(
+            "Source file path or glob pattern. Supports @repo/ cross-repository references. "
+            "Examples: 'services/traefik/traefik.yaml', '@infra/configs/*', 'scripts/**/*.sh'"
+        )
+    )
+    target: str = Field(
+        description=(
+            "Relative destination path inside the module's build output directory. "
+            "Use a trailing '/' to indicate a directory (required when source is a glob). "
+            "Examples: 'traefik.yaml', 'config/', 'conf.d/'"
+        )
+    )
+
+    @model_validator(mode="after")
+    def validate_glob_requires_dir_target(self) -> "ModuleFileModel":
+        """Glob source patterns require target to be a directory (trailing '/')."""
+        if any(c in self.source for c in ("*", "?", "[")):
+            if not self.target.endswith("/"):
+                raise ValueError(
+                    f"source '{self.source}' is a glob pattern — "
+                    "target must be a directory path ending with '/' "
+                    f"(got '{self.target}')"
+                )
+        return self
+
+
 class ModuleReferenceModel(PlatformBaseModel):
     """
     References to variables, secrets, and features required by this module.
@@ -265,6 +306,18 @@ class ModuleSpecModel(PlatformBaseModel):
             "(@repo/path/to/docker-compose.yml or workspace-relative path). "
             "When set, ComposeBuilder copies this file verbatim to the build path instead of "
             "generating one from spec.services. Mutually exclusive with spec.services."
+        ),
+    )
+
+    # Extra files to copy into the build output
+    files: Optional[List["ModuleFileModel"]] = Field(
+        None,
+        description=(
+            "Extra files to copy verbatim into the module's build output directory. "
+            "Supports glob patterns and @repo/ cross-repository references. "
+            "Template substitution (STRATA_* variables) is applied to all copied text files. "
+            "For compose modules, files land in {build}/{namespace}/{module}/. "
+            "For helm modules, files land in {build}/{namespace}/{module}/."
         ),
     )
 
