@@ -291,6 +291,7 @@ class TerraformIntegration(BaseIntegration):
         variables: Optional[Dict[str, str]] = None,
         out_file: Optional[str] = None,
         destroy: bool = False,
+        detailed_exitcode: bool = False,
         target: Optional[List[str]] = None,
         timeout: int = 600,
         **kwargs,
@@ -340,6 +341,9 @@ class TerraformIntegration(BaseIntegration):
 
         if destroy:
             args.append("-destroy")
+
+        if detailed_exitcode:
+            args.append("-detailed-exitcode")
 
         if target:
             for resource in target:

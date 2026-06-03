@@ -332,19 +332,37 @@ class TestTerraformDeployerCheck:
 
 
 class TestTerraformDeployerPlan:
-    def test_success(self, tmp_path):
+    def test_no_changes_returns_success(self, tmp_path):
+        """Exit code 0 means no changes — plan still succeeds."""
         d = _make_deployer(tmp_path)
-        d._tf.plan.return_value = _ok()
+        d._tf.plan.return_value = _ok(returncode=0)
         ok, msgs = d.plan()
         assert ok is True
-        d._tf.plan.assert_called_once()
+        assert d._plan_has_changes is False
+        assert any("No changes" in m for m in msgs)
 
-    def test_failure_returns_false(self, tmp_path):
+    def test_changes_present_returns_success(self, tmp_path):
+        """Exit code 2 means changes present — plan still succeeds."""
+        d = _make_deployer(tmp_path)
+        d._tf.plan.return_value = _ok(returncode=2)
+        ok, msgs = d.plan()
+        assert ok is True
+        assert d._plan_has_changes is True
+
+    def test_exit_code_1_is_failure(self, tmp_path):
+        """Exit code 1 is a genuine terraform plan error."""
         d = _make_deployer(tmp_path)
         d._tf.plan.return_value = _fail("plan error")
         ok, msgs = d.plan()
         assert ok is False
         assert any("terraform plan failed" in m for m in msgs)
+
+    def test_detailed_exitcode_passed_to_integration(self, tmp_path):
+        d = _make_deployer(tmp_path)
+        d._tf.plan.return_value = _ok(returncode=2)
+        d.plan()
+        call_kwargs = d._tf.plan.call_args[1]
+        assert call_kwargs.get("detailed_exitcode") is True
 
     def test_runtime_error_returns_false(self, tmp_path):
         d = _make_deployer(tmp_path)
@@ -354,7 +372,7 @@ class TestTerraformDeployerPlan:
 
     def test_plan_file_name_in_message(self, tmp_path):
         d = _make_deployer(tmp_path)
-        d._tf.plan.return_value = _ok()
+        d._tf.plan.return_value = _ok(returncode=2)
         ok, msgs = d.plan()
         assert any("production.tfplan" in m for m in msgs)
 
@@ -366,6 +384,33 @@ class TestTerraformDeployerApply:
         ok, msgs = d.apply()
         assert ok is True
         assert any("applied successfully" in m for m in msgs)
+
+    def test_skips_apply_when_no_changes(self, tmp_path):
+        """When plan() found no changes, apply short-circuits with success."""
+        d = _make_deployer(tmp_path)
+        d._plan_has_changes = False
+        ok, msgs = d.apply()
+        assert ok is True
+        d._tf.apply.assert_not_called()
+        assert any("skipped" in m for m in msgs)
+
+    def test_runs_apply_when_changes_present(self, tmp_path):
+        """When plan() found changes, apply runs normally."""
+        d = _make_deployer(tmp_path)
+        d._plan_has_changes = True
+        d._tf.apply.return_value = _ok()
+        ok, msgs = d.apply()
+        assert ok is True
+        d._tf.apply.assert_called_once()
+
+    def test_runs_apply_when_plan_not_yet_called(self, tmp_path):
+        """_plan_has_changes=None (plan not run) does not skip apply."""
+        d = _make_deployer(tmp_path)
+        # _plan_has_changes is None by default
+        d._tf.apply.return_value = _ok()
+        ok, msgs = d.apply()
+        assert ok is True
+        d._tf.apply.assert_called_once()
 
     def test_failure_returns_false(self, tmp_path):
         d = _make_deployer(tmp_path)
