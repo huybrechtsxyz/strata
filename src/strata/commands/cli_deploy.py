@@ -15,6 +15,7 @@ from strata.commands.cli_common import (
 from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
 from strata.commands.deploy.health_deploy_command import HealthDeployCommand
 from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
+from strata.commands.deploy.output_deploy_command import OutputDeployCommand
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
 from strata.commands.deploy.status_deploy_command import StatusDeployCommand
 
@@ -250,6 +251,55 @@ def deploy_health(
         file=file,
         work_path=work_path,
         stage=stage,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@deploy.command(name="output", help="Show Terraform outputs for a deployment (cached or live).")
+@click_file
+@click_work_path
+@click.option(
+    "--stage",
+    default=None,
+    metavar="NAME",
+    help="Limit output to a specific deployment stage.",
+)
+@click.option(
+    "--key",
+    default=None,
+    metavar="NAME",
+    help="Show only a single output key (useful for scripting).",
+)
+@click.option(
+    "--refresh",
+    is_flag=True,
+    default=False,
+    help="Fetch outputs live from the backend and update the cache.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_output(
+    file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    stage: Optional[str] = None,
+    key: Optional[str] = None,
+    refresh: bool = False,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Show Terraform outputs from cache or live backend."""
+    command = OutputDeployCommand(
+        file=file,
+        work_path=work_path,
+        stage=stage,
+        key=key,
+        refresh=refresh,
         output=output,
         verbose=verbose,
         quiet=quiet,
