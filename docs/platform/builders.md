@@ -245,7 +245,7 @@ spec:
     - name: website
       image: nginx:alpine
       depends_on:
-        - @mod_auth/server    # cross-module
+        - "@mod_auth/server"  # cross-module
         - database            # intra-module
     - name: database
       image: postgres:16
