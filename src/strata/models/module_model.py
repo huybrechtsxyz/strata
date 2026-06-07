@@ -250,8 +250,12 @@ class ModuleServiceModel(PlatformBaseModel):
     )
     depends_on: Optional[List[str]] = Field(
         None,
-        description="Short service names within this module that must start before this service. "
-        "Intra-module only. Builder rewrites to prefixed names automatically.",
+        description="Services that must start before this service. "
+        "Use short names for intra-module deps (e.g. 'redis'). "
+        "Use @module/service for cross-module deps within the same namespace "
+        "(e.g. '@mod_auth/server'). Use @module when module name equals service name. "
+        "Builder rewrites all entries to prefixed names. "
+        "Intra-module refs are validated at load time; cross-module refs at build time.",
     )
     healthcheck: Optional[ModuleCheckModel] = Field(
         None,

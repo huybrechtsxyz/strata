@@ -158,3 +158,56 @@ class TestModuleServiceDynamicValidation:
         svc = self._make_service(data)
         ok, errors = svc.validate()
         assert ok, errors
+
+    def test_cross_module_depends_on_syntax_accepted(self):
+        """@module/service refs are accepted at Phase 1 (validated at build time)."""
+        data = self._base()
+        data["spec"]["services"] = [
+            {"name": "web", "image": "nginx", "depends_on": ["@mod_auth/server"]},
+        ]
+        svc = self._make_service(data)
+        ok, errors = svc.validate()
+        assert ok, errors
+
+    def test_cross_module_depends_on_shorthand_accepted(self):
+        """@module shorthand (module == service) is accepted."""
+        data = self._base()
+        data["spec"]["services"] = [
+            {"name": "web", "image": "nginx", "depends_on": ["@mod_auth"]},
+        ]
+        svc = self._make_service(data)
+        ok, errors = svc.validate()
+        assert ok, errors
+
+    def test_cross_module_depends_on_empty_module_rejected(self):
+        """@/service with empty module name is invalid syntax."""
+        data = self._base()
+        data["spec"]["services"] = [
+            {"name": "web", "image": "nginx", "depends_on": ["@/server"]},
+        ]
+        svc = self._make_service(data)
+        ok, errors = svc.validate()
+        assert not ok
+        assert any("invalid syntax" in e for e in errors)
+
+    def test_cross_module_depends_on_empty_service_rejected(self):
+        """@module/ with empty service name is invalid."""
+        data = self._base()
+        data["spec"]["services"] = [
+            {"name": "web", "image": "nginx", "depends_on": ["@mod_auth/"]},
+        ]
+        svc = self._make_service(data)
+        ok, errors = svc.validate()
+        assert not ok
+        assert any("empty service name" in e for e in errors)
+
+    def test_mixed_intra_and_cross_module_depends_on(self):
+        """Mixing local and @module/service refs works."""
+        data = self._base()
+        data["spec"]["services"] = [
+            {"name": "db", "image": "postgres:16"},
+            {"name": "web", "image": "nginx", "depends_on": ["db", "@mod_auth/server"]},
+        ]
+        svc = self._make_service(data)
+        ok, errors = svc.validate()
+        assert ok, errors

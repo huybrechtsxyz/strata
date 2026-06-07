@@ -223,6 +223,47 @@ One file per namespace. All compose modules in the same namespace are merged int
 
 Entries in `depends_on` are automatically rewritten from their short module-local names to their full prefixed form using the same rule.
 
+#### Cross-Module Dependencies
+
+To depend on a service in another module within the same namespace, use `@module/service` syntax:
+
+| Syntax             | Meaning                                                           |
+| ------------------ | ----------------------------------------------------------------- |
+| `redis`            | Intra-module: service `redis` in this module                      |
+| `@mod_auth/server` | Cross-module: service `server` in module `mod_auth`               |
+| `@mod_auth`        | Cross-module shorthand: service whose name equals the module name |
+
+Cross-module refs are validated at build time — the builder checks that the target module exists in the namespace and the service exists in that module. Intra-module refs are validated at module load time.
+
+Example:
+
+```yaml
+# Module: mod_web (depends on mod_auth in the same namespace)
+spec:
+  type: compose
+  services:
+    - name: website
+      image: nginx:alpine
+      depends_on:
+        - @mod_auth/server    # cross-module
+        - database            # intra-module
+    - name: database
+      image: postgres:16
+```
+
+Generated output:
+
+```yaml
+services:
+  mod_web-website:
+    image: nginx:alpine
+    depends_on:
+      - mod_auth-server
+      - mod_web-database
+  mod_web-database:
+    image: postgres:16
+```
+
 ### Environment Variable Sources
 
 | YAML source field | Value emitted in compose                      |

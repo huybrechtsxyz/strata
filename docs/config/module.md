@@ -89,7 +89,8 @@ services:
       - name: pgdata
         target_path: /var/lib/postgresql/data
         volume_ref: data                       # compose: references topology volume
-    depends_on: [postgresql, redis]            # intra-module only; builder prefixes names
+    depends_on: [postgresql, redis]            # intra-module: builder prefixes names
+    # depends_on: ["@mod_auth/server"]         # cross-module: @module/service syntax
     healthcheck:
       type: http
       target: http://localhost:9000/-/health/live/
