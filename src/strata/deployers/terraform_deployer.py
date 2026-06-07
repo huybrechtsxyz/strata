@@ -23,6 +23,7 @@ Typical caller sequences:
 
 import json
 from contextlib import nullcontext
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -436,6 +437,7 @@ class TerraformDeployer(BaseDeployer):
             messages.append(f"terraform output error: {exc}")
             return False, non_sensitive, sensitive, messages
 
+        self._write_outputs_cache({**non_sensitive, **sensitive})
         return True, non_sensitive, sensitive, messages
 
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:
@@ -462,7 +464,21 @@ class TerraformDeployer(BaseDeployer):
             messages.append(f"terraform output error: {exc}")
             return False, outputs, messages
 
+        self._write_outputs_cache(outputs)
         return True, outputs, messages
+
+    def _write_outputs_cache(self, outputs: Dict[str, Any]) -> None:
+        """Write outputs to build/<stage>.tf-outputs.json for fast offline access."""
+        cache_file = self.build_path / f"{self.stage.name}.tf-outputs.json"
+        try:
+            data = {
+                "refreshed_at": datetime.now(timezone.utc).isoformat(),
+                "outputs": outputs,
+            }
+            with open(cache_file, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2, default=str)
+        except OSError:
+            pass  # non-fatal: cache write failures do not affect the deploy
 
     def show_plan(self) -> Tuple[bool, Dict[str, Any], List[str]]:
         """terraform show -json <stage>.tfplan  → raw plan data dict"""

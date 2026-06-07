@@ -632,3 +632,124 @@ class TestComposeBuilderPassThrough:
 
         assert ok is False
         assert any("cannot mix" in e for e in builder.get_errors())
+
+
+# ---------------------------------------------------------------------------
+# build — cross-module depends_on (@module/service)
+# ---------------------------------------------------------------------------
+
+
+class TestComposeBuilderCrossModuleDependsOn:
+    def _run_multi_module_build(self, tmp_path, modules_dict, namespace="testns"):
+        """Build one namespace with multiple compose modules.
+
+        Args:
+            modules_dict: dict of module_name → list of services (MockServiceModel)
+        """
+        mod_refs = []
+        mod_services_map = {}
+
+        for mod_name, services in modules_dict.items():
+            ref = _module_ref(mod_name, f"{mod_name}.yaml")
+            mod_refs.append(ref)
+            compose_mod = _make_compose_module(mod_name, services=services)
+            mod_services_map[mod_name] = _make_mod_service(module=compose_mod)
+
+            dummy = tmp_path / f"{mod_name}.yaml"
+            dummy.write_text("")
+
+        ns_svc = _mock_namespace_service(mod_refs)
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={namespace: ns_svc})
+
+        builder = ComposeBuilder()
+
+        def _resolve(base, ref):
+            return tmp_path / ref
+
+        load_order = list(modules_dict.keys())
+
+        def _load(path, validate=True):
+            # Match module name from the file path
+            for mod_name in load_order:
+                if f"{mod_name}.yaml" in str(path):
+                    return mod_services_map[mod_name]
+            return mod_services_map[load_order[0]]
+
+        with (
+            patch("strata.builders.compose_builder.resolve_path", side_effect=_resolve),
+            patch("strata.builders.compose_builder.ModuleService.load", side_effect=_load),
+        ):
+            ok = builder.build(dep_svc, tmp_path, tmp_path)
+
+        return ok, builder, tmp_path / namespace / "docker-compose.yml"
+
+    def test_cross_module_depends_on_resolved(self, tmp_path):
+        """@mod_auth/server resolves to mod_auth-server in the compose output."""
+        svc_auth = _make_service("server", image="auth:1")
+        svc_web = _make_service("web", image="nginx", depends_on=["@mod_auth/server"])
+
+        ok, builder, compose_path = self._run_multi_module_build(
+            tmp_path,
+            {"mod_auth": [svc_auth], "mod_web": [svc_web]},
+        )
+
+        assert ok is True, builder.get_errors()
+        doc = yaml.safe_load(compose_path.read_text())
+        assert doc["services"]["mod_web-web"]["depends_on"] == ["mod_auth-server"]
+
+    def test_cross_module_shorthand_resolved(self, tmp_path):
+        """@mod_auth (no /service) resolves using module name as service name."""
+        svc_auth = _make_service("mod_auth", image="auth:1")
+        svc_web = _make_service("web", image="nginx", depends_on=["@mod_auth"])
+
+        ok, builder, compose_path = self._run_multi_module_build(
+            tmp_path,
+            {"mod_auth": [svc_auth], "mod_web": [svc_web]},
+        )
+
+        assert ok is True, builder.get_errors()
+        doc = yaml.safe_load(compose_path.read_text())
+        # mod_auth service name == module name → no prefix
+        assert doc["services"]["mod_web-web"]["depends_on"] == ["mod_auth"]
+
+    def test_cross_module_unknown_module_error(self, tmp_path):
+        """@nonexistent/server fails when the target module is not in the namespace."""
+        svc_web = _make_service("web", image="nginx", depends_on=["@nonexistent/server"])
+
+        ok, builder, _ = self._run_multi_module_build(
+            tmp_path,
+            {"mod_web": [svc_web]},
+        )
+
+        assert ok is False
+        assert any("nonexistent" in e and "not a compose module" in e for e in builder.get_errors())
+
+    def test_cross_module_unknown_service_error(self, tmp_path):
+        """@mod_auth/typo fails when the service doesn't exist in the target module."""
+        svc_auth = _make_service("server", image="auth:1")
+        svc_web = _make_service("web", image="nginx", depends_on=["@mod_auth/typo"])
+
+        ok, builder, _ = self._run_multi_module_build(
+            tmp_path,
+            {"mod_auth": [svc_auth], "mod_web": [svc_web]},
+        )
+
+        assert ok is False
+        assert any("typo" in e and "does not exist" in e for e in builder.get_errors())
+
+    def test_mixed_intra_and_cross_module(self, tmp_path):
+        """Mixing local and @module/service deps both resolve correctly."""
+        svc_auth = _make_service("server", image="auth:1")
+        svc_db = _make_service("db", image="postgres:16")
+        svc_web = _make_service("web", image="nginx", depends_on=["db", "@mod_auth/server"])
+
+        ok, builder, compose_path = self._run_multi_module_build(
+            tmp_path,
+            {"mod_auth": [svc_auth], "mod_web": [svc_db, svc_web]},
+        )
+
+        assert ok is True, builder.get_errors()
+        doc = yaml.safe_load(compose_path.read_text())
+        deps = doc["services"]["mod_web-web"]["depends_on"]
+        assert "mod_web-db" in deps
+        assert "mod_auth-server" in deps

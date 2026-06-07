@@ -6,49 +6,52 @@ meta:
     description: Traefik reverse proxy module for routing and load balancing
   labels:
     version: "1.0.0"
-  tags: [xyz,traefik]
+  tags: [xyz, traefik]
 spec:
   source:
     repository: xyz_svc_traefik
     source_path: .
-  properties:
-    mounts:
-      - name: configuration_files
-        type: config
-        target_path: ${TRAEFIK_PATH_CONFIG}
-        chmod: "0644"
-        source_path: config
-        description: Traefik static configuration
-      - name: certificates
-        type: config
-        chmod: "0600"
-        target_path: ${TRAEFIK_PATH_CERTS}
-        description: TLS certificates
-      - name: documentation
-        type: docs
-        chmod: "0644"
-        target_path: ${TRAEFIK_PATH_DOCS}
-        source_path: docs/traefik
-        description: Module documentation
-      - name: datafiles
-        type: data
-        chmod: "0600"
-        target_path: ${TRAEFIK_PATH_DATA}
-        description: Certificate storage (ACME)
-      - name: logging
-        type: logs
-        chmod: "0644"
-        target_path: ${TRAEFIK_PATH_LOGS}
-        description: Access and error logs
-    checks:
-      - name: traefik_http_check
-        label: Traefik HTTP Health Check
-        target: consul
+  type: compose
+  services:
+    - name: traefik
+      image: traefik:v3.1
+      restart: unless-stopped
+      ports:
+        - "80:80"
+        - "443:443"
+        - "8080:8080"
+      mounts:
+        - name: configuration_files
+          type: config
+          target_path: ${TRAEFIK_PATH_CONFIG}
+          chmod: "0644"
+          source_path: config
+        - name: certificates
+          type: config
+          chmod: "0600"
+          target_path: ${TRAEFIK_PATH_CERTS}
+        - name: datafiles
+          type: data
+          chmod: "0600"
+          target_path: ${TRAEFIK_PATH_DATA}
+        - name: logging
+          type: logs
+          chmod: "0644"
+          target_path: ${TRAEFIK_PATH_LOGS}
+      healthcheck:
+        name: traefik_http_check
         type: http
-        endpoint: http://traefik:8080/ping
+        command: ["traefik", "healthcheck", "--ping"]
         interval: 60s
         timeout: 5s
         retries: 3
+    - name: website
+      image: nginx:alpine
+      restart: unless-stopped
+      ports:
+        - "8081:80"
+      depends_on: [traefik]
+  properties:
     endpoints:
       - name: traefik_dashboard
         label: Traefik Dashboard

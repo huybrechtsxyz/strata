@@ -198,6 +198,11 @@ class ComposeBuilder(BaseBuilder):
         passthrough_file: Optional[Path] = None
         passthrough_module: Optional[str] = None
 
+        # First pass: load all compose modules and build a registry of
+        # module_name → set(service_names) for cross-module depends_on validation.
+        loaded_modules: List[Tuple[str, Any]] = []  # (module_name, module_model)
+        namespace_service_registry: Dict[str, set] = {}
+
         for module_ref in modules:
             try:
                 module_path = resolve_path(str(work_path), module_ref.file)
@@ -228,7 +233,14 @@ class ComposeBuilder(BaseBuilder):
                 continue
 
             module_name = str(module.meta.name)
+            loaded_modules.append((module_name, module))
 
+            # Register service names for this module
+            if module.spec.services:
+                namespace_service_registry[module_name] = {str(s.name) for s in module.spec.services}
+
+        # Second pass: render compose output from loaded modules
+        for module_name, module in loaded_modules:
             # Pass-through: explicit external compose file reference
             if module.spec.compose_file:
                 if passthrough_file is not None:
@@ -259,11 +271,15 @@ class ComposeBuilder(BaseBuilder):
                 # Compose module declared but no services and no compose_file — skip
                 continue
 
-            svc_entries, vol_entries = self._render_module_services(
+            svc_entries, vol_entries, xmod_errors = self._render_module_services(
                 namespace_name=namespace_name,
                 module_name=module_name,
                 services=module.spec.services,
+                namespace_service_registry=namespace_service_registry,
             )
+            if xmod_errors:
+                self._errors.extend(xmod_errors)
+                return False
             compose_services.update(svc_entries)
             top_volumes.update(vol_entries)
 
@@ -398,22 +414,62 @@ class ComposeBuilder(BaseBuilder):
         namespace_name: str,
         module_name: str,
         services: List[ModuleServiceModel],
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        namespace_service_registry: Optional[Dict[str, set]] = None,
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], List[str]]:
         """Render all services for a module into Docker Compose service entries.
 
         Args:
             namespace_name: Namespace name (used for volume key prefix).
             module_name: Module name (used for service name prefix).
             services: List of ``ModuleServiceModel`` instances.
+            namespace_service_registry: Map of module_name → set(service_names)
+                for all compose modules in this namespace.  Used to validate and
+                resolve cross-module ``@module/service`` depends_on refs.
 
         Returns:
-            Tuple of (compose_services dict, top_level_volumes dict).
+            Tuple of (compose_services dict, top_level_volumes dict, list of errors).
         """
+        registry = namespace_service_registry or {}
         service_names = {str(s.name) for s in services}
+        errors: List[str] = []
 
-        def prefixed(svc_name: str) -> str:
+        def prefixed(svc_name: str, mod: str = module_name) -> str:
             """Prefix service name with module name unless they are the same."""
-            return svc_name if svc_name == module_name else f"{module_name}-{svc_name}"
+            return svc_name if svc_name == mod else f"{mod}-{svc_name}"
+
+        def resolve_dep(dep: str) -> Optional[str]:
+            """Resolve a depends_on entry to its prefixed compose service name.
+
+            Returns the resolved name, or None if an error was recorded.
+            """
+            if not dep.startswith("@"):
+                # Intra-module: rewrite to prefixed form
+                return prefixed(dep) if dep in service_names else dep
+
+            ref = dep[1:]
+            parts = ref.split("/", 1)
+            target_module = parts[0]
+            target_service = parts[1] if len(parts) > 1 else target_module
+
+            if target_module not in registry:
+                errors.append(
+                    f"Namespace '{namespace_name}', module '{module_name}': "
+                    f"depends_on '{dep}' references module '{target_module}' "
+                    f"which is not a compose module in this namespace. "
+                    f"Available modules: {sorted(registry.keys())}."
+                )
+                return None
+
+            if target_service not in registry[target_module]:
+                errors.append(
+                    f"Namespace '{namespace_name}', module '{module_name}': "
+                    f"depends_on '{dep}' references service '{target_service}' "
+                    f"which does not exist in module '{target_module}'. "
+                    f"Available services: {sorted(registry[target_module])}."
+                )
+                return None
+
+            return prefixed(target_service, mod=target_module)
 
         compose_services: Dict[str, Any] = {}
         top_volumes: Dict[str, Any] = {}
@@ -465,9 +521,19 @@ class ComposeBuilder(BaseBuilder):
                 if vol_list:
                     entry["volumes"] = vol_list
 
-            # depends_on — rewrite short service names to their prefixed form
+            # depends_on — resolve intra-module and cross-module (@module/service) refs
             if svc.depends_on:
-                entry["depends_on"] = [prefixed(dep) if dep in service_names else dep for dep in svc.depends_on]
+                resolved_deps = []
+                for dep in svc.depends_on:
+                    resolved = resolve_dep(dep)
+                    if resolved is None:
+                        # Error already recorded by resolve_dep
+                        continue
+                    resolved_deps.append(resolved)
+                if errors:
+                    # Bail early — return partial results with errors
+                    return compose_services, top_volumes, errors
+                entry["depends_on"] = resolved_deps
 
             # Healthcheck
             if svc.healthcheck:
@@ -481,7 +547,7 @@ class ComposeBuilder(BaseBuilder):
 
             compose_services[entry_name] = entry
 
-        return compose_services, top_volumes
+        return compose_services, top_volumes, errors
 
     def _render_healthcheck(self, check: ModuleCheckModel) -> Dict[str, Any]:
         """Render a ``ModuleCheckModel`` into a Docker Compose healthcheck block.

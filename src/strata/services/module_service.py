@@ -49,9 +49,28 @@ class ModuleService(BaseService["ModuleModel"]):
         declared_features = set(spec.references.features or []) if spec.references else set()
 
         for service in services:
-            # Validate depends_on: all entries must be service names within this module
+            # Validate depends_on: intra-module entries must exist locally;
+            # cross-module refs (@module/service) are validated at build time.
             for dep in service.depends_on or []:
-                if dep not in service_names:
+                if dep.startswith("@"):
+                    # Cross-module reference — validate syntax only
+                    ref = dep[1:]  # strip leading @
+                    parts = ref.split("/", 1)
+                    mod_part = parts[0]
+                    svc_part = parts[1] if len(parts) > 1 else None
+                    if not mod_part:
+                        errors.append(
+                            f"Module '{module_name}', service '{service.name}': "
+                            f"depends_on '{dep}' has invalid syntax — "
+                            f"expected @module or @module/service."
+                        )
+                    elif svc_part is not None and not svc_part:
+                        errors.append(
+                            f"Module '{module_name}', service '{service.name}': "
+                            f"depends_on '{dep}' has empty service name after '/'."
+                        )
+                    # Valid syntax — will be resolved and validated by ComposeBuilder
+                elif dep not in service_names:
                     errors.append(
                         f"Module '{module_name}', service '{service.name}': "
                         f"depends_on '{dep}' is not a service defined in this module. "
