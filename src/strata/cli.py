@@ -8,6 +8,7 @@ Commands:
     repo                : Manage repositories in the solution.
     profile             : Manage profiles in the solution.
     ref                 : Manage file references (env, config, data, secret types).
+    secret              : Generate and manage secret values (generate, mask).
     version             : Show CLI version.
 
 Exit Codes:

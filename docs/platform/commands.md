@@ -42,6 +42,7 @@ These options are accepted by every command and subcommand:
 | `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                  |
 | `validate`   | —                                                                            | Validate a single platform YAML file                    |
 | `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds            |
+| `secret`     | `generate` `mask`                                                            | Generate and manage secret values                       |
 | `deploy` †   | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                      |
 | `diff` †     | —                                                                            | Preview what would change before deploying              |
 | `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                      |
@@ -618,6 +619,104 @@ Default and `--output json` both emit the complete Pydantic-generated JSON Schem
 strata schema get deployment
 strata schema get deployment --output json
 strata schema get environment --output text
+```
+
+---
+
+## `secret`
+
+Generate and manage secret values. These utilities are useful for creating passwords, tokens, and other sensitive values to be stored in vaults or used in configuration files.
+
+### `secret generate`
+
+Generate a cryptographically secure secret value in various formats.
+
+```
+strata secret generate [--format FORMAT] [--length N] [standard options]
+```
+
+| Option            | Default   | Description                                                                                                                                                   |
+| ----------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format FORMAT` | `urlsafe` | Output encoding. Valid formats: `urlsafe`, `hex`, `alphanumeric`, `password`, `numeric`, `base64`, `uuid4`, `uuid7`                                           |
+| `--length N`      | 32        | For most formats: number of bytes (output will be longer after encoding). For `alphanumeric`/`password`/`numeric`: exact character count. For UUIDs: ignored. |
+
+**Format descriptions:**
+
+| Format         | Use Case                                                 | Output Example                         |
+| -------------- | -------------------------------------------------------- | -------------------------------------- |
+| `urlsafe`      | Passwords, tokens, API keys (safe for URLs and env vars) | `qB2-mKp3XzZ_VqL9N8RkT4Wx1YuJaFbC`     |
+| `hex`          | Binary data, checksums, hashing                          | `a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6`     |
+| `alphanumeric` | Restrictive password policies (letters + digits only)    | `A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6`     |
+| `password`     | General-purpose passwords (mix of letter+digit+symbols)  | `T7@kL2#qP5!mX9&rW3\`vY8$bZ1%cN4`      |
+| `numeric`      | PINs, OTPs, numeric-only contexts                        | `482916375029847362`                   |
+| `base64`       | Kubernetes secrets, Docker auth, config formats          | `YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo=` |
+| `uuid4`        | Distributed IDs, uncorrelated identifiers                | `f47ac10b-58cc-4372-a567-0e02b2c3d479` |
+| `uuid7`        | Time-ordered IDs, sortable identifiers, Postgres v13+    | `01891a9c-16d7-7e52-be7c-6cde194a6e5a` |
+
+**Typical use cases:**
+
+- Store in a vault: `strata secret generate --format password --length 20 | vault write secret/app_password -`
+- Generate API token: `strata secret generate --format urlsafe --length 48`
+- Create database password: `strata secret generate --format password --length 32`
+
+**Exit codes:** 0 success · 1 invalid format or options
+
+```bash
+# Generate a 20-character password with symbols
+strata secret generate --format password --length 20
+
+# Generate a 64-byte URL-safe token (outputs base64-URL, ~86 chars)
+strata secret generate --format urlsafe --length 64
+
+# Generate a UUID v7 (time-ordered)
+strata secret generate --format uuid7
+
+# Get structured JSON output
+strata secret generate --format password --length 32 --output json
+```
+
+### `secret mask`
+
+Mask a secret value for safe display in logs or output. The first N characters remain visible; the rest are replaced.
+
+```
+strata secret mask VALUE [--show N] [--char C] [standard options]
+```
+
+| Option   | Default | Description                                  |
+| -------- | ------- | -------------------------------------------- |
+| `--show` | 4       | Number of leading characters to keep visible |
+| `--char` | `*`     | Replacement character for the masked portion |
+
+**Typical use cases:**
+
+- Log tokens safely: `echo "Token: $(strata secret mask $TOKEN --show 4 --char '*')"`
+- Display credentials in output: `strata secret mask "dbpassword123" --show 2 --char '#'`
+- Audit trail: Show enough to identify, but not leak secrets
+
+**Exit codes:** 0 success · 1 invalid arguments
+
+```bash
+# Show first 4 chars of a token, mask the rest with asterisks
+strata secret mask "akiaiosfodnn7example" --show 4
+
+# Show first 2 chars with custom mask character
+strata secret mask "s3cr3t_p@ssw0rd" --show 2 --char '#'
+
+# Get structured JSON output
+strata secret mask "mysecretvalue" --show 3 --output json
+```
+
+**Output examples:**
+
+```
+# Token with 4 visible chars (default)
+$ strata secret mask "token_abc123xyz789"
+token****
+
+# Password with 2 visible chars and custom replacement
+$ strata secret mask "myP@ssw0rd" --show 2 --char '#'
+my########
 ```
 
 ---
