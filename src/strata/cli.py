@@ -36,6 +36,7 @@ from strata.commands.cli_profile import profile_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
 from strata.commands.cli_schema import schema_group
+from strata.commands.cli_secret import secret_group
 from strata.commands.cli_service import service_group
 from strata.commands.cli_sln import sln_group
 from strata.commands.cli_tools import tools_group
@@ -127,7 +128,7 @@ _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
     ("Build & Deploy", ["build", "diff", "deploy", "service"]),
     ("Inspection & Validation", ["validate", "schema", "tools"]),
-    ("Utility", ["version", "help", "log", "completion"]),
+    ("Utility", ["secret", "version", "help", "log", "completion"]),
 ]
 
 
@@ -261,6 +262,7 @@ main.add_command(deploy_group, name="deploy")
 main.add_command(diff_command, name="diff")
 main.add_command(values_group, name="values")
 main.add_command(tools_group, name="tools")
+main.add_command(secret_group, name="secret")
 main.add_command(service_group, name="service")
 # ENTRY POINT
 #
