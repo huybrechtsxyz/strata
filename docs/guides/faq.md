@@ -9,7 +9,7 @@ Terragrunt solves a similar problem (DRY Terraform configuration) but with a dif
 | Config language           | YAML (declarative, tooling-friendly)               | HCL (Terraform-native)                       |
 | Approach                  | Generate complete Terraform, then run it           | Wrap Terraform with inheritance and includes |
 | Secret management         | Built-in (Key Vault, Bitwarden, env vars)          | External (sops, vault, env vars)             |
-| Drift detection           | `strata diff` (built-in)                           | Manual `terraform plan` per module           |
+| Drift detection           | `strata build plan` (built-in)                     | Manual `terraform plan` per module           |
 | Multi-stage orchestration | Deployment stages with dependency ordering         | `run-all` with dependency blocks             |
 | Escape hatch              | Copy generated `.tf` files, run Terraform directly | Already Terraform — remove `terragrunt.hcl`  |
 | Learning curve            | Know YAML + understand the layering model          | Know HCL + Terragrunt's inheritance model    |
@@ -17,7 +17,7 @@ Terragrunt solves a similar problem (DRY Terraform configuration) but with a dif
 **Choose strata when:**
 - You want a clean separation between config (YAML) and infrastructure code (Terraform modules).
 - You need integrated secret resolution from multiple backends.
-- You want `diff` and `plan` as first-class operations across environments.
+- You want `build plan` as a first-class operation across environments.
 - Your team prefers YAML over HCL for configuration.
 
 **Choose Terragrunt when:**

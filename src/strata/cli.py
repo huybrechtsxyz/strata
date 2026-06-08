@@ -8,6 +8,7 @@ Commands:
     repo                : Manage repositories in the solution.
     profile             : Manage profiles in the solution.
     ref                 : Manage file references (env, config, data, secret types).
+    secret              : Generate and manage secret values (generate, mask).
     version             : Show CLI version.
 
 Exit Codes:
@@ -28,7 +29,6 @@ from strata.commands.cli_builders import build as build_group
 from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
 from strata.commands.cli_deploy import deploy as deploy_group
-from strata.commands.cli_diff import diff_command
 from strata.commands.cli_help import help_command
 from strata.commands.cli_log import log_group
 from strata.commands.cli_new import new_command
@@ -36,6 +36,7 @@ from strata.commands.cli_profile import profile_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
 from strata.commands.cli_schema import schema_group
+from strata.commands.cli_secret import secret_group
 from strata.commands.cli_service import service_group
 from strata.commands.cli_sln import sln_group
 from strata.commands.cli_tools import tools_group
@@ -125,9 +126,9 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Workspace Setup", ["sln", "profile", "new"]),
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
-    ("Build & Deploy", ["build", "diff", "deploy", "service"]),
+    ("Build & Deploy", ["build", "deploy", "service"]),
     ("Inspection & Validation", ["validate", "schema", "tools"]),
-    ("Utility", ["version", "help", "log", "completion"]),
+    ("Utility", ["secret", "version", "help", "log", "completion"]),
 ]
 
 
@@ -258,9 +259,9 @@ main.add_command(validate_command, name="validate")
 main.add_command(schema_group, name="schema")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
-main.add_command(diff_command, name="diff")
 main.add_command(values_group, name="values")
 main.add_command(tools_group, name="tools")
+main.add_command(secret_group, name="secret")
 main.add_command(service_group, name="service")
 # ENTRY POINT
 #

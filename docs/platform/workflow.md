@@ -375,23 +375,6 @@ Sample output:
   Terraform: 1 stage(s) planned
 ```
 
-### 6.5 Preview what would change (deployment-framed)
-
-Use `strata diff` for a deployment-oriented "what would change?" view — the ergonomic
-equivalent of `git diff` for your infrastructure:
-
-```bash
-# Full diff: artifact changes + terraform plan per stage
-strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
-
-# Limit to one stage
-strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
-
-# Machine-readable output
-strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --output json
-```
-
-Nothing is written. Exit code 0 whether or not changes exist.
 
 ---
 
@@ -644,7 +627,7 @@ strata build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --d
 strata build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # -- Preview changes --
-strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # -- Deploy --
 strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
@@ -667,7 +650,7 @@ strata repo sync
 strata build run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Review what would change
-strata diff -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata build plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Deploy changes
 strata deploy run -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --dry-run
@@ -763,12 +746,6 @@ All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 | `strata build run -f FILE [--dry-run]`                     | Run the platform + Terraform build pipeline                     |
 | `strata build plan -f FILE [--stage S] [--artifacts-only]` | Artifact diff + terraform plan per stage (reads only, temp dir) |
 | `strata build clean -f FILE [--dry-run]`                   | Remove build artifacts                                          |
-
-### Diff
-
-| Command                           | Description                                                       |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `strata diff -f FILE [--stage S]` | Preview artifact + Terraform changes before deploying (read-only) |
 
 ### Deploy
 

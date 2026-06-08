@@ -50,6 +50,6 @@ Chosen: **Four codes**, because the distinction between a system crash (`1`), a 
 
 `handle_command_exit(command, success)` in `cli_common.py` maps command outcomes to the correct exit code. All commands use this function — `sys.exit()` is never called directly.
 
-Exit code `3` specifically is used by: `strata validate`, `strata diff` (when drift detected), `strata deploy health` (when health checks fail), and `strata build plan` (when plan shows changes in strict mode).
+Exit code `3` specifically is used by: `strata validate`, `strata deploy health` (when health checks fail), and `strata build plan` (when plan shows changes in strict mode).
 
 Related: [Exit codes reference](../platform/exit-codes.md), [CI Integration](../platform/ci-integration.md)

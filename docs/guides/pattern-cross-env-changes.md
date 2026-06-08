@@ -15,11 +15,11 @@ workspace variables  →  environment variables  →  deployment variables
 
 Where you make a change depends on the scope you want:
 
-| Scope | Where to edit | Example |
-|-------|--------------|---------|
-| All environments | Workspace (`ws-*.yaml`) or resource (`vm-*.yaml`) | Bump RAM on all worker VMs |
-| One environment only | Environment (`env-*.yaml`) | Enable debug logging in staging only |
-| One deployment only | Deployment (`deploy-*.yaml`) — `spec.variables` section | Override a value for a specific deploy run |
+| Scope                | Where to edit                                           | Example                                    |
+| -------------------- | ------------------------------------------------------- | ------------------------------------------ |
+| All environments     | Workspace (`ws-*.yaml`) or resource (`vm-*.yaml`)       | Bump RAM on all worker VMs                 |
+| One environment only | Environment (`env-*.yaml`)                              | Enable debug logging in staging only       |
+| One deployment only  | Deployment (`deploy-*.yaml`) — `spec.variables` section | Override a value for a specific deploy run |
 
 ---
 
@@ -37,17 +37,17 @@ spec:
     ram_mb: 4096          # ← changed from 2048
 ```
 
-Then validate and diff ALL deployments:
+Then validate and plan ALL deployments:
 
 ```bash
 strata validate --file deploy/deploy-prd.yaml
 strata validate --file deploy/deploy-stg.yaml
 
-strata diff --file deploy/deploy-prd.yaml
-strata diff --file deploy/deploy-stg.yaml
+strata build plan --file deploy/deploy-prd.yaml
+strata build plan --file deploy/deploy-stg.yaml
 ```
 
-The diff shows the RAM change propagating to every environment that uses this resource.
+The plan shows the RAM change propagating to every environment that uses this resource.
 
 ---
 
@@ -109,18 +109,14 @@ After making cross-environment changes:
 strata validate --file deploy/deploy-prd.yaml
 strata validate --file deploy/deploy-stg.yaml
 
-# 2. Diff — see what would change in each environment
-strata diff --file deploy/deploy-prd.yaml
-strata diff --file deploy/deploy-stg.yaml
-
-# 3. Build plan — review generated Terraform
+# 2. Build plan — see what would change in each environment
 strata build plan --file deploy/deploy-prd.yaml
 strata build plan --file deploy/deploy-stg.yaml
 
-# 4. Commit the change
+# 3. Commit the change
 git add -A && git commit -m "Bump worker RAM to 4096 MB"
 
-# 5. Deploy (staging first, then production)
+# 4. Deploy (staging first, then production)
 strata deploy run --file deploy/deploy-stg.yaml
 strata deploy run --file deploy/deploy-prd.yaml
 ```
@@ -129,7 +125,7 @@ strata deploy run --file deploy/deploy-prd.yaml
 
 ## Tips
 
-- **Use `strata diff` before deploying** — it shows the exact infrastructure changes that would apply.
+- **Use `strata build plan` before deploying** — it shows the exact infrastructure changes that would apply.
 - **Commit config changes before deploying** — so the git history reflects what was deployed and when.
 - **Deploy staging first** — catch issues before they hit production.
 - **One change per commit** — makes `git log` useful for debugging later.

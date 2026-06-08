@@ -5,7 +5,7 @@
 - **Generates deployment artifacts from YAML configuration** — workspaces, modules, variables, providers, and backends composed into ready-to-apply files for your provisioner of choice.
 - **Resolves secrets at build time** — pulls values from Key Vault, Bitwarden, or environment variables and injects them into build output without ever committing secrets to Git.
 - **Merges configuration across environments** — one set of YAML definitions, multiple environments (dev/staging/prod) with layered overrides.
-- **Orchestrates deployment stages** — runs provisioners in the correct order across stages, with drift detection (`strata diff`) built in.
+- **Orchestrates deployment stages** — runs provisioners in the correct order across stages, with drift detection (`strata build plan`) built in.
 
 > **Terraform is the primary example throughout this document, but the same architecture applies to any provisioner strata supports — Helm, Ansible, Pulumi, or others.** The build/deploy pipeline is provisioner-agnostic: strata generates artifacts and calls the tool via subprocess. Swap the provisioner, keep the workflow.
 
@@ -21,7 +21,7 @@ Hardcoded secrets in variable files or CI scripts are a compliance liability. st
 
 ### Environment drift
 
-When environments diverge silently, production surprises follow. `strata diff` compares the current build output against the last-applied state, surfacing drift before it becomes an incident.
+When environments diverge silently, production surprises follow. `strata build plan` compares the current build output against the last-applied state, surfacing drift before it becomes an incident.
 
 ### Deployment orchestration
 
