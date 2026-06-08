@@ -16,6 +16,9 @@ _FORMAT_HELP = (
     "urlsafe = base64-URL (default, safe for passwords/tokens);  "
     "hex = lowercase hex string;  "
     "alphanumeric = letters + digits only;  "
+    "password = letters + digits + symbols, guaranteed policy mix;  "
+    "numeric = digits only (PINs, OTPs);  "
+    "base64 = standard base64 (Kubernetes secrets, Docker auth);  "
     "uuid4 = random UUID v4;  "
     "uuid7 = time-ordered UUID v7 (--length ignored for UUID formats)."
 )
@@ -33,7 +36,9 @@ def secret_group() -> None:
 @click.option(
     "--format",
     "fmt",
-    type=click.Choice(["urlsafe", "hex", "alphanumeric", "uuid4", "uuid7"], case_sensitive=False),
+    type=click.Choice(
+        ["urlsafe", "hex", "alphanumeric", "password", "numeric", "base64", "uuid4", "uuid7"], case_sensitive=False
+    ),
     default="urlsafe",
     show_default=True,
     help=_FORMAT_HELP,
@@ -46,7 +51,8 @@ def secret_group() -> None:
     help=(
         "For urlsafe/hex: number of random bytes to source "
         "(output will be longer after encoding).  "
-        "For alphanumeric: exact number of output characters.  "
+        "For alphanumeric/password/numeric: exact number of output characters.  "
+        "For base64: number of random bytes before encoding.  "
         "Ignored for uuid4/uuid7."
     ),
 )
@@ -56,7 +62,10 @@ def generate_secret_command(
     length: int,
 ) -> None:
     """Generate a cryptographically secure secret and print it to stdout."""
-    value = generate_secret(fmt, length)
+    try:
+        value = generate_secret(fmt, length)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
 
     if output == "json":
         data: dict = {"secret": value, "format": fmt}
