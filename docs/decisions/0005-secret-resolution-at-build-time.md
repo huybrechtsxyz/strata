@@ -21,7 +21,7 @@ Chosen: **Build time**, because it separates the concerns of "prepare everything
 
 ### Consequences
 
-- Good: `strata build plan` and `strata diff` can show complete, accurate Terraform plans because all variable values are present in the build output.
+- Good: `strata build plan` can show complete, accurate Terraform plans because all variable values are present in the build output.
 - Good: Operators can review `terraform.tfvars.json` before deploying — no hidden values injected at apply time.
 - Good: `strata deploy run` becomes a pure orchestration step — it calls `terraform apply` against an already-complete artifact directory, with no secret store dependency at deploy time.
 - Good: CI pipelines can separate the `build` stage (needs secret store access) from the `deploy` stage (needs only the build output artifact and Terraform state access).
@@ -41,7 +41,7 @@ The secret store itself is never directly accessed by Terraform — strata fetch
 
 - Good: Secrets are as fresh as possible — rotated credentials are picked up automatically.
 - Good: Build output contains no sensitive values — safe to inspect, share, or cache.
-- Bad: `strata diff` and `strata build plan` cannot produce accurate plans without secret store access — defeats the "review before deploying" workflow.
+- Bad: `strata build plan` cannot produce accurate plans without secret store access — defeats the "review before deploying" workflow.
 - Bad: `deploy run` has a dependency on the secret store being available and authenticated — network partition or vault downtime blocks deployment even if the Terraform itself is ready.
 
 ### Hybrid

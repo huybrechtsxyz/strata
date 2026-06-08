@@ -56,8 +56,8 @@ strata validate <file.yaml>
 # 2. Dry-run build to see what would be generated
 strata build run -f deploy/<deployment.yaml> --dry-run
 
-# 3. Diff to see what changed since last build
-strata diff -f deploy/<deployment.yaml>
+# 3. Preview what changed since last build
+strata build plan -f deploy/<deployment.yaml>
 
 # 4. Build for real
 strata build run -f deploy/<deployment.yaml>

@@ -44,7 +44,6 @@ These options are accepted by every command and subcommand:
 | `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds            |
 | `secret`     | `generate` `mask`                                                            | Generate and manage secret values                       |
 | `deploy` †   | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                      |
-| `diff` †     | —                                                                            | Preview what would change before deploying              |
 | `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                      |
 | `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                   |
 | `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations           |
@@ -800,42 +799,6 @@ Run health checks against provisioned infrastructure stages. Exit code 3 if any 
 strata deploy health -f xyz-deploy-prd.yaml
 strata deploy health -f xyz-deploy-prd.yaml --stage production
 ```
-
----
-
-## `diff`
-
-Preview what would change in the environment before deploying. This is a **read-only** command — nothing is modified. Think of it as `git diff` for your infrastructure: it shows artifact changes and Terraform plan output so you can review before committing to a deploy.
-
-Internally, `strata diff` builds artifacts to a temporary directory, diffs them against the current build output, and runs `terraform plan` against remote state for each stage.
-
-```
-strata diff -f FILE [--stage NAME] [standard options]
-```
-
-| Option         | Description                                  |
-| -------------- | -------------------------------------------- |
-| `-f FILE`      | ✅ Required. Path to the deployment YAML file |
-| `--stage NAME` | Limit diff to a single deployment stage      |
-
-**Output sections:**
-
-1. **Artifact diff** — lists new, changed, and unchanged files compared to the current build
-2. **Terraform plan** — per-stage plan output (add / change / destroy counts)
-3. **Summary** — aggregate verdict across all stages
-
-**Exit codes:** 0 = success (whether or not changes exist) · 1 = system failure · 2 = invalid arguments
-
-```bash
-strata diff -f deploy/deploy-prd.yaml
-strata diff -f deploy/deploy-prd.yaml --stage infra
-strata diff -f deploy/deploy-prd.yaml --output json
-```
-
-> **Relationship to other commands:**
-> - `strata build plan` does similar work but is framed around build artifacts rather than deployment intent.
-> - `strata deploy run --dry-run` validates and plans without applying — framed as "deploy with a safety net" rather than "inspect upcoming changes".
-> - `strata diff` is the ergonomic "what would change?" entry point designed for pre-deploy review.
 
 ---
 

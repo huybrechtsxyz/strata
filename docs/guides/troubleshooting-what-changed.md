@@ -11,7 +11,7 @@ When something breaks, run through these steps in order:
 ### 1. Check current drift
 
 ```bash
-strata diff --file deploy/deploy-prd.yaml
+strata build plan --file deploy/deploy-prd.yaml
 ```
 
 This compares the current configuration against the last-applied state. If there's drift, you'll see exactly which resources differ and how.
@@ -125,17 +125,17 @@ strata log list | head -5
 git log --oneline --since="2025-01-15" -- deploy/ envs/ stack/ config/
 
 # 3. What's the current state vs. desired state?
-strata diff --file deploy/deploy-prd.yaml
+strata build plan --file deploy/deploy-prd.yaml
 ```
 
 ---
 
 ## Prevention
 
-| Practice                                  | Why                                                           |
-| ----------------------------------------- | ------------------------------------------------------------- |
-| Run `strata diff` on a schedule (CI cron) | Catch drift before users notice                               |
-| Commit before deploying                   | Git history = audit trail                                     |
-| Use `strata build plan` in PRs            | Review infrastructure changes like code                       |
-| Tag deployments in git                    | `git tag deploy-prd-2025-01-15` makes rollback points obvious |
-| Use separate secrets per environment      | Rotating one environment's secrets doesn't break another      |
+| Practice                                        | Why                                                           |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| Run `strata build plan` on a schedule (CI cron) | Catch drift before users notice                               |
+| Commit before deploying                         | Git history = audit trail                                     |
+| Use `strata build plan` in PRs                  | Review infrastructure changes like code                       |
+| Tag deployments in git                          | `git tag deploy-prd-2025-01-15` makes rollback points obvious |
+| Use separate secrets per environment            | Rotating one environment's secrets doesn't break another      |

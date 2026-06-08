@@ -98,15 +98,15 @@ jobs:
       - run: uv tool install xyz-strata
       - run: strata validate --file $STRATA_FILE --output json
         id: validate
-      - run: strata diff --file $STRATA_FILE --output json > diff.json
+      - run: strata build plan --file $STRATA_FILE --output json > plan.json
         if: github.event_name == 'pull_request'
       - uses: actions/github-script@v7
         if: github.event_name == 'pull_request'
         with:
           script: |
             const fs = require('fs');
-            const diff = fs.readFileSync('diff.json', 'utf8');
-            const body = `### 🔍 strata diff\n\`\`\`json\n${diff}\n\`\`\``;
+            const diff = fs.readFileSync('plan.json', 'utf8');
+            const body = `### 🔍 strata build plan\n\`\`\`json\n${diff}\n\`\`\``;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -189,16 +189,16 @@ stages:
           - script: strata validate --file $(STRATA_FILE) --output json
             displayName: Validate deployment file
 
-          - script: strata diff --file $(STRATA_FILE) --output json > $(Build.ArtifactStagingDirectory)/diff.json
-            displayName: Generate diff
+          - script: strata build plan --file $(STRATA_FILE) --output json > $(Build.ArtifactStagingDirectory)/plan.json
+            displayName: Generate plan
             condition: eq(variables['Build.Reason'], 'PullRequest')
 
           - task: PublishBuildArtifacts@1
             inputs:
-              PathtoPublish: $(Build.ArtifactStagingDirectory)/diff.json
-              ArtifactName: diff
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/plan.json
+              ArtifactName: plan
             condition: eq(variables['Build.Reason'], 'PullRequest')
-            displayName: Publish diff artifact
+            displayName: Publish plan artifact
 
   - stage: Deploy
     dependsOn: Validate
