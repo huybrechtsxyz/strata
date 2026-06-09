@@ -29,6 +29,13 @@ from strata.models.deployment_model import (
     DeploymentSpecModel,
     DeploymentStageModel,
 )
+from strata.models.dns_model import (
+    DnsModel as InputDnsModel,
+)
+from strata.models.dns_model import (
+    DnsReferencesModel,
+    DnsZoneModel,
+)
 from strata.models.firewall_model import (
     FirewallDefaultsModel,
     FirewallRuleModel,
@@ -113,6 +120,43 @@ class PlatformFirewallModel(BaseModel):
             defaults=model.spec.defaults,
             deny=model.spec.deny,
             allow=model.spec.allow,
+        )
+
+
+# ---------------------------------------------------------------------------
+# DNS
+# ---------------------------------------------------------------------------
+
+
+class PlatformDnsModel(BaseModel):
+    """Flattened DNS model for platform output (meta + spec combined)."""
+
+    name: PlatformName = Field(description="Unique name for the DNS resource.")
+    annotations: Optional[Dict[str, Any]] = Field(
+        None, description="Optional annotations (key-value pairs for documentation)"
+    )
+    labels: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional labels (key-value pairs for classification/filtering).",
+    )
+    tags: Optional[List[Any]] = Field(None, description="Optional list of tags for the DNS resource.")
+    provider: Optional[str] = Field(None, description="DNS provider name, e.g. 'inwx', 'cloudflare', 'route53'")
+    zones: List[DnsZoneModel] = Field(description="List of DNS zones in this configuration.")
+    references: Optional[DnsReferencesModel] = Field(
+        None, description="Secret and variable keys declared for this DNS config"
+    )
+
+    @classmethod
+    def from_dns_model(cls, model: InputDnsModel) -> "PlatformDnsModel":
+        """Create from input DnsModel (merges meta + spec)."""
+        return cls(
+            name=model.meta.name,
+            annotations=model.meta.annotations,
+            labels=model.meta.labels,
+            tags=model.meta.tags,
+            provider=model.spec.provider,
+            zones=model.spec.zones,
+            references=model.spec.references,
         )
 
 
@@ -538,6 +582,7 @@ class PlatformSpecModel(BaseModel):
     firewalls: Optional[List[PlatformFirewallModel]] = Field(
         None, description="List of firewalls and their configurations"
     )
+    dns_zones: Optional[List[PlatformDnsModel]] = Field(None, description="List of DNS zone definitions")
 
     @classmethod
     def from_deployment_model(

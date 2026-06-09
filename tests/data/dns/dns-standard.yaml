@@ -1,0 +1,74 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: dns
+meta:
+  name: dns_primary
+  annotations:
+    description: Primary DNS zones for the platform
+  labels:
+    version: "1.0.0"
+  tags:
+    - dns
+    - production
+spec:
+  provider: inwx
+  references:
+    variables:
+      - spf_include
+    secrets:
+      - domain_verify_token
+  zones:
+    - name: example.com
+      ttl: 3600
+      records:
+        - name: "@"
+          type: A
+          value: "203.0.113.10"
+        - name: "@"
+          type: AAAA
+          value: "2001:db8::1"
+          ttl: 300
+        - name: "www"
+          type: CNAME
+          value: "example.com."
+        - name: "@"
+          type: MX
+          value: "mail.example.com."
+          priority: 10
+        - name: "@"
+          type: MX
+          value: "mail2.example.com."
+          priority: 20
+        - name: "@"
+          type: TXT
+          value: "v=DMARC1; p=reject; rua=mailto:dmarc@example.com"
+        - name: "_dmarc"
+          type: TXT
+          value: "v=DMARC1; p=reject; rua=mailto:dmarc@example.com"
+        - name: "spf"
+          type: TXT
+          var: spf_include
+        - name: "_verify"
+          type: TXT
+          secret: domain_verify_token
+        - name: "_sip._tcp"
+          type: SRV
+          value: "sipserver.example.com."
+          priority: 10
+        - name: "ns1"
+          type: NS
+          value: "ns1.example.com."
+        - name: "10.0.0.1.in-addr.arpa"
+          type: PTR
+          value: "host.example.com."
+        - name: "@"
+          type: CAA
+          value: '0 issue "letsencrypt.org"'
+    - name: internal.example.com
+      ttl: 600
+      records:
+        - name: "db"
+          type: A
+          value: "10.0.0.5"
+        - name: "cache"
+          type: CNAME
+          value: "db.internal.example.com."

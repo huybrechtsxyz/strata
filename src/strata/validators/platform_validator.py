@@ -12,6 +12,7 @@ from strata.models.configuration_model import ConfigurationModel
 from strata.models.validation_error import ValidationError
 from strata.services.base_service import BaseService
 from strata.services.deployment_service import DeploymentService
+from strata.services.dns_service import DnsService
 from strata.services.environment_service import EnvironmentService
 from strata.services.firewall_service import FirewallService
 from strata.services.module_service import ModuleService
@@ -28,6 +29,7 @@ from strata.validators.base_validator import BaseValidator
 # ConfigurationModel.model_validate() in the validate() method below.
 _KIND_TO_SERVICE: Dict[PlatformKind, Any] = {
     PlatformKind.DEPLOYMENT: DeploymentService,
+    PlatformKind.DNS: DnsService,
     PlatformKind.ENVIRONMENT: EnvironmentService,
     PlatformKind.FIREWALL: FirewallService,
     PlatformKind.MODULE: ModuleService,

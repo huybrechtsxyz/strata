@@ -18,6 +18,7 @@ strata uses YAML configuration files to define infrastructure, environments, and
 
 - [provider.md](provider.md) - Cloud provider credentials
 - [resource.md](resource.md) - VM/storage specs
+- [dns.md](dns.md) - DNS zones and records
 - [firewall.md](firewall.md) - Security rules
 - [module.md](module.md) - Reusable components
 - [namespace.md](namespace.md) - Application packages

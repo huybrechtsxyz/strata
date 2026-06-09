@@ -115,6 +115,8 @@ class TerraformBuilder(BaseBuilder):
                     "modules.auto.tfvars.json",
                     "namespaces.auto.tfvars.json",
                     "firewalls.auto.tfvars.json",
+                    "dns.auto.tfvars.json",
+                    "dns_secret_records.auto.tfvars.json",
                     "tf_required_variables.json",
                     "tf_required_features.json",
                     "tf_required_secrets.json",
@@ -250,6 +252,8 @@ class TerraformBuilder(BaseBuilder):
             "modules.auto.tfvars.json",
             "namespaces.auto.tfvars.json",
             "firewalls.auto.tfvars.json",
+            "dns.auto.tfvars.json",
+            "dns_secret_records.auto.tfvars.json",
             "tf_required_variables.json",
             "tf_required_features.json",
             "tf_required_secrets.json",
@@ -285,6 +289,7 @@ class TerraformBuilder(BaseBuilder):
             "modules": self._build_module_vars(platform, messages),
             "namespaces": self._build_namespace_vars(platform, messages),
             "firewalls": self._build_firewall_vars(platform, messages),
+            "dns": self._build_dns_vars(platform, messages),
             "required_variables": self._document_required_variables(),
             "required_features": self._document_required_features(),
             "required_secrets": self._document_required_secrets(),
@@ -533,6 +538,72 @@ class TerraformBuilder(BaseBuilder):
 
         return {"firewalls": firewalls_dict}
 
+    def _build_dns_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
+        """Build DNS zone tfvars payload."""
+        dns_dict: Dict[str, Any] = {}
+        secret_records_dict: Dict[str, Any] = {}
+
+        if platform.spec.dns_zones:
+            for dns in platform.spec.dns_zones:
+                zones_dict: Dict[str, Any] = {}
+                dns_secret_zones: Dict[str, Any] = {}
+                for zone in dns.zones:
+                    records = []
+                    secret_records = {}
+                    if zone.records:
+                        for record in zone.records:
+                            if record.value is not None:
+                                resolved_value: Optional[str] = record.value
+                            elif record.var is not None:
+                                var_entry = self.variable_refs.get(record.var, {})
+                                resolved_value = var_entry.get("value")
+                                if resolved_value is None:
+                                    messages.append(
+                                        f"DNS record '{record.name}' in zone '{zone.name}' uses "
+                                        f"var '{record.var}' which has no resolved value — "
+                                        "emitting null. Pass resolved_values to resolve at build time."
+                                    )
+                            else:
+                                # record.secret is not None
+                                resolved_value = None
+                                coord_key = f"{record.name}_{record.type.value}"
+                                secret_records[coord_key] = {
+                                    "name": record.name,
+                                    "type": record.type.value,
+                                    "secret_key": record.secret,
+                                    "ttl": record.ttl,
+                                    "priority": record.priority,
+                                }
+                            records.append(
+                                {
+                                    "name": record.name,
+                                    "type": record.type.value,
+                                    "value": resolved_value,
+                                    "ttl": record.ttl,
+                                    "priority": record.priority,
+                                }
+                            )
+                    zones_dict[zone.name] = {
+                        "ttl": zone.ttl,
+                        "records": records,
+                    }
+                    if secret_records:
+                        dns_secret_zones[zone.name] = secret_records
+                dns_dict[dns.name] = {
+                    "description": (dns.annotations.get("description", "") if dns.annotations else ""),
+                    "labels": dns.labels or {},
+                    "tags": dns.tags or [],
+                    "provider": dns.provider,
+                    "zones": zones_dict,
+                }
+                if dns_secret_zones:
+                    secret_records_dict[dns.name] = dns_secret_zones
+
+        if self.verbose:
+            messages.append(f"Built DNS vars: {len(dns_dict)} DNS zone configurations")
+
+        return {"dns_zones": dns_dict, "dns_secret_records": secret_records_dict}
+
     def _document_required_variables(self) -> Dict[str, Any]:
         return {"variables": list(self.variable_refs.values())}
 
@@ -599,6 +670,13 @@ class TerraformBuilder(BaseBuilder):
                 self._write_json(terraform_path / "modules.auto.tfvars.json", terraform_vars["modules"])
                 self._write_json(terraform_path / "namespaces.auto.tfvars.json", terraform_vars["namespaces"])
                 self._write_json(terraform_path / "firewalls.auto.tfvars.json", terraform_vars["firewalls"])
+                self._write_json(
+                    terraform_path / "dns.auto.tfvars.json", {"dns_zones": terraform_vars["dns"]["dns_zones"]}
+                )
+                self._write_json(
+                    terraform_path / "dns_secret_records.auto.tfvars.json",
+                    {"dns_secret_records": terraform_vars["dns"]["dns_secret_records"]},
+                )
 
                 for resource_type, payload in terraform_vars["resources_by_category"].items():
                     self._write_json(terraform_path / f"resx_{resource_type}.auto.tfvars.json", payload)

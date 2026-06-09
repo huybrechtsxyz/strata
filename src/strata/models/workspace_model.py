@@ -46,6 +46,13 @@ class WorkspaceFirewallModel(PlatformBaseModel):
     file: str = Field(description="File reference for the firewall configuration")
 
 
+class WorkspaceDnsModel(PlatformBaseModel):
+    """Model for a workspace DNS zone configuration reference."""
+
+    name: PlatformName = Field(description="Unique DNS zone configuration name")
+    file: str = Field(description="File reference for the DNS zone configuration")
+
+
 class WorkspaceVolumeModel(PlatformBaseModel):
     """Model for a workspace volume."""
 
@@ -321,6 +328,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
     )
     namespaces: Optional[List[WorkspaceNamespaceModel]] = Field(None, description="Workspace namespaces")
     firewalls: Optional[List[WorkspaceFirewallModel]] = Field(None, description="Workspace firewalls")
+    dns_zones: Optional[List[WorkspaceDnsModel]] = Field(None, description="DNS zone file references")
 
     # Validate unique provider names
     @model_validator(mode="after")
@@ -376,6 +384,17 @@ class WorkspaceSpecModel(PlatformBaseModel):
             duplicates = [name for name in firewall_names if firewall_names.count(name) > 1]
             if duplicates:
                 raise ValueError(f"Duplicate firewall names found: {', '.join(set(duplicates))}")
+        return self
+
+    # Validate unique DNS zone names
+    @model_validator(mode="after")
+    def validate_unique_dns_zones(self) -> "WorkspaceSpecModel":
+        """Validate that all DNS zone configuration names are unique."""
+        if self.dns_zones:
+            dns_names = [dz.name for dz in self.dns_zones]
+            duplicates = [name for name in dns_names if dns_names.count(name) > 1]
+            if duplicates:
+                raise ValueError(f"Duplicate DNS zone names found: {', '.join(set(duplicates))}")
         return self
 
     # Validate unique resource names

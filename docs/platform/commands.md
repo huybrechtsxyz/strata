@@ -277,6 +277,7 @@ strata new --list
 strata new namespace my-app
 strata new provider azure --path config/
 strata new workspace my-ws --set owner=myteam
+strata new dns my-zones --path config/dns/
 strata new --list
 ```
 
@@ -610,7 +611,7 @@ strata schema get KIND [--output FORMAT]
 
 Default and `--output json` both emit the complete Pydantic-generated JSON Schema. `--output text` shows a compact summary (required fields and top-level property names).
 
-**Valid kinds:** `configuration` `deployment` `environment` `firewall` `module` `namespace` `platform_model` `provider` `resource` `workspace`
+**Valid kinds:** `configuration` `deployment` `dns` `environment` `firewall` `module` `namespace` `platform_model` `provider` `resource` `workspace`
 
 **Exit codes:** 0 success · 2 unknown kind
 
