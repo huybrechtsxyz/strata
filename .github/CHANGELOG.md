@@ -9,6 +9,38 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.2.0] — 2026-06-09
+
+### Added
+
+- **`strata env state`** — show live infrastructure state per deployment stage (resources, serial, outputs from `terraform show -json`). Supports `--offline` for cached-only mode.
+- **`strata env drift`** — detect drift between desired config and live infrastructure using `terraform plan -detailed-exitcode`. Reports create/update/delete/replace counts per stage.
+- **`strata values set`** — write a value to its configured store backend. Dispatches to constant (print location), environment (export instruction), github (`gh secret set`), or integration backends. Supports `--value`, `--from-file`, and `--stdin` for multiline input.
+- **`strata values resolve`** — diagnose value resolution paths without revealing actual values. Walks the resolution chain with checkpoints per store type. `--probe` flag attempts actual backend resolution (pass/fail only).
+- **Environment module overrides** — new `spec.overrides.modules` schema in environment YAML for pinning container images, Helm chart versions, and module enabled state per environment without modifying module definitions.
+  - `services` list with `name` + `image` for per-service image pinning.
+  - `chart_version` field for Helm chart version overrides.
+  - Optional `resource`, `namespace`, `slot_type` qualifiers for scoping when a module appears in multiple places.
+  - Specificity-based matching: most specific override wins.
+  - Validates: mutual exclusivity of resource/namespace, unique service names.
+
+### Changed
+
+- Renamed internal `commands/env/` package to `commands/envs/` to avoid collision with the reserved word `env`.
+- `EnvironmentModuleOverrideModel` redesigned: `module` is now the primary key (required), `resource` is optional (was required).
+- `get_module_override()` service method uses specificity scoring instead of exact tuple match.
+- `get_overridden_module_keys()` returns `(module, resource, namespace, slot_type)` tuples.
+- Deployment service applies module overrides by scanning all matching workspace resources rather than requiring exact resource targeting.
+
+### Documentation
+
+- Added `Overrides` section to `docs/config/environment.md` with full module override schema and examples.
+- Added cross-reference in `docs/config/module.md` pointing to environment overrides for image pinning.
+- Added `values set` and `values resolve` to `docs/platform/commands.md` and `docs/platform/workflow.md`.
+- Created `.archive/releases.md` — release & version management analysis for multi-repo deployment orchestration.
+
+---
+
 ## [0.1.1] — 2026-06-07
 
 ### Added
