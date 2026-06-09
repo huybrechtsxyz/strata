@@ -135,23 +135,48 @@ class EnvironmentResourceOverrideModel(PlatformBaseModel):
     )
 
 
+class EnvironmentServiceImageOverrideModel(PlatformBaseModel):
+    """Override a single service's container image within a module."""
+
+    name: PlatformName = Field(description="Service name within the module to override")
+    image: str = Field(
+        description="Container image reference (registry/name:tag)",
+        min_length=1,
+    )
+
+
 class EnvironmentModuleOverrideModel(PlatformBaseModel):
     """
-    Environment-specific module overrides (for modules within workspace resources).
+    Environment-specific module overrides.
 
-    Mirrors WorkspaceModuleReferenceModel fields (all optional except identifiers).
-    Values are merged with workspace module configuration.
+    Targets a module by name. Optionally narrow scope with resource, namespace,
+    or slot_type when the same module appears in multiple places.
     """
 
-    resource: PlatformName = Field(description="Resource name containing the module")
-    module: PlatformName = Field(description="Module name to override")
+    module: PlatformName = Field(description="Module meta.name to override")
+    resource: Optional[PlatformName] = Field(
+        None,
+        description="Narrow to module within this resource (optional)",
+    )
+    namespace: Optional[PlatformName] = Field(
+        None,
+        description="Narrow to module within this namespace (optional)",
+    )
     slot_type: Optional[str] = Field(
         None,
-        description="Override deployment slot type (main, staging, canary, sidecar, init)",
+        description="Narrow to specific deployment slot (main, staging, canary, sidecar, init)",
     )
     enabled: Optional[bool] = Field(
         None,
         description="Override whether this module is enabled/deployed in this environment",
+    )
+    chart_version: Optional[str] = Field(
+        None,
+        description="Override Helm chart version for this module",
+    )
+    services: Optional[List[EnvironmentServiceImageOverrideModel]] = Field(
+        None,
+        description="Override container images for specific services within the module",
     )
     configuration: Optional[Dict[str, Any]] = Field(
         None,
@@ -163,6 +188,23 @@ class EnvironmentModuleOverrideModel(PlatformBaseModel):
     def validate_slot_type_value(cls, v: Optional[str]) -> Optional[str]:
         """Validate slot_type using common validator."""
         return validate_slot_type(v)
+
+    @model_validator(mode="after")
+    def validate_scope_not_both(self) -> "EnvironmentModuleOverrideModel":
+        """Ensure resource and namespace are not both set."""
+        if self.resource is not None and self.namespace is not None:
+            raise ValueError("Cannot specify both 'resource' and 'namespace' — use one to narrow scope")
+        return self
+
+    @model_validator(mode="after")
+    def validate_unique_service_names(self) -> "EnvironmentModuleOverrideModel":
+        """Ensure service override names are unique within this module override."""
+        if self.services:
+            names = [s.name for s in self.services]
+            duplicates = [n for n in names if names.count(n) > 1]
+            if duplicates:
+                raise ValueError(f"Duplicate service overrides: {', '.join(set(duplicates))}")
+        return self
 
 
 class EnvironmentProviderOverrideModel(PlatformBaseModel):
@@ -217,9 +259,11 @@ class EnvironmentOverridesModel(PlatformBaseModel):
             if duplicates:
                 errors.append(f"Duplicate resource overrides found: {', '.join(set(duplicates))}")
 
-        # Validate unique module overrides (resource+module+slot_type combination)
+        # Validate unique module overrides (module+resource+namespace+slot_type combination)
         if self.modules:
-            module_keys = [f"{mod.resource}:{mod.module}:{mod.slot_type or 'main'}" for mod in self.modules]
+            module_keys = [
+                f"{mod.module}:{mod.resource or ''}:{mod.namespace or ''}:{mod.slot_type or ''}" for mod in self.modules
+            ]
             duplicates = [key for key in module_keys if module_keys.count(key) > 1]
             if duplicates:
                 errors.append(f"Duplicate module overrides found: {', '.join(set(duplicates))}")

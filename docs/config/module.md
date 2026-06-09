@@ -68,6 +68,8 @@ source:
 
 The `services` list defines the containers (compose) or sub-chart components (helm) that make up the module. When absent, the module uses the single-service `properties` shape for backward compatibility.
 
+> **Tip:** Service images defined here are defaults. Use [environment overrides](environment.md#module-overrides) to pin different image versions per environment without modifying the module file.
+
 ```yaml
 services:
   - name: server                               # service identifier

@@ -233,8 +233,8 @@ class TestEnvironmentOverrides:
                 "overrides": {
                     "modules": [
                         {
-                            "resource": "manager",
                             "module": "traefik",
+                            "resource": "manager",
                             "slot_type": "main",
                             "enabled": True,
                         }
@@ -243,9 +243,128 @@ class TestEnvironmentOverrides:
             },
         }
         model = EnvironmentModel.model_validate(data)
-        assert model.spec.overrides.modules[0].resource == "manager"
         assert model.spec.overrides.modules[0].module == "traefik"
+        assert model.spec.overrides.modules[0].resource == "manager"
         assert model.spec.overrides.modules[0].slot_type == "main"
+
+    def test_module_override_services_image(self):
+        """Test that module overrides can pin service images."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "overrides": {
+                    "modules": [
+                        {
+                            "module": "xyz_backend",
+                            "services": [
+                                {"name": "server", "image": "registry.omp.com/product/backend:2025.3.0"},
+                                {"name": "worker", "image": "registry.omp.com/product/backend:2025.3.0"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        }
+        model = EnvironmentModel.model_validate(data)
+        override = model.spec.overrides.modules[0]
+        assert override.module == "xyz_backend"
+        assert override.resource is None
+        assert len(override.services) == 2
+        assert override.services[0].name == "server"
+        assert override.services[0].image == "registry.omp.com/product/backend:2025.3.0"
+
+    def test_module_override_chart_version(self):
+        """Test that module overrides can pin chart versions."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "overrides": {
+                    "modules": [
+                        {
+                            "module": "traefik",
+                            "chart_version": "26.1.0",
+                        }
+                    ]
+                }
+            },
+        }
+        model = EnvironmentModel.model_validate(data)
+        assert model.spec.overrides.modules[0].chart_version == "26.1.0"
+
+    def test_module_override_rejects_resource_and_namespace(self):
+        """Test that specifying both resource and namespace is rejected."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "overrides": {
+                    "modules": [
+                        {
+                            "module": "traefik",
+                            "resource": "manager",
+                            "namespace": "platform_ns",
+                        }
+                    ]
+                }
+            },
+        }
+        with pytest.raises(ValueError) as exc_info:
+            EnvironmentModel.model_validate(data)
+        assert "resource" in str(exc_info.value).lower()
+        assert "namespace" in str(exc_info.value).lower()
+
+    def test_module_override_duplicate_service_names(self):
+        """Test that duplicate service names in overrides are rejected."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "overrides": {
+                    "modules": [
+                        {
+                            "module": "traefik",
+                            "services": [
+                                {"name": "server", "image": "img:v1"},
+                                {"name": "server", "image": "img:v2"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        }
+        with pytest.raises(ValueError) as exc_info:
+            EnvironmentModel.model_validate(data)
+        assert "duplicate" in str(exc_info.value).lower()
+
+    def test_module_override_module_only(self):
+        """Test module override without resource or namespace scope."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "overrides": {
+                    "modules": [
+                        {
+                            "module": "traefik",
+                            "enabled": False,
+                        }
+                    ]
+                }
+            },
+        }
+        model = EnvironmentModel.model_validate(data)
+        override = model.spec.overrides.modules[0]
+        assert override.module == "traefik"
+        assert override.resource is None
+        assert override.namespace is None
+        assert override.enabled is False
 
     def test_duplicate_resource_overrides(self):
         """Test that duplicate resource overrides are rejected."""
@@ -300,7 +419,6 @@ class TestEnvironmentOverrides:
                     "overrides": {
                         "modules": [
                             {
-                                "resource": "manager",
                                 "module": "traefik",
                                 "slot_type": slot,
                             }

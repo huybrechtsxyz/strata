@@ -441,62 +441,62 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         # Apply module overrides
         for module_key in environment.get_overridden_module_keys():
-            if isinstance(module_key, tuple) and len(module_key) == 3:
-                resource_name, module_name, slot_type = module_key
-            else:
+            if not isinstance(module_key, tuple) or len(module_key) < 1:
                 continue
+            module_name = module_key[0]
+            override_resource = module_key[1] if len(module_key) > 1 else None
+            override_namespace = module_key[2] if len(module_key) > 2 else None
+            override_slot = module_key[3] if len(module_key) > 3 else None
 
-            module_override = environment.get_module_override(resource_name, module_name, slot_type or "main")
-            if not module_override:
-                continue
-
-            # Get the workspace resource
-            workspace_resource = None
+            # Find all matching modules in workspace resources
+            targets_found = False
             if workspace.model and workspace.model.spec and workspace.model.spec.resources:
-                workspace_resource = next(
-                    (r for r in workspace.model.spec.resources if r.name == resource_name),
-                    None,
-                )
-            if not workspace_resource or not workspace_resource.modules:
-                errors.append(
-                    f"Module override for '{resource_name}.{module_name}' (resource has no modules - skipped)"
-                )
-                self.logger.warning(
-                    "Skipping module override — resource has no modules", resource=resource_name, module=module_name
-                )
-                continue
+                for ws_resource in workspace.model.spec.resources:
+                    # Skip if override narrows to a specific resource that doesn't match
+                    if override_resource and ws_resource.name != override_resource:
+                        continue
+                    if not ws_resource.modules:
+                        continue
+                    for target_module in ws_resource.modules:
+                        if target_module.name != module_name:
+                            continue
+                        if override_slot and (target_module.slot_type or "main") != override_slot:
+                            continue
 
-            # Find the module to override
-            target_module = next(
-                (
-                    m
-                    for m in workspace_resource.modules
-                    if m.name == module_name and (m.slot_type or "main") == (slot_type or "main")
-                ),
-                None,
-            )
-            if not target_module:
-                errors.append(f"Module override for '{resource_name}.{module_name}' (module not found - skipped)")
+                        module_override = environment.get_module_override(
+                            module_name=module_name,
+                            resource_name=ws_resource.name,
+                            slot_type=target_module.slot_type or "main",
+                        )
+                        if not module_override:
+                            continue
+
+                        targets_found = True
+                        if module_override.slot_type is not None:
+                            target_module.slot_type = module_override.slot_type
+                        if module_override.enabled is not None:
+                            target_module.enabled = module_override.enabled
+                        if module_override.configuration is not None:
+                            if target_module.configuration:
+                                target_module.configuration.update(module_override.configuration)
+                            else:
+                                target_module.configuration = module_override.configuration
+
+                        self.logger.debug(
+                            "Applied module override",
+                            resource=ws_resource.name,
+                            module=module_name,
+                        )
+
+            if not targets_found:
+                scope = override_resource or override_namespace or "workspace"
+                errors.append(f"Module override for '{module_name}' (not found in {scope} - skipped)")
                 self.logger.warning(
-                    "Skipping module override — module not found in workspace",
-                    resource=resource_name,
+                    "Skipping module override — module not found",
                     module=module_name,
+                    resource=override_resource,
+                    namespace=override_namespace,
                 )
-                continue
-
-            # Apply module overrides
-            if module_override.slot_type is not None:
-                target_module.slot_type = module_override.slot_type
-            if module_override.enabled is not None:
-                target_module.enabled = module_override.enabled
-            if module_override.configuration is not None:
-                # Deep merge configuration (override wins)
-                if target_module.configuration:
-                    target_module.configuration.update(module_override.configuration)
-                else:
-                    target_module.configuration = module_override.configuration
-
-            self.logger.debug("Applied module override", resource=resource_name, module=module_name)
 
         # Apply provider overrides (minimal - providers mostly configured in provider files)
         for provider_name in environment.get_overridden_provider_names():
@@ -961,14 +961,13 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 if provider_name not in providers:
                     errors.append(f"Environment overrides non-existent provider '{provider_name}'")
 
-            # Check module overrides (modules are within resources)
+            # Check module overrides (modules are within resources or namespaces)
             for module_key in environment.get_overridden_module_keys():
-                # module_key format: (resource_name, module_name, slot_type)
+                # module_key format: (module_name, resource_or_none, namespace_or_none, slot_type_or_none)
                 if isinstance(module_key, tuple) and len(module_key) >= 2:
-                    resource_name, _ = module_key[0], module_key[1]
-                    if resource_name not in resources:
-                        errors.append(f"Environment overrides module in non-existent resource '{resource_name}'")
-                    # Note: Can't validate module exists without loading resource details
+                    override_resource = module_key[1]
+                    if override_resource and override_resource not in resources:
+                        errors.append(f"Environment overrides module in non-existent resource '{override_resource}'")
 
         # Validation 2: Stage provisioner/topology references
         if self.model and self.model.spec and self.model.spec.stages:
