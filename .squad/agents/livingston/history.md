@@ -8,6 +8,25 @@ Key paths: `tests/strata/`, `conftest.py`, `noxfile.py`.
 
 ## Learnings
 
+### 2026-06-09 — DNS record value union tests
+
+**What was added:**
+- `tests/data/dns/dns-standard.yaml` — updated: added `spec.references` block (`variables: [spf_include]`, `secrets: [domain_verify_token]`), replaced one literal TXT record with `var: spf_include`, added a new TXT record with `secret: domain_verify_token`. All other records retained as `value:` (literal).
+- `tests/strata/models/test_models_dns.py` — 9 new tests appended: `test_dns_record_value_literal`, `test_dns_record_var_valid`, `test_dns_record_secret_valid`, `test_dns_record_no_source_invalid`, `test_dns_record_two_sources_invalid`, `test_dns_var_undeclared_in_references_invalid`, `test_dns_secret_undeclared_in_references_invalid`, `test_dns_var_without_references_block_invalid`, `test_dns_secret_without_references_block_invalid`.
+- `_dns_data()` helper added to `test_models_dns.py` — builds full DnsModel payload from records list + optional references dict; keeps inline dict tests DRY.
+- No changes to `tests/strata/services/test_services_dns.py` — inline `value:` dicts remain valid, `.value` attribute access works for `Optional[str]` after union change.
+
+**Patterns followed:**
+- Tests are anticipatory — model implementation by Linus is concurrent. Tests will fail until `DnsRecordModel`, `DnsReferencesModel`, and `DnsSpecModel` are updated.
+- Cross-reference validation (var key vs. references.variables) is expected at `DnsSpecModel` level (needs both sides). Record-level mutual exclusion (exactly one of value/var/secret) is expected at `DnsRecordModel` level.
+- `_dns_data()` helper added above the new tests (below the last existing test) — does not touch existing parametrized or inline-dict tests.
+
+**Key rules the new tests encode:**
+1. Exactly one of `value`/`var`/`secret` per record — none or two → ValidationError.
+2. `var: key` requires `references.variables` to contain `key`.
+3. `secret: key` requires `references.secrets` to contain `key`.
+4. Using `var:` or `secret:` with no `references:` block → ValidationError.
+
 ### 2026-06-09 — DNS kind tests (anticipatory)
 
 **What was added:**

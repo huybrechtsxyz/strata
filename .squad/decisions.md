@@ -107,11 +107,27 @@
 - **Decision 5 — `platform_builder.py` not modified:** DNS wiring (loading `dns_zones` from workspace, building `PlatformDnsModel`) deferred to Basher per task scope.
 - **Implications:** `strata validate dns-file.yaml`, `strata schema show dns`, and `dns.auto.tfvars.json` generation all work. Platform builder DNS population is a Basher follow-up.
 
-## Governance
+### 2026-06-09 — DNS record value/var/secret union
+- **By:** Linus
+- **Decision 1 — Union model on `DnsRecordModel`:** `value: str` (required) replaced with three optional fields: `value`, `var`, `secret`. Mutual exclusion enforced by `model_validator(mode="after")`. Mirrors `ModuleServiceEnvironmentModel.validate_exactly_one_source` — adapted for DNS (no `feature` field).
+- **Decision 2 — `DnsReferencesModel` at spec level:** Holds `variables: VariableRefs` and `secrets: SecretRefs` (reusing types from `common_models`). Placed in `DnsSpecModel` as `references: Optional[DnsReferencesModel]`. Cross-reference validation (all used var/secret keys must be declared) lives at spec level via a second `model_validator(mode="after")`, because records don't have access to their parent spec.
+- **Decision 3 — `var:` resolution emits `null` + warning for non-literal stores:** `_build_dns_vars()` resolves only `store: literal` variables at build time. All other stores (azure_key_vault etc.) emit `null` in the output with a warning message. Full resolution requires runtime secret injection and is out of scope for the build phase.
+- **Decision 4 — Split tfvars output (`dns_secret_records`):** Records using `secret:` write `null` to `dns.auto.tfvars.json` and add their coordinates (zone, domain, record name+type) plus the secret key to a separate `dns_secret_records.auto.tfvars.json`. This allows Terraform to identify which null values require external secret injection without re-parsing the zone structure.
+- **Implications:** `platform_artifact_model.py` gains `references` field on `PlatformDnsModel`. `terraform_builder.py` writes two DNS-related tfvars files. Downstream Terraform modules must handle `null` record values gracefully.
 
-- All meaningful architectural changes require a decision entry here
-- Danny triages and records decisions — other agents propose via decisions/inbox/
-- Keep decisions focused on direction, not implementation detail
+### 2026-06-09 — DNS union test design
+- **By:** Livingston
+- **Decision 1 — Mutual exclusion tested at `DnsRecordModel` level:** 4 tests (no source, two sources, var valid, secret valid) exercise the record-level validator directly using minimal inline payloads. No need for full file fixture for these cases.
+- **Decision 2 — Cross-reference tests at `DnsModel` level:** 5 tests (undeclared var, undeclared secret, var without references block, secret without references block, var+references valid) use full `DnsModel` payloads because `validate_references_declared` runs at spec level and requires a complete model.
+- **Decision 3 — `dns-standard.yaml` fixture extended (not replaced):** Added `spec.references` block and two new TXT records (`var: spf_include`, `secret: domain_verify_token`). Existing records unchanged — preserves coverage of all 9 record types and the pre-union test cases.
+
+### 2026-06-09 — DNS union documentation approach
+- **By:** Reuben
+- **Decision 1 — `one of` in Required column:** For `value`, `var`, `secret` rows in the Record Fields table, the Required column reads `one of` instead of `Yes`/`No`. A blockquote note after the table reinforces mutual exclusivity. Avoids adding a separate Constraints column to a table where the constraint appears in only one row.
+- **Decision 2 — `spec.references` section placed before Zone Fields:** `## spec.references Fields` is inserted immediately after `## Top-level Fields`. Readers see the `spec.references` row in the top-level table and find its expansion on the next scroll — following natural reading order. Zone → Record → References would require readers to skip past two sections.
+- **Decision 3 — Preserve and extend the huybrechts.xyz example:** The existing comprehensive example (A, CNAME, dual MX, DMARC, CAA) is kept; two TXT records are modified to show `var:` and `secret:` in context. Replacing with a minimal example would sacrifice the worked real-world zone structure that operators copy-paste.
+
+## Governance
 
 - All meaningful architectural changes require a decision entry here
 - Danny triages and records decisions — other agents propose via decisions/inbox/

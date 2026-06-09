@@ -6,6 +6,19 @@ Docs / Technical Writer for strata. Sphinx docs, Markdown guides, CLI reference.
 User: Vincent Huybrechts. Stack: Sphinx, reStructuredText, Markdown.
 Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`, `docs/SQUAD.md`.
 
+### 2026-06-09 — DNS record value union (value/var/secret)
+
+- **`docs/config/dns.md`** — Updated for `DnsRecordModel` record value union. Six targeted edits:
+  1. **Schema block** — Added `references:` (variables/secrets) to the spec skeleton; replaced single `value:` comment with three `# one of:` comments for `value:`, `var:`, `secret:`.
+  2. **Top-level Fields table** — Added `spec.references` row (object, No); reformatted column widths.
+  3. **spec.references Fields** — New dedicated section (between Top-level Fields and Zone Fields) with a two-row table (`variables`, `secrets`) and a "required when any record uses var/secret" lead-in.
+  4. **Record Fields table** — Replaced single `value` row (Required: Yes) with three rows (`value`, `var`, `secret`, Required: "one of") plus blockquote note: "Exactly one of `value`, `var`, or `secret` must be set per record."
+  5. **Example** — Added `references:` block to spec; replaced literal SPF TXT record with `var: extra_spf_include`; added new `secret: google_verify_token` TXT record; comments explain build-time vs deploy-time.
+  6. **Variable and secret records** — New section (between Example and Linking to a Workspace): comparison table (value/var/secret × use-when/behaviour); `### var:` subsection explaining build-time resolution via `environment.yaml`; `### secret:` subsection explaining `dns_secret_records` Terraform variable, no disk storage, `TF_VAR_<key>` injection, and where to declare keys.
+  7. **Validation Rules table** — Added two new rows: "Exactly one of value/var/secret per record" and "var/secret keys must be declared in spec.references".
+- **Key structural decision:** `spec.references Fields` section placed immediately after Top-level Fields (not after Zone or Record Fields) because `references` is a top-level spec block — readers who see it in the top-level table can immediately drill into its schema.
+- **Example strategy:** Kept the existing comprehensive huybrechts.xyz zone (A, CNAME, dual MX, DMARC, CAA) and changed two TXT records to `var:` / `secret:`. Preserving the fuller example is more useful than replacing with a minimal one.
+
 ### 2026-06-09 — DNS kind documentation
 
 - **`docs/config/dns.md`** — Created new reference doc. Structure mirrors `firewall.md`: What it is / When to use; top-level schema block; three field tables (top-level, zone, record); record type reference table (A, AAAA, CNAME, MX, TXT, SRV, NS, PTR, CAA) with trailing-dot callout and priority notes; complete real-world example (huybrechts.xyz zone with A, CNAME, dual MX, SPF TXT, DMARC TXT, CAA); workspace linking pattern (`spec.dns_zones`); build output description (`dns.auto.tfvars.json`); validation rules table; best practices.
@@ -91,3 +104,10 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 - **`docs/platform/commands.md`** — Updated the `## deploy` section blockquote note from Terraform-specific language to general: now references all provisioner CLIs and directs users to `strata tools status`.
 - **Key structural decision:** `deployment.md` had no stage types section at all — added `## Provisioner Stage Types` as a new section rather than shoehorning content into the existing schema block. This is the canonical location in deployment.md for stage type documentation.
 - **Bug fixed:** `HelmIntegration` was classified under `IContainerTool` in the capabilities table — corrected to `IInfrastructureTool` (matches `CAPABILITIES = [IInfrastructureTool]` in `src/strata/integrations/helm.py`).
+
+## Learnings
+
+- **Union fields in record tables:** When a model field becomes a union (one-of), the Required column should change from "Yes"/"No" to "one of" to accurately signal mutual exclusivity. This pattern works for any doc where Pydantic discriminates exactly one field from a set.
+- **spec.references placement:** A top-level spec block's dedicated reference section belongs directly after the top-level fields table, not buried after the sub-object (zone/record) sections. Readers correlate the top-level table row to the section that follows.
+- **secret: records and Terraform variable naming:** The `dns_secret_records` variable is a Terraform-side concern; the doc must tell users they need to wire it in their HCL — strata only omits the value from tfvars and names the env var `TF_VAR_<key>`. Always document the "other side" of the boundary.
+- **Preserving comprehensive examples:** When updating an existing worked example, keep the full richness and just modify/add the records needed to show new patterns. A minimal replacement example loses the coverage that operators use as a copy-paste starting point.

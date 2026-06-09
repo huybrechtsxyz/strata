@@ -8,6 +8,20 @@ Key paths: `src/strata/cli.py`, `commands/cli_common.py`, `models/`, `services/`
 
 ## Learnings
 
+### 2026-06-09 — DNS record value/var/secret union + references block
+
+**Files modified:**
+- `src/strata/models/dns_model.py` — added `DnsReferencesModel`, updated `DnsRecordModel` to value/var/secret union with `validate_exactly_one_source`, added `references` to `DnsSpecModel` with `validate_references_declared` cross-check validator
+- `src/strata/models/platform_artifact_model.py` — imported `DnsReferencesModel`, added `references` field to `PlatformDnsModel`, updated `from_dns_model()` to pass `references=model.spec.references`
+- `src/strata/builders/terraform_builder.py` — updated `_build_dns_vars()` to resolve value/var/secret per record, build `secret_records_dict`, return `{"dns_zones": ..., "dns_secret_records": ...}`; updated `_save_terraform_vars()` to write `dns_secret_records.auto.tfvars.json`; added file to dry-run planned list and `after_build` base_files
+
+**Key patterns:**
+- `var:` keys resolved via `self.variable_refs.get(key, {}).get("value")` — only resolves if env declares a literal-store variable; emits `null` and warning otherwise (no resolved_values param on TerraformBuilder)
+- `secret:` keys always emit `null` in `dns.auto.tfvars.json` and populate `dns_secret_records.auto.tfvars.json` with record coordinates + secret_key
+- `validate_references_declared` runs as second `mode="after"` validator on DnsSpecModel; walks all zones/records and checks every var/secret key is declared in `spec.references`
+- `dns_secret_records.auto.tfvars.json` is always written (even if empty `{}`) — listed in both after_build base_files and dry-run planned list
+- All 22 existing DNS model+service tests pass unchanged — test data was already pre-authored with new syntax
+
 ### 2026-06-09 — DNS kind implementation
 
 **Files created:**
