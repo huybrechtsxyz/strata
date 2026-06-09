@@ -29,6 +29,7 @@ from strata.commands.cli_builders import build as build_group
 from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
 from strata.commands.cli_deploy import deploy as deploy_group
+from strata.commands.cli_env import env_group
 from strata.commands.cli_help import help_command
 from strata.commands.cli_log import log_group
 from strata.commands.cli_new import new_command
@@ -126,7 +127,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Workspace Setup", ["sln", "profile", "new"]),
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
-    ("Build & Deploy", ["build", "deploy", "service"]),
+    ("Build & Deploy", ["build", "deploy", "env", "service"]),
     ("Inspection & Validation", ["validate", "schema", "tools"]),
     ("Utility", ["secret", "version", "help", "log", "completion"]),
 ]
@@ -259,6 +260,7 @@ main.add_command(validate_command, name="validate")
 main.add_command(schema_group, name="schema")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
+main.add_command(env_group, name="env")
 main.add_command(values_group, name="values")
 main.add_command(tools_group, name="tools")
 main.add_command(secret_group, name="secret")
