@@ -12,9 +12,9 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
-from strata.commands.env.drift_env_command import DriftEnvCommand
-from strata.commands.env.show_env_command import ShowEnvCommand
-from strata.commands.env.state_env_command import StateEnvCommand
+from strata.commands.envs.drift_env_command import DriftEnvCommand
+from strata.commands.envs.show_env_command import ShowEnvCommand
+from strata.commands.envs.state_env_command import StateEnvCommand
 
 
 @click.group(name="env", help="Inspect environment configuration and state.")
