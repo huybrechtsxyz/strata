@@ -24,6 +24,12 @@ meta:
 spec:
   properties: {} # Environment-specific settings
   custom: {} # Organizational metadata
+  overrides: # Override workspace resources, modules, and providers
+    resources: [] # Resource-level overrides
+    modules: [] # Module-level overrides (images, chart versions, enabled state)
+    providers: [] # Provider-level overrides
+    properties: {} # Override workspace properties
+    includes: [] # Terraform file includes
   variables: [] # Override/extend workspace variables
   secrets: [] # Override/extend workspace secrets
   features: {} # Feature flags
@@ -48,6 +54,106 @@ custom:
   owner: "Platform Team"
   compliance: "PCI-DSS"
   backup_retention_days: 30
+```
+
+## Overrides
+
+Environment overrides let you customize workspace resources, modules, and providers
+without modifying their source definitions. All override fields are optional — only
+specify what you need to change.
+
+### Module Overrides
+
+Override module settings per environment: enable/disable modules, pin container
+image versions, pin Helm chart versions, or merge additional configuration.
+
+```yaml
+spec:
+  overrides:
+    modules:
+      - module: xyz_backend           # Module meta.name (required)
+        services:                     # Override service container images
+          - name: server
+            image: registry.omp.com/product/backend:2025.3.0
+          - name: worker
+            image: registry.omp.com/product/backend:2025.3.0
+
+      - module: xyz_frontend
+        chart_version: "26.1.0"       # Pin Helm chart version
+        services:
+          - name: app
+            image: registry.omp.com/product/frontend:2025.3.0
+
+      - module: xyz_monitoring
+        enabled: false                # Disable in this environment
+```
+
+**Scoping:** When a module appears in multiple resources or slots, use optional
+qualifiers to narrow the override:
+
+```yaml
+overrides:
+  modules:
+    - module: xyz_backend             # Applies to ALL instances
+      services:
+        - name: server
+          image: registry.omp.com/product/backend:2025.3.0
+
+    - module: xyz_backend             # Narrow to canary slot only
+      slot_type: canary
+      services:
+        - name: server
+          image: registry.omp.com/product/backend:2025.3.0-rc.3
+
+    - module: xyz_backend             # Narrow to specific resource
+      resource: kubernetes_cluster
+      services:
+        - name: server
+          image: registry.omp.com/product/backend:2025.3.0
+```
+
+| Field           | Required | Description                                                              |
+| --------------- | -------- | ------------------------------------------------------------------------ |
+| `module`        | Yes      | Module `meta.name` to override                                           |
+| `resource`      | No       | Narrow to module within this resource                                    |
+| `namespace`     | No       | Narrow to module within this namespace                                   |
+| `slot_type`     | No       | Narrow to specific slot (`main`, `staging`, `canary`, `sidecar`, `init`) |
+| `enabled`       | No       | Enable or disable the module                                             |
+| `chart_version` | No       | Override Helm chart version                                              |
+| `services`      | No       | List of service image overrides (`name` + `image`)                       |
+| `configuration` | No       | Arbitrary configuration merged into module config                        |
+
+**Constraints:**
+- `resource` and `namespace` are mutually exclusive
+- Service names within a module override must be unique
+- When multiple overrides match, the most specific one wins (resource/namespace > module-only)
+
+### Resource Overrides
+
+Override resource-level settings such as instance count, enabled state, or configuration:
+
+```yaml
+spec:
+  overrides:
+    resources:
+      - resource: manager
+        count: 3
+        enabled: true
+        configuration:
+          instance_type: "Standard_D4s_v3"
+```
+
+### Provider Overrides
+
+Override provider descriptions or configuration:
+
+```yaml
+spec:
+  overrides:
+    providers:
+      - provider: kamatera_europe
+        configuration:
+          region: "eu-west-1"
 ```
 
 ## Variables

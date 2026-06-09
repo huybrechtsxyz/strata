@@ -262,18 +262,28 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
         )
 
     def get_module_override(
-        self, resource_name: str, module_name: str, slot_type: str = "main"
+        self,
+        module_name: str,
+        resource_name: Optional[str] = None,
+        namespace_name: Optional[str] = None,
+        slot_type: Optional[str] = None,
     ) -> Optional[EnvironmentModuleOverrideModel]:
         """
-        Get module override by resource, module name, and slot type.
+        Get module override matching the given context.
+
+        Matching rules (most specific wins):
+        1. Exact match on module + resource/namespace + slot_type
+        2. Match on module + resource/namespace (any slot)
+        3. Match on module only (applies to all instances)
 
         Args:
-            resource_name: Name of the resource containing the module
-            module_name: Name of the module to get override for
-            slot_type: Deployment slot type (default: "main")
+            module_name: Module meta.name to look up
+            resource_name: Resource context (optional)
+            namespace_name: Namespace context (optional)
+            slot_type: Deployment slot type (optional)
 
         Returns:
-            Optional[EnvironmentModuleOverrideModel]: Module override if found, None otherwise
+            Optional[EnvironmentModuleOverrideModel]: Best matching override, or None
         """
         self._ensure_validated()
         if (
@@ -283,14 +293,39 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
             or not self.model.spec.overrides.modules
         ):
             return None
-        return next(
-            (
-                m
-                for m in self.model.spec.overrides.modules
-                if m.resource == resource_name and m.module == module_name and (m.slot_type or "main") == slot_type
-            ),
-            None,
-        )
+
+        candidates = [m for m in self.model.spec.overrides.modules if m.module == module_name]
+        if not candidates:
+            return None
+
+        # Score candidates by specificity (higher = more specific)
+        best: Optional[EnvironmentModuleOverrideModel] = None
+        best_score = -1
+        for candidate in candidates:
+            score = 0
+            # Check resource match
+            if candidate.resource is not None:
+                if resource_name and candidate.resource == resource_name:
+                    score += 2
+                else:
+                    continue  # resource specified but doesn't match
+            # Check namespace match
+            if candidate.namespace is not None:
+                if namespace_name and candidate.namespace == namespace_name:
+                    score += 2
+                else:
+                    continue  # namespace specified but doesn't match
+            # Check slot_type match
+            if candidate.slot_type is not None:
+                if slot_type and candidate.slot_type == slot_type:
+                    score += 1
+                else:
+                    continue  # slot specified but doesn't match
+            if score > best_score:
+                best_score = score
+                best = candidate
+
+        return best
 
     def get_provider_override(self, provider_name: str) -> Optional[EnvironmentProviderOverrideModel]:
         """
@@ -351,10 +386,10 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
 
     def get_overridden_module_keys(self) -> Set[tuple]:
         """
-        Get set of all (resource, module, slot_type) tuples that have overrides.
+        Get set of all module override identifiers.
 
         Returns:
-            Set[tuple]: Set of (resource_name, module_name, slot_type) tuples with overrides
+            Set[tuple]: Set of (module_name, resource_or_none, namespace_or_none, slot_type_or_none) tuples
         """
         self._ensure_validated()
         if (
@@ -364,7 +399,7 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
             or not self.model.spec.overrides.modules
         ):
             return set()
-        return {(m.resource, m.module, m.slot_type or "main") for m in self.model.spec.overrides.modules}
+        return {(m.module, m.resource, m.namespace, m.slot_type) for m in self.model.spec.overrides.modules}
 
     def get_merged_properties(self, workspace_properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
