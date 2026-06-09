@@ -13,6 +13,7 @@ from strata.commands.cli_common import (
 )
 from strata.commands.deploy.get_values_deploy_command import GetValuesDeployCommand
 from strata.commands.deploy.list_values_deploy_command import ListValuesDeployCommand
+from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
 from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
 
 
@@ -201,6 +202,64 @@ def values_set(
         value=value,
         from_file=from_file,
         from_stdin=from_stdin,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@values_group.command(name="resolve")
+@click.option(
+    "--file",
+    "-f",
+    required=True,
+    envvar="STRATA_FILE",
+    metavar="PATH",
+    help="Path to the deployment YAML file. [env: STRATA_FILE]",
+)
+@click_work_path
+@click.option(
+    "--key",
+    "-k",
+    default=None,
+    metavar="KEY",
+    help="Diagnose a single key only (default: all).",
+)
+@click.option(
+    "--probe",
+    is_flag=True,
+    default=False,
+    help="Also attempt actual resolution against store backends (without revealing values).",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def values_resolve(
+    file: str,
+    key: Optional[str] = None,
+    probe: bool = False,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Diagnose value resolution paths without revealing values.
+
+    Walks the resolution chain for each key and reports whether each step
+    would succeed: store type, integration registration, availability, and
+    optionally (with --probe) actual backend reachability.
+
+        strata values resolve -f deploy.yaml
+        strata values resolve -f deploy.yaml -k DB_PASSWORD
+        strata values resolve -f deploy.yaml --probe
+    """
+    command = ResolveValuesDeployCommand(
+        file=file,
+        key=key,
+        probe=probe,
         work_path=work_path,
         output=output,
         verbose=verbose,

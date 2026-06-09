@@ -864,6 +864,27 @@ strata values set -f xyz-deploy-prd.yaml -k TLS_CERT --from-file cert.pem
 cat key.pem | strata values set -f xyz-deploy-prd.yaml -k SSH_KEY --stdin
 ```
 
+### `values resolve`
+
+```
+strata values resolve -f FILE [-k KEY] [--probe] [standard options]
+```
+
+Diagnose the resolution chain for each value key without revealing actual values.
+Reports store type, integration registration, availability, and optionally
+(with `--probe`) whether the reference exists in the backend.
+
+| Flag      | Effect                                                                    |
+| --------- | ------------------------------------------------------------------------- |
+| `-k KEY`  | Diagnose a single key only                                                |
+| `--probe` | Also attempt resolution against backends (pass/fail only, no value shown) |
+
+```bash
+strata values resolve -f xyz-deploy-prd.yaml
+strata values resolve -f xyz-deploy-prd.yaml -k DB_PASSWORD
+strata values resolve -f xyz-deploy-prd.yaml --probe
+```
+
 ---
 
 ## `version`

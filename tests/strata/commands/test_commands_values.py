@@ -1,5 +1,6 @@
-"""Tests for the `values` command group (list / get / set)."""
+"""Tests for the `values` command group (list / get / set / resolve)."""
 
+import os
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -466,3 +467,202 @@ class TestValuesSetCommand:
 
         assert ok is False
         assert "failure" in msg.lower()
+
+
+class TestValuesResolve:
+    """CLI wiring tests for `strata values resolve`."""
+
+    def test_missing_file_option_returns_exit_2(self, tmp_path):
+        runner = CliRunner()
+        result = runner.invoke(values_group, ["resolve", "--work-path", str(tmp_path)])
+        assert result.exit_code == 2
+
+    def test_basic_resolve_mocked(self, tmp_path):
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.resolve_values_deploy_command.ResolveValuesDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(values_group, ["resolve", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+
+    def test_key_filter_mocked(self, tmp_path):
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.resolve_values_deploy_command.ResolveValuesDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(
+                values_group,
+                ["resolve", "-f", "deploy.yaml", "-k", "DB_HOST", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_probe_flag_mocked(self, tmp_path):
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.resolve_values_deploy_command.ResolveValuesDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(
+                values_group,
+                ["resolve", "-f", "deploy.yaml", "--probe", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_execute_false_returns_nonzero(self, tmp_path):
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.resolve_values_deploy_command.ResolveValuesDeployCommand.execute",
+            return_value=False,
+        ):
+            result = runner.invoke(values_group, ["resolve", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
+        assert result.exit_code != 0
+
+
+class TestValuesResolveCommand:
+    """Unit tests for ResolveValuesDeployCommand internals."""
+
+    def test_diagnose_constant_always_ok(self):
+        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
+        from strata.models.store_models import VariableStoreModel, VariableStoreType
+
+        cmd = ResolveValuesDeployCommand(file="x.yaml")
+        item = VariableStoreModel(key="K", store=VariableStoreType.CONSTANT, value="hello")
+        diag = cmd._diagnose_item(item, "variable")
+        assert diag["ok"] is True
+        assert diag["store"] == "constant"
+        assert any(c["check"] == "store" for c in diag["checks"])
+
+    def test_diagnose_env_var_set(self):
+        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
+        from strata.models.store_models import VariableStoreModel, VariableStoreType
+
+        cmd = ResolveValuesDeployCommand(file="x.yaml")
+        item = VariableStoreModel(key="K", store=VariableStoreType.ENVIRONMENT, value="PATH")
+        diag = cmd._diagnose_item(item, "variable")
+        # PATH is always set
+        assert diag["ok"] is True
+        assert any(c["status"] == "ok" and "set" in c["detail"] for c in diag["checks"])
+
+    def test_diagnose_env_var_not_set(self):
+        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
+        from strata.models.store_models import VariableStoreModel, VariableStoreType
+
+        cmd = ResolveValuesDeployCommand(file="x.yaml")
+        item = VariableStoreModel(key="K", store=VariableStoreType.ENVIRONMENT, value="STRATA_TEST_NONEXISTENT_VAR_XYZ")
+        diag = cmd._diagnose_item(item, "variable")
+        assert diag["ok"] is False
+        assert any(c["status"] == "fail" for c in diag["checks"])
+
+    def test_diagnose_github_not_in_ci(self):
+        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        cmd = ResolveValuesDeployCommand(file="x.yaml")
+        item = SecretStoreModel(key="TOKEN", store=SecretStoreType.GITHUB, value="MY_TOKEN")
+        with patch.dict("os.environ", {}, clear=False):
+            # Ensure GITHUB_ACTIONS is not set
+            os.environ.pop("GITHUB_ACTIONS", None)
+            os.environ.pop("MY_TOKEN", None)
+            diag = cmd._diagnose_item(item, "secret")
+        assert diag["ok"] is False
+        assert any(c["check"] == "context" and c["status"] == "warn" for c in diag["checks"])
+        assert any(c["check"] == "env_var" and c["status"] == "fail" for c in diag["checks"])
+
+    def test_diagnose_integration_not_registered(self):
+        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        cmd = ResolveValuesDeployCommand(file="x.yaml")
+        item = SecretStoreModel(key="S", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
+
+        with patch(
+            "strata.controllers.value_controller.ValueController._get_integration_by_type",
+            return_value=None,
+        ):
+            diag = cmd._diagnose_item(item, "secret")
+
+        assert diag["ok"] is False
+        assert any(c["check"] == "integration" and c["status"] == "fail" for c in diag["checks"])
+
+    def test_diagnose_integration_not_available(self):
+        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        cmd = ResolveValuesDeployCommand(file="x.yaml")
+        item = SecretStoreModel(key="S", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
+
+        mock_integration = MagicMock()
+        mock_integration.ensure_available.return_value = (False, "az CLI not found")
+
+        with patch(
+            "strata.controllers.value_controller.ValueController._get_integration_by_type",
+            return_value=mock_integration,
+        ):
+            diag = cmd._diagnose_item(item, "secret")
+
+        assert diag["ok"] is False
+        assert any(c["check"] == "available" and c["status"] == "fail" for c in diag["checks"])
+
+    def test_diagnose_integration_available_no_probe(self):
+        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        cmd = ResolveValuesDeployCommand(file="x.yaml", probe=False)
+        item = SecretStoreModel(key="S", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
+
+        mock_integration = MagicMock()
+        mock_integration.ensure_available.return_value = (True, "")
+        mock_integration.get_info.return_value = {"version": "2.50.0"}
+
+        with patch(
+            "strata.controllers.value_controller.ValueController._get_integration_by_type",
+            return_value=mock_integration,
+        ):
+            diag = cmd._diagnose_item(item, "secret")
+
+        assert diag["ok"] is True
+        assert not any(c["check"] == "probe" for c in diag["checks"])
+
+    def test_diagnose_integration_with_probe_success(self):
+        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
+        from strata.models.store_models import SecretStoreModel, SecretStoreType
+
+        cmd = ResolveValuesDeployCommand(file="x.yaml", probe=True)
+        item = SecretStoreModel(key="S", store=SecretStoreType.AZURE_KEYVAULT, value="my-ref")
+
+        mock_integration = MagicMock()
+        mock_integration.ensure_available.return_value = (True, "")
+        mock_integration.get_info.return_value = {"version": "2.50.0"}
+        mock_integration.get_secret.return_value = "some-value"
+
+        with patch(
+            "strata.controllers.value_controller.ValueController._get_integration_by_type",
+            return_value=mock_integration,
+        ):
+            diag = cmd._diagnose_item(item, "secret")
+
+        assert diag["ok"] is True
+        assert any(c["check"] == "probe" and c["status"] == "ok" for c in diag["checks"])
+
+    def test_diagnose_integration_with_probe_failure(self):
+        from strata.commands.deploy.resolve_values_deploy_command import ResolveValuesDeployCommand
+        from strata.models.store_models import VariableStoreModel, VariableStoreType
+
+        cmd = ResolveValuesDeployCommand(file="x.yaml", probe=True)
+        item = VariableStoreModel(key="V", store=VariableStoreType.HASHICORP_CONSUL, value="config/missing")
+
+        mock_integration = MagicMock()
+        mock_integration.ensure_available.return_value = (True, "")
+        mock_integration.get_info.return_value = {"version": "1.15.0"}
+        mock_integration.get_variable.return_value = None
+
+        with patch(
+            "strata.controllers.value_controller.ValueController._get_integration_by_type",
+            return_value=mock_integration,
+        ):
+            diag = cmd._diagnose_item(item, "variable")
+
+        assert diag["ok"] is False
+        assert any(c["check"] == "probe" and c["status"] == "fail" for c in diag["checks"])

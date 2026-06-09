@@ -277,6 +277,11 @@ strata values get -f … DB_PASSWORD API_KEY
 strata values set -f … -k DB_HOST --value "new-host.example.com"
 strata values set -f … -k TLS_CERT --from-file cert.pem
 cat key.pem | strata values set -f … -k SSH_KEY --stdin
+
+# Diagnose resolution paths (no secrets revealed)
+strata values resolve -f …
+strata values resolve -f … -k DB_PASSWORD
+strata values resolve -f … --probe          # also check backend reachability
 ```
 
 Exit codes: `0` = all resolved, `3` = one or more entries failed.
@@ -769,5 +774,6 @@ All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 | `strata values list -f FILE [--type T] [--show-store] [--unresolved]` | List all variables / secrets (masked) / feature flags                |
 | `strata values get  -f FILE KEY [KEY …]`                              | Retrieve full resolved value(s) for specific keys (secrets revealed) |
 | `strata values set  -f FILE -k KEY --value V`                         | Write a value to its configured store backend                        |
+| `strata values resolve -f FILE [-k KEY] [--probe]`                    | Diagnose resolution paths without revealing values                   |
 
 
