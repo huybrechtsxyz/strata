@@ -13,6 +13,7 @@ from strata.commands.cli_common import (
 )
 from strata.commands.deploy.get_values_deploy_command import GetValuesDeployCommand
 from strata.commands.deploy.list_values_deploy_command import ListValuesDeployCommand
+from strata.commands.deploy.set_values_deploy_command import SetValuesDeployCommand
 
 
 @click.group(name="values", help="Inspect and manage deployment values (variables, secrets, feature flags).")
@@ -123,6 +124,83 @@ def values_get(
     command = GetValuesDeployCommand(
         file=file,
         keys=list(keys),
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@values_group.command(name="set")
+@click.option(
+    "--file",
+    "-f",
+    required=True,
+    envvar="STRATA_FILE",
+    metavar="PATH",
+    help="Path to the deployment YAML file. [env: STRATA_FILE]",
+)
+@click_work_path
+@click.option(
+    "--key",
+    "-k",
+    required=True,
+    metavar="KEY",
+    help="The value key to update.",
+)
+@click.option(
+    "--value",
+    "-v",
+    default=None,
+    metavar="VALUE",
+    help="The new value to set (mutually exclusive with --from-file and --stdin).",
+)
+@click.option(
+    "--from-file",
+    default=None,
+    metavar="PATH",
+    help="Read value from a file (supports multiline: certs, keys, etc.).",
+)
+@click.option(
+    "--stdin",
+    "from_stdin",
+    is_flag=True,
+    default=False,
+    help="Read value from stdin pipe.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def values_set(
+    file: str,
+    key: str,
+    value: Optional[str] = None,
+    from_file: Optional[str] = None,
+    from_stdin: bool = False,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Write a value to its configured store backend.
+
+    For integration-backed stores (azure-keyvault, vault, consul, etc.),
+    writes directly via the integration. For 'constant' and 'environment'
+    stores, prints instructions on where/how to set the value.
+
+    Multiline values (SSH keys, certificates) use --from-file or --stdin:
+
+        strata values set -f deploy.yaml -k TLS_CERT --from-file cert.pem
+        cat key.pem | strata values set -f deploy.yaml -k SSH_KEY --stdin
+    """
+    command = SetValuesDeployCommand(
+        file=file,
+        key=key,
+        value=value,
+        from_file=from_file,
+        from_stdin=from_stdin,
         work_path=work_path,
         output=output,
         verbose=verbose,

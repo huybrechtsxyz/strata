@@ -272,6 +272,11 @@ strata values list -f … --show-store
 
 # Retrieve one or more values in full (secrets revealed)
 strata values get -f … DB_PASSWORD API_KEY
+
+# Write a value to its store backend
+strata values set -f … -k DB_HOST --value "new-host.example.com"
+strata values set -f … -k TLS_CERT --from-file cert.pem
+cat key.pem | strata values set -f … -k SSH_KEY --stdin
 ```
 
 Exit codes: `0` = all resolved, `3` = one or more entries failed.
@@ -763,5 +768,6 @@ All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `strata values list -f FILE [--type T] [--show-store] [--unresolved]` | List all variables / secrets (masked) / feature flags                |
 | `strata values get  -f FILE KEY [KEY …]`                              | Retrieve full resolved value(s) for specific keys (secrets revealed) |
+| `strata values set  -f FILE -k KEY --value V`                         | Write a value to its configured store backend                        |
 
 
