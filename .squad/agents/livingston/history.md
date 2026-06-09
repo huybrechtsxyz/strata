@@ -8,6 +8,28 @@ Key paths: `tests/strata/`, `conftest.py`, `noxfile.py`.
 
 ## Learnings
 
+### 2026-06-09 — DNS kind tests (anticipatory)
+
+**What was added:**
+- `tests/data/dns/dns-standard.yaml` — valid, feature-complete fixture (2 zones, all 9 record types, record-level TTL override, zone TTL, provider: inwx).
+- `tests/data/dns/dns-invalid.yaml` — invalid fixture with `kind: namespace` (wrong kind) and `zones: []` (empty, fails min-length).
+- `tests/strata/models/test_models_dns.py` — 8 tests covering: valid YAML, invalid YAML, MX priority valid, A+priority invalid, empty zones, ttl=0, duplicate zone names, wrong kind.
+- `tests/strata/services/test_services_dns.py` — 5 tests: `_get_model_class`, validate_standard, get_kind_after_validate, merge_dns_zones (last-wins by zone name), merge_dns_records (last-wins by (name,type)).
+- 2 tests added to `tests/strata/validators/test_validators.py`: `test_valid_dns_file_detected` (kind detection) and `test_validate_dns_standard_passes` (validate pipeline).
+
+**Patterns followed:**
+- Same file layout as firewall tests; imports from `strata.models.dns_model` and `strata.services.dns_service`.
+- `_make_dns_model()` helper constructs programmatic `DnsModel` instances for merge tests.
+- Validator tests inserted immediately after their firewall equivalents inside each existing class.
+- Tests are anticipatory — `DnsModel`/`DnsService` are being implemented simultaneously by Linus.
+- `DnsService.merge_dns()` assumed to mirror `FirewallService.merge_firewalls()` API.
+
+**Gaps / assumptions:**
+- `merge_dns()` method name assumed from the firewall pattern — confirm with Linus.
+- `DnsRecordType` enum values assumed case-matching the YAML strings (e.g., `"A"`, `"MX"`).
+- `PlatformKind.DNS = "dns"` assumed to be added by Linus to `common_models.py`.
+- PTR record name format (`10.0.0.1.in-addr.arpa`) not validated by model — acceptable for now.
+
 ### 2026-05-18 — devcontainer scaffold tests
 
 **What was added:** `TestSolutionControllerScaffoldDevcontainer` class in

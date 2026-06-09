@@ -8,6 +8,30 @@ Key paths: `src/strata/cli.py`, `commands/cli_common.py`, `models/`, `services/`
 
 ## Learnings
 
+### 2026-06-09 — DNS kind implementation
+
+**Files created:**
+- `src/strata/models/dns_model.py` — DnsRecordType enum, DnsRecordModel, DnsZoneModel, DnsSpecModel, DnsMetaModel, DnsModel
+- `src/strata/services/dns_service.py` — DnsService with merge_dns() and merge_dnsfiles() following exact FirewallService skeleton
+- `src/strata/templates/solution/dot.strata/templates/dns.yaml` — boilerplate template with A, AAAA, CNAME, MX, TXT (SPF+DMARC), CAA, NS examples
+
+**Files modified:**
+- `src/strata/models/common_models.py` — added `DNS = "dns"` to PlatformKind enum (alphabetical order between DEPLOYMENT and ENVIRONMENT)
+- `src/strata/models/platform_artifact_model.py` — imported DnsModel+DnsZoneModel, added PlatformDnsModel (from_dns_model classmethod), added `dns_zones` field to PlatformSpecModel
+- `src/strata/models/workspace_model.py` — added WorkspaceDnsModel class, `dns_zones` field to WorkspaceSpecModel, `validate_unique_dns_zones()` model_validator
+- `src/strata/validators/platform_validator.py` — added DnsService import + `PlatformKind.DNS: DnsService` to _KIND_TO_SERVICE dict
+- `src/strata/commands/cli_schema.py` — added DnsModel import + `PlatformKind.DNS: DnsModel` to _KIND_TO_MODEL dict
+- `src/strata/services/unknown_service.py` — added DNS elif branch in get_service_by_kind()
+- `src/strata/builders/terraform_builder.py` — added _build_dns_vars(), wired into _build_terraform_vars(), added "dns.auto.tfvars.json" to dry-run planned list, after_build base_files list, and _save_terraform_vars write calls
+
+**Key patterns:**
+- DnsMetaModel uses Optional labels (unlike FirewallMetaModel which requires labels) — matches design spec
+- priority constraint validated via model_validator (mode="after") on DnsRecordModel — checks type is MX or SRV
+- merge strategy: zones by name (last wins for ttl/provider), records by (name, type) tuple (last wins)
+- PlatformDnsModel reuses DnsZoneModel directly (no flattening needed for zone/record structures)
+- dns_zones field name in PlatformSpecModel and WorkspaceSpecModel is plural to match pattern (firewalls → dns_zones)
+- _build_dns_vars() outputs `{"dns_zones": {...}}` top-level key; records include all fields (ttl, priority) even when None for Terraform variable completeness
+
 ### 2026-06-01 — HelmBuilder implementation
 
 **Files created/modified:**

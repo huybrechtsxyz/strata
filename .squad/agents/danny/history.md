@@ -81,3 +81,16 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 **Delegated to Basher:** `HelmIntegration` in `integrations/helm.py` — methods: `repo_add`, `repo_update`, `pull`, `upgrade_install`, `uninstall`, `status`, `list_releases`. Step sequence: `setup → check → plan → apply` (same contract as `TerraformDeployer`).
 
 **Decision written:** `.squad/decisions/inbox/danny-helm-architecture.md`
+
+### 2026-06-09 — DNS kind architecture review
+
+**Requested by:** Vincent Huybrechts.
+
+**Reviewed:** 4 open architecture questions for `PlatformKind.DNS`. All resolved.
+
+- `spec.provider`: INCLUDE as `Optional[str]`. Multi-provider DNS workspaces (INWX + Cloudflare + Route53 simultaneously) need per-zone routing without loading configuration.yaml. Validate against provider enum via `field_validator`.
+- Workspace field name: `dns_zones` (`workspace.spec.dns_zones: Optional[List[WorkspaceDnsModel]]`). `dns` alone is too ambiguous; `_zones` qualifier makes the collection unit explicit.
+- Merge strategy: Zone merge by name (last-wins); record merge by (name, type) RRset replacement — not per-value dedup. Matches Terraform DNS provider semantics (complete RRset replaced atomically).
+- tfvars shape: APPROVED. Nested `dns_zones → attachment_name → {provider, zones: {domain → {ttl, records}}}`. Records serialized with null fields included (`exclude_none=False`) for uniform Terraform schema.
+
+**Decision written:** `.squad/decisions/inbox/danny-dns-architecture.md`

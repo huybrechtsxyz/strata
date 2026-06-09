@@ -59,7 +59,59 @@
 - **Rationale:** Core workspace management (init, repo, profile, ref) must be stable first.
 - **Implications:** No build/deploy code. When added, they register as flat top-level commands in `cli.py`.
 
+### 2026-05-21 — Build output folder at workspace root, not inside `.strata/`
+- **By:** Vincent Huybrechts
+- **Decision:** Build output goes to `work_path/build/` — not `work_path/.strata/build/`. `DEFAULT_BUILD_PATH = "build"` set in `utils/config.py`. No `--build-path` flag or `STRATA_BUILD_PATH` env var override.
+- **Rationale:** `.strata/` is internal CLI state (registry, preferences). Build artifacts are generated outputs for external tools (terraform, ansible) — a different concern. Ecosystem convention puts generated outputs at workspace root (`build/`, `target/`, `dist/`).
+- **Implications:** `base_build_command.py` and `base_deploy_command.py` must use `DEFAULT_BUILD_PATH` instead of `SolutionController.get_state_dir(...) / "build"`. Haven's `.gitignore` needs `build/` added. `.strata/.gitignore` template should remove `build/` if present. See `.squad/agents/danny/todo-build-folder-migration.md`.
+
+### 2026-05-28 — Helm: no new `kind`, use `deployment` with `stage.type = "helm"`
+- **By:** Danny (architecture review)
+- **Decision:** No `kind: helm-deployment`. Helm is modelled as `ProvisionerType.HELM` on an existing `DeploymentStageModel`. Add `WorkspaceHelmModel` to `workspace_model.py` (fields: `name`, `release_name`, `chart`, `chart_version`, `repo_name`, `repo_url`, `namespace`, `values_files`, `values`, `kube_context`, `kubeconfig`, `wait`, `atomic`, `timeout`). `WorkspaceSpecModel` gets `helm: Optional[List[WorkspaceHelmModel]]`. Stage-level overrides deferred to follow-up.
+- **Rationale:** `DeploymentModel` already handles multi-provisioner pipelines by design. `kind: helm-deployment` would be over-engineering. Helm rides `build`, `deploy run`, `deploy destroy`, `deploy status` — no new commands needed.
+- **Implications:** `ProvisionerType.HELM` added to `common_models.py`. No new CLI commands. `strata build run` should `helm pull`; `strata deploy run` runs `helm upgrade --install`.
+
+### 2026-05-28 — Helm integration: `IInfrastructureTool`, not a new protocol
+- **By:** Basher (DevOps Integrations)
+- **Decision:** `HelmIntegration` implements `IInfrastructureTool` (`init` → `helm dependency update`; `plan` → `helm diff upgrade`; `apply` → `helm upgrade --install`). Singleton key is `config.name`. No `HelmBuilder` in Phase 1. `plan` step is advisory — absent `helm-diff` plugin emits a warning and returns success (does not block `apply`). `destroy` requires `force=True`.
+- **Rationale:** `IPackageManager` is premature — add it only when a second package manager requires the abstraction. `helm diff` advisory matches Ansible's graceful degradation pattern.
+- **Implications:** New files: `integrations/helm.py`, `deployers/helm_deployer.py`. `integrations/__init__.py` and `docs/platform/integrations.md` updated.
+
+### 2026-05-29 — `github` secret store: thin subtype (Option C)
+- **By:** Danny (architecture review) + Basher (mechanics confirmation)
+- **Decision:** Add `SecretStoreType.GITHUB = "github"`. Resolution delegates to `os.environ.get(str(item.value))` (GitHub Actions injects secrets as env vars before the job starts). No integration class. Add branch in `value_controller._resolve_secret()` parallel to `ENVIRONMENT`. Add `model_validator` rejecting `version` field when `store == "github"` (GitHub secrets are unversioned). Emit `logger.warning` if `GITHUB_ACTIONS != "true"` — non-fatal, informational only.
+- **Rationale:** Option A (alias coercion) destroys provenance. Option B (integration class) adds complexity with zero functional gain — there is no external process to call. Option C preserves `secret.store.value == "github"` throughout the object lifecycle, keeps JSON schema accurate, and allows `allowed_secret_stores` policy matching on the enum value.
+- **Implications:** `store_models.py`, `value_controller.py`, `configuration_model.py` updated. `GITHUB_ACTIONS` warning is advisory — CI quiet mode can suppress it.
+- **Status:** Implementation complete (Linus, 2026-05-29)
+
+### 2026-06-01 — HelmBuilder: per-module output (not per-namespace)
+- **By:** Linus
+- **Decision:** `HelmBuilder` writes one `values.yaml` + `meta.yaml` pair per module at `{build_path}/{namespace}/{module}/values.yaml` and `{build_path}/{namespace}/{module}/meta.yaml`.
+- **Rationale:** Helm deploys are release-scoped (`helm upgrade` per chart), not namespace-scoped. `meta.yaml` carries `releaseName` and `namespace` — per-module properties with no meaningful per-namespace aggregation. Contrast with `ComposeBuilder` (per-namespace, because all containers share one `docker compose up`).
+- **Implications:** `HelmDeployer` (deferred) iterates `{build_path}/**/{module}/meta.yaml` to discover releases. Modules with no services are skipped silently.
+
+### 2026-06-09 — DNS kind: 4 architecture decisions
+- **By:** Danny (architecture review)
+- **Decision 1 — `spec.provider`:** INCLUDE as `Optional[str]` with enum validation (`inwx`, `cloudflare`, `route53`). Single-provider workspaces omit it; multi-provider workspaces are self-documenting.
+- **Decision 2 — workspace field name:** `dns_zones` (not `dns`). `dns` is too ambiguous — `_zones` makes plurality and unit explicit. Follows firewall precedent of plural nouns but adds the qualifier for clarity.
+- **Decision 3 — merge strategy:** Zone merge by name (last-definition-wins). Record merge by `(name, type)` RRset replacement — entire RRset replaced (not per-value dedup). Matches Terraform provider semantics; prevents impossible states (two A records for `@` with different IPs).
+- **Decision 4 — tfvars output shape:** Nested `dns_zones → attachment_name → {provider, zones: {domain → {ttl, records: [{name, type, value, ttl, priority}]}}}`. Records serialized with null fields included (`exclude_none=False`) — uniform per-record schema prevents type-union complexity in Terraform variable definitions.
+- **Implications:** `DnsModel.spec.provider` validated against enum. `workspace_model.py` uses `dns_zones` field name. `DnsService.merge_dns()` merges at `(name, type)` RRset level. `terraform_builder._build_dns_vars()` uses `model_dump(exclude_none=False)` for records.
+
+### 2026-06-09 — DNS implementation deviations from firewall pattern
+- **By:** Linus
+- **Decision 1 — `DnsMetaModel.labels` optional:** Made fully optional with `None` default (unlike `FirewallMetaModel` which requires labels). DNS config files are typically simpler.
+- **Decision 2 — `PlatformDnsModel` extends `BaseModel`:** Not `PlatformBaseModel` (extra="forbid") — same pattern as `PlatformFirewallModel`. Zone structure needs no flattening.
+- **Decision 3 — Records serialized with explicit nulls:** `exclude_none=False` for record `model_dump()` — differs from firewall `exclude_none=True`. Deliberate, matches Danny's Decision 4 above.
+- **Decision 4 — `dns_zones` field name consistent:** Used across `WorkspaceSpecModel`, `PlatformSpecModel`, and tfvars output key — aligns with Danny's Decision 2.
+- **Decision 5 — `platform_builder.py` not modified:** DNS wiring (loading `dns_zones` from workspace, building `PlatformDnsModel`) deferred to Basher per task scope.
+- **Implications:** `strata validate dns-file.yaml`, `strata schema show dns`, and `dns.auto.tfvars.json` generation all work. Platform builder DNS population is a Basher follow-up.
+
 ## Governance
+
+- All meaningful architectural changes require a decision entry here
+- Danny triages and records decisions — other agents propose via decisions/inbox/
+- Keep decisions focused on direction, not implementation detail
 
 - All meaningful architectural changes require a decision entry here
 - Danny triages and records decisions — other agents propose via decisions/inbox/

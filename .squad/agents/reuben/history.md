@@ -6,7 +6,13 @@ Docs / Technical Writer for strata. Sphinx docs, Markdown guides, CLI reference.
 User: Vincent Huybrechts. Stack: Sphinx, reStructuredText, Markdown.
 Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`, `docs/SQUAD.md`.
 
-## Learnings
+### 2026-06-09 — DNS kind documentation
+
+- **`docs/config/dns.md`** — Created new reference doc. Structure mirrors `firewall.md`: What it is / When to use; top-level schema block; three field tables (top-level, zone, record); record type reference table (A, AAAA, CNAME, MX, TXT, SRV, NS, PTR, CAA) with trailing-dot callout and priority notes; complete real-world example (huybrechts.xyz zone with A, CNAME, dual MX, SPF TXT, DMARC TXT, CAA); workspace linking pattern (`spec.dns_zones`); build output description (`dns.auto.tfvars.json`); validation rules table; best practices.
+- **`docs/config/readme.md`** — Added `dns.md` to the Resources kind listing, positioned before `firewall.md` (alphabetical order: d before f).
+- **`docs/platform/commands.md`** — Two changes: (1) Added `dns` to the **Valid kinds** list in `schema get KIND` (alphabetical: between `deployment` and `environment`); (2) Added `strata new dns my-zones --path config/dns/` to the `strata new` usage examples.
+- **`docs/platform/workflow.md`** — Added a callout block in Phase 6.2 (Full build) explaining workspace-level resource kinds: firewall rules (`spec.firewalls` → `firewalls.auto.tfvars.json`) and DNS zones (`spec.dns_zones` → `dns.auto.tfvars.json`) with cross-links to the config docs. Firewall was not previously mentioned in workflow.md — the callout introduces both kinds together.
+- **Key structural decision:** firewall was absent from workflow.md. Rather than adding only DNS and leaving firewall undiscovered, the callout introduces the pattern for both kinds simultaneously — more useful to a reader following the workflow guide.
 
 ### 2026-05-19 — README pitch rewrite + Getting Started guide
 
