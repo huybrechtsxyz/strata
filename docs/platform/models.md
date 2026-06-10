@@ -21,10 +21,10 @@ spec:
 
 ## Constrained Types
 
-| Type              | Pattern              | Used for                                         |
-| ----------------- | -------------------- | ------------------------------------------------ |
-| `PlatformName`    | `^[a-z][a-z0-9_-]*$` | All `meta.name` fields                           |
-| `PlatformKind`    | enum                 | `kind` field — one of the values below           |
+| Type              | Pattern              | Used for                                       |
+| ----------------- | -------------------- | ---------------------------------------------- |
+| `PlatformName`    | `^[a-z][a-z0-9_-]*$` | All `meta.name` fields                         |
+| `PlatformKind`    | enum                 | `kind` field — one of the values below         |
 | `PlatformVersion` | enum                 | `apiVersion` — only `strata.huybrechts.xyz/v1` |
 
 Never use plain `str` for `name` fields — always use `PlatformName` from `common_models`.
@@ -44,7 +44,7 @@ Never use plain `str` for `name` fields — always use `PlatformName` from `comm
 | `namespace`          | `NamespaceModel`        | Application deployment unit (groups modules)                |
 | `platform-artifact`  | `PlatformArtifactModel` | Build output written to `.strata/build/`                    |
 | `workspace-template` | `PlatformTemplateModel` | Scaffold for `strata sln init --from-template`              |
-| `solution`           | `SolutionModel`         | Project registry (`project.json`)                           |
+| `solution`           | `SolutionModel`         | Solution registry (`solution.json`)                         |
 | `repository`         | `RepositoryModel`       | Registered repository entry                                 |
 | `integration`        | `IntegrationModel`      | Integration backend credential config                       |
 

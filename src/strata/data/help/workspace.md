@@ -4,7 +4,7 @@ What the `.strata/` directory is and why it matters.
 
 ## Directory Layout
 
-After `xyz init`, your workspace root contains:
+After `strata sln init`, your workspace root contains:
 
 ```
 .strata/
@@ -31,11 +31,11 @@ After `xyz init`, your workspace root contains:
 ## Multi-Repo Layout
 
 The workspace root is NOT a code repository. It is the directory from which you
-run `xyz` commands. Your code repos live inside it (or alongside it, registered
+run `strata` commands. Your code repos live inside it (or alongside it, registered
 with `@repo_name/` paths). The workspace root is identified by the presence of
 `.strata/solution.json`.
 
-## What `xyz init` Does and Does Not Do
+## What `strata sln init` Does and Does Not Do
 
 DOES:
 - Creates `.strata/` with scaffold files
@@ -44,7 +44,7 @@ DOES:
 
 DOES NOT:
 - Touch any of your existing files or directories
-- Clone repositories (use `xyz repo add` then `xyz repo sync`)
-- Create any profiles (use `xyz profile add`)
+- Clone repositories (use `strata repo add` then `strata repo sync`)
+- Create any profiles (use `strata profile add`)
 
-See also: `xyz help --topic quickstart`, `xyz help --topic cross-repo`
+See also: `strata help --topic quickstart`, `strata help --topic cross-repo`

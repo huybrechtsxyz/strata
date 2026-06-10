@@ -33,7 +33,7 @@ These options are accepted by every command and subcommand:
 
 | Group        | Subcommands                                                                  | Description                                             |
 | ------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `sln`        | `init` `clean` `status` `export`                                             | Solution workspace lifecycle                            |
+| `sln`        | `init` `update` `clean` `status` `export`                                    | Solution workspace lifecycle                            |
 | `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config |
 | `log` †      | `list`                                                                       | View execution logs (read-only)                         |
 | `profile` †  | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                             |
@@ -68,16 +68,16 @@ Initialize a new strata solution workspace. Creates the `.strata/` state directo
 strata sln init --name NAME [--template NAME-OR-PATH] [standard options]
 ```
 
-| Option                    | Required | Description                                                                                                                    |
-| ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `--name NAME`             | ✅        | Name of the solution workspace                                                                                                 |
-| `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
+| Option                    | Required | Description                                                                                                                               |
+| ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `--name NAME`             | ✅        | Name of the solution workspace                                                                                                            |
+| `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`, `compose`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
 
 **Files created:**
 
 | Path                              | Description                                                                |
 | --------------------------------- | -------------------------------------------------------------------------- |
-| `.strata/project.json`            | Solution registry                                                          |
+| `.strata/solution.json`           | Solution registry                                                          |
 | `.strata/cli.yaml`                | Workspace CLI defaults                                                     |
 | `.strata/logging.yaml`            | Logging configuration                                                      |
 | `.devcontainer/devcontainer.json` | Dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm) |
@@ -366,8 +366,15 @@ Manage environment profiles within the solution.
 
 ### `profile add NAME`
 
+Create a new environment profile.
+
+| Option       | Description                                         |
+| ------------ | --------------------------------------------------- |
+| `--activate` | Activate this profile immediately after creating it |
+
 ```bash
 strata profile add staging
+strata profile add prd --activate
 ```
 
 ### `profile remove NAME`
@@ -406,6 +413,13 @@ strata profile show staging
 Manage file references (env, config, data, secret) within profiles.
 
 Each file type has its own subgroup: `ref env`, `ref config`, `ref data`, `ref secret`. All four expose the same four subcommands.
+
+| Type     | What it registers                                                                                                                                        |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `env`    | Environment variable files (`.env` format) — merged into the build environment                                                                           |
+| `config` | Platform YAML config files — merged by kind into the build artifact                                                                                      |
+| `data`   | Arbitrary data files (JSON, TOML, text) — copied verbatim into the build output without merging. Use for non-YAML assets your Terraform or scripts need. |
+| `secret` | Secret files (YAML or env format) — loaded at deploy time, values masked in logs                                                                         |
 
 All `ref` subcommands accept `--profile NAME` (optional; defaults to the active profile).
 
@@ -459,6 +473,8 @@ strata repo add NAME URL [--branch BRANCH] [--path PATH] [--clone]
 
 - Remote git URL (any `https://`, `git@`, etc.) → registered as type `gitops`. Use `--branch` and `--clone` as needed.
 - Local path starting with a drive letter (`C:/…`, `C:\…`) or a network path (`//server/…`, `\\server\…`) → registered as type `local`. The path must exist and be a directory at registration time. `--branch` and `--clone` are ignored. No sync is needed — the folder is already on disk.
+
+> **`--type local`:** You can also pass `--type local` explicitly to force local registration when the auto-detection heuristic doesn't match (e.g. a relative path or an unusual UNC format). This is the same as what the workspace template's `GETTING_STARTED.md` uses for repos that already live on disk.
 
 ```bash
 # Remote git repository
