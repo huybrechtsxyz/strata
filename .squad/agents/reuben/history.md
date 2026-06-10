@@ -6,104 +6,18 @@ Docs / Technical Writer for strata. Sphinx docs, Markdown guides, CLI reference.
 User: Vincent Huybrechts. Stack: Sphinx, reStructuredText, Markdown.
 Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`, `docs/SQUAD.md`.
 
-### 2026-06-09 — DNS record value union (value/var/secret)
-
-- **`docs/config/dns.md`** — Updated for `DnsRecordModel` record value union. Six targeted edits:
-  1. **Schema block** — Added `references:` (variables/secrets) to the spec skeleton; replaced single `value:` comment with three `# one of:` comments for `value:`, `var:`, `secret:`.
-  2. **Top-level Fields table** — Added `spec.references` row (object, No); reformatted column widths.
-  3. **spec.references Fields** — New dedicated section (between Top-level Fields and Zone Fields) with a two-row table (`variables`, `secrets`) and a "required when any record uses var/secret" lead-in.
-  4. **Record Fields table** — Replaced single `value` row (Required: Yes) with three rows (`value`, `var`, `secret`, Required: "one of") plus blockquote note: "Exactly one of `value`, `var`, or `secret` must be set per record."
-  5. **Example** — Added `references:` block to spec; replaced literal SPF TXT record with `var: extra_spf_include`; added new `secret: google_verify_token` TXT record; comments explain build-time vs deploy-time.
-  6. **Variable and secret records** — New section (between Example and Linking to a Workspace): comparison table (value/var/secret × use-when/behaviour); `### var:` subsection explaining build-time resolution via `environment.yaml`; `### secret:` subsection explaining `dns_secret_records` Terraform variable, no disk storage, `TF_VAR_<key>` injection, and where to declare keys.
-  7. **Validation Rules table** — Added two new rows: "Exactly one of value/var/secret per record" and "var/secret keys must be declared in spec.references".
-- **Key structural decision:** `spec.references Fields` section placed immediately after Top-level Fields (not after Zone or Record Fields) because `references` is a top-level spec block — readers who see it in the top-level table can immediately drill into its schema.
-- **Example strategy:** Kept the existing comprehensive huybrechts.xyz zone (A, CNAME, dual MX, DMARC, CAA) and changed two TXT records to `var:` / `secret:`. Preserving the fuller example is more useful than replacing with a minimal one.
-
-### 2026-06-09 — DNS kind documentation
-
-- **`docs/config/dns.md`** — Created new reference doc. Structure mirrors `firewall.md`: What it is / When to use; top-level schema block; three field tables (top-level, zone, record); record type reference table (A, AAAA, CNAME, MX, TXT, SRV, NS, PTR, CAA) with trailing-dot callout and priority notes; complete real-world example (huybrechts.xyz zone with A, CNAME, dual MX, SPF TXT, DMARC TXT, CAA); workspace linking pattern (`spec.dns_zones`); build output description (`dns.auto.tfvars.json`); validation rules table; best practices.
-- **`docs/config/readme.md`** — Added `dns.md` to the Resources kind listing, positioned before `firewall.md` (alphabetical order: d before f).
-- **`docs/platform/commands.md`** — Two changes: (1) Added `dns` to the **Valid kinds** list in `schema get KIND` (alphabetical: between `deployment` and `environment`); (2) Added `strata new dns my-zones --path config/dns/` to the `strata new` usage examples.
-- **`docs/platform/workflow.md`** — Added a callout block in Phase 6.2 (Full build) explaining workspace-level resource kinds: firewall rules (`spec.firewalls` → `firewalls.auto.tfvars.json`) and DNS zones (`spec.dns_zones` → `dns.auto.tfvars.json`) with cross-links to the config docs. Firewall was not previously mentioned in workflow.md — the callout introduces both kinds together.
-- **Key structural decision:** firewall was absent from workflow.md. Rather than adding only DNS and leaving firewall undiscovered, the callout introduces the pattern for both kinds simultaneously — more useful to a reader following the workflow guide.
-
-### 2026-05-19 — README pitch rewrite + Getting Started guide
-
-- **`README.md`** — Replaced the opening paragraph (generic feature description) and the Quick Install + Quick Start sections with: (1) a one-paragraph pain statement pitch answering "why not just Terraform?"; (2) a minimal 4-command Quick Start block; (3) a link to the new Getting Started guide. Automation and License sections left untouched.
-- **`docs/platform/getting-started.md`** — Created new file. Target reader: DevOps engineer, first contact with the tool. Structure: Prerequisites → Install (pipx + dev) → Init → File structure → Repo registration → Profiles → Validate → Deploy → Troubleshooting (audit, --verbose, JSON output) → Persist preferences → Next steps. Kept to ~150 lines (well under 200 limit).
-- **Audience notes:** Operators scan — used tables, short paragraphs, and code blocks throughout. Avoided marketing language in the guide itself; saved the pitch for README only.
-- **Decisions:** Chose to fold the old Quick Install and Quick Start into a single simplified Quick Start rather than maintaining two separate sections. Wrote to decisions/inbox for Danny's review.
-
-### 2026-05-18 — Devcontainer scaffolding added to `xyz init`
-
-- **`docs/platform/commands.md`** — Rewrote the `## init` section description and added a "Files created" table listing all five scaffolded paths (`.platform/project.json`, `.platform/cli.yaml`, `.platform/logging.yaml`, `.devcontainer/devcontainer.json`, `.devcontainer/post-create.sh`). Added a "Dev container" callout about "Reopen in Container".
-- **`docs/platform/workflow.md`** — Extended the "Creates:" bullet list in Phase 1 to include both `.devcontainer/` files and a note about VS Code / Codespaces.
-- **`docs/README.md`** — Added a one-line inline comment in the Quick Start `xyz init` step pointing users to "Reopen in Container".
-- Only touched the three files directly affected; no new files created.
-
-### 2026-05-19 — sln group docs and instructions update
-
-- **`docs/platform/getting-started.md`** — Updated all `xyz init` references to `xyz sln init`. Added a `xyz sln export` section documenting the workflow for saving a workspace as a scaffold template.
-- **`.github/copilot-instructions.md`** — Added `sln` to the registered CLI command groups list. Canonical list now includes: `sln init`, `sln clean`, `sln status`, `sln export` under the `sln` group. Flat `init`, `clean`, `status` are no longer registered directly.
-- **Key convention:** `xyz sln init` is the canonical entry point for workspace creation in all documentation. Any doc referencing the old flat `xyz init` must be updated.
-
-### 2026-05-29 — Document `github` as a valid secret store
-
-- **`docs/config/configuration.md`** — Added a new "## Secret Stores" section (before Notes) with: a full store-type reference table (`constant`, `environment`, `github`, `azure-keyvault`, `bitwarden`, `vault`, `infisical`); a dedicated `### github — GitHub Actions secrets` subsection with YAML example, uppercase normalization note, local development workaround, `version` not-supported callout, and `allowed_secret_stores` production policy snippet.
-- **`docs/platform/integrations.md`** — Updated the `secrets` row in the Capability Protocols table to note that `github` and `environment` are built-in resolvers, not integrations. Added a blockquote callout below the table pointing to the configuration.md reference.
-- **Key fact to preserve:** `store: github` is NOT an integration — it is a built-in resolver in `ValueController` that reads `os.environ.get(value.upper())`. GitHub Actions injects secrets as env vars before each step. `GITHUB_ACTIONS != "true"` triggers a warning; missing env var returns an error.
-- `version` field raises a validation error for `store: github` (enforced in `SecretStoreModel` via `model_validator`).
-
-### 2026-06-01 — HelmBuilder documentation
-
-- **`docs/platform/builders.md`** — Added `HelmBuilder` to the overview table. Appended a new `## HelmBuilder` section. Coverage: purpose sentence + security callout; output path pattern (two files per module: `values.yaml` + `meta.yaml`); service key naming table (same prefix rule as ComposeBuilder); environment variable source types table (value/var/secret/feature → literal or `${KEY}`); PVC persistence block (storage_class mounts → `persistence.{name}` with storageClass/accessMode/size); `meta.yaml` contents table with fallback defaults; full authentik YAML module example with two generated outputs; deploy-time `${KEY}` injection note (`--set` or secrets values file); `configuration:` escape hatch with example; three-phase pipeline summary.
-- **Style decisions:** Mirrored `## ComposeBuilder` section structure exactly — security callout first, then reference tables, then example with generated output, then pipeline. Placed `meta.yaml` fields in a table (source + fallback) for quick scanning.
-- **Key fact to preserve:** Service key naming rule is identical to ComposeBuilder: `{module}-{service}` unless module name equals service name, in which case just `{service}`. Only mounts with `storage_class` produce a `persistence` block — bind mounts and volume refs are not emitted. `releaseName` falls back to module name; `namespace` falls back to the strata namespace name.
-
-### 2026-06-01 — ComposeBuilder documentation
-
-- **`docs/platform/builders.md`** — Appended a new `## ComposeBuilder` section. Updated the overview table to include the new builder. Coverage: purpose statement; output path pattern; service naming rules table; environment variable source types (value/var/secret/feature) and what gets emitted; volume conventions (named vs bind); healthcheck type mapping; a full YAML module example with two services; the generated `docker-compose.yml` for that example; `.env` injection note; `configuration:` escape hatch with example; three-phase pipeline summary.
-- **Style decisions:** Kept structure parallel to existing `TerraformBuilder` section — overview → security callout → tables → examples → three-phase pipeline. Used tables for naming rules, env sources, volumes, and healthchecks (scannable for ops engineers). Placed generated output directly after the input YAML so the transformation is immediately visible.
-- **Key fact to preserve:** `after_build` always returns `True` — no compose modules in a namespace is intentionally not an error. Secret/var/feature references are always emitted as `${KEY}` tokens, never resolved. Volume naming pattern: `{namespace}_{module}_{volume_ref}`.
-
-### 2026-06-01 — Helm deployer/integration documentation audit
-
-**Audit scope:** `docs/platform/deployers.md`, `docs/platform/integrations.md`, `docs/platform/commands.md`, `docs/config/deployment.md`.
-
-**Key facts about the Helm implementation (for use when writing the docs):**
-- `HelmDeployer` lives in `deployers/helm_deployer.py`. All 8 steps supported: `setup` (helm repo update), `check` (helm lint per module), `plan` (helm upgrade --dry-run --install), `apply` (helm upgrade --install -n {ns} -f values.yaml {release} {chart}), `destroy` (helm uninstall, requires force=True), `plan_destroy` (helm get manifest), `output` (helm get values), `show_plan` (no-op).
-- `validate_workspace` iterates all namespace/module pairs in the build path; only processes modules where `module.spec.type == ServiceDeployerType.HELM`. Reads `values.yaml` + `meta.yaml` per module from build output.
-- `validate_environment` calls `HelmIntegration.ensure_available()`.
-- Chart source resolution: `meta.yaml` provides `releaseName` and `namespace`. Chart ref comes from `module.spec.source`: chart_repository + chart_name → registry chart; repository + source_path → local chart path.
-- `resolved_values` injected at plan/apply/destroy via `--set` flags (or secrets values file).
-- `HelmIntegration` uses `CAPABILITIES = [IInfrastructureTool]` — NOT `IContainerTool`. The integrations.md capability table currently lists Helm under `IContainerTool`, which is wrong.
-- Stage type token is `"helm"` (`ProvisionerType.HELM`). Written in deployment YAML as `type: helm` in a stage.
-- `ServiceDeployerType.HELM` is the module-level deployer type (used by HelmBuilder and HelmDeployer).
-
-**Gaps found:**
-- `deployers.md`: No `HelmDeployer` row in overview table. No `## HelmDeployer` section. Zero mentions of helm. **Biggest gap.**
-- `integrations.md`: `HelmIntegration` missing from overview table entirely. No per-integration `### Helm` reference section. Wrong capability classification in the Protocols table (Helm listed under `IContainerTool`, should be `IInfrastructureTool`).
-- `deployment.md`: No mention of `type: helm` as a valid stage type. Workflow description references only "Terraform/manifests". The deploy command note says "requires Terraform CLI" with no Helm caveat.
-- `commands.md`: Minor — deploy section note references only Terraform; no `type: helm` example. Incidental Helm mentions exist (devcontainer description, tools section) but nothing about Helm deployment.
-
-**Priority order for updates:** (1) `deployers.md` — missing entire section; (2) `integrations.md` — missing entry + wrong capability; (3) `deployment.md` — no stage type documented; (4) `commands.md` — minor note update.
-
-### 2026-06-02 — ComposeDeployer documentation
-
-- **`docs/platform/deployers.md`** — Added `ComposeDeployer` row to overview table (between AnsibleDeployer and HelmDeployer, alphabetical order). Inserted new `## ComposeDeployer` section immediately before `## HelmDeployer`. Section structure mirrors HelmDeployer: one-paragraph description + Swarm mode callout; step → Docker command table (all 8 steps); `### validate_workspace` (build path discovery, missing files silently skipped, empty-found warning); `### validate_environment` (DockerIntegration.ensure_available); `### Deployment YAML example`; "See also: DockerIntegration" cross-reference.
-- **`docs/config/deployment.md`** — Added `compose` row to the `## Provisioner Stage Types` table (between `ansible` and `helm`, alphabetical). Notes Docker Swarm requirement and links to ComposeDeployer section.
-- **`docs/platform/integrations.md`** — Added "Used by `ComposeDeployer` for Docker Stack deployments." sentence at the end of the Docker section (before the `---` separator), matching the Helm section's "Which deployer uses it" pattern without adding a new heading (targeted minimal edit as instructed).
-- **Key structural decision:** Placed ComposeDeployer before HelmDeployer in deployers.md to maintain alphabetical order (Ansible → Compose → Helm → Script → Terraform). The HelmDeployer section was added at the end yesterday — this insertion restores alphabetical ordering.
-- **Swarm mode callout:** Added as a blockquote directly after the opening paragraph in `## ComposeDeployer` — DevOps engineers running plain Docker Engine without swarm init will get the error immediately before they waste time debugging step failures.
-
-### 2026-06-02 — Helm deployer/integration documentation (implementation)
-
-- **`docs/platform/deployers.md`** — Added `HelmDeployer` row to overview table (after `AnsibleDeployer`). Appended new `## HelmDeployer` section with: one-paragraph description; step → Helm command table (all 8 steps); `### validate_workspace`, `### validate_environment`, `### Chart source resolution`, and `### Deployment YAML example` subsections matching TerraformDeployer/AnsibleDeployer section structure.
-- **`docs/platform/integrations.md`** — Three changes: (1) Fixed capability table — moved Helm from `IContainerTool` to `IInfrastructureTool` row; (2) Added `HelmIntegration` row to the overview table after `DockerIntegration`; (3) Added `### Helm` per-integration reference section (after Docker, before Bitwarden) with env vars, auth methods, which deployer uses it, and troubleshooting tip.
-- **`docs/config/deployment.md`** — Two changes: (1) Updated Deployment Workflow step 5 from "Create Terraform/manifests" to "Create Terraform/manifests/Helm values"; (2) Added new `## Provisioner Stage Types` section (between Deployment Workflow and Source Types) with a 3-column table listing all 5 stage types (`terraform`, `opentofu`, `ansible`, `helm`, `script`) and a cross-reference to deployers.md.
-- **`docs/platform/commands.md`** — Updated the `## deploy` section blockquote note from Terraform-specific language to general: now references all provisioner CLIs and directs users to `strata tools status`.
-- **Key structural decision:** `deployment.md` had no stage types section at all — added `## Provisioner Stage Types` as a new section rather than shoehorning content into the existing schema block. This is the canonical location in deployment.md for stage type documentation.
-- **Bug fixed:** `HelmIntegration` was classified under `IContainerTool` in the capabilities table — corrected to `IInfrastructureTool` (matches `CAPABILITIES = [IInfrastructureTool]` in `src/strata/integrations/helm.py`).
+**Past documentation (condensed):**
+- 2026-05-18: Devcontainer scaffold docs — `commands.md` init section rewrite + "Files created" table; `workflow.md` Phase 1 extended with devcontainer files
+- 2026-05-19: sln group docs — `getting-started.md` updated `xyz init` → `xyz sln init`; `copilot-instructions.md` updated registered CLI groups list
+- 2026-05-19: README pitch rewrite + Getting Started guide — pain-statement pitch, 4-command Quick Start, new `docs/platform/getting-started.md`
+- 2026-05-29: github secret store doc — new `## Secret Stores` section in `configuration.md`; `integrations.md` note that `github` + `environment` are built-in resolvers; `store: github` reads env vars uppercased, not a real integration
+- 2026-06-01: ComposeBuilder docs — `builders.md` new `## ComposeBuilder` section: output path, service naming rules, env sources, volumes, healthchecks, example, pipeline summary
+- 2026-06-01: HelmBuilder docs — `builders.md` new `## HelmBuilder` section mirroring ComposeBuilder structure; `meta.yaml` contents table; PVC persistence block explanation
+- 2026-06-01: Helm deployer/integration audit — gap analysis: missing HelmDeployer section in `deployers.md`, missing HelmIntegration in `integrations.md`, wrong capability (IContainerTool → IInfrastructureTool), no `type: helm` in `deployment.md`
+- 2026-06-02: Helm docs implementation — `deployers.md` HelmDeployer section + overview row; `integrations.md` HelmIntegration row + section + corrected capability; `deployment.md` Stage Types table + workflow step 5 update; `commands.md` deploy note generalized
+- 2026-06-02: ComposeDeployer docs — `deployers.md` ComposeDeployer section (alphabetical before Helm); `deployment.md` compose row in Stage Types; `integrations.md` "Used by ComposeDeployer" sentence
+- 2026-06-09: DNS kind documentation — new `docs/config/dns.md`; `config/readme.md` updated; `commands.md` valid kinds + new example; `workflow.md` Phase 6.2 callout with firewall + dns
+- 2026-06-09: DNS record value/var/secret docs — `dns.md` 6 targeted edits: references block, union record fields table, var:/secret: subsections, example updated, validation rules table
 
 ### 2026-06-10 — Network kind documentation
 
@@ -113,6 +27,14 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 - **`docs/platform/workflow.md`** — Extended the Phase 6.2 resource kinds callout to include network topologies (`spec.networks` → `networks.auto.tfvars.json`) with a note about CIDR overlap detection. Added cross-link to `network.md`.
 - **Key structural decision:** CIDR overlap detection got its own narrative section (not just validation table rows) because the three tiers of validation (intra-network subnet overlap, subnet containment within address space, cross-network peered vs non-peered) need explanation of *why* — operators need to understand the difference between a warning and an error for overlapping address spaces.
 
+### 2026-06-10 — Document `strata guide` in commands.md
+
+- **`docs/platform/commands.md`** — Two changes: (1) Added `guide` row to the Command Groups table, positioned after `validate` (no `†` marker — INIT_REQUIRED = False); (2) Inserted a new `## guide` section between `## validate` and `## schema`.
+- **Section structure:** Syntax block → options table (all five flags including `--file / -f`) → exit code callout → `### Workspace mode` (7-phase checklist table + console output example from spec section 4 + next-step hints table) → `### File mode (--file)` (5-phase structural table + file mode console example + `@repo/path` note) → `### Project customisation` (`.strata/guide.yaml` override pattern) → usage examples.
+- **Console output examples:** Used the spec section 4 examples verbatim, including the partial-clone ⚠️ and empty-refs ⚠️ scenario for workspace mode, and the configuration kind example for file mode. Real examples with concrete values (prd, xyz-svc-traefik) are more useful than abstract placeholders.
+- **Phase table design:** Added separate ✅ / ⚠️ / ⬜ columns to the workspace checklist table rather than inline prose — lets operators scan quickly which states each phase supports. Note: phases 2, 4, 5 never produce ⚠️ (binary done/not-done), so those cells show —.
+- **Key convention:** `guide` is a top-level command (not under `sln`) because it is an onboarding entry point before users know any group names. INIT_REQUIRED = False mirrors StatusCommand and HelpCommand — always mention this in docs via "Works outside an initialized workspace" callout.
+
 ## Learnings
 
 - **Union fields in record tables:** When a model field becomes a union (one-of), the Required column should change from "Yes"/"No" to "one of" to accurately signal mutual exclusivity. This pattern works for any doc where Pydantic discriminates exactly one field from a set.
@@ -120,3 +42,4 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 - **secret: records and Terraform variable naming:** The `dns_secret_records` variable is a Terraform-side concern; the doc must tell users they need to wire it in their HCL — strata only omits the value from tfvars and names the env var `TF_VAR_<key>`. Always document the "other side" of the boundary.
 - **Preserving comprehensive examples:** When updating an existing worked example, keep the full richness and just modify/add the records needed to show new patterns. A minimal replacement example loses the coverage that operators use as a copy-paste starting point.
 - **Network kind documentation approach:** The network kind has more validation depth than DNS or firewall (CIDR overlap detection, containment, peering-aware errors). Dedicated sections for each validation tier (subnet-to-subnet, containment, cross-network) are clearer than cramming everything into the validation rules table. The validation rules table gets all 13 rules as a quick-reference, while the "CIDR Overlap Detection" narrative section explains the *why* for operators who need to understand what strata catches. Two-example strategy (haven + enterprise hub-spoke) covers both the simple and complex use cases without requiring a third example.
+
