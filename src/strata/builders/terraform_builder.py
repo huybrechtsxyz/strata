@@ -117,6 +117,7 @@ class TerraformBuilder(BaseBuilder):
                     "firewalls.auto.tfvars.json",
                     "dns.auto.tfvars.json",
                     "dns_secret_records.auto.tfvars.json",
+                    "networks.auto.tfvars.json",
                     "tf_required_variables.json",
                     "tf_required_features.json",
                     "tf_required_secrets.json",
@@ -254,6 +255,7 @@ class TerraformBuilder(BaseBuilder):
             "firewalls.auto.tfvars.json",
             "dns.auto.tfvars.json",
             "dns_secret_records.auto.tfvars.json",
+            "networks.auto.tfvars.json",
             "tf_required_variables.json",
             "tf_required_features.json",
             "tf_required_secrets.json",
@@ -290,6 +292,7 @@ class TerraformBuilder(BaseBuilder):
             "namespaces": self._build_namespace_vars(platform, messages),
             "firewalls": self._build_firewall_vars(platform, messages),
             "dns": self._build_dns_vars(platform, messages),
+            "networks": self._build_network_vars(platform, messages),
             "required_variables": self._document_required_variables(),
             "required_features": self._document_required_features(),
             "required_secrets": self._document_required_secrets(),
@@ -604,6 +607,83 @@ class TerraformBuilder(BaseBuilder):
 
         return {"dns_zones": dns_dict, "dns_secret_records": secret_records_dict}
 
+    def _build_network_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
+        """Build network topology tfvars payload."""
+        networks_dict: Dict[str, Any] = {}
+
+        if platform.spec.networks:
+            for net_attachment in platform.spec.networks:
+                networks_inner: Dict[str, Any] = {}
+                for network in net_attachment.networks:
+                    # Resolve address_space CIDRs
+                    address_space: List[Optional[str]] = []
+                    for addr in network.address_space:
+                        if addr.value is not None:
+                            address_space.append(addr.value)
+                        elif addr.var is not None:
+                            var_entry = self.variable_refs.get(addr.var, {})
+                            resolved = var_entry.get("value")
+                            if resolved is None:
+                                messages.append(
+                                    f"Network '{network.name}' address_space uses "
+                                    f"var '{addr.var}' which has no resolved value — "
+                                    "emitting null."
+                                )
+                            address_space.append(resolved)
+                        else:
+                            # addr.secret
+                            address_space.append(None)
+
+                    # Resolve subnet CIDRs
+                    subnets_dict: Dict[str, Any] = {}
+                    for subnet in network.subnets:
+                        if subnet.cidr.value is not None:
+                            resolved_cidr: Optional[str] = subnet.cidr.value
+                        elif subnet.cidr.var is not None:
+                            var_entry = self.variable_refs.get(subnet.cidr.var, {})
+                            resolved_cidr = var_entry.get("value")
+                            if resolved_cidr is None:
+                                messages.append(
+                                    f"Subnet '{subnet.name}' in network '{network.name}' uses "
+                                    f"var '{subnet.cidr.var}' which has no resolved value — "
+                                    "emitting null."
+                                )
+                        else:
+                            # subnet.cidr.secret
+                            resolved_cidr = None
+                        subnets_dict[subnet.name] = {
+                            "cidr": resolved_cidr,
+                            "description": subnet.description,
+                        }
+
+                    # Peerings
+                    peerings_dict: Dict[str, Any] = {}
+                    if network.peerings:
+                        for peering in network.peerings:
+                            peerings_dict[peering.name] = {
+                                "target": peering.target,
+                            }
+
+                    networks_inner[network.name] = {
+                        "address_space": address_space,
+                        "subnets": subnets_dict,
+                        "peerings": peerings_dict,
+                    }
+
+                networks_dict[net_attachment.name] = {
+                    "description": (
+                        net_attachment.annotations.get("description", "") if net_attachment.annotations else ""
+                    ),
+                    "labels": net_attachment.labels or {},
+                    "tags": net_attachment.tags or [],
+                    "networks": networks_inner,
+                }
+
+        if self.verbose:
+            messages.append(f"Built network vars: {len(networks_dict)} network configurations")
+
+        return {"networks": networks_dict}
+
     def _document_required_variables(self) -> Dict[str, Any]:
         return {"variables": list(self.variable_refs.values())}
 
@@ -676,6 +756,10 @@ class TerraformBuilder(BaseBuilder):
                 self._write_json(
                     terraform_path / "dns_secret_records.auto.tfvars.json",
                     {"dns_secret_records": terraform_vars["dns"]["dns_secret_records"]},
+                )
+                self._write_json(
+                    terraform_path / "networks.auto.tfvars.json",
+                    terraform_vars["networks"],
                 )
 
                 for resource_type, payload in terraform_vars["resources_by_category"].items():

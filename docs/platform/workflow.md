@@ -344,8 +344,11 @@ Writes:
 > **Workspace-level resource kinds:** The workspace YAML can declare additional resource kinds
 > that strata validates and builds into separate artifact files. Firewall rules are listed under
 > `spec.firewalls` and produce `firewalls.auto.tfvars.json`. DNS zones follow the same pattern
-> — list them under `spec.dns_zones` and the build produces `dns.auto.tfvars.json`.
-> See [firewall.md](../config/firewall.md) and [dns.md](../config/dns.md) for schema details.
+> — list them under `spec.dns_zones` and the build produces `dns.auto.tfvars.json`. Network
+> topologies are listed under `spec.networks` and produce `networks.auto.tfvars.json` — including
+> CIDR overlap detection across subnets and peered networks.
+> See [firewall.md](../config/firewall.md), [dns.md](../config/dns.md), and
+> [network.md](../config/network.md) for schema details.
 
 ### 6.3 Clean build artifacts
 

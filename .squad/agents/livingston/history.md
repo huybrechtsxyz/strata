@@ -212,3 +212,30 @@ Key paths: `tests/strata/`, `conftest.py`, `noxfile.py`.
 - `plan_destroy()` treats `returncode=1` (docker stack ls failure) as non-fatal — still returns `(True, [...])`.
 - `destroy()` force guard checked BEFORE iterating files — `force=False` with files populated still returns immediately with `(False, ["--force is required..."])`.
 - ruff check and format: no changes needed after file creation.
+
+### 2026-06-10 — Network kind tests (anticipatory)
+
+**What was added:**
+- `tests/data/network/` — 6 YAML fixtures: `network-haven.yaml` (simple flat), `network-enterprise.yaml` (hub+2 spokes, peerings, var refs), `network-invalid.yaml` (wrong kind + empty networks), `network-overlapping-subnets.yaml` (V9 overlap), `network-peered-overlap.yaml` (V11 mutual peering overlap), `network-var-refs.yaml` (value/var/secret mix with references).
+- `tests/strata/models/test_models_network.py` — 22 tests in `TestNetworkModel`: valid haven/enterprise/var-refs loads, invalid kind, empty networks, CidrSourceModel union (value/var/secret/none/two/bad-format), unique network names (V3), unique subnet names (V4), subnet overlap (V9), subnet-outside-address-space (V10), peering target exists (V5), no self-peering (V6), unique peering names (V7), undeclared var/secret refs (V8), peered overlap (V11), kind frozen.
+- `tests/strata/services/test_services_network.py` — 5 tests in `TestNetworkService`: `_get_model_class`, validate standard fixture, get_kind after validate, merge networks by name (last-wins), merge subnets by (network, subnet) tuple (last-wins).
+
+**Patterns followed:**
+- Same file layout as DNS tests; imports from `strata.models.network_model` and `strata.services.network_service`.
+- `_net_data()` and `_simple_network()` helpers for inline model construction — keeps tests DRY.
+- `_make_network_model()` helper in service tests mirrors `_make_dns_model()` pattern.
+- Tests are anticipatory — `NetworkModel`, `NetworkService`, and `PlatformKind.NETWORK` are being implemented concurrently by Linus.
+- Fixture `network-invalid.yaml` uses `kind: namespace` (wrong kind) + `networks: []` (empty), matching `dns-invalid.yaml` pattern.
+- `network-overlapping-subnets.yaml`: `10.0.0.0/24` overlaps `10.0.0.128/25` within same network.
+- `network-peered-overlap.yaml`: two networks with mutual peerings sharing `10.0.0.0/16` — triggers V11 hard error.
+- `merge_networks()` method name assumed from design spec §8.2 — confirm with Linus.
+
+**Key rules the tests encode:**
+1. `CidrSourceModel`: exactly one of value/var/secret (V1); value must be valid CIDR (V2).
+2. Network names unique within spec (V3); subnet names unique within network (V4).
+3. Peering target must exist in spec (V5); no self-peering (V6); unique peering names (V7).
+4. var/secret keys must be declared in `references` block (V8).
+5. Subnet CIDRs must not overlap within same network (V9) — literals only.
+6. Subnets must fit within address space (V10) — literals only.
+7. Peered networks with overlapping address spaces = hard error (V11).
+8. Non-peered overlap is a warning (not tested here — warning-level, not ValidationError).

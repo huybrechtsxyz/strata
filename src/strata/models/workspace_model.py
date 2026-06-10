@@ -53,6 +53,13 @@ class WorkspaceDnsModel(PlatformBaseModel):
     file: str = Field(description="File reference for the DNS zone configuration")
 
 
+class WorkspaceNetworkModel(PlatformBaseModel):
+    """Model for a workspace network topology reference."""
+
+    name: PlatformName = Field(description="Unique network configuration name")
+    file: str = Field(description="File reference for the network topology configuration")
+
+
 class WorkspaceVolumeModel(PlatformBaseModel):
     """Model for a workspace volume."""
 
@@ -203,6 +210,10 @@ class WorkspaceResourceModel(PlatformBaseModel):
         None,
         description="References to firewall/NSG resource names for network security",
     )
+    subnet: Optional[str] = Field(
+        None,
+        description="Subnet reference in qualified format 'network_name/subnet_name'",
+    )
 
     # Configuration overrides
     configuration: Optional[Dict[str, Any]] = Field(
@@ -329,6 +340,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
     namespaces: Optional[List[WorkspaceNamespaceModel]] = Field(None, description="Workspace namespaces")
     firewalls: Optional[List[WorkspaceFirewallModel]] = Field(None, description="Workspace firewalls")
     dns_zones: Optional[List[WorkspaceDnsModel]] = Field(None, description="DNS zone file references")
+    networks: Optional[List[WorkspaceNetworkModel]] = Field(None, description="Network topology file references")
 
     # Validate unique provider names
     @model_validator(mode="after")
@@ -395,6 +407,17 @@ class WorkspaceSpecModel(PlatformBaseModel):
             duplicates = [name for name in dns_names if dns_names.count(name) > 1]
             if duplicates:
                 raise ValueError(f"Duplicate DNS zone names found: {', '.join(set(duplicates))}")
+        return self
+
+    # Validate unique network names
+    @model_validator(mode="after")
+    def validate_unique_networks(self) -> "WorkspaceSpecModel":
+        """Validate that all network configuration names are unique."""
+        if self.networks:
+            network_names = [n.name for n in self.networks]
+            duplicates = [name for name in network_names if network_names.count(name) > 1]
+            if duplicates:
+                raise ValueError(f"Duplicate network names found: {', '.join(set(duplicates))}")
         return self
 
     # Validate unique resource names

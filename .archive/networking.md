@@ -26,11 +26,7 @@ _Date: 2026-06-09_
 Same pattern as `firewall`. Structured records (A, CNAME, MX, TXT, SRV) with validation.
 Triggered by: haven moving to INWX, which has a Terraform provider (`inwx/inwx`).
 
-### 2. `certificate` / `tls` — Certificate definitions
-Certs are referenced implicitly via secrets today, but they have their own lifecycle:
-issuer, domain, SANs, expiry, renewal. Let's Encrypt / ACME, Azure Key Vault certs — all
-structured, all validatable. Haven needs this for Traefik TLS termination.
-`dns` and `certificate` are a natural pair — ACME DNS-01 challenges tie them directly.
+> Done. See `docs/config/dns.md` for the new reference doc, and `test_models_dns.py` for the new model tests.
 
 ### 3. `network` — Network topology / VNet / subnet definitions
 Resources have a `category: networking` dependency mechanism, but no first-class kind for
@@ -53,6 +49,13 @@ if not declared declaratively.
 - **`user` / `identity`** — IAM roles, service accounts. Usually provider-specific enough to stay in Terraform.
 - **`ingress` / `loadbalancer`** — Often a module concern (Traefik, nginx). Modules handle this today.
 - **`storage`** — Already modeled inside `resource`. Extracting would be over-engineering.
+
+
+### 2. `certificate` / `tls` — Certificate definitions
+Certs are referenced implicitly via secrets today, but they have their own lifecycle:
+issuer, domain, SANs, expiry, renewal. Let's Encrypt / ACME, Azure Key Vault certs — all
+structured, all validatable. Haven needs this for Traefik TLS termination.
+`dns` and `certificate` are a natural pair — ACME DNS-01 challenges tie them directly.
 
 ---
 

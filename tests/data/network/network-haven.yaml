@@ -1,0 +1,26 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: network
+meta:
+  name: haven_network
+  annotations:
+    description: "Home lab flat network"
+  labels:
+    version: "1.0.0"
+  tags:
+    - network
+    - homelab
+spec:
+  networks:
+    - name: home_lab
+      address_space:
+        - value: "10.0.0.0/16"
+      subnets:
+        - name: default
+          cidr:
+            value: "10.0.0.0/24"
+        - name: services
+          cidr:
+            value: "10.0.1.0/24"
+        - name: management
+          cidr:
+            value: "10.0.2.0/24"

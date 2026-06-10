@@ -15,6 +15,7 @@ from strata.models.environment_model import EnvironmentModel
 from strata.models.firewall_model import FirewallModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
+from strata.models.network_model import NetworkModel
 from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
@@ -29,6 +30,7 @@ _KIND_TO_MODEL = {
     PlatformKind.FIREWALL: FirewallModel,
     PlatformKind.MODULE: ModuleModel,
     PlatformKind.NAMESPACE: NamespaceModel,
+    PlatformKind.NETWORK: NetworkModel,
     PlatformKind.PLATFORM_MODEL: PlatformArtifactModel,
     PlatformKind.PROVIDER: ProviderModel,
     PlatformKind.RESOURCE: ResourceModel,

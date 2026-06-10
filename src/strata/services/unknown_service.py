@@ -69,6 +69,11 @@ class UnknownService(BaseService["UnknownModel"]):
 
             return DnsService(self.path)
 
+        elif kind == PlatformKind.NETWORK:
+            from strata.services.network_service import NetworkService
+
+            return NetworkService(self.path)
+
         elif kind == PlatformKind.NAMESPACE:
             from strata.services.namespace_service import NamespaceService
 

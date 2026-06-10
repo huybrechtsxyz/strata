@@ -17,6 +17,7 @@ from strata.services.environment_service import EnvironmentService
 from strata.services.firewall_service import FirewallService
 from strata.services.module_service import ModuleService
 from strata.services.namespace_service import NamespaceService
+from strata.services.network_service import NetworkService
 from strata.services.platform_artifact_service import PlatformService
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
@@ -34,6 +35,7 @@ _KIND_TO_SERVICE: Dict[PlatformKind, Any] = {
     PlatformKind.FIREWALL: FirewallService,
     PlatformKind.MODULE: ModuleService,
     PlatformKind.NAMESPACE: NamespaceService,
+    PlatformKind.NETWORK: NetworkService,
     PlatformKind.PLATFORM_MODEL: PlatformService,
     PlatformKind.PROVIDER: ProviderService,
     PlatformKind.RESOURCE: ResourceService,

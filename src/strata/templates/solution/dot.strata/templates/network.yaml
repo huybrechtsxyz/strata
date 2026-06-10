@@ -1,0 +1,65 @@
+# Network Topology Template
+# Copy this file and customize for your network configuration
+#
+# Usage: cp .strata/templates/network.yaml config/{platform}/networks/{name}-network.yaml
+
+apiVersion: strata.huybrechts.xyz/v1
+kind: network
+meta:
+  name: ${name}
+  annotations:
+    description: "Network topology configuration"
+    owner: ${owner}
+  labels:
+    version: ${version}
+  tags: ["template", "network", "infrastructure"]
+spec:
+  networks:
+    - name: main
+      description: "Primary network"
+      address_space:
+        - value: "10.0.0.0/16"
+      subnets:
+        - name: default
+          cidr:
+            value: "10.0.0.0/24"
+          description: "Default subnet"
+        - name: services
+          cidr:
+            value: "10.0.1.0/24"
+          description: "Services subnet"
+        - name: management
+          cidr:
+            value: "10.0.2.0/24"
+          description: "Management subnet"
+
+    # Uncomment for multi-network with peering:
+    # - name: secondary
+    #   description: "Secondary network"
+    #   address_space:
+    #     - value: "10.1.0.0/16"
+    #   subnets:
+    #     - name: app
+    #       cidr:
+    #         value: "10.1.0.0/24"
+    #     - name: data
+    #       cidr:
+    #         value: "10.1.1.0/24"
+    #   peerings:
+    #     - name: to_main
+    #       target: main
+
+    # For per-environment CIDRs, use variable references:
+    # - name: env_network
+    #   address_space:
+    #     - var: env_address_space
+    #   subnets:
+    #     - name: workload
+    #       cidr:
+    #         var: workload_subnet_cidr
+    # And declare references:
+    # references:
+    #   variables:
+    #     - env_address_space
+    #     - workload_subnet_cidr
+    #   secrets: []

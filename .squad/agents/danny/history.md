@@ -94,3 +94,24 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 - tfvars shape: APPROVED. Nested `dns_zones → attachment_name → {provider, zones: {domain → {ttl, records}}}`. Records serialized with null fields included (`exclude_none=False`) for uniform Terraform schema.
 
 **Decision written:** `.squad/decisions/inbox/danny-dns-architecture.md`
+
+### 2026-06-10 — Network kind architecture design
+
+**Requested by:** Vincent Huybrechts.
+
+**Deliverable:** Full design spec for `PlatformKind.NETWORK` written to `.archive/network-design.md`.
+
+**Key architectural decisions:**
+
+- `CidrSourceModel` as reusable value/var/secret union type for CIDRs (AD-NET-1). Appears in two structural positions (address_space list, subnet single), extracted to avoid duplication.
+- Subnets required per network (min_length=1) (AD-NET-2). A network without subnets is unreferenceable — strata's value is the subnet registry.
+- Peering as lightweight `(name, target)` reference only (AD-NET-3). Configuration is provider-specific → Terraform's job. Strata captures intent for overlap validation.
+- Qualified subnet references `<network>/<subnet>` on `WorkspaceResourceModel.subnet` (AD-NET-4). Avoids ambiguity in multi-network setups. Dot notation rejected (PlatformName regex conflict).
+- CIDR overlap: warning for non-peered networks, hard error for peered networks (AD-NET-5). Non-peered may legitimately overlap (isolated envs); peered overlap fails at provider level.
+- CIDR validation deferred for var/secret sources (AD-NET-6). Models load without environment context; service re-validates after variable injection at build time.
+- Merge strategy mirrors DNS: network merge by name (last-wins), subnet merge by `(network_name, subnet_name)` replacement, post-merge CIDR re-validation (AD-NET-7).
+- No `spec.provider` field (AD-NET-9). Unlike DNS, networks are bound to a single provider via workspace topology — adding provider here would create contradictory source of truth.
+- 17 touchpoints identified (comparable to DNS's 15). Two extras: `WorkspaceResourceModel.subnet` field and cross-kind reference validation.
+
+**Design document:** `.archive/network-design.md`
+**Decision written:** `.squad/decisions/inbox/danny-network-kind-design.md`

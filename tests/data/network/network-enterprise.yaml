@@ -1,0 +1,66 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: network
+meta:
+  name: contoso_networking
+  annotations:
+    description: "Contoso enterprise network topology"
+  labels:
+    region: westeurope
+spec:
+  references:
+    variables:
+      - hub_address_space
+      - spoke_app_address_space
+      - spoke_data_address_space
+    secrets: []
+  networks:
+    - name: hub_vnet
+      address_space:
+        - var: hub_address_space
+      subnets:
+        - name: gateway
+          cidr:
+            value: "10.0.0.0/27"
+          description: "VPN/ExpressRoute gateway subnet"
+        - name: firewall
+          cidr:
+            value: "10.0.0.64/26"
+          description: "Azure Firewall subnet"
+        - name: bastion
+          cidr:
+            value: "10.0.0.128/26"
+          description: "Azure Bastion subnet"
+        - name: management
+          cidr:
+            value: "10.0.1.0/24"
+
+    - name: spoke_app
+      address_space:
+        - var: spoke_app_address_space
+      subnets:
+        - name: frontend
+          cidr:
+            value: "10.1.0.0/24"
+        - name: backend
+          cidr:
+            value: "10.1.1.0/24"
+        - name: integration
+          cidr:
+            value: "10.1.2.0/24"
+      peerings:
+        - name: to_hub
+          target: hub_vnet
+
+    - name: spoke_data
+      address_space:
+        - var: spoke_data_address_space
+      subnets:
+        - name: database
+          cidr:
+            value: "10.2.0.0/24"
+        - name: analytics
+          cidr:
+            value: "10.2.1.0/24"
+      peerings:
+        - name: to_hub
+          target: hub_vnet
