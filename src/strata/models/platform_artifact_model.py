@@ -53,8 +53,10 @@ from strata.models.namespace_model import (
 )
 from strata.models.network_model import (
     NetworkDefinitionModel,
-    NetworkModel as InputNetworkModel,
     NetworkReferencesModel,
+)
+from strata.models.network_model import (
+    NetworkModel as InputNetworkModel,
 )
 from strata.models.provider_model import (
     ProviderModel,

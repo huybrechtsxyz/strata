@@ -23,14 +23,14 @@ Enterprise fixture CIDR `10.0.0.32/26` → `10.0.0.64/26` (original not on /26 b
 
 ## Files Touched
 
-| Layer      | New                                                    | Modified                                                                                       |
-| ---------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| Models     | `network_model.py`                                     | `common_models.py`, `workspace_model.py`, `platform_artifact_model.py`                         |
-| Services   | `network_service.py`                                   | `unknown_service.py`                                                                           |
-| Builders   | —                                                      | `terraform_builder.py`                                                                         |
-| Validators | —                                                      | `platform_validator.py`                                                                        |
-| Commands   | —                                                      | `cli_schema.py`                                                                                |
-| Templates  | `network.yaml`                                         | —                                                                                              |
-| Tests      | `test_models_network.py`, `test_services_network.py`, 6 YAML fixtures | —                                                                                |
-| Docs       | `docs/config/network.md`                               | `docs/config/readme.md`, `docs/platform/commands.md`, `docs/platform/workflow.md`              |
-| Design     | `.archive/network-design.md`                           | `.archive/networking.md`                                                                       |
+| Layer      | New                                                                   | Modified                                                                          |
+| ---------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Models     | `network_model.py`                                                    | `common_models.py`, `workspace_model.py`, `platform_artifact_model.py`            |
+| Services   | `network_service.py`                                                  | `unknown_service.py`                                                              |
+| Builders   | —                                                                     | `terraform_builder.py`                                                            |
+| Validators | —                                                                     | `platform_validator.py`                                                           |
+| Commands   | —                                                                     | `cli_schema.py`                                                                   |
+| Templates  | `network.yaml`                                                        | —                                                                                 |
+| Tests      | `test_models_network.py`, `test_services_network.py`, 6 YAML fixtures | —                                                                                 |
+| Docs       | `docs/config/network.md`                                              | `docs/config/readme.md`, `docs/platform/commands.md`, `docs/platform/workflow.md` |
+| Design     | `.archive/network-design.md`                                          | `.archive/networking.md`                                                          |

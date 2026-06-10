@@ -55,10 +55,10 @@ spec:
 
 ## Top-level Fields
 
-| Field             | Type   | Required | Description                                                                              |
-| ----------------- | ------ | -------- | ---------------------------------------------------------------------------------------- |
-| `spec.references` | object | No       | Variable and secret key declarations. Required when any CIDR uses `var:` or `secret:`.   |
-| `spec.networks`   | array  | Yes      | One or more network definitions. At least one required.                                  |
+| Field             | Type   | Required | Description                                                                            |
+| ----------------- | ------ | -------- | -------------------------------------------------------------------------------------- |
+| `spec.references` | object | No       | Variable and secret key declarations. Required when any CIDR uses `var:` or `secret:`. |
+| `spec.networks`   | array  | Yes      | One or more network definitions. At least one required.                                |
 
 ## spec.references Fields
 
@@ -72,41 +72,41 @@ any address space or subnet CIDR uses `var:` or `secret:`.
 
 ## Network Fields
 
-| Field           | Type   | Required | Description                                                              |
-| --------------- | ------ | -------- | ------------------------------------------------------------------------ |
-| `name`          | string | Yes      | Network name — unique within `spec.networks`. `PlatformName` format.     |
-| `description`   | string | No       | Human-readable description of the network's purpose.                     |
+| Field           | Type   | Required | Description                                                             |
+| --------------- | ------ | -------- | ----------------------------------------------------------------------- |
+| `name`          | string | Yes      | Network name — unique within `spec.networks`. `PlatformName` format.    |
+| `description`   | string | No       | Human-readable description of the network's purpose.                    |
 | `address_space` | array  | Yes      | One or more CIDR ranges for this network. Each entry is a `CidrSource`. |
-| `subnets`       | array  | Yes      | At least one subnet required per network.                                |
-| `peerings`      | array  | No       | Peering references to other networks in the same spec.                   |
+| `subnets`       | array  | Yes      | At least one subnet required per network.                               |
+| `peerings`      | array  | No       | Peering references to other networks in the same spec.                  |
 
 ## CidrSource Fields
 
 A CIDR value with three mutually exclusive source types. Used for both `address_space` entries
 and subnet `cidr` values.
 
-| Field    | Type   | Required | Description                                                                          |
-| -------- | ------ | -------- | ------------------------------------------------------------------------------------ |
+| Field    | Type   | Required | Description                                                                         |
+| -------- | ------ | -------- | ----------------------------------------------------------------------------------- |
 | `value`  | string | one of   | Literal CIDR notation (e.g. `10.0.0.0/24`). Validated via `ipaddress.ip_network()`. |
-| `var`    | string | one of   | Variable key from `spec.references.variables` — resolved at build time.              |
-| `secret` | string | one of   | Secret key from `spec.references.secrets` — injected at deploy time via `TF_VAR_*`.  |
+| `var`    | string | one of   | Variable key from `spec.references.variables` — resolved at build time.             |
+| `secret` | string | one of   | Secret key from `spec.references.secrets` — injected at deploy time via `TF_VAR_*`. |
 
 > Exactly one of `value`, `var`, or `secret` must be set per CIDR source.
 
 ## Subnet Fields
 
-| Field         | Type       | Required | Description                                                   |
-| ------------- | ---------- | -------- | ------------------------------------------------------------- |
-| `name`        | string     | Yes      | Subnet name — unique within the parent network.               |
-| `description` | string     | No       | Human-readable description of the subnet's purpose.           |
-| `cidr`        | CidrSource | Yes      | Single CIDR for this subnet. Same value/var/secret union.     |
+| Field         | Type       | Required | Description                                               |
+| ------------- | ---------- | -------- | --------------------------------------------------------- |
+| `name`        | string     | Yes      | Subnet name — unique within the parent network.           |
+| `description` | string     | No       | Human-readable description of the subnet's purpose.       |
+| `cidr`        | CidrSource | Yes      | Single CIDR for this subnet. Same value/var/secret union. |
 
 ## Peering Fields
 
-| Field    | Type   | Required | Description                                                                   |
-| -------- | ------ | -------- | ----------------------------------------------------------------------------- |
-| `name`   | string | Yes      | Peering name — unique within the parent network.                              |
-| `target` | string | Yes      | Name of the target network. Must exist in `spec.networks` within this file.   |
+| Field    | Type   | Required | Description                                                                 |
+| -------- | ------ | -------- | --------------------------------------------------------------------------- |
+| `name`   | string | Yes      | Peering name — unique within the parent network.                            |
+| `target` | string | Yes      | Name of the target network. Must exist in `spec.networks` within this file. |
 
 > **v1 scope:** Peerings are lightweight `(name, target)` references only — no routing config,
 > gateway settings, or direction. Strata declares the *intent* to peer; Terraform implements it.
@@ -273,11 +273,11 @@ reference resolves to a declared `<network>/<subnet>` in the loaded network defi
 CIDRs support three mutually exclusive value sources. Choose based on how environment-specific
 and sensitive the address space is.
 
-| Source    | Use when                                                    | Build behaviour                                                                          |
-| --------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `value:`  | The CIDR is the same in every environment                   | Written literally to `networks.auto.tfvars.json`                                         |
-| `var:`    | The CIDR varies by environment but is not sensitive          | Resolved from `environment.yaml` at `strata build run`; written to `networks.auto.tfvars.json` |
-| `secret:` | The CIDR is sensitive (e.g., enterprise topology is classified) | **Not** written to `networks.auto.tfvars.json`; injected at deploy time as `TF_VAR_<key>` |
+| Source    | Use when                                                        | Build behaviour                                                                                |
+| --------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `value:`  | The CIDR is the same in every environment                       | Written literally to `networks.auto.tfvars.json`                                               |
+| `var:`    | The CIDR varies by environment but is not sensitive             | Resolved from `environment.yaml` at `strata build run`; written to `networks.auto.tfvars.json` |
+| `secret:` | The CIDR is sensitive (e.g., enterprise topology is classified) | **Not** written to `networks.auto.tfvars.json`; injected at deploy time as `TF_VAR_<key>`      |
 
 ### var: — build-time variable resolution
 
@@ -313,10 +313,10 @@ spec:
       file: "@infra/networks/spokes.yaml"
 ```
 
-| Field  | Type   | Required | Description                                                 |
-| ------ | ------ | -------- | ----------------------------------------------------------- |
+| Field  | Type   | Required | Description                                                        |
+| ------ | ------ | -------- | ------------------------------------------------------------------ |
 | `name` | string | Yes      | Unique name. Used as the outer key in `networks.auto.tfvars.json`. |
-| `file` | string | Yes      | Path to the network YAML file. Supports `@repo-name/` refs. |
+| `file` | string | Yes      | Path to the network YAML file. Supports `@repo-name/` refs.        |
 
 Names must be unique across all `networks` entries in the workspace.
 
@@ -340,9 +340,9 @@ auto-load.
 
 ## Validation Rules
 
-| Rule                                                                             | Enforcement           |
-| -------------------------------------------------------------------------------- | --------------------- |
-| `meta.name` must match `^[a-z][a-z0-9_]*$`                                       | Pydantic / model load |
+| Rule                                                                              | Enforcement           |
+| --------------------------------------------------------------------------------- | --------------------- |
+| `meta.name` must match `^[a-z][a-z0-9_]*$`                                        | Pydantic / model load |
 | Exactly one of `value`, `var`, or `secret` must be set per CIDR source (V1)       | Model validator       |
 | Literal `value` CIDRs must be valid CIDR notation (V2)                            | Model validator       |
 | Network names must be unique within `spec.networks` (V3)                          | Model validator       |
@@ -362,13 +362,13 @@ auto-load.
 When multiple network files are referenced in a workspace, strata merges them into a single
 topology before validation:
 
-| Element                | Strategy                                                               |
-| ---------------------- | ---------------------------------------------------------------------- |
-| Network names          | Merge by name — last-wins for metadata and address space               |
-| Subnets within network | Merge by `(network_name, subnet_name)` — last-wins replacement         |
-| Peerings               | Merge by `(network_name, peering_name)` — last-wins replacement        |
-| Meta (annotations)     | Shallow merge — last-wins per key                                      |
-| References             | Union — all declared variables and secrets accumulated                  |
+| Element                | Strategy                                                        |
+| ---------------------- | --------------------------------------------------------------- |
+| Network names          | Merge by name — last-wins for metadata and address space        |
+| Subnets within network | Merge by `(network_name, subnet_name)` — last-wins replacement  |
+| Peerings               | Merge by `(network_name, peering_name)` — last-wins replacement |
+| Meta (annotations)     | Shallow merge — last-wins per key                               |
+| References             | Union — all declared variables and secrets accumulated          |
 
 **Post-merge validation:** After merging, strata re-runs CIDR overlap detection on the
 combined result. Two files may each be valid independently but create overlaps when combined.

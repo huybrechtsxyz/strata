@@ -78,9 +78,7 @@ class NetworkDefinitionModel(PlatformBaseModel):
         subnet_names = [s.name for s in self.subnets]
         duplicates = [n for n in subnet_names if subnet_names.count(n) > 1]
         if duplicates:
-            raise ValueError(
-                f"Duplicate subnet names in network '{self.name}': {', '.join(set(duplicates))}"
-            )
+            raise ValueError(f"Duplicate subnet names in network '{self.name}': {', '.join(set(duplicates))}")
         return self
 
     @model_validator(mode="after")
@@ -89,9 +87,7 @@ class NetworkDefinitionModel(PlatformBaseModel):
         if self.peerings:
             for peering in self.peerings:
                 if peering.target == self.name:
-                    raise ValueError(
-                        f"Network '{self.name}' has self-peering '{peering.name}' targeting itself"
-                    )
+                    raise ValueError(f"Network '{self.name}' has self-peering '{peering.name}' targeting itself")
         return self
 
     @model_validator(mode="after")
@@ -101,9 +97,7 @@ class NetworkDefinitionModel(PlatformBaseModel):
             peering_names = [p.name for p in self.peerings]
             duplicates = [n for n in peering_names if peering_names.count(n) > 1]
             if duplicates:
-                raise ValueError(
-                    f"Duplicate peering names in network '{self.name}': {', '.join(set(duplicates))}"
-                )
+                raise ValueError(f"Duplicate peering names in network '{self.name}': {', '.join(set(duplicates))}")
         return self
 
     @model_validator(mode="after")
@@ -229,9 +223,7 @@ class NetworkSpecModel(PlatformBaseModel):
         if undeclared_vars:
             errors.append(f"var keys not declared in references.variables: {', '.join(sorted(undeclared_vars))}")
         if undeclared_secrets:
-            errors.append(
-                f"secret keys not declared in references.secrets: {', '.join(sorted(undeclared_secrets))}"
-            )
+            errors.append(f"secret keys not declared in references.secrets: {', '.join(sorted(undeclared_secrets))}")
 
         if errors:
             raise ValueError("; ".join(errors))

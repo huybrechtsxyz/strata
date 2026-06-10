@@ -21,20 +21,20 @@ proposition is:
 
 ### In scope
 
-| Concern                      | Status |
-| ---------------------------- | ------ |
-| Address spaces (CIDRs)       | ✅      |
-| Named subnets with CIDRs     | ✅      |
+| Concern                      | Status                                |
+| ---------------------------- | ------------------------------------- |
+| Address spaces (CIDRs)       | ✅                                     |
+| Named subnets with CIDRs     | ✅                                     |
 | Peering references (by name) | ✅ v1 lightweight — name + target only |
 
 ### Out of scope
 
-| Concern                                | Rationale                                         |
-| -------------------------------------- | ------------------------------------------------- |
-| Route tables                           | Terraform territory — too provider-specific        |
-| NSG rules                              | `firewall` kind handles this                      |
-| Provider-specific subnet properties    | Delegations, service endpoints = Terraform config |
-| Peering configuration (routes, gateways) | v2 concern — v1 captures the reference only     |
+| Concern                                  | Rationale                                         |
+| ---------------------------------------- | ------------------------------------------------- |
+| Route tables                             | Terraform territory — too provider-specific       |
+| NSG rules                                | `firewall` kind handles this                      |
+| Provider-specific subnet properties      | Delegations, service endpoints = Terraform config |
+| Peering configuration (routes, gateways) | v2 concern — v1 captures the reference only       |
 
 ---
 
@@ -174,17 +174,17 @@ NetworkModel                         # Top-level document (apiVersion + kind + m
 
 ### 3.1 Field Details
 
-| Model                    | Field          | Type                           | Required | Notes                                                        |
-| ------------------------ | -------------- | ------------------------------ | -------- | ------------------------------------------------------------ |
-| `CidrSourceModel`       | `value`        | `Optional[str]`                | union    | Literal CIDR — validated via `ipaddress.ip_network()`        |
-| `CidrSourceModel`       | `var`          | `Optional[str]`                | union    | Variable key — resolved at build time from environment       |
-| `CidrSourceModel`       | `secret`       | `Optional[str]`                | union    | Secret key — resolved at deploy time via `TF_VAR_*`          |
-| `NetworkDefinitionModel` | `name`         | `PlatformName`                 | yes      | Network name — unique within spec                            |
-| `NetworkDefinitionModel` | `address_space`| `List[CidrSourceModel]`        | yes      | One or more CIDRs for this network's address space           |
-| `NetworkDefinitionModel` | `subnets`      | `List[SubnetModel]`            | yes      | At least one subnet required per network                     |
-| `SubnetModel`           | `name`         | `PlatformName`                 | yes      | Subnet name — unique within network                          |
-| `SubnetModel`           | `cidr`         | `CidrSourceModel`              | yes      | Single CIDR for this subnet                                  |
-| `PeeringReferenceModel` | `target`       | `str`                          | yes      | Name of the target network (must exist in same spec)         |
+| Model                    | Field           | Type                    | Required | Notes                                                  |
+| ------------------------ | --------------- | ----------------------- | -------- | ------------------------------------------------------ |
+| `CidrSourceModel`        | `value`         | `Optional[str]`         | union    | Literal CIDR — validated via `ipaddress.ip_network()`  |
+| `CidrSourceModel`        | `var`           | `Optional[str]`         | union    | Variable key — resolved at build time from environment |
+| `CidrSourceModel`        | `secret`        | `Optional[str]`         | union    | Secret key — resolved at deploy time via `TF_VAR_*`    |
+| `NetworkDefinitionModel` | `name`          | `PlatformName`          | yes      | Network name — unique within spec                      |
+| `NetworkDefinitionModel` | `address_space` | `List[CidrSourceModel]` | yes      | One or more CIDRs for this network's address space     |
+| `NetworkDefinitionModel` | `subnets`       | `List[SubnetModel]`     | yes      | At least one subnet required per network               |
+| `SubnetModel`            | `name`          | `PlatformName`          | yes      | Subnet name — unique within network                    |
+| `SubnetModel`            | `cidr`          | `CidrSourceModel`       | yes      | Single CIDR for this subnet                            |
+| `PeeringReferenceModel`  | `target`        | `str`                   | yes      | Name of the target network (must exist in same spec)   |
 
 ---
 
@@ -192,24 +192,24 @@ NetworkModel                         # Top-level document (apiVersion + kind + m
 
 ### 4.1 Structural validation (Pydantic model validators)
 
-| #   | Rule                                    | Scope                    | Validator type        |
-| --- | --------------------------------------- | ------------------------ | --------------------- |
-| V1  | Exactly one of value/var/secret set     | `CidrSourceModel`        | `model_validator`     |
-| V2  | `value` is valid CIDR when literal      | `CidrSourceModel`        | `model_validator`     |
-| V3  | Unique network names within spec        | `NetworkSpecModel`       | `model_validator`     |
-| V4  | Unique subnet names within each network | `NetworkDefinitionModel` | `model_validator`     |
-| V5  | Peering target exists in spec.networks  | `NetworkSpecModel`       | `model_validator`     |
-| V6  | No self-peering (target ≠ own name)     | `NetworkDefinitionModel` | `model_validator`     |
-| V7  | Unique peering names within network     | `NetworkDefinitionModel` | `model_validator`     |
-| V8  | References declared for used var/secret | `NetworkSpecModel`       | `model_validator`     |
+| #   | Rule                                    | Scope                    | Validator type    |
+| --- | --------------------------------------- | ------------------------ | ----------------- |
+| V1  | Exactly one of value/var/secret set     | `CidrSourceModel`        | `model_validator` |
+| V2  | `value` is valid CIDR when literal      | `CidrSourceModel`        | `model_validator` |
+| V3  | Unique network names within spec        | `NetworkSpecModel`       | `model_validator` |
+| V4  | Unique subnet names within each network | `NetworkDefinitionModel` | `model_validator` |
+| V5  | Peering target exists in spec.networks  | `NetworkSpecModel`       | `model_validator` |
+| V6  | No self-peering (target ≠ own name)     | `NetworkDefinitionModel` | `model_validator` |
+| V7  | Unique peering names within network     | `NetworkDefinitionModel` | `model_validator` |
+| V8  | References declared for used var/secret | `NetworkSpecModel`       | `model_validator` |
 
 ### 4.2 CIDR overlap detection (the core value)
 
-| #    | Rule                                                  | Scope              | Notes                                      |
-| ---- | ----------------------------------------------------- | ------------------ | ------------------------------------------ |
-| V9   | Subnets within a network must not overlap each other   | `NetworkDefinitionModel` | Only when all CIDRs are literals      |
-| V10  | Subnets must fit within their network's address space  | `NetworkDefinitionModel` | Only when both are literals           |
-| V11  | Cross-network address space overlap = **warning**      | `NetworkSpecModel` | Warning, not error — peered networks may intentionally share space, and overlapping address spaces in non-peered networks may be valid (e.g., isolated environments). Hard error only if both networks have a mutual peering declared. |
+| #   | Rule                                                  | Scope                    | Notes                                                                                                                                                                                                                                  |
+| --- | ----------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V9  | Subnets within a network must not overlap each other  | `NetworkDefinitionModel` | Only when all CIDRs are literals                                                                                                                                                                                                       |
+| V10 | Subnets must fit within their network's address space | `NetworkDefinitionModel` | Only when both are literals                                                                                                                                                                                                            |
+| V11 | Cross-network address space overlap = **warning**     | `NetworkSpecModel`       | Warning, not error — peered networks may intentionally share space, and overlapping address spaces in non-peered networks may be valid (e.g., isolated environments). Hard error only if both networks have a mutual peering declared. |
 
 **CIDR validation implementation:**
 ```python
@@ -234,10 +234,10 @@ after variable injection, the builder or service can re-validate with resolved v
 
 ### 4.3 Cross-kind validation (dynamic phase)
 
-| #    | Rule                                                           | Where                     |
-| ---- | -------------------------------------------------------------- | ------------------------- |
-| V12  | Resource subnet references resolve to a declared subnet name   | `NetworkService._validate_dynamic()` |
-| V13  | All var keys used in CIDRs exist in environment variables      | Build-time                |
+| #   | Rule                                                         | Where                                |
+| --- | ------------------------------------------------------------ | ------------------------------------ |
+| V12 | Resource subnet references resolve to a declared subnet name | `NetworkService._validate_dynamic()` |
+| V13 | All var keys used in CIDRs exist in environment variables    | Build-time                           |
 
 ---
 
@@ -336,25 +336,25 @@ This is deferred — v1 keeps network references at the resource level only.
 
 Every file that needs modification for the `network` kind:
 
-| #  | File                                              | Change                                                       |
-| -- | ------------------------------------------------- | ------------------------------------------------------------ |
-| 1  | `src/strata/models/common_models.py`              | Add `NETWORK = "network"` to `PlatformKind` enum             |
-| 2  | `src/strata/models/network_model.py`              | **NEW** — all models from §3                                 |
-| 3  | `src/strata/models/workspace_model.py`            | Add `WorkspaceNetworkModel(name, file)` class                |
-| 4  | `src/strata/models/workspace_model.py`            | Add `networks: Optional[List[WorkspaceNetworkModel]]` to `WorkspaceSpecModel` |
-| 5  | `src/strata/models/workspace_model.py`            | Add `validate_unique_networks` validator                     |
-| 6  | `src/strata/models/workspace_model.py`            | Add `subnet: Optional[str]` to `WorkspaceResourceModel`     |
-| 7  | `src/strata/models/platform_artifact_model.py`    | Add `PlatformNetworkModel` (flattened) with `from_network_model()` |
-| 8  | `src/strata/models/platform_artifact_model.py`    | Add `networks: Optional[List[PlatformNetworkModel]]` to `PlatformSpecModel` |
-| 9  | `src/strata/services/network_service.py`          | **NEW** — `NetworkService(BaseService)` with `merge_networks()` |
-| 10 | `src/strata/validators/platform_validator.py`     | Add `PlatformKind.NETWORK: NetworkService` to `_KIND_TO_SERVICE` |
-| 11 | `src/strata/builders/terraform_builder.py`        | Add `_build_network_vars()` method                           |
-| 12 | `src/strata/builders/terraform_builder.py`        | Write `networks.auto.tfvars.json` in `_save_terraform_vars()` |
-| 13 | `tests/strata/models/test_models_network.py`      | **NEW** — model validation tests                             |
-| 14 | `tests/strata/services/test_services_network.py`  | **NEW** — service + merge tests                              |
-| 15 | `tests/data/network/`                             | **NEW** — test YAML fixtures (standard, overlapping, multi-net, var-refs) |
-| 16 | `docs/config/network.md`                          | **NEW** — reference documentation                            |
-| 17 | `src/strata/models/__init__.py`                   | Export `NetworkModel` (if `__init__` re-exports)             |
+| #   | File                                             | Change                                                                        |
+| --- | ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| 1   | `src/strata/models/common_models.py`             | Add `NETWORK = "network"` to `PlatformKind` enum                              |
+| 2   | `src/strata/models/network_model.py`             | **NEW** — all models from §3                                                  |
+| 3   | `src/strata/models/workspace_model.py`           | Add `WorkspaceNetworkModel(name, file)` class                                 |
+| 4   | `src/strata/models/workspace_model.py`           | Add `networks: Optional[List[WorkspaceNetworkModel]]` to `WorkspaceSpecModel` |
+| 5   | `src/strata/models/workspace_model.py`           | Add `validate_unique_networks` validator                                      |
+| 6   | `src/strata/models/workspace_model.py`           | Add `subnet: Optional[str]` to `WorkspaceResourceModel`                       |
+| 7   | `src/strata/models/platform_artifact_model.py`   | Add `PlatformNetworkModel` (flattened) with `from_network_model()`            |
+| 8   | `src/strata/models/platform_artifact_model.py`   | Add `networks: Optional[List[PlatformNetworkModel]]` to `PlatformSpecModel`   |
+| 9   | `src/strata/services/network_service.py`         | **NEW** — `NetworkService(BaseService)` with `merge_networks()`               |
+| 10  | `src/strata/validators/platform_validator.py`    | Add `PlatformKind.NETWORK: NetworkService` to `_KIND_TO_SERVICE`              |
+| 11  | `src/strata/builders/terraform_builder.py`       | Add `_build_network_vars()` method                                            |
+| 12  | `src/strata/builders/terraform_builder.py`       | Write `networks.auto.tfvars.json` in `_save_terraform_vars()`                 |
+| 13  | `tests/strata/models/test_models_network.py`     | **NEW** — model validation tests                                              |
+| 14  | `tests/strata/services/test_services_network.py` | **NEW** — service + merge tests                                               |
+| 15  | `tests/data/network/`                            | **NEW** — test YAML fixtures (standard, overlapping, multi-net, var-refs)     |
+| 16  | `docs/config/network.md`                         | **NEW** — reference documentation                                             |
+| 17  | `src/strata/models/__init__.py`                  | Export `NetworkModel` (if `__init__` re-exports)                              |
 
 **17 touchpoints** — comparable to DNS (15). The two extras are the `WorkspaceResourceModel.subnet`
 field addition (#6) and cross-kind reference validation that DNS didn't need.
@@ -379,13 +379,13 @@ spec:
 
 **Merge rules:**
 
-| Element                 | Strategy                                                    |
-| ----------------------- | ----------------------------------------------------------- |
-| Network names           | Merge by name — last-wins for metadata/address_space        |
-| Subnets within network  | Merge by `(network_name, subnet_name)` — last-wins replacement |
-| Peerings                | Merge by `(network_name, peering_name)` — last-wins         |
-| Meta (annotations, etc.)| Shallow merge — last-wins per key                           |
-| References              | Union — all declared variables/secrets accumulated           |
+| Element                  | Strategy                                                       |
+| ------------------------ | -------------------------------------------------------------- |
+| Network names            | Merge by name — last-wins for metadata/address_space           |
+| Subnets within network   | Merge by `(network_name, subnet_name)` — last-wins replacement |
+| Peerings                 | Merge by `(network_name, peering_name)` — last-wins            |
+| Meta (annotations, etc.) | Shallow merge — last-wins per key                              |
+| References               | Union — all declared variables/secrets accumulated             |
 
 **Post-merge validation:** After merge, re-run CIDR overlap detection on the merged result.
 Two files may each be valid independently but create overlaps when combined.
@@ -616,11 +616,11 @@ docs/config/network.md
 
 ## 12. Open Questions (for implementation phase)
 
-| #  | Question                                                              | Default if not decided        |
-| -- | --------------------------------------------------------------------- | ----------------------------- |
-| Q1 | Should `ResourceDependencyModel` gain a `subnet` field too?          | No — keep it on `WorkspaceResourceModel` only |
-| Q2 | Should peering be bidirectional by default (declare once, imply both)?| No — explicit in both networks. Less magic. |
-| Q3 | Should we validate subnet CIDRs against IPv4 only, or support IPv6?  | Support both — `ipaddress.ip_network()` handles both natively |
+| #   | Question                                                               | Default if not decided                                        |
+| --- | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Q1  | Should `ResourceDependencyModel` gain a `subnet` field too?            | No — keep it on `WorkspaceResourceModel` only                 |
+| Q2  | Should peering be bidirectional by default (declare once, imply both)? | No — explicit in both networks. Less magic.                   |
+| Q3  | Should we validate subnet CIDRs against IPv4 only, or support IPv6?    | Support both — `ipaddress.ip_network()` handles both natively |
 
 ---
 

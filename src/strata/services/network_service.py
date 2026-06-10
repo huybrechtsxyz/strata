@@ -12,8 +12,6 @@ from strata.models.network_model import (
     NetworkModel,
     NetworkReferencesModel,
     NetworkSpecModel,
-    PeeringReferenceModel,
-    SubnetModel,
 )
 from strata.services.base_service import BaseService
 

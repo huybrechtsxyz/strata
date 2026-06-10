@@ -259,9 +259,7 @@ class TestNetworkModel:
 
     def test_undeclared_secret_in_references(self):
         """secret key used in CIDR but not in references.secrets raises ValidationError (V8)."""
-        net = _simple_network(
-            subnets=[{"name": "secure", "cidr": {"secret": "undeclared_secret"}}]
-        )
+        net = _simple_network(subnets=[{"name": "secure", "cidr": {"secret": "undeclared_secret"}}])
         data = _net_data([net], references={"secrets": ["other_secret"]})
         with pytest.raises(ValidationError):
             NetworkModel.model_validate(data)
