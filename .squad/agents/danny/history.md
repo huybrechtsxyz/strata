@@ -115,3 +115,26 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 
 **Design document:** `.archive/network-design.md`
 **Decision written:** `.squad/decisions/inbox/danny-network-kind-design.md`
+
+### 2026-06-10 — `strata guide` command design
+
+**Requested by:** Vincent Huybrechts.
+
+**Deliverable:** Full design spec for the `strata guide` command written to `.archive/guide-command-design.md`.
+
+**Key architectural decisions:**
+
+- Top-level `strata guide` command — NOT under `sln`. First-time users must reach it with zero prior knowledge. Buried under a lifecycle group defeats the purpose.
+- `INIT_REQUIRED = False` — mirrors `StatusCommand`. Guide teaches you how to init; it cannot require init to run.
+- 7 checklist phases: workspace initialized → repos registered → repos on disk → profile created → profile activated → refs registered → build artifact exists. Phases 2 (tools check) and 9 (deploy history) deferred to v2.
+- Status markers: ✅ (ok), ⚠️ (partial/attention), ⬜ (pending). No ❌ in v1 — advisory only.
+- "Next step" = first non-✅ phase from top. ⚠️ counts as non-done (repos 2/3 cloned still triggers a next-step hint). Phase 3 hint emits one `git clone` line per missing repo with the registered URL.
+- Uses `SolutionService.load_from_json()` — never raw `json.load()`. Parse failures rendered as ⚠️ phase 1.
+- Exit code always 0. Guide is advisory, never a pipeline gate.
+- No `--profile` flag — always reads the active profile. A phantom-profile view would misrepresent deploy-time state.
+- `ChecklistItem` / `NextStepItem` are module-local dataclasses in `show_guide_command.py` — single consumer, no shared extraction.
+- Console rendering is single-pass `click.echo()` — matches StatusCommand pattern, no template engine.
+- 3 new files (cli_guide.py, guide/__init__.py, guide/show_guide_command.py), 1 modified file (cli.py import + registration + `_HELP_SECTIONS`). Zero new models, zero new services.
+
+**Design document:** `.archive/guide-command-design.md`
+**Decision written:** `.squad/decisions/inbox/danny-guide-command-design.md`
