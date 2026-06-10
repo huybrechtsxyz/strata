@@ -132,7 +132,10 @@ class NetworkDefinitionModel(PlatformBaseModel):
         supernets = [ipaddress.ip_network(a, strict=False) for a in literal_address_spaces]
         for subnet_name, subnet_cidr in literal_subnets:
             sub = ipaddress.ip_network(subnet_cidr, strict=False)
-            fits = any(sub.subnet_of(sup) for sup in supernets)
+            fits = any(
+                sub.subnet_of(sup)  # type: ignore[arg-type]
+                for sup in supernets
+            )
             if not fits:
                 raise ValueError(
                     f"Subnet '{subnet_name}' ({subnet_cidr}) in network '{self.name}' "

@@ -534,7 +534,7 @@ class GuideCommand(BaseCommand):
         detected_kind: Optional[str] = None
         detected_name: Optional[str] = None
 
-        _BLOCKED_LABELS = {
+        blocked_labels = {
             2: "Kind recognized",
             3: "apiVersion present",
             4: "Name present",
@@ -544,7 +544,7 @@ class GuideCommand(BaseCommand):
         # Phase 1 — File readable
         if not path.exists():
             checklist.append(ChecklistItem(1, "File readable", "pending", f"{path} not found"))
-            for phase, label in _BLOCKED_LABELS.items():
+            for phase, label in blocked_labels.items():
                 checklist.append(ChecklistItem(phase, label, "pending"))
             return checklist, None, None
 
@@ -557,7 +557,7 @@ class GuideCommand(BaseCommand):
             checklist.append(ChecklistItem(1, "File readable", "ok"))
         except Exception as e:
             checklist.append(ChecklistItem(1, "File readable", "warn", str(e)))
-            for phase, label in _BLOCKED_LABELS.items():
+            for phase, label in blocked_labels.items():
                 checklist.append(ChecklistItem(phase, label, "pending"))
             return checklist, None, None
 
