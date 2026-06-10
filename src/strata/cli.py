@@ -30,6 +30,7 @@ from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
 from strata.commands.cli_deploy import deploy as deploy_group
 from strata.commands.cli_env import env_group
+from strata.commands.cli_guide import guide_command
 from strata.commands.cli_help import help_command
 from strata.commands.cli_log import log_group
 from strata.commands.cli_new import new_command
@@ -41,7 +42,6 @@ from strata.commands.cli_secret import secret_group
 from strata.commands.cli_service import service_group
 from strata.commands.cli_sln import sln_group
 from strata.commands.cli_tools import tools_group
-from strata.commands.cli_guide import guide_command
 from strata.commands.cli_validate import validate_command
 from strata.commands.cli_values import values_group
 from strata.commands.cli_vars import vars_group

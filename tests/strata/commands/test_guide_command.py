@@ -133,13 +133,7 @@ def _make_config_yaml(
 ) -> Path:
     """Write a minimal strata YAML file at *dest/filename* and return its Path."""
     spec_block = "spec:\n  some_key: some_value\n" if include_spec else ""
-    content = (
-        f"apiVersion: {api_version}\n"
-        f"kind: {kind}\n"
-        f"meta:\n"
-        f"  name: {name}\n"
-        f"{spec_block}"
-    )
+    content = f"apiVersion: {api_version}\nkind: {kind}\nmeta:\n  name: {name}\n{spec_block}"
     p = dest / filename
     p.write_text(content)
     return p
@@ -151,7 +145,6 @@ def _make_config_yaml(
 
 
 class TestGuideCommandWorkspaceChecklist:
-
     # -----------------------------------------------------------------------
     # Test 1 — uninitialized workspace (no solution.json)
     # -----------------------------------------------------------------------
@@ -445,7 +438,6 @@ class TestGuideCommandWorkspaceChecklist:
 
 
 class TestGuideCommandFileMode:
-
     # -----------------------------------------------------------------------
     # Test 12 — valid config YAML: all 5 file phases ✅, next_steps has both actions
     # -----------------------------------------------------------------------
@@ -499,13 +491,7 @@ class TestGuideCommandFileMode:
     def test_unknown_kind_phase2_warn(self, tmp_path):
         """An unrecognised kind value marks file-phase 2 as ⚠️."""
         bad_file = tmp_path / "unknown-kind.yaml"
-        bad_file.write_text(
-            "apiVersion: strata.huybrechts.xyz/v1\n"
-            "kind: blahblah\n"
-            "meta:\n"
-            "  name: x\n"
-            "spec: {}\n"
-        )
+        bad_file.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: blahblah\nmeta:\n  name: x\nspec: {}\n")
         _make_workspace(tmp_path)
 
         result = _runner().invoke(
@@ -520,13 +506,7 @@ class TestGuideCommandFileMode:
     def test_unknown_kind_console_lists_known_kinds(self, tmp_path):
         """Console output for unknown kind includes at least one known kind name."""
         bad_file = tmp_path / "unknown-kind.yaml"
-        bad_file.write_text(
-            "apiVersion: strata.huybrechts.xyz/v1\n"
-            "kind: blahblah\n"
-            "meta:\n"
-            "  name: x\n"
-            "spec: {}\n"
-        )
+        bad_file.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: blahblah\nmeta:\n  name: x\nspec: {}\n")
         _make_workspace(tmp_path)
 
         result = _runner().invoke(
@@ -579,9 +559,7 @@ class TestGuideCommandFileMode:
         for phase_num in (2, 3, 4, 5):
             item = next((i for i in data["checklist"] if i["phase"] == phase_num), None)
             if item is not None:
-                assert item["status"] == "pending", (
-                    f"Phase {phase_num} expected 'pending', got '{item['status']}'"
-                )
+                assert item["status"] == "pending", f"Phase {phase_num} expected 'pending', got '{item['status']}'"
 
     # -----------------------------------------------------------------------
     # File mode — JSON shape
@@ -624,7 +602,6 @@ class TestGuideCommandFileMode:
 
 
 class TestGuideCommandHintCustomization:
-
     # -----------------------------------------------------------------------
     # Test 16 — .strata/guide.yaml override for phase 6
     # -----------------------------------------------------------------------
@@ -643,9 +620,7 @@ class TestGuideCommandHintCustomization:
         # Write the hint override file
         guide_yaml = tmp_path / ".strata" / "guide.yaml"
         guide_yaml.write_text(
-            "phases:\n"
-            "  6:\n"
-            '    hint: "strata ref config add my-custom-config @repo/path.yaml --profile prd"\n'
+            'phases:\n  6:\n    hint: "strata ref config add my-custom-config @repo/path.yaml --profile prd"\n'
         )
 
         result = _runner().invoke(guide_command, ["--work-path", str(tmp_path)])

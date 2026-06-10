@@ -31,27 +31,27 @@ These options are accepted by every command and subcommand:
 
 ## Command Groups
 
-| Group        | Subcommands                                                                  | Description                                             |
-| ------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `sln`        | `init` `update` `clean` `status` `export`                                    | Solution workspace lifecycle                            |
-| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config |
-| `log` †      | `list`                                                                       | View execution logs (read-only)                         |
-| `profile` †  | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                             |
-| `ref` †      | `env` `config` `data` `secret`                                               | Manage file references within profiles                  |
-| `repo` †     | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                     |
-| `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                  |
-| `validate`   | —                                                                            | Validate a single platform YAML file                    |
+| Group        | Subcommands                                                                  | Description                                               |
+| ------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `sln`        | `init` `update` `clean` `status` `export`                                    | Solution workspace lifecycle                              |
+| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config   |
+| `log` †      | `list`                                                                       | View execution logs (read-only)                           |
+| `profile` †  | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                               |
+| `ref` †      | `env` `config` `data` `secret`                                               | Manage file references within profiles                    |
+| `repo` †     | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                       |
+| `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                    |
+| `validate`   | —                                                                            | Validate a single platform YAML file                      |
 | `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
-| `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds            |
-| `secret`     | `generate` `mask`                                                            | Generate and manage secret values                       |
-| `deploy` †   | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                      |
-| `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                      |
-| `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                   |
-| `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations           |
-| `new` †      | —                                                                            | Create a platform config file from a template           |
-| `version`    | —                                                                            | Show CLI version                                        |
-| `completion` | `bash` `zsh` `fish` `powershell`                                             | Output shell completion script for the given shell      |
-| `help`       | —                                                                            | Show help topics                                        |
+| `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
+| `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
+| `deploy` †   | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                        |
+| `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
+| `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
+| `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations             |
+| `new` †      | —                                                                            | Create a platform config file from a template             |
+| `version`    | —                                                                            | Show CLI version                                          |
+| `completion` | `bash` `zsh` `fish` `powershell`                                             | Output shell completion script for the given shell        |
+| `help`       | —                                                                            | Show help topics                                          |
 
 > **†** Requires an initialized workspace (`.strata/` directory). Run `strata sln init --name NAME` first.
 
@@ -608,13 +608,13 @@ Show workspace setup progress and suggest the next action. Use `strata guide` to
 strata guide [OPTIONS]
 ```
 
-| Option             | Type                                | Default       | Description                                                               |
-| ------------------ | ----------------------------------- | ------------- | ------------------------------------------------------------------------- |
-| `--file / -f PATH` | path                                | —             | Inspect a specific YAML file (file mode). Supports `STRATA_FILE` env var. |
+| Option             | Type                                | Default       | Description                                                                |
+| ------------------ | ----------------------------------- | ------------- | -------------------------------------------------------------------------- |
+| `--file / -f PATH` | path                                | —             | Inspect a specific YAML file (file mode). Supports `STRATA_FILE` env var.  |
 | `--work-path PATH` | path                                | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH`, then CWD walk. |
-| `--output FORMAT`  | `console`\|`text`\|`json`\|`ndjson` | `console`     | Output format.                                                            |
-| `--verbose`        | flag                                | off           | Emit structured log lines to console.                                     |
-| `--quiet`          | flag                                | off           | Suppress all output.                                                      |
+| `--output FORMAT`  | `console`\|`text`\|`json`\|`ndjson` | `console`     | Output format.                                                             |
+| `--verbose`        | flag                                | off           | Emit structured log lines to console.                                      |
+| `--quiet`          | flag                                | off           | Suppress all output.                                                       |
 
 **Exit code:** always `0` — `guide` is advisory and never a pipeline gate.
 
@@ -624,15 +624,15 @@ Works outside an initialized workspace: degrades gracefully when `.strata/soluti
 
 Run `strata guide` without `--file` to see the 7-phase workspace setup checklist. Each phase is marked ✅ done, ⚠️ needs attention, or ⬜ not started. The `→ Next step` block identifies the first phase that is not ✅ and shows the exact command to address it.
 
-| # | Phase | ✅ Done | ⚠️ Attention | ⬜ Not started |
-| - | ----- | ------- | ------------ | ------------- |
-| 1 | Workspace initialized | `.strata/solution.json` exists and parses | File exists but cannot be parsed | File absent |
-| 2 | Repositories registered | At least one repo in `spec.repositories` | — | None registered |
-| 3 | Repositories on disk | All registered repos exist locally | Some paths missing (shows count and names) | Phase 2 is ⬜ |
-| 4 | Profile created | At least one profile in `spec.profiles` | — | None created |
-| 5 | Profile activated | One profile has `active: true` | — | None active |
-| 6 | File references registered | Active profile has at least one ref | Zero refs on active profile | Phase 5 is ⬜ |
-| 7 | Build artifact exists | `build/` directory exists and has files | Directory exists but is empty | Directory absent |
+| #   | Phase                      | ✅ Done                                    | ⚠️ Attention                                | ⬜ Not started    |
+| --- | -------------------------- | ----------------------------------------- | ------------------------------------------ | ---------------- |
+| 1   | Workspace initialized      | `.strata/solution.json` exists and parses | File exists but cannot be parsed           | File absent      |
+| 2   | Repositories registered    | At least one repo in `spec.repositories`  | —                                          | None registered  |
+| 3   | Repositories on disk       | All registered repos exist locally        | Some paths missing (shows count and names) | Phase 2 is ⬜     |
+| 4   | Profile created            | At least one profile in `spec.profiles`   | —                                          | None created     |
+| 5   | Profile activated          | One profile has `active: true`            | —                                          | None active      |
+| 6   | File references registered | Active profile has at least one ref       | Zero refs on active profile                | Phase 5 is ⬜     |
+| 7   | Build artifact exists      | `build/` directory exists and has files   | Directory exists but is empty              | Directory absent |
 
 ```
 Workspace: my-platform  (e:\src\my-config-repo)
@@ -656,28 +656,28 @@ Setup progress:
 
 Next-step hints by phase:
 
-| First incomplete phase | Suggested command |
-| ---------------------- | ----------------- |
-| 1 — Workspace not initialized | `strata sln init <name>` |
-| 2 — No repos registered | `strata repo add <name> <url>` |
-| 3 — Repos not all on disk | `git clone <url> <path>` (one line per missing repo) |
-| 4 — No profiles | `strata profile add <name> --activate` |
-| 5 — No active profile | `strata profile activate <name>` |
-| 6 — No refs registered | `strata ref config add <name> @<repo>/path/to/config.yaml --profile <active>` |
-| 7 — No build artifact | `strata build run` |
-| All ✅ | `All setup phases complete. Your workspace is ready to deploy.` |
+| First incomplete phase        | Suggested command                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| 1 — Workspace not initialized | `strata sln init <name>`                                                      |
+| 2 — No repos registered       | `strata repo add <name> <url>`                                                |
+| 3 — Repos not all on disk     | `git clone <url> <path>` (one line per missing repo)                          |
+| 4 — No profiles               | `strata profile add <name> --activate`                                        |
+| 5 — No active profile         | `strata profile activate <name>`                                              |
+| 6 — No refs registered        | `strata ref config add <name> @<repo>/path/to/config.yaml --profile <active>` |
+| 7 — No build artifact         | `strata build run`                                                            |
+| All ✅                         | `All setup phases complete. Your workspace is ready to deploy.`               |
 
 ### File mode (`--file`)
 
 Supply `--file` (or `-f`) to inspect a specific YAML file. The workspace setup checklist is suppressed and replaced by a 5-phase structural check, followed by ready-to-use `validate` and `register` commands for the detected kind.
 
-| # | Phase | Check |
-| - | ----- | ----- |
-| 1 | File readable | Path exists and YAML parses without error |
-| 2 | Kind recognized | `kind:` is present and is a known platform kind |
-| 3 | apiVersion present | `apiVersion: strata.huybrechts.xyz/v1` |
-| 4 | Name present | `meta.name` is non-empty |
-| 5 | Spec present | `spec:` block exists and is non-empty |
+| #   | Phase              | Check                                           |
+| --- | ------------------ | ----------------------------------------------- |
+| 1   | File readable      | Path exists and YAML parses without error       |
+| 2   | Kind recognized    | `kind:` is present and is a known platform kind |
+| 3   | apiVersion present | `apiVersion: strata.huybrechts.xyz/v1`          |
+| 4   | Name present       | `meta.name` is non-empty                        |
+| 5   | Spec present       | `spec:` block exists and is non-empty           |
 
 ```
 File: path/to/my-config.yaml  (kind: configuration)

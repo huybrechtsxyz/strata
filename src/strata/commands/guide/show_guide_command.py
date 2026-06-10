@@ -177,9 +177,7 @@ class GuideCommand(BaseCommand):
     # Workspace checklist evaluation
     # ------------------------------------------------------------------
 
-    def _evaluate_checklist(
-        self, solution: Optional[SolutionModel], solution_exists: bool
-    ) -> List[ChecklistItem]:
+    def _evaluate_checklist(self, solution: Optional[SolutionModel], solution_exists: bool) -> List[ChecklistItem]:
         checklist: List[ChecklistItem] = []
 
         # Phase 1 — Workspace initialized
@@ -326,11 +324,7 @@ class GuideCommand(BaseCommand):
                 missing_repos = [
                     r
                     for r in repos
-                    if not (
-                        Path(r.path)
-                        if Path(r.path).is_absolute()
-                        else self._work_path / r.path
-                    ).exists()
+                    if not (Path(r.path) if Path(r.path).is_absolute() else self._work_path / r.path).exists()
                 ]
                 hint_lines: List[str] = []
                 for repo in missing_repos:
@@ -534,9 +528,7 @@ class GuideCommand(BaseCommand):
     # File mode: checklist evaluation
     # ------------------------------------------------------------------
 
-    def _evaluate_file_checklist(
-        self, path: Path
-    ) -> tuple[List[ChecklistItem], Optional[str], Optional[str]]:
+    def _evaluate_file_checklist(self, path: Path) -> tuple[List[ChecklistItem], Optional[str], Optional[str]]:
         """Evaluate file inspection phases. Returns (checklist, detected_kind, detected_name)."""
         checklist: List[ChecklistItem] = []
         detected_kind: Optional[str] = None
@@ -596,9 +588,7 @@ class GuideCommand(BaseCommand):
         elif api_version == expected:
             checklist.append(ChecklistItem(3, "apiVersion present", "ok", api_version))
         else:
-            checklist.append(
-                ChecklistItem(3, "apiVersion present", "warn", f'wrong value: "{api_version}"')
-            )
+            checklist.append(ChecklistItem(3, "apiVersion present", "warn", f'wrong value: "{api_version}"'))
 
         # Phase 4 — Name present
         meta = doc.get("meta") or {}
@@ -660,9 +650,7 @@ class GuideCommand(BaseCommand):
 
         if register_hint:
             register_hint = self._apply_tokens(register_hint, active_profile, resolved_path.stem, resolved_path)
-            next_steps.append(
-                NextStepItem(phase=0, label="Register", hint=register_hint, see_also=see_also)
-            )
+            next_steps.append(NextStepItem(phase=0, label="Register", hint=register_hint, see_also=see_also))
 
         return next_steps
 
