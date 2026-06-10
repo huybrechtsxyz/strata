@@ -14,22 +14,22 @@ Only one profile is active at a time. The active profile is stored in
 ## Typical Setup
 
 ```
-xyz profile add dev
-xyz profile add stg
-xyz profile add prd
-xyz profile activate dev
+strata profile add dev
+strata profile add stg
+strata profile add prd
+strata profile activate dev
 
 # Add refs per profile:
-xyz ref envfile add --profile dev --name base --path ./envs/dev.env
-xyz ref envfile add --profile stg --name base --path ./envs/stg.env
-xyz ref configfile add --profile dev --name app --path ./config/app-dev.yaml
+strata ref envfile add --profile dev --name base --path ./envs/dev.env
+strata ref envfile add --profile stg --name base --path ./envs/stg.env
+strata ref configfile add --profile dev --name app --path ./config/app-dev.yaml
 ```
 
 ## Switching Profiles
 
 ```
-xyz profile activate stg     # switch to staging
-xyz profile list             # see which is active
+strata profile activate stg     # switch to staging
+strata profile list             # see which is active
 ```
 
 Switching profiles changes the ambient context for all subsequent commands in
@@ -47,4 +47,4 @@ configuration will pick up the new active profile.
 Name profiles to match your deployment environments: `dev`, `stg`, `prd`. This
 makes it unambiguous which profile maps to which target.
 
-See also: `xyz help --topic refs`, `xyz help --topic environments`
+See also: `strata help --topic refs`, `strata help --topic environments`

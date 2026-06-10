@@ -1,0 +1,10 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: dns-broken
+  annotations:
+    description: This file has the wrong kind — namespace instead of dns
+  labels:
+    version: "1.0.0"
+spec:
+  zones: []

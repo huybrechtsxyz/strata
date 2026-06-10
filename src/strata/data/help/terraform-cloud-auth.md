@@ -125,9 +125,9 @@ files are removed after rendering.
 
 ## Related Topics
 
-- `xyz help terraform` — Terraform integration overview and environment variables
-- `xyz help azure_keyvault` — Azure Key Vault secret resolution
-- `xyz help hashicorp_vault` — HashiCorp Vault secret resolution
-- `xyz help bitwarden` — Bitwarden Secrets Manager integration
+- `strata help terraform` — Terraform integration overview and environment variables
+- `strata help azure_keyvault` — Azure Key Vault secret resolution
+- `strata help hashicorp_vault` — HashiCorp Vault secret resolution
+- `strata help bitwarden` — Bitwarden Secrets Manager integration
 - https://www.terraform.io/cloud-docs — Terraform Cloud documentation
 - https://www.terraform.io/cli/commands/login — terraform login reference

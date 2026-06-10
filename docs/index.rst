@@ -58,6 +58,8 @@ strata
    config/firewall
    config/module
    config/namespace
+   config/dns
+   config/network
 
 .. toctree::
    :maxdepth: 2

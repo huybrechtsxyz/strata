@@ -1,0 +1,29 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: network
+meta:
+  name: peered_overlap
+  annotations:
+    description: "Two peered networks with overlapping address spaces — should fail V11 for peered"
+spec:
+  networks:
+    - name: net_alpha
+      address_space:
+        - value: "10.0.0.0/16"
+      subnets:
+        - name: alpha_sub
+          cidr:
+            value: "10.0.0.0/24"
+      peerings:
+        - name: to_beta
+          target: net_beta
+
+    - name: net_beta
+      address_space:
+        - value: "10.0.0.0/16"
+      subnets:
+        - name: beta_sub
+          cidr:
+            value: "10.0.1.0/24"
+      peerings:
+        - name: to_alpha
+          target: net_alpha

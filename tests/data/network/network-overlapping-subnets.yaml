@@ -1,0 +1,18 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: network
+meta:
+  name: overlapping_subnets
+  annotations:
+    description: "Two subnets with overlapping CIDRs within the same network — should fail V9"
+spec:
+  networks:
+    - name: broken_net
+      address_space:
+        - value: "10.0.0.0/16"
+      subnets:
+        - name: subnet_a
+          cidr:
+            value: "10.0.0.0/24"
+        - name: subnet_b
+          cidr:
+            value: "10.0.0.128/25"

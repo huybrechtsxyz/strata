@@ -81,3 +81,60 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 **Delegated to Basher:** `HelmIntegration` in `integrations/helm.py` — methods: `repo_add`, `repo_update`, `pull`, `upgrade_install`, `uninstall`, `status`, `list_releases`. Step sequence: `setup → check → plan → apply` (same contract as `TerraformDeployer`).
 
 **Decision written:** `.squad/decisions/inbox/danny-helm-architecture.md`
+
+### 2026-06-09 — DNS kind architecture review
+
+**Requested by:** Vincent Huybrechts.
+
+**Reviewed:** 4 open architecture questions for `PlatformKind.DNS`. All resolved.
+
+- `spec.provider`: INCLUDE as `Optional[str]`. Multi-provider DNS workspaces (INWX + Cloudflare + Route53 simultaneously) need per-zone routing without loading configuration.yaml. Validate against provider enum via `field_validator`.
+- Workspace field name: `dns_zones` (`workspace.spec.dns_zones: Optional[List[WorkspaceDnsModel]]`). `dns` alone is too ambiguous; `_zones` qualifier makes the collection unit explicit.
+- Merge strategy: Zone merge by name (last-wins); record merge by (name, type) RRset replacement — not per-value dedup. Matches Terraform DNS provider semantics (complete RRset replaced atomically).
+- tfvars shape: APPROVED. Nested `dns_zones → attachment_name → {provider, zones: {domain → {ttl, records}}}`. Records serialized with null fields included (`exclude_none=False`) for uniform Terraform schema.
+
+**Decision written:** `.squad/decisions/inbox/danny-dns-architecture.md`
+
+### 2026-06-10 — Network kind architecture design
+
+**Requested by:** Vincent Huybrechts.
+
+**Deliverable:** Full design spec for `PlatformKind.NETWORK` written to `.archive/network-design.md`.
+
+**Key architectural decisions:**
+
+- `CidrSourceModel` as reusable value/var/secret union type for CIDRs (AD-NET-1). Appears in two structural positions (address_space list, subnet single), extracted to avoid duplication.
+- Subnets required per network (min_length=1) (AD-NET-2). A network without subnets is unreferenceable — strata's value is the subnet registry.
+- Peering as lightweight `(name, target)` reference only (AD-NET-3). Configuration is provider-specific → Terraform's job. Strata captures intent for overlap validation.
+- Qualified subnet references `<network>/<subnet>` on `WorkspaceResourceModel.subnet` (AD-NET-4). Avoids ambiguity in multi-network setups. Dot notation rejected (PlatformName regex conflict).
+- CIDR overlap: warning for non-peered networks, hard error for peered networks (AD-NET-5). Non-peered may legitimately overlap (isolated envs); peered overlap fails at provider level.
+- CIDR validation deferred for var/secret sources (AD-NET-6). Models load without environment context; service re-validates after variable injection at build time.
+- Merge strategy mirrors DNS: network merge by name (last-wins), subnet merge by `(network_name, subnet_name)` replacement, post-merge CIDR re-validation (AD-NET-7).
+- No `spec.provider` field (AD-NET-9). Unlike DNS, networks are bound to a single provider via workspace topology — adding provider here would create contradictory source of truth.
+- 17 touchpoints identified (comparable to DNS's 15). Two extras: `WorkspaceResourceModel.subnet` field and cross-kind reference validation.
+
+**Design document:** `.archive/network-design.md`
+**Decision written:** `.squad/decisions/inbox/danny-network-kind-design.md`
+
+### 2026-06-10 — `strata guide` command design
+
+**Requested by:** Vincent Huybrechts.
+
+**Deliverable:** Full design spec for the `strata guide` command written to `.archive/guide-command-design.md`.
+
+**Key architectural decisions:**
+
+- Top-level `strata guide` command — NOT under `sln`. First-time users must reach it with zero prior knowledge. Buried under a lifecycle group defeats the purpose.
+- `INIT_REQUIRED = False` — mirrors `StatusCommand`. Guide teaches you how to init; it cannot require init to run.
+- 7 checklist phases: workspace initialized → repos registered → repos on disk → profile created → profile activated → refs registered → build artifact exists. Phases 2 (tools check) and 9 (deploy history) deferred to v2.
+- Status markers: ✅ (ok), ⚠️ (partial/attention), ⬜ (pending). No ❌ in v1 — advisory only.
+- "Next step" = first non-✅ phase from top. ⚠️ counts as non-done (repos 2/3 cloned still triggers a next-step hint). Phase 3 hint emits one `git clone` line per missing repo with the registered URL.
+- Uses `SolutionService.load_from_json()` — never raw `json.load()`. Parse failures rendered as ⚠️ phase 1.
+- Exit code always 0. Guide is advisory, never a pipeline gate.
+- No `--profile` flag — always reads the active profile. A phantom-profile view would misrepresent deploy-time state.
+- `ChecklistItem` / `NextStepItem` are module-local dataclasses in `show_guide_command.py` — single consumer, no shared extraction.
+- Console rendering is single-pass `click.echo()` — matches StatusCommand pattern, no template engine.
+- 3 new files (cli_guide.py, guide/__init__.py, guide/show_guide_command.py), 1 modified file (cli.py import + registration + `_HELP_SECTIONS`). Zero new models, zero new services.
+
+**Design document:** `.archive/guide-command-design.md`
+**Decision written:** `.squad/decisions/inbox/danny-guide-command-design.md`

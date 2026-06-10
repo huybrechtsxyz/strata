@@ -10,10 +10,12 @@ from strata.commands.cli_common import click_output_format
 from strata.models.common_models import PlatformKind
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.deployment_model import DeploymentModel
+from strata.models.dns_model import DnsModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.firewall_model import FirewallModel
 from strata.models.module_model import ModuleModel
 from strata.models.namespace_model import NamespaceModel
+from strata.models.network_model import NetworkModel
 from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
@@ -23,10 +25,12 @@ from strata.models.workspace_model import WorkspaceModel
 _KIND_TO_MODEL = {
     PlatformKind.CONFIGURATION: ConfigurationModel,
     PlatformKind.DEPLOYMENT: DeploymentModel,
+    PlatformKind.DNS: DnsModel,
     PlatformKind.ENVIRONMENT: EnvironmentModel,
     PlatformKind.FIREWALL: FirewallModel,
     PlatformKind.MODULE: ModuleModel,
     PlatformKind.NAMESPACE: NamespaceModel,
+    PlatformKind.NETWORK: NetworkModel,
     PlatformKind.PLATFORM_MODEL: PlatformArtifactModel,
     PlatformKind.PROVIDER: ProviderModel,
     PlatformKind.RESOURCE: ResourceModel,

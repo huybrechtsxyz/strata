@@ -6,168 +6,73 @@ Tester / QA for strata. pytest, Click CliRunner, Pydantic model testing, integra
 User: Vincent Huybrechts. Stack: Python 3.13, pytest, nox, Click testing.
 Key paths: `tests/strata/`, `conftest.py`, `noxfile.py`.
 
+**Past test suites (condensed):**
+- 2026-05-18: devcontainer scaffold tests — 7 tests in `TestSolutionControllerScaffoldDevcontainer`; `get_pkg_templates_path` patched via `patch(...)`; idempotency + graceful-skip tested
+- 2026-05-19: sln group test pattern — `TestSln<Verb>` naming; CLI invocation must include group prefix `["sln", "init", ...]`; subcommand tests in `tests/strata/commands/`
+- 2026-05-29: github secret store tests — 4 model tests + 5 controller tests; `monkeypatch.setenv` for env isolation; `GITHUB_ACTIONS` warning verified
+- 2026-06-01: HelmBuilder anticipatory tests (27 skipped) — `IMPL_MISSING` guard pattern established; mirrors `test_builders_compose.py`; `_make_helm_module`, `_make_pvc_mount` helpers; service key `{module}-{service}` rule encoded
+- 2026-06-01: Helm test coverage gap analysis — gap confirmed: no `test_integrations_helm.py` or `test_deployers_helm.py`; 13 integration tests + ~45 deployer tests planned and documented
+- 2026-06-02: Helm integration + deployer tests — 13 integration + 42 deployer tests, all passing (1655 total); `d._helm = MagicMock()` injection pattern; `call_args_list` inspection for multi-call verification; `ensure_available()` returns `(True, "")` on success
+- 2026-06-02: ComposeDeployer tests — 38 tests, 12 classes, all passing (1693 total); mirrors Helm deployer pattern; `force=False` guard tested BEFORE iterating files; `test_parse_error_logged_not_raised` confirms exceptions caught internally
+- 2026-06-09: DNS kind tests (anticipatory) — 8 model tests + 5 service tests; `_make_dns_model()` helper; validator tests inserted after firewall equivalents; `DnsService.merge_dns()` assumed from firewall pattern
+- 2026-06-09: DNS record value union tests — 9 new tests in `test_models_dns.py`; `_dns_data()` helper added; tests: one-of value/var/secret, cross-reference validation, references block required for var/secret
+
 ## Learnings
 
-### 2026-05-18 — devcontainer scaffold tests
+### 2026-06-10 — guide command tests (anticipatory)
 
-**What was added:** `TestSolutionControllerScaffoldDevcontainer` class in
-`tests/strata/controllers/test_controllers_solution.py` (7 tests).
+**What was added:** `tests/strata/commands/test_guide_command.py` (new file) — 26 tests across 3 classes.
+
+**Test classes:**
+- `TestGuideCommandWorkspaceChecklist` (16 tests) — phases 1-7 checklist logic, JSON shape, exit-code invariants.
+- `TestGuideCommandFileMode` (9 tests) — file inspection mode (`-f`), file phase checklist, next_steps actions.
+- `TestGuideCommandHintCustomization` (1 test) — `.strata/guide.yaml` phase 6 hint override.
 
 **Patterns followed:**
-- All tests use `tmp_path` fixture; no real disk I/O beyond the temp dir.
-- `get_pkg_templates_path` is patched via
-  `patch("strata.controllers.solution_controller.get_pkg_templates_path", return_value=<Path>)`
-  so each test controls exactly which template files exist.
-- A `_make_templates(templates_root)` static helper writes minimal
-  `devcontainer/devcontainer.template.json` and `devcontainer/post-create.sh`
-  into the patched templates root; other scaffold sections (solution, configuration,
-  integrations) simply skip because their subdirs don't exist.
-- `_make_ctrl(work_path)` creates `.platform/` and sets `ctrl._solution` directly —
-  matching the project-wide convention of avoiding full init/save round-trips.
-- `_scaffold_platform_dir()` is called directly (single-underscore private method,
-  callable from tests).
-- Idempotency tested by pre-writing the destination file and asserting its content
-  is unchanged after the scaffold call.
-- Graceful-skip tested by creating the templates root without a `devcontainer/`
-  subdir and asserting `.devcontainer/` is never created.
+- `IMPL_MISSING` try/except guard on `from strata.commands.cli_guide import guide_command`; `pytestmark = pytest.mark.skipif(IMPL_MISSING, ...)` skips all 26 tests until Linus lands the implementation.
+- `CliRunner(mix_stderr=False)` in `_runner()` factory per spec requirement.
+- All filesystem work via `tmp_path` pytest fixture; no real workspace touched.
+- `_make_workspace(tmp_path, solution, build_files)` — creates `.strata/`, writes `solution.json`, optionally populates `build/`.
+- `_make_solution_json(...)` builds a dict for `json.dumps` — matches `SolutionModel` shape exactly.
+- `_make_repo(name, url, path, repo_type)` and `_make_profile(name, active, config_paths, ...)` factory helpers keep tests concise.
+- `_make_config_yaml(dest, kind, ...)` writes a minimal strata YAML for file-mode tests.
+- JSON shape assertions use `json.loads(result.output)` directly (no mock needed — behaviour is filesystem-driven).
+- Local repo test: `url: ""` + `type: "local"` distinguishes local repos from remote; validates hint emits `# local repo not found:` not `git clone`.
 
-**Test file location:** `tests/strata/controllers/test_controllers_solution.py`
-**Import added:** `from pathlib import Path` and `from unittest.mock import patch`
+**Key assumptions (to confirm with Linus):**
+- Import path: `strata.commands.cli_guide.guide_command` (mirrors `cli_help`, `cli_status`, etc.).
+- JSON top-level keys: `workspace`, `checklist`, `next_steps` (array), `complete`.
+- File mode JSON top-level includes `file` block.
+- Status values: `"ok"`, `"warn"`, `"pending"` (not `"✅"`/`"⚠️"`/`"⬜"`).
+- `.strata/guide.yaml` phase hint override format: `phases: { 6: { hint: "..." } }`.
+- Empty URL string (`""`) on `SolutionSpecRepositoryModel.url` passes Pydantic validation (no non-empty validator on that field).
 
-### 2026-05-29 — github secret store tests
+**Current status:** All 26 tests skip cleanly via `pytestmark`. Zero failures, zero errors.
+
+### 2026-06-10 — Network kind tests (anticipatory)
 
 **What was added:**
-- `tests/strata/models/test_store_models.py` (new file) — `TestSecretStoreTypeGithub` class with 4 tests.
-- `TestValueControllerGithubStore` class appended to `tests/strata/controllers/test_controllers_value.py` with 5 tests.
+- `tests/data/network/` — 6 YAML fixtures: `network-haven.yaml` (simple flat), `network-enterprise.yaml` (hub+2 spokes, peerings, var refs), `network-invalid.yaml` (wrong kind + empty networks), `network-overlapping-subnets.yaml` (V9 overlap), `network-peered-overlap.yaml` (V11 mutual peering overlap), `network-var-refs.yaml` (value/var/secret mix with references).
+- `tests/strata/models/test_models_network.py` — 22 tests in `TestNetworkModel`: valid haven/enterprise/var-refs loads, invalid kind, empty networks, CidrSourceModel union (value/var/secret/none/two/bad-format), unique network names (V3), unique subnet names (V4), subnet overlap (V9), subnet-outside-address-space (V10), peering target exists (V5), no self-peering (V6), unique peering names (V7), undeclared var/secret refs (V8), peered overlap (V11), kind frozen.
+- `tests/strata/services/test_services_network.py` — 5 tests in `TestNetworkService`: `_get_model_class`, validate standard fixture, get_kind after validate, merge networks by name (last-wins), merge subnets by (network, subnet) tuple (last-wins).
 
 **Patterns followed:**
-- Model tests use `pytest.raises(ValidationError)` with `exc_info` inspection — assert against `str(exc_info.value)`.
-- Controller tests call `ctrl._resolve_secret(item)` directly on a `ValueController()` instance.
-- Env var isolation via `monkeypatch.setenv` / `monkeypatch.delenv` — no manual cleanup needed.
-- Logger warning capture via `unittest.mock.patch("strata.controllers.value_controller.logger")` as context manager; inspect `.warning.assert_called_once()` / `.warning.assert_not_called()`.
-- Added `patch` to the existing `from unittest.mock import MagicMock` import line.
+- Same file layout as DNS tests; imports from `strata.models.network_model` and `strata.services.network_service`.
+- `_net_data()` and `_simple_network()` helpers for inline model construction — keeps tests DRY.
+- `_make_network_model()` helper in service tests mirrors `_make_dns_model()` pattern.
+- Tests are anticipatory — `NetworkModel`, `NetworkService`, and `PlatformKind.NETWORK` are being implemented concurrently by Linus.
+- Fixture `network-invalid.yaml` uses `kind: namespace` (wrong kind) + `networks: []` (empty), matching `dns-invalid.yaml` pattern.
+- `network-overlapping-subnets.yaml`: `10.0.0.0/24` overlaps `10.0.0.128/25` within same network.
+- `network-peered-overlap.yaml`: two networks with mutual peerings sharing `10.0.0.0/16` — triggers V11 hard error.
+- `merge_networks()` method name assumed from design spec §8.2 — confirm with Linus.
 
-**Key implementation facts confirmed:**
-- `SecretStoreType.GITHUB = "github"` is live in `src/strata/models/store_models.py`.
-- `SecretStoreModel` has `@model_validator(mode="after")` that raises `ValueError` when `version` is set for github store.
-- `_resolve_secret` in `value_controller.py` applies `.upper()` normalization: `env_key = str(item.value).upper()`.
-- Warning fires when `os.environ.get("GITHUB_ACTIONS") != "true"`; silent when it equals `"true"`.
-- Error message for missing env var contains `"GitHub Actions"`.
+**Key rules the tests encode:**
+1. `CidrSourceModel`: exactly one of value/var/secret (V1); value must be valid CIDR (V2).
+2. Network names unique within spec (V3); subnet names unique within network (V4).
+3. Peering target must exist in spec (V5); no self-peering (V6); unique peering names (V7).
+4. var/secret keys must be declared in `references` block (V8).
+5. Subnet CIDRs must not overlap within same network (V9) — literals only.
+6. Subnets must fit within address space (V10) — literals only.
+7. Peered networks with overlapping address spaces = hard error (V11).
+8. Non-peered overlap is a warning (not tested here — warning-level, not ValidationError).
 
-**All 35 tests pass (31 pre-existing + 4 model + 5 controller).**
-
-### 2026-05-19 — sln group test pattern
-
-**Pattern for testing sln subcommands:**
-- Test class naming: `TestSln<Verb>` (e.g., `TestSlnInit`, `TestSlnClean`, `TestSlnStatus`, `TestSlnExport`).
-- CLI invocation must include the group prefix: `runner.invoke(main, ["sln", "init", ...])` — not `["init", ...]`.
-- Existing command tests (`test_commands_init.py`, `test_commands_clean.py`, `test_commands_status.py`) were updated in-place: class renamed, invocation updated.
-- New subcommand tests (e.g., `test_commands_sln_export.py`) live in `tests/strata/commands/` — same directory as other command tests.
-- New subcommand modules live under `src/strata/commands/sln/` — import path: `from strata.commands.sln.export_template_command import ...`.
-- **25 sln command tests passing after this session.**
-
-### 2026-06-01 — HelmBuilder tests (anticipatory)
-
-**What was added:** `tests/strata/builders/test_builders_helm.py` (new file) — full test suite written from the design spec before the implementation exists.
-
-**Patterns followed:**
-- Mirrors `test_builders_compose.py` exactly: same helper names (`_mock_deployment_service`, `_mock_namespace_service`, `_module_ref`, `_make_service`, `_make_mod_service`), same `_run_build` inner-helper pattern inside the output test class.
-- `IMPL_MISSING` guard: imports `HelmBuilder` in a try/except; if `ImportError`, `pytestmark = pytest.mark.skipif(IMPL_MISSING, ...)` skips the whole module gracefully so CI doesn't break.
-- `_make_helm_module` adds `release_name` and `kubernetes_namespace` params for `meta.yaml` tests.
-- `_make_pvc_mount` helper constructs a `ModuleMountModel` mock with `storage_class`, `access_mode`, `storage_size` for PVC persistence tests.
-- `patch` target for `resolve_path` and `ModuleService.load` must be `strata.builders.helm_builder.*` (not compose_builder).
-
-**Key design decisions captured in tests:**
-- Service key: `{module}-{service}` normally; just `{service}` when names are equal.
-- `env` block under service key for all four env types (value, var, secret, feature).
-- `persistence` block only when mount has `storage_class`; non-PVC mounts excluded.
-- `configuration` dict merged verbatim into the service key at top level.
-- `meta.yaml`: `releaseName` = `spec.release_name` or `module_name`; `namespace` = `spec.kubernetes_namespace` or `namespace_name`.
-- `dry_run=True`: no files written.
-- Error cases: file not found → False + "not found" error; validation failed → False + "validation failed" error.
-
-**Implementation status:** `HelmBuilder` not yet written. All tests are currently skipped via `pytestmark`.
-
-### 2026-06-01 — Helm test coverage gap analysis
-
-**Gap confirmed:** Neither `tests/strata/integrations/test_integrations_helm.py` nor `tests/strata/deployers/test_deployers_helm.py` exist.
-
-**Existing Helm-related coverage:**
-- `tests/strata/builders/test_builders_helm.py` — 27 tests, ALL currently skipped via `pytestmark` (HelmBuilder not yet implemented).
-- No integration-layer tests for `HelmIntegration`.
-- No deployer-layer tests for `HelmDeployer`.
-
-**Missing test files to create:**
-
-**1. `tests/strata/integrations/test_integrations_helm.py` (13 tests needed)**
-- `TestHelmIntegrationMetadata`: `test_command_is_helm`, `test_capabilities_include_infrastructure`, `test_version_command`
-- `TestHelmIntegrationParseVersion`: `test_parse_buildinfo_format`, `test_parse_with_v_prefix`, `test_parse_plain_semver`, `test_parse_fallback_returns_stripped`
-- `TestHelmIntegrationEnsureAvailable`: `test_ensure_available_success`, `test_ensure_available_not_installed`, `test_ensure_available_version_invalid`
-- `TestHelmIntegrationSetupInfo`: `test_setup_info_returns_dict`, `test_setup_info_has_required_keys`, `test_setup_info_has_yaml_example`
-
-**2. `tests/strata/deployers/test_deployers_helm.py` (~45 tests needed)**
-- `TestHelmDeployerMetadata` (2)
-- `TestHelmDeployerValidateWorkspace` (6): no namespaces, file not found continues, validation failed continues, non-helm skipped, missing build artifacts skipped, registry source happy path
-- `TestHelmDeployerValidateEnvironment` (2): unavailable, available sets `_helm`
-- `TestHelmDeployerStepsNotReady` (5): one per step (setup, check, plan, apply, destroy) — all guard via `_ready()`
-- `TestHelmDeployerSetup` (3): no registries skips update, registry calls repo add + update, deduplication
-- `TestHelmDeployerCheck` (3): no modules, lint passes, lint fails
-- `TestHelmDeployerPlan` (4): no modules, dry-run succeeds, dry-run fails, chart version appended
-- `TestHelmDeployerApply` (4): no modules, install succeeds, install fails, chart version appended
-- `TestHelmDeployerDestroy` (4): requires force, no modules, uninstall succeeds, uninstall fails
-- `TestHelmDeployerPlanDestroy` (3): no modules, module installed, module not installed
-- `TestHelmDeployerOutput` (3): no modules, parses yaml values, failed returns empty dict per module
-- `TestHelmDeployerShowPlan` (1): always returns empty dict
-- `TestSanitizeRepoName` (5): strips https, strips http, replaces non-alphanumeric, truncates to 20 chars, no leading/trailing dashes
-
-**Key mock patterns for test_deployers_helm.py:**
-- `_make_deployer(build_path, work_path, verbose, force)` factory — mirrors AnsibleDeployer pattern exactly
-- `_make_target(ns_name, module_name, ...)` factory returns a `HelmModuleTarget` dataclass instance
-- For `validate_workspace`: patch `strata.deployers.helm_deployer.resolve_path` + `strata.deployers.helm_deployer.ModuleService.load`; write real `meta.yaml` + `values.yaml` to `tmp_path` for filesystem checks
-- For `validate_environment`: patch `strata.deployers.helm_deployer.HelmIntegration`
-- For all step tests: inject `d._helm = MagicMock()` and `d._helm_modules = [_make_target()]` directly — skip validate calls
-- `d._helm._run_integration.return_value = MagicMock(returncode=0, stdout="", stderr="")` for success
-- `d._helm._run_integration.return_value = MagicMock(returncode=1, stderr="error text")` for failure
-
-**Priority ranking:**
-1. **P1 (block deploy path):** `TestHelmDeployerValidateEnvironment`, `TestHelmDeployerStepsNotReady`, `TestHelmDeployerApply`, `TestHelmDeployerDestroy` (force guard), `TestHelmIntegrationEnsureAvailable`
-2. **P2 (core correctness):** `TestHelmDeployerValidateWorkspace`, `TestHelmDeployerSetup`, `TestHelmDeployerCheck`, `TestHelmDeployerPlan`, `TestHelmIntegrationParseVersion`
-3. **P3 (edge cases + output):** `TestHelmDeployerPlanDestroy`, `TestHelmDeployerOutput`, `TestHelmDeployerShowPlan`, `TestSanitizeRepoName`, `TestHelmIntegrationMetadata`, `TestHelmIntegrationSetupInfo`
-
-### 2026-06-02 — Helm integration + deployer tests written
-
-**What was added:**
-- `tests/strata/integrations/test_integrations_helm.py` (13 tests) — all passing.
-- `tests/strata/deployers/test_deployers_helm.py` (42 tests) — all passing.
-- Full suite: 1655 passed, 3 skipped (pre-existing HelmBuilder skips), 0 regressions.
-
-**Patterns followed:**
-- `test_integrations_helm.py` mirrors `test_integrations_ansible.py` exactly: `setup_method` clears `BaseIntegration._instances`, `_make_integration(name)` helper, same class structure.
-- `test_deployers_helm.py` mirrors `test_deployers_ansible.py`: `_make_deployer(tmp_path, force, verbose)` and `_make_target(...)` helpers, inject `d._helm = MagicMock()` and `d._helm_modules = [...]` directly into the deployer before calling step methods.
-- `patch.object(i, "is_available", return_value=True)` for `ensure_available` tests — avoids subprocess calls while testing the Helm-specific override logic.
-- `patch("strata.deployers.helm_deployer.HelmIntegration")` replaces the entire class in the deployer module's namespace — `mock_int.return_value = instance` controls the constructed object.
-- `_run_helm` wraps `self._helm._run_integration(...)` — mocking `d._helm._run_integration` covers both direct calls and `_run_helm`-mediated calls in one mock.
-- `call_args_list` inspection: `[c[0][0] for c in d._helm._run_integration.call_args_list]` extracts positional arg lists for multi-call verification (repo add + repo update deduplication).
-- `output()` and `show_plan()` return 3-tuple `(bool, dict, list)` — unpack accordingly in tests.
-- `_sanitize_repo_name` is importable directly from `strata.deployers.helm_deployer` (module-level function).
-- `HelmIntegration.ensure_available()` returns `(True, "")` on success (empty string, NOT a version message) — version message is composed in `validate_environment` separately.
-- `plan_destroy()` treats `returncode=1` as "not installed" info, not an error — step still returns `(True, [...])`.
-
-### 2026-06-02 — ComposeDeployer tests written
-
-**What was added:**
-- `tests/strata/deployers/test_deployers_compose.py` (38 tests, 12 classes) — all passing.
-- Full suite: 1693 passed, 3 skipped (pre-existing HelmBuilder skips), 0 regressions.
-
-**Patterns followed:**
-- Mirrors `test_deployers_helm.py` exactly: `_make_deployer(tmp_path, force, verbose)` helper, no `_make_target` needed (compose uses `_compose_files: Dict[str, Path]` directly).
-- Inject `d._docker = MagicMock()` + `d._compose_files = {...}` directly before calling step methods — no `validate_*` calls in step tests.
-- `d._docker._run_integration.return_value = MagicMock(returncode=0, stdout="", stderr="")` for success; `returncode=1` for failure.
-- `validate_workspace` tests: patch `d.deployment_service` mock attributes directly (`.get_build_path.return_value`, `.get_namespace_services.return_value`) — no `patch()` context manager needed.
-- `validate_environment` test: `patch("strata.deployers.compose_deployer.DockerIntegration")` replaces the class in the module namespace; `mock_int.return_value = instance` controls the constructed object.
-- `test_failure_aborts_loop` (apply): uses `assert d._docker._run_integration.call_count == 1` to verify the early-return on first failure — first failure stops the loop before second stack is reached.
-- `test_parse_error_logged_not_raised` (plan): writing malformed YAML to the compose file still returns `(True, [...])` with "could not parse" in messages — exceptions are caught internally.
-- `output()` returns 3-tuple `(bool, dict, list)` — unpack accordingly in tests.
-- `plan_destroy()` treats `returncode=1` (docker stack ls failure) as non-fatal — still returns `(True, [...])`.
-- `destroy()` force guard checked BEFORE iterating files — `force=False` with files populated still returns immediately with `(False, ["--force is required..."])`.
-- ruff check and format: no changes needed after file creation.

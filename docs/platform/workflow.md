@@ -58,7 +58,7 @@ strata sln init --name xyz-workspace
 ```
 
 Creates:
-- `.strata/project.json`          — solution registry
+- `.strata/solution.json`          — solution registry
 - `.strata/cli.yaml`              — workspace defaults
 - `.strata/logging.yaml`          — logging configuration
 - `.devcontainer/devcontainer.json` — dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm)
@@ -204,6 +204,12 @@ strata profile add stg
 strata profile add prd
 ```
 
+Use `--activate` to create and activate in one step:
+
+```bash
+strata profile add prd --activate
+```
+
 ### 3.2 Activate the working profile
 
 ```bash
@@ -243,7 +249,16 @@ strata ref env add prd-env @xyz-config/environments/xyz-env-prd.yaml          --
 strata ref secret add prd-secrets /run/secrets/xyz-prd.yaml                   --profile prd
 ```
 
-### 4.4 Verify refs
+### 4.3b Register data files (non-YAML assets)
+
+`ref data` registers arbitrary files (JSON, TOML, scripts, certs) that the build copies
+verbatim into the output folder. Use this for assets your Terraform modules or deployment
+scripts need but that don't follow the platform YAML schema.
+
+```bash
+strata ref data add ca-bundle /run/certs/ca-bundle.pem --profile prd
+strata ref data add tf-backend @xyz-config/backend.json --profile prd
+```
 
 ```bash
 strata ref config list --profile prd
@@ -287,6 +302,38 @@ strata values resolve -f … --probe          # also check backend reachability
 Exit codes: `0` = all resolved, `3` = one or more entries failed.
 
 JSON output is supported via `--output json`.
+
+---
+
+## Phase 4b — Create New Config Files
+
+Use `strata new` to scaffold a new platform YAML file from a built-in template.
+This is the fastest way to add namespaces, modules, providers, DNS zones,
+network definitions, and other config files to your repo.
+
+```bash
+# See every available template
+strata new --list
+
+# Create a namespace config file in the current directory
+strata new namespace my-app
+
+# Create a module config, written to a specific folder
+strata new module my-api --path repos/xyz-config/stack/
+
+# Create a provider definition with a variable override
+strata new provider azure --path repos/xyz-config/config/ --set owner=myteam
+
+# Create a DNS zones file
+strata new dns my-zones --path repos/xyz-config/dns/
+
+# Create a network topology file
+strata new network my-networks --path repos/xyz-config/network/
+```
+
+Each command writes a ready-to-edit YAML file with `meta.name` pre-filled and
+all spec fields present as commented placeholders. Use `--overwrite` to replace
+an existing file.
 
 ---
 
@@ -340,6 +387,15 @@ Reads:
 
 Writes:
 - `.strata/build/<deployment>/` — Terraform `.tfvars.json`, `platform.json`, rendered templates
+
+> **Workspace-level resource kinds:** The workspace YAML can declare additional resource kinds
+> that strata validates and builds into separate artifact files. Firewall rules are listed under
+> `spec.firewalls` and produce `firewalls.auto.tfvars.json`. DNS zones follow the same pattern
+> — list them under `spec.dns_zones` and the build produces `dns.auto.tfvars.json`. Network
+> topologies are listed under `spec.networks` and produce `networks.auto.tfvars.json` — including
+> CIDR overlap detection across subnets and peered networks.
+> See [firewall.md](../config/firewall.md), [dns.md](../config/dns.md), and
+> [network.md](../config/network.md) for schema details.
 
 ### 6.3 Clean build artifacts
 
@@ -597,6 +653,9 @@ strata help --topic cross-repo
 ## Phase 9 — Maintenance
 
 ```bash
+# After upgrading the strata package — refresh schemas, templates, devcontainer
+strata sln update
+
 # Pull latest from all registered repos
 strata repo sync
 
@@ -679,7 +738,9 @@ strata log list --last
 | Command                                         | Description                                                                      |
 | ----------------------------------------------- | -------------------------------------------------------------------------------- |
 | `strata sln init --name NAME [--template FILE]` | Initialize a new workspace; `--template` pre-populates repos, profiles, and refs |
+| `strata sln export --name NAME [--dry-run]`     | Save current workspace as a reusable scaffold template                           |
 | `strata sln status`                             | Show workspace health and integration availability                               |
+| `strata sln update`                             | Refresh package-owned files (schemas, templates, devcontainer) after upgrade     |
 | `strata sln clean [--dry-run]`                  | Remove logs and temp artifacts                                                   |
 | `strata version`                                | Print CLI version                                                                |
 | `strata help [--topic NAME]`                    | Show workflow guidance topics                                                    |
@@ -724,13 +785,13 @@ Valid keys: `output`, `verbose`, `quiet`, `work_path`
 
 ### Profiles
 
-| Command                        | Description                           |
-| ------------------------------ | ------------------------------------- |
-| `strata profile add NAME`      | Create a new profile                  |
-| `strata profile remove NAME`   | Delete a profile                      |
-| `strata profile list`          | List all profiles                     |
-| `strata profile activate NAME` | Set the active profile                |
-| `strata profile show NAME`     | Show all refs registered on a profile |
+| Command                                | Description                                                   |
+| -------------------------------------- | ------------------------------------------------------------- |
+| `strata profile add NAME [--activate]` | Create a new profile; `--activate` sets it active immediately |
+| `strata profile remove NAME`           | Delete a profile                                              |
+| `strata profile list`                  | List all profiles                                             |
+| `strata profile activate NAME`         | Set the active profile                                        |
+| `strata profile show NAME`             | Show all refs registered on a profile                         |
 
 ### File References
 

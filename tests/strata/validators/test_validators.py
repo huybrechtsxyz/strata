@@ -183,6 +183,13 @@ class TestPlatformValidatorBeforeValidate:
         assert result is True
         assert v.detected_kind.value == "firewall"
 
+    def test_valid_dns_file_detected(self, tmp_path):
+        src = _data("dns/dns-standard.yaml")
+        v = PlatformValidator(src)
+        result = v.before_validate(tmp_path)
+        assert result is True
+        assert v.detected_kind.value == "dns"
+
     def test_valid_resource_file_detected(self, tmp_path):
         src = _data("resources/resource-standard.yaml")
         v = PlatformValidator(src)
@@ -249,6 +256,13 @@ class TestPlatformValidatorValidate:
 
     def test_validate_firewall_standard_passes(self, tmp_path):
         src = _data("firewalls/firewall-standard.yaml")
+        v = PlatformValidator(src)
+        assert v.before_validate(tmp_path)
+        result = v.validate(tmp_path)
+        assert result is True
+
+    def test_validate_dns_standard_passes(self, tmp_path):
+        src = _data("dns/dns-standard.yaml")
         v = PlatformValidator(src)
         assert v.before_validate(tmp_path)
         result = v.validate(tmp_path)

@@ -1,0 +1,27 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: network
+meta:
+  name: var_refs_network
+  annotations:
+    description: "Network with CIDRs using var and secret sources with references block"
+spec:
+  references:
+    variables:
+      - main_address_space
+      - mgmt_cidr
+    secrets:
+      - secure_subnet_cidr
+  networks:
+    - name: dynamic_net
+      address_space:
+        - var: main_address_space
+      subnets:
+        - name: public
+          cidr:
+            value: "10.0.0.0/24"
+        - name: management
+          cidr:
+            var: mgmt_cidr
+        - name: secure
+          cidr:
+            secret: secure_subnet_cidr

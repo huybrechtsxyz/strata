@@ -31,26 +31,27 @@ These options are accepted by every command and subcommand:
 
 ## Command Groups
 
-| Group        | Subcommands                                                                  | Description                                             |
-| ------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `sln`        | `init` `clean` `status` `export`                                             | Solution workspace lifecycle                            |
-| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config |
-| `log` †      | `list`                                                                       | View execution logs (read-only)                         |
-| `profile` †  | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                             |
-| `ref` †      | `env` `config` `data` `secret`                                               | Manage file references within profiles                  |
-| `repo` †     | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                     |
-| `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                  |
-| `validate`   | —                                                                            | Validate a single platform YAML file                    |
-| `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds            |
-| `secret`     | `generate` `mask`                                                            | Generate and manage secret values                       |
-| `deploy` †   | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                      |
-| `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                      |
-| `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                   |
-| `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations           |
-| `new` †      | —                                                                            | Create a platform config file from a template           |
-| `version`    | —                                                                            | Show CLI version                                        |
-| `completion` | `bash` `zsh` `fish` `powershell`                                             | Output shell completion script for the given shell      |
-| `help`       | —                                                                            | Show help topics                                        |
+| Group        | Subcommands                                                                  | Description                                               |
+| ------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `sln`        | `init` `update` `clean` `status` `export`                                    | Solution workspace lifecycle                              |
+| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config   |
+| `log` †      | `list`                                                                       | View execution logs (read-only)                           |
+| `profile` †  | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                               |
+| `ref` †      | `env` `config` `data` `secret`                                               | Manage file references within profiles                    |
+| `repo` †     | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                       |
+| `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                    |
+| `validate`   | —                                                                            | Validate a single platform YAML file                      |
+| `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
+| `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
+| `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
+| `deploy` †   | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                        |
+| `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
+| `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
+| `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations             |
+| `new` †      | —                                                                            | Create a platform config file from a template             |
+| `version`    | —                                                                            | Show CLI version                                          |
+| `completion` | `bash` `zsh` `fish` `powershell`                                             | Output shell completion script for the given shell        |
+| `help`       | —                                                                            | Show help topics                                          |
 
 > **†** Requires an initialized workspace (`.strata/` directory). Run `strata sln init --name NAME` first.
 
@@ -68,16 +69,16 @@ Initialize a new strata solution workspace. Creates the `.strata/` state directo
 strata sln init --name NAME [--template NAME-OR-PATH] [standard options]
 ```
 
-| Option                    | Required | Description                                                                                                                    |
-| ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `--name NAME`             | ✅        | Name of the solution workspace                                                                                                 |
-| `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
+| Option                    | Required | Description                                                                                                                               |
+| ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `--name NAME`             | ✅        | Name of the solution workspace                                                                                                            |
+| `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`, `compose`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
 
 **Files created:**
 
 | Path                              | Description                                                                |
 | --------------------------------- | -------------------------------------------------------------------------- |
-| `.strata/project.json`            | Solution registry                                                          |
+| `.strata/solution.json`           | Solution registry                                                          |
 | `.strata/cli.yaml`                | Workspace CLI defaults                                                     |
 | `.strata/logging.yaml`            | Logging configuration                                                      |
 | `.devcontainer/devcontainer.json` | Dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm) |
@@ -277,6 +278,8 @@ strata new --list
 strata new namespace my-app
 strata new provider azure --path config/
 strata new workspace my-ws --set owner=myteam
+strata new dns my-zones --path config/dns/
+strata new network my-networks --path config/networks/
 strata new --list
 ```
 
@@ -364,8 +367,15 @@ Manage environment profiles within the solution.
 
 ### `profile add NAME`
 
+Create a new environment profile.
+
+| Option       | Description                                         |
+| ------------ | --------------------------------------------------- |
+| `--activate` | Activate this profile immediately after creating it |
+
 ```bash
 strata profile add staging
+strata profile add prd --activate
 ```
 
 ### `profile remove NAME`
@@ -404,6 +414,13 @@ strata profile show staging
 Manage file references (env, config, data, secret) within profiles.
 
 Each file type has its own subgroup: `ref env`, `ref config`, `ref data`, `ref secret`. All four expose the same four subcommands.
+
+| Type     | What it registers                                                                                                                                        |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `env`    | Environment variable files (`.env` format) — merged into the build environment                                                                           |
+| `config` | Platform YAML config files — merged by kind into the build artifact                                                                                      |
+| `data`   | Arbitrary data files (JSON, TOML, text) — copied verbatim into the build output without merging. Use for non-YAML assets your Terraform or scripts need. |
+| `secret` | Secret files (YAML or env format) — loaded at deploy time, values masked in logs                                                                         |
 
 All `ref` subcommands accept `--profile NAME` (optional; defaults to the active profile).
 
@@ -457,6 +474,8 @@ strata repo add NAME URL [--branch BRANCH] [--path PATH] [--clone]
 
 - Remote git URL (any `https://`, `git@`, etc.) → registered as type `gitops`. Use `--branch` and `--clone` as needed.
 - Local path starting with a drive letter (`C:/…`, `C:\…`) or a network path (`//server/…`, `\\server\…`) → registered as type `local`. The path must exist and be a directory at registration time. `--branch` and `--clone` are ignored. No sync is needed — the folder is already on disk.
+
+> **`--type local`:** You can also pass `--type local` explicitly to force local registration when the auto-detection heuristic doesn't match (e.g. a relative path or an unusual UNC format). This is the same as what the workspace template's `GETTING_STARTED.md` uses for repos that already live on disk.
 
 ```bash
 # Remote git repository
@@ -581,6 +600,130 @@ strata validate config/xyz-ws-platform.yaml --deep
 
 ---
 
+## `guide`
+
+Show workspace setup progress and suggest the next action. Use `strata guide` to understand where you are in the setup sequence — whether you are onboarding to a new workspace for the first time or returning after making changes.
+
+```
+strata guide [OPTIONS]
+```
+
+| Option             | Type                                | Default       | Description                                                                |
+| ------------------ | ----------------------------------- | ------------- | -------------------------------------------------------------------------- |
+| `--file / -f PATH` | path                                | —             | Inspect a specific YAML file (file mode). Supports `STRATA_FILE` env var.  |
+| `--work-path PATH` | path                                | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH`, then CWD walk. |
+| `--output FORMAT`  | `console`\|`text`\|`json`\|`ndjson` | `console`     | Output format.                                                             |
+| `--verbose`        | flag                                | off           | Emit structured log lines to console.                                      |
+| `--quiet`          | flag                                | off           | Suppress all output.                                                       |
+
+**Exit code:** always `0` — `guide` is advisory and never a pipeline gate.
+
+Works outside an initialized workspace: degrades gracefully when `.strata/solution.json` is absent (shows Phase 1 as ⬜ and stops).
+
+### Workspace mode
+
+Run `strata guide` without `--file` to see the 7-phase workspace setup checklist. Each phase is marked ✅ done, ⚠️ needs attention, or ⬜ not started. The `→ Next step` block identifies the first phase that is not ✅ and shows the exact command to address it.
+
+| #   | Phase                      | ✅ Done                                    | ⚠️ Attention                                | ⬜ Not started    |
+| --- | -------------------------- | ----------------------------------------- | ------------------------------------------ | ---------------- |
+| 1   | Workspace initialized      | `.strata/solution.json` exists and parses | File exists but cannot be parsed           | File absent      |
+| 2   | Repositories registered    | At least one repo in `spec.repositories`  | —                                          | None registered  |
+| 3   | Repositories on disk       | All registered repos exist locally        | Some paths missing (shows count and names) | Phase 2 is ⬜     |
+| 4   | Profile created            | At least one profile in `spec.profiles`   | —                                          | None created     |
+| 5   | Profile activated          | One profile has `active: true`            | —                                          | None active      |
+| 6   | File references registered | Active profile has at least one ref       | Zero refs on active profile                | Phase 5 is ⬜     |
+| 7   | Build artifact exists      | `build/` directory exists and has files   | Directory exists but is empty              | Directory absent |
+
+```
+Workspace: my-platform  (e:\src\my-config-repo)
+
+Setup progress:
+
+  ✅ Workspace initialized
+  ✅ Repositories registered (3)
+  ⚠️  Repositories on disk (2/3 cloned — xyz-svc-traefik not found)
+  ✅ Profile created (prd, stg, dev)
+  ✅ Profile activated (prd)
+  ⚠️  File references (0 registered on active profile 'prd')
+  ⬜ Build artifact
+
+→ Next step: Register config files with your active profile:
+
+   strata ref config add <name> @<repo>/path/to/config.yaml --profile prd
+
+   See: strata help --topic environments
+```
+
+Next-step hints by phase:
+
+| First incomplete phase        | Suggested command                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| 1 — Workspace not initialized | `strata sln init <name>`                                                      |
+| 2 — No repos registered       | `strata repo add <name> <url>`                                                |
+| 3 — Repos not all on disk     | `git clone <url> <path>` (one line per missing repo)                          |
+| 4 — No profiles               | `strata profile add <name> --activate`                                        |
+| 5 — No active profile         | `strata profile activate <name>`                                              |
+| 6 — No refs registered        | `strata ref config add <name> @<repo>/path/to/config.yaml --profile <active>` |
+| 7 — No build artifact         | `strata build run`                                                            |
+| All ✅                         | `All setup phases complete. Your workspace is ready to deploy.`               |
+
+### File mode (`--file`)
+
+Supply `--file` (or `-f`) to inspect a specific YAML file. The workspace setup checklist is suppressed and replaced by a 5-phase structural check, followed by ready-to-use `validate` and `register` commands for the detected kind.
+
+| #   | Phase              | Check                                           |
+| --- | ------------------ | ----------------------------------------------- |
+| 1   | File readable      | Path exists and YAML parses without error       |
+| 2   | Kind recognized    | `kind:` is present and is a known platform kind |
+| 3   | apiVersion present | `apiVersion: strata.huybrechts.xyz/v1`          |
+| 4   | Name present       | `meta.name` is non-empty                        |
+| 5   | Spec present       | `spec:` block exists and is non-empty           |
+
+```
+File: path/to/my-config.yaml  (kind: configuration)
+Workspace: my-platform  (e:\src\my-config-repo)
+
+File structure:
+
+  ✅ File readable
+  ✅ Kind: configuration
+  ✅ apiVersion: strata.huybrechts.xyz/v1
+  ✅ Name: my-config
+  ✅ Spec present
+
+→ Validate:
+
+   strata validate -f path/to/my-config.yaml
+
+→ Register with your active profile:
+
+   strata ref config add my-config @<repo>/path/to/my-config.yaml --profile prd
+
+   See: strata help --topic environments
+```
+
+`@repo/path` references are resolved via `solution.spec.repositories` and require an initialized workspace.
+
+### Project customisation
+
+Create `.strata/guide.yaml` to override the default next-step hints and `see_also` links for any phase:
+
+```yaml
+hints:
+  phase_6:
+    hint: "strata ref config add infra-config @infra/config/infra.yaml --profile prd"
+    see_also: "strata help --topic environments"
+```
+
+```bash
+strata guide
+strata guide --output json
+strata guide --file config/my-config.yaml
+strata guide -f @myrepo/config/app.yaml
+```
+
+---
+
 ## `schema`
 
 Inspect JSON schemas for platform YAML document kinds. Useful for editors, linters, and AI agents that need to understand what fields a document type requires.
@@ -610,7 +753,7 @@ strata schema get KIND [--output FORMAT]
 
 Default and `--output json` both emit the complete Pydantic-generated JSON Schema. `--output text` shows a compact summary (required fields and top-level property names).
 
-**Valid kinds:** `configuration` `deployment` `environment` `firewall` `module` `namespace` `platform_model` `provider` `resource` `workspace`
+**Valid kinds:** `configuration` `deployment` `dns` `environment` `firewall` `module` `namespace` `network` `platform_model` `provider` `resource` `workspace`
 
 **Exit codes:** 0 success · 2 unknown kind
 

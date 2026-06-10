@@ -1,0 +1,62 @@
+# Built-in guide hints. Override per-project via .strata/guide.yaml.
+
+header: null
+complete: "All setup phases complete. Your workspace is ready to deploy."
+
+phases:
+  1:
+    hint: "strata sln init <name>"
+    see_also: "strata help --topic quickstart"
+  2:
+    hint: "strata repo add <name> <url>"
+    see_also: "strata help --topic repos"
+  3:
+    hint: null # hint is built dynamically (git clone per missing repo)
+    see_also: "strata help --topic repos"
+  4:
+    hint: "strata profile add <name> --activate"
+    see_also: "strata help --topic profiles"
+  5:
+    hint: "strata profile activate <name>"
+    see_also: "strata help --topic profiles"
+  6:
+    hint: "strata ref config add <name> @<repo>/path/to/config.yaml --profile <active>"
+    see_also: "strata help --topic environments"
+  7:
+    hint: "strata build run"
+    see_also: "strata help --topic build"
+
+kinds:
+  configuration:
+    register: "strata ref config add <name> @<repo>/path.yaml --profile <active>"
+    see_also: "strata help --topic environments"
+  environment:
+    register: "strata ref env add <name> @<repo>/path.yaml --profile <active>"
+    see_also: "strata help --topic environments"
+  deployment:
+    register: "Add to workspace.yaml under spec.deployments"
+    see_also: "strata help --topic deployments"
+  namespace:
+    register: "Referenced from a deployment spec via spec.namespaces"
+    see_also: "strata help --topic environments"
+  network:
+    register: "Add to workspace.yaml under spec.networks"
+    see_also: "strata help --topic environments"
+  dns:
+    register: "strata ref config add <name> @<repo>/path.yaml --profile <active>"
+    see_also: "strata help --topic environments"
+  firewall:
+    register: "strata ref config add <name> @<repo>/path.yaml --profile <active>"
+    see_also: "strata help --topic environments"
+  module:
+    register: "Referenced from a deployment spec via spec.modules"
+    see_also: "strata help --topic deployments"
+  workspace:
+    register: "Used directly by strata build run — no registration needed"
+    see_also: "strata help --topic getting-started"
+  provider:
+    register: "Referenced in workspace.yaml under spec.providers"
+    see_also: "strata help --topic getting-started"
+  resource:
+    register: "Referenced from a deployment spec via spec.resources"
+    see_also: "strata help --topic deployments"

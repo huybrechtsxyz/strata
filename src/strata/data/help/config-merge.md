@@ -1,6 +1,6 @@
 # Config Merge
 
-How xyz resolves the final configuration from multiple layered config refs.
+How strata resolves the final configuration from multiple layered config refs.
 
 ## Merge Mechanics
 
@@ -45,10 +45,10 @@ Get-Content .strata\configuration.yaml    # PowerShell
 ## Common Mistakes
 
 - **Wrong order:** If `local.yaml` overrides `prod.yaml` but was registered first,
-  `prod.yaml` wins. Check registration order with `xyz ref configfile list`.
+  `prod.yaml` wins. Check registration order with `strata ref configfile list`.
 - **Missing ref:** A ref pointing to a non-existent file is skipped with a debug
   warning — it does not cause a failure. If your config looks wrong, check the log.
-- **Wrong profile active:** `xyz profile list` shows which profile is active.
+- **Wrong profile active:** `strata profile list` shows which profile is active.
   Verify before running.
 
-See also: `xyz help --topic refs`, `xyz help --topic profiles`
+See also: `strata help --topic refs`, `strata help --topic profiles`
