@@ -101,9 +101,9 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# ── Equal: VERSION.txt already at target — just re-tag HEAD ─────────────────
+# -- Equal: VERSION.txt already at target -- just re-tag HEAD ---------------
 if ($newVer -eq $currentVer) {
-    Write-Host "[*] Version unchanged ($Version) — skipping commit, tagging HEAD." -ForegroundColor Yellow
+    Write-Host "[*] Version unchanged ($Version) - skipping commit, tagging HEAD." -ForegroundColor Yellow
     Write-Host ""
 
     git tag -a $tag -m "Release $tag"
@@ -121,8 +121,8 @@ if ($newVer -eq $currentVer) {
     exit 0
 }
 
-# ── Greater: bump VERSION.txt via a PR branch ────────────────────────────────
-Write-Host "[*] VERSION.txt: $currentRaw → $Version" -ForegroundColor Yellow
+# -- Greater: bump VERSION.txt via a PR branch ------------------------------
+Write-Host "[*] VERSION.txt: $currentRaw -> $Version" -ForegroundColor Yellow
 
 # Abort if release branch already exists
 $existingBranch = git branch --list $branch
