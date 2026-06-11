@@ -306,16 +306,39 @@ spec:
 
 #### AnsibleDeployer step mapping
 
-| Deployer Step  | Ansible Command                                         |
-| -------------- | ------------------------------------------------------- |
-| `setup`        | `ansible-galaxy collection install -r requirements.yml` |
-| `check`        | `ansible-playbook <playbook> --syntax-check`            |
-| `plan`         | `ansible-playbook <playbook> --check --diff`            |
-| `apply`        | `ansible-playbook <playbook>`                           |
-| `destroy`      | `ansible-playbook destroy.yml` (requires `--force`)     |
-| `plan_destroy` | Not supported — returns empty                           |
-| `show_plan`    | Not supported — returns empty                           |
-| `output`       | Not supported — returns empty                           |
+| Deployer Step  | Ansible Command                                                              |
+| -------------- | ---------------------------------------------------------------------------- |
+| `setup`        | `ansible-galaxy collection install -r requirements.yml`                      |
+| `check`        | `ansible-playbook <playbook> --syntax-check`                                 |
+| `plan`         | `ansible-playbook <playbook> --check --diff [-e @file ...] [-e key=val ...]` |
+| `apply`        | `ansible-playbook <playbook> [-e @file ...] [-e key=val ...]`                |
+| `destroy`      | `ansible-playbook destroy.yml` (requires `--force`)                          |
+| `plan_destroy` | Not supported — returns empty                                                |
+| `show_plan`    | Not supported — returns empty                                                |
+| `output`       | Not supported — returns empty                                                |
+
+#### Strata variable files
+
+When `AnsibleBuilder` has run (as part of `strata build run`), it writes `strata_*.yml` files into the provisioner build directory. `AnsibleDeployer` discovers these automatically and passes them as `-e @file.yml` arguments to every playbook invocation — before any inline `extra_vars` from the IaC configuration.
+
+This provides playbooks with structured access to the full platform model without any manual `vars_files` declarations. See [AnsibleBuilder](builders.md#ansiblebuilder) for the complete list of generated files and their variable keys.
+
+#### SSH private key injection
+
+`AnsibleDeployer` resolves an SSH private key from `resolved_values.secrets` (key name configurable via `ssh_private_key_secret` in the provisioner configuration, defaulting to `ssh_private_key`) or from the matching environment variable. The key is loaded into a temporary ssh-agent session so it never touches disk. If ssh-agent is unavailable, a `chmod 600` tempfile is used and deleted immediately after the subprocess exits.
+
+#### Minimal YAML configuration
+
+```yaml
+type: ansible
+spec:
+  source: ansible/                    # directory containing playbooks
+  playbook: site.yml                  # main playbook (defaults to site.yml)
+  inventory: hosts.yml                # optional — auto-discovered if not set
+  ssh_private_key_secret: my_ssh_key  # optional — secret name for SSH private key
+  extra_vars:                         # optional — passed as -e key=value after strata var files
+    target_env: production
+```
 
 #### Troubleshooting
 

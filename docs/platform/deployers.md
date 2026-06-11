@@ -162,25 +162,29 @@ AnsibleDeployer(
     stage, deployment_service, configuration_service,
     build_path, work_path,
     verbose=False, force=False,
+    resolved_values=None,    # ResolvedValues — provides secrets + stage_outputs
+    solution_controller=None,
 )
 ```
 
 ### Step → Ansible command mapping
 
-| Step           | Command                                                   |
-| -------------- | --------------------------------------------------------- |
-| `setup`        | `ansible-galaxy collection install -r requirements.yml`   |
-| `check`        | `ansible-playbook <playbook> --syntax-check`              |
-| `plan`         | `ansible-playbook <playbook> --check --diff`              |
-| `apply`        | `ansible-playbook <playbook> [-i inventory] [-e key=val]` |
-| `destroy`      | `ansible-playbook destroy.yml` (requires `force=True`)    |
-| `plan_destroy` | Not supported — returns `(True, {}, [])`                  |
-| `show_plan`    | Not supported — returns `(True, {}, [])`                  |
-| `output`       | Not supported — returns `(True, {}, [])`                  |
+| Step           | Command                                                           |
+| -------------- | ----------------------------------------------------------------- |
+| `setup`        | `ansible-galaxy collection install -r requirements.yml`           |
+| `check`        | `ansible-playbook <playbook> --syntax-check`                      |
+| `plan`         | `ansible-playbook <playbook> --check --diff [-e @file ...] [-e key=val ...]` |
+| `apply`        | `ansible-playbook <playbook> [-i inventory] [-e @file ...] [-e key=val ...]` |
+| `destroy`      | `ansible-playbook destroy.yml` (requires `force=True`)            |
+| `plan_destroy` | Not supported — returns `(True, {}, [])`                          |
+| `show_plan`    | Not supported — returns `(True, {}, [])`                          |
+| `output`       | Not supported — returns `(True, {}, [])`                          |
 
 ### validate_workspace
 
-Resolves the `WorkspaceIacModel` for the stage by matching the first provisioner with `type == ProvisionerType.ANSIBLE`. If `stage.provisioner` is set, looks up by name. Verifies the source directory exists on disk.
+Resolves the `WorkspaceIacModel` for the stage (same priority as `TerraformDeployer`: explicit `stage.provisioner` → topology lookup → sole provisioner fallback). Verifies the source directory exists on disk.
+
+When `stage.topology` is set, the deployer builds a dynamic inventory from stage outputs (see [Topology-based inventory](#topology-based-inventory) below).
 
 ### validate_environment
 
@@ -188,17 +192,79 @@ Creates a minimal `AnsibleIntegration` instance and calls `ensure_available()`. 
 
 ### IaC spec options
 
-| Key          | Default     | Description                                     |
-| ------------ | ----------- | ----------------------------------------------- |
-| `playbook`   | `site.yml`  | Main playbook file to execute                   |
-| `inventory`  | auto-detect | Inventory file (`inventory`, `hosts.yml`, etc.) |
-| `extra_vars` | `{}`        | Extra variables passed via `-e key=value`       |
+Configure per-provisioner behaviour under `workspace.spec.provisioners[*].configuration`:
+
+| Key                      | Default          | Description                                                             |
+| ------------------------ | ---------------- | ----------------------------------------------------------------------- |
+| `playbook`               | `site.yml`       | Main playbook filename                                                  |
+| `inventory`              | auto-detect      | Inventory file or directory path                                        |
+| `extra_vars`             | `{}`             | Extra variables passed via `-e key=value` (inline, after file vars)     |
+| `ssh_private_key_secret` | `ssh_private_key`| Secret name for the SSH private key (looked up in `resolved_values.secrets` then env) |
+| `ip_output_key`          | `server_ip`      | Stage output key to extract IPs for dynamic inventory (topology mode)   |
 
 ### Auto-discovery
 
 - **Inventory:** looks for `inventory`, `inventory.yml`, `hosts.yml`, `hosts` in the working directory
 - **Requirements:** looks for `requirements.yml` or `collections/requirements.yml`
 - **Destroy playbook:** expects `destroy.yml` in the working directory
+
+### Strata variable files
+
+When `AnsibleBuilder` runs as part of `strata build run`, it writes `strata_*.yml` files into the provisioner build path. The deployer discovers these automatically and passes them to every playbook invocation as `-e @file.yml` arguments — before any inline `extra_vars`.
+
+This means playbooks have immediate access to:
+
+```yaml
+# Available without any explicit vars_files block in the playbook:
+strata_workspace:     # workspace identity, version, environment
+strata_providers:     # provider config keyed by name
+strata_topologies:    # topology components and volumes
+strata_resources:     # all resources keyed by name
+strata_<type>:        # resources by type (e.g. strata_objectstorage, strata_virtualmachine)
+strata_modules:       # module properties
+strata_namespaces:    # namespace definitions
+strata_firewalls:     # firewall rules
+strata_dns_zones:     # DNS zone definitions
+strata_networks:      # network configurations
+```
+
+**Variable precedence (high to low):**
+1. `-e key=value` (inline extra_vars from `configuration.extra_vars`)
+2. `-e @strata_*.yml` files (strata variable files — injected by the deployer)
+3. Inventory vars
+4. `vars_files` in the playbook
+
+### Topology-based inventory
+
+When a stage references a topology via `stage.topology`, the deployer builds a dynamic inventory string from stage outputs rather than using a static inventory file.
+
+The IP address(es) are read from `resolved_values.stage_outputs[ip_output_key]` where `ip_output_key` defaults to `server_ip` (overridable in `configuration`). The resulting inventory is passed as `-i <ip>,` to `ansible-playbook`.
+
+This allows an Ansible stage to immediately follow a Terraform stage that provisions the target hosts:
+
+```yaml
+spec:
+  stages:
+    - name: infra
+      type: terraform
+      provisioner: tf_hetzner
+
+    - name: config
+      type: ansible
+      topology: my_topology           # matches the topology that tf_hetzner manages
+      depends_on: [infra]             # waits for infra to finish
+```
+
+### SSH key management
+
+The deployer resolves an SSH private key for remote access using this priority:
+
+1. `resolved_values.secrets[ssh_private_key_secret]` (default key name: `ssh_private_key`)
+2. `os.environ[SSH_PRIVATE_KEY_SECRET.upper()]` (e.g. `SSH_PRIVATE_KEY`)
+
+When a key is found, the deployer attempts to load it into a temporary **ssh-agent** (key lives in agent memory — never written to disk). Ansible picks up the agent automatically via `SSH_AUTH_SOCK`. If `ssh-agent` is unavailable, the key is written to a `chmod 600` tempfile and passed via `--private-key`, then deleted immediately after the subprocess exits.
+
+When no key is found, SSH key handling is skipped entirely — Ansible uses its default discovery (agent, `~/.ssh/id_rsa`, etc.).
 
 ---
 
