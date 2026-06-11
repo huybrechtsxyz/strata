@@ -1,3 +1,5 @@
+from datetime import datetime as _dt
+from datetime import timezone as _tz
 from typing import List, Optional
 
 import click
@@ -67,9 +69,12 @@ class DestroyDeployCommand(BaseDeployCommand):
                 self._finalize(success=False)
                 return False
 
+            self._record_deploy_start()
+
             if not self._resolve_values():
                 if self._is_console_output():
                     click.echo("\n❌  Failed to resolve variables/secrets/features")
+                self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
 
@@ -81,12 +86,14 @@ class DestroyDeployCommand(BaseDeployCommand):
             if not self._execute_provisioning():
                 if self._is_console_output():
                     click.echo("\n❌  Destroy failed")
+                self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
 
             if not self._after_execute():
                 if self._is_console_output():
                     click.echo("\n❌  Post-execution hook failed")
+                self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
 
@@ -100,12 +107,21 @@ class DestroyDeployCommand(BaseDeployCommand):
                 }
             )
 
+            manifest_path = self._write_deployment_manifest(
+                action="destroy",
+                status="success",
+                dry_run=self._dry_run,
+            )
+            if manifest_path and self._is_console_output():
+                click.echo(f"\n📋  Deployment manifest: {manifest_path}")
+
             self._finalize(success=True)
             return True
 
         except Exception as exc:
             self._errors.append(f"Failed to execute deploy_destroy: {exc}")
             self.logger.exception("deploy_destroy failed")
+            self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
             self._finalize(success=False)
             return False
 
@@ -182,8 +198,18 @@ class DestroyDeployCommand(BaseDeployCommand):
         return True
 
     def _execute_stage_destroy(self, stage: DeploymentStageModel) -> bool:
+        stage_started = _dt.now(_tz.utc).isoformat()
         deployer = self._create_deployer(stage)
         if deployer is None:
+            self._record_stage_result(
+                stage_name=str(stage.name),
+                provisioner=stage.provisioner,
+                topology=stage.topology,
+                status="failed",
+                started_at=stage_started,
+                completed_at=_dt.now(_tz.utc).isoformat(),
+                error="Failed to create deployer",
+            )
             return False
 
         # Pre-flight validation
@@ -198,6 +224,15 @@ class DestroyDeployCommand(BaseDeployCommand):
                     click.echo(f"    {msg}")
             if not ok:
                 self._errors.extend(msgs)
+                self._record_stage_result(
+                    stage_name=str(stage.name),
+                    provisioner=stage.provisioner,
+                    topology=stage.topology,
+                    status="failed",
+                    started_at=stage_started,
+                    completed_at=_dt.now(_tz.utc).isoformat(),
+                    error=f"Validation '{_label}' failed",
+                )
                 return False
 
         # Step sequence
@@ -210,6 +245,15 @@ class DestroyDeployCommand(BaseDeployCommand):
                     "(non-interactive execution needs -auto-approve). "
                     "Use --dry-run to preview what would be removed."
                 )
+                self._record_stage_result(
+                    stage_name=str(stage.name),
+                    provisioner=stage.provisioner,
+                    topology=stage.topology,
+                    status="failed",
+                    started_at=stage_started,
+                    completed_at=_dt.now(_tz.utc).isoformat(),
+                    error="--force flag required",
+                )
                 return False
             steps_to_run = [STEP_SETUP, STEP_DESTROY]
 
@@ -220,6 +264,16 @@ class DestroyDeployCommand(BaseDeployCommand):
                 self._errors.append(
                     f"Stage '{stage.name}': step '{step_name}' is not supported "
                     f"by deployer '{deployer.get_deployer_name()}'."
+                )
+                self._record_stage_result(
+                    stage_name=str(stage.name),
+                    provisioner=stage.provisioner,
+                    topology=stage.topology,
+                    status="failed",
+                    started_at=stage_started,
+                    completed_at=_dt.now(_tz.utc).isoformat(),
+                    steps=steps_to_run,
+                    error=f"Step '{step_name}' not supported",
                 )
                 return False
 
@@ -235,7 +289,27 @@ class DestroyDeployCommand(BaseDeployCommand):
                     click.echo(f"      {msg}")
             if not ok:
                 self._errors.extend(msgs)
+                self._record_stage_result(
+                    stage_name=str(stage.name),
+                    provisioner=stage.provisioner,
+                    topology=stage.topology,
+                    status="failed",
+                    started_at=stage_started,
+                    completed_at=_dt.now(_tz.utc).isoformat(),
+                    steps=steps_to_run,
+                    error=f"Step '{step_name}' failed",
+                )
                 return False
+
+        self._record_stage_result(
+            stage_name=str(stage.name),
+            provisioner=stage.provisioner,
+            topology=stage.topology,
+            status="success",
+            started_at=stage_started,
+            completed_at=_dt.now(_tz.utc).isoformat(),
+            steps=steps_to_run,
+        )
 
         return True
 
