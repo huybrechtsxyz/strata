@@ -82,6 +82,47 @@ spec:
           min_count: 1
 ```
 
+## Configuration Schema Fields
+
+The `configuration` dict on a resource (and `properties` at the spec level) maps field names to validation rules. Each entry is either a **shorthand regex string** or a **structured `ConfigurationSchemaField`**:
+
+```yaml
+resources:
+  - name: virtualmachine
+    configuration:
+      # Shorthand: just the pattern string (required=true, no description)
+      cpu_cores: "^[1-9][0-9]?$"
+
+      # Structured: pattern + optional flags
+      enable_backup:
+        pattern: "^(true|false)$"
+        required: false
+        description: "Whether automated backups are enabled"
+```
+
+| Field         | Type     | Default | Description                                              |
+| ------------- | -------- | ------- | -------------------------------------------------------- |
+| `pattern`     | `str`    | —       | Regex the field value must fully match                   |
+| `required`    | `bool`   | `true`  | Whether the field must be present in resource config     |
+| `description` | `str`    | `null`  | Human-readable description of the field                  |
+
+> **Boolean fields must use a pattern — there is no native `type: boolean` in the schema.**
+> The configuration schema is regex-only; all values are validated as strings.
+> Use `"^(true|false)$"` as the pattern and pass `"true"` or `"false"` as the value.
+>
+> ```yaml
+> # Schema (in configuration YAML)
+> enable_backup:
+>   pattern: "^(true|false)$"
+>   required: false
+>
+> # Usage (in deployment/resource YAML)
+> configuration:
+>   enable_backup: "true"   # string, not a YAML boolean
+> ```
+
+---
+
 ## Merge Behavior
 
 Multiple configs merge: built-in → 00-_.yaml → 10-_.yaml → 99-\*.yaml  

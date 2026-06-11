@@ -95,7 +95,12 @@ class ConfigurationTopologyModel(PlatformBaseModel):
 
 
 class ConfigurationSchemaField(PlatformBaseModel):
-    """Model for a configuration schema field with pattern and required flag."""
+    """Model for a configuration schema field with pattern and required flag.
+
+    All field values are validated as strings against the ``pattern`` regex.
+    There is no native boolean type — use ``pattern: "^(true|false)$"`` and
+    pass ``"true"`` or ``"false"`` as the value in resource configuration.
+    """
 
     pattern: str = Field(..., description="Regex pattern that field values must match")
     required: bool = Field(True, description="Whether this field is required in resource configuration")
