@@ -590,3 +590,69 @@ class TestAnsibleDeployerTimeouts:
         d.destroy()
         call_kwargs = d._ansible.apply.call_args[1]
         assert call_kwargs.get("timeout") == 600
+
+
+class TestAnsibleDeployerExtraVarsFiles:
+    """Test discovery and passing of strata-generated variable files."""
+
+    def test_get_extra_vars_files_returns_none_when_no_working_dir(self):
+        d = _make_deployer()
+        d._working_dir = None
+        assert d._get_extra_vars_files() is None
+
+    def test_get_extra_vars_files_returns_none_when_no_files(self, tmp_path):
+        d = _make_deployer()
+        d._working_dir = tmp_path
+        assert d._get_extra_vars_files() is None
+
+    def test_get_extra_vars_files_discovers_strata_files(self, tmp_path):
+        (tmp_path / "strata_workspace.yml").write_text("---\nstrata_workspace: {}")
+        (tmp_path / "strata_resources.yml").write_text("---\nstrata_resources: {}")
+        (tmp_path / "other_file.yml").write_text("---\nfoo: bar")
+        d = _make_deployer()
+        d._working_dir = tmp_path
+        files = d._get_extra_vars_files()
+        assert files is not None
+        assert len(files) == 2
+        # Should be sorted
+        assert "strata_resources.yml" in files[0]
+        assert "strata_workspace.yml" in files[1]
+
+    def test_plan_passes_extra_vars_files(self, tmp_path):
+        (tmp_path / "strata_workspace.yml").write_text("---\nstrata_workspace: {}")
+        d = _make_deployer()
+        d._working_dir = tmp_path
+        d._ansible = MagicMock()
+        d._ansible.plan.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+        ok, msgs = d.plan()
+        assert ok is True
+        call_kwargs = d._ansible.plan.call_args[1]
+        assert call_kwargs.get("extra_vars_files") is not None
+        assert len(call_kwargs["extra_vars_files"]) == 1
+
+    def test_apply_passes_extra_vars_files(self, tmp_path):
+        (tmp_path / "strata_workspace.yml").write_text("---\nstrata_workspace: {}")
+        (tmp_path / "strata_resources.yml").write_text("---\nstrata_resources: {}")
+        d = _make_deployer()
+        d._working_dir = tmp_path
+        d._ansible = MagicMock()
+        d._ansible.apply.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+        ok, msgs = d.apply()
+        assert ok is True
+        call_kwargs = d._ansible.apply.call_args[1]
+        assert call_kwargs.get("extra_vars_files") is not None
+        assert len(call_kwargs["extra_vars_files"]) == 2
+
+    def test_describe_plan_shows_vars_files(self, tmp_path):
+        (tmp_path / "strata_workspace.yml").write_text("---\nstrata_workspace: {}")
+        d = _make_deployer()
+        d._working_dir = tmp_path
+        d._iac_model = MagicMock()
+        d._iac_model.configuration = None
+        lines = d.describe_plan()
+        assert any("vars_files" in line for line in lines)
+        assert any("@strata_workspace.yml" in line for line in lines)

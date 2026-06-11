@@ -148,6 +148,7 @@ class AnsibleIntegration(BaseIntegration):
         playbook: str = "site.yml",
         inventory: Optional[str] = None,
         extra_vars: Optional[Dict[str, str]] = None,
+        extra_vars_files: Optional[List[str]] = None,
         private_key_file: Optional[str] = None,
         timeout: int = 600,
         **kwargs,
@@ -159,6 +160,7 @@ class AnsibleIntegration(BaseIntegration):
             playbook: Playbook filename
             inventory: Inventory file path
             extra_vars: Additional variables as key=value pairs
+            extra_vars_files: YAML variable files passed as ``-e @file.yml``
             private_key_file: Path to SSH private key file
             timeout: Command timeout in seconds
         """
@@ -171,6 +173,9 @@ class AnsibleIntegration(BaseIntegration):
             args.extend(["-i", inventory])
         if private_key_file:
             args.extend(["--private-key", private_key_file])
+        if extra_vars_files:
+            for fpath in extra_vars_files:
+                args.extend(["-e", f"@{fpath}"])
         if extra_vars:
             for k, v in extra_vars.items():
                 args.extend(["-e", f"{k}={v}"])
@@ -184,6 +189,7 @@ class AnsibleIntegration(BaseIntegration):
         playbook: str = "site.yml",
         inventory: Optional[str] = None,
         extra_vars: Optional[Dict[str, str]] = None,
+        extra_vars_files: Optional[List[str]] = None,
         private_key_file: Optional[str] = None,
         timeout: int = 1800,
         **kwargs,
@@ -195,6 +201,7 @@ class AnsibleIntegration(BaseIntegration):
             playbook: Playbook filename
             inventory: Inventory file path
             extra_vars: Additional variables as key=value pairs
+            extra_vars_files: YAML variable files passed as ``-e @file.yml``
             private_key_file: Path to SSH private key file
             timeout: Command timeout in seconds
         """
@@ -207,6 +214,9 @@ class AnsibleIntegration(BaseIntegration):
             args.extend(["-i", inventory])
         if private_key_file:
             args.extend(["--private-key", private_key_file])
+        if extra_vars_files:
+            for fpath in extra_vars_files:
+                args.extend(["-e", f"@{fpath}"])
         if extra_vars:
             for k, v in extra_vars.items():
                 args.extend(["-e", f"{k}={v}"])

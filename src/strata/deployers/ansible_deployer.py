@@ -46,6 +46,9 @@ from strata.models.workspace_model import WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 
+# Prefix used by AnsibleBuilder for generated variable files.
+STRATA_VARS_PREFIX = "strata_"
+
 try:
     from strata.models.deployment_model import DeploymentStageModel
 except ImportError:  # pragma: no cover
@@ -209,6 +212,11 @@ class AnsibleDeployer(BaseDeployer):
                 lines.append(f"inventory:  {self._working_dir / inventory}")
             else:
                 lines.append("inventory:  (none — Ansible will use its default discovery)")
+        vars_files = self._get_extra_vars_files()
+        if vars_files:
+            lines.append(f"vars_files: {len(vars_files)} strata variable file(s)")
+            for vf in vars_files:
+                lines.append(f"  -e @{Path(vf).name}")
         return lines
 
     def _get_configuration(self) -> Optional[Dict[str, Any]]:
@@ -246,6 +254,24 @@ class AnsibleDeployer(BaseDeployer):
             if isinstance(ev, dict):
                 return {k: str(v) for k, v in ev.items()}
         return None
+
+    def _get_extra_vars_files(self) -> Optional[List[str]]:
+        """Discover strata-generated YAML variable files in the working directory.
+
+        The ``AnsibleBuilder`` writes files matching ``strata_*.yml`` into
+        the provisioner build path.  When those files exist, we pass them
+        to ``ansible-playbook`` via ``-e @file.yml`` so the playbook has
+        access to workspace, providers, topologies, resources, etc.
+
+        Returns:
+            Sorted list of absolute file paths, or None if none found.
+        """
+        if self._working_dir is None:
+            return None
+        files = sorted(self._working_dir.glob(f"{STRATA_VARS_PREFIX}*.yml"))
+        if not files:
+            return None
+        return [str(f) for f in files]
 
     def _get_requirements_file(self) -> Optional[str]:
         """Resolve the Galaxy requirements file if present."""
@@ -444,6 +470,7 @@ class AnsibleDeployer(BaseDeployer):
                         playbook=playbook,
                         inventory=inventory,
                         extra_vars=self._get_extra_vars(),
+                        extra_vars_files=self._get_extra_vars_files(),
                         private_key_file=key_file,
                         timeout=self._get_timeout("plan", 600),
                     )
@@ -481,6 +508,7 @@ class AnsibleDeployer(BaseDeployer):
                         playbook=playbook,
                         inventory=inventory,
                         extra_vars=self._get_extra_vars(),
+                        extra_vars_files=self._get_extra_vars_files(),
                         private_key_file=key_file,
                         timeout=self._get_timeout("apply", 1800),
                     )
@@ -525,6 +553,7 @@ class AnsibleDeployer(BaseDeployer):
                         str(self._working_dir),
                         playbook=destroy_playbook,
                         inventory=inventory,
+                        extra_vars_files=self._get_extra_vars_files(),
                         private_key_file=key_file,
                         timeout=self._get_timeout("destroy", 1800),
                     )
@@ -563,6 +592,7 @@ class AnsibleDeployer(BaseDeployer):
                         str(self._working_dir),
                         playbook=destroy_playbook,
                         inventory=inventory,
+                        extra_vars_files=self._get_extra_vars_files(),
                         private_key_file=key_file,
                         timeout=self._get_timeout("plan", 600),
                     )
