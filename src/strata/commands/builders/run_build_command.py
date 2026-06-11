@@ -221,6 +221,8 @@ class RunBuildCommand(BaseBuildCommand):
             return False
         builder = AnsibleBuilder(verbose=self._is_verbose())
 
+        repo_map = self._solution_controller.get_repo_map() if self._solution_controller is not None else {}
+
         ok = builder.before_build(
             deployment_service=self._deployment_service,
             work_path=self._work_path,
@@ -239,6 +241,7 @@ class RunBuildCommand(BaseBuildCommand):
             build_path=self._build_path,
             dry_run=self._dry_run,
             platform_model=getattr(self, "_platform_model", None),
+            repo_map=repo_map,
             solution_controller=self._solution_controller,
         )
         self._messages.extend(builder.drain_messages())

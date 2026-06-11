@@ -23,6 +23,7 @@ Output files (written to ``{provisioner_build_path}/``):
 | ``strata_networks.yml``      | ``strata_networks``    | ``{{ strata_networks[name] }}``                         |
 """
 
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -92,6 +93,7 @@ class AnsibleBuilder(BaseBuilder):
         dry_run: bool = False,
         platform_model: Optional[PlatformArtifactModel] = None,
         solution_controller: Optional["SolutionController"] = None,
+        repo_map: Optional[Dict[str, str]] = None,
     ) -> bool:
         """Build Ansible YAML variable files from ``platform.json``.
 
@@ -150,11 +152,34 @@ class AnsibleBuilder(BaseBuilder):
                 for filename in planned:
                     self._messages.append(f"[DRY-RUN] Would write: {ansible_path / filename}")
                 self._messages.append(f"[DRY-RUN] Planned {len(planned)} Ansible variable file(s)")
+
+                # Validate source copy in dry-run mode (no writes)
+                if not self._copy_provisioner_source(
+                    deployment_service=deployment_service,
+                    build_path=build_path,
+                    work_path=work_path,
+                    repo_map=repo_map or {},
+                    dry_run=True,
+                    solution_controller=solution_controller,
+                ):
+                    return False
+
                 return True
 
             self._messages.extend(
                 self._save_ansible_vars(ansible_vars, deployment_service, build_path, solution_controller)
             )
+
+            # Copy ansible source files from each provisioner's source_path into the build
+            if not self._copy_provisioner_source(
+                deployment_service=deployment_service,
+                build_path=build_path,
+                work_path=work_path,
+                repo_map=repo_map or {},
+                dry_run=False,
+                solution_controller=solution_controller,
+            ):
+                return False
 
             return True
 
@@ -552,6 +577,81 @@ class AnsibleBuilder(BaseBuilder):
         return {"strata_networks": networks_dict}
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Ansible provisioner source copy
+    # ------------------------------------------------------------------
+
+    def _copy_provisioner_source(
+        self,
+        deployment_service: DeploymentService,
+        build_path: Path,
+        work_path: Path,
+        repo_map: Dict[str, str],
+        dry_run: bool = False,
+        solution_controller: Optional["SolutionController"] = None,
+    ) -> bool:
+        """Copy ansible source files from each provisioner's source_path into the build.
+
+        For each ansible provisioner declared in the workspace:
+          source  = repo_root / source_path   (repo_root from repo_map or work_path)
+          dest    = solution_controller.get_provisioner_path(deployment_service, build_path, prov)
+
+        In dry_run mode only logs the planned copy; no files are written.
+        The generated ``strata_*.yml`` files are written on top of the copied
+        source tree by ``_save_ansible_vars`` — the copy must happen first.
+        """
+        workspace_service = deployment_service.get_workspace_service()
+        if workspace_service is None or workspace_service.model is None:
+            return True  # Nothing to copy — workspace not loaded
+
+        provisioners = workspace_service.model.spec.provisioners or []
+        deployment_build_path = deployment_service.get_build_path(build_path)
+        template_context = self._build_template_context(deployment_service)
+
+        for prov in provisioners:
+            if prov.provisioner.value != "ansible":
+                continue
+
+            source = prov.source
+            if source.source_path is None:
+                self._errors.append(
+                    f"Provisioner '{prov.name}' has no source_path — ansible provisioners must declare a source_path."
+                )
+                return False
+
+            repo_name = str(source.repository) if source.repository else ""
+
+            # Resolve repository root: use repo_map when available, fall back to work_path
+            if repo_map and repo_name and repo_name in repo_map:
+                repo_root = Path(repo_map[repo_name])
+            else:
+                repo_root = work_path
+
+            src_dir = repo_root / source.source_path
+            dest_dir = (
+                solution_controller.get_provisioner_path(deployment_service, build_path, prov)
+                if solution_controller is not None
+                else deployment_build_path / (source.target_path or source.source_path)
+            )
+
+            if dry_run:
+                self._messages.append(f"[DRY-RUN] Would copy ansible source: {src_dir} -> {dest_dir}")
+                if not src_dir.exists():
+                    self._errors.append(f"Ansible source directory not found: {src_dir} (provisioner: {prov.name})")
+                    return False
+                continue
+
+            if not src_dir.exists():
+                self._errors.append(f"Ansible source directory not found: {src_dir} (provisioner: {prov.name})")
+                return False
+
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(src_dir, dest_dir, dirs_exist_ok=True)
+            self._apply_templates_to_dir(dest_dir, template_context)
+            self._messages.append(f"Copied ansible source: {src_dir} -> {dest_dir}")
+
+        return True
+
     # Path resolution
     # ------------------------------------------------------------------
 
