@@ -11,6 +11,7 @@ Secrets and variable/feature references are emitted as ``${KEY}`` substitution
 tokens.  The deployer injects real values via ``--set`` flags at deploy time.
 """
 
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -47,6 +48,7 @@ class HelmBuilder(BaseBuilder):
         build_path: Path,
         dry_run: bool = False,
         solution_controller: Optional["SolutionController"] = None,
+        repo_map: Optional[Dict[str, str]] = None,
     ) -> bool:
         """Generate values.yaml and meta.yaml for each namespace with helm modules.
 
@@ -81,6 +83,8 @@ class HelmBuilder(BaseBuilder):
                     work_path=work_path,
                     deployment_build_path=deployment_build_path,
                     dry_run=dry_run,
+                    repo_map=repo_map or {},
+                    template_context=template_context,
                 )
                 if not ok:
                     return False
@@ -171,6 +175,8 @@ class HelmBuilder(BaseBuilder):
         work_path: Path,
         deployment_build_path: Path,
         dry_run: bool,
+        repo_map: Optional[Dict[str, str]] = None,
+        template_context: Optional[Dict[str, str]] = None,
     ) -> bool:
         """Build values.yaml and meta.yaml for all helm modules in one namespace.
 
@@ -236,6 +242,39 @@ class HelmBuilder(BaseBuilder):
             module_dir = deployment_build_path / namespace_name / module_name
             values_path = module_dir / "values.yaml"
             meta_path = module_dir / "meta.yaml"
+
+            # For local charts (no chart_repository), copy the chart source directory
+            # into module_dir so the deployer can reference it as chart_ref.
+            source = module.spec.source
+            if not source.chart_repository and source.source_path:
+                repo_name = str(source.repository) if source.repository else ""
+                if repo_map and repo_name and repo_name in repo_map:
+                    repo_root = Path(repo_map[repo_name])
+                else:
+                    repo_root = work_path
+                src_dir = repo_root / source.source_path
+
+                if dry_run:
+                    self._messages.append(f"[DRY-RUN] Would copy helm chart source: {src_dir} -> {module_dir}")
+                    if not src_dir.exists():
+                        self._errors.append(
+                            f"Helm chart source not found: {src_dir} "
+                            f"(namespace '{namespace_name}', module '{module_name}')"
+                        )
+                        return False
+                else:
+                    if not src_dir.exists():
+                        self._errors.append(
+                            f"Helm chart source not found: {src_dir} "
+                            f"(namespace '{namespace_name}', module '{module_name}')"
+                        )
+                        return False
+                    module_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(src_dir, module_dir, dirs_exist_ok=True)
+                    if template_context:
+                        self._apply_templates_to_dir(module_dir, template_context)
+                    if self.verbose:
+                        self._messages.append(f"Copied helm chart source: {src_dir} -> {module_dir}")
 
             if dry_run:
                 if self.verbose:
