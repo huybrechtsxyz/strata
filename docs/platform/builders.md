@@ -11,6 +11,7 @@ Builders assemble and persist deployment artifacts from fully-loaded services. T
 | `BaseBuilder`      | `builders.base_builder`      | Abstract base — error/message accumulation + lifecycle hooks         |
 | `PlatformBuilder`  | `builders.strata_builder`    | Assembles `platform.json` / `platform.yaml` from services            |
 | `TerraformBuilder` | `builders.terraform_builder` | Generates `.tfvars.json` files for Terraform from the platform model |
+| `AnsibleBuilder`   | `builders.ansible_builder`   | Generates `strata_*.yml` YAML variable files for Ansible playbooks   |
 | `ComposeBuilder`   | `builders.compose_builder`   | Generates `docker-compose.yml` per namespace for compose modules     |
 | `HelmBuilder`      | `builders.helm_builder`      | Generates `values.yaml` and `meta.yaml` per Helm module              |
 
@@ -197,6 +198,107 @@ All files are written to `{deployment_build_path}/terraform/`:
 | `tf_required_variables.json`   | Required variable keys (no values)                  |
 | `tf_required_features.json`    | Required feature flag keys (no values)              |
 | `tf_required_secrets.json`     | Required secret keys (no values)                    |
+
+---
+
+## AnsibleBuilder
+
+Generates Ansible-native YAML variable files from a `PlatformArtifactModel`. The files are written into each Ansible provisioner's build directory. The `AnsibleDeployer` auto-discovers them at deploy time and passes them as `--extra-vars @file.yml` arguments.
+
+> **Security note:** `AnsibleBuilder` NEVER writes resolved variable, feature, or secret values. It documents workspace structure and resource configuration so playbooks know what is available — secrets must be injected separately at deploy time.
+
+```python
+from strata.builders.ansible_builder import AnsibleBuilder
+
+builder = AnsibleBuilder(verbose=True)
+
+# dry_run with a pre-assembled model (avoids reading platform.json from disk)
+if not builder.before_build(deployment_service, work_path, build_path, dry_run=True):
+    print("Pre-build failed:", builder.get_errors())
+elif not builder.build(
+    deployment_service, work_path, build_path,
+    dry_run=True,
+    platform_model=platform_builder._last_platform_model,
+):
+    print("Build failed:", builder.get_errors())
+```
+
+### Constructor
+
+```python
+AnsibleBuilder(verbose: bool = False)
+```
+
+### Three-Phase Pipeline
+
+#### `before_build(deployment_service, work_path, build_path, dry_run=False, solution_controller=None)` → `bool`
+
+1. Verifies `deployment_service.is_validated()` — error if not validated
+2. If `dry_run=False`: verifies `platform.json` exists in the deployment build path — error if missing (run `PlatformBuilder` first)
+
+#### `build(deployment_service, work_path, build_path, dry_run=False, platform_model=None, solution_controller=None)` → `bool`
+
+1. If `platform_model` is supplied: uses it directly (no disk read)
+2. If `platform_model=None`: loads and validates `platform.json` via `PlatformService`
+3. Calls `_build_ansible_vars()` to assemble all payloads
+4. If `dry_run=True`: logs planned file paths, returns `True` without writing
+5. If `dry_run=False`: writes all files to each resolved Ansible provisioner build path
+
+#### `after_build(deployment_service, work_path, build_path, dry_run=False, solution_controller=None)` → `bool`
+
+1. If `dry_run=True`: returns `True` immediately
+2. For each resolved Ansible provisioner path: verifies at least one `strata_*.yml` file exists
+
+### Output Files
+
+All files are written to `{provisioner_build_path}/` (one set per Ansible provisioner found in the deployment).
+
+File names use the prefix `strata_` so the deployer can discover them via glob.
+
+| File                        | Top-level YAML key    | Contents                                             |
+| --------------------------- | --------------------- | ---------------------------------------------------- |
+| `strata_workspace.yml`      | `strata_workspace`    | Workspace name, version, environment, labels         |
+| `strata_providers.yml`      | `strata_providers`    | Provider configurations keyed by name                |
+| `strata_topologies.yml`     | `strata_topologies`   | Topology definitions with components and volumes     |
+| `strata_resources.yml`      | `strata_resources`    | All resources in a single dict keyed by name         |
+| `strata_resx_<type>.yml`    | `strata_<type>`       | Resources grouped by `resource_type` (one per type)  |
+| `strata_modules.yml`        | `strata_modules`      | Module source paths and properties                   |
+| `strata_namespaces.yml`     | `strata_namespaces`   | Namespace definitions                                |
+| `strata_firewalls.yml`      | `strata_firewalls`    | Firewall rules keyed by name                         |
+| `strata_dns.yml`            | `strata_dns_zones`    | DNS zone definitions                                 |
+| `strata_networks.yml`       | `strata_networks`     | Network configurations                               |
+
+### Playbook Variable Access
+
+```yaml
+# strata_workspace.yml
+- name: Configure deployment
+  hosts: all
+  vars_files:
+    - strata_workspace.yml
+  tasks:
+    - debug:
+        msg: "Deploying {{ strata_workspace.name }} v{{ strata_workspace.version }}"
+
+# strata_resources.yml
+- name: Provision resources
+  hosts: all
+  tasks:
+    - name: Iterate all resources
+      loop: "{{ strata_resources | dict2items }}"
+      debug:
+        msg: "Resource {{ item.key }}: {{ item.value.type }}"
+
+# strata_resx_<type>.yml (e.g. strata_objectstorage.yml)
+- name: Create object storage buckets
+  hosts: all
+  tasks:
+    - name: Create bucket
+      loop: "{{ strata_objectstorage | dict2items }}"
+      # ...
+```
+
+When `AnsibleDeployer` discovers these files, it passes them automatically — no manual `vars_files` block is needed in the playbook. Variable precedence: files passed via `-e @file.yml` take priority over `vars_files` and inventory vars.
 
 ---
 
