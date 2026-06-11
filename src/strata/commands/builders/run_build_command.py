@@ -4,6 +4,7 @@ from typing import Optional
 
 import click
 
+from strata.builders.ansible_builder import AnsibleBuilder
 from strata.builders.compose_builder import ComposeBuilder
 from strata.builders.helm_builder import HelmBuilder
 from strata.builders.platform_builder import PlatformBuilder
@@ -69,6 +70,12 @@ class RunBuildCommand(BaseBuildCommand):
             if not self._execute_terraform_build():
                 if self._is_console_output():
                     click.echo("\n❌  Terraform build failed")
+                self._finalize(success=False)
+                return False
+
+            if not self._execute_ansible_build():
+                if self._is_console_output():
+                    click.echo("\n❌  Ansible build failed")
                 self._finalize(success=False)
                 return False
 
@@ -187,6 +194,51 @@ class RunBuildCommand(BaseBuildCommand):
             dry_run=self._dry_run,
             platform_model=getattr(self, "_platform_model", None),
             repo_map=repo_map,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(builder.drain_messages())
+        if not ok:
+            self._errors.extend(builder.get_errors())
+            return False
+
+        ok = builder.after_build(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=self._build_path,
+            dry_run=self._dry_run,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(builder.drain_messages())
+        if not ok:
+            self._errors.extend(builder.get_errors())
+            return False
+
+        return True
+
+    def _execute_ansible_build(self) -> bool:
+        if self._deployment_service is None:
+            self._errors.append("Deployment service not loaded")
+            return False
+        builder = AnsibleBuilder(verbose=self._is_verbose())
+
+        ok = builder.before_build(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=self._build_path,
+            dry_run=self._dry_run,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(builder.drain_messages())
+        if not ok:
+            self._errors.extend(builder.get_errors())
+            return False
+
+        ok = builder.build(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=self._build_path,
+            dry_run=self._dry_run,
+            platform_model=getattr(self, "_platform_model", None),
             solution_controller=self._solution_controller,
         )
         self._messages.extend(builder.drain_messages())

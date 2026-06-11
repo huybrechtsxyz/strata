@@ -38,7 +38,7 @@ CONFIGURATION_VALID_FILES = [
 
 # List of invalid YAML files to test (extensible)
 CONFIGURATION_INVALID_FILES = [
-    os.path.join(CONFIGURATION_FOLDER, "configuration-invalid.yaml"),
+    os.path.join(CONFIGURATION_FOLDER, "invalid-configuration.yaml"),
 ]
 
 

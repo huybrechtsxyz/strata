@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 import click
 
+from strata.builders.ansible_builder import AnsibleBuilder
 from strata.builders.platform_builder import PlatformBuilder
 from strata.builders.terraform_builder import TerraformBuilder
 from strata.commands.builders.base_build_command import BaseBuildCommand
@@ -213,6 +214,46 @@ class PlanBuildCommand(BaseBuildCommand):
         self._messages.extend(tb.get_messages())
         if not ok:
             self._errors.extend(tb.get_errors())
+            return False
+
+        # --- Ansible builder ---
+        ab = AnsibleBuilder(verbose=self._is_verbose())
+
+        ok = ab.before_build(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=tmp_build_path,
+            dry_run=False,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(ab.get_messages())
+        if not ok:
+            self._errors.extend(ab.get_errors())
+            return False
+
+        ok = ab.build(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=tmp_build_path,
+            dry_run=False,
+            platform_model=platform_model,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(ab.get_messages())
+        if not ok:
+            self._errors.extend(ab.get_errors())
+            return False
+
+        ok = ab.after_build(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=tmp_build_path,
+            dry_run=False,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(ab.get_messages())
+        if not ok:
+            self._errors.extend(ab.get_errors())
             return False
 
         return True
