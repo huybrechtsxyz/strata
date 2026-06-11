@@ -58,9 +58,7 @@ spec:
   providers:
     - name: azure_westeurope
       description: Azure West Europe provider for production
-      backend: terraform
-      type: azure
-      region: westeurope
+      engine: azurerm
       regions:
         - westeurope
       additional_regions: false
