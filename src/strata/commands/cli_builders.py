@@ -7,6 +7,7 @@ import click
 from strata.commands.builders.clean_build_command import CleanBuildCommand
 from strata.commands.builders.plan_build_command import PlanBuildCommand
 from strata.commands.builders.run_build_command import RunBuildCommand
+from strata.commands.builders.sbom_build_command import SbomBuildCommand
 from strata.commands.cli_common import (
     click_file,
     click_output_format,
@@ -128,6 +129,31 @@ def build_plan(
         work_path=work_path,
         stage=stage,
         artifacts_only=artifacts_only,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@build.command(name="sbom", help="(Re)generate SBOM from an existing platform.json.")
+@click_file
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def build_sbom(
+    file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """(Re)generate the SBOM from an existing platform.json without re-running the full build."""
+    command = SbomBuildCommand(
+        file=file,
+        work_path=work_path,
         output=output,
         verbose=verbose,
         quiet=quiet,

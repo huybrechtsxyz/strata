@@ -539,7 +539,7 @@ All `build` subcommands accept `--file/-f PATH` to specify the deployment file.
 strata build run [-f FILE] [--dry-run] [standard options]
 ```
 
-Runs the full build pipeline (platform builder → terraform builder). `--dry-run` validates and plans without writing output files.
+Runs the full build pipeline (platform → terraform → ansible → compose → helm → SBOM). `--dry-run` validates and plans without writing output files.
 
 ```bash
 strata build run -f xyz-deploy-prd.yaml
@@ -562,6 +562,18 @@ Builds into a temp directory, diffs against existing artifacts, then runs `terra
 ```bash
 strata build plan -f xyz-deploy-prd.yaml
 strata build plan --stage production --artifacts-only
+```
+
+### `build sbom`
+
+```
+strata build sbom [-f FILE] [standard options]
+```
+
+Regenerates the SBOM from an existing `platform.json` without a full rebuild. Reads the build directory, runs all collectors (images, Helm charts, Terraform providers, Ansible collections/roles), and writes `sbom.json` alongside `platform.json`.
+
+```bash
+strata build sbom -f xyz-deploy-prd.yaml
 ```
 
 ### `build clean`

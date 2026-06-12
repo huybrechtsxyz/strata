@@ -552,9 +552,9 @@ ipython_config.py
 .squad-workstream
 
 # strata workspace state — commit solution.json, ignore personal CLI prefs
-.platform/cli.yaml
-.platform/logs/
-.platform/*.log
+.strata/cli.yaml
+.strata/logs/
+.strata/*.log
 
 # Temporary until uv.lock is cleaned of internal ProGet URLs (dev-machine only)
 uv.lock

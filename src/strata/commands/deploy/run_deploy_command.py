@@ -66,15 +66,19 @@ class RunDeployCommand(BaseDeployCommand):
                 self._finalize(success=False)
                 return False
 
+            self._record_deploy_start()
+
             if not self._load_related_services():
                 if self._is_console_output():
                     click.echo("\n❌  Failed to load deployment related services")
+                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
 
             if not self._resolve_values():
                 if self._is_console_output():
                     click.echo("\n❌  Failed to resolve variables/secrets/features")
+                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
 
@@ -84,12 +88,14 @@ class RunDeployCommand(BaseDeployCommand):
             if not self._execute_provisioning():
                 if self._is_console_output():
                     click.echo("\n❌  Deploy provisioning failed")
+                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
 
             if not self._after_execute():
                 if self._is_console_output():
                     click.echo("\n❌  Post-execution hook failed")
+                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
 
@@ -103,12 +109,21 @@ class RunDeployCommand(BaseDeployCommand):
                 }
             )
 
+            manifest_path = self._write_deployment_manifest(
+                action="deploy",
+                status="success",
+                dry_run=self._dry_run,
+            )
+            if manifest_path and self._is_console_output():
+                click.echo(f"\n📋  Deployment manifest: {manifest_path}")
+
             self._finalize(success=True)
             return True
 
         except Exception as exc:
             self._errors.append(f"Failed to execute deploy_run: {exc}")
             self.logger.exception("deploy_run failed")
+            self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
             self._finalize(success=False)
             return False
 
@@ -243,8 +258,18 @@ class RunDeployCommand(BaseDeployCommand):
           destroy  : setup → destroy  (requires --force for -auto-approve)
           normal   : setup → check → plan → apply
         """
+        stage_started = _dt.now(_tz.utc).isoformat()
         deployer = self._create_deployer(stage)
         if deployer is None:
+            self._record_stage_result(
+                stage_name=str(stage.name),
+                provisioner=stage.provisioner,
+                topology=stage.topology,
+                status="failed",
+                started_at=stage_started,
+                completed_at=_dt.now(_tz.utc).isoformat(),
+                error="Failed to create deployer",
+            )
             return False
 
         # --- pre-flight validation ---
@@ -348,6 +373,16 @@ class RunDeployCommand(BaseDeployCommand):
                             "ts": _dt.now(_tz.utc).isoformat(),
                         }
                     )
+                self._record_stage_result(
+                    stage_name=str(stage.name),
+                    provisioner=stage.provisioner,
+                    topology=stage.topology,
+                    status="failed",
+                    started_at=stage_started,
+                    completed_at=_dt.now(_tz.utc).isoformat(),
+                    steps=steps_to_run,
+                    error=f"Step '{step_name}' failed",
+                )
                 return False
 
             if self._is_ndjson_output():
@@ -407,6 +442,21 @@ class RunDeployCommand(BaseDeployCommand):
                     "ts": _dt.now(_tz.utc).isoformat(),
                 }
             )
+
+        # Record stage result for deployment manifest
+        stage_outputs = None
+        if STEP_APPLY in steps_to_run and self._resolved_values is not None:
+            stage_outputs = dict(self._resolved_values.stage_outputs) if self._resolved_values.stage_outputs else None
+        self._record_stage_result(
+            stage_name=str(stage.name),
+            provisioner=stage.provisioner,
+            topology=stage.topology,
+            status="success",
+            started_at=stage_started,
+            completed_at=_dt.now(_tz.utc).isoformat(),
+            steps=steps_to_run,
+            outputs=stage_outputs,
+        )
 
         return True
 

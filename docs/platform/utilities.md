@@ -82,6 +82,47 @@ processor = TemplateProcessor(template_dir=Path("terraform/"), cleanup_templates
 processor.process_all_templates()  # main.template.tf → main.tf
 ```
 
+## `ansible_utils.py`
+
+Shared helper for locating Ansible Galaxy requirements files.
+
+**`find_ansible_requirements_file(directory: Path) -> Optional[Path]`** — checks `requirements.yml` then `collections/requirements.yml` under the given directory. Returns the first match or `None`.
+
+Used by both `AnsibleCollectionCollector` and `AnsibleDeployer` to avoid duplicated discovery logic.
+
+```python
+from strata.utils.ansible_utils import find_ansible_requirements_file
+
+req = find_ansible_requirements_file(Path("deploy/configure"))
+# returns Path("deploy/configure/requirements.yml") or None
+```
+
+## `sbom_utils.py`
+
+Pure-function PURL helpers and floating-tag detection. No imports from builders, services, or integrations.
+
+**`is_floating_tag(tag)`** — returns `True` for `None`, empty string, well-known moving tags (`latest`, `main`, `dev`, `edge`, …), or any non-semver string. Returns `False` for pinned semver strings and digests.
+
+**`parse_image_ref(image)`** — splits a container image reference into `(name, tag, digest)`.
+
+**`image_to_purl(image)`** — converts a container image reference to a `pkg:docker/…` PURL string.
+
+**`helm_chart_to_purl(name, version, repository=None)`** — `pkg:helm/…` PURL with optional `repository_url` qualifier.
+
+**`terraform_provider_to_purl(source, version=None)`** — `pkg:terraform/…` PURL.
+
+**`ansible_collection_to_purl(name, version=None)`** / **`ansible_role_to_purl(name, version=None)`** — `pkg:ansible/…` PURLs.
+
+```python
+from strata.utils.sbom_utils import is_floating_tag, image_to_purl, helm_chart_to_purl
+
+is_floating_tag("latest")          # True
+is_floating_tag("v3.0.1")          # False
+image_to_purl("traefik:v3.0.1")   # "pkg:docker/traefik@v3.0.1"
+helm_chart_to_purl("authentik", "2024.12.0", "https://charts.goauthentik.io")
+# "pkg:helm/authentik@2024.12.0?repository_url=https%3A%2F%2Fcharts.goauthentik.io"
+```
+
 ## `version.py`
 
 Reads the installed package version from package metadata.

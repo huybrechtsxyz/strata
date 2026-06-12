@@ -45,6 +45,7 @@ from strata.models.integration_model import IntegrationModel
 from strata.models.workspace_model import WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
+from strata.utils.ansible_utils import find_ansible_requirements_file
 
 # Prefix used by AnsibleBuilder for generated variable files.
 STRATA_VARS_PREFIX = "strata_"
@@ -275,11 +276,10 @@ class AnsibleDeployer(BaseDeployer):
 
     def _get_requirements_file(self) -> Optional[str]:
         """Resolve the Galaxy requirements file if present."""
-        if self._working_dir:
-            for candidate in ("requirements.yml", "collections/requirements.yml"):
-                if (self._working_dir / candidate).exists():
-                    return candidate
-        return None
+        if not self._working_dir:
+            return None
+        found = find_ansible_requirements_file(self._working_dir)
+        return str(found.relative_to(self._working_dir)) if found else None
 
     def _get_ssh_key_content(self) -> Optional[str]:
         """Look up SSH private key content from resolved_values.secrets, then os.environ.
