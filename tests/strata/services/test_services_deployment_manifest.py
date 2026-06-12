@@ -1,12 +1,18 @@
 """Unit tests for DeploymentManifestService."""
 
 import json
+from pathlib import Path
 
 from strata.models.common_models import PlatformKind
+from strata.models.configuration_model import (
+    ConfigurationManifestModel,
+    ManifestStoreType,
+)
 from strata.models.deployment_manifest_model import (
     DeploymentManifestMetaModel,
     DeploymentManifestModel,
     DeploymentManifestSpecModel,
+    ManifestArtifactsModel,
     ManifestPlatformModel,
     ManifestStageModel,
 )
@@ -26,7 +32,9 @@ def _make_manifest(
             action="deploy",
             started_at=started_at,
             status=status,
-            platform=ManifestPlatformModel(hash="abc123"),
+            artifacts=ManifestArtifactsModel(
+                platform=ManifestPlatformModel(hash="abc123"),
+            ),
             stages=[
                 ManifestStageModel(name="infra", status=status),
             ],
@@ -139,3 +147,66 @@ class TestDeploymentManifestServiceValidate:
         ok, errors = svc._validate_dynamic()
         assert ok is True
         assert errors == []
+
+
+class TestResolveOutputDir:
+    def test_local_relative_path(self, tmp_path):
+        config = ConfigurationManifestModel(type=ManifestStoreType.LOCAL, path=".strata/deployments")
+        result = DeploymentManifestService.resolve_output_dir(config, tmp_path, "prod_deploy")
+        assert result == tmp_path / ".strata" / "deployments" / "prod_deploy"
+
+    def test_local_relative_path_with_version(self, tmp_path):
+        config = ConfigurationManifestModel(type=ManifestStoreType.LOCAL, path=".strata/deployments")
+        result = DeploymentManifestService.resolve_output_dir(config, tmp_path, "prod_deploy", version="2.3.0")
+        assert result == tmp_path / ".strata" / "deployments" / "prod_deploy" / "2.3.0"
+
+    def test_local_absolute_path(self, tmp_path):
+        abs_path = str(tmp_path / "custom" / "output")
+        config = ConfigurationManifestModel(type=ManifestStoreType.LOCAL, path=abs_path)
+        result = DeploymentManifestService.resolve_output_dir(config, tmp_path, "my_deploy")
+        assert result == Path(abs_path) / "my_deploy"
+
+    def test_gitops_path(self, tmp_path):
+        config = ConfigurationManifestModel(
+            type=ManifestStoreType.GITOPS, path="deployments", repository="state-repo", branch="manifests"
+        )
+        result = DeploymentManifestService.resolve_output_dir(config, tmp_path, "staging_deploy", version="1.0.0")
+        assert result == tmp_path / "deployments" / "staging_deploy" / "1.0.0"
+
+    def test_no_version_omits_version_segment(self, tmp_path):
+        config = ConfigurationManifestModel(type=ManifestStoreType.LOCAL, path="out")
+        result = DeploymentManifestService.resolve_output_dir(config, tmp_path, "app")
+        assert result == tmp_path / "out" / "app"
+
+
+class TestSaveWithConfig:
+    def test_save_with_config_creates_structured_path(self, tmp_path):
+        config = ConfigurationManifestModel(type=ManifestStoreType.LOCAL, path=".strata/deployments")
+        svc = DeploymentManifestService()
+        manifest = _make_manifest(deployment_name="web_app")
+        result = svc.save_with_config(manifest, config, tmp_path, version="1.2.0")
+        assert result.exists()
+        assert "web_app" in str(result)
+        assert "1.2.0" in str(result)
+        # File is inside: tmp_path/.strata/deployments/web_app/1.2.0/
+        assert result.parent == tmp_path / ".strata" / "deployments" / "web_app" / "1.2.0"
+
+    def test_save_with_config_no_version(self, tmp_path):
+        config = ConfigurationManifestModel(type=ManifestStoreType.LOCAL, path="manifests")
+        svc = DeploymentManifestService()
+        manifest = _make_manifest(deployment_name="api_svc")
+        result = svc.save_with_config(manifest, config, tmp_path)
+        assert result.exists()
+        assert result.parent == tmp_path / "manifests" / "api_svc"
+
+    def test_save_with_config_gitops_writes_locally(self, tmp_path):
+        """Gitops type still writes the file locally; git push is the caller's responsibility."""
+        config = ConfigurationManifestModel(
+            type=ManifestStoreType.GITOPS, path="state", repository="ops-repo", branch="main"
+        )
+        svc = DeploymentManifestService()
+        manifest = _make_manifest(deployment_name="prod")
+        result = svc.save_with_config(manifest, config, tmp_path, version="3.0.0")
+        assert result.exists()
+        data = json.loads(result.read_text(encoding="utf-8"))
+        assert data["spec"]["deployment_name"] == "prod"

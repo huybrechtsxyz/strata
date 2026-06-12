@@ -1,14 +1,19 @@
 """Service for loading, saving, and querying deployment manifests.
 
 Deployment manifests are written by the deploy command after each run and
-stored in ``.strata/deployments/``.  This service provides I/O and
-query capabilities over those manifests.
+stored according to the manifest configuration in the platform configuration
+file.  When no manifest config is defined, manifests are not written.
+
+This service provides I/O, path resolution, and query capabilities.
 """
 
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from strata.models.configuration_model import ConfigurationModel
+from strata.models.configuration_model import (
+    ConfigurationManifestModel,
+    ConfigurationModel,
+)
 from strata.models.deployment_manifest_model import DeploymentManifestModel
 from strata.services.base_service import BaseService
 
@@ -44,6 +49,41 @@ class DeploymentManifestService(BaseService["DeploymentManifestModel"]):
         return True, []
 
     # ------------------------------------------------------------------
+    # Path resolution
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def resolve_output_dir(
+        manifest_config: ConfigurationManifestModel,
+        work_path: Path,
+        deployment_name: str,
+        version: Optional[str] = None,
+    ) -> Path:
+        """Resolve the output directory for a manifest based on configuration.
+
+        Structure: {base_path}/{deployment_name}/{version}/
+        Falls back to {base_path}/{deployment_name}/ when version is not set.
+
+        Args:
+            manifest_config: The manifest configuration from the platform config.
+            work_path: Workspace root path.
+            deployment_name: Name of the deployment.
+            version: Optional version string (from deployment meta labels).
+
+        Returns:
+            Resolved absolute path to the output directory.
+        """
+        base = Path(manifest_config.path)
+        if not base.is_absolute():
+            base = work_path / base
+
+        output_dir = base / deployment_name
+        if version:
+            output_dir = output_dir / version
+
+        return output_dir
+
+    # ------------------------------------------------------------------
     # Save
     # ------------------------------------------------------------------
 
@@ -75,6 +115,39 @@ class DeploymentManifestService(BaseService["DeploymentManifestModel"]):
         )
         self.logger.info("Deployment manifest saved", path=str(path))
         return path
+
+    def save_with_config(
+        self,
+        manifest: DeploymentManifestModel,
+        manifest_config: ConfigurationManifestModel,
+        work_path: Path,
+        version: Optional[str] = None,
+    ) -> Path:
+        """Write a manifest using the platform manifest configuration.
+
+        Resolves the output directory from the manifest config, writes the
+        file locally.  For gitops type, the file is written locally under
+        the repository's deploy_path — the actual git commit/push/tag is
+        the responsibility of the caller (deploy command) via the git
+        integration.
+
+        Args:
+            manifest: The manifest model to persist.
+            manifest_config: Manifest storage configuration.
+            work_path: Workspace root.
+            version: Optional deployment version (from labels).
+
+        Returns:
+            Path to the written manifest file.
+        """
+        deployment_name = str(manifest.spec.deployment_name)
+        output_dir = self.resolve_output_dir(
+            manifest_config=manifest_config,
+            work_path=work_path,
+            deployment_name=deployment_name,
+            version=version,
+        )
+        return self.save(manifest, output_dir)
 
     # ------------------------------------------------------------------
     # Query helpers

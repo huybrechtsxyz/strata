@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic model for provider and resource configuration validation."""
 
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import Field, field_validator, model_validator
@@ -215,6 +216,67 @@ class ConfigurationLoggingModel(PlatformBaseModel):
     )
 
 
+class ManifestStoreType(str, Enum):
+    """Supported manifest storage backends."""
+
+    LOCAL = "local"
+    GITOPS = "gitops"
+
+
+class ConfigurationManifestModel(PlatformBaseModel):
+    """Configuration for deployment manifest storage.
+
+    Controls where and how deployment manifests are persisted after each
+    deploy run.  When omitted from the configuration, manifests are not
+    written and a log message is emitted.
+
+    Path structure (auto-appended by the service)::
+
+        {path}/{deployment_name}/{version}/{timestamp}.json
+
+    Example (local):
+        manifest:
+          type: local
+          path: ".strata/deployments"
+
+    Example (gitops):
+        manifest:
+          type: gitops
+          repository: "state-repo"
+          branch: "manifests"
+          tag: true
+          path: "deployments"
+    """
+
+    type: ManifestStoreType = Field(description="Storage backend: 'local' (filesystem) or 'gitops' (git repository)")
+    path: str = Field(
+        default=".strata/deployments",
+        description="Base path for manifests. Service appends /{deployment_name}/{version}/{timestamp}.json",
+    )
+    repository: Optional[str] = Field(
+        None,
+        description="Repository name from spec.repositories (required when type=gitops)",
+    )
+    branch: Optional[str] = Field(
+        None,
+        description="Target branch for manifest commits (required when type=gitops)",
+    )
+    tag: bool = Field(
+        default=True,
+        description="Create a git tag '{deployment_name}/{version}' after writing (gitops only)",
+    )
+
+    @model_validator(mode="after")
+    def validate_gitops_fields(self) -> "ConfigurationManifestModel":
+        """Validate that gitops type has required repository and branch fields."""
+        if self.type == ManifestStoreType.GITOPS:
+            if not self.repository:
+                raise ValueError("manifest.repository is required when type='gitops'")
+            if not self.branch:
+                raise ValueError("manifest.branch is required when type='gitops'")
+        return self
+
+
 class ConfigurationDeploymentModel(PlatformBaseModel):
     """Model for deployment configuration and schema definition.
 
@@ -238,6 +300,9 @@ class ConfigurationDeploymentModel(PlatformBaseModel):
                 pattern: "^[a-z]{2}-[a-z]+(-[0-9]+)?$"
                 required: false
                 description: "Deployment region"
+          manifest:
+            type: local
+            path: ".strata/deployments"
     """
 
     additional_properties: bool = Field(
@@ -247,6 +312,10 @@ class ConfigurationDeploymentModel(PlatformBaseModel):
     properties: Optional[Dict[str, Union[str, ConfigurationSchemaField]]] = Field(
         None,
         description="Deployment properties schema (pattern string or structured field with validation)",
+    )
+    manifest: Optional[ConfigurationManifestModel] = Field(
+        None,
+        description="Manifest storage configuration. When absent, manifests are not written.",
     )
 
 

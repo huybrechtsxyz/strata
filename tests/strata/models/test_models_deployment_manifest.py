@@ -8,10 +8,32 @@ from strata.models.deployment_manifest_model import (
     DeploymentManifestMetaModel,
     DeploymentManifestModel,
     DeploymentManifestSpecModel,
+    ManifestArtifactImageModel,
+    ManifestArtifactProviderModel,
+    ManifestArtifactsModel,
     ManifestPlatformModel,
     ManifestRepositoryModel,
     ManifestStageModel,
 )
+
+
+def _make_artifacts(**kwargs) -> ManifestArtifactsModel:
+    defaults = dict(platform=ManifestPlatformModel(hash="sha256:abc123"))
+    defaults.update(kwargs)
+    return ManifestArtifactsModel(**defaults)
+
+
+def _make_spec(**kwargs) -> DeploymentManifestSpecModel:
+    defaults = dict(
+        deployment_name="my_deploy",
+        workspace_name="my_ws",
+        action="deploy",
+        started_at="2025-01-01T00:00:00+00:00",
+        status="success",
+        artifacts=_make_artifacts(),
+    )
+    defaults.update(kwargs)
+    return DeploymentManifestSpecModel(**defaults)
 
 
 class TestManifestPlatformModel:
@@ -19,11 +41,24 @@ class TestManifestPlatformModel:
         m = ManifestPlatformModel(hash="abc123")
         assert m.hash == "abc123"
         assert m.path is None
+        assert m.content is None
+
+    def test_with_path(self):
+        m = ManifestPlatformModel(hash="abc123", path="build/platform.json")
+        assert m.path == "build/platform.json"
+
+    def test_with_content(self):
+        m = ManifestPlatformModel(hash="abc123", content={"kind": "platform_model", "spec": {}})
+        assert m.content["kind"] == "platform_model"
 
     def test_full(self):
-        m = ManifestPlatformModel(hash="abc123", path=".strata/platform.json")
-        assert m.hash == "abc123"
-        assert m.path == ".strata/platform.json"
+        m = ManifestPlatformModel(
+            hash="sha256:deadbeef",
+            path="build/prod/platform.json",
+            content={"spec": {"deployment_name": "prod"}},
+        )
+        assert m.hash == "sha256:deadbeef"
+        assert m.content["spec"]["deployment_name"] == "prod"
 
 
 class TestManifestRepositoryModel:
@@ -42,6 +77,76 @@ class TestManifestRepositoryModel:
         assert m.url == "https://github.com/org/repo.git"
         assert m.ref == "main"
         assert m.commit == "abc123def456"
+
+
+class TestManifestArtifactImageModel:
+    def test_minimal(self):
+        m = ManifestArtifactImageModel(name="traefik", image="docker.io/traefik:v3.0.1")
+        assert m.name == "traefik"
+        assert m.image == "docker.io/traefik:v3.0.1"
+        assert m.digest is None
+
+    def test_with_digest(self):
+        m = ManifestArtifactImageModel(
+            name="app",
+            image="registry.example.com/app:v2.0",
+            digest="sha256:cafebabe",
+        )
+        assert m.digest == "sha256:cafebabe"
+
+    def test_missing_image_rejected(self):
+        with pytest.raises(ValidationError):
+            ManifestArtifactImageModel(name="traefik")  # type: ignore[call-arg]
+
+
+class TestManifestArtifactProviderModel:
+    def test_minimal(self):
+        m = ManifestArtifactProviderModel(name="tf_hetzner", type="terraform")
+        assert m.name == "tf_hetzner"
+        assert m.type == "terraform"
+        assert m.backend is None
+        assert m.details is None
+
+    def test_terraform_with_backend(self):
+        m = ManifestArtifactProviderModel(
+            name="tf_hetzner",
+            type="terraform",
+            backend={"type": "azurerm", "configuration": {"container_name": "state"}},
+        )
+        assert m.backend["type"] == "azurerm"
+
+    def test_ansible_with_details(self):
+        m = ManifestArtifactProviderModel(
+            name="ansible_configure",
+            type="ansible",
+            details={"playbook": "site.yml"},
+        )
+        assert m.details["playbook"] == "site.yml"
+
+    def test_missing_type_rejected(self):
+        with pytest.raises(ValidationError):
+            ManifestArtifactProviderModel(name="x")  # type: ignore[call-arg]
+
+
+class TestManifestArtifactsModel:
+    def test_minimal(self):
+        m = ManifestArtifactsModel(platform=ManifestPlatformModel(hash="abc"))
+        assert m.platform.hash == "abc"
+        assert m.repositories is None
+        assert m.images is None
+        assert m.providers is None
+
+    def test_full(self):
+        m = ManifestArtifactsModel(
+            platform=ManifestPlatformModel(hash="sha256:abc", content={"kind": "platform_model"}),
+            repositories={"xyz_infra": ManifestRepositoryModel(url="git@github.com:org/infra.git", commit="abc123")},
+            images=[ManifestArtifactImageModel(name="traefik", image="traefik:v3")],
+            providers=[ManifestArtifactProviderModel(name="tf_hetzner", type="terraform")],
+        )
+        assert m.platform.content["kind"] == "platform_model"
+        assert "xyz_infra" in m.repositories
+        assert len(m.images) == 1
+        assert len(m.providers) == 1
 
 
 class TestManifestStageModel:
@@ -95,57 +200,46 @@ class TestDeploymentManifestMetaModel:
 
 
 class TestDeploymentManifestSpecModel:
-    @pytest.fixture
-    def minimal_spec(self):
-        return DeploymentManifestSpecModel(
-            deployment_name="my_deploy",
-            workspace_name="my_workspace",
-            action="deploy",
-            started_at="2025-01-01T00:00:00+00:00",
-            status="success",
-            platform=ManifestPlatformModel(hash="abc123"),
-        )
+    def test_minimal(self):
+        spec = _make_spec()
+        assert str(spec.deployment_name) == "my_deploy"
+        assert spec.action == "deploy"
+        assert spec.status == "success"
+        assert spec.dry_run is False
+        assert spec.stages is None
+        assert spec.sbom is None
+        assert spec.artifacts.repositories is None
 
-    def test_minimal(self, minimal_spec):
-        assert str(minimal_spec.deployment_name) == "my_deploy"
-        assert str(minimal_spec.workspace_name) == "my_workspace"
-        assert minimal_spec.action == "deploy"
-        assert minimal_spec.status == "success"
-        assert minimal_spec.dry_run is False
-        assert minimal_spec.stages is None
-        assert minimal_spec.sbom is None
-
-    def test_full(self):
-        spec = DeploymentManifestSpecModel(
-            deployment_name="prod_deploy",
-            workspace_name="prod_ws",
-            environment="production",
-            action="deploy",
-            started_at="2025-01-01T00:00:00+00:00",
-            completed_at="2025-01-01T00:10:00+00:00",
-            duration_seconds=600,
-            status="success",
-            dry_run=False,
-            deployed_by="ci-bot",
-            platform=ManifestPlatformModel(hash="abc123", path="platform.json"),
-            repositories={
-                "infra": ManifestRepositoryModel(url="https://github.com/org/infra.git", commit="abc123"),
-            },
-            stages=[
-                ManifestStageModel(name="infra", status="success", steps=["setup", "apply"]),
-            ],
+    def test_artifacts_accessible(self):
+        spec = _make_spec(
+            artifacts=ManifestArtifactsModel(
+                platform=ManifestPlatformModel(hash="sha256:abc", content={"spec": {}}),
+                repositories={"repo_a": ManifestRepositoryModel(commit="abc123")},
+                providers=[ManifestArtifactProviderModel(name="tf_x", type="terraform")],
+                images=[ManifestArtifactImageModel(name="svc", image="img:latest")],
+            )
         )
-        assert spec.environment == "production"
-        assert spec.deployed_by == "ci-bot"
-        assert len(spec.repositories) == 1
-        assert len(spec.stages) == 1
+        assert spec.artifacts.platform.hash == "sha256:abc"
+        assert spec.artifacts.platform.content is not None
+        assert "repo_a" in spec.artifacts.repositories
+        assert len(spec.artifacts.providers) == 1
+        assert len(spec.artifacts.images) == 1
 
     def test_missing_required_fields_rejected(self):
         with pytest.raises(ValidationError):
-            DeploymentManifestSpecModel(
-                deployment_name="x",
-                # missing workspace_name, action, started_at, status, platform
-            )
+            DeploymentManifestSpecModel(deployment_name="x")  # type: ignore[call-arg]
+
+    def test_full(self):
+        spec = _make_spec(
+            environment="production",
+            completed_at="2025-01-01T00:10:00+00:00",
+            duration_seconds=600,
+            deployed_by="ci-bot",
+            stages=[ManifestStageModel(name="infra", status="success", steps=["setup", "apply"])],
+        )
+        assert spec.environment == "production"
+        assert spec.deployed_by == "ci-bot"
+        assert len(spec.stages) == 1
 
 
 class TestDeploymentManifestModel:
@@ -153,14 +247,7 @@ class TestDeploymentManifestModel:
     def manifest(self):
         return DeploymentManifestModel(
             meta=DeploymentManifestMetaModel(name="prod"),
-            spec=DeploymentManifestSpecModel(
-                deployment_name="prod_deploy",
-                workspace_name="prod_ws",
-                action="deploy",
-                started_at="2025-01-01T00:00:00+00:00",
-                status="success",
-                platform=ManifestPlatformModel(hash="abc123"),
-            ),
+            spec=_make_spec(deployment_name="prod_deploy", workspace_name="prod_ws"),
         )
 
     def test_defaults(self, manifest):
@@ -173,31 +260,59 @@ class TestDeploymentManifestModel:
     def test_spec_accessible(self, manifest):
         assert manifest.spec.action == "deploy"
         assert manifest.spec.status == "success"
+        assert manifest.spec.artifacts is not None
 
     def test_json_round_trip(self, manifest):
         json_str = manifest.model_dump_json(indent=2, exclude_none=True)
         loaded = DeploymentManifestModel.model_validate_json(json_str)
         assert loaded.spec.deployment_name == manifest.spec.deployment_name
         assert loaded.kind == PlatformKind.DEPLOYMENT_MANIFEST
+        assert loaded.spec.artifacts.platform.hash == "sha256:abc123"
 
     def test_destroy_action(self):
         m = DeploymentManifestModel(
             meta=DeploymentManifestMetaModel(name="destroy_run"),
-            spec=DeploymentManifestSpecModel(
-                deployment_name="prod_deploy",
-                workspace_name="prod_ws",
+            spec=_make_spec(
                 action="destroy",
-                started_at="2025-01-01T00:00:00+00:00",
                 status="failed",
-                platform=ManifestPlatformModel(hash="abc123"),
-                stages=[
-                    ManifestStageModel(
-                        name="infra",
-                        status="failed",
-                        error="Destroy timed out",
-                    ),
-                ],
+                stages=[ManifestStageModel(name="infra", status="failed", error="Destroy timed out")],
             ),
         )
         assert m.spec.action == "destroy"
         assert m.spec.stages[0].error == "Destroy timed out"
+
+    def test_embedded_platform_content_round_trip(self):
+        m = DeploymentManifestModel(
+            meta=DeploymentManifestMetaModel(name="prod"),
+            spec=_make_spec(
+                artifacts=ManifestArtifactsModel(
+                    platform=ManifestPlatformModel(
+                        hash="sha256:abc",
+                        path="build/platform.json",
+                        content={"kind": "platform_model", "spec": {"deployment_name": "prod"}},
+                    ),
+                    providers=[ManifestArtifactProviderModel(name="tf_hetzner", type="terraform")],
+                    images=[ManifestArtifactImageModel(name="traefik", image="traefik:v3.0.1")],
+                )
+            ),
+        )
+        json_str = m.model_dump_json(indent=2, exclude_none=True)
+        loaded = DeploymentManifestModel.model_validate_json(json_str)
+        assert loaded.spec.artifacts.platform.content["kind"] == "platform_model"
+        assert loaded.spec.artifacts.providers[0].name == "tf_hetzner"
+        assert loaded.spec.artifacts.images[0].image == "traefik:v3.0.1"
+
+        m = ManifestRepositoryModel()
+        assert m.url is None
+        assert m.ref is None
+        assert m.commit is None
+
+    def test_full(self):
+        m = ManifestRepositoryModel(
+            url="https://github.com/org/repo.git",
+            ref="main",
+            commit="abc123def456",
+        )
+        assert m.url == "https://github.com/org/repo.git"
+        assert m.ref == "main"
+        assert m.commit == "abc123def456"

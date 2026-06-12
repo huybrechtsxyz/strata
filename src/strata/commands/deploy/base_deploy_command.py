@@ -12,6 +12,9 @@ from strata.models.deployment_manifest_model import (
     DeploymentManifestMetaModel,
     DeploymentManifestModel,
     DeploymentManifestSpecModel,
+    ManifestArtifactImageModel,
+    ManifestArtifactProviderModel,
+    ManifestArtifactsModel,
     ManifestPlatformModel,
     ManifestRepositoryModel,
     ManifestStageModel,
@@ -252,6 +255,10 @@ class BaseDeployCommand(BaseCommand):
     ) -> Optional[Path]:
         """Assemble and persist a deployment manifest.
 
+        Uses the manifest configuration from ``spec.deployment.manifest`` in
+        the platform configuration.  When no manifest config is defined, logs
+        an info message and skips writing.
+
         Args:
             action: ``"deploy"`` or ``"destroy"``.
             status: ``"success"``, ``"partial"``, or ``"failed"``.
@@ -268,6 +275,15 @@ class BaseDeployCommand(BaseCommand):
             self.logger.warning("Cannot write manifest — deployment service not loaded")
             return None
 
+        # Check manifest configuration
+        manifest_config = self._get_manifest_config()
+        if manifest_config is None:
+            self.logger.info(
+                "Deployment manifest not configured — skipping. "
+                "Define spec.deployment.manifest in the configuration to enable manifest storage."
+            )
+            return None
+
         try:
             completed_at = datetime.now(timezone.utc).isoformat()
             started_at = self._deploy_started_at or completed_at
@@ -280,12 +296,6 @@ class BaseDeployCommand(BaseCommand):
             except (ValueError, TypeError):
                 pass
 
-            # Platform artifact fingerprint
-            platform_info = self._hash_platform_artifact()
-
-            # Repository bill of materials
-            repositories = self._collect_repository_info()
-
             # Deployment identity
             deploy_meta = self._deployment_service.model.meta  # type: ignore[union-attr]
             workspace_service = self._deployment_service.get_workspace_service()
@@ -293,14 +303,20 @@ class BaseDeployCommand(BaseCommand):
                 str(workspace_service.model.meta.name) if workspace_service and workspace_service.model else "unknown"
             )
 
-            # Environment from deployment labels
+            # Environment and version from deployment labels
             labels = deploy_meta.labels or {}
             environment = labels.get("environment")
+
+            # Version from deployment labels
+            version = labels.get("version")
 
             # Actor
             deployed_by = (
                 os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
             )
+
+            # Full artifact BOM
+            artifacts = self._collect_artifacts()
 
             manifest = DeploymentManifestModel(
                 meta=DeploymentManifestMetaModel(
@@ -320,15 +336,18 @@ class BaseDeployCommand(BaseCommand):
                     status=status,
                     dry_run=dry_run,
                     deployed_by=deployed_by,
-                    platform=platform_info,
-                    repositories=repositories if repositories else None,
+                    artifacts=artifacts,
                     stages=self._stage_results if self._stage_results else None,
                 ),
             )
 
-            deployments_dir = self._work_path / ".strata" / "deployments"
             svc = DeploymentManifestService()
-            path = svc.save(manifest, deployments_dir)
+            path = svc.save_with_config(
+                manifest=manifest,
+                manifest_config=manifest_config,
+                work_path=self._work_path,
+                version=version,
+            )
             self.logger.info("Deployment manifest written", path=str(path))
             return path
 
@@ -336,19 +355,50 @@ class BaseDeployCommand(BaseCommand):
             self.logger.warning("Failed to write deployment manifest", error=str(exc))
             return None
 
-    def _hash_platform_artifact(self) -> ManifestPlatformModel:
-        """Compute SHA-256 of platform.json and return a ManifestPlatformModel."""
+    def _get_manifest_config(self):
+        """Retrieve manifest configuration from the configuration service.
+
+        Returns:
+            ConfigurationManifestModel or None if not configured.
+        """
+        if self._configuration_service is None:
+            return None
+        model = self._configuration_service.model
+        if model is None:
+            return None
+        if model.spec.deployment is None:
+            return None
+        return model.spec.deployment.manifest
+
+    def _collect_artifacts(self) -> ManifestArtifactsModel:
+        """Assemble the full artifact BOM from available runtime data."""
+        return ManifestArtifactsModel(
+            platform=self._collect_platform_artifact(),
+            repositories=self._collect_repository_info(),
+            providers=self._collect_provider_info(),
+            images=self._collect_image_info(),
+        )
+
+    def _collect_platform_artifact(self) -> ManifestPlatformModel:
+        """Compute SHA-256 of platform.json and embed its full content."""
         if self._deployment_service is None:
             return ManifestPlatformModel(hash="unknown")
 
         platform_path = self._deployment_service.get_build_path(self._build_path) / "platform.json"
-        if platform_path.exists():
-            content = platform_path.read_bytes()
-            digest = hashlib.sha256(content).hexdigest()
-            rel_path = str(platform_path.relative_to(self._work_path))
-            return ManifestPlatformModel(hash=f"sha256:{digest}", path=rel_path)
+        if not platform_path.exists():
+            return ManifestPlatformModel(hash="unknown")
 
-        return ManifestPlatformModel(hash="unknown")
+        import json as _json
+
+        content_bytes = platform_path.read_bytes()
+        digest = hashlib.sha256(content_bytes).hexdigest()
+        rel_path = str(platform_path.relative_to(self._work_path))
+        try:
+            content = _json.loads(content_bytes.decode("utf-8"))
+        except Exception:
+            content = None
+
+        return ManifestPlatformModel(hash=f"sha256:{digest}", path=rel_path, content=content)
 
     def _collect_repository_info(self) -> Optional[Dict[str, ManifestRepositoryModel]]:
         """Walk solution repositories and collect URL/ref/commit info."""
@@ -367,7 +417,6 @@ class BaseDeployCommand(BaseCommand):
             ref = getattr(repo, "ref", None)
             commit: Optional[str] = None
 
-            # Try to resolve commit SHA from the local clone
             repo_map = self._solution_controller.get_repo_map()
             if repo_map and name in repo_map:
                 repo_path = Path(repo_map[name])
@@ -391,3 +440,72 @@ class BaseDeployCommand(BaseCommand):
             )
 
         return result if result else None
+
+    def _collect_provider_info(self) -> Optional[List[ManifestArtifactProviderModel]]:
+        """Collect provisioner metadata from the workspace model.
+
+        Walks ``workspace.spec.provisioners`` and captures each provisioner's
+        name, tool type, and state backend configuration.
+        """
+        if self._deployment_service is None:
+            return None
+        workspace_service = self._deployment_service.get_workspace_service()
+        if workspace_service is None or workspace_service.model is None:
+            return None
+
+        provisioners = getattr(workspace_service.model.spec, "provisioners", None) or []
+        if not provisioners:
+            return None
+
+        result: List[ManifestArtifactProviderModel] = []
+        for prov in provisioners:
+            backend_dict: Optional[Dict[str, Any]] = None
+            if getattr(prov, "backend", None) is not None:
+                backend_dict = {
+                    "type": prov.backend.type,
+                    "configuration": prov.backend.configuration,
+                }
+
+            details: Optional[Dict[str, Any]] = None
+            if getattr(prov, "properties", None) is not None:
+                details = prov.properties.model_dump(exclude_none=True)
+
+            result.append(
+                ManifestArtifactProviderModel(
+                    name=str(prov.name),
+                    type=prov.provisioner.value,
+                    backend=backend_dict,
+                    details=details,
+                )
+            )
+
+        return result if result else None
+
+    def _collect_image_info(self) -> Optional[List[ManifestArtifactImageModel]]:
+        """Collect container image references from stage outputs.
+
+        Compose stages emit service image references in their outputs under
+        the ``services`` key.  This method walks all recorded stage results
+        and extracts any image data found there.
+        """
+        images: List[ManifestArtifactImageModel] = []
+        for stage in self._stage_results:
+            if not stage.outputs:
+                continue
+            services = stage.outputs.get("services")
+            if not isinstance(services, list):
+                continue
+            for svc in services:
+                if not isinstance(svc, dict):
+                    continue
+                name = svc.get("name") or svc.get("service")
+                image = svc.get("image")
+                if name and image:
+                    images.append(
+                        ManifestArtifactImageModel(
+                            name=str(name),
+                            image=str(image),
+                            digest=svc.get("digest"),
+                        )
+                    )
+        return images if images else None

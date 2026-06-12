@@ -11,14 +11,14 @@ spec:
   # Logging configuration
   logging:
     file: "@xyz_configuration/config/xyz-logging.yaml"
-  
+
   # Deployment hierarchy: simple single-layer structure
   layering:
     - name: environment
       description: "Deployment environment"
       pattern: ""
       required: true
-  
+
   # Deployment properties schema - defines required properties for all deployments
   deployment:
     additional_properties: false
@@ -27,7 +27,18 @@ spec:
         pattern: "^(dev|tst|stg|prd)$"
         required: true
         description: "Deployment environment (dev, tst, stg, prd)"
-  
+    # Deployment manifest storage configuration
+    # When omitted, manifests are not written; define to enable automatic manifest persistence
+    manifest:
+      type: local # local | gitops
+      path: ".strata/deployments" # Base path (service appends /{deployment_name}/{version}/{timestamp}.json)
+      # Uncomment below for gitops storage:
+      # type: gitops
+      # repository: "state-repo"      # Reference to a repository entry from spec.repositories
+      # branch: "manifests"           # Target branch for manifest commits
+      # tag: true                      # Create git tag {deployment_name}/{version} (default: true)
+      # path: "deployments"            # Base path within the repo
+
   # Required repositories for this configuration (bundled with platform)
   repositories:
     - name: xyz_configuration
@@ -48,14 +59,14 @@ spec:
       reference: "1.0.0"
       source_path: repo/xyz_svc_traefik
       deploy_path: xyz_svc_traefik
-  
+
   # Integrations define external tools and services the platform uses
   integrations:
     # === Essential Tools (Required for platform operation) ===
     # GitTool class for Git integration
     - name: git
-      type: git 
-      capabilities: [ repository ]
+      type: git
+      capabilities: [repository]
       description: Git version control system for repository management
       required: true
       validation:
@@ -77,11 +88,11 @@ spec:
             export GIT_USERNAME="oauth2"
             export GIT_PASSWORD="your-personal-access-token"
           Note: Not required for public repositories or if SSH is already configured
-    
+
     # TerraformTool class for Terraform integration
     - name: terraform
-      type: terraform 
-      capabilities: [ infrastructure ]
+      type: terraform
+      capabilities: [infrastructure]
       description: Terraform infrastructure as code provisioner
       required: true
       validation:
@@ -98,12 +109,12 @@ spec:
             2. Set environment variable:
                export TERRAFORM_API_TOKEN="your-terraform-token"
           Note: Not required for local Terraform execution
-    
+
     # === Secret Management Tools (Choose one or more) ===
     # BitwardenTool class for Bitwarden Secrets Manager integration
     - name: bitwarden
       type: bitwarden
-      capabilities: [ secrets ]
+      capabilities: [secrets]
       description: Bitwarden Secrets Manager
       required: false
       validation:
@@ -119,7 +130,7 @@ spec:
           Bitwarden Secrets Manager access token
           Setup: Create machine account at https://bitwarden.com/sm
           Then: export BWS_ACCESS_TOKEN="your-access-token"
-    
+
     # HashiCorpVaultTool class for Vault integration
     - name: vault
       type: hashicorp_vault
@@ -142,11 +153,11 @@ spec:
           Or: vault login -method=token token=your-token
           Then: export VAULT_TOKEN="your-vault-token"
           And: export VAULT_ADDR="https://vault.example.com:8200"
-    
+
     # AzureKeyVaultTool class for Azure Key Vault integration
     - name: azure_keyvault
       type: azure_keyvault
-      capabilities: [ secrets ]
+      capabilities: [secrets]
       description: Azure Key Vault for secret management
       required: false
       validation:
@@ -172,7 +183,7 @@ spec:
                export AZURE_TENANT_ID="your-tenant-id"
                export AZURE_KEYVAULT_NAME="your-keyvault-name"
           Alternative: Use Azure CLI default credentials (az login)
-    
+
     # === Variable/Config Stores ===
     # HashiCorpConsulTool class for Consul integration
     - name: consul
@@ -196,7 +207,7 @@ spec:
             3. Set environment variables:
                export CONSUL_HTTP_ADDR="http://consul.example.com:8500"
                export CONSUL_HTTP_TOKEN="your-consul-token"
-    
+
     # AzureAppConfigTool class for Azure App Configuration integration
     - name: azure_appconfig
       type: azure_appconfig
@@ -221,7 +232,7 @@ spec:
                export AZURE_APPCONFIG_NAME="your-appconfig-name"
                export AZURE_APPCONFIG_CONNECTION_STRING="Endpoint=...;Id=...;Secret=..."
           Alternative: Use Azure AD (requires AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET)
-    
+
     # === API Integrations (Optional, for workflow hooks) ===
     # Custom API integration example for artifact registry example
     - name: artifact_registry
@@ -243,7 +254,7 @@ spec:
       lifecycle:
         deploy_apply_after:
           description: "Upload deployment manifests after deploy apply"
-    
+
     # Custom API integration example for test management system
     - name: test_management
       type: api
@@ -309,7 +320,7 @@ spec:
               pattern: "^[1-9][0-9]*$"
               required: false
               description: "Optional custom disk size in GB"
-  
+
   # Topologies define supported deployment topologies and their component schemas
   additional_topologies: false
   topologies:
