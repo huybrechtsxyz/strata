@@ -54,6 +54,7 @@ from strata.models.common_models import (
     PlatformName,
     PlatformVersion,
 )
+from strata.models.sbom_model import SbomReferenceModel
 
 # ---------------------------------------------------------------------------
 # Artifact sub-models
@@ -197,8 +198,8 @@ class DeploymentManifestSpecModel(PlatformBaseModel):
     # Stage results
     stages: Optional[List[ManifestStageModel]] = Field(None, description="Results of each deployment stage")
 
-    # Future extension points
-    sbom: Optional[Dict[str, Any]] = Field(None, description="Software bill of materials (future)")
+    # Extension points
+    sbom: Optional[SbomReferenceModel] = Field(None, description="Reference to the generated CycloneDX SBOM file")
     signatures: Optional[Dict[str, Any]] = Field(None, description="Signing/attestation data (future)")
 
 

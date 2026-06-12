@@ -31,22 +31,23 @@ Never use plain `str` for `name` fields — always use `PlatformName` from `comm
 
 ## Supported Kinds
 
-| Kind                 | Model class             | Description                                                 |
-| -------------------- | ----------------------- | ----------------------------------------------------------- |
-| `configuration`      | `ConfigurationModel`    | Integration backends and store definitions                  |
-| `workspace`          | `WorkspaceModel`        | Infrastructure topology (providers, resources, namespaces)  |
-| `deployment`         | `DeploymentModel`       | Deployment manifest referencing a workspace + environment   |
-| `environment`        | `EnvironmentModel`      | Environment-specific variable/secret/feature overrides      |
-| `provider`           | `ProviderModel`         | Cloud provider connection parameters                        |
-| `resource`           | `ResourceModel`         | Infrastructure resource definition (VM size, disk, network) |
-| `firewall`           | `FirewallModel`         | Firewall ruleset                                            |
-| `module`             | `ModuleModel`           | Deployable application component (source, lifecycle hooks)  |
-| `namespace`          | `NamespaceModel`        | Application deployment unit (groups modules)                |
-| `platform-artifact`  | `PlatformArtifactModel` | Build output written to `.strata/build/`                    |
-| `workspace-template` | `PlatformTemplateModel` | Scaffold for `strata sln init --from-template`              |
-| `solution`           | `SolutionModel`         | Solution registry (`solution.json`)                         |
-| `repository`         | `RepositoryModel`       | Registered repository entry                                 |
-| `integration`        | `IntegrationModel`      | Integration backend credential config                       |
+| Kind                  | Model class               | Description                                                     |
+| --------------------- | ------------------------- | --------------------------------------------------------------- |
+| `configuration`       | `ConfigurationModel`      | Integration backends and store definitions                      |
+| `workspace`           | `WorkspaceModel`          | Infrastructure topology (providers, resources, namespaces)      |
+| `deployment`          | `DeploymentModel`         | Deployment configuration referencing a workspace + environment  |
+| `deployment-manifest` | `DeploymentManifestModel` | Immutable snapshot written after deploy (audit trail, versions) |
+| `environment`         | `EnvironmentModel`        | Environment-specific variable/secret/feature overrides          |
+| `provider`            | `ProviderModel`           | Cloud provider connection parameters                            |
+| `resource`            | `ResourceModel`           | Infrastructure resource definition (VM size, disk, network)     |
+| `firewall`            | `FirewallModel`           | Firewall ruleset                                                |
+| `module`              | `ModuleModel`             | Deployable application component (source, lifecycle hooks)      |
+| `namespace`           | `NamespaceModel`          | Application deployment unit (groups modules)                    |
+| `platform-artifact`   | `PlatformArtifactModel`   | Build output written to `.strata/build/`                        |
+| `workspace-template`  | `PlatformTemplateModel`   | Scaffold for `strata sln init --from-template`                  |
+| `solution`            | `SolutionModel`           | Solution registry (`solution.json`)                             |
+| `repository`          | `RepositoryModel`         | Registered repository entry                                     |
+| `integration`         | `IntegrationModel`        | Integration backend credential config                           |
 
 ## Two-Phase Validation
 

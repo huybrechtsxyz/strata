@@ -60,6 +60,7 @@ strata
    config/namespace
    config/dns
    config/network
+   config/manifest
 
 .. toctree::
    :maxdepth: 2
@@ -86,6 +87,7 @@ strata
    guides/pattern-cross-env-changes
    guides/troubleshooting-what-changed
    guides/setup-azure-oidc
+   guides/deployment-manifests
 
 .. :orphan:
 

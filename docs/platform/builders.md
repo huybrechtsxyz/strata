@@ -14,6 +14,7 @@ Builders assemble and persist deployment artifacts from fully-loaded services. T
 | `AnsibleBuilder`   | `builders.ansible_builder`   | Generates `strata_*.yml` YAML variable files for Ansible playbooks   |
 | `ComposeBuilder`   | `builders.compose_builder`   | Generates `docker-compose.yml` per namespace for compose modules     |
 | `HelmBuilder`      | `builders.helm_builder`      | Generates `values.yaml` and `meta.yaml` per Helm module              |
+| `SbomBuilder`      | `builders.sbom_builder`      | Generates CycloneDX 1.6 JSON SBOM from the platform artifact         |
 
 ---
 
@@ -255,18 +256,18 @@ All files are written to `{provisioner_build_path}/` (one set per Ansible provis
 
 File names use the prefix `strata_` so the deployer can discover them via glob.
 
-| File                        | Top-level YAML key    | Contents                                             |
-| --------------------------- | --------------------- | ---------------------------------------------------- |
-| `strata_workspace.yml`      | `strata_workspace`    | Workspace name, version, environment, labels         |
-| `strata_providers.yml`      | `strata_providers`    | Provider configurations keyed by name                |
-| `strata_topologies.yml`     | `strata_topologies`   | Topology definitions with components and volumes     |
-| `strata_resources.yml`      | `strata_resources`    | All resources in a single dict keyed by name         |
-| `strata_resx_<type>.yml`    | `strata_<type>`       | Resources grouped by `resource_type` (one per type)  |
-| `strata_modules.yml`        | `strata_modules`      | Module source paths and properties                   |
-| `strata_namespaces.yml`     | `strata_namespaces`   | Namespace definitions                                |
-| `strata_firewalls.yml`      | `strata_firewalls`    | Firewall rules keyed by name                         |
-| `strata_dns.yml`            | `strata_dns_zones`    | DNS zone definitions                                 |
-| `strata_networks.yml`       | `strata_networks`     | Network configurations                               |
+| File                     | Top-level YAML key  | Contents                                            |
+| ------------------------ | ------------------- | --------------------------------------------------- |
+| `strata_workspace.yml`   | `strata_workspace`  | Workspace name, version, environment, labels        |
+| `strata_providers.yml`   | `strata_providers`  | Provider configurations keyed by name               |
+| `strata_topologies.yml`  | `strata_topologies` | Topology definitions with components and volumes    |
+| `strata_resources.yml`   | `strata_resources`  | All resources in a single dict keyed by name        |
+| `strata_resx_<type>.yml` | `strata_<type>`     | Resources grouped by `resource_type` (one per type) |
+| `strata_modules.yml`     | `strata_modules`    | Module source paths and properties                  |
+| `strata_namespaces.yml`  | `strata_namespaces` | Namespace definitions                               |
+| `strata_firewalls.yml`   | `strata_firewalls`  | Firewall rules keyed by name                        |
+| `strata_dns.yml`         | `strata_dns_zones`  | DNS zone definitions                                |
+| `strata_networks.yml`    | `strata_networks`   | Network configurations                              |
 
 ### Playbook Variable Access
 
@@ -656,6 +657,72 @@ spec:
 #### `after_build` → `bool`
 
 Always returns `True`. A namespace that contains no helm modules is not an error condition.
+
+---
+
+## SbomBuilder
+
+Generates a CycloneDX 1.6 JSON Software Bill of Materials from an existing `platform.json` artifact and writes `sbom.json` to the same deployment build directory.
+
+### Output Location
+
+```
+{deployment_build_path}/sbom.json
+```
+
+### Collector Pattern
+
+`SbomBuilder` delegates component discovery to pluggable collectors. Each collector implements `BaseSbomCollector` and is responsible for one artifact type. The default set:
+
+| Collector                    | Source                                               | PURL type         |
+| ---------------------------- | ---------------------------------------------------- | ----------------- |
+| `ContainerImageCollector`    | `platform.spec.modules[].services[].image`           | `pkg:docker/…`    |
+| `HelmChartCollector`         | Provisioners with `type: helm`                       | `pkg:helm/…`      |
+| `TerraformProviderCollector` | `required_providers {}` blocks in `*.tf` build files | `pkg:terraform/…` |
+| `AnsibleCollectionCollector` | `requirements.yml` files in the build directory      | `pkg:ansible/…`   |
+
+Collectors are injectable — pass `collectors=[…]` to the constructor for testing or extension:
+
+```python
+from strata.builders.sbom_builder import SbomBuilder
+from strata.builders.sbom.image_collector import ContainerImageCollector
+
+builder = SbomBuilder(collectors=[ContainerImageCollector()])
+builder.before_build(deployment_service, work_path, build_path)
+builder.build(deployment_service, work_path, build_path)
+builder.after_build(deployment_service, work_path, build_path)
+
+ref = builder.sbom_reference  # SbomReferenceModel with path, sha256, component_count
+```
+
+### Floating Tags
+
+Container images with non-pinned tags (`latest`, `main`, `dev`, etc.) are flagged with a `strata:tag-stability=floating` CycloneDX property and emit a `WARNING` log. Pinned semver tags and digests do not trigger warnings.
+
+### Three-Phase Pipeline
+
+#### `before_build`
+
+1. Verifies `deployment_service.is_validated()` — error if not validated
+2. Unless `dry_run=True`, verifies `platform.json` exists in the build path — error if missing
+
+#### `build`
+
+1. Runs each collector in order, draining warnings to the logger immediately
+2. If `dry_run=True`: logs planned component count, returns `True` without writing
+3. If `dry_run=False`: builds CycloneDX BOM, serializes to JSON, writes `sbom.json`, computes SHA-256, stores `SbomReferenceModel` on `self.sbom_reference`
+
+#### `after_build`
+
+Verifies `sbom.json` exists on disk (skipped in dry-run). Returns `False` and adds an error if the file is absent.
+
+### Adding a New Collector
+
+1. Create a class extending `BaseSbomCollector` in `builders/sbom/`.
+2. Implement `get_collector_name() -> str` and `collect(platform, work_path, deployment_build_path) -> List[SbomComponentModel]`.
+3. Use `self._add_warning(msg)` for non-fatal issues (e.g. unparseable files, missing versions).
+4. Add helper PURLs to `utils/sbom_utils.py` if the component type is new.
+5. Register the collector in `SbomBuilder._default_collectors()`.
 
 ---
 
