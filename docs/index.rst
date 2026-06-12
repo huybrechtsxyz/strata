@@ -88,6 +88,7 @@ strata
    guides/troubleshooting-what-changed
    guides/setup-azure-oidc
    guides/deployment-manifests
+   guides/at-scale
 
 .. :orphan:
 
