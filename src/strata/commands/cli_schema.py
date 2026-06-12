@@ -9,6 +9,7 @@ import click
 from strata.commands.cli_common import click_output_format
 from strata.models.common_models import PlatformKind
 from strata.models.configuration_model import ConfigurationModel
+from strata.models.deployment_manifest_model import DeploymentManifestModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
 from strata.models.environment_model import EnvironmentModel
@@ -25,6 +26,7 @@ from strata.models.workspace_model import WorkspaceModel
 _KIND_TO_MODEL = {
     PlatformKind.CONFIGURATION: ConfigurationModel,
     PlatformKind.DEPLOYMENT: DeploymentModel,
+    PlatformKind.DEPLOYMENT_MANIFEST: DeploymentManifestModel,
     PlatformKind.DNS: DnsModel,
     PlatformKind.ENVIRONMENT: EnvironmentModel,
     PlatformKind.FIREWALL: FirewallModel,
