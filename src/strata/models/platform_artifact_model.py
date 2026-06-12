@@ -47,6 +47,7 @@ from strata.models.module_model import (
     ModuleModel,
     ModulePropertiesModel,
     ModuleReferenceModel,
+    ModuleServiceModel,
 )
 from strata.models.namespace_model import (
     NamespaceModel as InputNamespaceModel,
@@ -228,6 +229,9 @@ class PlatformModuleModel(BaseModel):
         None, description="Module references for variable and secret injection"
     )
     configuration: Optional[Dict[str, Any]] = Field(None, description="Module-specific configuration data")
+    services: Optional[List[ModuleServiceModel]] = Field(
+        None, description="Multi-container service definitions for this module"
+    )
 
     @classmethod
     def from_module_model(cls, model: ModuleModel) -> "PlatformModuleModel":
@@ -242,6 +246,7 @@ class PlatformModuleModel(BaseModel):
             properties=model.spec.properties,
             references=model.spec.references,
             configuration=model.spec.configuration,
+            services=model.spec.services,
         )
 
 
