@@ -46,6 +46,7 @@ class PlatformKind(str, Enum):
     """Enumeration of supported platform kinds."""
 
     CONFIGURATION = "configuration"
+    CUSTOMER = "customer"
     DEPLOYMENT = "deployment"
     DNS = "dns"
     ENVIRONMENT = "environment"

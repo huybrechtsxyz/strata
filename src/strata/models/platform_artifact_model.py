@@ -483,6 +483,10 @@ class PlatformProviderModel(BaseModel):
         description="Optional labels (key-value pairs for classification/filtering)",
     )
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
+    zone: Optional[str] = Field(
+        None,
+        description="Logical data-residency zone this provider's region belongs to (resolved from configuration)",
+    )
     lifecycle: Optional[CommonLifecycleModel] = Field(
         None,
         description="IaC workflow lifecycle phases (setup, validate, plan, apply, output, destroy)",
@@ -499,14 +503,24 @@ class PlatformProviderModel(BaseModel):
     )
 
     @classmethod
-    def from_provider_model(cls, model: ProviderModel) -> "PlatformProviderModel":
-        """Create from input ProviderModel (merges meta + spec)."""
+    def from_provider_model(
+        cls,
+        model: ProviderModel,
+        zone: Optional[str] = None,
+    ) -> "PlatformProviderModel":
+        """Create from input ProviderModel (merges meta + spec).
+
+        Args:
+            model: The source ProviderModel.
+            zone: Optional zone name resolved from the configuration's zones list.
+        """
         return cls(
             name=model.meta.name,
             description=(model.meta.annotations.get("description") if model.meta.annotations else None),
             annotations=model.meta.annotations,
             labels=model.meta.labels,
             tags=model.meta.tags,
+            zone=zone,
             lifecycle=model.spec.lifecycle,
             properties=model.spec.properties,
             authentication=model.spec.authentication,

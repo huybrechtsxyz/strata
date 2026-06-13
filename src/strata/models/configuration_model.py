@@ -319,6 +319,23 @@ class ConfigurationDeploymentModel(PlatformBaseModel):
     )
 
 
+class ConfigurationZoneModel(PlatformBaseModel):
+    """A logical zone grouping one or more provider regions.
+
+    Zones are used to enforce data residency constraints — a customer
+    restricted to zone 'eu' may only be deployed to providers whose
+    region is in that zone's regions list.
+    """
+
+    name: PlatformName = Field(..., description="Unique zone name (e.g., 'eu', 'us', 'apac')")
+    description: Optional[str] = Field(None, description="Human-readable description of this zone")
+    regions: List[str] = Field(
+        ...,
+        min_length=1,
+        description="Provider regions belonging to this zone (e.g., 'westeurope', 'northeurope')",
+    )
+
+
 class ConfigurationSpecModel(PlatformBaseModel):
     """Specification for the configuration model."""
 
@@ -351,6 +368,35 @@ class ConfigurationSpecModel(PlatformBaseModel):
         None,
         description="Security policies for store types and other security constraints",
     )
+    zones: Optional[List[ConfigurationZoneModel]] = Field(
+        None,
+        description="Logical zones grouping provider regions for data residency enforcement",
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_zones(self) -> "ConfigurationSpecModel":
+        """Validate zone names are unique and each region appears in at most one zone."""
+        if not self.zones:
+            return self
+
+        # Unique zone names
+        zone_names = [z.name for z in self.zones]
+        duplicates = [n for n in zone_names if zone_names.count(n) > 1]
+        if duplicates:
+            raise ValueError(f"Duplicate zone names in configuration: {', '.join(set(duplicates))}")
+
+        # Each region must appear in at most one zone
+        seen: dict[str, str] = {}
+        for zone in self.zones:
+            for region in zone.regions:
+                if region in seen:
+                    raise ValueError(
+                        f"Region '{region}' is listed in both zone '{seen[region]}' and zone '{zone.name}'. "
+                        "Each region must belong to exactly one zone."
+                    )
+                seen[region] = zone.name
+
+        return self
 
     @model_validator(mode="after")
     def validate_unique_providers(self) -> "ConfigurationSpecModel":

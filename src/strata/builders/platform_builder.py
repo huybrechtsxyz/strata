@@ -289,8 +289,18 @@ class PlatformBuilder(BaseBuilder):
         providers = None
         provider_services = workspace_service.get_provider_services()
         if provider_services:
+            # Build a region → zone lookup from configuration (if zones are defined)
+            region_to_zone: dict[str, str] = {}
+            if configuration_model and configuration_model.spec.zones:
+                for zone in configuration_model.spec.zones:
+                    for region in zone.regions:
+                        region_to_zone[region] = zone.name
+
             providers = [
-                PlatformProviderModel.from_provider_model(svc.model)
+                PlatformProviderModel.from_provider_model(
+                    svc.model,
+                    zone=region_to_zone.get(svc.model.spec.properties.region) if svc.model else None,
+                )
                 for svc in provider_services.values()
                 if svc.model is not None
             ]
