@@ -10,7 +10,8 @@ meta:
 spec:
   code: xyz_company
   name: XYZ Company
-  zones: []
+  zones:
+    - eu_west
   onboarded: 2025-01-15
   environments:
     - environments/tiers/enterprise.yaml
