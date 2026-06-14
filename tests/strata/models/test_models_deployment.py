@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from strata.models.deployment_model import DeploymentStageModel, DeploymentStageTimeoutsModel
+from strata.models.deployment_model import DeploymentModel, DeploymentStageModel, DeploymentStageTimeoutsModel
 
 
 class TestDeploymentStageTimeoutsModel:
@@ -90,3 +90,40 @@ class TestDeploymentStageModelSecretsField:
         assert stage.secrets == ["hetzner_api_token"]
         assert stage.timeouts is not None
         assert stage.timeouts.apply == 1200
+
+
+class TestDeploymentCustomerField:
+    """Tests for the optional customer field on DeploymentSpecModel."""
+
+    def _spec(self, **overrides):
+        base = {
+            "workspace": {"name": "ws", "file": "workspace.yaml"},
+            "environments": ["env.yaml"],
+        }
+        base.update(overrides)
+        return base
+
+    def _model(self, **spec_overrides):
+        return DeploymentModel.model_validate(
+            {
+                "apiVersion": "strata.huybrechts.xyz/v1",
+                "kind": "deployment",
+                "meta": {"name": "test_deploy"},
+                "spec": self._spec(**spec_overrides),
+            }
+        )
+
+    def test_customer_absent_defaults_none(self):
+        """customer is None when not specified."""
+        model = self._model()
+        assert model.spec.customer is None
+
+    def test_customer_valid_platform_name(self):
+        """A valid PlatformName is accepted."""
+        model = self._model(customer="acme")
+        assert model.spec.customer == "acme"
+
+    def test_customer_invalid_platform_name_rejected(self):
+        """Uppercase / spaces are rejected by PlatformName constraint."""
+        with pytest.raises(ValidationError):
+            self._model(customer="ACME Corp")

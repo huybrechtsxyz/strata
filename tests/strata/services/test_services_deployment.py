@@ -76,3 +76,61 @@ class TestDeploymentService:
         is_valid, errors = service._validate_dynamic()
         assert is_valid
         assert errors == []
+
+    def test_customer_field_absent_phase2_passes(self, tmp_path):
+        """When customer is not set, Phase 2 adds no customer-related errors."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "deployment",
+            "meta": {"name": "shared_deploy"},
+            "spec": {
+                "workspace": {"name": "ws", "file": "workspace.yaml"},
+                "environments": ["env.yaml"],
+            },
+        }
+        svc = DeploymentService(data=data)
+        svc.validate()  # Phase 1
+        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path))
+        # Customer is absent — no error should carry the "Customer:" label
+        assert not any(e.startswith("Customer:") for e in errors)
+
+    def test_customer_file_missing_fails_phase2(self, tmp_path):
+        """Phase 2 fails when customer file does not exist on disk."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "deployment",
+            "meta": {"name": "test_deploy"},
+            "spec": {
+                "workspace": {"name": "ws", "file": "workspace.yaml"},
+                "environments": ["env.yaml"],
+                "customer": "acme",
+            },
+        }
+        svc = DeploymentService(data=data)
+        svc.validate()  # Phase 1
+        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path))
+        assert not is_valid
+        assert any("acme" in e for e in errors)
+
+    def test_customer_file_present_passes_phase2(self, tmp_path):
+        """Phase 2 passes when customer file exists on disk."""
+        customer_dir = tmp_path / "customers"
+        customer_dir.mkdir()
+        (customer_dir / "acme.yaml").write_text("# placeholder\n")
+        env_file = tmp_path / "env.yaml"
+        env_file.write_text("# placeholder\n")
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "deployment",
+            "meta": {"name": "test_deploy"},
+            "spec": {
+                "workspace": {"name": "ws", "file": "workspace.yaml"},
+                "environments": ["env.yaml"],
+                "customer": "acme",
+            },
+        }
+        svc = DeploymentService(data=data)
+        svc.validate()  # Phase 1
+        is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path))
+        # workspace.yaml is still missing, but no customer error
+        assert not any("acme" in e for e in errors)

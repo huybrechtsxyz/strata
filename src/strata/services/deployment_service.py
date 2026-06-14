@@ -90,6 +90,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 file_refs.append((f"Environment[{i}]", env_path))
             for cfg in self.model.spec.configurations or []:
                 file_refs.append((f"Configuration '{cfg.name}'", cfg.file))
+            if self.model.spec.customer:
+                file_refs.append(("Customer", f"customers/{self.model.spec.customer}.yaml"))
             errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
 
         return len(errors) == 0, errors
