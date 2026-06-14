@@ -1,0 +1,11 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: customer
+meta:
+  # Missing required 'name' field
+  annotations:
+    description: Invalid customer - missing name
+spec:
+  code: invalid_co
+  name: Invalid Co
+  zones:
+    - eu-west

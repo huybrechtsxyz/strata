@@ -1,0 +1,27 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: customer
+meta:
+  name: acme
+  annotations:
+    description: ACME Corporation - standard tier customer
+  labels:
+    tier: standard
+    version: "1.0.0"
+spec:
+  code: acme
+  name: ACME Corporation
+  zones:
+    - eu-west
+  onboarded: 2025-01-01
+  environments:
+    - environments/tiers/standard.yaml
+  configuration:
+    crm_id: "2001"
+    support_level: "standard"
+  references:
+    variables:
+      - company_domain
+    secrets:
+      - api_key
+    features:
+      - audit_logging

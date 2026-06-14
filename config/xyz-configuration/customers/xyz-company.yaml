@@ -1,0 +1,35 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: customer
+meta:
+  name: xyz_company
+  annotations:
+    description: XYZ Company - Premium tier customer with advanced monitoring
+  labels:
+    landscape: alpha
+    tier: enterprise
+spec:
+  code: xyz_company
+  name: XYZ Company
+  zones: []
+  onboarded: 2025-01-15
+  environments:
+    - environments/tiers/enterprise.yaml
+  configuration:
+    crm_id: "1001"
+    invoice_prefix: "XYZ"
+    support_level: "premium"
+    data_classification: "confidential"
+  references:
+    variables:
+      - company_domain
+      - api_endpoint
+      - webhook_url
+    secrets:
+      - api_key
+      - database_password
+      - tls_certificate
+    features:
+      - advanced_analytics
+      - audit_logging
+      - sso_enabled
+      - custom_branding
