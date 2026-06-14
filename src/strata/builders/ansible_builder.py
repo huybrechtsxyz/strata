@@ -241,6 +241,7 @@ class AnsibleBuilder(BaseBuilder):
             "firewalls": self._build_firewall_vars(platform, messages),
             "dns": self._build_dns_vars(platform, messages),
             "networks": self._build_network_vars(platform, messages),
+            "customer": self._build_customer_vars(platform, messages),
         }
 
     def _build_workspace_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
@@ -576,6 +577,27 @@ class AnsibleBuilder(BaseBuilder):
 
         return {"strata_networks": networks_dict}
 
+    def _build_customer_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
+        """Build customer Ansible variable payload. Returns empty dict when no customer is linked."""
+        customer = platform.spec.customer
+        if not customer:
+            return {}
+
+        customer_dict: Dict[str, Any] = {
+            "code": str(customer.code),
+            "name": customer.name,
+            "zones": list(customer.zones),
+        }
+        if customer.onboarded is not None:
+            customer_dict["onboarded"] = str(customer.onboarded)
+        if customer.configuration:
+            customer_dict["configuration"] = dict(customer.configuration)
+
+        if self.verbose:
+            messages.append(f"Built customer vars: {customer.code}")
+
+        return {"strata_customer": customer_dict}
+
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
     # Ansible provisioner source copy
@@ -727,6 +749,12 @@ class AnsibleBuilder(BaseBuilder):
                     self._write_yaml(
                         ansible_path / f"{self.FILE_PREFIX}resx_{resource_type}.yml",
                         {f"strata_{resource_type}": payload},
+                    )
+
+                if ansible_vars.get("customer"):
+                    self._write_yaml(
+                        ansible_path / f"{self.FILE_PREFIX}customer.yml",
+                        ansible_vars["customer"],
                     )
 
                 messages.append(f"✓ Ansible artifacts saved to: {ansible_path}")

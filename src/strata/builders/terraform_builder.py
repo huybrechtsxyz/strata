@@ -293,6 +293,7 @@ class TerraformBuilder(BaseBuilder):
             "firewalls": self._build_firewall_vars(platform, messages),
             "dns": self._build_dns_vars(platform, messages),
             "networks": self._build_network_vars(platform, messages),
+            "customer": self._build_customer_vars(platform, messages),
             "required_variables": self._document_required_variables(),
             "required_features": self._document_required_features(),
             "required_secrets": self._document_required_secrets(),
@@ -693,6 +694,27 @@ class TerraformBuilder(BaseBuilder):
     def _document_required_secrets(self) -> Dict[str, Any]:
         return {"secrets": list(self.secret_refs.values())}
 
+    def _build_customer_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
+        """Build customer tfvars payload. Returns empty dict when no customer is linked."""
+        customer = platform.spec.customer
+        if not customer:
+            return {}
+
+        customer_dict: Dict[str, Any] = {
+            "code": str(customer.code),
+            "name": customer.name,
+            "zones": list(customer.zones),
+        }
+        if customer.onboarded is not None:
+            customer_dict["onboarded"] = str(customer.onboarded)
+        if customer.configuration:
+            customer_dict["configuration"] = dict(customer.configuration)
+
+        if self.verbose:
+            messages.append(f"Built customer vars: {customer.code}")
+
+        return {"strata_customer": customer_dict}
+
     def _resolve_terraform_paths(
         self,
         deployment_service: DeploymentService,
@@ -777,6 +799,12 @@ class TerraformBuilder(BaseBuilder):
                     terraform_path / "tf_required_secrets.json",
                     terraform_vars["required_secrets"],
                 )
+
+                if terraform_vars.get("customer"):
+                    self._write_json(
+                        terraform_path / "customer.auto.tfvars.json",
+                        terraform_vars["customer"],
+                    )
 
                 messages.append(f"✓ Terraform artifacts saved to: {terraform_path}")
 
