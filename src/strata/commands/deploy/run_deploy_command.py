@@ -500,6 +500,10 @@ class RunDeployCommand(BaseDeployCommand):
                         if _sensitive:
                             for k in _sensitive:
                                 click.echo(f"      [stage_output_sensitive] {k} = ***")
+            if _ok_out:
+                out_path = self._write_outputs_artifact(str(stage.name), _outputs, _sensitive)
+                if out_path and self._is_console_output():
+                    click.echo(f"    outputs \u2192 {out_path}")
         elif self._dry_run and self._is_console_output():
             click.echo("    [DRY-RUN] Stage outputs not captured \u2014 apply did not run.")
 

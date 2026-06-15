@@ -437,7 +437,7 @@ class TerraformDeployer(BaseDeployer):
             messages.append(f"terraform output error: {exc}")
             return False, non_sensitive, sensitive, messages
 
-        self._write_outputs_cache({**non_sensitive, **sensitive})
+        self._write_outputs_cache(non_sensitive)
         return True, non_sensitive, sensitive, messages
 
     def output(self) -> Tuple[bool, Dict[str, Any], List[str]]:
