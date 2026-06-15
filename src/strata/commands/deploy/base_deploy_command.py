@@ -1,6 +1,7 @@
 """Base class for deploy commands."""
 
 import hashlib
+import json
 import os
 from abc import abstractmethod
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from strata.models.deployment_manifest_model import (
     ManifestArtifactImageModel,
     ManifestArtifactProviderModel,
     ManifestArtifactsModel,
+    ManifestOutputsReferenceModel,
     ManifestPlatformModel,
     ManifestPolicyResultModel,
     ManifestRepositoryModel,
@@ -222,6 +224,7 @@ class BaseDeployCommand(BaseCommand):
         completed_at: Optional[str],
         steps: Optional[List[str]] = None,
         outputs: Optional[Dict[str, Any]] = None,
+        outputs_artifact: Optional[ManifestOutputsReferenceModel] = None,
         error: Optional[str] = None,
     ) -> None:
         """Append a stage result for the deployment manifest."""
@@ -245,6 +248,7 @@ class BaseDeployCommand(BaseCommand):
                 duration_seconds=duration,
                 steps=steps,
                 outputs=outputs,
+                outputs_artifact=outputs_artifact,
                 error=error,
             )
         )
@@ -372,6 +376,104 @@ class BaseDeployCommand(BaseCommand):
         if model.spec.deployment is None:
             return None
         return model.spec.deployment.manifest
+
+    def _get_outputs_config(self):
+        """Retrieve outputs configuration from the configuration service.
+
+        Returns:
+            ConfigurationOutputsModel or None if not configured.
+        """
+        if self._configuration_service is None:
+            return None
+        model = self._configuration_service.model
+        if model is None:
+            return None
+        if model.spec.deployment is None:
+            return None
+        return model.spec.deployment.outputs
+
+    def _write_outputs_artifact(
+        self,
+        stage_name: str,
+        non_sensitive: Dict[str, Any],
+        sensitive: Dict[str, Any],
+    ) -> Optional[Path]:
+        """Write per-stage Terraform outputs to the configured durable store.
+
+        Uses ``spec.deployment.outputs`` from the platform configuration.
+        When not configured or ``enabled=False`` the call is a no-op.
+        Sensitive output handling follows ``outputs.sensitive``:
+
+        * ``redact`` — include the key with value ``"(sensitive)"``
+        * ``omit``   — drop the key entirely
+
+        The artifact is written to::
+
+            {work_path}/{outputs.path}/{deployment_name}/{version}/{stage_name}.json
+
+        Non-fatal: write failures are logged as warnings and do not affect
+        the deploy outcome.
+
+        Args:
+            stage_name: The stage whose outputs are being persisted.
+            non_sensitive: Outputs with ``sensitive=false`` from Terraform.
+            sensitive: Outputs with ``sensitive=true`` from Terraform.
+
+        Returns:
+            Path written, or None when skipped/failed.
+        """
+        from strata.models.configuration_model import SensitiveOutputHandling
+
+        outputs_config = self._get_outputs_config()
+        if outputs_config is None:
+            self.logger.debug("Outputs artifact not configured — skipping", stage=stage_name)
+            return None
+        if not outputs_config.enabled:
+            self.logger.debug("Outputs artifact disabled — skipping", stage=stage_name)
+            return None
+
+        if self._deployment_service is None:
+            return None
+
+        try:
+            deploy_meta = self._deployment_service.model.meta  # type: ignore[union-attr]
+            deployment_name = str(deploy_meta.name)
+            labels = deploy_meta.labels or {}
+            version = str(labels.get("version", "unknown"))
+
+            # Apply sensitive handling
+            if outputs_config.sensitive == SensitiveOutputHandling.OMIT:
+                stored: Dict[str, Any] = dict(non_sensitive)
+            else:  # REDACT (default)
+                stored = dict(non_sensitive)
+                for key in sensitive:
+                    stored[key] = "(sensitive)"
+
+            artifact_path = self._work_path / outputs_config.path / deployment_name / version / f"{stage_name}.json"
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+
+            data = {
+                "deployment": deployment_name,
+                "version": version,
+                "stage": stage_name,
+                "written_at": datetime.now(timezone.utc).isoformat(),
+                "outputs": stored,
+            }
+            with open(artifact_path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2, default=str)
+
+            self.logger.info(
+                "Outputs artifact written",
+                stage=stage_name,
+                path=str(artifact_path),
+                output_count=len(non_sensitive),
+                sensitive_count=len(sensitive),
+            )
+            return artifact_path
+
+        except Exception as exc:
+            self.logger.warning("Failed to write outputs artifact", stage=stage_name, error=str(exc))
+            return None
 
     def _collect_artifacts(self) -> ManifestArtifactsModel:
         """Assemble the full artifact BOM from available runtime data."""

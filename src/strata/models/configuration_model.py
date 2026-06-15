@@ -278,6 +278,52 @@ class ConfigurationManifestModel(PlatformBaseModel):
         return self
 
 
+class SensitiveOutputHandling(str, Enum):
+    """How to handle Terraform outputs marked ``sensitive = true``."""
+
+    REDACT = "redact"
+    """Replace the value with the string ``(sensitive)`` — key remains visible."""
+
+    OMIT = "omit"
+    """Drop the key entirely from the stored artifact."""
+
+
+class ConfigurationOutputsModel(PlatformBaseModel):
+    """Configuration for Terraform output artifact storage.
+
+    Controls whether and how Terraform output values are persisted after a
+    successful deploy.  Stored outputs never include sensitive values as
+    plain text; the ``sensitive`` field controls whether sensitive keys are
+    redacted (value replaced with ``"(sensitive)"``) or omitted entirely.
+
+    Path structure (auto-appended by the deployer)::
+
+        {path}/{deployment_name}/{version}/{stage}.json
+
+    Example:
+        outputs:
+          enabled: true
+          path: ".strata/outputs"
+          sensitive: redact
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Write output artifacts after a successful deploy. Set to false to disable.",
+    )
+    path: str = Field(
+        default=".strata/outputs",
+        description=("Base path for output artifacts. The deployer appends /{deployment_name}/{version}/{stage}.json"),
+    )
+    sensitive: SensitiveOutputHandling = Field(
+        default=SensitiveOutputHandling.REDACT,
+        description=(
+            "How to handle outputs marked sensitive=true in Terraform: "
+            "'redact' (store key with value '(sensitive)') or 'omit' (drop the key entirely)."
+        ),
+    )
+
+
 class ConfigurationDeploymentModel(PlatformBaseModel):
     """Model for deployment configuration and schema definition.
 
@@ -304,6 +350,10 @@ class ConfigurationDeploymentModel(PlatformBaseModel):
           manifest:
             type: local
             path: ".strata/deployments"
+          outputs:
+            enabled: true
+            path: ".strata/outputs"
+            sensitive: redact
     """
 
     additional_properties: bool = Field(
@@ -317,6 +367,14 @@ class ConfigurationDeploymentModel(PlatformBaseModel):
     manifest: Optional[ConfigurationManifestModel] = Field(
         None,
         description="Manifest storage configuration. When absent, manifests are not written.",
+    )
+    outputs: Optional[ConfigurationOutputsModel] = Field(
+        None,
+        description=(
+            "Terraform output artifact storage. "
+            "When absent, outputs are not written to a durable store "
+            "(they are still available within the current deploy run for downstream stages)."
+        ),
     )
 
 

@@ -15,6 +15,7 @@ from strata.deployers.base_deployer import (
 )
 from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.common_models import ProvisionerType
+from strata.models.deployment_manifest_model import ManifestOutputsReferenceModel
 from strata.models.deployment_model import DeploymentStageModel
 
 
@@ -453,7 +454,7 @@ class RunDeployCommand(BaseDeployCommand):
                     return False
 
                 # --- policy evaluation: plan phase ---
-                if not self._evaluate_plan_policies(stage, deployer):
+                if not self._evaluate_phase_policies("plan", stage, deployer):
                     self._record_stage_result(
                         stage_name=str(stage.name),
                         provisioner=stage.provisioner,
@@ -463,6 +464,20 @@ class RunDeployCommand(BaseDeployCommand):
                         completed_at=_dt.now(_tz.utc).isoformat(),
                         steps=steps_to_run,
                         error="Plan policy denied deployment",
+                    )
+                    return False
+
+                # --- policy evaluation: deploy phase ---
+                if not self._evaluate_phase_policies("deploy", stage, deployer):
+                    self._record_stage_result(
+                        stage_name=str(stage.name),
+                        provisioner=stage.provisioner,
+                        topology=stage.topology,
+                        status="failed",
+                        started_at=stage_started,
+                        completed_at=_dt.now(_tz.utc).isoformat(),
+                        steps=steps_to_run,
+                        error="Deploy policy denied deployment",
                     )
                     return False
 
@@ -477,6 +492,7 @@ class RunDeployCommand(BaseDeployCommand):
                     click.echo(f"    plan JSON \u2192 {plan_json_path}")
 
         # --- collect outputs for downstream stages ---
+        out_path = None
         if STEP_APPLY in steps_to_run:
             _ok_out, _outputs, _sensitive, _out_msgs = deployer.collect_outputs()
             if _ok_out and self._resolved_values is not None:
@@ -500,6 +516,10 @@ class RunDeployCommand(BaseDeployCommand):
                         if _sensitive:
                             for k in _sensitive:
                                 click.echo(f"      [stage_output_sensitive] {k} = ***")
+            if _ok_out:
+                out_path = self._write_outputs_artifact(str(stage.name), _outputs, _sensitive)
+                if out_path and self._is_console_output():
+                    click.echo(f"    outputs \u2192 {out_path}")
         elif self._dry_run and self._is_console_output():
             click.echo("    [DRY-RUN] Stage outputs not captured \u2014 apply did not run.")
 
@@ -517,6 +537,23 @@ class RunDeployCommand(BaseDeployCommand):
         stage_outputs = None
         if STEP_APPLY in steps_to_run and self._resolved_values is not None:
             stage_outputs = dict(self._resolved_values.stage_outputs) if self._resolved_values.stage_outputs else None
+
+        outputs_artifact_ref: Optional[ManifestOutputsReferenceModel] = None
+        if out_path is not None and self._deployment_service is not None:
+            deploy_meta = self._deployment_service.model.meta  # type: ignore[union-attr]
+            labels = deploy_meta.labels or {}
+            version = str(labels.get("version", "unknown"))
+            try:
+                rel = str(out_path.relative_to(self._work_path))
+            except ValueError:
+                rel = str(out_path)
+            outputs_artifact_ref = ManifestOutputsReferenceModel(
+                path=rel,
+                stage=str(stage.name),
+                version=version,
+                written_at=_dt.now(_tz.utc).isoformat(),
+            )
+
         self._record_stage_result(
             stage_name=str(stage.name),
             provisioner=stage.provisioner,
@@ -526,6 +563,7 @@ class RunDeployCommand(BaseDeployCommand):
             completed_at=_dt.now(_tz.utc).isoformat(),
             steps=steps_to_run,
             outputs=stage_outputs,
+            outputs_artifact=outputs_artifact_ref,
         )
 
         # --- stage-level after hook ---
@@ -538,8 +576,8 @@ class RunDeployCommand(BaseDeployCommand):
 
         return True
 
-    def _evaluate_plan_policies(self, stage: DeploymentStageModel, deployer) -> bool:
-        """Evaluate 'plan' phase policies. Returns False if any deny-enforcement policy fails."""
+    def _evaluate_phase_policies(self, phase: str, stage: DeploymentStageModel, deployer) -> bool:
+        """Evaluate policies for *phase* ('plan' or 'deploy'). Returns False if any deny-enforcement policy fails."""
         from strata.models.deployment_manifest_model import ManifestPolicyResultModel
         from strata.validators.policies.base_policy import PolicyContext
         from strata.validators.policies.policy_engine import PolicyEngine
@@ -549,17 +587,17 @@ class RunDeployCommand(BaseDeployCommand):
 
         spec = self._configuration_service.model.spec if self._configuration_service.model else None
         policy_models = getattr(spec, "policies", None) or []
-        plan_policies = [p for p in policy_models if p.phase == "plan" and p.enabled]
-        if not plan_policies:
+        phase_policies = [p for p in policy_models if p.phase == phase and p.enabled]
+        if not phase_policies:
             return True
 
-        # Load plan JSON from the deployer (terraform-specific)
+        # Load plan JSON from the deployer (available for both plan and deploy phases)
         plan_data = None
         if hasattr(deployer, "show_plan"):
             _, plan_data, _ = deployer.show_plan()
 
         context = PolicyContext(
-            phase="plan",
+            phase=phase,
             work_path=self._work_path,
             deployment_service=self._deployment_service,
             configuration_service=self._configuration_service,
@@ -567,17 +605,16 @@ class RunDeployCommand(BaseDeployCommand):
             build_path=self._build_path,
         )
 
-        engine = PolicyEngine(plan_policies)
-        results = engine.evaluate("plan", context)
+        engine = PolicyEngine(phase_policies)
+        results = engine.evaluate(phase, context)
 
         denied = False
-        for policy_model, result in zip(plan_policies, results, strict=False):
-            # Record in manifest accumulator (all results, not just failures)
+        for policy_model, result in zip(phase_policies, results, strict=False):
             self._policy_results.append(
                 ManifestPolicyResultModel(
                     policy_name=result.policy_name,
                     policy_type=policy_model.type,
-                    phase="plan",
+                    phase=phase,
                     enforcement=result.enforcement,
                     passed=result.passed,
                     violations=result.violations or [],

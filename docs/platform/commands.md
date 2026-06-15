@@ -44,7 +44,7 @@ These options are accepted by every command and subcommand:
 | `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
 | `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
 | `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
-| `deploy` †   | `run` `destroy` `status` `history` `health`                                  | Deploy platform using provisioners                        |
+| `deploy` †   | `run` `destroy` `status` `history` `health` `output` `outputs`               | Deploy platform using provisioners                        |
 | `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
 | `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
 | `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations             |
@@ -806,6 +806,33 @@ strata policy list --output json
 strata policy list -f config/deploy.yaml --output json
 ```
 
+### `policy check`
+
+```
+strata policy check -f FILE [--phase PHASE]... [--plan-file PATH] [standard options]
+```
+
+Evaluate all enabled policies for a deployment and report results. Policies are grouped by phase (validate, build, plan, deploy).
+
+| Option                                  | Description                                                                                  |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `-f` / `--file`                         | ✅ Required. Path to the deployment YAML file.                                                |
+| `--phase validate\|build\|plan\|deploy` | Filter to one or more phases. Repeatable. Defaults to all phases.                            |
+| `--plan-file PATH`                      | Path to a Terraform plan JSON file used for plan-phase policies. Auto-discovered if omitted. |
+
+When context artifacts are not available (no platform build, no plan file), the command includes **notes** with the exact command to run to generate the missing artifact. These notes appear in console output and in the `notes[]` field of JSON output — they do not fail the command.
+
+**Exit codes:** 0 all policies passed · 1 execution error · 3 one or more `deny` policies failed
+
+**Output keys (`--output json`):** `deployment`, `phases`, `policies_checked`, `passed`, `failed`, `denied`, `notes[]`, `results[]` (each with `phase`, `policy`, `enforcement`, `result`, `violations[]`).
+
+```bash
+strata policy check -f xyz-deploy-prd.yaml
+strata policy check -f xyz-deploy-prd.yaml --phase validate --phase plan
+strata policy check -f xyz-deploy-prd.yaml --plan-file build/infra.tfplan.json
+strata policy check -f xyz-deploy-prd.yaml --output json
+```
+
 ---
 
 ## `secret`
@@ -984,6 +1011,55 @@ Run health checks against provisioned infrastructure stages. Exit code 3 if any 
 ```bash
 strata deploy health -f xyz-deploy-prd.yaml
 strata deploy health -f xyz-deploy-prd.yaml --stage production
+```
+
+### `deploy output`
+
+```
+strata deploy output -f FILE [--stage NAME] [--key NAME] [--refresh] [standard options]
+```
+
+Show Terraform outputs from the local cache (`.tf-outputs.json`) or fetch live from the backend with `--refresh`.
+
+| Option         | Description                                               |
+| -------------- | --------------------------------------------------------- |
+| `--stage NAME` | Limit to a single deployment stage                        |
+| `--key NAME`   | Print only a single output key (useful for scripting)     |
+| `--refresh`    | Re-run `terraform output -json` and update the cache file |
+
+```bash
+strata deploy output -f xyz-deploy-prd.yaml
+strata deploy output -f xyz-deploy-prd.yaml --stage production --key endpoint
+strata deploy output -f xyz-deploy-prd.yaml --refresh
+```
+
+### `deploy outputs`
+
+```
+strata deploy outputs -f FILE [--stage NAME] [--key NAME] [--version VERSION] [--all-versions] [standard options]
+```
+
+Show **stored output artifacts** written by `deploy run` to the configured outputs path (default: `.strata/outputs`). These files persist across runs and are not affected by Terraform state changes.
+
+Distinct from `deploy output`: `deploy output` reads the Terraform cache / hits the backend live; `deploy outputs` reads the durable per-stage JSON artifact files.
+
+| Option              | Description                                                                      |
+| ------------------- | -------------------------------------------------------------------------------- |
+| `--stage NAME`      | Limit display to a single stage                                                  |
+| `--key NAME`        | Show only a single output key                                                    |
+| `--version VERSION` | Show artifacts for a specific version tag (default: current version from labels) |
+| `--all-versions`    | Show artifacts for every version directory found in the outputs path             |
+
+Artifacts are grouped by version in console output. Sensitive values are shown as `(sensitive)` or omitted, depending on `spec.deployment.outputs.sensitive` in the configuration.
+
+**Output keys (`--output json`):** `deployment`, `artifacts[]` (each with `deployment`, `version`, `stage`, `written_at`, `outputs{}`).
+
+```bash
+strata deploy outputs -f xyz-deploy-prd.yaml
+strata deploy outputs -f xyz-deploy-prd.yaml --stage production
+strata deploy outputs -f xyz-deploy-prd.yaml --key endpoint
+strata deploy outputs -f xyz-deploy-prd.yaml --all-versions
+strata deploy outputs -f xyz-deploy-prd.yaml --version 2.0.0 --output json
 ```
 
 ---
