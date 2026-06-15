@@ -185,9 +185,9 @@ class TestEvaluatePhasePolices:
         passing_result = _make_policy_result("allow_all", passed=True)
 
         with (
-            patch("strata.validators.policies.policy_engine.PolicyEngine") as MockEngine,
+            patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine,
         ):
-            MockEngine.return_value.evaluate.return_value = [passing_result]
+            mock_engine.return_value.evaluate.return_value = [passing_result]
             result = cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
 
         assert result is True
@@ -201,8 +201,8 @@ class TestEvaluatePhasePolices:
 
         failing_result = _make_policy_result("blocker", passed=False, enforcement="deny")
 
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as MockEngine:
-            MockEngine.return_value.evaluate.return_value = [failing_result]
+        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
+            mock_engine.return_value.evaluate.return_value = [failing_result]
             result = cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
 
         assert result is False
@@ -217,8 +217,8 @@ class TestEvaluatePhasePolices:
 
         warn_result = _make_policy_result("advisory", passed=False, enforcement="warn")
 
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as MockEngine:
-            MockEngine.return_value.evaluate.return_value = [warn_result]
+        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
+            mock_engine.return_value.evaluate.return_value = [warn_result]
             result = cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
 
         assert result is True
@@ -233,8 +233,8 @@ class TestEvaluatePhasePolices:
 
         passing_result = _make_policy_result("tag_check", passed=True, enforcement="deny")
 
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as MockEngine:
-            MockEngine.return_value.evaluate.return_value = [passing_result]
+        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
+            mock_engine.return_value.evaluate.return_value = [passing_result]
             cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
 
         assert len(cmd._policy_results) == 1
@@ -247,9 +247,9 @@ class TestEvaluatePhasePolices:
         cfg_svc.model.spec.policies = [_make_policy_model("off_policy", "deploy", enabled=False)]
         cmd._configuration_service = cfg_svc
 
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as MockEngine:
+        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
             cmd._evaluate_phase_policies("deploy", MagicMock(), _make_deployer_mock())
-            MockEngine.assert_not_called()
+            mock_engine.assert_not_called()
 
         assert not cmd._errors  # no crash, no errors
 
@@ -262,8 +262,8 @@ class TestEvaluatePhasePolices:
 
         passing_result = _make_policy_result("plan_guard", passed=True)
 
-        with patch("strata.validators.policies.policy_engine.PolicyEngine") as MockEngine:
-            MockEngine.return_value.evaluate.return_value = [passing_result]
+        with patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine:
+            mock_engine.return_value.evaluate.return_value = [passing_result]
             result = cmd._evaluate_phase_policies("plan", MagicMock(), _make_deployer_mock())
 
         assert result is True

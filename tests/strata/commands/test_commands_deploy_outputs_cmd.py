@@ -295,7 +295,7 @@ class TestOutputsDeployCommandRun:
 
         names = [a["stage"] for a in cmd._output_data.get("artifacts", []) if "stage" in a]
         # Only infra stage (which has the "stage" key set explicitly)
-        for entry in cmd._output_data["artifacts"]:
+        for _entry in cmd._output_data["artifacts"]:
             # Each artifact comes from infra.json so stem is infra
             pass
         # Check: network.json was skipped

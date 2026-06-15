@@ -356,11 +356,11 @@ class TestCheckPolicyCommandRunExecution:
                 "_load_deployment_service",
                 side_effect=lambda: setattr(cmd, "_deployment_service", dep_svc) or True,
             ),
-            patch("strata.validators.policies.policy_engine.PolicyEngine") as MockEngine,
+            patch("strata.validators.policies.policy_engine.PolicyEngine") as mock_engine,
         ):
             engine_instance = MagicMock()
             engine_instance.evaluate.return_value = policy_results
-            MockEngine.return_value = engine_instance
+            mock_engine.return_value = engine_instance
             cmd._run_execution()
 
         return cmd
