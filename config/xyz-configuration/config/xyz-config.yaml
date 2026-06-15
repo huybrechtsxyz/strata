@@ -355,3 +355,22 @@ spec:
           required: true
           min_count: 1
           max_count: 5
+
+  # Policy rules — evaluated at validate, build, plan, and deploy phases
+  # policies:
+  #   # Enforce customer zone restrictions on all planned Terraform resources
+  #   - name: zone_enforcement
+  #     type: customer_zone
+  #     phase: plan
+  #     enforcement: deny
+  #     description: "Block apply when resources target regions outside customer-allowed zones"
+  #
+  #   # Warn when required tags are missing from resources (build phase)
+  #   # - name: required_tags
+  #   #   type: required_tags
+  #   #   phase: build
+  #   #   enforcement: warn
+  #   #   configuration:
+  #   #     required:
+  #   #       - environment
+  #   #       - owner

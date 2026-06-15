@@ -50,6 +50,7 @@ from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
 from strata.utils.config import SOLUTION_CONFIG_FILE, SOLUTION_DIR
 from strata.utils.integration_loader import load_workspace_integrations
+from strata.utils.policy_loader import load_workspace_policies
 from strata.utils.system import resolve_work_path
 
 logger = get_logger(__name__)
@@ -239,6 +240,12 @@ def main(ctx: click.Context, no_color: bool = False) -> None:
         load_workspace_integrations(work_path)
     except Exception as exc:
         logger.debug("Workspace integration loader error (non-fatal)", error=str(exc))
+
+    # Load workspace-local policy drop-ins (.strata/policies/*.py)
+    try:
+        load_workspace_policies(work_path)
+    except Exception as exc:
+        logger.debug("Workspace policy loader error (non-fatal)", error=str(exc))
 
 
 #

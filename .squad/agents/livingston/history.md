@@ -76,3 +76,28 @@ Key paths: `tests/strata/`, `conftest.py`, `noxfile.py`.
 7. Peered networks with overlapping address spaces = hard error (V11).
 8. Non-peered overlap is a warning (not tested here — warning-level, not ValidationError).
 
+### 2026-06-15 — Policy Engine tests (Phase 1)
+
+**What was added:** 3 new test files — 27 tests total, all passing.
+
+**Test files:**
+- `tests/strata/validators/test_policy_model.py` — 7 tests in `TestPolicyModel`: valid minimal, valid with all fields, defaults (enforcement=deny, enabled=True), invalid PlatformName, phase is plain str (no enum), configuration dict, disabled.
+- `tests/strata/validators/test_policy_engine.py` — 9 tests in `TestPolicyEngine`: empty engine, phase filtering, disabled policy skipped, has_denials false/true/warn/audit, all policies run, unknown type raises ValueError.
+- `tests/strata/validators/test_customer_zone_policy.py` — 11 tests across 3 classes: no-context graceful skips, zone enforcement violations (location+region fields, read action ignored, multiple violations), enforcement level in result.
+
+**Key discoveries about actual implementation (vs ADR spec):**
+- `PolicyContext` has NO `manifest` field — ADR spec was aspirational; Linus dropped it. Fields are: `phase`, `work_path`, optional `deployment_service`, `configuration_service`, `platform_artifact`, `plan_data`, `build_path`.
+- `CustomerZonePolicy` reads customer zones from `plan_data["variables"]["strata_customer"]["value"]["zones"]` — NOT from `customer.auto.tfvars.json` file on disk as the ADR described.
+- `PolicyEngine.__init__` sets `self.logger` via `get_logger()` — `_TestableEngine` must set `self.logger = MagicMock()` to avoid AttributeError when `evaluate()` calls `self.logger.debug()`.
+- Violation message format: `"Resource '{type}.{name}' is in region '{location}' which is not in any of the customer's allowed zones: {zones}"` — uses `change.get("type")` + `change.get("name")`, NOT `change["address"]`.
+- `BasePolicy.name` property exists: returns `str(self.policy.name)`.
+
+**Patterns established:**
+- `_TestableEngine(PolicyEngine)` — bypasses `_create()` by accepting pre-built policy instances; sets `self.logger = MagicMock()`.
+- `_AlwaysPassPolicy` / `_AlwaysFailPolicy` stubs defined inside `if not IMPL_MISSING:` guard.
+- `_make_context(plan_data, zone_map)` — builds PolicyContext + MagicMock config service in one call; no file I/O, no `tmp_path` needed.
+- `PLAN_DATA_*` constants include `variables.strata_customer.value.zones` to activate enforcement.
+- `patch.object(PolicyEngine, "_create", side_effect=...)` for testing `disabled_policy_skipped` through the real `__init__`.
+
+**Current status:** 27 tests passing, 0 skipped (implementation is live).
+

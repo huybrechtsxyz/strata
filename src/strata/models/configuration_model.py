@@ -14,6 +14,7 @@ from strata.models.common_models import (
     PlatformVersion,
 )
 from strata.models.integration_model import IntegrationModel
+from strata.models.policy_model import PolicyModel
 from strata.models.repository_model import RepositoryModel
 
 
@@ -371,6 +372,10 @@ class ConfigurationSpecModel(PlatformBaseModel):
     zones: Optional[List[ConfigurationZoneModel]] = Field(
         None,
         description="Logical zones grouping provider regions for data residency enforcement",
+    )
+    policies: Optional[List[PolicyModel]] = Field(
+        default_factory=list,
+        description="Policy rules evaluated at validate, build, plan, and deploy phases",
     )
 
     @model_validator(mode="after")

@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Policy engine — instantiates and evaluates policies for a given phase."""
+
+from typing import Dict, List, Type
+
+from strata.logger import get_logger
+from strata.models.policy_model import PolicyModel
+from strata.validators.policies.base_policy import BasePolicy, PolicyContext, PolicyResult
+
+
+class PolicyEngine:
+    """Evaluates all enabled policies for a given lifecycle phase.
+
+    Usage::
+
+        engine = PolicyEngine(policy_models)
+        results = engine.evaluate("plan", context)
+        if engine.has_denials(results):
+            # block the pipeline
+
+    Custom policy types can be registered via :meth:`register_type` — this is
+    used by auto-discovered ``.strata/policies/*.py`` files.
+    """
+
+    # Class-level registry for custom policy types registered by user plugins.
+    _custom_types: Dict[str, Type[BasePolicy]] = {}
+
+    def __init__(self, policies: List[PolicyModel]) -> None:
+        self.logger = get_logger(__name__)
+        self._policies: List[BasePolicy] = [self._create(p) for p in policies if p.enabled]
+
+    def evaluate(self, phase: str, context: PolicyContext) -> List[PolicyResult]:
+        """Run all policies whose ``phase`` matches and return their results."""
+        results: List[PolicyResult] = []
+        for policy in self._policies:
+            if policy.phase != phase:
+                continue
+            result = policy.evaluate(context)
+            self.logger.debug(
+                "policy_evaluated",
+                policy=policy.name,
+                phase=phase,
+                passed=result.passed,
+                enforcement=policy.enforcement,
+                violations=result.violations,
+            )
+            results.append(result)
+        return results
+
+    def has_denials(self, results: List[PolicyResult]) -> bool:
+        """Return True if any deny-enforcement policy failed."""
+        return any(not r.passed and r.enforcement == "deny" for r in results)
+
+    @classmethod
+    def register_type(cls, type_name: str, policy_class: Type[BasePolicy]) -> None:
+        """Register a custom policy type for plugin discovery.
+
+        Called by ``.strata/policies/*.py`` files in their ``register()`` function.
+        """
+        cls._custom_types[type_name] = policy_class
+
+    def _create(self, policy_model: PolicyModel) -> BasePolicy:
+        """Dispatch policy type to its concrete implementation."""
+        from strata.validators.policies.customer_zone_policy import CustomerZonePolicy
+
+        _builtin = {
+            "customer_zone": CustomerZonePolicy,
+        }
+
+        policy_class = _builtin.get(policy_model.type) or self._custom_types.get(policy_model.type)
+        if policy_class is not None:
+            return policy_class(policy_model)
+
+        available = sorted(set(list(_builtin.keys()) + list(self._custom_types.keys())))
+        raise ValueError(f"Unknown policy type: '{policy_model.type}'. Available types: {', '.join(available)}")

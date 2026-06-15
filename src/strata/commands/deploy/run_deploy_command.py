@@ -452,6 +452,20 @@ class RunDeployCommand(BaseDeployCommand):
                     )
                     return False
 
+                # --- policy evaluation: plan phase ---
+                if not self._evaluate_plan_policies(stage, deployer):
+                    self._record_stage_result(
+                        stage_name=str(stage.name),
+                        provisioner=stage.provisioner,
+                        topology=stage.topology,
+                        status="failed",
+                        started_at=stage_started,
+                        completed_at=_dt.now(_tz.utc).isoformat(),
+                        steps=steps_to_run,
+                        error="Plan policy denied deployment",
+                    )
+                    return False
+
         # --- save plan JSON for artifact upload / downstream use ---
         if STEP_PLAN in steps_to_run:
             ok_save, plan_json_path, save_msgs = deployer.save_plan_json()
@@ -523,6 +537,54 @@ class RunDeployCommand(BaseDeployCommand):
             return False
 
         return True
+
+    def _evaluate_plan_policies(self, stage: DeploymentStageModel, deployer) -> bool:
+        """Evaluate 'plan' phase policies. Returns False if any deny-enforcement policy fails."""
+        from strata.validators.policies.base_policy import PolicyContext
+        from strata.validators.policies.policy_engine import PolicyEngine
+
+        if self._configuration_service is None:
+            return True
+
+        spec = self._configuration_service.model.spec if self._configuration_service.model else None
+        policy_models = getattr(spec, "policies", None) or []
+        plan_policies = [p for p in policy_models if p.phase == "plan" and p.enabled]
+        if not plan_policies:
+            return True
+
+        # Load plan JSON from the deployer (terraform-specific)
+        plan_data = None
+        if hasattr(deployer, "show_plan"):
+            _, plan_data, _ = deployer.show_plan()
+
+        context = PolicyContext(
+            phase="plan",
+            work_path=self._work_path,
+            deployment_service=self._deployment_service,
+            configuration_service=self._configuration_service,
+            plan_data=plan_data,
+            build_path=self._build_path,
+        )
+
+        engine = PolicyEngine(plan_policies)
+        results = engine.evaluate("plan", context)
+
+        denied = False
+        for result in results:
+            if result.passed:
+                if self._is_verbose() and self._is_console_output():
+                    click.echo(f"    \u2713  Policy '{result.policy_name}' passed")
+            else:
+                for v in result.violations:
+                    if result.enforcement == "deny":
+                        click.echo(f"    \u2717  Policy '{result.policy_name}' DENIED: {v}")
+                        self._errors.append(f"Policy '{result.policy_name}': {v}")
+                        denied = True
+                    elif result.enforcement == "warn":
+                        click.echo(f"    \u26a0  Policy '{result.policy_name}' warning: {v}")
+                    elif result.enforcement == "audit" and self._is_verbose():
+                        click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
+        return not denied
 
     def _create_deployer(self, stage: DeploymentStageModel):
         """Instantiate and return the deployer for *stage*, or None.

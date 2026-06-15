@@ -40,6 +40,7 @@ strata
    platform/deployers
    platform/validators
    platform/lifecycles
+   platform/policies
    platform/exceptions
    platform/logging
    platform/utilities
