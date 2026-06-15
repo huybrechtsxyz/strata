@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+---
+
+## [0.6.0] — 2026-06-15
+
 ### Added
 
 - **Policy engine** — declarative deployment guardrails evaluated at validate, build, and plan phases.
