@@ -34,6 +34,7 @@ from strata.commands.cli_guide import guide_command
 from strata.commands.cli_help import help_command
 from strata.commands.cli_log import log_group
 from strata.commands.cli_new import new_command
+from strata.commands.cli_policy import policy_group
 from strata.commands.cli_profile import profile_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
@@ -130,7 +131,7 @@ _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Workspace Setup", ["sln", "profile", "new"]),
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
     ("Build & Deploy", ["build", "deploy", "env", "service"]),
-    ("Inspection & Validation", ["guide", "validate", "schema", "tools"]),
+    ("Inspection & Validation", ["guide", "validate", "schema", "policy", "tools"]),
     ("Utility", ["secret", "version", "help", "log", "completion"]),
 ]
 
@@ -267,6 +268,7 @@ main.add_command(ref_group, name="ref")
 main.add_command(guide_command, name="guide")
 main.add_command(validate_command, name="validate")
 main.add_command(schema_group, name="schema")
+main.add_command(policy_group, name="policy")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
 main.add_command(env_group, name="env")
