@@ -1,7 +1,7 @@
 """Command to validate a single platform YAML file."""
 
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import click
 
@@ -36,13 +36,16 @@ class ValidateCommand(BaseCommand):
         self._resolved_file: Optional[Path] = None
         self._validator: Optional[PlatformValidator] = None
         self._detected_kind: Optional[str] = None
+        self._policy_configuration_service: Optional[Any] = None
+        self._validate_policy_denied: bool = False
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
     def has_validation_errors(self) -> bool:
-        """Return True when the validator found errors in the file."""
-        return self._validator.has_errors() if self._validator else False
+        """Return True when the validator or policy engine found errors."""
+        validator_errors = self._validator.has_errors() if self._validator else False
+        return validator_errors or self._validate_policy_denied
 
     def execute(self) -> bool:
         try:
@@ -63,7 +66,9 @@ class ValidateCommand(BaseCommand):
                     click.echo("\n❌  Execution failed")
                 self._finalize(success=False)
                 return False
-
+            # Evaluate validate-phase policies — failures are validation errors
+            # (exit code 3), not system failures (exit code 1).
+            self._evaluate_validate_policies()
             if not self._after_execute():
                 if self._is_console_output():
                     click.echo("\n❌  Post-execution processing failed")
@@ -122,6 +127,7 @@ class ValidateCommand(BaseCommand):
         # _load_configuration_service appends to self._errors on hard failure
         if self._deep and config_svc is None:
             return False  # exit code 1 — system error, not validation error
+        self._policy_configuration_service = config_svc
 
         assert self._resolved_file is not None  # guaranteed by _before_execute
         solution_repo_map = self._solution_controller.get_repo_map()
@@ -173,6 +179,48 @@ class ValidateCommand(BaseCommand):
         }
 
         return True
+
+    def _evaluate_validate_policies(self) -> bool:
+        """Evaluate 'validate' phase policies. Returns False if any deny-enforcement policy fails."""
+        from strata.validators.policies.base_policy import PolicyContext
+        from strata.validators.policies.policy_engine import PolicyEngine
+
+        if self._policy_configuration_service is None:
+            return True
+
+        spec = self._policy_configuration_service.model.spec if self._policy_configuration_service.model else None
+        policy_models = getattr(spec, "policies", None) or []
+        validate_policies = [p for p in policy_models if p.phase == "validate" and p.enabled]
+        if not validate_policies:
+            return True
+
+        context = PolicyContext(
+            phase="validate",
+            work_path=self._work_path,
+            configuration_service=self._policy_configuration_service,
+        )
+
+        engine = PolicyEngine(validate_policies)
+        results = engine.evaluate("validate", context)
+
+        denied = False
+        for result in results:
+            if result.passed:
+                if self._is_verbose() and self._is_console_output():
+                    click.echo(f"    \u2713  Policy '{result.policy_name}' passed")
+            else:
+                for v in result.violations:
+                    if result.enforcement == "deny":
+                        click.echo(f"    \u2717  Policy '{result.policy_name}' DENIED: {v}")
+                        self._errors.append(f"Policy '{result.policy_name}': {v}")
+                        denied = True
+                    elif result.enforcement == "warn":
+                        click.echo(f"    \u26a0  Policy '{result.policy_name}' warning: {v}")
+                    elif result.enforcement == "audit" and self._is_verbose():
+                        click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
+        if denied:
+            self._validate_policy_denied = True
+        return not denied
 
     def _after_execute(self) -> bool:
         """Emit human-readable console output."""

@@ -107,6 +107,11 @@ class RunBuildCommand(BaseBuildCommand):
                 self._finalize(success=False)
                 return False
 
+            if not self._evaluate_build_policies():
+                if self._is_console_output():
+                    click.echo("\n\u274c  Build policy check failed")
+                self._finalize(success=False)
+                return False
             if not self._run_lifecycle_phase(
                 "build_run_after",
                 context={"file": str(self._file_path), "dry_run": self._dry_run},
@@ -142,6 +147,50 @@ class RunBuildCommand(BaseBuildCommand):
     def _load_related_services(self) -> bool:
         """Services are already loaded by BaseBuildCommand._before_execute."""
         return True
+
+    def _evaluate_build_policies(self) -> bool:
+        """Evaluate 'build' phase policies. Returns False if any deny-enforcement policy fails."""
+        from strata.validators.policies.base_policy import PolicyContext
+        from strata.validators.policies.policy_engine import PolicyEngine
+
+        if self._configuration_service is None:
+            return True
+
+        spec = self._configuration_service.model.spec if self._configuration_service.model else None
+        policy_models = getattr(spec, "policies", None) or []
+        build_policies = [p for p in policy_models if p.phase == "build" and p.enabled]
+        if not build_policies:
+            return True
+
+        platform_artifact = getattr(self, "_platform_model", None)
+
+        context = PolicyContext(
+            phase="build",
+            work_path=self._work_path,
+            configuration_service=self._configuration_service,
+            platform_artifact=platform_artifact,
+            build_path=self._build_path,
+        )
+
+        engine = PolicyEngine(build_policies)
+        results = engine.evaluate("build", context)
+
+        denied = False
+        for result in results:
+            if result.passed:
+                if self._is_verbose() and self._is_console_output():
+                    click.echo(f"    \u2713  Policy '{result.policy_name}' passed")
+            else:
+                for v in result.violations:
+                    if result.enforcement == "deny":
+                        click.echo(f"    \u2717  Policy '{result.policy_name}' DENIED: {v}")
+                        self._errors.append(f"Policy '{result.policy_name}': {v}")
+                        denied = True
+                    elif result.enforcement == "warn":
+                        click.echo(f"    \u26a0  Policy '{result.policy_name}' warning: {v}")
+                    elif result.enforcement == "audit" and self._is_verbose():
+                        click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
+        return not denied
 
     def _execute_platform_build(self) -> bool:
         if self._deployment_service is None:

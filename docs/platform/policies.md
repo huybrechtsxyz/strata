@@ -81,6 +81,67 @@ For each resource change, it checks whether the target region (from `location` o
 
 No `configuration` block is needed — the policy reads zone data from the configuration file automatically.
 
+### `required_tags`
+
+Evaluates at the `build` phase, after all builders have completed and the platform artifact has been generated.
+
+It checks that every namespace in the built platform artifact has all labels listed in `configuration.required_labels`. Any namespace missing a required label is reported as a violation.
+
+Skipped gracefully when no platform artifact has been generated, or when `required_labels` is not configured.
+
+```yaml
+- name: require_standard_labels
+  type: required_tags
+  phase: build
+  enforcement: deny
+  configuration:
+    required_labels:
+      - environment
+      - project
+      - owner
+```
+
+### `naming_pattern`
+
+Evaluates at the `validate` phase, after structural validation completes. Requires the `--deep` flag on `strata validate` to load the configuration service.
+
+It checks whether the `meta.name` field in the loaded configuration file matches the regex in `configuration.pattern`, using a full-string match.
+
+Skipped gracefully when no configuration service has been loaded (i.e. `strata validate` was run without `--deep`).
+
+```yaml
+- name: naming_convention
+  type: naming_pattern
+  phase: validate
+  enforcement: warn
+  configuration:
+    pattern: "^[a-z][a-z0-9-]*$"
+```
+
+### `script`
+
+Delegates policy evaluation to an external command — OPA, Checkov, a custom shell script, or any executable that can read JSON from stdin.
+
+strata launches the command, writes a JSON context object to its standard input, and waits for it to exit. Exit code `0` is a pass; any non-zero exit code is a failure. Stdout is captured as the violation message.
+
+**Context sent on stdin:**
+
+```json
+{"phase": "plan", "work_path": "/path/to/workspace"}
+```
+
+The `script` type can run at any phase — set `phase` to whichever phase you want the evaluation to occur. Timeout defaults to `30` seconds. Skipped gracefully when no `command` is configured.
+
+```yaml
+- name: opa_check
+  type: script
+  phase: plan
+  enforcement: deny
+  configuration:
+    command: "opa eval --data policy.rego --input /dev/stdin -"
+    timeout: 30
+```
+
 ---
 
 ## Enforcement Levels
@@ -140,7 +201,7 @@ spec:
 
 With this configuration, running `strata deploy run` will evaluate every resource in the Terraform plan against the customer's declared zones. If any resource targets `us-east-1` or another region outside the allowed set, the deploy stops before apply with exit code `3`.
 
-### Two policies — zone enforcement + advisory tags
+### Two policies — zone enforcement + required tags
 
 ```yaml
   policies:
@@ -150,37 +211,77 @@ With this configuration, running `strata deploy run` will evaluate every resourc
       enforcement: deny
       description: "Block resources outside customer zones"
 
-    - name: required_tags_advisory
+    - name: require_standard_labels
       type: required_tags
       phase: build
       enforcement: warn
-      description: "Warn when cost_center tag is missing (Phase 2 feature)"
+      description: "Warn when required labels are missing"
       configuration:
-        required:
+        required_labels:
           - environment
           - cost_center
 ```
 
-> **Note:** `required_tags` is a Phase 2 feature. The `configuration` block shown above is the intended declaration format; the policy type is not yet implemented.
+### Complete example — naming, tags, zone, and OPA
 
----
-
-## Script Escape Hatch (Phase 2)
-
-For organisations that already use OPA/Conftest, Checkov, or custom validation scripts, the `script` type delegates policy evaluation to an external command. This is a Phase 2 feature.
+The following configuration shows all four built-in policy types working together on a single deployment. Policies are evaluated in declaration order within each phase.
 
 ```yaml
-    - name: opa_security_baseline
+apiVersion: strata.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: production
+spec:
+  zones:
+    eu-west:
+      regions:
+        - westeurope
+        - northeurope
+
+  policies:
+    # validate phase: checked during `strata validate --deep`
+    - name: naming_convention
+      type: naming_pattern
+      phase: validate
+      enforcement: warn
+      description: "Names must be lowercase, start with a letter"
+      configuration:
+        pattern: "^[a-z][a-z0-9-]*$"
+
+    # build phase: checked after `strata build run` completes
+    - name: require_standard_labels
+      type: required_tags
+      phase: build
+      enforcement: deny
+      description: "All namespaces must carry standard cost-tracking labels"
+      configuration:
+        required_labels:
+          - environment
+          - project
+          - owner
+
+    # plan phase: checked after `terraform plan`, before `terraform apply`
+    - name: zone_enforcement
+      type: customer_zone
+      phase: plan
+      enforcement: deny
+      description: "Resources must stay within customer-allowed regions"
+
+    # plan phase: delegate to OPA for additional compliance checks
+    - name: opa_compliance
       type: script
       phase: plan
       enforcement: deny
+      description: "OPA baseline security policy"
       configuration:
-        command: "conftest test --policy policies/ --input"
-        input: plan_json   # plan_json | platform_json | deployment_yaml
-        timeout: 60
+        command: "opa eval --data policy.rego --input /dev/stdin -"
+        timeout: 30
 ```
 
-strata passes the specified input file path as an argument to `command`. Exit code `0` is a pass; any non-zero exit code is a failure. Stdout is captured as the violation message.
+With this setup:
+- `strata validate --deep` flags configuration names that don't follow the naming convention.
+- `strata build run` stops if any namespace is missing `environment`, `project`, or `owner`.
+- `strata deploy run` runs zone enforcement and the OPA check in sequence against the Terraform plan. Both must pass before `terraform apply` is invoked.
 
 ---
 

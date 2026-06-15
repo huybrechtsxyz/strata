@@ -62,14 +62,20 @@ class PolicyEngine:
     def _create(self, policy_model: PolicyModel) -> BasePolicy:
         """Dispatch policy type to its concrete implementation."""
         from strata.validators.policies.customer_zone_policy import CustomerZonePolicy
+        from strata.validators.policies.naming_policy import NamingPolicy
+        from strata.validators.policies.required_tags_policy import RequiredTagsPolicy
+        from strata.validators.policies.script_policy import ScriptPolicy
 
         _builtin = {
             "customer_zone": CustomerZonePolicy,
+            "required_tags": RequiredTagsPolicy,
+            "naming_pattern": NamingPolicy,
+            "script": ScriptPolicy,
         }
 
         policy_class = _builtin.get(policy_model.type) or self._custom_types.get(policy_model.type)
         if policy_class is not None:
-            return policy_class(policy_model)
+            return policy_class(policy_model)  # type: ignore[abstract]
 
         available = sorted(set(list(_builtin.keys()) + list(self._custom_types.keys())))
         raise ValueError(f"Unknown policy type: '{policy_model.type}'. Available types: {', '.join(available)}")
