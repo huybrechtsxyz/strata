@@ -11,6 +11,7 @@ from strata.models.deployment_manifest_model import (
     ManifestArtifactImageModel,
     ManifestArtifactProviderModel,
     ManifestArtifactsModel,
+    ManifestOutputsReferenceModel,
     ManifestPlatformModel,
     ManifestRepositoryModel,
     ManifestStageModel,
@@ -149,6 +150,39 @@ class TestManifestArtifactsModel:
         assert len(m.providers) == 1
 
 
+class TestManifestOutputsReferenceModel:
+    def test_all_fields(self):
+        m = ManifestOutputsReferenceModel(
+            path=".strata/outputs/prod/1.0.0/infra.json",
+            stage="infra",
+            version="1.0.0",
+            written_at="2026-01-01T00:00:00+00:00",
+        )
+        assert m.path == ".strata/outputs/prod/1.0.0/infra.json"
+        assert m.stage == "infra"
+        assert m.version == "1.0.0"
+        assert m.written_at == "2026-01-01T00:00:00+00:00"
+
+    def test_missing_path_rejected(self):
+        with pytest.raises(ValidationError):
+            ManifestOutputsReferenceModel(stage="infra", version="1.0.0", written_at="ts")  # type: ignore[call-arg]
+
+    def test_missing_stage_rejected(self):
+        with pytest.raises(ValidationError):
+            ManifestOutputsReferenceModel(path="x", version="1.0.0", written_at="ts")  # type: ignore[call-arg]
+
+    def test_serialised_round_trip(self):
+        m = ManifestOutputsReferenceModel(
+            path=".strata/outputs/prod/1.0.0/infra.json",
+            stage="infra",
+            version="1.0.0",
+            written_at="2026-01-01T00:00:00+00:00",
+        )
+        data = m.model_dump()
+        restored = ManifestOutputsReferenceModel(**data)
+        assert restored.path == m.path
+
+
 class TestManifestStageModel:
     def test_minimal(self):
         m = ManifestStageModel(name="infra", status="success")
@@ -175,6 +209,32 @@ class TestManifestStageModel:
         assert m.steps == ["setup", "check", "plan", "apply"]
         assert m.outputs == {"ip": "1.2.3.4"}
         assert m.error == "Apply timed out"
+
+    def test_outputs_artifact_field_is_none_by_default(self):
+        m = ManifestStageModel(name="infra", status="success")
+        assert m.outputs_artifact is None
+
+    def test_outputs_artifact_field_accepted(self):
+        ref = ManifestOutputsReferenceModel(
+            path=".strata/outputs/prod/1.0.0/infra.json",
+            stage="infra",
+            version="1.0.0",
+            written_at="2026-01-01T00:00:00+00:00",
+        )
+        m = ManifestStageModel(name="infra", status="success", outputs_artifact=ref)
+        assert m.outputs_artifact is not None
+        assert m.outputs_artifact.path == ".strata/outputs/prod/1.0.0/infra.json"
+
+    def test_outputs_artifact_serialised(self):
+        ref = ManifestOutputsReferenceModel(
+            path=".strata/outputs/prod/1.0.0/infra.json",
+            stage="infra",
+            version="1.0.0",
+            written_at="2026-01-01T00:00:00+00:00",
+        )
+        m = ManifestStageModel(name="infra", status="success", outputs_artifact=ref)
+        data = m.model_dump()
+        assert data["outputs_artifact"]["path"] == ".strata/outputs/prod/1.0.0/infra.json"
 
     def test_invalid_name_rejected(self):
         with pytest.raises(ValidationError):

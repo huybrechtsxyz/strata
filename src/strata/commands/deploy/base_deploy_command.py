@@ -16,6 +16,7 @@ from strata.models.deployment_manifest_model import (
     ManifestArtifactImageModel,
     ManifestArtifactProviderModel,
     ManifestArtifactsModel,
+    ManifestOutputsReferenceModel,
     ManifestPlatformModel,
     ManifestPolicyResultModel,
     ManifestRepositoryModel,
@@ -223,6 +224,7 @@ class BaseDeployCommand(BaseCommand):
         completed_at: Optional[str],
         steps: Optional[List[str]] = None,
         outputs: Optional[Dict[str, Any]] = None,
+        outputs_artifact: Optional[ManifestOutputsReferenceModel] = None,
         error: Optional[str] = None,
     ) -> None:
         """Append a stage result for the deployment manifest."""
@@ -246,6 +248,7 @@ class BaseDeployCommand(BaseCommand):
                 duration_seconds=duration,
                 steps=steps,
                 outputs=outputs,
+                outputs_artifact=outputs_artifact,
                 error=error,
             )
         )

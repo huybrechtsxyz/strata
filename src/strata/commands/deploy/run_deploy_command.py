@@ -15,6 +15,7 @@ from strata.deployers.base_deployer import (
 )
 from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.common_models import ProvisionerType
+from strata.models.deployment_manifest_model import ManifestOutputsReferenceModel
 from strata.models.deployment_model import DeploymentStageModel
 
 
@@ -477,6 +478,7 @@ class RunDeployCommand(BaseDeployCommand):
                     click.echo(f"    plan JSON \u2192 {plan_json_path}")
 
         # --- collect outputs for downstream stages ---
+        out_path = None
         if STEP_APPLY in steps_to_run:
             _ok_out, _outputs, _sensitive, _out_msgs = deployer.collect_outputs()
             if _ok_out and self._resolved_values is not None:
@@ -521,6 +523,23 @@ class RunDeployCommand(BaseDeployCommand):
         stage_outputs = None
         if STEP_APPLY in steps_to_run and self._resolved_values is not None:
             stage_outputs = dict(self._resolved_values.stage_outputs) if self._resolved_values.stage_outputs else None
+
+        outputs_artifact_ref: Optional[ManifestOutputsReferenceModel] = None
+        if out_path is not None and self._deployment_service is not None:
+            deploy_meta = self._deployment_service.model.meta  # type: ignore[union-attr]
+            labels = deploy_meta.labels or {}
+            version = str(labels.get("version", "unknown"))
+            try:
+                rel = str(out_path.relative_to(self._work_path))
+            except ValueError:
+                rel = str(out_path)
+            outputs_artifact_ref = ManifestOutputsReferenceModel(
+                path=rel,
+                stage=str(stage.name),
+                version=version,
+                written_at=_dt.now(_tz.utc).isoformat(),
+            )
+
         self._record_stage_result(
             stage_name=str(stage.name),
             provisioner=stage.provisioner,
@@ -530,6 +549,7 @@ class RunDeployCommand(BaseDeployCommand):
             completed_at=_dt.now(_tz.utc).isoformat(),
             steps=steps_to_run,
             outputs=stage_outputs,
+            outputs_artifact=outputs_artifact_ref,
         )
 
         # --- stage-level after hook ---

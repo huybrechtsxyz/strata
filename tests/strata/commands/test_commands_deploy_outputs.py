@@ -1,4 +1,4 @@
-"""Unit tests for BaseDeployCommand._write_outputs_artifact."""
+"""Unit tests for BaseDeployCommand._write_outputs_artifact and _record_stage_result."""
 
 import json
 from pathlib import Path
@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.models.configuration_model import ConfigurationOutputsModel, SensitiveOutputHandling
+from strata.models.deployment_manifest_model import ManifestOutputsReferenceModel
 
 # ---------------------------------------------------------------------------
 # Concrete subclass for testing the abstract base
@@ -304,3 +305,65 @@ class TestWriteOutputsArtifactNonFatal:
         with patch("builtins.open", side_effect=PermissionError("read-only")):
             # Must not raise
             cmd._write_outputs_artifact("infra", {"ip": "1.2.3.4"}, {})
+
+
+# ---------------------------------------------------------------------------
+# Tests: _record_stage_result with outputs_artifact
+# ---------------------------------------------------------------------------
+
+
+class TestRecordStageResultOutputsArtifact:
+    def test_outputs_artifact_none_by_default(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        cmd._record_stage_result(
+            stage_name="infra",
+            provisioner="tf_x",
+            topology=None,
+            status="success",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:01:00+00:00",
+        )
+        assert len(cmd._stage_results) == 1
+        assert cmd._stage_results[0].outputs_artifact is None
+
+    def test_outputs_artifact_recorded(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        ref = ManifestOutputsReferenceModel(
+            path=".strata/outputs/prod/1.0.0/infra.json",
+            stage="infra",
+            version="1.0.0",
+            written_at="2026-01-01T00:00:00+00:00",
+        )
+        cmd._record_stage_result(
+            stage_name="infra",
+            provisioner="tf_x",
+            topology=None,
+            status="success",
+            started_at="2026-01-01T00:00:00+00:00",
+            completed_at="2026-01-01T00:01:00+00:00",
+            outputs_artifact=ref,
+        )
+        assert cmd._stage_results[0].outputs_artifact is not None
+        assert cmd._stage_results[0].outputs_artifact.path == ".strata/outputs/prod/1.0.0/infra.json"
+        assert cmd._stage_results[0].outputs_artifact.version == "1.0.0"
+
+    def test_multiple_stages_each_get_own_artifact(self, tmp_path):
+        cmd = _make_command(tmp_path)
+        for stage in ("infra", "network"):
+            ref = ManifestOutputsReferenceModel(
+                path=f".strata/outputs/prod/1.0.0/{stage}.json",
+                stage=stage,
+                version="1.0.0",
+                written_at="2026-01-01T00:00:00+00:00",
+            )
+            cmd._record_stage_result(
+                stage_name=stage,
+                provisioner="tf_x",
+                topology=None,
+                status="success",
+                started_at="2026-01-01T00:00:00+00:00",
+                completed_at="2026-01-01T00:01:00+00:00",
+                outputs_artifact=ref,
+            )
+        assert cmd._stage_results[0].outputs_artifact.stage == "infra"
+        assert cmd._stage_results[1].outputs_artifact.stage == "network"

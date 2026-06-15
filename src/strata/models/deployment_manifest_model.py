@@ -127,6 +127,24 @@ class ManifestArtifactsModel(PlatformBaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Outputs artifact reference model
+# ---------------------------------------------------------------------------
+
+
+class ManifestOutputsReferenceModel(PlatformBaseModel):
+    """Reference to the durable outputs artifact written for a deployment stage.
+
+    Recorded in :class:`ManifestStageModel` when ``spec.deployment.outputs``
+    is enabled in the platform configuration.
+    """
+
+    path: str = Field(description="Workspace-relative path to the outputs artifact JSON file")
+    stage: str = Field(description="Stage name whose outputs were written")
+    version: str = Field(description="Deployment version label at time of write")
+    written_at: str = Field(description="ISO-8601 timestamp of the artifact write")
+
+
+# ---------------------------------------------------------------------------
 # Stage result model
 # ---------------------------------------------------------------------------
 
@@ -143,6 +161,9 @@ class ManifestStageModel(PlatformBaseModel):
     duration_seconds: Optional[int] = Field(None, description="Wall-clock duration in seconds")
     steps: Optional[List[str]] = Field(None, description="Steps executed (e.g. [setup, check, plan, apply])")
     outputs: Optional[Dict[str, Any]] = Field(None, description="Non-sensitive outputs collected from the stage")
+    outputs_artifact: Optional[ManifestOutputsReferenceModel] = Field(
+        None, description="Reference to the durable outputs artifact file written for this stage"
+    )
     error: Optional[str] = Field(None, description="Error message if the stage failed")
 
 
