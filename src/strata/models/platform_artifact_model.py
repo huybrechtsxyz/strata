@@ -7,12 +7,16 @@ reuses input models where possible, with separate flattened models for
 output-specific structures.
 """
 
-from typing import Annotated, Any, Dict, List, Optional
+from datetime import date
+from typing import TYPE_CHECKING, Annotated, Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, RootModel, StringConstraints
 
 # Input models (consumed by from_*_model classmethods)
 from strata.models.auth_models import AuthenticationModel
+
+if TYPE_CHECKING:
+    from strata.models.customer_model import CustomerModel as InputCustomerModel
 
 # Core shared types
 from strata.models.common_models import (
@@ -59,6 +63,7 @@ from strata.models.network_model import (
 from strata.models.network_model import (
     NetworkModel as InputNetworkModel,
 )
+from strata.models.policy_model import PolicyModel
 from strata.models.provider_model import (
     ProviderModel,
     ProviderPropertiesModel,
@@ -488,6 +493,10 @@ class PlatformProviderModel(BaseModel):
         description="Optional labels (key-value pairs for classification/filtering)",
     )
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")
+    zone: Optional[str] = Field(
+        None,
+        description="Logical data-residency zone this provider's region belongs to (resolved from configuration)",
+    )
     lifecycle: Optional[CommonLifecycleModel] = Field(
         None,
         description="IaC workflow lifecycle phases (setup, validate, plan, apply, output, destroy)",
@@ -504,14 +513,24 @@ class PlatformProviderModel(BaseModel):
     )
 
     @classmethod
-    def from_provider_model(cls, model: ProviderModel) -> "PlatformProviderModel":
-        """Create from input ProviderModel (merges meta + spec)."""
+    def from_provider_model(
+        cls,
+        model: ProviderModel,
+        zone: Optional[str] = None,
+    ) -> "PlatformProviderModel":
+        """Create from input ProviderModel (merges meta + spec).
+
+        Args:
+            model: The source ProviderModel.
+            zone: Optional zone name resolved from the configuration's zones list.
+        """
         return cls(
             name=model.meta.name,
             description=(model.meta.annotations.get("description") if model.meta.annotations else None),
             annotations=model.meta.annotations,
             labels=model.meta.labels,
             tags=model.meta.tags,
+            zone=zone,
             lifecycle=model.spec.lifecycle,
             properties=model.spec.properties,
             authentication=model.spec.authentication,
@@ -563,6 +582,39 @@ class PlatformLifecycleModel(RootModel):
     """Lifecycle phases map: phase-name → PlatformLifecyclePhaseModel."""
 
     root: Dict[str, PlatformLifecyclePhaseModel] = {}
+
+
+# ---------------------------------------------------------------------------
+# Customer (snapshot of the linked CustomerModel)
+# ---------------------------------------------------------------------------
+
+
+class PlatformCustomerModel(BaseModel):
+    """Customer context snapshot embedded in the platform artifact.
+
+    Populated by the builder when ``spec.customer`` is set on the deployment.
+    Contains the fields needed by deployers/builders at runtime.
+    """
+
+    code: PlatformName = Field(description="Customer code — matches meta.name and customers/<code>.yaml")
+    name: str = Field(description="Human-readable customer display name")
+    zones: List[str] = Field(description="Zones this customer is authorised to deploy into")
+    onboarded: Optional[date] = Field(None, description="ISO date the customer was onboarded")
+    configuration: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Customer-specific key/value settings injected at slot generation time",
+    )
+
+    @classmethod
+    def from_customer_model(cls, model: "InputCustomerModel") -> "PlatformCustomerModel":
+        """Create from a loaded CustomerModel."""
+        return cls(
+            code=model.spec.code,
+            name=model.spec.name,
+            zones=list(model.spec.zones),
+            onboarded=model.spec.onboarded,
+            configuration=model.spec.configuration,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -631,6 +683,14 @@ class PlatformSpecModel(BaseModel):
     )
     dns_zones: Optional[List[PlatformDnsModel]] = Field(None, description="List of DNS zone definitions")
     networks: Optional[List[PlatformNetworkModel]] = Field(None, description="List of network topology definitions")
+    customer: Optional[PlatformCustomerModel] = Field(
+        None,
+        description="Customer context snapshot — present when this deployment is scoped to a customer",
+    )
+    policies: Optional[List[PolicyModel]] = Field(
+        None,
+        description="Policy declarations active during build — copied from configuration.spec.policies",
+    )
 
     @classmethod
     def from_deployment_model(
@@ -673,6 +733,7 @@ class PlatformSpecModel(BaseModel):
             namespaces=None,
             modules=None,
             firewalls=None,
+            policies=None,
         )
 
 

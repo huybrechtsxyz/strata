@@ -7,6 +7,25 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **Policy engine** — declarative deployment guardrails evaluated at validate, build, and plan phases.
+  - `PolicyModel` — Pydantic model for policy declarations in `configuration.spec.policies` (`name`, `type`, `phase`, `enforcement`, `enabled`, `description`, `configuration`).
+  - `BasePolicy` / `PolicyContext` / `PolicyResult` — abstract base, evaluation context dataclass, and typed result dataclass.
+  - `PolicyEngine` — coordinator that instantiates built-in and custom policy types, evaluates a list of enabled policies for a given phase, and accumulates results.
+  - Four built-in policy types:
+    - `customer_zone` — denies deploy when the target cluster is not in an allowed customer zone.
+    - `required_tags` — verifies that every namespace in the built platform artifact carries the configured required labels.
+    - `naming_pattern` — validates `meta.name` of the active configuration against a required regex pattern.
+    - `script` — delegates to an external script or tool (OPA, Checkov, custom) via subprocess; passes JSON context on stdin and reads violations from stdout/stderr.
+  - **Validate phase hook** — `ValidateCommand` evaluates all `phase: validate` policies after structural validation; violations with `enforcement: deny` promote the command to exit code 3.
+  - **Build phase hook** — `RunBuildCommand` evaluates all `phase: build` policies after a successful SBOM build step.
+  - **Plan phase hook** — `RunDeployCommand` evaluates all `phase: plan` policies after Terraform plan output is available.
+  - **Policies in platform artifact** — `PlatformSpecModel.policies` field carries the full policy declaration list into `platform.json` so deploy-time inspection doesn't require the source configuration.
+  - **Policy results in deployment manifest** — `ManifestPolicyResultModel` captures per-policy outcomes; `DeploymentManifestSpecModel.policy_results` accumulates them across all evaluated phases, making audit data available in the signed manifest.
+- **`PolicyController`** — `get_declared_policies(configuration_service)` extracts the policy list; `get_deployment_phases(deployment_service)` infers which lifecycle phases a deployment's stages can trigger via keyword matching on provisioner and topology names.
+- **`strata policy list`** — introspection command that lists every policy declared in the active configuration. Columns: Name, Type, Phase, Enforcement, Enabled. `deny` enforcement highlighted red, `warn` yellow. Summary line reports enabled/disabled counts. Accepts `--file` / `-f` to load a deployment YAML and annotate the output with which lifecycle phases that deployment can trigger. Supports `--output json` / `--output text` / `--output ndjson` for machine consumption.
+
 ---
 
 ## [0.5.0] — 2026-06-12

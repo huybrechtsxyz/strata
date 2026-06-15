@@ -1,8 +1,11 @@
 """Build the platform model artifact."""
 
+import json
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Tuple
+
+import yaml
 
 from strata.builders.base_builder import BaseBuilder
 
@@ -11,6 +14,7 @@ if TYPE_CHECKING:
 from strata.models.platform_artifact_model import (
     PlatformArtifactModel,
     PlatformComponentModel,
+    PlatformCustomerModel,
     PlatformFirewallModel,
     PlatformLifecycleModel,
     PlatformMetaModel,
@@ -28,6 +32,7 @@ from strata.models.store_models import (
     SecretStoreModel,
     VariableStoreModel,
 )
+from strata.services.customer_service import CustomerService
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
 
@@ -70,7 +75,7 @@ class PlatformBuilder(BaseBuilder):
         self._last_platform_model = None
 
         try:
-            platform, build_messages = self._build_platform(deployment_service)
+            platform, build_messages = self._build_platform(deployment_service, work_path=work_path)
             self._messages.extend(build_messages)
 
             if platform is None:
@@ -200,7 +205,7 @@ class PlatformBuilder(BaseBuilder):
     # ------------------------------------------------------------------
 
     def _build_platform(
-        self, deployment_service: DeploymentService
+        self, deployment_service: DeploymentService, work_path: Optional[Path] = None
     ) -> Tuple[Optional[PlatformArtifactModel], List[str]]:
         """Assemble the PlatformModel from the deployment service hierarchy.
 
@@ -227,7 +232,7 @@ class PlatformBuilder(BaseBuilder):
             configuration_model = (
                 getattr(self.configuration_service, "model", None) if self.configuration_service else None
             )
-            spec = self._build_spec(deployment_service, configuration_model=configuration_model)
+            spec = self._build_spec(deployment_service, configuration_model=configuration_model, work_path=work_path)
 
             platform = PlatformArtifactModel(meta=meta, spec=spec)
 
@@ -246,6 +251,7 @@ class PlatformBuilder(BaseBuilder):
         self,
         deployment_service: DeploymentService,
         configuration_model=None,
+        work_path: Optional[Path] = None,
     ) -> PlatformSpecModel:
         """Build the PlatformSpecModel from workspace and deployment data.
 
@@ -289,8 +295,18 @@ class PlatformBuilder(BaseBuilder):
         providers = None
         provider_services = workspace_service.get_provider_services()
         if provider_services:
+            # Build a region → zone lookup from configuration (if zones are defined)
+            region_to_zone: dict[str, str] = {}
+            if configuration_model and configuration_model.spec.zones:
+                for zone in configuration_model.spec.zones:
+                    for region in zone.regions:
+                        region_to_zone[region] = zone.name
+
             providers = [
-                PlatformProviderModel.from_provider_model(svc.model)
+                PlatformProviderModel.from_provider_model(
+                    svc.model,
+                    zone=region_to_zone.get(svc.model.spec.properties.region) if svc.model else None,
+                )
                 for svc in provider_services.values()
                 if svc.model is not None
             ]
@@ -441,6 +457,38 @@ class PlatformBuilder(BaseBuilder):
         if deployment_model.spec.lifecycle:
             lifecycle_model = PlatformLifecycleModel.model_validate(deployment_model.spec.lifecycle.model_dump())
 
+        # ------------------------------------------------------------------
+        # Customer (load, embed, validate zone alignment)
+        # ------------------------------------------------------------------
+        platform_customer: Optional[PlatformCustomerModel] = None
+        if deployment_model.spec.customer and work_path:
+            customer_file = work_path / "customers" / f"{deployment_model.spec.customer}.yaml"
+            if customer_file.exists():
+                customer_svc = CustomerService(str(customer_file))
+                is_valid, c_errors = customer_svc.validate()
+                if is_valid and customer_svc.model:
+                    platform_customer = PlatformCustomerModel.from_customer_model(customer_svc.model)
+                    # Zone alignment: each provider's resolved zone must be in customer.zones
+                    allowed_zones = set(platform_customer.zones)
+                    if providers and allowed_zones:
+                        for prov in providers:
+                            if prov.zone and prov.zone not in allowed_zones:
+                                self._errors.append(
+                                    f"Provider '{prov.name}' is in zone '{prov.zone}' which is not "
+                                    f"allowed for customer '{platform_customer.code}'. "
+                                    f"Customer zones: {sorted(allowed_zones)}"
+                                )
+                            elif prov.zone is None and allowed_zones:
+                                self.logger.warning(
+                                    "Provider has no resolved zone — cannot verify customer zone alignment",
+                                    provider=str(prov.name),
+                                    customer=str(platform_customer.code),
+                                )
+                else:
+                    self._errors.extend(c_errors)
+            else:
+                self._errors.append(f"Customer file not found for '{deployment_model.spec.customer}': {customer_file}")
+
         return PlatformSpecModel(
             workspace=workspace,
             providers=providers,
@@ -461,6 +509,8 @@ class PlatformBuilder(BaseBuilder):
             secrets=all_secrets,
             provisioners=provisioners,
             stereotypes=None,
+            customer=platform_customer,
+            policies=getattr(configuration_model.spec, "policies", None) or None if configuration_model else None,
         )
 
     # ------------------------------------------------------------------
@@ -500,6 +550,17 @@ class PlatformBuilder(BaseBuilder):
             if self.verbose:
                 messages.append(f"Saved platform model to: {json_path}")
                 messages.append(f"Saved platform model to: {yaml_path}")
+
+            # Write standalone customer.json / customer.yaml when a customer is linked
+            if platform.spec.customer:
+                customer_data = platform.spec.customer.model_dump(exclude_none=True, mode="json")
+                customer_json_path = deployment_build_path / "customer.json"
+                customer_json_path.write_text(json.dumps(customer_data, indent=2), encoding="utf-8")
+                customer_yaml_path = deployment_build_path / "customer.yaml"
+                with open(customer_yaml_path, "w", encoding="utf-8") as f:
+                    yaml.dump(customer_data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                messages.append(f"Customer snapshot written to: {customer_json_path}")
+                messages.append(f"Customer snapshot written to: {customer_yaml_path}")
 
         except Exception as exc:
             msg = f"Failed to save platform model: {exc}"

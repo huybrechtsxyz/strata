@@ -13,6 +13,29 @@ Key paths: `src/strata/cli.py`, `commands/cli_common.py`, `models/`, `services/`
 
 ## Learnings
 
+### 2026-06-15 — Policy Engine Phase 1
+
+**Files created:**
+- `src/strata/models/policy_model.py` — `PolicyModel` with `name`, `type`, `phase`, `enforcement`, `description`, `configuration`, `enabled`
+- `src/strata/validators/policies/__init__.py` — package exporting 5 public symbols
+- `src/strata/validators/policies/base_policy.py` — `PolicyContext` dataclass, `PolicyResult` dataclass, `BasePolicy` ABC
+- `src/strata/validators/policies/policy_engine.py` — `PolicyEngine` with `evaluate()`, `has_denials()`, `_create()` type dispatch
+- `src/strata/validators/policies/customer_zone_policy.py` — built-in zone enforcement policy
+
+**Files modified:**
+- `src/strata/models/configuration_model.py` — imported `PolicyModel`, added `policies: Optional[List[PolicyModel]]` field to `ConfigurationSpecModel` with `default_factory=list`
+- `src/strata/commands/deploy/run_deploy_command.py` — added `_evaluate_plan_policies()` method, wired it after `deploy_plan_after` gate inside the `STEP_PLAN && STEP_APPLY in steps_to_run` block
+
+**Key patterns:**
+- Policies sit in `validators/` layer, NOT in `integrations/` — they are stateless evaluators, no singleton lifecycle
+- `PolicyContext` uses `Optional[Any]` for service fields to avoid circular imports
+- `CustomerZonePolicy` degrades gracefully at 5 levels: no plan data → no zone config → no customer context → no customer zones → no resource_changes → all return `passed=True`
+- Region normalization: `.lower().replace(" ", "")` to handle `"West Europe"` vs `"westeurope"`
+- Plan data comes from `deployer.show_plan()` (not `load_plan_json` — that method doesn't exist); `show_plan()` returns `(bool, dict, list)`
+- Policy evaluation is guarded: `if hasattr(deployer, "show_plan")` — works only for TerraformDeployer
+- `PolicyEngine._create()` uses a deferred import of `CustomerZonePolicy` to avoid module-level circular dependency risk
+- `default_factory=list` with `Optional[List[PolicyModel]]` is valid Pydantic v2 — field is never `None`, just empty list by default
+
 ### 2026-06-10 — `strata guide` command implementation
 
 **Files created:**

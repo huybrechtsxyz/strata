@@ -35,6 +35,13 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 - **Phase table design:** Added separate ✅ / ⚠️ / ⬜ columns to the workspace checklist table rather than inline prose — lets operators scan quickly which states each phase supports. Note: phases 2, 4, 5 never produce ⚠️ (binary done/not-done), so those cells show —.
 - **Key convention:** `guide` is a top-level command (not under `sln`) because it is an onboarding entry point before users know any group names. INIT_REQUIRED = False mirrors StatusCommand and HelpCommand — always mention this in docs via "Works outside an initialized workspace" callout.
 
+### 2026-06-15 — Policy Engine documentation
+
+- **`docs/platform/policies.md`** — Created new user-facing guide. Structure: overview comparison table (policies vs lifecycle hooks); configuration fields table; policy types table (built-in + Phase 2 + script); enforcement levels table with behavior descriptions; phases table with trigger commands and timing; two worked examples (single zone enforcement, two-policy zone+tags); script escape hatch section (Phase 2 callout); see-also links to lifecycles, validators, exit-codes, and ADR 0006.
+- **`docs/index.rst`** — Added `platform/policies` to the Internals toctree, positioned after `platform/lifecycles` and before `platform/exceptions` (matching the natural policy → lifecycle hook → exception handling reading order).
+- **Key structural decision:** The policy vs. lifecycle hook comparison table is placed in the Overview section, not a "See Also". Engineers scanning the docs need to immediately understand *when to use which mechanism* — that distinction belongs at the top, not at the bottom.
+- **Phase 2 callout pattern:** `required_tags` and `naming_pattern` show the intended YAML declaration format with a `> **Note:** … Phase 2 feature` callout. This gives operators a forward-looking reference without implying the feature works today.
+
 ## Learnings
 
 - **Union fields in record tables:** When a model field becomes a union (one-of), the Required column should change from "Yes"/"No" to "one of" to accurately signal mutual exclusivity. This pattern works for any doc where Pydantic discriminates exactly one field from a set.

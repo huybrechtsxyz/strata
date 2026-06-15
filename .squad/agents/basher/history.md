@@ -8,6 +8,12 @@ Key paths: `src/strata/integrations/`, `models/deployment_model.py`.
 
 ## Learnings
 
+### 2026-06-15 — Policy template blocks in config/data files
+- `xyz-config.yaml` has no top-level `lifecycle:` or `security:` section in `spec:` — policies block was appended after the `topologies:` section (end of file).
+- `src/strata/data/configuration.yaml` is the scaffold template for `strata new configuration` — it is minimal (only a `configuration:` sub-key). Policies block was appended after the existing `configuration:` block.
+- Policy block is fully commented out in both files; `policies:` is optional and defaults to empty — no model changes needed.
+- `src/strata/data/` also contains `logging.yaml`, `guide-hints.yaml`, and a `help/` directory — check these if new top-level spec fields are added in future.
+
 ### 2026-04-22 — Config cross-repo `@repo/path` reference resolution
 - Pattern `@xyz_configuration/stack/xyz-ws-platform.yaml` is resolved in `utils/system.py::resolve_path(base, target, repo_map={})`.
 - `repo_map` = `{repo_name: deploy_path}` built by `ConfigurationService.get_repo_map()` from `spec.repositories[].deploy_path`.

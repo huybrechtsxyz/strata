@@ -85,9 +85,29 @@ class RunDeployCommand(BaseDeployCommand):
             if self._dry_run and self._is_console_output():
                 click.echo("\n[DRY-RUN] Validating and planning deploy — no provisioning will run")
 
+            if not self._run_lifecycle_phase(
+                "deploy_run_before",
+                context={"file": str(self._file_path), "stage": self._stage, "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-deploy lifecycle hook failed")
+                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
+                self._finalize(success=False)
+                return False
+
             if not self._execute_provisioning():
                 if self._is_console_output():
                     click.echo("\n❌  Deploy provisioning failed")
+                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
+                self._finalize(success=False)
+                return False
+
+            if not self._run_lifecycle_phase(
+                "deploy_run_after",
+                context={"file": str(self._file_path), "stage": self._stage, "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Post-deploy lifecycle hook failed")
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
@@ -309,6 +329,23 @@ class RunDeployCommand(BaseDeployCommand):
                 }
             )
 
+        # --- stage-level before hook ---
+        if not self._run_lifecycle_phase(
+            "deploy_stage_before",
+            context={"stage": str(stage.name), "dry_run": self._dry_run},
+        ):
+            self._errors.append(f"Stage '{stage.name}': deploy_stage_before lifecycle hook failed.")
+            self._record_stage_result(
+                stage_name=str(stage.name),
+                provisioner=stage.provisioner,
+                topology=stage.topology,
+                status="failed",
+                started_at=stage_started,
+                completed_at=_dt.now(_tz.utc).isoformat(),
+                error="deploy_stage_before hook failed",
+            )
+            return False
+
         # --- execute each step ---
         for step_name in steps_to_run:
             if step_name not in supported:
@@ -396,6 +433,39 @@ class RunDeployCommand(BaseDeployCommand):
                     }
                 )
 
+            # --- plan gate: enforce deploy_plan_after hook before apply ---
+            if step_name == STEP_PLAN and STEP_APPLY in steps_to_run:
+                if not self._run_lifecycle_phase(
+                    "deploy_plan_after",
+                    context={"stage": str(stage.name), "dry_run": self._dry_run},
+                ):
+                    self._errors.append(f"Stage '{stage.name}': deploy_plan_after lifecycle hook blocked apply.")
+                    self._record_stage_result(
+                        stage_name=str(stage.name),
+                        provisioner=stage.provisioner,
+                        topology=stage.topology,
+                        status="failed",
+                        started_at=stage_started,
+                        completed_at=_dt.now(_tz.utc).isoformat(),
+                        steps=steps_to_run,
+                        error="deploy_plan_after hook blocked apply",
+                    )
+                    return False
+
+                # --- policy evaluation: plan phase ---
+                if not self._evaluate_plan_policies(stage, deployer):
+                    self._record_stage_result(
+                        stage_name=str(stage.name),
+                        provisioner=stage.provisioner,
+                        topology=stage.topology,
+                        status="failed",
+                        started_at=stage_started,
+                        completed_at=_dt.now(_tz.utc).isoformat(),
+                        steps=steps_to_run,
+                        error="Plan policy denied deployment",
+                    )
+                    return False
+
         # --- save plan JSON for artifact upload / downstream use ---
         if STEP_PLAN in steps_to_run:
             ok_save, plan_json_path, save_msgs = deployer.save_plan_json()
@@ -458,7 +528,75 @@ class RunDeployCommand(BaseDeployCommand):
             outputs=stage_outputs,
         )
 
+        # --- stage-level after hook ---
+        if not self._run_lifecycle_phase(
+            "deploy_stage_after",
+            context={"stage": str(stage.name), "dry_run": self._dry_run},
+        ):
+            self._errors.append(f"Stage '{stage.name}': deploy_stage_after lifecycle hook failed.")
+            return False
+
         return True
+
+    def _evaluate_plan_policies(self, stage: DeploymentStageModel, deployer) -> bool:
+        """Evaluate 'plan' phase policies. Returns False if any deny-enforcement policy fails."""
+        from strata.models.deployment_manifest_model import ManifestPolicyResultModel
+        from strata.validators.policies.base_policy import PolicyContext
+        from strata.validators.policies.policy_engine import PolicyEngine
+
+        if self._configuration_service is None:
+            return True
+
+        spec = self._configuration_service.model.spec if self._configuration_service.model else None
+        policy_models = getattr(spec, "policies", None) or []
+        plan_policies = [p for p in policy_models if p.phase == "plan" and p.enabled]
+        if not plan_policies:
+            return True
+
+        # Load plan JSON from the deployer (terraform-specific)
+        plan_data = None
+        if hasattr(deployer, "show_plan"):
+            _, plan_data, _ = deployer.show_plan()
+
+        context = PolicyContext(
+            phase="plan",
+            work_path=self._work_path,
+            deployment_service=self._deployment_service,
+            configuration_service=self._configuration_service,
+            plan_data=plan_data,
+            build_path=self._build_path,
+        )
+
+        engine = PolicyEngine(plan_policies)
+        results = engine.evaluate("plan", context)
+
+        denied = False
+        for policy_model, result in zip(plan_policies, results, strict=False):
+            # Record in manifest accumulator (all results, not just failures)
+            self._policy_results.append(
+                ManifestPolicyResultModel(
+                    policy_name=result.policy_name,
+                    policy_type=policy_model.type,
+                    phase="plan",
+                    enforcement=result.enforcement,
+                    passed=result.passed,
+                    violations=result.violations or [],
+                )
+            )
+            if result.passed:
+                if self._is_verbose() and self._is_console_output():
+                    click.echo(f"    \u2713  Policy '{result.policy_name}' passed")
+            else:
+                for v in result.violations:
+                    if result.enforcement == "deny":
+                        click.echo(f"    \u2717  Policy '{result.policy_name}' DENIED: {v}")
+                        self._errors.append(f"Policy '{result.policy_name}': {v}")
+                        denied = True
+                    elif result.enforcement == "warn":
+                        click.echo(f"    \u26a0  Policy '{result.policy_name}' warning: {v}")
+                    elif result.enforcement == "audit" and self._is_verbose():
+                        click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
+        return not denied
 
     def _create_deployer(self, stage: DeploymentStageModel):
         """Instantiate and return the deployer for *stage*, or None.

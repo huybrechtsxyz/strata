@@ -90,7 +90,35 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 file_refs.append((f"Environment[{i}]", env_path))
             for cfg in self.model.spec.configurations or []:
                 file_refs.append((f"Configuration '{cfg.name}'", cfg.file))
+            if self.model.spec.customer:
+                file_refs.append(("Customer", f"customers/{self.model.spec.customer}.yaml"))
             errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
+
+        # Deep zone check: customer zones must all exist in configuration.spec.zones
+        if (
+            work_path
+            and self.model
+            and self.model.spec.customer
+            and configuration_model
+            and configuration_model.spec.zones
+        ):
+            from pathlib import Path as _Path
+
+            from strata.services.customer_service import CustomerService
+
+            customer_file = _Path(work_path) / "customers" / f"{self.model.spec.customer}.yaml"
+            if customer_file.exists():
+                customer_svc = CustomerService(str(customer_file))
+                is_valid_c, _ = customer_svc.validate()
+                if is_valid_c and customer_svc.model:
+                    config_zone_names = {z.name for z in configuration_model.spec.zones}
+                    for zone in customer_svc.model.spec.zones:
+                        if zone not in config_zone_names:
+                            errors.append(
+                                f"Customer '{self.model.spec.customer}' references zone '{zone}' "
+                                f"which is not defined in configuration.spec.zones. "
+                                f"Available zones: {sorted(config_zone_names)}"
+                            )
 
         return len(errors) == 0, errors
 

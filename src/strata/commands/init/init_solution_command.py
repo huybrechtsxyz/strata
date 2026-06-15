@@ -71,10 +71,28 @@ class InitSolutionCommand(BaseCommand):
                 self._finalize(success=False)
                 return False
 
+            if not self._run_lifecycle_phase(
+                "solution_init_before",
+                context={"solution_name": self._solution_name, "work_path": str(self._work_path)},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-init lifecycle hook failed")
+                self._finalize(success=False)
+                return False
+
             if not self._run_execution():
                 self.logger.error(f"Execution failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Execution failed")
+                self._finalize(success=False)
+                return False
+
+            if not self._run_lifecycle_phase(
+                "solution_init_after",
+                context={"solution_name": self._solution_name, "work_path": str(self._work_path)},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Post-init lifecycle hook failed")
                 self._finalize(success=False)
                 return False
 

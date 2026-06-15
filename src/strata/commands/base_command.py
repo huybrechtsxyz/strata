@@ -283,6 +283,25 @@ class BaseCommand(ABC):
         )
         return True
 
+    def _run_lifecycle_phase(self, phase_name: str, context: Optional[dict] = None) -> bool:
+        """Execute a named lifecycle phase via the active ConfigurationService.
+
+        Returns True when no hooks are defined for the phase or all scripts succeed.
+        Returns False and appends errors when any script fails.
+        """
+        from strata.controllers.lifecycle_controller import LifecycleController
+
+        lc = LifecycleController()
+        if not lc.execute_configuration_phase(
+            phase_name=phase_name,
+            work_path=self._work_path,
+            context=context,
+        ):
+            for err in lc.get_errors():
+                self._errors.append(f"Lifecycle hook '{phase_name}' failed: {err}")
+            return False
+        return True
+
     def _finalize(
         self,
         success: bool = False,

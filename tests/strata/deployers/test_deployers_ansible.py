@@ -360,7 +360,9 @@ class TestAnsibleDeployerHelpers:
         (tmp_path / "collections" / "requirements.yml").write_text("")
         d = _make_deployer()
         d._working_dir = tmp_path
-        assert d._get_requirements_file() == "collections/requirements.yml"
+        from pathlib import Path
+
+        assert Path(d._get_requirements_file()) == Path("collections") / "requirements.yml"
 
 
 class TestAnsibleDeployerSshKey:

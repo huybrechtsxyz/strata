@@ -310,6 +310,15 @@ class DeploymentSpecModel(PlatformBaseModel):
         description="Deployment layer values (keys must match configuration.spec.layering[].name). "
         "Defines the artifact path location for this deployment.",
     )
+    customer: Optional[PlatformName] = Field(
+        None,
+        description=(
+            "Optional customer code this deployment belongs to. "
+            "Must match a customer YAML file in customers/<code>.yaml. "
+            "Validated against the filesystem during Phase 2. "
+            "Omit for shared/platform deployments that serve all tenants."
+        ),
+    )
     workspace: DeploymentWorkspaceModel = Field(description="Name of the associated workspace for this deployment")
     environments: Annotated[
         List[str],

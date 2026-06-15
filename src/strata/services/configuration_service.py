@@ -149,6 +149,26 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
                             f"Duplicate component roles in topology '{topology.type}' (merged config): {', '.join(set(duplicates))}"
                         )
 
+        # Validate zones: each region in providers must exist in a zone (if zones are defined)
+        if self.model.spec.zones and self.model.spec.providers:
+            # Build flat set of all known zone regions
+            zone_regions: set[str] = set()
+            for zone in self.model.spec.zones:
+                zone_regions.update(zone.regions)
+
+            for provider in self.model.spec.providers:
+                if not provider.regions or provider.additional_regions:
+                    continue
+                for region_entry in provider.regions:
+                    region_name = (
+                        region_entry if isinstance(region_entry, str) else region_entry.get("name", str(region_entry))
+                    )
+                    if region_name not in zone_regions:
+                        errors.append(
+                            f"Provider '{provider.name}' region '{region_name}' is not assigned to any zone. "
+                            f"Add it to a zone in spec.zones or set additional_regions=true on the provider."
+                        )
+
         # Validate logging file reference exists on disk
         if work_path and self.model.spec.logging and self.model.spec.logging.file:
             repo_map = self.get_repo_map()

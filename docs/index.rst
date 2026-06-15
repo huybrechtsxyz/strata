@@ -40,6 +40,7 @@ strata
    platform/deployers
    platform/validators
    platform/lifecycles
+   platform/policies
    platform/exceptions
    platform/logging
    platform/utilities
@@ -76,6 +77,7 @@ strata
    decisions/0003-layered-architecture
    decisions/0004-exit-code-convention
    decisions/0005-secret-resolution-at-build-time
+   decisions/0006-policy-engine-for-deployment-guardrails
 
 .. toctree::
    :maxdepth: 2
@@ -88,6 +90,7 @@ strata
    guides/troubleshooting-what-changed
    guides/setup-azure-oidc
    guides/deployment-manifests
+   guides/at-scale
 
 .. :orphan:
 

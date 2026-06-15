@@ -76,6 +76,15 @@ class CleanSolutionCommand(BaseCommand):
                 self._finalize(success=False)
                 return False
 
+            if not self._run_lifecycle_phase(
+                "solution_clean_before",
+                context={"work_path": str(self._work_path), "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-clean lifecycle hook failed")
+                self._finalize(success=False)
+                return False
+
             success, self._clean_stats = self._solution_controller.clean_solution(
                 work_path=self._work_path,
                 dry_run=self._dry_run,
@@ -88,6 +97,15 @@ class CleanSolutionCommand(BaseCommand):
                 self.logger.error(f"Clean failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Clean failed")
+                self._finalize(success=False)
+                return False
+
+            if not self._run_lifecycle_phase(
+                "solution_clean_after",
+                context={"work_path": str(self._work_path), "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Post-clean lifecycle hook failed")
                 self._finalize(success=False)
                 return False
 

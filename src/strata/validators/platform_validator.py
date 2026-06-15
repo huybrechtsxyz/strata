@@ -11,6 +11,7 @@ from strata.models.common_models import CommonLifecycleModel, PlatformKind
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.validation_error import ValidationError
 from strata.services.base_service import BaseService
+from strata.services.customer_service import CustomerService
 from strata.services.deployment_service import DeploymentService
 from strata.services.dns_service import DnsService
 from strata.services.environment_service import EnvironmentService
@@ -29,6 +30,7 @@ from strata.validators.base_validator import BaseValidator
 # BaseService.load(path).  CONFIGURATION kind files are validated directly via
 # ConfigurationModel.model_validate() in the validate() method below.
 _KIND_TO_SERVICE: Dict[PlatformKind, Any] = {
+    PlatformKind.CUSTOMER: CustomerService,
     PlatformKind.DEPLOYMENT: DeploymentService,
     PlatformKind.DNS: DnsService,
     PlatformKind.ENVIRONMENT: EnvironmentService,

@@ -55,6 +55,11 @@ class UnknownService(BaseService["UnknownModel"]):
 
             return ConfigurationService.get_instance()
 
+        elif kind == PlatformKind.CUSTOMER:
+            from strata.services.customer_service import CustomerService
+
+            return CustomerService(self.path)
+
         elif kind == PlatformKind.ENVIRONMENT:
             from strata.services.environment_service import EnvironmentService
 

@@ -777,6 +777,37 @@ strata schema get environment --output text
 
 ---
 
+## `policy`
+
+Inspect policies declared in the active configuration. Policies define guardrails evaluated at the validate, build, and plan lifecycle phases. See [policies.md](policies.md) for the policy engine reference.
+
+### `policy list`
+
+List all policies declared in `configuration.spec.policies`.
+
+```
+strata policy list [-f PATH] [standard options]
+```
+
+Loads the active configuration from the workspace's active profile. Displays a table of every policy with its type, phase, enforcement level, and enabled state. `deny` enforcement is highlighted red; `warn` is highlighted yellow.
+
+| Option          | Description                                                                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-f` / `--file` | Optional path to a deployment YAML. When given, annotates the output with which lifecycle phases that deployment can trigger (inferred from provisioner names). |
+
+**Output keys (`--output json`):** `source`, `deployment`, `policy_count`, `enabled_count`, `phases_triggered`, `policies[]` (each with `name`, `type`, `phase`, `enforcement`, `enabled`, `description`, `configuration`).
+
+**Exit codes:** 0 success · 1 workspace not initialised or configuration load failure
+
+```bash
+strata policy list
+strata policy list -f config/deploy-prd.yaml
+strata policy list --output json
+strata policy list -f config/deploy.yaml --output json
+```
+
+---
+
 ## `secret`
 
 Generate and manage secret values. These utilities are useful for creating passwords, tokens, and other sensitive values to be stored in vaults or used in configuration files.

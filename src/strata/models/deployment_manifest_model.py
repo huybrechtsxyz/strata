@@ -147,6 +147,22 @@ class ManifestStageModel(PlatformBaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Policy result model
+# ---------------------------------------------------------------------------
+
+
+class ManifestPolicyResultModel(PlatformBaseModel):
+    """Result of a single policy evaluation recorded in the deployment manifest."""
+
+    policy_name: str = Field(description="Policy name as declared in configuration.spec.policies")
+    policy_type: str = Field(description="Policy type (e.g. customer_zone, required_tags, naming_pattern, script)")
+    phase: str = Field(description="Phase when evaluated: validate | build | plan | deploy")
+    enforcement: str = Field(description="Enforcement level: deny | warn | audit")
+    passed: bool = Field(description="Whether the policy passed")
+    violations: List[str] = Field(default_factory=list, description="Violation messages when the policy failed")
+
+
+# ---------------------------------------------------------------------------
 # Meta model
 # ---------------------------------------------------------------------------
 
@@ -201,6 +217,9 @@ class DeploymentManifestSpecModel(PlatformBaseModel):
     # Extension points
     sbom: Optional[SbomReferenceModel] = Field(None, description="Reference to the generated CycloneDX SBOM file")
     signatures: Optional[Dict[str, Any]] = Field(None, description="Signing/attestation data (future)")
+    policy_results: Optional[List[ManifestPolicyResultModel]] = Field(
+        None, description="Policy evaluation results from all phases run during this deployment"
+    )
 
 
 # ---------------------------------------------------------------------------

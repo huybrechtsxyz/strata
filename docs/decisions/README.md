@@ -8,13 +8,14 @@ were considered, and why. They exist so the rationale survives beyond the author
 
 ## Index
 
-| #                                               | Title                                                           | Status   |
-| ----------------------------------------------- | --------------------------------------------------------------- | -------- |
-| [0001](0001-kubernetes-style-yaml-schema.md)    | Kubernetes-style YAML schema for config documents               | Accepted |
-| [0002](0002-python-click-not-compiled-cli.md)   | Python + Click for the CLI, not a compiled binary               | Accepted |
-| [0003](0003-layered-architecture.md)            | Strict layered architecture (commands → controllers → services) | Accepted |
-| [0004](0004-exit-code-convention.md)            | Four exit codes: 0 success, 1 system, 2 usage, 3 validation     | Accepted |
-| [0005](0005-secret-resolution-at-build-time.md) | Resolve secrets at build time, not deploy time                  | Accepted |
+| #                                                       | Title                                                           | Status   |
+| ------------------------------------------------------- | --------------------------------------------------------------- | -------- |
+| [0001](0001-kubernetes-style-yaml-schema.md)            | Kubernetes-style YAML schema for config documents               | Accepted |
+| [0002](0002-python-click-not-compiled-cli.md)           | Python + Click for the CLI, not a compiled binary               | Accepted |
+| [0003](0003-layered-architecture.md)                    | Strict layered architecture (commands → controllers → services) | Accepted |
+| [0004](0004-exit-code-convention.md)                    | Four exit codes: 0 success, 1 system, 2 usage, 3 validation     | Accepted |
+| [0005](0005-secret-resolution-at-build-time.md)         | Resolve secrets at build time, not deploy time                  | Accepted |
+| [0006](0006-policy-engine-for-deployment-guardrails.md) | Policy engine for deployment guardrails                         | Proposed |
 
 ## Adding a new ADR
 
