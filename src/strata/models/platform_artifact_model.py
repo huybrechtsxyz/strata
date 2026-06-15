@@ -62,6 +62,7 @@ from strata.models.network_model import (
 from strata.models.network_model import (
     NetworkModel as InputNetworkModel,
 )
+from strata.models.policy_model import PolicyModel
 from strata.models.provider_model import (
     ProviderModel,
     ProviderPropertiesModel,
@@ -681,6 +682,10 @@ class PlatformSpecModel(BaseModel):
         None,
         description="Customer context snapshot — present when this deployment is scoped to a customer",
     )
+    policies: Optional[List[PolicyModel]] = Field(
+        None,
+        description="Policy declarations active during build — copied from configuration.spec.policies",
+    )
 
     @classmethod
     def from_deployment_model(
@@ -723,6 +728,7 @@ class PlatformSpecModel(BaseModel):
             namespaces=None,
             modules=None,
             firewalls=None,
+            policies=None,
         )
 
 

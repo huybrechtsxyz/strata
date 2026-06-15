@@ -510,6 +510,7 @@ class PlatformBuilder(BaseBuilder):
             provisioners=provisioners,
             stereotypes=None,
             customer=platform_customer,
+            policies=getattr(configuration_model.spec, "policies", None) or None if configuration_model else None,
         )
 
     # ------------------------------------------------------------------

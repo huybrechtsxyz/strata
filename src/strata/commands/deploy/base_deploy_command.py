@@ -16,6 +16,7 @@ from strata.models.deployment_manifest_model import (
     ManifestArtifactProviderModel,
     ManifestArtifactsModel,
     ManifestPlatformModel,
+    ManifestPolicyResultModel,
     ManifestRepositoryModel,
     ManifestStageModel,
 )
@@ -51,6 +52,7 @@ class BaseDeployCommand(BaseCommand):
         self._build_path: Path = self._work_path / "build"
         self._deploy_started_at: Optional[str] = None
         self._stage_results: List[ManifestStageModel] = []
+        self._policy_results: List[ManifestPolicyResultModel] = []
 
     @abstractmethod
     def execute(self) -> bool:
@@ -338,6 +340,7 @@ class BaseDeployCommand(BaseCommand):
                     deployed_by=deployed_by,
                     artifacts=artifacts,
                     stages=self._stage_results if self._stage_results else None,
+                    policy_results=self._policy_results if self._policy_results else None,
                 ),
             )
 

@@ -540,6 +540,7 @@ class RunDeployCommand(BaseDeployCommand):
 
     def _evaluate_plan_policies(self, stage: DeploymentStageModel, deployer) -> bool:
         """Evaluate 'plan' phase policies. Returns False if any deny-enforcement policy fails."""
+        from strata.models.deployment_manifest_model import ManifestPolicyResultModel
         from strata.validators.policies.base_policy import PolicyContext
         from strata.validators.policies.policy_engine import PolicyEngine
 
@@ -570,7 +571,18 @@ class RunDeployCommand(BaseDeployCommand):
         results = engine.evaluate("plan", context)
 
         denied = False
-        for result in results:
+        for policy_model, result in zip(plan_policies, results, strict=False):
+            # Record in manifest accumulator (all results, not just failures)
+            self._policy_results.append(
+                ManifestPolicyResultModel(
+                    policy_name=result.policy_name,
+                    policy_type=policy_model.type,
+                    phase="plan",
+                    enforcement=result.enforcement,
+                    passed=result.passed,
+                    violations=result.violations or [],
+                )
+            )
             if result.passed:
                 if self._is_verbose() and self._is_console_output():
                     click.echo(f"    \u2713  Policy '{result.policy_name}' passed")
