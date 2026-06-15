@@ -76,6 +76,7 @@ strata
    decisions/0003-layered-architecture
    decisions/0004-exit-code-convention
    decisions/0005-secret-resolution-at-build-time
+   decisions/0006-policy-engine-for-deployment-guardrails
 
 .. toctree::
    :maxdepth: 2
