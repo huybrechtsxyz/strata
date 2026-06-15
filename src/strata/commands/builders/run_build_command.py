@@ -62,6 +62,15 @@ class RunBuildCommand(BaseBuildCommand):
             if self._dry_run and self._is_console_output():
                 click.echo("\n[DRY-RUN] Validating and planning build — no files will be written")
 
+            if not self._run_lifecycle_phase(
+                "build_run_before",
+                context={"file": str(self._file_path), "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-build lifecycle hook failed")
+                self._finalize(success=False)
+                return False
+
             if not self._execute_platform_build():
                 if self._is_console_output():
                     click.echo("\n❌  Platform build failed")
@@ -95,6 +104,15 @@ class RunBuildCommand(BaseBuildCommand):
             if not self._execute_sbom_build():
                 if self._is_console_output():
                     click.echo("\n❌  SBOM build failed")
+                self._finalize(success=False)
+                return False
+
+            if not self._run_lifecycle_phase(
+                "build_run_after",
+                context={"file": str(self._file_path), "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Post-build lifecycle hook failed")
                 self._finalize(success=False)
                 return False
 

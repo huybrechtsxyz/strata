@@ -85,9 +85,29 @@ class RunDeployCommand(BaseDeployCommand):
             if self._dry_run and self._is_console_output():
                 click.echo("\n[DRY-RUN] Validating and planning deploy — no provisioning will run")
 
+            if not self._run_lifecycle_phase(
+                "deploy_run_before",
+                context={"file": str(self._file_path), "stage": self._stage, "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-deploy lifecycle hook failed")
+                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
+                self._finalize(success=False)
+                return False
+
             if not self._execute_provisioning():
                 if self._is_console_output():
                     click.echo("\n❌  Deploy provisioning failed")
+                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
+                self._finalize(success=False)
+                return False
+
+            if not self._run_lifecycle_phase(
+                "deploy_run_after",
+                context={"file": str(self._file_path), "stage": self._stage, "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Post-deploy lifecycle hook failed")
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
@@ -309,6 +329,23 @@ class RunDeployCommand(BaseDeployCommand):
                 }
             )
 
+        # --- stage-level before hook ---
+        if not self._run_lifecycle_phase(
+            "deploy_stage_before",
+            context={"stage": str(stage.name), "dry_run": self._dry_run},
+        ):
+            self._errors.append(f"Stage '{stage.name}': deploy_stage_before lifecycle hook failed.")
+            self._record_stage_result(
+                stage_name=str(stage.name),
+                provisioner=stage.provisioner,
+                topology=stage.topology,
+                status="failed",
+                started_at=stage_started,
+                completed_at=_dt.now(_tz.utc).isoformat(),
+                error="deploy_stage_before hook failed",
+            )
+            return False
+
         # --- execute each step ---
         for step_name in steps_to_run:
             if step_name not in supported:
@@ -396,6 +433,25 @@ class RunDeployCommand(BaseDeployCommand):
                     }
                 )
 
+            # --- plan gate: enforce deploy_plan_after hook before apply ---
+            if step_name == STEP_PLAN and STEP_APPLY in steps_to_run:
+                if not self._run_lifecycle_phase(
+                    "deploy_plan_after",
+                    context={"stage": str(stage.name), "dry_run": self._dry_run},
+                ):
+                    self._errors.append(f"Stage '{stage.name}': deploy_plan_after lifecycle hook blocked apply.")
+                    self._record_stage_result(
+                        stage_name=str(stage.name),
+                        provisioner=stage.provisioner,
+                        topology=stage.topology,
+                        status="failed",
+                        started_at=stage_started,
+                        completed_at=_dt.now(_tz.utc).isoformat(),
+                        steps=steps_to_run,
+                        error="deploy_plan_after hook blocked apply",
+                    )
+                    return False
+
         # --- save plan JSON for artifact upload / downstream use ---
         if STEP_PLAN in steps_to_run:
             ok_save, plan_json_path, save_msgs = deployer.save_plan_json()
@@ -457,6 +513,14 @@ class RunDeployCommand(BaseDeployCommand):
             steps=steps_to_run,
             outputs=stage_outputs,
         )
+
+        # --- stage-level after hook ---
+        if not self._run_lifecycle_phase(
+            "deploy_stage_after",
+            context={"stage": str(stage.name), "dry_run": self._dry_run},
+        ):
+            self._errors.append(f"Stage '{stage.name}': deploy_stage_after lifecycle hook failed.")
+            return False
 
         return True
 

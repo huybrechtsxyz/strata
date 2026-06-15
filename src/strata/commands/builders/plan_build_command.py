@@ -73,7 +73,26 @@ class PlanBuildCommand(BaseBuildCommand):
                 self._finalize(success=False)
                 return False
 
+            if not self._run_lifecycle_phase(
+                "build_plan_before",
+                context={"file": str(self._file_path)},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-plan lifecycle hook failed")
+                self._finalize(success=False)
+                return False
+
             success = self._run_plan()
+
+            if success and not self._run_lifecycle_phase(
+                "build_plan_after",
+                context={"file": str(self._file_path)},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Post-plan lifecycle hook failed")
+                self._finalize(success=False)
+                return False
+
             self._finalize(success=success)
             return success
 

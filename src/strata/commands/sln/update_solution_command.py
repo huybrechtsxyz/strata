@@ -68,10 +68,28 @@ class UpdateSolutionCommand(BaseCommand):
                 self._finalize(success=False)
                 return False
 
+            if not self._run_lifecycle_phase(
+                "solution_update_before",
+                context={"work_path": str(self._work_path)},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-update lifecycle hook failed")
+                self._finalize(success=False)
+                return False
+
             if not self._run_execution():
                 self.logger.error(f"Execution failed in {self.__class__.__name__}")
                 if self._is_console_output():
                     click.echo("\n❌  Execution failed")
+                self._finalize(success=False)
+                return False
+
+            if not self._run_lifecycle_phase(
+                "solution_update_after",
+                context={"work_path": str(self._work_path)},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Post-update lifecycle hook failed")
                 self._finalize(success=False)
                 return False
 

@@ -83,9 +83,29 @@ class DestroyDeployCommand(BaseDeployCommand):
             elif self._is_console_output():
                 click.echo("\n⚠️  --destroy: removing provisioned infrastructure per stage")
 
+            if not self._run_lifecycle_phase(
+                "deploy_destroy_before",
+                context={"file": str(self._file_path), "stage": self._stage, "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-destroy lifecycle hook failed")
+                self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
+                self._finalize(success=False)
+                return False
+
             if not self._execute_provisioning():
                 if self._is_console_output():
                     click.echo("\n❌  Destroy failed")
+                self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
+                self._finalize(success=False)
+                return False
+
+            if not self._run_lifecycle_phase(
+                "deploy_destroy_after",
+                context={"file": str(self._file_path), "stage": self._stage, "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Post-destroy lifecycle hook failed")
                 self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
