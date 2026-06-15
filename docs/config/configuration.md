@@ -100,11 +100,11 @@ resources:
         description: "Whether automated backups are enabled"
 ```
 
-| Field         | Type     | Default | Description                                              |
-| ------------- | -------- | ------- | -------------------------------------------------------- |
-| `pattern`     | `str`    | —       | Regex the field value must fully match                   |
-| `required`    | `bool`   | `true`  | Whether the field must be present in resource config     |
-| `description` | `str`    | `null`  | Human-readable description of the field                  |
+| Field         | Type   | Default | Description                                          |
+| ------------- | ------ | ------- | ---------------------------------------------------- |
+| `pattern`     | `str`  | —       | Regex the field value must fully match               |
+| `required`    | `bool` | `true`  | Whether the field must be present in resource config |
+| `description` | `str`  | `null`  | Human-readable description of the field              |
 
 > **Boolean fields must use a pattern — there is no native `type: boolean` in the schema.**
 > The configuration schema is regex-only; all values are validated as strings.
@@ -184,6 +184,87 @@ spec:
       - github
       - azure-keyvault
 ```
+
+---
+
+## Deployment Artifacts
+
+The `spec.deployment` section controls where deployment artifacts are persisted.
+
+### Manifest Storage
+
+Controls where the deployment manifest (full audit record) is written after every deploy run.
+When absent, manifests are not written.
+
+```yaml
+spec:
+  deployment:
+    manifest:
+      type: local                     # local | gitops
+      path: ".strata/deployments"     # base path; appended: /{deployment}/{version}/{timestamp}.json
+```
+
+For GitOps storage:
+
+```yaml
+spec:
+  deployment:
+    manifest:
+      type: gitops
+      repository: state-repo          # must match a name in spec.repositories
+      branch: manifests
+      path: deployments
+      tag: true                       # create git tag {deployment}/{version} after write
+```
+
+| Field        | Type   | Default               | Description                                   |
+| ------------ | ------ | --------------------- | --------------------------------------------- |
+| `type`       | `enum` | —                     | `local` or `gitops`                           |
+| `path`       | `str`  | `.strata/deployments` | Base path for manifest files                  |
+| `repository` | `str`  | `null`                | Repository name (required when `type=gitops`) |
+| `branch`     | `str`  | `null`                | Target branch (required when `type=gitops`)   |
+| `tag`        | `bool` | `true`                | Create a git tag after writing (gitops only)  |
+
+### Terraform Output Artifact Storage
+
+Controls whether Terraform output values are written to a durable artifact file after a successful
+deploy. When absent, outputs are available to downstream stages within the same run but not persisted.
+
+```yaml
+spec:
+  deployment:
+    outputs:
+      enabled: true                   # set to false to disable
+      path: ".strata/outputs"         # base path; appended: /{deployment}/{version}/{stage}.json
+      sensitive: redact               # redact | omit
+```
+
+Written to: `{work_path}/{path}/{deployment_name}/{version}/{stage_name}.json`
+
+Artifact structure:
+
+```json
+{
+  "deployment": "prod_deploy",
+  "version": "2.0.0",
+  "stage": "network",
+  "written_at": "2026-06-15T10:00:00Z",
+  "outputs": {
+    "server_ip": "10.0.0.5",
+    "db_password": "(sensitive)"
+  }
+}
+```
+
+| Field       | Type   | Default           | Description                                                                         |
+| ----------- | ------ | ----------------- | ----------------------------------------------------------------------------------- |
+| `enabled`   | `bool` | `true`            | Write the artifact. Set `false` to disable without removing config                  |
+| `path`      | `str`  | `.strata/outputs` | Base path for output artifacts                                                      |
+| `sensitive` | `enum` | `redact`          | `redact` — keep key, replace value with `"(sensitive)"`. `omit` — drop key entirely |
+
+> Sensitive output handling applies to any Terraform output declared `sensitive = true`.
+> Non-sensitive outputs are always stored as-is.
+> Write failures are non-fatal and logged as warnings.
 
 ---
 
