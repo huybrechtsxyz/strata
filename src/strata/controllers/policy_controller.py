@@ -8,8 +8,10 @@ from strata.models.policy_model import PolicyModel
 
 # Maps provisioner type keywords to the lifecycle phases they trigger.
 # "validate" is always triggered regardless of provisioner type.
+# "tf_" is a common short-form prefix for terraform provisioner names.
 _PROVISIONER_PHASE_MAP: dict[str, list[str]] = {
     "terraform": ["build", "plan", "deploy"],
+    "tf_": ["build", "plan", "deploy"],
     "helm": ["build", "deploy"],
     "ansible": ["build", "deploy"],
     "compose": ["build", "deploy"],
