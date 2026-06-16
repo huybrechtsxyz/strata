@@ -78,12 +78,14 @@ strata
    decisions/0004-exit-code-convention
    decisions/0005-secret-resolution-at-build-time
    decisions/0006-policy-engine-for-deployment-guardrails
+   decisions/0007-deployment-state-locking
 
 .. toctree::
    :maxdepth: 2
    :caption: Guides:
 
    guides/how-deployments-work
+   guides/how-deployment-locking-works
    guides/faq
    guides/cookbook-add-environment
    guides/pattern-cross-env-changes

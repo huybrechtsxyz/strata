@@ -525,6 +525,100 @@ Stages reference a provisioner by name. The backend tool used by that provisione
 - **Testing:** Test in lower environments first
 - **Rollback plan:** Maintain previous configs
 
+## Locking
+
+Optionally protect the deploy pipeline from concurrent runs. When enabled, strata acquires a lock before the first stage and releases it in a `finally` block — covering hooks, Terraform, Ansible, health checks, and policy evaluation.
+
+The lock backend is derived automatically from the provisioner's `backend.type` — no separate connection configuration is needed.
+
+```yaml
+spec:
+  locking:
+    enabled: true          # false by default
+    strategy: wrap         # wrap | delegate  (default: wrap)
+    wait_timeout: 30m      # how long to wait for a held lock (default: 30m)
+    force_unlock_after: 8h # stale lock TTL — auto-release after this (default: 8h)
+```
+
+| Field                | Type                  | Default | Description                                                                           |
+| -------------------- | --------------------- | ------- | ------------------------------------------------------------------------------------- |
+| `enabled`            | bool                  | `false` | Activate locking for this deployment                                                  |
+| `strategy`           | `wrap` \| `delegate`  | `wrap`  | `wrap` = strata holds the lock; `delegate` = trust TFC run queue (TFC-only pipelines) |
+| `wait_timeout`       | duration (e.g. `30m`) | `30m`   | How long `deploy run` waits for a held lock before aborting with exit code 3          |
+| `force_unlock_after` | duration (e.g. `8h`)  | `8h`    | *(Phase 3)* Auto-release stale locks older than this threshold                        |
+
+`--dry-run` always skips lock acquisition regardless of this setting.
+
+### Lock Backend by Provisioner Type
+
+The backend is selected from the first Terraform provisioner's `backend.type`. Stages with no backend (Ansible, scripts) fall back to a local file lock.
+
+| `backend.type`    | Lock mechanism                       | Multi-machine | Requires                    |
+| ----------------- | ------------------------------------ | ------------- | --------------------------- |
+| `azurerm`         | Azure Blob infinite lease            | Yes           | `az` CLI + Storage access   |
+| `terraform_cloud` | TFC Workspace Lock API               | Yes           | `TF_TOKEN_app_terraform_io` |
+| `remote`          | TFC Workspace Lock API (alias)       | Yes           | `TF_TOKEN_app_terraform_io` |
+| `consul`          | Consul session + KV acquire          | Yes           | `CONSUL_HTTP_TOKEN` (opt.)  |
+| `s3`              | *(Phase 3)* DynamoDB conditional put | Yes           | `boto3` + AWS credentials   |
+| `gcs`             | *(Phase 3)* GCS object conditions    | Yes           | `google-cloud-storage`      |
+| `local` / none    | File lock (`fcntl` / `msvcrt`)       | No            | None                        |
+
+### Example — Azure Blob lock
+
+```yaml
+spec:
+  locking:
+    enabled: true
+    wait_timeout: 15m
+  # Lock backend derived from the first provisioner's backend:
+  # workspace.spec.provisioners[*].backend.type: azurerm
+  # (storage_account_name + container_name read from backend.configuration)
+```
+
+### Example — Terraform Cloud lock
+
+```yaml
+spec:
+  locking:
+    enabled: true
+    wait_timeout: 30m
+  # Lock backend derived from:
+  # workspace.spec.provisioners[*].backend.type: terraform_cloud
+  # organization + workspaces.name read from backend.configuration
+  # Token from TF_TOKEN_app_terraform_io env var or ~/.terraformrc
+```
+
+### Example — Consul lock
+
+```yaml
+spec:
+  locking:
+    enabled: true
+    wait_timeout: 10m
+  # Lock backend derived from:
+  # workspace.spec.provisioners[*].backend.type: consul
+  # address read from backend.configuration (default: http://127.0.0.1:8500)
+  # Token from CONSUL_HTTP_TOKEN env var
+```
+
+### Managing locks manually
+
+```bash
+# Inspect current state
+strata deploy lock status -f deployment.yaml
+
+# Release a stuck lock (your own)
+strata deploy lock release -f deployment.yaml
+
+# Force-release another holder's lock
+strata deploy lock release -f deployment.yaml --force
+
+# View recent lock history
+strata deploy lock history -f deployment.yaml --last 20
+```
+
+---
+
 ## Validation
 
 Platform validates:

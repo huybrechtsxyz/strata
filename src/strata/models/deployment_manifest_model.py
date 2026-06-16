@@ -144,6 +144,22 @@ class ManifestOutputsReferenceModel(PlatformBaseModel):
     written_at: str = Field(description="ISO-8601 timestamp of the artifact write")
 
 
+class ManifestLockReferenceModel(PlatformBaseModel):
+    """State lock audit trail recorded in the deployment manifest.
+
+    Populated when ``spec.locking.enabled: true`` on the deployment.
+    Records which backend held the lock, who held it, and when it was
+    released — providing a complete concurrency audit trail per deploy run.
+    """
+
+    lock_id: str = Field(description="Unique lock identifier (UUID or backend-native ID)")
+    backend: str = Field(description="Lock backend type: azurerm | terraform_cloud | s3 | consul | gcs | local")
+    acquired_at: str = Field(description="ISO-8601 timestamp when the lock was acquired")
+    released_at: Optional[str] = Field(None, description="ISO-8601 timestamp when the lock was released")
+    holder: str = Field(description="Identity of the lock holder (user or CI actor)")
+    hostname: str = Field(description="Hostname of the machine that acquired the lock")
+
+
 # ---------------------------------------------------------------------------
 # Stage result model
 # ---------------------------------------------------------------------------
@@ -240,6 +256,9 @@ class DeploymentManifestSpecModel(PlatformBaseModel):
     signatures: Optional[Dict[str, Any]] = Field(None, description="Signing/attestation data (future)")
     policy_results: Optional[List[ManifestPolicyResultModel]] = Field(
         None, description="Policy evaluation results from all phases run during this deployment"
+    )
+    lock: Optional[ManifestLockReferenceModel] = Field(
+        None, description="State lock audit trail — populated when spec.locking.enabled: true"
     )
 
 

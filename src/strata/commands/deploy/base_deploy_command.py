@@ -16,6 +16,7 @@ from strata.models.deployment_manifest_model import (
     ManifestArtifactImageModel,
     ManifestArtifactProviderModel,
     ManifestArtifactsModel,
+    ManifestLockReferenceModel,
     ManifestOutputsReferenceModel,
     ManifestPlatformModel,
     ManifestPolicyResultModel,
@@ -55,6 +56,7 @@ class BaseDeployCommand(BaseCommand):
         self._deploy_started_at: Optional[str] = None
         self._stage_results: List[ManifestStageModel] = []
         self._policy_results: List[ManifestPolicyResultModel] = []
+        self._lock_ref: Optional[ManifestLockReferenceModel] = None
 
     @abstractmethod
     def execute(self) -> bool:
@@ -345,6 +347,7 @@ class BaseDeployCommand(BaseCommand):
                     artifacts=artifacts,
                     stages=self._stage_results if self._stage_results else None,
                     policy_results=self._policy_results if self._policy_results else None,
+                    lock=self._lock_ref,
                 ),
             )
 

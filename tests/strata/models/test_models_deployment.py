@@ -3,7 +3,12 @@
 import pytest
 from pydantic import ValidationError
 
-from strata.models.deployment_model import DeploymentModel, DeploymentStageModel, DeploymentStageTimeoutsModel
+from strata.models.deployment_model import (
+    DeploymentLockingModel,
+    DeploymentModel,
+    DeploymentStageModel,
+    DeploymentStageTimeoutsModel,
+)
 
 
 class TestDeploymentStageTimeoutsModel:
@@ -127,3 +132,78 @@ class TestDeploymentCustomerField:
         """Uppercase / spaces are rejected by PlatformName constraint."""
         with pytest.raises(ValidationError):
             self._model(customer="ACME Corp")
+
+
+class TestDeploymentLockingModel:
+    """Tests for DeploymentLockingModel and its wiring into DeploymentSpecModel."""
+
+    def _model(self, locking=None):
+        spec = {
+            "workspace": {"name": "ws", "file": "workspace.yaml"},
+            "environments": ["env.yaml"],
+        }
+        if locking is not None:
+            spec["locking"] = locking
+        return DeploymentModel.model_validate(
+            {
+                "apiVersion": "strata.huybrechts.xyz/v1",
+                "kind": "deployment",
+                "meta": {"name": "test_deploy"},
+                "spec": spec,
+            }
+        )
+
+    def test_locking_absent_defaults_none(self):
+        """spec.locking is None when not declared."""
+        model = self._model()
+        assert model.spec.locking is None
+
+    def test_locking_enabled_false_by_default(self):
+        """enabled defaults to False when locking block is present but empty."""
+        model = self._model(locking={})
+        assert model.spec.locking is not None
+        assert model.spec.locking.enabled is False
+
+    def test_locking_defaults(self):
+        """All defaults apply when only enabled: true is set."""
+        model = self._model(locking={"enabled": True})
+        lock = model.spec.locking
+        assert lock.enabled is True
+        assert lock.strategy == "wrap"
+        assert lock.wait_timeout == "30m"
+        assert lock.force_unlock_after == "8h"
+
+    def test_locking_full_config(self):
+        """All fields accepted when explicitly provided."""
+        model = self._model(
+            locking={
+                "enabled": True,
+                "strategy": "delegate",
+                "wait_timeout": "1h",
+                "force_unlock_after": "24h",
+            }
+        )
+        lock = model.spec.locking
+        assert lock.strategy == "delegate"
+        assert lock.wait_timeout == "1h"
+        assert lock.force_unlock_after == "24h"
+
+    def test_strategy_invalid_value_rejected(self):
+        """An unknown strategy value is rejected by Pydantic."""
+        with pytest.raises(ValidationError):
+            self._model(locking={"strategy": "unknown"})
+
+    def test_locking_model_standalone(self):
+        """DeploymentLockingModel can be instantiated directly."""
+        lock = DeploymentLockingModel()
+        assert lock.enabled is False
+        assert lock.strategy == "wrap"
+
+    def test_locking_roundtrip(self):
+        """model_dump preserves all fields."""
+        lock = DeploymentLockingModel(enabled=True, strategy="delegate", wait_timeout="2h", force_unlock_after="12h")
+        data = lock.model_dump()
+        assert data["enabled"] is True
+        assert data["strategy"] == "delegate"
+        assert data["wait_timeout"] == "2h"
+        assert data["force_unlock_after"] == "12h"
