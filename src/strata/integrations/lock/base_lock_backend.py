@@ -122,7 +122,10 @@ class BaseLockBackend(ABC):
         """
 
 
-class LockTimeoutError(Exception):
+from strata.exceptions.base_exception import PlatformError
+
+
+class LockTimeoutError(PlatformError):
     """Raised when ``acquire()`` cannot obtain the lock within the timeout."""
 
     def __init__(self, deployment_name: str, timeout_seconds: int, holder: str) -> None:
@@ -130,9 +133,18 @@ class LockTimeoutError(Exception):
         self.timeout_seconds = timeout_seconds
         self.holder = holder
         super().__init__(
-            f"Could not acquire lock for '{deployment_name}' within {timeout_seconds}s (currently held by {holder!r})"
+            message=f"Could not acquire lock for '{deployment_name}' within {timeout_seconds}s (currently held by {holder!r})",
+            error_code="LOCK_TIMEOUT",
+            details={
+                "deployment": deployment_name,
+                "timeout_seconds": timeout_seconds,
+                "holder": holder,
+            },
         )
 
 
-class LockBackendError(Exception):
+class LockBackendError(PlatformError):
     """Raised when the lock backend returns an unexpected error."""
+
+    def __init__(self, message: str, *, cause: Exception | None = None) -> None:
+        super().__init__(message=message, error_code="LOCK_BACKEND_ERROR", cause=cause)

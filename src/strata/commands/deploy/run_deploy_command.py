@@ -848,14 +848,22 @@ class RunDeployCommand(BaseDeployCommand):
     # -------------------------------------------------------------------------
 
     def _should_lock(self) -> bool:
-        """Return True if locking is enabled and this is not a dry-run."""
+        """Return True if locking is enabled and this is not a dry-run.
+
+        Returns ``False`` immediately for dry-runs and for the ``delegate``
+        strategy (which trusts the backend's native locking, e.g. TFC run queue).
+        """
         if self._dry_run:
             return False
         if self._deployment_service is None:
             return False
         spec = self._deployment_service.model.spec  # type: ignore[union-attr]
         locking = getattr(spec, "locking", None)
-        return locking is not None and locking.enabled
+        if locking is None or not locking.enabled:
+            return False
+        if locking.strategy == "delegate":
+            return False
+        return True
 
     def _resolve_lock_backend(self, stages: List[DeploymentStageModel]) -> BaseLockBackend:
         """Return the lock backend from the first Terraform provisioner with a backend.

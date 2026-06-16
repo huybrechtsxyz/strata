@@ -335,6 +335,17 @@ class TestLockingWiring:
         cmd._deployment_service = svc
         assert cmd._should_lock() is True
 
+    def test_should_lock_false_when_strategy_is_delegate(self, tmp_path):
+        """delegate strategy defers locking to the backend — strata must not take a lock."""
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        svc = MagicMock()
+        spec = _make_locking_spec(enabled=True)
+        spec.locking.strategy = "delegate"
+        svc.model.spec = spec
+        cmd._deployment_service = svc
+        assert cmd._should_lock() is False
+
     # ------------------------------------------------------------------
     # _acquire_lock / _release_lock
     # ------------------------------------------------------------------
