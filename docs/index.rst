@@ -84,6 +84,7 @@ strata
    :caption: Guides:
 
    guides/how-deployments-work
+   guides/how-deployment-locking-works
    guides/faq
    guides/cookbook-add-environment
    guides/pattern-cross-env-changes
