@@ -9,6 +9,22 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.7.0] — 2026-06-16
+
+### Added
+
+- **`strata policy check`** — standalone command to evaluate all declared policies for a given deployment file without running a deploy. Accepts `--file` / `-f` (required). Reports each policy result with pass/fail, enforcement level, and any violations. Exits with code 3 when one or more `deny` policies fail; exits 0 when all policies pass or only `warn`/`audit` policies are violated.
+- **`strata deploy outputs`** — reads stored deployment output artifact files written by a previous `strata deploy run`. Accepts `--stage`, `--key`, `--version`, and `--all-versions`. Resolves artifacts from `{work_path}/{outputs.path}/{deployment_name}/{version}/{stage}.json`; supports filtering to a single key for scripting.
+- **Deploy phase policy hook** — `RunDeployCommand._evaluate_phase_policies("deploy", …)` is now evaluated after Terraform plan succeeds and before apply runs. This extends the existing plan-phase gate so policies annotated with `phase: deploy` can block the apply step independently.
+- **`ManifestOutputsReferenceModel`** — new Pydantic model that records the workspace-relative path, stage name, version, and `written_at` ISO-8601 timestamp of a stored outputs artifact. Added as `ManifestStageModel.outputs_artifact` so each stage in the deployment manifest carries a typed reference to its output file when one was written.
+- **`NamingPolicy` `targets` parameter** — the `naming_pattern` built-in policy now accepts an optional `targets` list in its `configuration` block, defaulting to `["config_name"]` for full backward compatibility. Available targets: `config_name`, `deployment_name`, `stage_names`, `workspace_name`, `topology_names`, `resource_names`, `namespace_names`, `provisioner_names`, `module_names`, `volume_names`. Targets whose required service is absent from the evaluation context are silently skipped. Unknown target names produce a policy violation so misconfiguration is caught early.
+
+### Changed
+
+- `RunDeployCommand._evaluate_plan_policies` renamed to `_evaluate_phase_policies(phase, stage, deployer)` — the method now accepts an explicit phase string so it can serve both `plan` and `deploy` gates without duplication.
+
+---
+
 ## [0.6.0] — 2026-06-15
 
 ### Added
