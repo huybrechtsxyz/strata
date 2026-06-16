@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -25,7 +26,7 @@ def _make_backend(tmp_path: Path) -> LocalLockBackend:
 
 
 def _make_entry(**kwargs) -> LockEntry:
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         lock_id="test-lock-id",
         deployment="prod-platform",
         holder="alice@company.com",

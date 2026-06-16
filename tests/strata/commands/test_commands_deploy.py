@@ -465,7 +465,6 @@ class TestLockingWiring:
             patch.object(cmd, "_check_approvals", return_value=True),
         ):
             stage = _make_stage()
-            cmd._execute_provisioning.__func__  # ensure it exists
             # Call directly via the helper
             result = cmd._execute_provisioning()  # type: ignore[call-arg]
 

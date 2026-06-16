@@ -119,7 +119,7 @@ class TestAzurermToken:
 
 class TestAzurermAcquire:
     def _patch_backend(self, backend: AzurermLockBackend, token: str = "tok") -> None:
-        backend._get_token = MagicMock(return_value=token)
+        backend._get_token = MagicMock(return_value=token)  # type: ignore[method-assign]
 
     def test_acquire_success_first_attempt(self, tmp_path):
         backend = _make_backend(tmp_path)
