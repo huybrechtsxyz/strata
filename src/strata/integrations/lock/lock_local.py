@@ -3,8 +3,8 @@
 import dataclasses
 import json
 import os
-import platform
 import socket
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -85,7 +85,7 @@ class LocalLockBackend(BaseLockBackend):
 
         Returns ``True`` if the lock was obtained, ``False`` if already held.
         """
-        if platform.system() == "Windows":
+        if sys.platform == "win32":
             import msvcrt
 
             try:
@@ -97,7 +97,7 @@ class LocalLockBackend(BaseLockBackend):
             import fcntl
 
             try:
-                fcntl.flock(fp.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)  # type: ignore[attr-defined]
+                fcntl.flock(fp.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 return True
             except OSError:
                 return False
@@ -105,7 +105,7 @@ class LocalLockBackend(BaseLockBackend):
     @staticmethod
     def _os_unlock(fp: Any) -> None:
         """Release the OS-level lock on *fp*."""
-        if platform.system() == "Windows":
+        if sys.platform == "win32":
             import msvcrt
 
             try:
@@ -116,7 +116,7 @@ class LocalLockBackend(BaseLockBackend):
             import fcntl
 
             try:
-                fcntl.flock(fp.fileno(), fcntl.LOCK_UN)  # type: ignore[attr-defined]
+                fcntl.flock(fp.fileno(), fcntl.LOCK_UN)
             except OSError:
                 pass
 
