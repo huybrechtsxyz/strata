@@ -44,7 +44,7 @@ These options are accepted by every command and subcommand:
 | `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
 | `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
 | `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
-| `deploy` †   | `run` `destroy` `status` `history` `health` `output` `outputs`               | Deploy platform using provisioners                        |
+| `deploy` †   | `run` `destroy` `status` `history` `health` `output` `outputs` `lock`        | Deploy platform using provisioners                        |
 | `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
 | `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
 | `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations             |
@@ -1061,6 +1061,66 @@ strata deploy outputs -f xyz-deploy-prd.yaml --key endpoint
 strata deploy outputs -f xyz-deploy-prd.yaml --all-versions
 strata deploy outputs -f xyz-deploy-prd.yaml --version 2.0.0 --output json
 ```
+
+### `deploy lock`
+
+Manage deployment state locks. Locking is enabled in the deployment YAML via `spec.locking.enabled: true`. When enabled, `deploy run` acquires a lock before the first stage and releases it in a `finally` block — protecting the full pipeline (hooks, Terraform, Ansible, health checks) from concurrent runs.
+
+The lock backend is chosen automatically from the provisioner's `backend.type` — no separate connection configuration needed.
+
+#### `deploy lock status`
+
+```
+strata deploy lock status -f FILE [standard options]
+```
+
+Show the current lock state for the deployment. Exits `0` whether locked or unlocked.
+
+```bash
+strata deploy lock status -f xyz-deploy-prd.yaml
+strata deploy lock status -f xyz-deploy-prd.yaml --output json
+```
+
+**JSON output keys:** `locked` (bool), `deployment`, and when locked: `lock_id`, `holder`, `hostname`, `pid`, `acquired_at`, `expires_at`, `reason`.
+
+#### `deploy lock release`
+
+```
+strata deploy lock release -f FILE [--force] [standard options]
+```
+
+Release the deployment lock. Without `--force`, release is denied if the lock is held by a different user or host (exit code `3`). With `--force`, the lock is released regardless of holder — use for stuck CI runs or crashed deploys.
+
+| Option    | Description                                      |
+| --------- | ------------------------------------------------ |
+| `--force` | Release even if held by a different user or host |
+
+```bash
+strata deploy lock release -f xyz-deploy-prd.yaml
+strata deploy lock release -f xyz-deploy-prd.yaml --force
+```
+
+**Exit codes:** `0` released (or was not locked); `1` backend error; `3` lock held by another holder and `--force` not supplied.
+
+#### `deploy lock history`
+
+```
+strata deploy lock history -f FILE [--last N] [standard options]
+```
+
+Show recent lock events for the deployment (most recent first). History is stored locally in `{work_path}/.strata/locks/` as an append-only NDJSON file.
+
+| Option     | Type | Default | Description                               |
+| ---------- | ---- | ------- | ----------------------------------------- |
+| `--last N` | int  | `10`    | Number of recent events to show (max 100) |
+
+```bash
+strata deploy lock history -f xyz-deploy-prd.yaml
+strata deploy lock history -f xyz-deploy-prd.yaml --last 25
+strata deploy lock history -f xyz-deploy-prd.yaml --output json
+```
+
+**JSON output keys:** `deployment`, `entries[]` — each entry: `lock_id`, `holder`, `hostname`, `pid`, `acquired_at`, `expires_at`, `reason`, `stage`.
 
 ---
 

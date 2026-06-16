@@ -15,6 +15,7 @@ from strata.commands.cli_common import (
 from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
 from strata.commands.deploy.health_deploy_command import HealthDeployCommand
 from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
+from strata.commands.deploy.lock_deploy_command import LockHistoryCommand, LockReleaseCommand, LockStatusCommand
 from strata.commands.deploy.output_deploy_command import OutputDeployCommand
 from strata.commands.deploy.outputs_deploy_command import OutputsDeployCommand
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
@@ -358,6 +359,109 @@ def deploy_output(
         stage=stage,
         key=key,
         refresh=refresh,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+# ---------------------------------------------------------------------------
+# deploy lock subgroup
+# ---------------------------------------------------------------------------
+
+
+@deploy.group(name="lock", help="Manage deployment state locks.")
+def deploy_lock():
+    """Lock management subgroup."""
+    pass
+
+
+@deploy_lock.command(name="status", help="Show the current lock state for a deployment.")
+@click_file
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_lock_status(
+    file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Show current lock state."""
+    command = LockStatusCommand(
+        file=file,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@deploy_lock.command(name="release", help="Release the state lock for a deployment.")
+@click_file
+@click_work_path
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Release the lock even if held by a different user or host.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_lock_release(
+    file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    force: bool = False,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Release the current deployment lock."""
+    command = LockReleaseCommand(
+        file=file,
+        work_path=work_path,
+        force=force,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@deploy_lock.command(name="history", help="Show recent lock history for a deployment.")
+@click_file
+@click_work_path
+@click.option(
+    "--last",
+    default=10,
+    show_default=True,
+    type=click.IntRange(1, 100),
+    help="Number of recent lock events to show.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_lock_history(
+    file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    last: int = 10,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Show recent lock history."""
+    command = LockHistoryCommand(
+        file=file,
+        work_path=work_path,
+        last=last,
         output=output,
         verbose=verbose,
         quiet=quiet,

@@ -11,6 +11,7 @@ from strata.models.deployment_manifest_model import (
     ManifestArtifactImageModel,
     ManifestArtifactProviderModel,
     ManifestArtifactsModel,
+    ManifestLockReferenceModel,
     ManifestOutputsReferenceModel,
     ManifestPlatformModel,
     ManifestRepositoryModel,
@@ -376,3 +377,63 @@ class TestDeploymentManifestModel:
         assert m.url == "https://github.com/org/repo.git"
         assert m.ref == "main"
         assert m.commit == "abc123def456"
+
+
+class TestManifestLockReferenceModel:
+    """Tests for ManifestLockReferenceModel and its wiring into DeploymentManifestSpecModel."""
+
+    def _make_lock(self, **kwargs) -> ManifestLockReferenceModel:
+        defaults = dict(
+            lock_id="a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            backend="azurerm",
+            acquired_at="2026-06-16T14:02:01Z",
+            holder="alice@company.com",
+            hostname="WORKSTATION-A",
+        )
+        defaults.update(kwargs)
+        return ManifestLockReferenceModel(**defaults)
+
+    def test_minimal_required_fields(self):
+        lock = self._make_lock()
+        assert lock.lock_id == "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        assert lock.backend == "azurerm"
+        assert lock.acquired_at == "2026-06-16T14:02:01Z"
+        assert lock.holder == "alice@company.com"
+        assert lock.hostname == "WORKSTATION-A"
+        assert lock.released_at is None
+
+    def test_released_at_optional(self):
+        lock = self._make_lock(released_at="2026-06-16T14:32:01Z")
+        assert lock.released_at == "2026-06-16T14:32:01Z"
+
+    def test_all_backend_types_accepted(self):
+        for backend in ("azurerm", "terraform_cloud", "s3", "consul", "gcs", "local"):
+            lock = self._make_lock(backend=backend)
+            assert lock.backend == backend
+
+    def test_roundtrip_serialization(self):
+        lock = self._make_lock(released_at="2026-06-16T14:32:01Z")
+        data = lock.model_dump()
+        restored = ManifestLockReferenceModel(**data)
+        assert restored.lock_id == lock.lock_id
+        assert restored.released_at == lock.released_at
+
+    def test_missing_required_field_rejected(self):
+        with pytest.raises(ValidationError):
+            ManifestLockReferenceModel(  # type: ignore[call-arg]
+                backend="azurerm",
+                acquired_at="2026-06-16T14:02:01Z",
+                holder="alice@company.com",
+                # hostname missing
+            )
+
+    def test_wired_into_spec_absent_by_default(self):
+        spec = _make_spec()
+        assert spec.lock is None
+
+    def test_wired_into_spec_accepts_lock(self):
+        lock = self._make_lock()
+        spec = _make_spec(lock=lock)
+        assert spec.lock is not None
+        assert spec.lock.backend == "azurerm"
+        assert spec.lock.holder == "alice@company.com"

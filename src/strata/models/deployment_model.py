@@ -290,6 +290,35 @@ class DeploymentStageModel(PlatformBaseModel):
         return self
 
 
+class DeploymentLockingModel(PlatformBaseModel):
+    """Locking behaviour for spec.locking.
+
+    Connection config is not declared here — it is derived automatically from
+    ``provisioner.backend`` on the workspace IaC provisioner used by each stage.
+    The lock backend type is inferred from ``provisioner.backend.type``
+    (e.g. ``azurerm``, ``terraform_cloud``, ``s3``, ``consul``).
+    """
+
+    enabled: bool = Field(default=False, description="Enable pipeline-level state locking")
+    strategy: Literal["wrap", "delegate"] = Field(
+        default="wrap",
+        description=(
+            "wrap: strata acquires the lock before the first stage and holds it for the entire pipeline. "
+            "delegate: strata does not lock — relies on the backend's native locking "
+            "(TFC run queue, Terraform state lock). Only safe for pure-TFC remote execution pipelines."
+        ),
+    )
+    wait_timeout: str = Field(
+        default="30m",
+        description="How long to wait for a held lock before failing (e.g. 30m, 1h). Supports h/m/s suffixes.",
+    )
+    force_unlock_after: str = Field(
+        default="8h",
+        description="Stale lock TTL — auto-release a lock held longer than this duration (e.g. 8h). "
+        "Supports h/m/s suffixes.",
+    )
+
+
 class DeploymentSpecModel(PlatformBaseModel):
     """Model for deployment specification (properties, workspace, stages)."""
 
@@ -328,6 +357,9 @@ class DeploymentSpecModel(PlatformBaseModel):
         ),
     ]
     approvals: Optional[DeploymentApprovalModel] = Field(None, description="Approval configuration for this deployment")
+    locking: Optional[DeploymentLockingModel] = Field(
+        None, description="Pipeline locking behaviour for concurrent deploy protection"
+    )
     stages: Optional[List[DeploymentStageModel]] = Field(
         None,
         description="Optional deployment stages for multi-step execution (if not specified, single-step execution)",

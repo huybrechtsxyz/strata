@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from strata.commands.cli_deploy import deploy
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
+from strata.integrations.lock.base_lock_backend import LockBackendError, LockTimeoutError
 
 
 class TestDeployRun:
@@ -268,3 +269,292 @@ class TestEvaluatePhasePolices:
 
         assert result is True
         assert cmd._policy_results[0].phase == "plan"
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by TestLockingWiring
+# ---------------------------------------------------------------------------
+
+
+def _make_locking_spec(enabled: bool = True, wait_timeout: str = "5m") -> MagicMock:
+    locking = MagicMock()
+    locking.enabled = enabled
+    locking.wait_timeout = wait_timeout
+    spec = MagicMock()
+    spec.locking = locking
+    spec.approvals = None
+    return spec
+
+
+def _make_stage(name: str = "production") -> MagicMock:
+    stage = MagicMock()
+    stage.name = name
+    stage.provisioner = None
+    stage.topology = None
+    stage.scope = None
+    stage.on_failure = "stop"
+    stage.approval = None
+    return stage
+
+
+class TestLockingWiring:
+    """Unit-tests for _should_lock, _resolve_lock_backend, _acquire_lock, _release_lock,
+    and the lock wrapping inside _execute_provisioning."""
+
+    # ------------------------------------------------------------------
+    # _should_lock
+    # ------------------------------------------------------------------
+
+    def test_should_lock_false_when_dry_run(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = True
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True)
+        cmd._deployment_service = svc
+        assert cmd._should_lock() is False
+
+    def test_should_lock_false_when_locking_disabled(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=False)
+        cmd._deployment_service = svc
+        assert cmd._should_lock() is False
+
+    def test_should_lock_false_when_no_deployment_service(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._deployment_service = None
+        assert cmd._should_lock() is False
+
+    def test_should_lock_true_when_enabled_and_not_dry_run(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True)
+        cmd._deployment_service = svc
+        assert cmd._should_lock() is True
+
+    # ------------------------------------------------------------------
+    # _acquire_lock / _release_lock
+    # ------------------------------------------------------------------
+
+    def test_acquire_lock_returns_handle_and_sets_lock_ref(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True, wait_timeout="1m")
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        handle = MagicMock()
+        handle.lock_id = "abc-123"
+        handle.backend_type = "local"
+        handle.acquired_at = "2024-01-01T00:00:00Z"
+
+        backend = MagicMock()
+        backend.acquire.return_value = handle
+
+        result = cmd._acquire_lock(backend)
+
+        assert result is handle
+        assert cmd._lock_ref is not None
+        assert cmd._lock_ref.lock_id == "abc-123"
+        assert cmd._lock_ref.backend == "local"
+
+    def test_acquire_lock_returns_none_on_timeout(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True)
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        backend = MagicMock()
+        exc = LockTimeoutError(deployment_name="my-deploy", timeout_seconds=60, holder="ci-bot")
+        backend.acquire.side_effect = exc
+
+        result = cmd._acquire_lock(backend)
+
+        assert result is None
+        assert len(cmd._errors) == 1
+
+    def test_acquire_lock_returns_none_on_backend_error(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True)
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        backend = MagicMock()
+        backend.acquire.side_effect = LockBackendError("disk full")
+
+        result = cmd._acquire_lock(backend)
+
+        assert result is None
+        assert len(cmd._errors) == 1
+
+    def test_release_lock_updates_released_at(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        from strata.models.deployment_manifest_model import ManifestLockReferenceModel
+
+        cmd._lock_ref = ManifestLockReferenceModel(
+            lock_id="abc-123",
+            backend="local",
+            acquired_at="2024-01-01T00:00:00Z",
+            holder="me",
+            hostname="host",
+        )
+
+        handle = MagicMock()
+        handle.lock_id = "abc-123"
+        handle.backend_type = "local"
+
+        backend = MagicMock()
+        cmd._release_lock(backend, handle)
+
+        backend.release.assert_called_once_with(handle)
+        assert cmd._lock_ref.released_at is not None
+
+    def test_release_lock_swallows_exceptions(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        handle = MagicMock()
+        handle.lock_id = "abc-123"
+        handle.backend_type = "local"
+
+        backend = MagicMock()
+        backend.release.side_effect = RuntimeError("disk gone")
+
+        # Must not raise
+        cmd._release_lock(backend, handle)
+
+    # ------------------------------------------------------------------
+    # Stage loop wrapping — acquire called before stages, release in finally
+    # ------------------------------------------------------------------
+
+    def test_acquire_called_before_stages_when_locking_enabled(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"  # suppress emoji echoes on Windows terminals
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True)
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        handle = MagicMock()
+        handle.lock_id = "h1"
+        handle.backend_type = "local"
+        handle.acquired_at = "2024-01-01T00:00:00Z"
+
+        backend_mock = MagicMock()
+        backend_mock.acquire.return_value = handle
+
+        with (
+            patch.object(cmd, "_should_lock", return_value=True),
+            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
+            patch.object(cmd, "_check_approvals", return_value=True),
+        ):
+            stage = _make_stage()
+            cmd._execute_provisioning.__func__  # ensure it exists
+            # Call directly via the helper
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        # acquire was called
+        backend_mock.acquire.assert_called_once()
+        assert result is True
+
+    def test_release_called_in_finally_on_success(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True)
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        handle = MagicMock()
+        handle.lock_id = "h1"
+        handle.backend_type = "local"
+        handle.acquired_at = "2024-01-01T00:00:00Z"
+
+        backend_mock = MagicMock()
+        backend_mock.acquire.return_value = handle
+
+        with (
+            patch.object(cmd, "_should_lock", return_value=True),
+            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
+            patch.object(cmd, "_check_approvals", return_value=True),
+        ):
+            cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        backend_mock.release.assert_called_once_with(handle)
+
+    def test_release_called_in_finally_on_stage_failure(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"
+        stage = _make_stage()
+        spec = _make_locking_spec(enabled=True)
+        spec.stages = [stage]
+        svc = MagicMock()
+        svc.model.spec = spec
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        handle = MagicMock()
+        handle.lock_id = "h1"
+        handle.backend_type = "local"
+        handle.acquired_at = "2024-01-01T00:00:00Z"
+
+        backend_mock = MagicMock()
+        backend_mock.acquire.return_value = handle
+
+        with (
+            patch.object(cmd, "_should_lock", return_value=True),
+            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=False),
+            patch.object(cmd, "_check_approvals", return_value=True),
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is False
+        backend_mock.release.assert_called_once_with(handle)
+
+    def test_dry_run_skips_lock(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = True
+        cmd._output_format = "json"
+
+        backend_mock = MagicMock()
+
+        with (
+            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
+            patch.object(cmd, "_execute_stage_provisioning", return_value=True),
+            patch.object(cmd, "_check_approvals", return_value=True),
+        ):
+            cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        backend_mock.acquire.assert_not_called()
+
+    def test_lock_timeout_makes_execute_provisioning_return_false(self, tmp_path):
+        cmd = _make_run_command(tmp_path)
+        cmd._dry_run = False
+        cmd._output_format = "json"
+        svc = MagicMock()
+        svc.model.spec = _make_locking_spec(enabled=True)
+        svc.model.meta.name = "my-deploy"
+        cmd._deployment_service = svc
+
+        exc = LockTimeoutError(deployment_name="my-deploy", timeout_seconds=60, holder="ci-bot")
+        backend_mock = MagicMock()
+        backend_mock.acquire.side_effect = exc
+
+        with (
+            patch.object(cmd, "_should_lock", return_value=True),
+            patch.object(cmd, "_resolve_lock_backend", return_value=backend_mock),
+            patch.object(cmd, "_check_approvals", return_value=True),
+        ):
+            result = cmd._execute_provisioning()  # type: ignore[call-arg]
+
+        assert result is False
+        assert len(cmd._errors) > 0
