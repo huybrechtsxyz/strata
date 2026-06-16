@@ -79,6 +79,7 @@ strata
    decisions/0005-secret-resolution-at-build-time
    decisions/0006-policy-engine-for-deployment-guardrails
    decisions/0007-deployment-state-locking
+   decisions/0008-infrastructure-drift-detection
 
 .. toctree::
    :maxdepth: 2
