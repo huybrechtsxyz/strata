@@ -57,6 +57,17 @@ class WorkspaceVolumeModel(PlatformBaseModel):
     type: str = Field(
         default="local", description="Volume storage type (e.g., local, replicated, distributed, nfs, iscsi, etc.)"
     )
+    size: Optional[str] = Field(None, description="Volume capacity (e.g., '10Gi', '500Mi', '1Ti')")
+    mount_path: Optional[str] = Field(None, description="Mount path for the volume (e.g., '/data', '/mnt/shared')")
+    access_mode: Optional[str] = Field(
+        None, description="Access mode (e.g., 'ReadWriteOnce', 'ReadWriteMany', 'ReadOnlyMany')"
+    )
+    driver: Optional[str] = Field(
+        None, description="Storage driver or CSI plugin (e.g., 'nfs.csi.k8s.io', 'local-path')"
+    )
+    configuration: Optional[Dict[str, Any]] = Field(
+        None, description="Driver-specific configuration (e.g., server, share, secretRef)"
+    )
 
 
 class WorkspaceModuleReferenceModel(PlatformBaseModel):
