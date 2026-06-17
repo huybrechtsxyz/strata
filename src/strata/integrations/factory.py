@@ -34,6 +34,7 @@ class IntegrationFactory:
         "azure_appconfig": ("strata.integrations.azure_appconfig", "AzureAppConfigIntegration"),
         "azure_keyvault": ("strata.integrations.azure_keyvault", "AzureKeyVaultIntegration"),
         "bitwarden": ("strata.integrations.bitwarden", "BitwardenIntegration"),
+        "cve_scanner": ("strata.integrations.cve_scanner", "CveScannerIntegration"),
         "docker": ("strata.integrations.docker", "DockerIntegration"),
         "etcd": ("strata.integrations.etcd", "EtcdIntegration"),
         "flagsmith": ("strata.integrations.flagsmith", "FlagsmithIntegration"),

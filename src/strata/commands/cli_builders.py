@@ -172,6 +172,27 @@ def build_plan(
     default=False,
     help="Skip application dependency scanning (DependencyFileCollector). Useful for large repos where lockfile scanning is slow.",
 )
+@click.option(
+    "--audit",
+    is_flag=True,
+    default=False,
+    help="Run CVE vulnerability scan after generating the SBOM (requires trivy or grype).",
+)
+@click.option(
+    "--severity",
+    "audit_severity",
+    type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"], case_sensitive=False),
+    default="MEDIUM",
+    show_default=True,
+    help="Minimum severity to report in CVE audit.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW"], case_sensitive=False),
+    default=None,
+    help="Exit non-zero (code 3) if findings at this severity or above exist.",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -182,6 +203,9 @@ def build_sbom(
     report: str = "cyclonedx",
     output_file: Optional[str] = None,
     no_deps: bool = False,
+    audit: bool = False,
+    audit_severity: str = "MEDIUM",
+    fail_on: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -200,6 +224,9 @@ def build_sbom(
         report=report,
         output_file=output_file,
         no_deps=no_deps,
+        audit=audit,
+        audit_severity=audit_severity.upper(),
+        fail_on=fail_on.upper() if fail_on else None,
     )
     success = command.execute()
     handle_command_exit(command, success)
