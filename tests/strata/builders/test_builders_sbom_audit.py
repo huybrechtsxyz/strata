@@ -75,18 +75,18 @@ class TestExecuteAudit:
         return cmd
 
     @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
-    def test_scanner_unavailable_returns_true(self, MockScanner):
+    def test_scanner_unavailable_returns_true(self, mock_scanner):
         """When no scanner installed, audit is skipped gracefully."""
-        instance = MockScanner.return_value
+        instance = mock_scanner.return_value
         instance.ensure_available.return_value = (False, "not found")
 
         cmd = self._make_command()
         assert cmd._execute_audit(Path("sbom.json")) is True
 
     @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
-    def test_clean_audit_returns_true(self, MockScanner):
+    def test_clean_audit_returns_true(self, mock_scanner):
         """No findings → success."""
-        instance = MockScanner.return_value
+        instance = mock_scanner.return_value
         instance.ensure_available.return_value = (True, "")
         instance.scan_sbom.return_value = _make_result()
 
@@ -95,9 +95,9 @@ class TestExecuteAudit:
         assert cmd._output_data["audit"]["total_findings"] == 0
 
     @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
-    def test_findings_without_fail_on_returns_true(self, MockScanner):
+    def test_findings_without_fail_on_returns_true(self, mock_scanner):
         """Findings exist but no --fail-on → success (advisory only)."""
-        instance = MockScanner.return_value
+        instance = mock_scanner.return_value
         instance.ensure_available.return_value = (True, "")
         instance.scan_sbom.return_value = _make_result(
             high=2,
@@ -109,9 +109,9 @@ class TestExecuteAudit:
         assert cmd._output_data["audit"]["high"] == 2
 
     @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
-    def test_fail_on_breached_returns_false(self, MockScanner):
+    def test_fail_on_breached_returns_false(self, mock_scanner):
         """--fail-on HIGH with HIGH findings → failure."""
-        instance = MockScanner.return_value
+        instance = mock_scanner.return_value
         instance.ensure_available.return_value = (True, "")
         instance.scan_sbom.return_value = _make_result(
             high=1,
@@ -123,9 +123,9 @@ class TestExecuteAudit:
         assert any("gate failed" in e for e in cmd._errors)
 
     @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
-    def test_fail_on_critical_passes_when_only_high(self, MockScanner):
+    def test_fail_on_critical_passes_when_only_high(self, mock_scanner):
         """--fail-on CRITICAL with only HIGH findings → pass."""
-        instance = MockScanner.return_value
+        instance = mock_scanner.return_value
         instance.ensure_available.return_value = (True, "")
         instance.scan_sbom.return_value = _make_result(
             high=3,
@@ -136,9 +136,9 @@ class TestExecuteAudit:
         assert cmd._execute_audit(Path("sbom.json")) is True
 
     @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
-    def test_ndjson_output_emits_findings(self, MockScanner):
+    def test_ndjson_output_emits_findings(self, mock_scanner):
         """In NDJSON mode, each finding is emitted as a data event."""
-        instance = MockScanner.return_value
+        instance = mock_scanner.return_value
         instance.ensure_available.return_value = (True, "")
         instance.scan_sbom.return_value = _make_result(
             critical=1,
@@ -155,9 +155,9 @@ class TestExecuteAudit:
         assert payload["audit_finding"]["severity"] == "CRITICAL"
 
     @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
-    def test_runtime_error_from_scanner(self, MockScanner):
+    def test_runtime_error_from_scanner(self, mock_scanner):
         """Scanner raises RuntimeError → audit fails."""
-        instance = MockScanner.return_value
+        instance = mock_scanner.return_value
         instance.ensure_available.return_value = (True, "")
         instance.scan_sbom.side_effect = RuntimeError("scanner crashed")
 
