@@ -9,6 +9,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.8.2] — 2026-06-17
+
+### Fixed
+
+- CI docs workflow: Added `--group doc` to `uv sync` to include Sphinx dependencies
+- CI docs workflow: Removed impossible `if` condition that prevented deployment on tag triggers
+
+---
+
 ## [0.8.1] — 2026-06-17
 
 ### Added
