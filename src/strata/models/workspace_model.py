@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Pydantic models for workspace configuration validation."""
 
-from enum import Enum
 from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
@@ -21,15 +20,6 @@ from strata.models.common_models import (
     SourceModel,
     validate_slot_type,
 )
-
-
-# Enumeration of supported workspace volume types.
-class WorkspaceVolumeType(str, Enum):
-    """Supported workspace volume types."""
-
-    local = "local"
-    replicated = "replicated"
-    distributed = "distributed"
 
 
 class WorkspaceNamespaceModel(PlatformBaseModel):
@@ -64,7 +54,24 @@ class WorkspaceVolumeModel(PlatformBaseModel):
     """Model for a workspace volume."""
 
     name: PlatformName = Field(description="Unique volume name within the topology")
-    type: WorkspaceVolumeType = Field(default=WorkspaceVolumeType.local, description="Type of the volume")
+    type: str = Field(
+        default="local", description="Volume storage type (e.g., local, replicated, distributed, nfs, iscsi, etc.)"
+    )
+    size: Optional[str] = Field(None, description="Volume capacity (e.g., '10Gi', '500Mi', '1Ti')")
+    mount_path: Optional[str] = Field(None, description="Mount path for the volume (e.g., '/data', '/mnt/shared')")
+    access_mode: Optional[str] = Field(
+        None,
+        description="Volume access mode - concurrency pattern at container level (e.g., 'ReadWriteOnce', 'ReadWriteMany', 'ReadOnlyMany')",
+    )
+    mode: Optional[str] = Field(
+        None, description="Filesystem permissions within the volume (e.g., '0755' octal, 'rw', 'ro')"
+    )
+    driver: Optional[str] = Field(
+        None, description="Storage driver or CSI plugin (e.g., 'nfs.csi.k8s.io', 'local-path')"
+    )
+    configuration: Optional[Dict[str, Any]] = Field(
+        None, description="Driver-specific configuration (e.g., server, share, secretRef)"
+    )
 
 
 class WorkspaceModuleReferenceModel(PlatformBaseModel):
