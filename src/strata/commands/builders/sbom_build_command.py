@@ -199,7 +199,10 @@ class SbomBuildCommand(BaseBuildCommand):
 
     def _execute_scan(self) -> bool:
         """Run SBOM scan against a directory without deployment context."""
+        from datetime import datetime
+
         assert self._scan_path is not None
+        self._start_time = datetime.now()
 
         if not self._scan_path.is_dir():
             self._errors.append(f"Scan path is not a directory: {self._scan_path}")
