@@ -9,6 +9,26 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.8.1] — 2026-06-17
+
+### Added
+
+- GitHub Pages CI workflow for automated documentation deployment on release tags
+- Enhanced workspace volume model with optional fields: `size`, `mount_path`, `driver`, `mode`, `configuration`
+
+### Fixed
+
+- Issue #109: Allow any string for topology volume type (removed restrictive enum)
+- Clarified `access_mode` (container-level concurrency) vs `mode` (filesystem permissions) in volume model
+
+### Changed
+
+- Documentation now deployed to GitHub Pages (`https://huybrechtsxyz.github.io/strata`)
+- Support link updated to GitHub Issues (`https://github.com/huybrechtsxyz/strata/issues`)
+- Updated `DOCS_URL` and `SUPPORT_URL` constants in `src/strata/utils/config.py`
+
+---
+
 ## [0.8.0] — 2026-06-17
 
 ### Added
