@@ -24,11 +24,10 @@ jobs:
 
       - name: Build docs with Sphinx
         run: |
-          uv sync
+          uv sync --group doc
           uv run sphinx-build -b html docs docs/_build/html -q
 
       - name: Deploy to gh-pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
