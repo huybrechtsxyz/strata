@@ -140,12 +140,40 @@ def build_plan(
 @build.command(name="sbom", help="(Re)generate SBOM from an existing platform.json.")
 @click_file
 @click_work_path
+@click.option(
+    "--report",
+    type=click.Choice(["cyclonedx", "inventory"], case_sensitive=False),
+    default="cyclonedx",
+    show_default=True,
+    help="Output mode: cyclonedx writes sbom.json; inventory prints a human-readable component listing.",
+)
+@click.option(
+    "--output-file",
+    "output_file",
+    default=None,
+    metavar="PATH",
+    help=(
+        "Write output to PATH instead of the default location. "
+        "For cyclonedx: overrides the default sbom.json path. "
+        "For inventory: writes to PATH instead of stdout."
+    ),
+)
+@click.option(
+    "--no-deps",
+    "no_deps",
+    is_flag=True,
+    default=False,
+    help="Skip application dependency scanning (DependencyFileCollector). Useful for large repos where lockfile scanning is slow.",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
 def build_sbom(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
+    report: str = "cyclonedx",
+    output_file: Optional[str] = None,
+    no_deps: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -157,6 +185,9 @@ def build_sbom(
         output=output,
         verbose=verbose,
         quiet=quiet,
+        report=report,
+        output_file=output_file,
+        no_deps=no_deps,
     )
     success = command.execute()
     handle_command_exit(command, success)

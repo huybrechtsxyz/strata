@@ -567,13 +567,35 @@ strata build plan --stage production --artifacts-only
 ### `build sbom`
 
 ```
-strata build sbom [-f FILE] [standard options]
+strata build sbom [-f FILE] [--report MODE] [--output-file PATH] [--no-deps] [standard options]
 ```
 
-Regenerates the SBOM from an existing `platform.json` without a full rebuild. Reads the build directory, runs all collectors (images, Helm charts, Terraform providers, Ansible collections/roles), and writes `sbom.json` alongside `platform.json`.
+Regenerates the SBOM from an existing `platform.json` without a full rebuild. Runs all
+collectors (images, Compose services, Helm charts, Terraform providers and modules,
+Ansible collections, application dependencies) and writes `sbom.json` alongside
+`platform.json`.
+
+`--report` selects the output style:
+
+| Flag                 | Behaviour                                                |
+| -------------------- | -------------------------------------------------------- |
+| `--report cyclonedx` | Write `sbom.json` (CycloneDX 1.6 JSON) — **default**     |
+| `--report inventory` | Print a human-readable grouped listing to stdout         |
+| `--output-file PATH` | Write to *PATH* instead of the default location / stdout |
+| `--no-deps`          | Skip `DependencyFileCollector` (faster for large repos)  |
 
 ```bash
+# Regenerate sbom.json
 strata build sbom -f xyz-deploy-prd.yaml
+
+# Print a human-readable platform inventory
+strata build sbom -f xyz-deploy-prd.yaml --report inventory
+
+# Save the inventory to a file
+strata build sbom -f xyz-deploy-prd.yaml --report inventory --output-file inventory.txt
+
+# Skip lockfile scanning (faster)
+strata build sbom -f xyz-deploy-prd.yaml --no-deps
 ```
 
 ### `build clean`

@@ -670,16 +670,41 @@ Generates a CycloneDX 1.6 JSON Software Bill of Materials from an existing `plat
 {deployment_build_path}/sbom.json
 ```
 
+### Report Modes
+
+`--report` selects what `strata build sbom` produces:
+
+| Mode        | Output                                                        | Use for                             |
+| ----------- | ------------------------------------------------------------- | ----------------------------------- |
+| `cyclonedx` | `sbom.json` (CycloneDX 1.6 JSON) — **default**                | Supply-chain scanning, compliance   |
+| `inventory` | Human-readable grouped listing to stdout (or `--output-file`) | Onboarding, quick platform overview |
+
+```bash
+# Write sbom.json (default)
+strata build sbom -f xyz-deploy-prd.yaml
+
+# Print a human-readable inventory to the terminal
+strata build sbom -f xyz-deploy-prd.yaml --report inventory
+
+# Save the inventory to a file
+strata build sbom -f xyz-deploy-prd.yaml --report inventory --output-file inventory.txt
+```
+
+Both modes run the same collector pipeline — no second pass.
+
 ### Collector Pattern
 
-`SbomBuilder` delegates component discovery to pluggable collectors. Each collector implements `BaseSbomCollector` and is responsible for one artifact type. The default set:
+`SbomBuilder` delegates component discovery to pluggable collectors. Each collector implements `BaseSbomCollector` and is responsible for one artifact type. The default set (in execution order):
 
-| Collector                    | Source                                               | PURL type         |
-| ---------------------------- | ---------------------------------------------------- | ----------------- |
-| `ContainerImageCollector`    | `platform.spec.modules[].services[].image`           | `pkg:docker/…`    |
-| `HelmChartCollector`         | Provisioners with `type: helm`                       | `pkg:helm/…`      |
-| `TerraformProviderCollector` | `required_providers {}` blocks in `*.tf` build files | `pkg:terraform/…` |
-| `AnsibleCollectionCollector` | `requirements.yml` files in the build directory      | `pkg:ansible/…`   |
+| Collector                    | Source                                                     | PURL type         |
+| ---------------------------- | ---------------------------------------------------------- | ----------------- |
+| `ContainerImageCollector`    | `platform.spec.modules[].services[].image`                 | `pkg:docker/…`    |
+| `ComposeImageCollector`      | `docker-compose.yml` service images in the build directory | `pkg:docker/…`    |
+| `HelmChartCollector`         | Provisioners with `type: helm`                             | `pkg:helm/…`      |
+| `TerraformProviderCollector` | `required_providers {}` blocks in `*.tf` build files       | `pkg:terraform/…` |
+| `TerraformModuleCollector`   | `module {}` blocks in `*.tf` build files                   | `pkg:terraform/…` |
+| `AnsibleCollectionCollector` | `requirements.yml` files in the build directory            | `pkg:ansible/…`   |
+| `DependencyFileCollector`    | Dependency manifests in workspace repos (see below)        | `pkg:pypi/…` etc. |
 
 Collectors are injectable — pass `collectors=[…]` to the constructor for testing or extension:
 
@@ -716,13 +741,192 @@ Container images with non-pinned tags (`latest`, `main`, `dev`, etc.) are flagge
 
 Verifies `sbom.json` exists on disk (skipped in dry-run). Returns `False` and adds an error if the file is absent.
 
-### Adding a New Collector
+### DependencyFileCollector — Scope Control
 
-1. Create a class extending `BaseSbomCollector` in `builders/sbom/`.
-2. Implement `get_collector_name() -> str` and `collect(platform, work_path, deployment_build_path) -> List[SbomComponentModel]`.
-3. Use `self._add_warning(msg)` for non-fatal issues (e.g. unparseable files, missing versions).
-4. Add helper PURLs to `utils/sbom_utils.py` if the component type is new.
-5. Register the collector in `SbomBuilder._default_collectors()`.
+`DependencyFileCollector` scans workspace repos for dependency manifests
+(`requirements*.txt`, `pyproject.toml`, `uv.lock`, `package-lock.json`, `go.sum`).
+To keep build times predictable it limits its search:
+
+**Scan paths** — taken from `solution.json → spec.repositories` (the repos registered
+in the solution).  If no repositories are registered, it falls back to walking
+`work_path`.
+
+**Skip dependency scanning entirely** — pass `--no-deps` to `strata build sbom` to
+exclude `DependencyFileCollector` from the run.  Useful for large repos where lockfile
+scanning is slow and dependency coverage is not needed for the current build.
+
+```bash
+strata build sbom -f xyz-deploy-prd.yaml --no-deps
+```
+
+**Ignore patterns** — controlled by `.strata/sbom-ignore.yaml` (optional):
+
+```yaml
+# .strata/sbom-ignore.yaml
+ignore_paths:
+  - "**/node_modules"     # always ignored by default
+  - "**/.venv"            # always ignored by default
+  - "docs/**"             # example: skip docs folder
+ignore_files:
+  - "requirements-dev.txt"
+  - "requirements-test.txt"
+```
+
+Default ignored paths include `**/node_modules`, `**/.venv`, `**/venv`, `**/dist`,
+`**/build`, `**/__pycache__`, and `**/.git`.  Entries in `sbom-ignore.yaml` are
+**additive** — they extend the defaults rather than replace them.
+
+**Built-in lockfile formats:**
+
+| File pattern        | Ecosystem | Parser                  |
+| ------------------- | --------- | ----------------------- |
+| `requirements*.txt` | `pypi`    | `RequirementsTxtParser` |
+| `pyproject.toml`    | `pypi`    | `PyprojectTomlParser`   |
+| `uv.lock`           | `pypi`    | `UvLockParser`          |
+| `package-lock.json` | `npm`     | `PackageLockJsonParser` |
+| `go.sum`            | `golang`  | `GoSumParser`           |
+
+Additional formats are added via workspace lockfile parser plugins — see below.
+
+### Extending the SBOM
+
+#### Workspace plugins
+
+Teams can add collectors and lockfile parsers without forking strata.  Plugins are
+declared in `.strata/collectors.yaml` and loaded at build time:
+
+```yaml
+# .strata/collectors.yaml
+collectors:
+  # A full BaseSbomCollector subclass — appended after the built-ins
+  - name: cargo
+    path: .strata/plugins/cargo_collector.py
+    class: CargoCollector
+    type: collector
+
+  # A LockfileParser subclass — auto-registered into DependencyFileCollector
+  - name: cargo-lock
+    path: .strata/plugins/cargo_lockfile_parser.py
+    type: lockfile_parser   # class is optional — __init_subclass__ handles it
+```
+
+`path` is relative to the workspace root.  Use `module` instead of `path` to load
+from an installed package:
+
+```yaml
+  - name: cargo-lock
+    module: my_company.strata_plugins.cargo
+    type: lockfile_parser
+```
+
+`strata sln init` creates `.strata/plugins/` with two annotated starter templates,
+plus a commented-out `collectors.yaml` stub and an `sbom-ignore.yaml` stub:
+
+- `my_collector.py` — skeleton for a `BaseSbomCollector` subclass
+- `my_lockfile_parser.py` — skeleton for a `LockfileParser` subclass
+- `collectors.yaml` — plugin declarations (all examples commented out by default)
+- `sbom-ignore.yaml` — ignore rules for `DependencyFileCollector`
+
+#### Writing a collector plugin
+
+A collector plugin reads from any source (files, APIs, environment) and returns
+`SbomComponentModel` instances:
+
+```python
+# .strata/plugins/my_collector.py
+from pathlib import Path
+from typing import List
+from strata.builders.sbom.base_sbom_collector import BaseSbomCollector
+from strata.models.sbom_model import SbomComponentModel
+
+class CargoCollector(BaseSbomCollector):
+    def get_collector_name(self) -> str:
+        return "cargo"
+
+    def collect(
+        self,
+        platform,           # PlatformArtifactModel
+        work_path: Path,
+        deployment_build_path: Path,
+    ) -> List[SbomComponentModel]:
+        components = []
+        # ... scan files, call APIs, etc.
+        # Use self._add_warning(msg) for non-fatal issues.
+        components.append(SbomComponentModel(
+            name="serde",
+            version="1.0.193",
+            purl="pkg:cargo/serde@1.0.193",
+            source_collector=self.get_collector_name(),
+        ))
+        return components
+```
+
+Then declare it in `.strata/collectors.yaml` with `type: collector`.
+
+#### Writing a lockfile parser plugin
+
+A lockfile parser plugin is even simpler — it reads one file format and returns
+`(name, version)` pairs.  `DependencyFileCollector` handles purl construction,
+deduplication, and `SbomComponentModel` creation:
+
+```python
+# .strata/plugins/cargo_lockfile_parser.py
+import tomllib
+from pathlib import Path
+from typing import List
+from strata.builders.sbom.lockfile_parsers import LockfileParser, RawDependency
+
+# Defining this class is all that's needed.
+# __init_subclass__ fires on class body execution and calls
+# DEFAULT_REGISTRY.register(CargoLockParser()) automatically.
+class CargoLockParser(LockfileParser):
+    @property
+    def ecosystem(self) -> str:
+        return "cargo"
+
+    def filename_patterns(self) -> List[str]:
+        return ["Cargo.lock"]
+
+    def parse(self, path: Path) -> List[RawDependency]:
+        with path.open("rb") as fh:
+            data = tomllib.load(fh)
+        return [
+            RawDependency(name=pkg["name"], version=pkg.get("version"))
+            for pkg in data.get("package", [])
+        ]
+```
+
+Declare it in `.strata/collectors.yaml` with `type: lockfile_parser` — `class` is
+optional because importing the module is sufficient to trigger auto-registration:
+
+```yaml
+collectors:
+  - name: cargo-lock
+    path: .strata/plugins/cargo_lockfile_parser.py
+    type: lockfile_parser
+```
+
+#### Test isolation
+
+Because `LockfileParser.__init_subclass__` fires at class-definition time into the
+module-level `DEFAULT_REGISTRY`, test parsers **must** use `register=False` to avoid
+polluting the registry across test runs:
+
+```python
+class FakeParser(LockfileParser, register=False):
+    ...
+```
+
+Alternatively inject a fresh registry:
+
+```python
+from strata.builders.sbom.lockfile_parsers import LockfileParserRegistry
+from strata.builders.sbom.deps_collector import DependencyFileCollector
+
+registry = LockfileParserRegistry()
+registry.register(MyTestParser())
+collector = DependencyFileCollector(registry=registry)
+```
 
 ---
 

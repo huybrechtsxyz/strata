@@ -1,6 +1,6 @@
 # Infrastructure drift detection
 
-- Status: proposed
+- Status: in design
 - Date: 2026-06-16
 - Issue: #122
 
@@ -184,7 +184,7 @@ concurrent state refresh and apply would corrupt state.
 
 ### Execution Flow
 
-```mermaid
+```text
 sequenceDiagram
     participant CLI as strata deploy drift
     participant Cmd as DriftDeployCommand
@@ -308,7 +308,7 @@ Users can override by placing a `drift_rules.yaml` in their workspace root or un
 
 History is stored per-deployment at `.strata/drift/{deployment_name}.drift.json`:
 
-```json
+```text
 {
   "deployment": "prod-platform",
   "baseline_at": "2026-06-10T00:00:00Z",

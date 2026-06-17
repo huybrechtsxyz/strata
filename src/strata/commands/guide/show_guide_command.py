@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -286,6 +287,33 @@ class GuideCommand(BaseCommand):
             checklist.append(ChecklistItem(7, "Build artifact exists", "warn", "directory is empty"))
         else:
             checklist.append(ChecklistItem(7, "Build artifact exists", "ok"))
+        phase7 = checklist[6]
+
+        # Phase 8 — Platform inventory generated (blocked when build does not exist)
+        if phase7.status == "pending":
+            checklist.append(ChecklistItem(8, "Platform inventory generated", "pending"))
+        else:
+            sbom_files = list(build_path.rglob("sbom.json")) if build_path.exists() else []
+            if not sbom_files:
+                checklist.append(ChecklistItem(8, "Platform inventory generated", "pending"))
+            else:
+                # Count components across all found sbom.json files (sum for multi-deployment workspaces)
+                total_components = 0
+                for sbom_path in sbom_files:
+                    try:
+                        with open(sbom_path, encoding="utf-8") as fh:
+                            sbom_data = json.load(fh)
+                        total_components += len(sbom_data.get("components", []))
+                    except Exception:
+                        pass
+                if total_components > 0:
+                    checklist.append(
+                        ChecklistItem(8, "Platform inventory generated", "ok", f"{total_components} components")
+                    )
+                else:
+                    checklist.append(
+                        ChecklistItem(8, "Platform inventory generated", "warn", "sbom.json present but empty")
+                    )
 
         return checklist
 
@@ -310,6 +338,7 @@ class GuideCommand(BaseCommand):
             5: "Profile activated",
             6: "File references registered",
             7: "Build artifact exists",
+            8: "Platform inventory generated",
         }
 
         for item in checklist:

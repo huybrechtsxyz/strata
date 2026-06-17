@@ -167,7 +167,7 @@ class TestGuideCommandWorkspaceChecklist:
     # -----------------------------------------------------------------------
 
     def test_fully_initialized_all_ok_json(self, tmp_path):
-        """All 7 phases ✅ → complete:true, next_steps:[], every status 'ok'."""
+        """All 8 phases ✅ → complete:true, next_steps:[], every status 'ok'."""
         repo_dir = tmp_path / "repos" / "xyz-svc-app"
         repo_dir.mkdir(parents=True)
         solution = _make_solution_json(
@@ -180,6 +180,13 @@ class TestGuideCommandWorkspaceChecklist:
             ],
         )
         _make_workspace(tmp_path, solution=solution, build_files=["platform.json"])
+        # Phase 8 — write a valid sbom.json with at least one component
+        sbom_path = tmp_path / "build" / "sbom.json"
+        sbom_path.write_text(
+            json.dumps(
+                {"bomFormat": "CycloneDX", "components": [{"type": "library", "name": "nginx", "version": "1.27.0"}]}
+            )
+        )
 
         result = _runner().invoke(
             guide_command,

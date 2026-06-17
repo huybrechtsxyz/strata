@@ -25,6 +25,18 @@ phases:
   7:
     hint: "strata build run"
     see_also: "strata help --topic build"
+  8:
+    hint: |-
+      Generate the platform inventory:
+
+        strata build sbom -f <file>
+
+      Or for a human-readable overview:
+
+        strata build sbom -f <file> --report inventory
+
+      See: docs/platform/builders.md
+    see_also: "docs/platform/builders.md"
 
 kinds:
   configuration:

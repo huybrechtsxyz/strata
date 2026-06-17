@@ -127,6 +127,70 @@ def helm_chart_to_purl(
     return purl
 
 
+def terraform_module_to_purl(source: str, version: Optional[str] = None) -> Optional[str]:
+    """Convert a Terraform module source string to a Package URL.
+
+    Returns ``None`` for local modules (``./`` or ``../``) and unsupported
+    source formats (e.g. Bitbucket, unknown hosts).  The caller is responsible
+    for deciding whether to warn on a ``None`` return.
+
+    Supported source formats:
+
+    - ``registry.terraform.io/namespace/module/provider`` →
+      ``pkg:terraform/namespace/module@version?repository_url=registry.terraform.io``
+    - ``namespace/module/provider`` (short public-registry form) →
+      same, with ``registry.terraform.io`` assumed
+    - ``github.com/org/repo[//subdir][?ref=tag]`` →
+      ``pkg:github/org/repo@ref`` (``?ref=`` query param or *version* attribute)
+    """
+    if source.startswith("./") or source.startswith("../"):
+        return None
+
+    # Strip subdirectory suffix (//subdir)
+    base = source.split("//")[0]
+
+    # ---- GitHub --------------------------------------------------------
+    if base.startswith("github.com/"):
+        # Search for ?ref= in the original source (may follow the //subdir suffix)
+        ref_match = re.search(r"\?ref=([^&\s]+)", source)
+        ref = (ref_match.group(1) if ref_match else None) or version
+        path = base.split("?")[0]  # strip query string for path parsing
+        parts = path.split("/")  # ["github.com", "org", "repo", ...]
+        if len(parts) < 3:
+            return None
+        org_repo = f"{parts[1]}/{parts[2]}"
+        purl = f"pkg:github/{org_repo}"
+        if ref:
+            purl += f"@{ref}"
+        return purl
+
+    # ---- Explicit Terraform registry -----------------------------------
+    if base.startswith("registry.terraform.io/"):
+        remainder = base[len("registry.terraform.io/") :]
+        parts = [p for p in remainder.split("/") if p]
+        if len(parts) < 2:
+            return None
+        name = f"{parts[0]}/{parts[1]}"  # namespace/module (drop provider suffix)
+        purl = f"pkg:terraform/{name}"
+        if version:
+            purl += f"@{version}"
+        purl += "?repository_url=registry.terraform.io"
+        return purl
+
+    # ---- Short-form public registry: namespace/module/provider ---------
+    parts = [p for p in base.split("/") if p]
+    if len(parts) == 3 and "." not in parts[0]:
+        name = f"{parts[0]}/{parts[1]}"
+        purl = f"pkg:terraform/{name}"
+        if version:
+            purl += f"@{version}"
+        purl += "?repository_url=registry.terraform.io"
+        return purl
+
+    # Unsupported source format (Bitbucket, other Git hosts, etc.)
+    return None
+
+
 def terraform_provider_to_purl(source: str, version: Optional[str] = None) -> str:
     """Convert a Terraform provider source to a Package URL string.
 

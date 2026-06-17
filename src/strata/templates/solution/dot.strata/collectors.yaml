@@ -1,0 +1,49 @@
+# .strata/collectors.yaml
+#
+# Workspace-local SBOM collector plugins.
+#
+# Declare custom collectors or lockfile parsers here to extend
+# "strata build sbom" without modifying strata core.  Both types
+# are loaded at build time via CollectorPluginLoader.
+#
+# Two plugin types are supported:
+#
+#   type: collector
+#     A BaseSbomCollector subclass.  Instantiated and appended after the
+#     built-in collectors (images, Compose, Helm, Terraform, Ansible, deps).
+#     Requires "class" and either "path" or "module".
+#     Starter template: .strata/plugins/my_collector.py
+#
+#   type: lockfile_parser
+#     A LockfileParser subclass.  The file is imported for its side effects —
+#     LockfileParser.__init_subclass__ fires and auto-registers every concrete
+#     parser into DEFAULT_REGISTRY, which DependencyFileCollector uses.
+#     "class" is optional (importing the module is sufficient).
+#     Starter template: .strata/plugins/my_lockfile_parser.py
+#
+# Path resolution: "path" values are relative to the workspace root.
+# Use "module" instead of "path" to load from an installed Python package.
+#
+# Examples (all commented out — uncomment and fill in to activate):
+#
+# collectors:
+#
+#   # A full collector — reads any source and returns SbomComponentModel list
+#   - name: cargo
+#     path: .strata/plugins/cargo_collector.py
+#     class: CargoCollector
+#     type: collector
+#
+#   # A lockfile parser — teaches DependencyFileCollector to read Cargo.lock
+#   - name: cargo-lock
+#     path: .strata/plugins/cargo_lockfile_parser.py
+#     type: lockfile_parser   # class is optional
+#
+#   # Load from an installed package instead of a local file
+#   - name: nuget-lock
+#     module: my_company.strata_plugins.nuget
+#     type: lockfile_parser
+#
+# See docs/platform/builders.md — "Extending the SBOM" for full details.
+
+collectors: []

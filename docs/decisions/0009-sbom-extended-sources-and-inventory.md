@@ -1,6 +1,6 @@
 # Extended SBOM sources and platform inventory
 
-- Status: proposed
+- Status: active
 - Date: 2026-06-17
 - Issue: #122 (related)
 

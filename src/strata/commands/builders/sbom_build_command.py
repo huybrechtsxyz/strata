@@ -1,5 +1,6 @@
 """Command to (re)generate the SBOM from an existing platform.json."""
 
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -27,6 +28,9 @@ class SbomBuildCommand(BaseBuildCommand):
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
+        report: str = "cyclonedx",
+        output_file: Optional[str] = None,
+        no_deps: bool = False,
     ):
         super().__init__(
             file=file,
@@ -35,6 +39,9 @@ class SbomBuildCommand(BaseBuildCommand):
             verbose=verbose,
             quiet=quiet,
         )
+        self._report = report
+        self._output_file: Optional[Path] = Path(output_file) if output_file else None
+        self._no_deps = no_deps
 
     def get_required_integrations(self):
         return {}
@@ -53,11 +60,18 @@ class SbomBuildCommand(BaseBuildCommand):
                 self._finalize(success=False)
                 return False
 
-            if not self._execute_sbom_build():
-                if self._is_console_output():
-                    click.echo("\n❌  SBOM build failed")
-                self._finalize(success=False)
-                return False
+            if self._report == "inventory":
+                if not self._execute_inventory():
+                    if self._is_console_output():
+                        click.echo("\n❌  Inventory generation failed")
+                    self._finalize(success=False)
+                    return False
+            else:
+                if not self._execute_sbom_build():
+                    if self._is_console_output():
+                        click.echo("\n❌  SBOM build failed")
+                    self._finalize(success=False)
+                    return False
 
             self._output_data.update(
                 {
@@ -91,7 +105,7 @@ class SbomBuildCommand(BaseBuildCommand):
             self._errors.append("Platform model validation failed")
             return False
 
-        builder = SbomBuilder(verbose=self._is_verbose())
+        builder = SbomBuilder(verbose=self._is_verbose(), no_deps=self._no_deps)
 
         ok = builder.before_build(
             deployment_service=self._deployment_service,
@@ -129,5 +143,43 @@ class SbomBuildCommand(BaseBuildCommand):
         if not ok:
             self._errors.extend(builder.get_errors())
             return False
+
+        return True
+
+    def _execute_inventory(self) -> bool:
+        if self._deployment_service is None:
+            self._errors.append("Deployment service not loaded")
+            return False
+
+        platform_path = self._deployment_service.get_build_path(self._build_path) / "platform.json"
+        if not platform_path.exists():
+            self._errors.append(f"Platform model not found at: {platform_path}. Run 'strata build run' first.")
+            return False
+
+        platform_service = PlatformService.load(str(platform_path), validate=True)
+        if not platform_service.is_validated() or not platform_service.model:
+            self._errors.append("Platform model validation failed")
+            return False
+
+        builder = SbomBuilder(verbose=self._is_verbose(), no_deps=self._no_deps)
+        text = builder.render_inventory(
+            deployment_service=self._deployment_service,
+            work_path=self._work_path,
+            build_path=self._build_path,
+            platform_model=platform_service.model,
+            solution_controller=self._solution_controller,
+        )
+        self._messages.extend(builder.drain_messages())
+        if text is None:
+            self._errors.extend(builder.get_errors())
+            return False
+
+        if self._output_file is not None:
+            self._output_file.parent.mkdir(parents=True, exist_ok=True)
+            self._output_file.write_text(text, encoding="utf-8")
+            if self._is_console_output():
+                click.echo(f"Inventory written to: {self._output_file}")
+        else:
+            click.echo(text)
 
         return True
