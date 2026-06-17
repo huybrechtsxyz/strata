@@ -438,12 +438,10 @@ class SbomBuilder(BaseBuilder):
 
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         title = f"Platform Inventory — {deployment_name}" if deployment_name else "Platform Inventory"
-        separator = "━" * 64
 
         lines: List[str] = [
             "",
             f"{title}  (built {now})",
-            separator,
         ]
 
         floating_count = 0

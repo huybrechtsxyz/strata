@@ -204,6 +204,9 @@ class SbomBuildCommand(BaseBuildCommand):
         assert self._scan_path is not None
         self._start_time = datetime.now()
 
+        if self._is_console_output():
+            self.show_console_header(work_path=str(self._scan_path))
+
         if not self._scan_path.is_dir():
             self._errors.append(f"Scan path is not a directory: {self._scan_path}")
             self._finalize(success=False)
