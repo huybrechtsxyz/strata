@@ -9,6 +9,38 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.8.0] — 2026-06-17
+
+### Added
+
+- **CVE audit (`strata build sbom --audit`)** — vulnerability scanning step that runs after SBOM generation using a locally-installed scanner (Trivy preferred, Grype as fallback). No external API calls — the scanner runs offline against the generated `sbom.json`.
+  - `--audit` flag enables scanning; no-op with a warning when no scanner is in PATH.
+  - `--severity LEVEL` (default `MEDIUM`) sets the minimum severity to report (`CRITICAL` | `HIGH` | `MEDIUM` | `LOW` | `UNKNOWN`).
+  - `--fail-on LEVEL` exits with code 3 when findings at or above the given severity exist. Without `--fail-on`, the audit is advisory only.
+  - Console output: severity summary table + top 10 findings.
+  - NDJSON output: each finding emitted as a `data` event with an `audit_finding` payload.
+  - JSON/text output: `audit` key added to the result envelope with severity counts.
+- **`CveScannerIntegration`** — new integration (`integrations/cve_scanner.py`) wrapping Trivy and Grype. Auto-detects whichever backend is in PATH. Exposes `scan_sbom(path, severity_threshold, timeout) → CveAuditResultModel`.
+- **`CveFindingModel` / `CveAuditResultModel`** — Pydantic models for structured CVE scan results added to `models/sbom_model.py`.
+- **`sbom_license` policy** — new built-in policy type that enforces license allow/deny lists on SBOM components at the `build` phase. Reads each component's `strata:license` property (set by collectors or lockfile parsers). Supports fnmatch globs (`BSD-*`, `GPL-*`). Deny always wins over allow when both lists are configured. `unknown_action` setting controls behaviour for components without license metadata (`allow` | `warn` | `deny`; default `warn`).
+- **Expanded lockfile parser support** — six new built-in parsers added to `DependencyFileCollector`:
+  - `NugetPackagesLockParser` — `packages.lock.json` (.NET / NuGet)
+  - `PackagesConfigParser` — `packages.config` (.NET / NuGet)
+  - `MavenPomParser` — `pom.xml` (Java / Maven)
+  - `GradleLockParser` — `gradle.lockfile` (Java / Maven)
+  - `GemfileLockParser` — `Gemfile.lock` (Ruby / gem)
+  - `CargoLockParser` — `Cargo.lock` (Rust / cargo)
+  - `ComposerLockParser` — `composer.lock` (PHP / Packagist)
+- **Lockfile parser package refactor** — `builders/sbom/lockfile_parsers/` restructured from a single file into a package with one module per ecosystem; all parsers re-exported from `__init__.py` for backward compatibility.
+- **Auto-discovery from `.strata/lockfile_parsers/`** — any `.py` file dropped in `.strata/lockfile_parsers/` at the workspace root is imported automatically before the first SBOM build. No `collectors.yaml` entry required. Files prefixed with `_` are skipped.
+- **NDJSON datalines for `strata build sbom --scan`** — with `--output ndjson`, one `data` event is emitted per discovered SBOM component in addition to the terminal `complete` event.
+
+### Changed
+
+- `SbomBuildCommand` constructor extended with `audit`, `audit_severity`, and `fail_on` parameters wired from the new CLI flags.
+
+---
+
 ## [0.7.0] — 2026-06-16
 
 ### Added
