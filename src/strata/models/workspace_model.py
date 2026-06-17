@@ -60,7 +60,11 @@ class WorkspaceVolumeModel(PlatformBaseModel):
     size: Optional[str] = Field(None, description="Volume capacity (e.g., '10Gi', '500Mi', '1Ti')")
     mount_path: Optional[str] = Field(None, description="Mount path for the volume (e.g., '/data', '/mnt/shared')")
     access_mode: Optional[str] = Field(
-        None, description="Access mode (e.g., 'ReadWriteOnce', 'ReadWriteMany', 'ReadOnlyMany')"
+        None,
+        description="Volume access mode - concurrency pattern at container level (e.g., 'ReadWriteOnce', 'ReadWriteMany', 'ReadOnlyMany')",
+    )
+    mode: Optional[str] = Field(
+        None, description="Filesystem permissions within the volume (e.g., '0755' octal, 'rw', 'ro')"
     )
     driver: Optional[str] = Field(
         None, description="Storage driver or CSI plugin (e.g., 'nfs.csi.k8s.io', 'local-path')"
