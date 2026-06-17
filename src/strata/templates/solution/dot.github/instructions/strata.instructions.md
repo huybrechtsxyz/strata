@@ -39,13 +39,14 @@ Commands follow a flat `strata <group> <command>` pattern:
 | `init` | — | Initialize workspace (creates `.strata/`) |
 | `config` | `set` `unset` `list` | Manage workspace defaults |
 | `validate` | — | Validate a YAML file against schema |
-| `build` | `run` `plan` `clean` | Build platform & Terraform artifacts |
+| `build` | `run` `plan` `clean` `sbom` | Build platform & Terraform artifacts; generate SBOM |
 | `deploy` | `run` `destroy` `status` `history` `health` | Deploy infrastructure |
 | `audit` | `list` | View execution logs |
 | `repo` | `add` `remove` `list` `sync` `status` | Manage solution repositories |
 | `profile` | `add` `remove` `list` `activate` `show` | Manage environment profiles |
 | `ref` | `env` `config` `data` `secret` | Manage file references in profiles |
 | `values` | `list` `get` | Inspect resolved deployment values |
+| `guide` | — | Step-by-step workspace setup checklist |
 | `schema` | `list` `get` | Inspect YAML schemas |
 | `tools` | `status` `check` | Verify external tool availability |
 | `status` | — | Show workspace health |
@@ -151,6 +152,26 @@ strata build plan -f deploy/deploy-prd.yaml --artifacts-only --output json
 # Clean build artifacts
 strata build clean -f deploy/deploy-prd.yaml --output json
 ```
+
+---
+
+## SBOM Workflow
+
+```bash
+# Generate CycloneDX 1.6 SBOM (writes sbom.json next to platform.json)
+strata build sbom -f deploy/deploy-prd.yaml --output json
+
+# Human-readable inventory to stdout (images, charts, modules, app deps)
+strata build sbom -f deploy/deploy-prd.yaml --report inventory
+
+# Write inventory to a file
+strata build sbom -f deploy/deploy-prd.yaml --report inventory --output-file inventory.txt
+
+# Skip lockfile scanning (faster for large repos)
+strata build sbom -f deploy/deploy-prd.yaml --no-deps
+```
+
+`strata guide` will prompt for this step once a successful build exists (Phase 8).
 
 ---
 
@@ -310,11 +331,15 @@ The default secret name is `ssh_private_key`. Override it via `configuration.ssh
 .strata/                  # State directory
 ├── solution.json           # Solution registry (repos, profiles)
 ├── cli.yaml                # Workspace defaults
-└── logging.yaml            # Logging configuration
+├── logging.yaml            # Logging configuration
+├── collectors.yaml         # (optional) workspace SBOM collector plugins
+└── sbom-ignore.yaml        # (optional) ignore rules for dependency scanning
 ```
 
 - `solution.json` — managed by the CLI, do not edit manually
 - `cli.yaml` — user preferences, manage via `strata config set|unset|list`
+- `collectors.yaml` — declare custom `BaseSbomCollector` or `LockfileParser` plugins; see `strata sln init` starter templates in `.strata/plugins/`
+- `sbom-ignore.yaml` — paths and filenames to exclude from `DependencyFileCollector`
 
 ---
 
@@ -374,6 +399,18 @@ strata deploy run -f deploy/deploy-prd.yaml --stage infrastructure --force --out
 # Stage 2: configure servers with Ansible
 # SSH key resolved from secret store; no key file on disk before/after
 strata deploy run -f deploy/deploy-prd.yaml --stage configuration --force --output json
+```
+
+### Generate SBOM / Platform Inventory
+```bash
+# CycloneDX SBOM for supply-chain / compliance tooling
+strata build sbom -f deploy/deploy-prd.yaml --output json
+
+# Human-readable overview for onboarding
+strata build sbom -f deploy/deploy-prd.yaml --report inventory
+
+# Run guide to see if SBOM step is next
+strata guide -f deploy/deploy-prd.yaml
 ```
 
 ### Troubleshooting a Failed Deploy
