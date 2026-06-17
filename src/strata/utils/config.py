@@ -11,9 +11,9 @@ DEFAULT_OBJECT_PATH: str = ""
 DEFAULT_STATE_DIR: str = ""
 DEFAULT_STATE_FILE: str = ""
 
-# Public URLs — update when the help-site is live
-DOCS_URL: str = "https://docs.strata.huybrechts.xyz"
-SUPPORT_URL: str = "https://support.strata.huybrechts.xyz"
+# Public URLs
+DOCS_URL: str = "https://huybrechtsxyz.github.io/strata"
+SUPPORT_URL: str = "https://github.com/huybrechtsxyz/strata/issues"
 
 # Solution workspace path conventions
 SOLUTION_DIR: str = ".strata"
