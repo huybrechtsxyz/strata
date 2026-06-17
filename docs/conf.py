@@ -9,7 +9,14 @@
 project = "strata"
 copyright = "2025, Huybrechts XYZ"
 author = "Vincent Huybrechts"
-release = "0.0.1"
+release = "0.8.0"
+
+# Project URLs
+project_urls = {
+    "Homepage": "https://huybrechtsxyz.github.io/strata",
+    "GitHub": "https://github.com/huybrechtsxyz/strata",
+    "Issues": "https://github.com/huybrechtsxyz/strata/issues",
+}
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -116,6 +123,7 @@ html_theme_options = {
     "navigation_depth": 5,
     "includehidden": True,
     "titles_only": False,
+    "vcs_pageview_mode": "edit",
 }
 
 
