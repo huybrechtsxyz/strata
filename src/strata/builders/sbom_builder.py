@@ -96,11 +96,17 @@ class SbomBuilder(BaseBuilder):
         else:
             self._collectors = _default_collectors()
         self._sbom_reference: Optional[SbomReferenceModel] = None
+        self._last_components: List[SbomComponentModel] = []
 
     @property
     def sbom_reference(self) -> Optional[SbomReferenceModel]:
         """Return the ``SbomReferenceModel`` produced by the last successful ``build()``."""
         return self._sbom_reference
+
+    @property
+    def last_components(self) -> List[SbomComponentModel]:
+        """Return the component list from the last ``scan_inventory()`` or ``scan()`` call."""
+        return self._last_components
 
     # ------------------------------------------------------------------
     # BaseBuilder interface
@@ -281,6 +287,8 @@ class SbomBuilder(BaseBuilder):
                 for warning in collector.get_warnings():
                     self._messages.append(f"[{collector.get_collector_name()}] {warning}")
 
+            self._last_components = components
+
             bom_json = self._build_cyclonedx_json(components)
             if bom_json is None:
                 return False
@@ -334,6 +342,8 @@ class SbomBuilder(BaseBuilder):
                 components.extend(collected)
                 for warning in collector.get_warnings():
                     self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+
+            self._last_components = components
 
             return self._format_inventory(components, scan_path.name)
 

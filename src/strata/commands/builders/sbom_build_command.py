@@ -199,7 +199,7 @@ class SbomBuildCommand(BaseBuildCommand):
 
     def _execute_scan(self) -> bool:
         """Run SBOM scan against a directory without deployment context."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         assert self._scan_path is not None
         self._start_time = datetime.now()
@@ -222,13 +222,26 @@ class SbomBuildCommand(BaseBuildCommand):
                 self._finalize(success=False)
                 return False
 
+            # Emit per-component datalines for NDJSON consumers
+            if self._is_ndjson_output():
+                self._emit_component_datalines(builder, timezone)
+
             if self._output_file is not None:
                 self._output_file.parent.mkdir(parents=True, exist_ok=True)
                 self._output_file.write_text(text, encoding="utf-8")
                 if self._is_console_output():
                     click.echo(f"Inventory written to: {self._output_file}")
-            else:
+            elif self._is_console_output():
                 click.echo(text)
+
+            self._output_data.update(
+                {
+                    "scan_path": str(self._scan_path),
+                    "report": "inventory",
+                    "component_count": len(builder.last_components),
+                    "components": self._components_to_dicts(builder),
+                }
+            )
         else:
             ok = builder.scan(self._scan_path, output_file=self._output_file)
             self._messages.extend(builder.drain_messages())
@@ -237,12 +250,63 @@ class SbomBuildCommand(BaseBuildCommand):
                 self._finalize(success=False)
                 return False
 
+            # Emit per-component datalines for NDJSON consumers
+            if self._is_ndjson_output():
+                self._emit_component_datalines(builder, timezone)
+
+            ref = builder.sbom_reference
+            count = ref.component_count if ref else 0
+            path = ref.path if ref else "sbom.json"
+            sha256 = ref.sha256 if ref else None
+
             if self._is_console_output():
-                ref = builder.sbom_reference
-                count = ref.component_count if ref else 0
-                path = ref.path if ref else "sbom.json"
                 click.echo(f"✅  SBOM written: {path} ({count} components)")
 
-        self._output_data.update({"scan_path": str(self._scan_path)})
+            self._output_data.update(
+                {
+                    "scan_path": str(self._scan_path),
+                    "report": "cyclonedx",
+                    "sbom_path": path,
+                    "component_count": count,
+                    "sha256": sha256,
+                    "components": self._components_to_dicts(builder),
+                }
+            )
+
         self._finalize(success=True)
         return True
+
+    def _emit_component_datalines(self, builder: SbomBuilder, timezone) -> None:
+        """Emit one NDJSON ``data`` event per collected component."""
+        from datetime import datetime
+
+        for comp in builder.last_components:
+            self.emit_ndjson(
+                {
+                    "event": "data",
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "component": {
+                        "name": comp.name,
+                        "version": comp.version,
+                        "type": comp.component_type,
+                        "purl": comp.purl,
+                        "collector": comp.source_collector,
+                        "properties": comp.properties if comp.properties else None,
+                    },
+                }
+            )
+
+    @staticmethod
+    def _components_to_dicts(builder: SbomBuilder) -> list:
+        """Convert collected components to plain dicts for structured output."""
+        return [
+            {
+                "name": c.name,
+                "version": c.version,
+                "type": c.component_type,
+                "purl": c.purl,
+                "collector": c.source_collector,
+                "properties": c.properties if c.properties else None,
+            }
+            for c in builder.last_components
+        ]
