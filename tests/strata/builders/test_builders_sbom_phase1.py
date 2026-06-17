@@ -528,7 +528,7 @@ class TestSbomBuilderDefaultCollectors:
         from strata.builders.sbom_builder import SbomBuilder
 
         builder = SbomBuilder()
-        assert len(builder._collectors) == 7
+        assert len(builder._collectors) == 8
 
     def test_default_collectors_includes_compose(self):
         from strata.builders.sbom_builder import SbomBuilder
