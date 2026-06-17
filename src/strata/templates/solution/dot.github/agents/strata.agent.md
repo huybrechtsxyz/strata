@@ -19,6 +19,9 @@ A strata workspace always contains a `.strata/` directory at its root. The solut
 Standard workspace structure:
 ```
 .strata/          ← state directory (solution.json, schemas/, logs/)
+  collectors.yaml   ← (optional) SBOM collector plugins
+  sbom-ignore.yaml  ← (optional) dependency scan ignore rules
+  plugins/          ← (optional) custom collector/parser Python files
 config/           ← workspace YAML config files (kind: Configuration)
 deploy/           ← deployment YAML files (kind: Deployment)
 modules/          ← module YAML files (kind: Module)
@@ -62,7 +65,10 @@ strata build plan -f deploy/<deployment.yaml>
 # 4. Build for real
 strata build run -f deploy/<deployment.yaml>
 
-# 5. Deploy
+# 5. Generate SBOM (writes sbom.json; use --report inventory for a human-readable overview)
+strata build sbom -f deploy/<deployment.yaml>
+
+# 6. Deploy
 strata deploy run -f deploy/<deployment.yaml> --dry-run
 strata deploy run -f deploy/<deployment.yaml>
 ```

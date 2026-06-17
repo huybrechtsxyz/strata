@@ -1,0 +1,40 @@
+# .strata/sbom-ignore.yaml
+#
+# Ignore rules for DependencyFileCollector (application dependency scanning).
+#
+# DependencyFileCollector walks workspace repos looking for dependency
+# manifests (requirements*.txt, pyproject.toml, uv.lock, package-lock.json,
+# go.sum, and any formats added via lockfile parser plugins).  Use this file
+# to exclude paths or filenames that would produce unwanted entries in the SBOM.
+#
+# Rules here are ADDITIVE — they extend the built-in defaults rather than
+# replace them.  The following paths are always ignored regardless of this
+# file:
+#
+#   **/node_modules   **/.venv    **/venv     **/dist
+#   **/build          **/.git     **/__pycache__
+#
+# ignore_paths:
+#   Glob patterns matched against the path relative to the scan root.
+#   Use ** to match any number of path segments.
+#   A directory match (e.g. "docs/**") skips all files under that directory.
+#
+# ignore_files:
+#   Exact filenames (no path) to skip regardless of where they appear.
+#   Useful for dev/test requirement files that are not part of production.
+#
+# Examples (all commented out — uncomment and adjust to activate):
+
+# ignore_paths:
+#   - "docs/**"                  # skip docs folder entirely
+#   - "**/test/**"               # skip any test sub-directory
+#   - "infra/modules/**"         # skip a specific sub-tree
+
+# ignore_files:
+#   - "requirements-dev.txt"
+#   - "requirements-test.txt"
+#   - "requirements-ci.txt"
+
+# Uncomment and populate the sections you need:
+ignore_paths: []
+ignore_files: []

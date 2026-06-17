@@ -567,13 +567,74 @@ strata build plan --stage production --artifacts-only
 ### `build sbom`
 
 ```
-strata build sbom [-f FILE] [standard options]
+strata build sbom [-f FILE | --scan PATH] [--report MODE] [--output-file PATH] [--no-deps] [--audit] [--severity LEVEL] [--fail-on LEVEL] [standard options]
 ```
 
-Regenerates the SBOM from an existing `platform.json` without a full rebuild. Reads the build directory, runs all collectors (images, Helm charts, Terraform providers, Ansible collections/roles), and writes `sbom.json` alongside `platform.json`.
+Two modes of operation:
+
+- **Deployment mode** (`-f FILE`): Regenerates the SBOM from an existing `platform.json`
+  without a full rebuild. Requires a prior `strata build run`.
+- **Scan mode** (`--scan PATH`): Scans any directory for SBOM components without a
+  deployment file or workspace init. Useful for generating an SBOM from existing
+  Terraform, Helm, Compose, or application repos.
+
+Collectors run in both modes:
+
+| Collector                                | Deployment mode | Scan mode       |
+| ---------------------------------------- | --------------- | --------------- |
+| Container images (platform model)        | ✅               | — (empty model) |
+| Compose images (`docker-compose.yml`)    | ✅               | ✅               |
+| Helm charts (platform model)             | ✅               | — (empty model) |
+| Helm charts (`Chart.yaml` files)         | ✅               | ✅               |
+| Terraform providers (`*.tf`)             | ✅               | ✅               |
+| Terraform modules (`*.tf`)               | ✅               | ✅               |
+| Ansible collections (`requirements.yml`) | ✅               | ✅               |
+| Application dependencies (lockfiles)     | ✅               | ✅               |
+
+`--scan` and `-f` are mutually exclusive.
+
+`--report` selects the output style:
+
+| Flag                 | Behaviour                                                                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--report cyclonedx` | Write `sbom.json` (CycloneDX 1.6 JSON) — **default**                                                                                            |
+| `--report inventory` | Print a human-readable grouped listing to stdout                                                                                                |
+| `--output-file PATH` | Write to *PATH* instead of the default location / stdout                                                                                        |
+| `--no-deps`          | Skip `DependencyFileCollector` (faster for large repos)                                                                                         |
+| `--audit`            | Run CVE vulnerability scan after generating the SBOM (requires [trivy](https://trivy.dev) or [grype](https://github.com/anchore/grype) in PATH) |
+| `--severity LEVEL`   | Minimum severity to report: `CRITICAL` \| `HIGH` \| `MEDIUM` \| `LOW` \| `UNKNOWN`. Default: `MEDIUM`                                           |
+| `--fail-on LEVEL`    | Exit non-zero (code 3) if findings at this severity or above exist. Optional — without it, audit is advisory only                               |
 
 ```bash
+# Regenerate sbom.json from deployment
 strata build sbom -f xyz-deploy-prd.yaml
+
+# Print a human-readable platform inventory
+strata build sbom -f xyz-deploy-prd.yaml --report inventory
+
+# Save the inventory to a file
+strata build sbom -f xyz-deploy-prd.yaml --report inventory --output-file inventory.txt
+
+# Skip lockfile scanning (faster)
+strata build sbom -f xyz-deploy-prd.yaml --no-deps
+
+# Scan a directory (no strata workspace required)
+strata build sbom --scan ./my-terraform-repo
+
+# Scan + human-readable overview
+strata build sbom --scan ./infra --report inventory
+
+# Scan + write SBOM to a specific file
+strata build sbom --scan . --output-file sbom.json
+
+# Generate SBOM + run CVE audit (advisory — prints findings, never fails)
+strata build sbom --scan . --audit
+
+# Audit with CI gate — fail if any HIGH or CRITICAL findings
+strata build sbom -f xyz-deploy-prd.yaml --audit --fail-on HIGH
+
+# Audit only CRITICAL vulnerabilities
+strata build sbom --scan . --audit --severity CRITICAL --fail-on CRITICAL
 ```
 
 ### `build clean`

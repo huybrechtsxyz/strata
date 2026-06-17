@@ -170,6 +170,7 @@ class RunBuildCommand(BaseBuildCommand):
             configuration_service=self._configuration_service,
             platform_artifact=platform_artifact,
             build_path=self._build_path,
+            sbom_components=getattr(self, "_sbom_components", None),
         )
 
         engine = PolicyEngine(build_policies)
@@ -468,5 +469,8 @@ class RunBuildCommand(BaseBuildCommand):
         if not ok:
             self._errors.extend(builder.get_errors())
             return False
+
+        # Store components for policy evaluation
+        self._sbom_components = builder.last_components
 
         return True

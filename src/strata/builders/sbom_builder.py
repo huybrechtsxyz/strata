@@ -1,16 +1,27 @@
 """Build the SBOM artifact from the assembled platform model."""
 
 import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from strata.builders.base_builder import BaseBuilder
 from strata.builders.sbom.ansible_collector import AnsibleCollectionCollector
 from strata.builders.sbom.base_sbom_collector import BaseSbomCollector
+from strata.builders.sbom.collector_plugin_loader import CollectorPluginLoader
+from strata.builders.sbom.compose_collector import ComposeImageCollector
+from strata.builders.sbom.deps_collector import DependencyFileCollector
+from strata.builders.sbom.helm_chart_file_collector import HelmChartFileCollector
 from strata.builders.sbom.helm_collector import HelmChartCollector
 from strata.builders.sbom.image_collector import ContainerImageCollector
 from strata.builders.sbom.terraform_collector import TerraformProviderCollector
-from strata.models.platform_artifact_model import PlatformArtifactModel
+from strata.builders.sbom.terraform_module_collector import TerraformModuleCollector
+from strata.models.platform_artifact_model import (
+    PlatformArtifactModel,
+    PlatformMetaModel,
+    PlatformSpecModel,
+    PlatformWorkspaceModel,
+)
 from strata.models.sbom_model import SbomComponentModel, SbomReferenceModel
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
@@ -21,14 +32,30 @@ if TYPE_CHECKING:
 _SBOM_FILENAME = "sbom.json"
 _SBOM_FORMAT = "cyclonedx-1.6"
 
+# Maps source_collector → human-readable group heading in inventory output.
+# Collectors not in this map appear under their collector name as-is.
+_INVENTORY_GROUP_LABELS: Dict[str, str] = {
+    "image": "Container Images",
+    "compose": "Compose Services",
+    "helm": "Helm Charts",
+    "terraform": "Terraform Providers",
+    "terraform-module": "Terraform Modules",
+    "ansible": "Ansible Collections",
+    "deps": "Application Dependencies",
+}
+
 
 def _default_collectors() -> List[BaseSbomCollector]:
     """Return a fresh list of all built-in collectors."""
     return [
         ContainerImageCollector(),
+        ComposeImageCollector(),
         HelmChartCollector(),
+        HelmChartFileCollector(),
         TerraformProviderCollector(),
+        TerraformModuleCollector(),
         AnsibleCollectionCollector(),
+        DependencyFileCollector(),
     ]
 
 
@@ -48,23 +75,38 @@ class SbomBuilder(BaseBuilder):
 
     Args:
         verbose: Enable progress messages.
-        collectors: Injectable list of collectors (defaults to all four
+        collectors: Injectable list of collectors (defaults to all seven
             built-in collectors when ``None``).
+        no_deps: When ``True`` and *collectors* is ``None``, exclude
+            ``DependencyFileCollector`` from the default set.  Has no effect
+            when *collectors* is provided explicitly.
     """
 
     def __init__(
         self,
         verbose: bool = False,
         collectors: Optional[List[BaseSbomCollector]] = None,
+        no_deps: bool = False,
     ) -> None:
         super().__init__(verbose=verbose)
-        self._collectors: List[BaseSbomCollector] = collectors if collectors is not None else _default_collectors()
+        if collectors is not None:
+            self._collectors: List[BaseSbomCollector] = collectors
+        elif no_deps:
+            self._collectors = [c for c in _default_collectors() if not isinstance(c, DependencyFileCollector)]
+        else:
+            self._collectors = _default_collectors()
         self._sbom_reference: Optional[SbomReferenceModel] = None
+        self._last_components: List[SbomComponentModel] = []
 
     @property
     def sbom_reference(self) -> Optional[SbomReferenceModel]:
         """Return the ``SbomReferenceModel`` produced by the last successful ``build()``."""
         return self._sbom_reference
+
+    @property
+    def last_components(self) -> List[SbomComponentModel]:
+        """Return the component list from the last ``scan_inventory()`` or ``scan()`` call."""
+        return self._last_components
 
     # ------------------------------------------------------------------
     # BaseBuilder interface
@@ -134,9 +176,13 @@ class SbomBuilder(BaseBuilder):
 
             deployment_build_path = deployment_service.get_build_path(build_path)
 
+            # Load workspace collector plugins (additive — does not mutate self._collectors)
+            extra_collectors = CollectorPluginLoader.load(work_path)
+            active_collectors = self._collectors + extra_collectors
+
             # Collect components — drain warnings immediately after each collector
             components: List[SbomComponentModel] = []
-            for collector in self._collectors:
+            for collector in active_collectors:
                 collected = collector.collect(platform_model, work_path, deployment_build_path)
                 components.extend(collected)
                 for warning in collector.get_warnings():
@@ -168,6 +214,8 @@ class SbomBuilder(BaseBuilder):
                 component_count=len(components),
             )
 
+            self._last_components = components
+
             if self.verbose:
                 self._messages.append(f"SBOM written: {sbom_path} ({len(components)} components)")
 
@@ -198,6 +246,242 @@ class SbomBuilder(BaseBuilder):
             self._messages.append(f"SBOM verified at: {sbom_path}")
 
         return True
+
+    # ------------------------------------------------------------------
+    # Standalone scan (no deployment service required)
+    # ------------------------------------------------------------------
+
+    def scan(
+        self,
+        scan_path: Path,
+        output_file: Optional[Path] = None,
+    ) -> bool:
+        """Scan a directory tree for SBOM components without a deployment context.
+
+        Runs all collectors against *scan_path* using an empty platform model.
+        Model-dependent collectors (images from platform modules, Helm from
+        provisioners) return empty results gracefully.  File-based collectors
+        (Terraform, Compose, Chart.yaml, lockfiles) scan the directory tree.
+
+        When *output_file* is provided, writes CycloneDX JSON there.
+        When omitted, writes to ``{scan_path}/sbom.json``.
+
+        Returns ``True`` on success.
+        """
+        try:
+            from strata.models.common_models import PlatformKind, PlatformName, PlatformVersion
+
+            platform_model = PlatformArtifactModel(
+                apiVersion=PlatformVersion.v1,
+                kind=PlatformKind.PLATFORM_MODEL,
+                meta=PlatformMetaModel(name=PlatformName("scan")),
+                spec=PlatformSpecModel(workspace=PlatformWorkspaceModel(name=PlatformName("scan"))),
+            )
+
+            scan_path = scan_path.resolve()
+            extra_collectors = CollectorPluginLoader.load(scan_path)
+            active_collectors = self._collectors + extra_collectors
+
+            components: List[SbomComponentModel] = []
+            for collector in active_collectors:
+                collected = collector.collect(platform_model, scan_path, scan_path)
+                components.extend(collected)
+                for warning in collector.get_warnings():
+                    self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+
+            self._last_components = components
+
+            bom_json = self._build_cyclonedx_json(components)
+            if bom_json is None:
+                return False
+
+            dest = output_file if output_file else scan_path / _SBOM_FILENAME
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            sbom_bytes = bom_json.encode("utf-8")
+            dest.write_bytes(sbom_bytes)
+
+            sha256 = hashlib.sha256(sbom_bytes).hexdigest()
+            self._sbom_reference = SbomReferenceModel(
+                path=str(dest),
+                format=_SBOM_FORMAT,
+                sha256=f"sha256:{sha256}",
+                component_count=len(components),
+            )
+
+            if self.verbose:
+                self._messages.append(f"SBOM written: {dest} ({len(components)} components)")
+
+            return True
+
+        except Exception as exc:
+            self._errors.append(f"Failed to scan: {exc}")
+            self.logger.exception("Failed to scan for SBOM", error=str(exc))
+            return False
+
+    def scan_inventory(self, scan_path: Path) -> Optional[str]:
+        """Scan a directory and return a human-readable inventory string.
+
+        Same collector pipeline as ``scan()`` but does not write any files.
+        Returns ``None`` on failure.
+        """
+        try:
+            from strata.models.common_models import PlatformKind, PlatformName, PlatformVersion
+
+            platform_model = PlatformArtifactModel(
+                apiVersion=PlatformVersion.v1,
+                kind=PlatformKind.PLATFORM_MODEL,
+                meta=PlatformMetaModel(name=PlatformName("scan")),
+                spec=PlatformSpecModel(workspace=PlatformWorkspaceModel(name=PlatformName("scan"))),
+            )
+
+            scan_path = scan_path.resolve()
+            extra_collectors = CollectorPluginLoader.load(scan_path)
+            active_collectors = self._collectors + extra_collectors
+
+            components: List[SbomComponentModel] = []
+            for collector in active_collectors:
+                collected = collector.collect(platform_model, scan_path, scan_path)
+                components.extend(collected)
+                for warning in collector.get_warnings():
+                    self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+
+            self._last_components = components
+
+            return self._format_inventory(components, scan_path.name)
+
+        except Exception as exc:
+            self._errors.append(f"Failed to scan inventory: {exc}")
+            self.logger.exception("Failed to scan inventory", error=str(exc))
+            return None
+
+    # ------------------------------------------------------------------
+    # Inventory rendering
+    # ------------------------------------------------------------------
+
+    def render_inventory(
+        self,
+        deployment_service: DeploymentService,
+        work_path: Path,
+        build_path: Path,
+        platform_model: Optional[PlatformArtifactModel] = None,
+        solution_controller: Optional["SolutionController"] = None,
+    ) -> Optional[str]:
+        """Collect all components and return a human-readable inventory string.
+
+        Runs the same collector pipeline as ``build()`` but does not write any
+        output files.  Returns ``None`` on failure — errors are appended to
+        ``self._errors``.
+        """
+        try:
+            if platform_model is None:
+                platform_path = (
+                    solution_controller.get_platform_path(deployment_service, build_path)
+                    if solution_controller is not None
+                    else deployment_service.get_build_path(build_path) / "platform.json"
+                )
+                if not platform_path.exists():
+                    self._errors.append("Platform model not found. Run platform build first.")
+                    return None
+
+                platform_service = PlatformService.load(str(platform_path), validate=True)
+                if not platform_service.is_validated() or not platform_service.model:
+                    self._errors.append("Platform model validation failed")
+                    return None
+
+                platform_model = platform_service.model
+
+            deployment_build_path = deployment_service.get_build_path(build_path)
+
+            extra_collectors = CollectorPluginLoader.load(work_path)
+            active_collectors = self._collectors + extra_collectors
+
+            components: List[SbomComponentModel] = []
+            for collector in active_collectors:
+                collected = collector.collect(platform_model, work_path, deployment_build_path)
+                components.extend(collected)
+                for warning in collector.get_warnings():
+                    self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+
+            deployment_name = str(deployment_service.model.meta.name) if deployment_service.model else None
+            return self._format_inventory(components, deployment_name)
+
+        except Exception as exc:
+            self._errors.append(f"Failed to render inventory: {exc}")
+            self.logger.exception("Failed to render inventory", error=str(exc))
+            return None
+
+    def _format_inventory(
+        self,
+        components: List[SbomComponentModel],
+        deployment_name: Optional[str],
+    ) -> str:
+        """Format *components* into a human-readable grouped inventory string."""
+
+        def _get_purl_cls():
+            try:
+                from packageurl import PackageURL
+
+                return PackageURL
+            except ImportError:
+                return None
+
+        _purl_cls = _get_purl_cls()
+
+        def _source_from_purl(purl_str: str) -> str:
+            if _purl_cls is None:
+                return ""
+            try:
+                purl = _purl_cls.from_string(purl_str)
+                repo_url: str = (purl.qualifiers or {}).get("repository_url", "")  # type: ignore[union-attr]
+                if repo_url:
+                    return repo_url
+                if purl.type == "docker":
+                    return "docker.io"
+                if purl.type in ("github", "gitlab", "bitbucket"):
+                    return f"{purl.type}.com"
+                return ""
+            except Exception:
+                return ""
+
+        # Group by source_collector, preserving insertion order
+        groups: Dict[str, List[SbomComponentModel]] = {}
+        for comp in components:
+            groups.setdefault(comp.source_collector, []).append(comp)
+
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        title = f"Platform Inventory — {deployment_name}" if deployment_name else "Platform Inventory"
+
+        lines: List[str] = [
+            "",
+            f"{title}  (built {now})",
+        ]
+
+        floating_count = 0
+
+        for collector_name, group_components in groups.items():
+            label = _INVENTORY_GROUP_LABELS.get(collector_name, collector_name.title())
+            lines.append(f"\n{label} ({len(group_components)})")
+
+            for comp in group_components:
+                is_floating = comp.properties.get("strata:tag-stability") == "floating"
+                if is_floating:
+                    floating_count += 1
+                source = _source_from_purl(comp.purl)
+                ver = comp.version or "—"
+                flag = "  ⚠ floating" if is_floating else ""
+                name_col = comp.name.ljust(24)
+                ver_col = ver.ljust(14)
+                src_col = source
+                lines.append(f"  {name_col}{ver_col}{src_col}{flag}")
+
+        total = len(components)
+        summary = f"Total: {total} component{'s' if total != 1 else ''}"
+        if floating_count:
+            summary += f"  |  ⚠ {floating_count} floating tag{'s' if floating_count != 1 else ''}"
+        lines.append(f"\n{summary}")
+        lines.append("")
+
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------
     # CycloneDX serialisation — only this class imports cyclonedx-python-lib

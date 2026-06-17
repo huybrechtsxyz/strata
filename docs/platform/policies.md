@@ -2,7 +2,7 @@
 
 Declarative guardrails evaluated at specific lifecycle phases before or after infrastructure changes are applied.
 
-**Built-in types:** `customer_zone` | **Phases:** `validate` / `build` / `plan` / `deploy` | **Enforcement:** `deny` / `warn` / `audit` | **Declared in:** `configuration.spec.policies`
+**Built-in types:** `customer_zone` | `required_tags` | `naming_pattern` | `script` | `sbom_pinned_versions` | `sbom_allowed_registries` | `sbom_denied_packages` | `sbom_max_components` | `sbom_license` | **Phases:** `validate` / `build` / `plan` / `deploy` | **Enforcement:** `deny` / `warn` / `audit` | **Declared in:** `configuration.spec.policies`
 
 ---
 
@@ -60,12 +60,17 @@ spec:
 
 ### Built-in types
 
-| Type             | Phase      | What it checks                                                         | Status  |
-| ---------------- | ---------- | ---------------------------------------------------------------------- | ------- |
-| `customer_zone`  | `plan`     | Terraform resource regions vs. the customer's allowed zones            | Phase 1 |
-| `required_tags`  | `build`    | Required tags/labels present on all resources in the platform artifact | Phase 2 |
-| `naming_pattern` | `validate` | `meta.name` fields match a configured regex pattern                    | Phase 2 |
-| `script`         | any        | Delegates to an external command (OPA, Checkov, custom script)         | Phase 2 |
+| Type                      | Phase      | What it checks                                                                   |
+| ------------------------- | ---------- | -------------------------------------------------------------------------------- |
+| `customer_zone`           | `plan`     | Terraform resource regions vs. the customer's allowed zones                      |
+| `required_tags`           | `build`    | Required tags/labels present on all resources in the platform artifact           |
+| `naming_pattern`          | `validate` | `meta.name` fields match a configured regex pattern                              |
+| `script`                  | any        | Delegates to an external command (OPA, Checkov, custom script)                   |
+| `sbom_pinned_versions`    | `build`    | SBOM components have pinned, non-floating version tags                           |
+| `sbom_allowed_registries` | `build`    | Container images originate only from approved registries                         |
+| `sbom_denied_packages`    | `build`    | No SBOM component matches a purl/name blocklist pattern                          |
+| `sbom_max_components`     | `build`    | Total SBOM component count stays within a configured budget                      |
+| `sbom_license`            | `build`    | SBOM component licenses match an allow/deny list (via `strata:license` property) |
 
 ### `customer_zone`
 
@@ -140,6 +145,134 @@ The `script` type can run at any phase — set `phase` to whichever phase you wa
   configuration:
     command: "opa eval --data policy.rego --input /dev/stdin -"
     timeout: 30
+```
+
+### `sbom_pinned_versions`
+
+Evaluates at the `build` phase, after the SBOM has been generated. Checks that every SBOM component from the selected collectors has an explicit, deterministic version — no missing versions, no floating tags (e.g. `:latest`, any tag marked `strata:tag-stability=floating`).
+
+Skipped gracefully when no SBOM components are available.
+
+| `configuration` key | Type           | Default | Description                                                              |
+| ------------------- | -------------- | ------- | ------------------------------------------------------------------------ |
+| `collectors`        | list of string | all     | Restrict checks to these collector names (`image`, `compose`, `deps`, …) |
+| `allow_latest`      | bool           | `false` | When `true`, the literal tag `latest` is not treated as a violation      |
+| `require_digest`    | bool           | `false` | When `true`, every component's purl must include a `@sha256:…` digest    |
+
+```yaml
+- name: pin_all_images
+  type: sbom_pinned_versions
+  phase: build
+  enforcement: deny
+  configuration:
+    collectors: [image, compose]
+    allow_latest: false
+    require_digest: false
+```
+
+### `sbom_allowed_registries`
+
+Evaluates at the `build` phase. Checks that every container image component (`pkg:docker/…` or `pkg:oci/…`) originates from one of the configured registry prefixes. Non-docker/OCI purls (Helm charts, Python packages, etc.) are ignored.
+
+Skipped gracefully when no SBOM components are available or when `allowed` is not configured.
+
+| `configuration` key | Type           | Default            | Description                                                         |
+| ------------------- | -------------- | ------------------ | ------------------------------------------------------------------- |
+| `allowed`           | list of string | *(required)*       | Registry prefix strings — e.g. `ghcr.io/myorg`, `mcr.microsoft.com` |
+| `collectors`        | list of string | `[image, compose]` | Restrict checks to these collector names                            |
+
+Single-segment image names (e.g. `pkg:docker/nginx@1.25`) are resolved to `docker.io/library`.
+
+```yaml
+- name: trusted_registries
+  type: sbom_allowed_registries
+  phase: build
+  enforcement: deny
+  configuration:
+    allowed:
+      - ghcr.io/myorg
+      - mcr.microsoft.com
+      - docker.io/library
+```
+
+### `sbom_denied_packages`
+
+Evaluates at the `build` phase. Blocks any SBOM component whose `purl` or `name` matches one of the configured glob patterns (Python `fnmatch` syntax). Use this for emergency CVE responses, deprecated package blocks, or license violations.
+
+Skipped gracefully when no SBOM components are available or when `denied` is not configured.
+
+| `configuration` key | Type           | Default                         | Description                                                        |
+| ------------------- | -------------- | ------------------------------- | ------------------------------------------------------------------ |
+| `denied`            | list of string | *(required)*                    | purl glob patterns (`pkg:pypi/bad-pkg@*`) or name globs (`log4j*`) |
+| `reason`            | string         | `"Package is on the deny list"` | Custom message appended to each violation                          |
+
+```yaml
+- name: block_vulnerable
+  type: sbom_denied_packages
+  phase: build
+  enforcement: deny
+  configuration:
+    denied:
+      - "pkg:pypi/setuptools@<70.0.0"
+      - "pkg:npm/event-stream@*"
+      - "log4j*"
+    reason: "Blocked by security policy SEC-2026-041"
+```
+
+### `sbom_max_components`
+
+Evaluates at the `build` phase. Enforces an upper bound on the total number of SBOM components and optionally per-collector limits. Useful as a complexity budget to detect dependency sprawl before it ships.
+
+Skipped gracefully when no SBOM components are available or when neither `max_count` nor `per_collector` is configured.
+
+| `configuration` key | Type             | Default | Description                                         |
+| ------------------- | ---------------- | ------- | --------------------------------------------------- |
+| `max_count`         | int              | none    | Maximum total component count across all collectors |
+| `per_collector`     | map string → int | none    | Per-collector limits keyed by collector name        |
+
+```yaml
+- name: complexity_budget
+  type: sbom_max_components
+  phase: build
+  enforcement: warn
+  configuration:
+    max_count: 200
+    per_collector:
+      image: 50
+      deps: 150
+```
+
+### `sbom_license`
+
+Evaluates at the `build` phase. Checks each component's `strata:license` property against configurable allow and deny lists using `fnmatch` glob patterns. Useful for enforcing open-source license compliance without external API calls — works entirely offline with data already in the SBOM.
+
+Collectors or lockfile parsers that capture license metadata set `properties["strata:license"] = "MIT"` on their `SbomComponentModel`. Components without this property are governed by the `unknown_action` setting.
+
+Skipped gracefully when no SBOM components are available or when neither `allowed` nor `denied` is configured.
+
+| `configuration` key | Type           | Default  | Description                                                             |
+| ------------------- | -------------- | -------- | ----------------------------------------------------------------------- |
+| `allowed`           | list of string | none     | SPDX license globs — only these are permitted (e.g. `MIT`, `BSD-*`)     |
+| `denied`            | list of string | none     | SPDX license globs — these are always blocked (e.g. `GPL-*`, `AGPL-*`)  |
+| `unknown_action`    | string         | `"warn"` | What to do when `strata:license` is missing: `allow`, `warn`, or `deny` |
+
+When both `allowed` and `denied` are configured, `denied` is checked first — an explicit deny always wins.
+
+```yaml
+- name: license_compliance
+  type: sbom_license
+  phase: build
+  enforcement: deny
+  configuration:
+    allowed:
+      - MIT
+      - Apache-2.0
+      - BSD-*
+      - ISC
+    denied:
+      - GPL-3.0-only
+      - AGPL-*
+    unknown_action: warn
 ```
 
 ---
@@ -222,9 +355,9 @@ With this configuration, running `strata deploy run` will evaluate every resourc
           - cost_center
 ```
 
-### Complete example — naming, tags, zone, and OPA
+### Complete example — naming, tags, SBOM, zone, and OPA
 
-The following configuration shows all four built-in policy types working together on a single deployment. Policies are evaluated in declaration order within each phase.
+The following configuration shows all built-in policy types working together on a single deployment. Policies are evaluated in declaration order within each phase.
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
@@ -260,6 +393,54 @@ spec:
           - project
           - owner
 
+    - name: pin_all_images
+      type: sbom_pinned_versions
+      phase: build
+      enforcement: deny
+      description: "Reject floating image tags — all images must be pinned"
+      configuration:
+        collectors: [image, compose]
+        allow_latest: false
+
+    - name: trusted_registries
+      type: sbom_allowed_registries
+      phase: build
+      enforcement: deny
+      description: "Images must come from approved registries"
+      configuration:
+        allowed:
+          - ghcr.io/myorg
+          - mcr.microsoft.com
+          - docker.io/library
+
+    - name: block_vulnerable
+      type: sbom_denied_packages
+      phase: build
+      enforcement: deny
+      description: "Block packages on the security blocklist"
+      configuration:
+        denied:
+          - "pkg:npm/event-stream@*"
+        reason: "Supply-chain attack risk"
+
+    - name: complexity_budget
+      type: sbom_max_components
+      phase: build
+      enforcement: warn
+      description: "Alert when component count exceeds budget"
+      configuration:
+        max_count: 200
+
+    - name: license_compliance
+      type: sbom_license
+      phase: build
+      enforcement: deny
+      description: "Only permissive open-source licenses allowed"
+      configuration:
+        allowed: [MIT, Apache-2.0, "BSD-*", ISC, Unlicense]
+        denied: ["GPL-*", "AGPL-*"]
+        unknown_action: warn
+
     # plan phase: checked after `terraform plan`, before `terraform apply`
     - name: zone_enforcement
       type: customer_zone
@@ -280,7 +461,7 @@ spec:
 
 With this setup:
 - `strata validate --deep` flags configuration names that don't follow the naming convention.
-- `strata build run` stops if any namespace is missing `environment`, `project`, or `owner`.
+- `strata build run` stops if any namespace is missing required labels, finds a floating image tag, an unapproved registry, or a blocked package. A warning is emitted if the component budget is exceeded.
 - `strata deploy run` runs zone enforcement and the OPA check in sequence against the Terraform plan. Both must pass before `terraform apply` is invoked.
 
 ---

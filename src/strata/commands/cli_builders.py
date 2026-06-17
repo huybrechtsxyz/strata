@@ -137,26 +137,96 @@ def build_plan(
     handle_command_exit(command, success)
 
 
-@build.command(name="sbom", help="(Re)generate SBOM from an existing platform.json.")
+@build.command(name="sbom", help="(Re)generate SBOM from an existing platform.json or scan a directory.")
 @click_file
 @click_work_path
+@click.option(
+    "--scan",
+    "scan_path",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    default=None,
+    help="Scan a directory for SBOM components without a deployment file. Mutually exclusive with -f.",
+)
+@click.option(
+    "--report",
+    type=click.Choice(["cyclonedx", "inventory"], case_sensitive=False),
+    default="cyclonedx",
+    show_default=True,
+    help="Output mode: cyclonedx writes sbom.json; inventory prints a human-readable component listing.",
+)
+@click.option(
+    "--output-file",
+    "output_file",
+    default=None,
+    metavar="PATH",
+    help=(
+        "Write output to PATH instead of the default location. "
+        "For cyclonedx: overrides the default sbom.json path. "
+        "For inventory: writes to PATH instead of stdout."
+    ),
+)
+@click.option(
+    "--no-deps",
+    "no_deps",
+    is_flag=True,
+    default=False,
+    help="Skip application dependency scanning (DependencyFileCollector). Useful for large repos where lockfile scanning is slow.",
+)
+@click.option(
+    "--audit",
+    is_flag=True,
+    default=False,
+    help="Run CVE vulnerability scan after generating the SBOM (requires trivy or grype).",
+)
+@click.option(
+    "--severity",
+    "audit_severity",
+    type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"], case_sensitive=False),
+    default="MEDIUM",
+    show_default=True,
+    help="Minimum severity to report in CVE audit.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW"], case_sensitive=False),
+    default=None,
+    help="Exit non-zero (code 3) if findings at this severity or above exist.",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
 def build_sbom(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
+    scan_path: Optional[str] = None,
+    report: str = "cyclonedx",
+    output_file: Optional[str] = None,
+    no_deps: bool = False,
+    audit: bool = False,
+    audit_severity: str = "MEDIUM",
+    fail_on: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
 ):
-    """(Re)generate the SBOM from an existing platform.json without re-running the full build."""
+    """(Re)generate the SBOM from an existing platform.json, or scan a directory directly."""
+    if scan_path and file:
+        raise click.UsageError("--scan and -f/--file are mutually exclusive.")
+
     command = SbomBuildCommand(
         file=file,
         work_path=work_path,
+        scan_path=scan_path,
         output=output,
         verbose=verbose,
         quiet=quiet,
+        report=report,
+        output_file=output_file,
+        no_deps=no_deps,
+        audit=audit,
+        audit_severity=audit_severity.upper(),
+        fail_on=fail_on.upper() if fail_on else None,
     )
     success = command.execute()
     handle_command_exit(command, success)

@@ -1,6 +1,6 @@
 """Pydantic models for SBOM references and internal component representation."""
 
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from pydantic import Field
 
@@ -44,3 +44,30 @@ class SbomReferenceModel(PlatformBaseModel):
     format: str = Field(description="SBOM format and schema version (e.g. 'cyclonedx-1.6')")
     sha256: str = Field(description="SHA-256 hash of the sbom.json file (prefixed 'sha256:')")
     component_count: int = Field(description="Number of components listed in the SBOM")
+
+
+class CveFindingModel(PlatformBaseModel):
+    """A single CVE finding from vulnerability scanning."""
+
+    vulnerability_id: str = Field(description="CVE identifier (e.g. 'CVE-2024-1234')")
+    severity: str = Field(description="Severity level: CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN")
+    package_name: str = Field(description="Affected package name")
+    installed_version: str = Field(description="Installed version of the affected package")
+    fixed_version: Optional[str] = Field(None, description="Version that fixes the vulnerability, if available")
+    title: Optional[str] = Field(None, description="Short description of the vulnerability")
+    purl: Optional[str] = Field(None, description="Package URL of the affected component")
+
+
+class CveAuditResultModel(PlatformBaseModel):
+    """Summary of CVE vulnerability scan results."""
+
+    scanner: str = Field(description="Scanner backend used: 'trivy' | 'grype'")
+    scanner_version: str = Field(description="Version of the scanner")
+    sbom_path: str = Field(description="Path to the SBOM file that was scanned")
+    total_findings: int = Field(description="Total number of vulnerabilities found")
+    critical: int = Field(default=0, description="Count of CRITICAL severity findings")
+    high: int = Field(default=0, description="Count of HIGH severity findings")
+    medium: int = Field(default=0, description="Count of MEDIUM severity findings")
+    low: int = Field(default=0, description="Count of LOW severity findings")
+    unknown: int = Field(default=0, description="Count of UNKNOWN severity findings")
+    findings: List[CveFindingModel] = Field(default_factory=list, description="Individual vulnerability findings")

@@ -61,7 +61,7 @@ def _mock_provisioner(provisioner_type, chart_name=None, chart_version=None, cha
 class TestSbomBuilderInit:
     def test_default_collectors_count(self):
         builder = SbomBuilder()
-        assert len(builder._collectors) == 4
+        assert len(builder._collectors) == 8
 
     def test_injectable_collectors(self):
         custom = [MagicMock()]
@@ -76,6 +76,27 @@ class TestSbomBuilderInit:
         builder = SbomBuilder()
         assert not builder.has_errors()
         assert builder.sbom_reference is None
+
+    def test_no_deps_excludes_dependency_file_collector(self):
+        from strata.builders.sbom.deps_collector import DependencyFileCollector
+
+        builder = SbomBuilder(no_deps=True)
+        types = [type(c) for c in builder._collectors]
+        assert DependencyFileCollector not in types
+        assert len(builder._collectors) == 7
+
+    def test_no_deps_false_includes_dependency_file_collector(self):
+        from strata.builders.sbom.deps_collector import DependencyFileCollector
+
+        builder = SbomBuilder(no_deps=False)
+        types = [type(c) for c in builder._collectors]
+        assert DependencyFileCollector in types
+
+    def test_no_deps_ignored_when_collectors_injected(self):
+        """Explicit collectors= wins over no_deps — no_deps has no effect."""
+        custom = [MagicMock()]
+        builder = SbomBuilder(collectors=custom, no_deps=True)
+        assert builder._collectors is custom
 
 
 # ---------------------------------------------------------------------------
