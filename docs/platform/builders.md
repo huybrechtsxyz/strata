@@ -782,7 +782,42 @@ Default ignored paths include `**/node_modules`, `**/.venv`, `**/venv`, `**/dist
 `**/build`, `**/__pycache__`, and `**/.git`.  Entries in `sbom-ignore.yaml` are
 **additive** — they extend the defaults rather than replace them.
 
-**Built-in lockfile formats:**
+### CVE Audit (`--audit`)
+
+After generating the SBOM, strata can optionally scan it for known vulnerabilities
+using a locally-installed CVE scanner. No network calls to external APIs — the
+scanner runs locally against the generated `sbom.json`.
+
+**Prerequisites:** install [Trivy](https://trivy.dev) (preferred) or
+[Grype](https://github.com/anchore/grype) in your PATH. Strata auto-detects
+whichever is available (Trivy takes priority if both exist).
+
+```bash
+# Advisory mode — prints findings, never fails the build
+strata build sbom -f xyz-deploy-prd.yaml --audit
+
+# CI gate — fail (exit code 3) if HIGH or CRITICAL vulnerabilities exist
+strata build sbom --scan . --audit --fail-on HIGH
+
+# Only report CRITICAL vulnerabilities
+strata build sbom --scan . --audit --severity CRITICAL --fail-on CRITICAL
+```
+
+| Flag               | Default  | Description                                                                 |
+| ------------------ | -------- | --------------------------------------------------------------------------- |
+| `--audit`          | off      | Enable CVE scanning after SBOM generation                                   |
+| `--severity LEVEL` | `MEDIUM` | Minimum severity to include: `CRITICAL`\|`HIGH`\|`MEDIUM`\|`LOW`\|`UNKNOWN` |
+| `--fail-on LEVEL`  | *(none)* | Exit code 3 if findings at this severity or above exist                     |
+
+**Console output** shows a severity summary table and the top 10 findings.
+**NDJSON output** (`--output ndjson`) emits each finding as a `data` event with
+an `audit_finding` payload.  **JSON output** includes an `audit` key with
+severity counts.
+
+When no scanner is found in PATH, `--audit` prints a warning and continues — it
+never blocks a build due to missing tooling.
+
+### Built-in lockfile formats
 
 | File pattern         | Language / Ecosystem | Parser                    |
 | -------------------- | -------------------- | ------------------------- |

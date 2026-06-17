@@ -2,7 +2,7 @@
 
 Declarative guardrails evaluated at specific lifecycle phases before or after infrastructure changes are applied.
 
-**Built-in types:** `customer_zone` | `required_tags` | `naming_pattern` | `script` | `sbom_pinned_versions` | `sbom_allowed_registries` | `sbom_denied_packages` | `sbom_max_components` | **Phases:** `validate` / `build` / `plan` / `deploy` | **Enforcement:** `deny` / `warn` / `audit` | **Declared in:** `configuration.spec.policies`
+**Built-in types:** `customer_zone` | `required_tags` | `naming_pattern` | `script` | `sbom_pinned_versions` | `sbom_allowed_registries` | `sbom_denied_packages` | `sbom_max_components` | `sbom_license` | **Phases:** `validate` / `build` / `plan` / `deploy` | **Enforcement:** `deny` / `warn` / `audit` | **Declared in:** `configuration.spec.policies`
 
 ---
 
@@ -60,16 +60,17 @@ spec:
 
 ### Built-in types
 
-| Type                      | Phase      | What it checks                                                         |
-| ------------------------- | ---------- | ---------------------------------------------------------------------- |
-| `customer_zone`           | `plan`     | Terraform resource regions vs. the customer's allowed zones            |
-| `required_tags`           | `build`    | Required tags/labels present on all resources in the platform artifact |
-| `naming_pattern`          | `validate` | `meta.name` fields match a configured regex pattern                    |
-| `script`                  | any        | Delegates to an external command (OPA, Checkov, custom script)         |
-| `sbom_pinned_versions`    | `build`    | SBOM components have pinned, non-floating version tags                 |
-| `sbom_allowed_registries` | `build`    | Container images originate only from approved registries               |
-| `sbom_denied_packages`    | `build`    | No SBOM component matches a purl/name blocklist pattern                |
-| `sbom_max_components`     | `build`    | Total SBOM component count stays within a configured budget            |
+| Type                      | Phase      | What it checks                                                                   |
+| ------------------------- | ---------- | -------------------------------------------------------------------------------- |
+| `customer_zone`           | `plan`     | Terraform resource regions vs. the customer's allowed zones                      |
+| `required_tags`           | `build`    | Required tags/labels present on all resources in the platform artifact           |
+| `naming_pattern`          | `validate` | `meta.name` fields match a configured regex pattern                              |
+| `script`                  | any        | Delegates to an external command (OPA, Checkov, custom script)                   |
+| `sbom_pinned_versions`    | `build`    | SBOM components have pinned, non-floating version tags                           |
+| `sbom_allowed_registries` | `build`    | Container images originate only from approved registries                         |
+| `sbom_denied_packages`    | `build`    | No SBOM component matches a purl/name blocklist pattern                          |
+| `sbom_max_components`     | `build`    | Total SBOM component count stays within a configured budget                      |
+| `sbom_license`            | `build`    | SBOM component licenses match an allow/deny list (via `strata:license` property) |
 
 ### `customer_zone`
 
@@ -241,6 +242,39 @@ Skipped gracefully when no SBOM components are available or when neither `max_co
       deps: 150
 ```
 
+### `sbom_license`
+
+Evaluates at the `build` phase. Checks each component's `strata:license` property against configurable allow and deny lists using `fnmatch` glob patterns. Useful for enforcing open-source license compliance without external API calls — works entirely offline with data already in the SBOM.
+
+Collectors or lockfile parsers that capture license metadata set `properties["strata:license"] = "MIT"` on their `SbomComponentModel`. Components without this property are governed by the `unknown_action` setting.
+
+Skipped gracefully when no SBOM components are available or when neither `allowed` nor `denied` is configured.
+
+| `configuration` key | Type           | Default  | Description                                                             |
+| ------------------- | -------------- | -------- | ----------------------------------------------------------------------- |
+| `allowed`           | list of string | none     | SPDX license globs — only these are permitted (e.g. `MIT`, `BSD-*`)     |
+| `denied`            | list of string | none     | SPDX license globs — these are always blocked (e.g. `GPL-*`, `AGPL-*`)  |
+| `unknown_action`    | string         | `"warn"` | What to do when `strata:license` is missing: `allow`, `warn`, or `deny` |
+
+When both `allowed` and `denied` are configured, `denied` is checked first — an explicit deny always wins.
+
+```yaml
+- name: license_compliance
+  type: sbom_license
+  phase: build
+  enforcement: deny
+  configuration:
+    allowed:
+      - MIT
+      - Apache-2.0
+      - BSD-*
+      - ISC
+    denied:
+      - GPL-3.0-only
+      - AGPL-*
+    unknown_action: warn
+```
+
 ---
 
 ## Enforcement Levels
@@ -396,6 +430,16 @@ spec:
       description: "Alert when component count exceeds budget"
       configuration:
         max_count: 200
+
+    - name: license_compliance
+      type: sbom_license
+      phase: build
+      enforcement: deny
+      description: "Only permissive open-source licenses allowed"
+      configuration:
+        allowed: [MIT, Apache-2.0, "BSD-*", ISC, Unlicense]
+        denied: ["GPL-*", "AGPL-*"]
+        unknown_action: warn
 
     # plan phase: checked after `terraform plan`, before `terraform apply`
     - name: zone_enforcement

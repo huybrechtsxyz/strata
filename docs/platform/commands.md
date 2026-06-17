@@ -567,7 +567,7 @@ strata build plan --stage production --artifacts-only
 ### `build sbom`
 
 ```
-strata build sbom [-f FILE | --scan PATH] [--report MODE] [--output-file PATH] [--no-deps] [standard options]
+strata build sbom [-f FILE | --scan PATH] [--report MODE] [--output-file PATH] [--no-deps] [--audit] [--severity LEVEL] [--fail-on LEVEL] [standard options]
 ```
 
 Two modes of operation:
@@ -595,12 +595,15 @@ Collectors run in both modes:
 
 `--report` selects the output style:
 
-| Flag                 | Behaviour                                                |
-| -------------------- | -------------------------------------------------------- |
-| `--report cyclonedx` | Write `sbom.json` (CycloneDX 1.6 JSON) — **default**     |
-| `--report inventory` | Print a human-readable grouped listing to stdout         |
-| `--output-file PATH` | Write to *PATH* instead of the default location / stdout |
-| `--no-deps`          | Skip `DependencyFileCollector` (faster for large repos)  |
+| Flag                 | Behaviour                                                                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--report cyclonedx` | Write `sbom.json` (CycloneDX 1.6 JSON) — **default**                                                                                            |
+| `--report inventory` | Print a human-readable grouped listing to stdout                                                                                                |
+| `--output-file PATH` | Write to *PATH* instead of the default location / stdout                                                                                        |
+| `--no-deps`          | Skip `DependencyFileCollector` (faster for large repos)                                                                                         |
+| `--audit`            | Run CVE vulnerability scan after generating the SBOM (requires [trivy](https://trivy.dev) or [grype](https://github.com/anchore/grype) in PATH) |
+| `--severity LEVEL`   | Minimum severity to report: `CRITICAL` \| `HIGH` \| `MEDIUM` \| `LOW` \| `UNKNOWN`. Default: `MEDIUM`                                           |
+| `--fail-on LEVEL`    | Exit non-zero (code 3) if findings at this severity or above exist. Optional — without it, audit is advisory only                               |
 
 ```bash
 # Regenerate sbom.json from deployment
@@ -623,6 +626,15 @@ strata build sbom --scan ./infra --report inventory
 
 # Scan + write SBOM to a specific file
 strata build sbom --scan . --output-file sbom.json
+
+# Generate SBOM + run CVE audit (advisory — prints findings, never fails)
+strata build sbom --scan . --audit
+
+# Audit with CI gate — fail if any HIGH or CRITICAL findings
+strata build sbom -f xyz-deploy-prd.yaml --audit --fail-on HIGH
+
+# Audit only CRITICAL vulnerabilities
+strata build sbom --scan . --audit --severity CRITICAL --fail-on CRITICAL
 ```
 
 ### `build clean`

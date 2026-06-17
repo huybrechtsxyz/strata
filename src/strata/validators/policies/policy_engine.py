@@ -66,6 +66,7 @@ class PolicyEngine:
         from strata.validators.policies.required_tags_policy import RequiredTagsPolicy
         from strata.validators.policies.sbom_allowed_registries_policy import SbomAllowedRegistriesPolicy
         from strata.validators.policies.sbom_denied_packages_policy import SbomDeniedPackagesPolicy
+        from strata.validators.policies.sbom_license_policy import SbomLicensePolicy
         from strata.validators.policies.sbom_max_components_policy import SbomMaxComponentsPolicy
         from strata.validators.policies.sbom_pinned_versions_policy import SbomPinnedVersionsPolicy
         from strata.validators.policies.script_policy import ScriptPolicy
@@ -79,6 +80,7 @@ class PolicyEngine:
             "sbom_allowed_registries": SbomAllowedRegistriesPolicy,
             "sbom_denied_packages": SbomDeniedPackagesPolicy,
             "sbom_max_components": SbomMaxComponentsPolicy,
+            "sbom_license": SbomLicensePolicy,
         }
 
         policy_class = _builtin.get(policy_model.type) or self._custom_types.get(policy_model.type)
