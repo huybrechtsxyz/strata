@@ -22,6 +22,7 @@ import fnmatch
 import json
 import re
 import tomllib
+import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, NamedTuple, Optional
@@ -310,3 +311,258 @@ class GoSumParser(LockfileParser):
                 seen[module_path] = version_str
 
         return [RawDependency(name=mod, version=ver) for mod, ver in seen.items()]
+
+
+class NugetPackagesLockParser(LockfileParser):
+    """Parse ``packages.lock.json`` (NuGet .NET lockfile, v1/v2 format).
+
+    Reads ``dependencies.<framework>.<package>`` entries.  De-duplicates
+    across target frameworks — highest version wins to avoid duplication.
+    """
+
+    @property
+    def ecosystem(self) -> str:
+        return "nuget"
+
+    def filename_patterns(self) -> List[str]:
+        return ["packages.lock.json"]
+
+    def parse(self, path: Path) -> List[RawDependency]:
+        try:
+            with path.open(encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(str(exc)) from exc
+
+        # Shape: {"dependencies": {"<framework>": {"<pkg>": {"resolved": "x.y.z", ...}}}}
+        seen: dict[str, str | None] = {}
+        for framework_deps in (data.get("dependencies") or {}).values():
+            if not isinstance(framework_deps, dict):
+                continue
+            for pkg_name, pkg_info in framework_deps.items():
+                if not pkg_name:
+                    continue
+                resolved = pkg_info.get("resolved") if isinstance(pkg_info, dict) else None
+                version = str(resolved) if resolved else None
+                # Keep the entry; if already present keep whichever has a version
+                if pkg_name not in seen or (version and not seen[pkg_name]):
+                    seen[pkg_name] = version
+
+        return [RawDependency(name=n, version=v) for n, v in seen.items()]
+
+
+class PackagesConfigParser(LockfileParser):
+    """Parse ``packages.config`` (legacy NuGet XML format).
+
+    Each ``<package id="..." version="..." />`` element becomes a dependency.
+    """
+
+    @property
+    def ecosystem(self) -> str:
+        return "nuget"
+
+    def filename_patterns(self) -> List[str]:
+        return ["packages.config"]
+
+    def parse(self, path: Path) -> List[RawDependency]:
+        try:
+            tree = ET.parse(path)
+        except (OSError, ET.ParseError) as exc:
+            raise ValueError(str(exc)) from exc
+
+        deps: List[RawDependency] = []
+        for elem in tree.iter("package"):
+            pkg_id = elem.get("id")
+            if not pkg_id:
+                continue
+            version = elem.get("version")
+            deps.append(RawDependency(name=pkg_id, version=version))
+        return deps
+
+
+class MavenPomParser(LockfileParser):
+    """Parse ``pom.xml`` (Apache Maven project descriptor).
+
+    Reads ``<dependencies><dependency>`` elements at the top level.
+    Handles the default XML namespace ``http://maven.apache.org/POM/4.0.0``.
+    Reports ``groupId:artifactId`` as the package name and ``version`` when
+    present (property interpolation is intentionally not resolved).
+    """
+
+    @property
+    def ecosystem(self) -> str:
+        return "maven"
+
+    def filename_patterns(self) -> List[str]:
+        return ["pom.xml"]
+
+    def parse(self, path: Path) -> List[RawDependency]:
+        try:
+            tree = ET.parse(path)
+        except (OSError, ET.ParseError) as exc:
+            raise ValueError(str(exc)) from exc
+
+        root = tree.getroot()
+        # pom.xml may or may not carry the namespace
+        ns = ""
+        if root.tag.startswith("{"):
+            ns = root.tag.split("}")[0] + "}"
+
+        deps: List[RawDependency] = []
+        for dep in root.iter(f"{ns}dependency"):
+            group_id = dep.findtext(f"{ns}groupId") or ""
+            artifact_id = dep.findtext(f"{ns}artifactId") or ""
+            if not artifact_id:
+                continue
+            name = f"{group_id}:{artifact_id}" if group_id else artifact_id
+            version_text = dep.findtext(f"{ns}version")
+            # Skip property references like ${project.version}
+            version = version_text if version_text and not version_text.startswith("$") else None
+            deps.append(RawDependency(name=name, version=version))
+        return deps
+
+
+class GradleLockParser(LockfileParser):
+    """Parse ``gradle.lockfile`` (Gradle dependency locking output).
+
+    Format: ``group:artifact:version=<configurations...>``  (one per line).
+    Lines starting with ``#`` or ``empty=`` are skipped.
+    """
+
+    @property
+    def ecosystem(self) -> str:
+        return "maven"
+
+    def filename_patterns(self) -> List[str]:
+        return ["gradle.lockfile"]
+
+    def parse(self, path: Path) -> List[RawDependency]:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            raise ValueError(str(exc)) from exc
+
+        deps: List[RawDependency] = []
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("empty="):
+                continue
+            # format: group:artifact:version=config1,config2
+            coord, _, _ = line.partition("=")
+            parts = coord.split(":")
+            if len(parts) < 3:
+                continue
+            group, artifact, version = parts[0], parts[1], parts[2]
+            name = f"{group}:{artifact}" if group else artifact
+            deps.append(RawDependency(name=name, version=version or None))
+        return deps
+
+
+class GemfileLockParser(LockfileParser):
+    """Parse ``Gemfile.lock`` (Bundler / Ruby lockfile).
+
+    Reads the ``GEM`` and ``GIT`` sections.  Each ``    <name> (<version>)``
+    line inside a ``specs:`` block becomes a dependency.
+    """
+
+    @property
+    def ecosystem(self) -> str:
+        return "gem"
+
+    def filename_patterns(self) -> List[str]:
+        return ["Gemfile.lock"]
+
+    def parse(self, path: Path) -> List[RawDependency]:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            raise ValueError(str(exc)) from exc
+
+        deps: List[RawDependency] = []
+        in_specs = False
+        gem_sections = {"GEM", "GIT", "PATH"}
+        current_section: str | None = None
+
+        for line in lines:
+            stripped = line.rstrip()
+            # Detect section headers (no leading spaces)
+            if stripped and not stripped[0].isspace():
+                current_section = stripped.split()[0].rstrip(":")
+                in_specs = False
+                continue
+
+            if current_section in gem_sections:
+                if stripped.strip() == "specs:":
+                    in_specs = True
+                    continue
+                if in_specs:
+                    # Spec lines: "    name (version)" — exactly 4 spaces of indent
+                    m = re.match(r"^    ([^\s(]+) \(([^)]+)\)$", stripped)
+                    if m:
+                        deps.append(RawDependency(name=m.group(1), version=m.group(2)))
+                    elif stripped and not stripped[0] == " ":
+                        in_specs = False
+
+        return deps
+
+
+class CargoLockParser(LockfileParser):
+    """Parse ``Cargo.lock`` (Rust/Cargo lockfile, v3 TOML format).
+
+    Reads ``[[package]]`` entries.  Each entry has ``name`` and ``version``.
+    """
+
+    @property
+    def ecosystem(self) -> str:
+        return "cargo"
+
+    def filename_patterns(self) -> List[str]:
+        return ["Cargo.lock"]
+
+    def parse(self, path: Path) -> List[RawDependency]:
+        try:
+            with path.open("rb") as fh:
+                data = tomllib.load(fh)
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raise ValueError(str(exc)) from exc
+
+        deps: List[RawDependency] = []
+        for pkg in data.get("package") or []:
+            name = pkg.get("name")
+            if not name:
+                continue
+            version = pkg.get("version")
+            deps.append(RawDependency(name=str(name), version=str(version) if version else None))
+        return deps
+
+
+class ComposerLockParser(LockfileParser):
+    """Parse ``composer.lock`` (PHP Composer lockfile).
+
+    Reads ``packages`` and ``packages-dev`` arrays.  Each entry has ``name``
+    and ``version`` fields.
+    """
+
+    @property
+    def ecosystem(self) -> str:
+        return "packagist"
+
+    def filename_patterns(self) -> List[str]:
+        return ["composer.lock"]
+
+    def parse(self, path: Path) -> List[RawDependency]:
+        try:
+            with path.open(encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(str(exc)) from exc
+
+        deps: List[RawDependency] = []
+        for section in ("packages", "packages-dev"):
+            for pkg in data.get(section) or []:
+                name = pkg.get("name")
+                if not name:
+                    continue
+                version = pkg.get("version")
+                deps.append(RawDependency(name=str(name), version=str(version) if version else None))
+        return deps

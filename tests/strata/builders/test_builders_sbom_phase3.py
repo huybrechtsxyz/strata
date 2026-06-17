@@ -10,10 +10,17 @@ import pytest
 from strata.builders.sbom.deps_collector import DependencyFileCollector
 from strata.builders.sbom.lockfile_parsers import (
     DEFAULT_REGISTRY,
+    CargoLockParser,
+    ComposerLockParser,
+    GemfileLockParser,
     GoSumParser,
+    GradleLockParser,
     LockfileParser,
     LockfileParserRegistry,
+    MavenPomParser,
+    NugetPackagesLockParser,
     PackageLockJsonParser,
+    PackagesConfigParser,
     PyprojectTomlParser,
     RawDependency,
     RequirementsTxtParser,
@@ -533,9 +540,283 @@ class CargoLockParser(LockfileParser):
 class TestSbomBuilderDefaultCollectorCount:
     def test_default_collectors_count_is_seven(self):
         builder = SbomBuilder()
-        assert len(builder._collectors) == 7
+        assert len(builder._collectors) == 8
 
     def test_default_collectors_includes_deps(self):
         builder = SbomBuilder()
         names = [c.get_collector_name() for c in builder._collectors]
         assert "deps" in names
+
+
+# ---------------------------------------------------------------------------
+# NugetPackagesLockParser
+# ---------------------------------------------------------------------------
+
+
+class TestNugetPackagesLockParser:
+    def _parse(self, data: dict, tmp_path: Path) -> List[RawDependency]:
+        p = tmp_path / "packages.lock.json"
+        p.write_text(json.dumps(data), encoding="utf-8")
+        return NugetPackagesLockParser().parse(p)
+
+    def test_extracts_package_name_and_version(self, tmp_path):
+        data = {"dependencies": {"net8.0": {"Newtonsoft.Json": {"resolved": "13.0.3"}}}}
+        deps = self._parse(data, tmp_path)
+        assert RawDependency("Newtonsoft.Json", "13.0.3") in deps
+
+    def test_deduplicates_across_frameworks(self, tmp_path):
+        data = {
+            "dependencies": {
+                "net8.0": {"Serilog": {"resolved": "3.1.0"}},
+                "net6.0": {"Serilog": {"resolved": "3.1.0"}},
+            }
+        }
+        deps = self._parse(data, tmp_path)
+        assert len([d for d in deps if d.name == "Serilog"]) == 1
+
+    def test_empty_dependencies_returns_empty(self, tmp_path):
+        assert self._parse({"dependencies": {}}, tmp_path) == []
+
+    def test_invalid_json_raises_value_error(self, tmp_path):
+        p = tmp_path / "packages.lock.json"
+        p.write_text("{bad", encoding="utf-8")
+        with pytest.raises(ValueError):
+            NugetPackagesLockParser().parse(p)
+
+    def test_missing_file_raises_value_error(self, tmp_path):
+        with pytest.raises(ValueError):
+            NugetPackagesLockParser().parse(tmp_path / "packages.lock.json")
+
+
+# ---------------------------------------------------------------------------
+# PackagesConfigParser
+# ---------------------------------------------------------------------------
+
+
+class TestPackagesConfigParser:
+    def _parse(self, xml: str, tmp_path: Path) -> List[RawDependency]:
+        p = tmp_path / "packages.config"
+        p.write_text(xml, encoding="utf-8")
+        return PackagesConfigParser().parse(p)
+
+    def test_extracts_package_and_version(self, tmp_path):
+        xml = '<?xml version="1.0"?><packages><package id="Newtonsoft.Json" version="13.0.3" /></packages>'
+        deps = self._parse(xml, tmp_path)
+        assert RawDependency("Newtonsoft.Json", "13.0.3") in deps
+
+    def test_multiple_packages(self, tmp_path):
+        xml = '<packages><package id="A" version="1.0" /><package id="B" version="2.0" /></packages>'
+        deps = self._parse(xml, tmp_path)
+        assert len(deps) == 2
+
+    def test_invalid_xml_raises_value_error(self, tmp_path):
+        p = tmp_path / "packages.config"
+        p.write_text("<not valid xml", encoding="utf-8")
+        with pytest.raises(ValueError):
+            PackagesConfigParser().parse(p)
+
+    def test_missing_file_raises_value_error(self, tmp_path):
+        with pytest.raises(ValueError):
+            PackagesConfigParser().parse(tmp_path / "packages.config")
+
+
+# ---------------------------------------------------------------------------
+# MavenPomParser
+# ---------------------------------------------------------------------------
+
+
+class TestMavenPomParser:
+    def _parse(self, xml: str, tmp_path: Path) -> List[RawDependency]:
+        p = tmp_path / "pom.xml"
+        p.write_text(xml, encoding="utf-8")
+        return MavenPomParser().parse(p)
+
+    def test_extracts_groupid_artifactid_version(self, tmp_path):
+        xml = (
+            '<project xmlns="http://maven.apache.org/POM/4.0.0">'
+            "<dependencies><dependency>"
+            "<groupId>com.google.guava</groupId>"
+            "<artifactId>guava</artifactId>"
+            "<version>32.1.3-jre</version>"
+            "</dependency></dependencies></project>"
+        )
+        deps = self._parse(xml, tmp_path)
+        assert RawDependency("com.google.guava:guava", "32.1.3-jre") in deps
+
+    def test_skips_property_reference_versions(self, tmp_path):
+        xml = (
+            "<project><dependencies><dependency>"
+            "<groupId>org.example</groupId><artifactId>foo</artifactId>"
+            "<version>${project.version}</version>"
+            "</dependency></dependencies></project>"
+        )
+        deps = self._parse(xml, tmp_path)
+        assert deps[0].version is None
+
+    def test_no_namespace(self, tmp_path):
+        xml = (
+            "<project><dependencies><dependency>"
+            "<groupId>org.apache</groupId><artifactId>commons</artifactId>"
+            "<version>1.0</version>"
+            "</dependency></dependencies></project>"
+        )
+        deps = self._parse(xml, tmp_path)
+        assert RawDependency("org.apache:commons", "1.0") in deps
+
+    def test_invalid_xml_raises_value_error(self, tmp_path):
+        p = tmp_path / "pom.xml"
+        p.write_text("<not valid", encoding="utf-8")
+        with pytest.raises(ValueError):
+            MavenPomParser().parse(p)
+
+
+# ---------------------------------------------------------------------------
+# GradleLockParser
+# ---------------------------------------------------------------------------
+
+
+class TestGradleLockParser:
+    def _parse(self, content: str, tmp_path: Path) -> List[RawDependency]:
+        p = tmp_path / "gradle.lockfile"
+        p.write_text(content, encoding="utf-8")
+        return GradleLockParser().parse(p)
+
+    def test_extracts_group_artifact_version(self, tmp_path):
+        content = "# This is a comment\ncom.google.guava:guava:32.1.3=compileClasspath\n"
+        deps = self._parse(content, tmp_path)
+        assert RawDependency("com.google.guava:guava", "32.1.3") in deps
+
+    def test_skips_comments_and_empty_lines(self, tmp_path):
+        content = "# comment\n\norg.slf4j:slf4j-api:2.0.9=runtimeClasspath\n"
+        deps = self._parse(content, tmp_path)
+        assert len(deps) == 1
+
+    def test_empty_file_returns_empty(self, tmp_path):
+        assert self._parse("", tmp_path) == []
+
+    def test_missing_file_raises_value_error(self, tmp_path):
+        with pytest.raises(ValueError):
+            GradleLockParser().parse(tmp_path / "gradle.lockfile")
+
+
+# ---------------------------------------------------------------------------
+# GemfileLockParser
+# ---------------------------------------------------------------------------
+
+
+class TestGemfileLockParser:
+    def _parse(self, content: str, tmp_path: Path) -> List[RawDependency]:
+        p = tmp_path / "Gemfile.lock"
+        p.write_text(content, encoding="utf-8")
+        return GemfileLockParser().parse(p)
+
+    def test_extracts_gem_name_and_version(self, tmp_path):
+        content = "GEM\n  remote: https://rubygems.org/\n  specs:\n    rails (7.1.0)\n    activesupport (7.1.0)\n"
+        deps = self._parse(content, tmp_path)
+        assert RawDependency("rails", "7.1.0") in deps
+        assert RawDependency("activesupport", "7.1.0") in deps
+
+    def test_empty_file_returns_empty(self, tmp_path):
+        assert self._parse("", tmp_path) == []
+
+    def test_missing_file_raises_value_error(self, tmp_path):
+        with pytest.raises(ValueError):
+            GemfileLockParser().parse(tmp_path / "Gemfile.lock")
+
+
+# ---------------------------------------------------------------------------
+# CargoLockParser
+# ---------------------------------------------------------------------------
+
+
+class TestCargoLockParser:
+    def _parse(self, content: str, tmp_path: Path) -> List[RawDependency]:
+        p = tmp_path / "Cargo.lock"
+        p.write_text(content, encoding="utf-8")
+        return CargoLockParser().parse(p)
+
+    def test_extracts_name_and_version(self, tmp_path):
+        content = 'version = 3\n\n[[package]]\nname = "serde"\nversion = "1.0.197"\n'
+        deps = self._parse(content, tmp_path)
+        assert RawDependency("serde", "1.0.197") in deps
+
+    def test_multiple_packages(self, tmp_path):
+        content = (
+            "version = 3\n\n"
+            '[[package]]\nname = "serde"\nversion = "1.0.197"\n\n'
+            '[[package]]\nname = "tokio"\nversion = "1.36.0"\n'
+        )
+        deps = self._parse(content, tmp_path)
+        assert len(deps) == 2
+
+    def test_empty_packages_returns_empty(self, tmp_path):
+        assert self._parse("version = 3\n", tmp_path) == []
+
+    def test_invalid_toml_raises_value_error(self, tmp_path):
+        p = tmp_path / "Cargo.lock"
+        p.write_text("[bad toml", encoding="utf-8")
+        with pytest.raises(ValueError):
+            CargoLockParser().parse(p)
+
+
+# ---------------------------------------------------------------------------
+# ComposerLockParser
+# ---------------------------------------------------------------------------
+
+
+class TestComposerLockParser:
+    def _parse(self, data: dict, tmp_path: Path) -> List[RawDependency]:
+        p = tmp_path / "composer.lock"
+        p.write_text(json.dumps(data), encoding="utf-8")
+        return ComposerLockParser().parse(p)
+
+    def test_extracts_packages(self, tmp_path):
+        data = {"packages": [{"name": "laravel/framework", "version": "v10.48.0"}]}
+        deps = self._parse(data, tmp_path)
+        assert RawDependency("laravel/framework", "v10.48.0") in deps
+
+    def test_extracts_dev_packages(self, tmp_path):
+        data = {"packages": [], "packages-dev": [{"name": "phpunit/phpunit", "version": "10.5.0"}]}
+        deps = self._parse(data, tmp_path)
+        assert RawDependency("phpunit/phpunit", "10.5.0") in deps
+
+    def test_empty_sections_returns_empty(self, tmp_path):
+        assert self._parse({"packages": [], "packages-dev": []}, tmp_path) == []
+
+    def test_invalid_json_raises_value_error(self, tmp_path):
+        p = tmp_path / "composer.lock"
+        p.write_text("{bad", encoding="utf-8")
+        with pytest.raises(ValueError):
+            ComposerLockParser().parse(p)
+
+    def test_missing_file_raises_value_error(self, tmp_path):
+        with pytest.raises(ValueError):
+            ComposerLockParser().parse(tmp_path / "composer.lock")
+
+
+# ---------------------------------------------------------------------------
+# DEFAULT_REGISTRY coverage — all new ecosystems are registered
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultRegistryNewParsers:
+    def test_nuget_packages_lock_registered(self):
+        assert DEFAULT_REGISTRY.find("packages.lock.json") is not None
+
+    def test_packages_config_registered(self):
+        assert DEFAULT_REGISTRY.find("packages.config") is not None
+
+    def test_pom_xml_registered(self):
+        assert DEFAULT_REGISTRY.find("pom.xml") is not None
+
+    def test_gradle_lockfile_registered(self):
+        assert DEFAULT_REGISTRY.find("gradle.lockfile") is not None
+
+    def test_gemfile_lock_registered(self):
+        assert DEFAULT_REGISTRY.find("Gemfile.lock") is not None
+
+    def test_cargo_lock_registered(self):
+        assert DEFAULT_REGISTRY.find("Cargo.lock") is not None
+
+    def test_composer_lock_registered(self):
+        assert DEFAULT_REGISTRY.find("composer.lock") is not None
