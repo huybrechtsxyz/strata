@@ -214,6 +214,8 @@ class SbomBuilder(BaseBuilder):
                 component_count=len(components),
             )
 
+            self._last_components = components
+
             if self.verbose:
                 self._messages.append(f"SBOM written: {sbom_path} ({len(components)} components)")
 

@@ -784,13 +784,23 @@ Default ignored paths include `**/node_modules`, `**/.venv`, `**/venv`, `**/dist
 
 **Built-in lockfile formats:**
 
-| File pattern        | Ecosystem | Parser                  |
-| ------------------- | --------- | ----------------------- |
-| `requirements*.txt` | `pypi`    | `RequirementsTxtParser` |
-| `pyproject.toml`    | `pypi`    | `PyprojectTomlParser`   |
-| `uv.lock`           | `pypi`    | `UvLockParser`          |
-| `package-lock.json` | `npm`     | `PackageLockJsonParser` |
-| `go.sum`            | `golang`  | `GoSumParser`           |
+| File pattern         | Language / Ecosystem | Parser                    |
+| -------------------- | -------------------- | ------------------------- |
+| `requirements*.txt`  | Python / `pypi`      | `RequirementsTxtParser`   |
+| `pyproject.toml`     | Python / `pypi`      | `PyprojectTomlParser`     |
+| `uv.lock`            | Python / `pypi`      | `UvLockParser`            |
+| `package-lock.json`  | Node.js / `npm`      | `PackageLockJsonParser`   |
+| `go.sum`             | Go / `golang`        | `GoSumParser`             |
+| `packages.lock.json` | .NET / `nuget`       | `NugetPackagesLockParser` |
+| `packages.config`    | .NET / `nuget`       | `PackagesConfigParser`    |
+| `pom.xml`            | Java / `maven`       | `MavenPomParser`          |
+| `gradle.lockfile`    | Java / `maven`       | `GradleLockParser`        |
+| `Gemfile.lock`       | Ruby / `gem`         | `GemfileLockParser`       |
+| `Cargo.lock`         | Rust / `cargo`       | `CargoLockParser`         |
+| `composer.lock`      | PHP / `packagist`    | `ComposerLockParser`      |
+
+Each parser lives in `strata.builders.sbom.lockfile_parsers.<language>` and is
+exported from the package `__init__.py`.
 
 Additional formats are added via workspace lockfile parser plugins — see below.
 
@@ -798,8 +808,18 @@ Additional formats are added via workspace lockfile parser plugins — see below
 
 #### Workspace plugins
 
-Teams can add collectors and lockfile parsers without forking strata.  Plugins are
-declared in `.strata/collectors.yaml` and loaded at build time:
+Teams can add collectors and lockfile parsers without forking strata.  There are
+two ways to add a lockfile parser:
+
+**Option A — Drop folder (zero config):** place any `.py` file in
+`.strata/lockfile_parsers/` and it is imported automatically.  No YAML entry
+needed.  Files starting with `_` are skipped.
+
+**Option B — Explicit config:** declare the plugin in `.strata/collectors.yaml`.
+This is required for full `BaseSbomCollector` plugins, and is an alternative for
+lockfile parsers when you want to store them outside the drop folder.
+
+Plugin declarations in `.strata/collectors.yaml`:
 
 ```yaml
 # .strata/collectors.yaml
@@ -902,14 +922,17 @@ class CargoLockParser(LockfileParser):
         ]
 ```
 
-Declare it in `.strata/collectors.yaml` with `type: lockfile_parser` — `class` is
-optional because importing the module is sufficient to trigger auto-registration:
+**Option A — Drop folder (zero config):** save the file as
+`.strata/lockfile_parsers/cargo.py` and it is imported automatically on the next
+build.  No YAML entry needed.
+
+**Option B — Explicit config:** declare it in `.strata/collectors.yaml`:
 
 ```yaml
 collectors:
   - name: cargo-lock
     path: .strata/plugins/cargo_lockfile_parser.py
-    type: lockfile_parser
+    type: lockfile_parser   # class is optional
 ```
 
 #### Test isolation

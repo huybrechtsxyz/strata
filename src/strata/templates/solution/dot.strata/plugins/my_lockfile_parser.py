@@ -2,13 +2,21 @@
 Custom lockfile parser template for strata.
 
 Copy / rename this file and implement the class to teach DependencyFileCollector
-how to read a new dependency manifest format.  Declare it in
-.strata/collectors.yaml:
+how to read a new dependency manifest format.
 
-    collectors:
-      - name: cargo-lock
-        path: .strata/plugins/my_lockfile_parser.py
-        type: lockfile_parser   # 'class' is optional — see How it works below
+Two ways to activate:
+
+  Option A — zero config (recommended for quick additions):
+    Save this file as .strata/lockfile_parsers/my_parser.py.
+    It will be auto-imported on the next build — no collectors.yaml entry needed.
+
+  Option B — explicit config:
+    Declare it in .strata/collectors.yaml:
+
+        collectors:
+          - name: cargo-lock
+            path: .strata/plugins/my_lockfile_parser.py
+            type: lockfile_parser   # 'class' is optional — see How it works below
 
 No changes to strata core code are required.
 
@@ -24,15 +32,14 @@ Minimal checklist
    Return version=None for unpinned dependencies (still valid per purl spec).
 5. Raise ValueError (only) for parse errors — DependencyFileCollector catches
    these, logs a warning, and continues.  Never raise any other exception.
-6. Update .strata/collectors.yaml with type: lockfile_parser.
+6. Activate via Option A (drop folder) or Option B (collectors.yaml).
 
 How it works
 ------------
-When CollectorPluginLoader reads a type=lockfile_parser entry, it imports the
-declared file.  Importing the file causes this class body to execute, which
-triggers LockfileParser.__init_subclass__ — that hook automatically calls
-DEFAULT_REGISTRY.register(MyLockfileParser()) without any explicit register()
-call.  The 'class' key in collectors.yaml is therefore optional.
+Whether loaded via the drop folder or collectors.yaml, importing the file causes
+this class body to execute, which triggers LockfileParser.__init_subclass__ — that
+hook automatically calls DEFAULT_REGISTRY.register(MyLockfileParser()) without any
+explicit register() call.  The 'class' key in collectors.yaml is therefore optional.
 
 DependencyFileCollector uses DEFAULT_REGISTRY.all_patterns() to know which
 filenames to look for, then calls the matched parser's parse() method.  It

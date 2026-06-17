@@ -28,6 +28,7 @@ class PolicyContext:
     platform_artifact: Optional[Any] = None  # PlatformArtifactModel
     plan_data: Optional[Dict[str, Any]] = None  # terraform show -json output
     build_path: Optional[Path] = None
+    sbom_components: Optional[List[Any]] = None  # List[SbomComponentModel]
 
 
 @dataclass

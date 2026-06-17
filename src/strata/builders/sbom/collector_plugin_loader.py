@@ -12,6 +12,7 @@ from strata.logger import get_logger
 logger = get_logger(__name__)
 
 _COLLECTORS_CONFIG = ".strata/collectors.yaml"
+_LOCKFILE_PARSERS_DIR = ".strata/lockfile_parsers"
 _SUPPORTED_TYPES = {"collector", "lockfile_parser"}
 
 
@@ -68,6 +69,8 @@ class CollectorPluginLoader:
         """
         config_path = work_path / _COLLECTORS_CONFIG
         if not config_path.exists():
+            # No YAML config, but still auto-discover from folder
+            CollectorPluginLoader._discover_lockfile_parsers(work_path)
             return []
 
         try:
@@ -152,7 +155,47 @@ class CollectorPluginLoader:
             extra.append(instance)
             logger.debug("Loaded collector plugin", plugin=name, cls=class_name)
 
+        # Auto-discover lockfile parsers from .strata/lockfile_parsers/*.py
+        CollectorPluginLoader._discover_lockfile_parsers(work_path)
+
         return extra
+
+    @staticmethod
+    def _discover_lockfile_parsers(work_path: Path) -> None:
+        """Auto-import all ``.py`` files from ``.strata/lockfile_parsers/``.
+
+        Each file is imported for its side effects — any ``LockfileParser``
+        subclass defined in the module is auto-registered into
+        ``DEFAULT_REGISTRY`` via ``__init_subclass__``.
+
+        Files starting with ``_`` are skipped.  Import errors are logged as
+        warnings but do not halt processing.
+        """
+        parsers_dir = work_path / _LOCKFILE_PARSERS_DIR
+        if not parsers_dir.is_dir():
+            return
+
+        for py_file in sorted(parsers_dir.glob("*.py")):
+            if py_file.name.startswith("_"):
+                continue
+            module_name = f"strata_lockfile_parser_{py_file.stem}"
+            if module_name in sys.modules:
+                continue  # already imported (avoid double-registration)
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, py_file)
+                if spec is None or spec.loader is None:
+                    logger.warning("Failed to create import spec", file=str(py_file))
+                    continue
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules[spec.name] = mod
+                spec.loader.exec_module(mod)  # type: ignore[union-attr]
+                logger.debug("Auto-discovered lockfile parser", file=py_file.name)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to load lockfile parser plugin",
+                    file=str(py_file),
+                    error=str(exc),
+                )
 
     @staticmethod
     def _import_module(

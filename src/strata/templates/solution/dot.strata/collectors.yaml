@@ -21,6 +21,12 @@
 #     "class" is optional (importing the module is sufficient).
 #     Starter template: .strata/plugins/my_lockfile_parser.py
 #
+# ZERO-CONFIG OPTION for lockfile parsers:
+#   Drop any .py file into .strata/lockfile_parsers/ and it is imported
+#   automatically — no entry in this file required.  Files starting with _
+#   are skipped.  Import errors are logged as warnings (non-fatal).
+#   Use this for quick additions; use collectors.yaml for explicit control.
+#
 # Path resolution: "path" values are relative to the workspace root.
 # Use "module" instead of "path" to load from an installed Python package.
 #

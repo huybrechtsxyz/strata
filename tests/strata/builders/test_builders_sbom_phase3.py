@@ -531,6 +531,60 @@ class CargoLockParser(LockfileParser):
         with pytest.raises(PlatformError, match="file not found"):
             CollectorPluginLoader.load(tmp_path)
 
+    def test_auto_discover_lockfile_parsers_from_folder(self, tmp_path):
+        """Py files in .strata/lockfile_parsers/ are auto-imported and registered."""
+        from strata.builders.sbom.collector_plugin_loader import CollectorPluginLoader
+        from strata.builders.sbom.lockfile_parsers import DEFAULT_REGISTRY
+
+        parser_code = (
+            "from strata.builders.sbom.lockfile_parsers import LockfileParser, RawDependency\n"
+            "from pathlib import Path\n"
+            "from typing import List\n\n"
+            "class CustomTxtParser(LockfileParser):\n"
+            "    @property\n"
+            "    def ecosystem(self): return 'custom'\n"
+            "    def filename_patterns(self): return ['custom-deps.txt']\n"
+            "    def parse(self, path: Path) -> List[RawDependency]: return []\n"
+        )
+
+        parsers_dir = tmp_path / ".strata" / "lockfile_parsers"
+        parsers_dir.mkdir(parents=True)
+        (parsers_dir / "my_custom_parser.py").write_text(parser_code)
+
+        CollectorPluginLoader.load(tmp_path)
+        assert DEFAULT_REGISTRY.find("custom-deps.txt") is not None
+
+    def test_auto_discover_skips_underscore_files(self, tmp_path):
+        """Files starting with _ are skipped during auto-discovery."""
+        from strata.builders.sbom.collector_plugin_loader import CollectorPluginLoader
+        from strata.builders.sbom.lockfile_parsers import DEFAULT_REGISTRY
+
+        parser_code = (
+            "from strata.builders.sbom.lockfile_parsers import LockfileParser, RawDependency\n"
+            "from pathlib import Path\n"
+            "from typing import List\n\n"
+            "class HiddenParser(LockfileParser):\n"
+            "    @property\n"
+            "    def ecosystem(self): return 'hidden'\n"
+            "    def filename_patterns(self): return ['hidden-deps.txt']\n"
+            "    def parse(self, path: Path) -> List[RawDependency]: return []\n"
+        )
+
+        parsers_dir = tmp_path / ".strata" / "lockfile_parsers"
+        parsers_dir.mkdir(parents=True)
+        (parsers_dir / "_helper.py").write_text(parser_code)
+
+        CollectorPluginLoader.load(tmp_path)
+        assert DEFAULT_REGISTRY.find("hidden-deps.txt") is None
+
+    def test_auto_discover_no_folder_is_noop(self, tmp_path):
+        """No error when .strata/lockfile_parsers/ does not exist."""
+        from strata.builders.sbom.collector_plugin_loader import CollectorPluginLoader
+
+        # No .strata/ at all — should not raise
+        result = CollectorPluginLoader.load(tmp_path)
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # SbomBuilder — default collector count (7 after Phase 3)

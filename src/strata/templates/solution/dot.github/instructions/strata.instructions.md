@@ -169,7 +169,17 @@ strata build sbom -f deploy/deploy-prd.yaml --report inventory --output-file inv
 
 # Skip lockfile scanning (faster for large repos)
 strata build sbom -f deploy/deploy-prd.yaml --no-deps
+
+# Scan any directory without a strata workspace (no deploy file required)
+strata build sbom --scan /path/to/repo --report inventory
+strata build sbom --scan /path/to/repo --output json
 ```
+
+**Built-in language support** (lockfile scanning): Python, Node.js, Go, .NET/C#, Java, Ruby, Rust, PHP.
+
+**Extend with custom parsers** — two options:
+1. Drop a `LockfileParser` subclass as `.strata/lockfile_parsers/my_parser.py` — auto-registered, no config needed
+2. Declare in `.strata/collectors.yaml` with `type: lockfile_parser`
 
 `strata guide` will prompt for this step once a successful build exists (Phase 8).
 
@@ -332,13 +342,15 @@ The default secret name is `ssh_private_key`. Override it via `configuration.ssh
 ├── solution.json           # Solution registry (repos, profiles)
 ├── cli.yaml                # Workspace defaults
 ├── logging.yaml            # Logging configuration
-├── collectors.yaml         # (optional) workspace SBOM collector plugins
+├── collectors.yaml         # (optional) SBOM collector/parser plugins via YAML
+├── lockfile_parsers/       # (optional) drop .py files here — auto-registered
 └── sbom-ignore.yaml        # (optional) ignore rules for dependency scanning
 ```
 
 - `solution.json` — managed by the CLI, do not edit manually
 - `cli.yaml` — user preferences, manage via `strata config set|unset|list`
 - `collectors.yaml` — declare custom `BaseSbomCollector` or `LockfileParser` plugins; see `strata sln init` starter templates in `.strata/plugins/`
+- `lockfile_parsers/` — zero-config drop folder: any `.py` file placed here is auto-imported and its `LockfileParser` subclasses registered; no YAML entry needed
 - `sbom-ignore.yaml` — paths and filenames to exclude from `DependencyFileCollector`
 
 ---
