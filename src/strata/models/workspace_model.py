@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Pydantic models for workspace configuration validation."""
 
-from enum import Enum
 from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
@@ -21,15 +20,6 @@ from strata.models.common_models import (
     SourceModel,
     validate_slot_type,
 )
-
-
-# Enumeration of supported workspace volume types.
-class WorkspaceVolumeType(str, Enum):
-    """Supported workspace volume types."""
-
-    local = "local"
-    replicated = "replicated"
-    distributed = "distributed"
 
 
 class WorkspaceNamespaceModel(PlatformBaseModel):
@@ -64,7 +54,9 @@ class WorkspaceVolumeModel(PlatformBaseModel):
     """Model for a workspace volume."""
 
     name: PlatformName = Field(description="Unique volume name within the topology")
-    type: WorkspaceVolumeType = Field(default=WorkspaceVolumeType.local, description="Type of the volume")
+    type: str = Field(
+        default="local", description="Volume storage type (e.g., local, replicated, distributed, nfs, iscsi, etc.)"
+    )
 
 
 class WorkspaceModuleReferenceModel(PlatformBaseModel):
