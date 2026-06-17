@@ -3,7 +3,7 @@ name: Build & Deploy Docs
 on:
   push:
     tags:
-      - "v*"  # triggers only on release tags like v0.8.0
+      - "v*" # triggers only on release tags like v0.8.0
 
 jobs:
   build-and-deploy:
