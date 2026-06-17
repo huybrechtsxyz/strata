@@ -1,0 +1,1294 @@
+﻿# strata — CLI Command Reference
+
+All commands are invoked as `strata <command> [options]` (or `uv run strata <command>`).
+
+## Standard Options
+
+These options are accepted by every command and subcommand:
+
+| Option             | Type                      | Default       | Description                                                                                                                                                                   |
+| ------------------ | ------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--work-path PATH` | path                      | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH` env var, then walks up from CWD looking for `.strata/`.                                                            |
+| `--output FORMAT`  | `console`\|`text`\|`json` | `console`     | Output format. Defaults to `console` (human-readable) when omitted. `json` returns a structured envelope `{"success": bool, "data": ...}`. Mutually exclusive with `--quiet`. |
+| `--verbose`        | flag                      | off           | Enable verbose output.                                                                                                                                                        |
+| `--quiet`          | flag                      | off           | Suppress console output.                                                                                                                                                      |
+| `--no-color`       | flag                      | off           | Disable all ANSI color output. Also honoured via the `NO_COLOR` env var ([no-color.org](https://no-color.org)) or `STRATA_NO_COLOR`.                                          |
+
+> **Automation / AI agents:** Always use `--output json` (or set `STRATA_OUTPUT=json`). Every CLI flag has an `XYZ_<OPTION>` environment-variable equivalent — set them once rather than passing flags on every call. In console mode, errors are written to **stderr**; the JSON envelope always goes to **stdout**.
+
+## Exit Codes
+
+| Code | Meaning                                                      |
+| ---- | ------------------------------------------------------------ |
+| `0`  | Success                                                      |
+| `1`  | System / execution failure (crash, missing file, init error) |
+| `2`  | Usage error — invalid CLI arguments (Click default)          |
+| `3`  | Validation failure — file processed but schema-invalid       |
+
+> **Using strata in CI/CD?** See [ci-integration.md](ci-integration.md) for complete GitHub Actions and Azure Pipelines examples that leverage these exit codes.
+
+---
+
+## Command Groups
+
+| Group        | Subcommands                                                                  | Description                                               |
+| ------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `sln`        | `init` `update` `clean` `status` `export`                                    | Solution workspace lifecycle                              |
+| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config   |
+| `log` †      | `list`                                                                       | View execution logs (read-only)                           |
+| `profile` †  | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                               |
+| `ref` †      | `env` `config` `data` `secret`                                               | Manage file references within profiles                    |
+| `repo` †     | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                       |
+| `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                    |
+| `validate`   | —                                                                            | Validate a single platform YAML file                      |
+| `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
+| `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
+| `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
+| `deploy` †   | `run` `destroy` `status` `history` `health` `output` `outputs` `lock`        | Deploy platform using provisioners                        |
+| `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
+| `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
+| `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations             |
+| `new` †      | —                                                                            | Create a platform config file from a template             |
+| `version`    | —                                                                            | Show CLI version                                          |
+| `completion` | `bash` `zsh` `fish` `powershell`                                             | Output shell completion script for the given shell        |
+| `help`       | —                                                                            | Show help topics                                          |
+
+> **†** Requires an initialized workspace (`.strata/` directory). Run `strata sln init --name NAME` first.
+
+---
+
+## `sln`
+
+Solution workspace lifecycle commands.
+
+### `sln init`
+
+Initialize a new strata solution workspace. Creates the `.strata/` state directory, workspace defaults, and a ready-to-use `.devcontainer/` for VS Code Dev Containers and GitHub Codespaces.
+
+```
+strata sln init --name NAME [--template NAME-OR-PATH] [standard options]
+```
+
+| Option                    | Required | Description                                                                                                                               |
+| ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `--name NAME`             | ✅        | Name of the solution workspace                                                                                                            |
+| `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`, `compose`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
+
+**Files created:**
+
+| Path                              | Description                                                                |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| `.strata/solution.json`           | Solution registry                                                          |
+| `.strata/cli.yaml`                | Workspace CLI defaults                                                     |
+| `.strata/logging.yaml`            | Logging configuration                                                      |
+| `.devcontainer/devcontainer.json` | Dev container definition (Python 3.13, Terraform, Azure CLI, kubectl/Helm) |
+| `.devcontainer/post-create.sh`    | Post-create script — installs `strata` and sets up shell completion        |
+
+All `.devcontainer/` files are written **idempotently** — existing files are never overwritten.
+
+**Exit codes:** 0 success · 1 failure · 2 missing `--name`
+
+```bash
+strata sln init --name my-platform
+strata sln init --name my-platform --template .strata/templates/my-corp-base/
+```
+
+> **Dev container:** After `strata sln init`, open the workspace in VS Code and select **Reopen in Container** to start a pre-configured environment with all tools installed. The container also works with GitHub Codespaces.
+
+### `sln update`
+
+Refresh package-owned files in an existing workspace after upgrading the strata package. Overwrites files that ship with the package (schemas, example templates, CI workflows, devcontainer config) while leaving user-customised files untouched.
+
+```
+strata sln update [standard options]
+```
+
+Requires an initialized workspace (`solution.json` must exist).
+
+**Files updated (package-owned — always overwritten):**
+
+| Path / Pattern                   | Description                                     |
+| -------------------------------- | ----------------------------------------------- |
+| `.strata/schemas/*.json`         | JSON Schemas derived from Pydantic models       |
+| `.strata/README.md`              | Package documentation stub                      |
+| `.strata/.gitignore`             | Package-standard ignore rules                   |
+| `.strata/integrations/`          | Example custom integration starter              |
+| `.strata/templates/`             | Example YAML document templates                 |
+| `.devcontainer/`                 | Dev container definition and post-create script |
+| `.github/workflows/`             | CI/CD workflow templates                        |
+| `.github/strata.instructions.md` | Copilot instructions                            |
+| `.gitignore` (root)              | Package-standard root ignore rules              |
+
+**Files preserved (user-owned — never overwritten):**
+
+| Path / Pattern          | Description                                      |
+| ----------------------- | ------------------------------------------------ |
+| `<name>.code-workspace` | User-customised VS Code workspace file           |
+| `.vscode/`              | User VS Code settings, tasks, and launch configs |
+| `.strata/cli.yaml`      | User CLI preferences                             |
+| `.strata/logging.yaml`  | User logging configuration                       |
+| `README.md` (root)      | User solution documentation                      |
+
+**Exit codes:** 0 success · 1 failure (workspace not initialised, or file write error)
+
+```bash
+strata sln update
+strata sln update --work-path /path/to/workspace
+```
+
+### `sln clean`
+
+Remove workspace artifacts (log files, temp files) without touching solution state.
+
+```
+strata sln clean [--dry-run] [standard options]
+```
+
+| Option      | Default | Description                                            |
+| ----------- | ------- | ------------------------------------------------------ |
+| `--dry-run` | off     | Report what would be deleted without removing anything |
+
+```bash
+strata sln clean
+strata sln clean --dry-run
+```
+
+### `sln status`
+
+Show workspace health: solution identity, active profile, repositories, and integration availability.
+
+```
+strata sln status [standard options]
+```
+
+Works inside and outside an initialized workspace (degrades gracefully when `solution.json` is absent).
+
+```bash
+strata sln status
+strata sln status --output json
+```
+
+### `sln export`
+
+Export the current workspace as a reusable scaffold template. Copies all workspace files into `.strata/templates/<name>/scaffold/`, replaces every occurrence of the solution name with `${solution_name}` in file content and file paths, then generates a `template.yaml` manifest.
+
+```
+strata sln export --name NAME [--force] [--dry-run] [standard options]
+```
+
+| Option        | Required | Description                                                             |
+| ------------- | -------- | ----------------------------------------------------------------------- |
+| `--name NAME` | ✅        | Template name — used as the output directory under `.strata/templates/` |
+| `--force`     | —        | Overwrite an existing template with the same name                       |
+| `--dry-run`   | —        | List files that would be copied without writing anything                |
+
+**Output structure:**
+
+| Path                                     | Description                                           |
+| ---------------------------------------- | ----------------------------------------------------- |
+| `.strata/templates/<name>/scaffold/`     | Workspace files with `${solution_name}` substitutions |
+| `.strata/templates/<name>/template.yaml` | Template manifest (name, description, variables)      |
+
+**Excluded from export:** `.git/`, `repos/`, `.venv/`, `node_modules/`, `.strata/logs/`, `__pycache__/`, `*.pyc`, `*.log`
+
+**Exit codes:** 0 success · 1 failure (includes target directory already exists without `--force`)
+
+```bash
+strata sln export --name my-corp-base
+strata sln export --name my-corp-base --dry-run
+strata sln export --name my-corp-base --force
+```
+
+> **Next steps:** Use the exported template with `strata sln init --name new-ws --template .strata/templates/my-corp-base/`
+
+---
+
+## `vars`
+
+Manage team-shared template variables stored in `solution.json`. Variables are substituted as `${key}` in platform YAML files.
+
+| Subcommand      | Description                          |
+| --------------- | ------------------------------------ |
+| `set KEY VALUE` | Set or overwrite a template variable |
+| `unset KEY`     | Remove a template variable           |
+| `list`          | Show all current template variables  |
+
+```bash
+strata vars set owner myteam
+strata vars unset owner
+strata vars list
+strata vars list --output json
+```
+
+---
+
+## `tools`
+
+Manage and inspect external tool integrations (Terraform, Docker, kubectl, Helm, Azure CLI, etc.).
+
+| Subcommand     | Description                                                      |
+| -------------- | ---------------------------------------------------------------- |
+| `status`       | List all known integrations and their availability               |
+| `check NAME`   | Deep-check a single integration (version, auth, connectivity)    |
+| `install NAME` | Show download URL, env vars, and auth methods for an integration |
+
+`tools install` accepts `--env-file PATH` to write a commented env-var template to a file.
+
+### `tools status` options
+
+| Option              | Description                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------- |
+| `--deployment FILE` | Load a deployment file to add a **Requirement** column (`required` / `optional` / `—`)        |
+| `--required`        | Show only integrations marked `required` by the deployment (requires `--deployment`)          |
+| `--optional`        | Show only integrations marked `optional` by the deployment (requires `--deployment`)          |
+| `--available`       | Show only integrations that are installed and available                                       |
+| `--missing`         | Show only integrations that are not available. Exits **3** if any `required` ones are missing |
+
+```bash
+strata tools status
+strata tools status --output json
+strata tools status --deployment deployment.yaml
+strata tools status --deployment deployment.yaml --required --missing
+strata tools check terraform
+strata tools install terraform
+strata tools install terraform --env-file .env.template
+```
+
+---
+
+## `new`
+
+Create a new platform configuration file from a built-in or custom template.
+
+```
+strata new TEMPLATE NAME [--path PATH] [--overwrite] [--set KEY=VALUE ...] [standard options]
+strata new --list
+```
+
+| Option / Argument | Description                                                |
+| ----------------- | ---------------------------------------------------------- |
+| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `workspace`)  |
+| `NAME`            | Written into `meta.name` and used in the output filename   |
+| `--path PATH`     | Output file path or directory (default: current directory) |
+| `--overwrite`     | Overwrite the output file if it already exists             |
+| `--set KEY=VALUE` | Override a template variable (repeatable)                  |
+| `--list`          | List available templates and exit                          |
+
+```bash
+strata new namespace my-app
+strata new provider azure --path config/
+strata new workspace my-ws --set owner=myteam
+strata new dns my-zones --path config/dns/
+strata new network my-networks --path config/networks/
+strata new --list
+```
+
+---
+
+## `config`
+
+Manage persistent workspace defaults stored in `.strata/cli.yaml`.
+
+### `config set KEY VALUE`
+
+```bash
+strata config set output json
+strata config set verbose true
+```
+
+Allowed keys: `output`, `verbose`, `quiet`, `work_path`.
+
+### `config unset KEY`
+
+```bash
+strata config unset output
+```
+
+### `config list`
+
+```bash
+strata config list
+strata config list --output json
+```
+
+### `config log` {#config-log}
+
+Manage `logging.yaml` — the workspace logging configuration.
+
+| Subcommand        | Description                                   |
+| ----------------- | --------------------------------------------- |
+| `log list`        | Show the full current `logging.yaml`          |
+| `log get KEY`     | Get a single value by dot-notation key        |
+| `log set KEY VAL` | Set a logging config value                    |
+| `log unset KEY`   | Remove a logging config key (restore default) |
+| `log reset`       | Reset `logging.yaml` to package defaults      |
+
+```bash
+strata config log list
+strata config log get level
+strata config log set level DEBUG
+strata config log unset level
+strata config log reset
+```
+
+---
+
+## `log`
+
+View execution logs (read-only).
+
+> **Note:** To configure logging behaviour (levels, output format), use `strata config log`. See [`config log`](#config-log) for details.
+
+### `log list`
+
+```
+strata log list [--lines N] [--minutes N] [--level LEVEL] [--execution-id ID] [--last]
+```
+
+| Option              | Default | Description                                                              |
+| ------------------- | ------- | ------------------------------------------------------------------------ |
+| `--lines N`         | 50      | Maximum number of log entries to show                                    |
+| `--minutes N`       | —       | Show only entries from the last N minutes                                |
+| `--level LEVEL`     | —       | Filter by minimum log level: `DEBUG` `INFO` `WARNING` `ERROR` `CRITICAL` |
+| `--execution-id ID` | —       | Filter to a specific execution ID                                        |
+| `--last`            | off     | Show logs for the most recent command execution                          |
+
+```bash
+strata log list
+strata log list --last
+strata log list --level ERROR --lines 20
+```
+
+---
+
+## `profile`
+
+Manage environment profiles within the solution.
+
+### `profile add NAME`
+
+Create a new environment profile.
+
+| Option       | Description                                         |
+| ------------ | --------------------------------------------------- |
+| `--activate` | Activate this profile immediately after creating it |
+
+```bash
+strata profile add staging
+strata profile add prd --activate
+```
+
+### `profile remove NAME`
+
+```bash
+strata profile remove staging
+```
+
+### `profile list [--name NAME]`
+
+```bash
+strata profile list
+strata profile list --name staging
+```
+
+### `profile activate NAME`
+
+Activate a profile (deactivates all others).
+
+```bash
+strata profile activate staging
+```
+
+### `profile show NAME`
+
+Show all registered ref paths for a profile, grouped by type.
+
+```bash
+strata profile show staging
+```
+
+---
+
+## `ref`
+
+Manage file references (env, config, data, secret) within profiles.
+
+Each file type has its own subgroup: `ref env`, `ref config`, `ref data`, `ref secret`. All four expose the same four subcommands.
+
+| Type     | What it registers                                                                                                                                        |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `env`    | Environment variable files (`.env` format) — merged into the build environment                                                                           |
+| `config` | Platform YAML config files — merged by kind into the build artifact                                                                                      |
+| `data`   | Arbitrary data files (JSON, TOML, text) — copied verbatim into the build output without merging. Use for non-YAML assets your Terraform or scripts need. |
+| `secret` | Secret files (YAML or env format) — loaded at deploy time, values masked in logs                                                                         |
+
+All `ref` subcommands accept `--profile NAME` (optional; defaults to the active profile).
+
+### `ref <type> add NAME PATH`
+
+```bash
+strata ref env add base-env .env
+strata ref config add app-config @myrepo/config/app.yaml --profile staging
+```
+
+### `ref <type> remove NAME`
+
+```bash
+strata ref env remove base-env --profile staging
+```
+
+### `ref <type> list`
+
+```bash
+strata ref config list
+strata ref config list --profile staging
+```
+
+### `ref <type> show NAME`
+
+Display the file content of a ref path entry.
+
+```bash
+strata ref config show app-config --profile staging
+```
+
+---
+
+## `repo`
+
+Manage repositories registered in the solution.
+
+### `repo add NAME URL`
+
+```
+strata repo add NAME URL [--branch BRANCH] [--path PATH] [--clone]
+```
+
+| Option            | Default | Description                                                |
+| ----------------- | ------- | ---------------------------------------------------------- |
+| `--branch BRANCH` | `main`  | Default branch to track (git repos only)                   |
+| `--path PATH`     | —       | Local path relative to work-path (default: `repos/<name>`) |
+| `--clone`         | off     | Clone the repository immediately after registering         |
+
+**URL / path auto-detection:**
+
+- Remote git URL (any `https://`, `git@`, etc.) → registered as type `gitops`. Use `--branch` and `--clone` as needed.
+- Local path starting with a drive letter (`C:/…`, `C:\…`) or a network path (`//server/…`, `\\server\…`) → registered as type `local`. The path must exist and be a directory at registration time. `--branch` and `--clone` are ignored. No sync is needed — the folder is already on disk.
+
+> **`--type local`:** You can also pass `--type local` explicitly to force local registration when the auto-detection heuristic doesn't match (e.g. a relative path or an unusual UNC format). This is the same as what the workspace template's `GETTING_STARTED.md` uses for repos that already live on disk.
+
+```bash
+# Remote git repository
+strata repo add platform https://github.com/org/platform.git
+strata repo add platform https://github.com/org/platform.git --branch develop --clone
+
+# Local folder (Windows drive path)
+strata repo add infra C:/repos/xyz-infrastructure
+
+# Local network share
+strata repo add shared //fileserver/repos/platform
+```
+
+### `repo list [--name NAME]`
+
+```bash
+strata repo list
+strata repo list --name platform
+```
+
+### `repo remove NAME [--purge]`
+
+`--purge` also deletes the local clone directory from disk.
+
+```bash
+strata repo remove old-repo
+strata repo remove old-repo --purge
+```
+
+### `repo sync [--name NAME] [--force]`
+
+Clone or pull repositories. `--force` hard-resets dirty working trees instead of skipping them.
+
+```bash
+strata repo sync
+strata repo sync --name platform --force
+```
+
+### `repo status [--name NAME]`
+
+Show git working-tree state for registered repositories.
+
+```bash
+strata repo status
+strata repo status --name platform
+```
+
+---
+
+## `build`
+
+> **Note:** `build` requires the Terraform CLI (`terraform`) to be installed and on `PATH`. The `--dry-run` mode (plan only, no files written) works without it. Full artifact generation targets production-ready environments.
+
+Build platform and Terraform artifacts from a deployment YAML file.
+
+All `build` subcommands accept `--file/-f PATH` to specify the deployment file.
+
+### `build run`
+
+```
+strata build run [-f FILE] [--dry-run] [standard options]
+```
+
+Runs the full build pipeline (platform → terraform → ansible → compose → helm → SBOM). `--dry-run` validates and plans without writing output files.
+
+```bash
+strata build run -f xyz-deploy-prd.yaml
+strata build run --dry-run
+```
+
+### `build plan`
+
+```
+strata build plan [-f FILE] [--stage NAME] [--artifacts-only] [standard options]
+```
+
+Builds into a temp directory, diffs against existing artifacts, then runs `terraform init → validate → plan` per stage. Nothing is written to the real build path.
+
+| Option             | Description                                   |
+| ------------------ | --------------------------------------------- |
+| `--stage NAME`     | Limit terraform plan to one stage             |
+| `--artifacts-only` | Skip terraform plan — show artifact diff only |
+
+```bash
+strata build plan -f xyz-deploy-prd.yaml
+strata build plan --stage production --artifacts-only
+```
+
+### `build sbom`
+
+```
+strata build sbom [-f FILE | --scan PATH] [--report MODE] [--output-file PATH] [--no-deps] [--audit] [--severity LEVEL] [--fail-on LEVEL] [standard options]
+```
+
+Two modes of operation:
+
+- **Deployment mode** (`-f FILE`): Regenerates the SBOM from an existing `platform.json`
+  without a full rebuild. Requires a prior `strata build run`.
+- **Scan mode** (`--scan PATH`): Scans any directory for SBOM components without a
+  deployment file or workspace init. Useful for generating an SBOM from existing
+  Terraform, Helm, Compose, or application repos.
+
+Collectors run in both modes:
+
+| Collector                                | Deployment mode | Scan mode       |
+| ---------------------------------------- | --------------- | --------------- |
+| Container images (platform model)        | ✅               | — (empty model) |
+| Compose images (`docker-compose.yml`)    | ✅               | ✅               |
+| Helm charts (platform model)             | ✅               | — (empty model) |
+| Helm charts (`Chart.yaml` files)         | ✅               | ✅               |
+| Terraform providers (`*.tf`)             | ✅               | ✅               |
+| Terraform modules (`*.tf`)               | ✅               | ✅               |
+| Ansible collections (`requirements.yml`) | ✅               | ✅               |
+| Application dependencies (lockfiles)     | ✅               | ✅               |
+
+`--scan` and `-f` are mutually exclusive.
+
+`--report` selects the output style:
+
+| Flag                 | Behaviour                                                                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--report cyclonedx` | Write `sbom.json` (CycloneDX 1.6 JSON) — **default**                                                                                            |
+| `--report inventory` | Print a human-readable grouped listing to stdout                                                                                                |
+| `--output-file PATH` | Write to *PATH* instead of the default location / stdout                                                                                        |
+| `--no-deps`          | Skip `DependencyFileCollector` (faster for large repos)                                                                                         |
+| `--audit`            | Run CVE vulnerability scan after generating the SBOM (requires [trivy](https://trivy.dev) or [grype](https://github.com/anchore/grype) in PATH) |
+| `--severity LEVEL`   | Minimum severity to report: `CRITICAL` \| `HIGH` \| `MEDIUM` \| `LOW` \| `UNKNOWN`. Default: `MEDIUM`                                           |
+| `--fail-on LEVEL`    | Exit non-zero (code 3) if findings at this severity or above exist. Optional — without it, audit is advisory only                               |
+
+```bash
+# Regenerate sbom.json from deployment
+strata build sbom -f xyz-deploy-prd.yaml
+
+# Print a human-readable platform inventory
+strata build sbom -f xyz-deploy-prd.yaml --report inventory
+
+# Save the inventory to a file
+strata build sbom -f xyz-deploy-prd.yaml --report inventory --output-file inventory.txt
+
+# Skip lockfile scanning (faster)
+strata build sbom -f xyz-deploy-prd.yaml --no-deps
+
+# Scan a directory (no strata workspace required)
+strata build sbom --scan ./my-terraform-repo
+
+# Scan + human-readable overview
+strata build sbom --scan ./infra --report inventory
+
+# Scan + write SBOM to a specific file
+strata build sbom --scan . --output-file sbom.json
+
+# Generate SBOM + run CVE audit (advisory — prints findings, never fails)
+strata build sbom --scan . --audit
+
+# Audit with CI gate — fail if any HIGH or CRITICAL findings
+strata build sbom -f xyz-deploy-prd.yaml --audit --fail-on HIGH
+
+# Audit only CRITICAL vulnerabilities
+strata build sbom --scan . --audit --severity CRITICAL --fail-on CRITICAL
+```
+
+### `build clean`
+
+```
+strata build clean [-f FILE] [--dry-run] [standard options]
+```
+
+Remove build artifacts for the selected deployment.
+
+```bash
+strata build clean -f xyz-deploy-prd.yaml
+strata build clean --dry-run
+```
+
+---
+
+## `validate`
+
+Validate a single platform YAML file against its kind-specific schema.
+
+```
+strata validate FILE_PATH [--deep] [standard options]
+```
+
+| Option   | Description                                                                                                                                               |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--deep` | Enable Phase 2 (cross-reference) validation against the active profile's configuration sources. Requires an initialized workspace with an active profile. |
+
+**Exit codes:** 0 valid · 1 system failure · 2 missing argument · 3 schema-invalid
+
+```bash
+strata validate config/xyz-config.yaml
+strata validate config/xyz-ws-platform.yaml --deep
+```
+
+---
+
+## `guide`
+
+Show workspace setup progress and suggest the next action. Use `strata guide` to understand where you are in the setup sequence — whether you are onboarding to a new workspace for the first time or returning after making changes.
+
+```
+strata guide [OPTIONS]
+```
+
+| Option             | Type                                | Default       | Description                                                                |
+| ------------------ | ----------------------------------- | ------------- | -------------------------------------------------------------------------- |
+| `--file / -f PATH` | path                                | —             | Inspect a specific YAML file (file mode). Supports `STRATA_FILE` env var.  |
+| `--work-path PATH` | path                                | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH`, then CWD walk. |
+| `--output FORMAT`  | `console`\|`text`\|`json`\|`ndjson` | `console`     | Output format.                                                             |
+| `--verbose`        | flag                                | off           | Emit structured log lines to console.                                      |
+| `--quiet`          | flag                                | off           | Suppress all output.                                                       |
+
+**Exit code:** always `0` — `guide` is advisory and never a pipeline gate.
+
+Works outside an initialized workspace: degrades gracefully when `.strata/solution.json` is absent (shows Phase 1 as ⬜ and stops).
+
+### Workspace mode
+
+Run `strata guide` without `--file` to see the 7-phase workspace setup checklist. Each phase is marked ✅ done, ⚠️ needs attention, or ⬜ not started. The `→ Next step` block identifies the first phase that is not ✅ and shows the exact command to address it.
+
+| #   | Phase                      | ✅ Done                                    | ⚠️ Attention                                | ⬜ Not started    |
+| --- | -------------------------- | ----------------------------------------- | ------------------------------------------ | ---------------- |
+| 1   | Workspace initialized      | `.strata/solution.json` exists and parses | File exists but cannot be parsed           | File absent      |
+| 2   | Repositories registered    | At least one repo in `spec.repositories`  | —                                          | None registered  |
+| 3   | Repositories on disk       | All registered repos exist locally        | Some paths missing (shows count and names) | Phase 2 is ⬜     |
+| 4   | Profile created            | At least one profile in `spec.profiles`   | —                                          | None created     |
+| 5   | Profile activated          | One profile has `active: true`            | —                                          | None active      |
+| 6   | File references registered | Active profile has at least one ref       | Zero refs on active profile                | Phase 5 is ⬜     |
+| 7   | Build artifact exists      | `build/` directory exists and has files   | Directory exists but is empty              | Directory absent |
+
+```
+Workspace: my-platform  (e:\src\my-config-repo)
+
+Setup progress:
+
+  ✅ Workspace initialized
+  ✅ Repositories registered (3)
+  ⚠️  Repositories on disk (2/3 cloned — xyz-svc-traefik not found)
+  ✅ Profile created (prd, stg, dev)
+  ✅ Profile activated (prd)
+  ⚠️  File references (0 registered on active profile 'prd')
+  ⬜ Build artifact
+
+→ Next step: Register config files with your active profile:
+
+   strata ref config add <name> @<repo>/path/to/config.yaml --profile prd
+
+   See: strata help --topic environments
+```
+
+Next-step hints by phase:
+
+| First incomplete phase        | Suggested command                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| 1 — Workspace not initialized | `strata sln init <name>`                                                      |
+| 2 — No repos registered       | `strata repo add <name> <url>`                                                |
+| 3 — Repos not all on disk     | `git clone <url> <path>` (one line per missing repo)                          |
+| 4 — No profiles               | `strata profile add <name> --activate`                                        |
+| 5 — No active profile         | `strata profile activate <name>`                                              |
+| 6 — No refs registered        | `strata ref config add <name> @<repo>/path/to/config.yaml --profile <active>` |
+| 7 — No build artifact         | `strata build run`                                                            |
+| All ✅                         | `All setup phases complete. Your workspace is ready to deploy.`               |
+
+### File mode (`--file`)
+
+Supply `--file` (or `-f`) to inspect a specific YAML file. The workspace setup checklist is suppressed and replaced by a 5-phase structural check, followed by ready-to-use `validate` and `register` commands for the detected kind.
+
+| #   | Phase              | Check                                           |
+| --- | ------------------ | ----------------------------------------------- |
+| 1   | File readable      | Path exists and YAML parses without error       |
+| 2   | Kind recognized    | `kind:` is present and is a known platform kind |
+| 3   | apiVersion present | `apiVersion: strata.huybrechts.xyz/v1`          |
+| 4   | Name present       | `meta.name` is non-empty                        |
+| 5   | Spec present       | `spec:` block exists and is non-empty           |
+
+```
+File: path/to/my-config.yaml  (kind: configuration)
+Workspace: my-platform  (e:\src\my-config-repo)
+
+File structure:
+
+  ✅ File readable
+  ✅ Kind: configuration
+  ✅ apiVersion: strata.huybrechts.xyz/v1
+  ✅ Name: my-config
+  ✅ Spec present
+
+→ Validate:
+
+   strata validate -f path/to/my-config.yaml
+
+→ Register with your active profile:
+
+   strata ref config add my-config @<repo>/path/to/my-config.yaml --profile prd
+
+   See: strata help --topic environments
+```
+
+`@repo/path` references are resolved via `solution.spec.repositories` and require an initialized workspace.
+
+### Project customisation
+
+Create `.strata/guide.yaml` to override the default next-step hints and `see_also` links for any phase:
+
+```yaml
+hints:
+  phase_6:
+    hint: "strata ref config add infra-config @infra/config/infra.yaml --profile prd"
+    see_also: "strata help --topic environments"
+```
+
+```bash
+strata guide
+strata guide --output json
+strata guide --file config/my-config.yaml
+strata guide -f @myrepo/config/app.yaml
+```
+
+---
+
+## `schema`
+
+Inspect JSON schemas for platform YAML document kinds. Useful for editors, linters, and AI agents that need to understand what fields a document type requires.
+
+### `schema list`
+
+List all supported platform document kinds.
+
+```
+strata schema list [--output FORMAT]
+```
+
+**`--output json`** returns `{"kinds": ["configuration", "deployment", ...]}`. **`--output text`** prints one kind per line.
+
+```bash
+strata schema list
+strata schema list --output json
+```
+
+### `schema get KIND`
+
+Emit the full JSON Schema for a platform document kind.
+
+```
+strata schema get KIND [--output FORMAT]
+```
+
+Default and `--output json` both emit the complete Pydantic-generated JSON Schema. `--output text` shows a compact summary (required fields and top-level property names).
+
+**Valid kinds:** `configuration` `deployment` `dns` `environment` `firewall` `module` `namespace` `network` `platform_model` `provider` `resource` `workspace`
+
+**Exit codes:** 0 success · 2 unknown kind
+
+```bash
+strata schema get deployment
+strata schema get deployment --output json
+strata schema get environment --output text
+```
+
+---
+
+## `policy`
+
+Inspect policies declared in the active configuration. Policies define guardrails evaluated at the validate, build, and plan lifecycle phases. See [policies.md](policies.md) for the policy engine reference.
+
+### `policy list`
+
+List all policies declared in `configuration.spec.policies`.
+
+```
+strata policy list [-f PATH] [standard options]
+```
+
+Loads the active configuration from the workspace's active profile. Displays a table of every policy with its type, phase, enforcement level, and enabled state. `deny` enforcement is highlighted red; `warn` is highlighted yellow.
+
+| Option          | Description                                                                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-f` / `--file` | Optional path to a deployment YAML. When given, annotates the output with which lifecycle phases that deployment can trigger (inferred from provisioner names). |
+
+**Output keys (`--output json`):** `source`, `deployment`, `policy_count`, `enabled_count`, `phases_triggered`, `policies[]` (each with `name`, `type`, `phase`, `enforcement`, `enabled`, `description`, `configuration`).
+
+**Exit codes:** 0 success · 1 workspace not initialised or configuration load failure
+
+```bash
+strata policy list
+strata policy list -f config/deploy-prd.yaml
+strata policy list --output json
+strata policy list -f config/deploy.yaml --output json
+```
+
+### `policy check`
+
+```
+strata policy check -f FILE [--phase PHASE]... [--plan-file PATH] [standard options]
+```
+
+Evaluate all enabled policies for a deployment and report results. Policies are grouped by phase (validate, build, plan, deploy).
+
+| Option                                  | Description                                                                                  |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `-f` / `--file`                         | ✅ Required. Path to the deployment YAML file.                                                |
+| `--phase validate\|build\|plan\|deploy` | Filter to one or more phases. Repeatable. Defaults to all phases.                            |
+| `--plan-file PATH`                      | Path to a Terraform plan JSON file used for plan-phase policies. Auto-discovered if omitted. |
+
+When context artifacts are not available (no platform build, no plan file), the command includes **notes** with the exact command to run to generate the missing artifact. These notes appear in console output and in the `notes[]` field of JSON output — they do not fail the command.
+
+**Exit codes:** 0 all policies passed · 1 execution error · 3 one or more `deny` policies failed
+
+**Output keys (`--output json`):** `deployment`, `phases`, `policies_checked`, `passed`, `failed`, `denied`, `notes[]`, `results[]` (each with `phase`, `policy`, `enforcement`, `result`, `violations[]`).
+
+```bash
+strata policy check -f xyz-deploy-prd.yaml
+strata policy check -f xyz-deploy-prd.yaml --phase validate --phase plan
+strata policy check -f xyz-deploy-prd.yaml --plan-file build/infra.tfplan.json
+strata policy check -f xyz-deploy-prd.yaml --output json
+```
+
+---
+
+## `secret`
+
+Generate and manage secret values. These utilities are useful for creating passwords, tokens, and other sensitive values to be stored in vaults or used in configuration files.
+
+### `secret generate`
+
+Generate a cryptographically secure secret value in various formats.
+
+```
+strata secret generate [--format FORMAT] [--length N] [standard options]
+```
+
+| Option            | Default   | Description                                                                                                                                                   |
+| ----------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format FORMAT` | `urlsafe` | Output encoding. Valid formats: `urlsafe`, `hex`, `alphanumeric`, `password`, `numeric`, `base64`, `uuid4`, `uuid7`                                           |
+| `--length N`      | 32        | For most formats: number of bytes (output will be longer after encoding). For `alphanumeric`/`password`/`numeric`: exact character count. For UUIDs: ignored. |
+
+**Format descriptions:**
+
+| Format         | Use Case                                                 | Output Example                         |
+| -------------- | -------------------------------------------------------- | -------------------------------------- |
+| `urlsafe`      | Passwords, tokens, API keys (safe for URLs and env vars) | `qB2-mKp3XzZ_VqL9N8RkT4Wx1YuJaFbC`     |
+| `hex`          | Binary data, checksums, hashing                          | `a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6`     |
+| `alphanumeric` | Restrictive password policies (letters + digits only)    | `A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6`     |
+| `password`     | General-purpose passwords (mix of letter+digit+symbols)  | `T7@kL2#qP5!mX9&rW3\`vY8$bZ1%cN4`      |
+| `numeric`      | PINs, OTPs, numeric-only contexts                        | `482916375029847362`                   |
+| `base64`       | Kubernetes secrets, Docker auth, config formats          | `YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo=` |
+| `uuid4`        | Distributed IDs, uncorrelated identifiers                | `f47ac10b-58cc-4372-a567-0e02b2c3d479` |
+| `uuid7`        | Time-ordered IDs, sortable identifiers, Postgres v13+    | `01891a9c-16d7-7e52-be7c-6cde194a6e5a` |
+
+**Typical use cases:**
+
+- Store in a vault: `strata secret generate --format password --length 20 | vault write secret/app_password -`
+- Generate API token: `strata secret generate --format urlsafe --length 48`
+- Create database password: `strata secret generate --format password --length 32`
+
+**Exit codes:** 0 success · 1 invalid format or options
+
+```bash
+# Generate a 20-character password with symbols
+strata secret generate --format password --length 20
+
+# Generate a 64-byte URL-safe token (outputs base64-URL, ~86 chars)
+strata secret generate --format urlsafe --length 64
+
+# Generate a UUID v7 (time-ordered)
+strata secret generate --format uuid7
+
+# Get structured JSON output
+strata secret generate --format password --length 32 --output json
+```
+
+### `secret mask`
+
+Mask a secret value for safe display in logs or output. The first N characters remain visible; the rest are replaced.
+
+```
+strata secret mask VALUE [--show N] [--char C] [standard options]
+```
+
+| Option   | Default | Description                                  |
+| -------- | ------- | -------------------------------------------- |
+| `--show` | 4       | Number of leading characters to keep visible |
+| `--char` | `*`     | Replacement character for the masked portion |
+
+**Typical use cases:**
+
+- Log tokens safely: `echo "Token: $(strata secret mask $TOKEN --show 4 --char '*')"`
+- Display credentials in output: `strata secret mask "dbpassword123" --show 2 --char '#'`
+- Audit trail: Show enough to identify, but not leak secrets
+
+**Exit codes:** 0 success · 1 invalid arguments
+
+```bash
+# Show first 4 chars of a token, mask the rest with asterisks
+strata secret mask "akiaiosfodnn7example" --show 4
+
+# Show first 2 chars with custom mask character
+strata secret mask "s3cr3t_p@ssw0rd" --show 2 --char '#'
+
+# Get structured JSON output
+strata secret mask "mysecretvalue" --show 3 --output json
+```
+
+**Output examples:**
+
+```
+# Token with 4 visible chars (default)
+$ strata secret mask "token_abc123xyz789"
+token****
+
+# Password with 2 visible chars and custom replacement
+$ strata secret mask "myP@ssw0rd" --show 2 --char '#'
+my########
+```
+
+---
+
+## `deploy`
+
+> **Note:** Requires the CLI tool for the provisioner used by each stage (`terraform`, `helm`, `ansible-playbook`). Use `strata tools status` to verify availability. Configure integration credentials (Bitwarden, Vault, Azure Key Vault, etc.) before running. Use `--dry-run` to validate and plan without applying any changes.
+
+Deploy platform infrastructure using provisioners defined in a deployment YAML file.
+
+All `deploy` subcommands accept `--file/-f PATH` and `--stage NAME`.
+
+### `deploy run`
+
+```
+strata deploy run [-f FILE] [--stage NAME] [--force] [--dry-run] [standard options]
+```
+
+Execute the deploy pipeline (setup → check → plan → apply).
+
+| Option         | Description                                  |
+| -------------- | -------------------------------------------- |
+| `--stage NAME` | Limit execution to one deployment stage      |
+| `--force`      | Skip confirmation prompts and approval gates |
+| `--dry-run`    | Validate and plan only — no provisioners run |
+
+```bash
+strata deploy run -f xyz-deploy-prd.yaml
+strata deploy run --stage production --dry-run
+strata deploy run --force
+```
+
+### `deploy destroy`
+
+```
+strata deploy destroy [-f FILE] [--stage NAME] [--force] [--dry-run] [standard options]
+```
+
+Tear down provisioned infrastructure. `--force` is required for a real destroy (runs non-interactively). `--dry-run` runs `terraform plan -destroy` only.
+
+```bash
+strata deploy destroy -f xyz-deploy-prd.yaml --dry-run
+strata deploy destroy --stage production --force
+```
+
+### `deploy status`
+
+```
+strata deploy status [-f FILE] [--stage NAME] [--plan] [standard options]
+```
+
+Show live Terraform outputs or saved plan details. `--plan` reads the last saved `.tfplan` file without backend calls.
+
+```bash
+strata deploy status -f xyz-deploy-prd.yaml
+strata deploy status --stage production --plan
+```
+
+### `deploy history`
+
+```
+strata deploy history [--lines N] [--operation run|destroy] [standard options]
+```
+
+Show deployment execution history from workspace logs.
+
+```bash
+strata deploy history
+strata deploy history --lines 20 --operation run
+```
+
+### `deploy health`
+
+```
+strata deploy health -f FILE [--stage NAME] [standard options]
+```
+
+Run health checks against provisioned infrastructure stages. Exit code 3 if any check fails.
+
+```bash
+strata deploy health -f xyz-deploy-prd.yaml
+strata deploy health -f xyz-deploy-prd.yaml --stage production
+```
+
+### `deploy output`
+
+```
+strata deploy output -f FILE [--stage NAME] [--key NAME] [--refresh] [standard options]
+```
+
+Show Terraform outputs from the local cache (`.tf-outputs.json`) or fetch live from the backend with `--refresh`.
+
+| Option         | Description                                               |
+| -------------- | --------------------------------------------------------- |
+| `--stage NAME` | Limit to a single deployment stage                        |
+| `--key NAME`   | Print only a single output key (useful for scripting)     |
+| `--refresh`    | Re-run `terraform output -json` and update the cache file |
+
+```bash
+strata deploy output -f xyz-deploy-prd.yaml
+strata deploy output -f xyz-deploy-prd.yaml --stage production --key endpoint
+strata deploy output -f xyz-deploy-prd.yaml --refresh
+```
+
+### `deploy outputs`
+
+```
+strata deploy outputs -f FILE [--stage NAME] [--key NAME] [--version VERSION] [--all-versions] [standard options]
+```
+
+Show **stored output artifacts** written by `deploy run` to the configured outputs path (default: `.strata/outputs`). These files persist across runs and are not affected by Terraform state changes.
+
+Distinct from `deploy output`: `deploy output` reads the Terraform cache / hits the backend live; `deploy outputs` reads the durable per-stage JSON artifact files.
+
+| Option              | Description                                                                      |
+| ------------------- | -------------------------------------------------------------------------------- |
+| `--stage NAME`      | Limit display to a single stage                                                  |
+| `--key NAME`        | Show only a single output key                                                    |
+| `--version VERSION` | Show artifacts for a specific version tag (default: current version from labels) |
+| `--all-versions`    | Show artifacts for every version directory found in the outputs path             |
+
+Artifacts are grouped by version in console output. Sensitive values are shown as `(sensitive)` or omitted, depending on `spec.deployment.outputs.sensitive` in the configuration.
+
+**Output keys (`--output json`):** `deployment`, `artifacts[]` (each with `deployment`, `version`, `stage`, `written_at`, `outputs{}`).
+
+```bash
+strata deploy outputs -f xyz-deploy-prd.yaml
+strata deploy outputs -f xyz-deploy-prd.yaml --stage production
+strata deploy outputs -f xyz-deploy-prd.yaml --key endpoint
+strata deploy outputs -f xyz-deploy-prd.yaml --all-versions
+strata deploy outputs -f xyz-deploy-prd.yaml --version 2.0.0 --output json
+```
+
+### `deploy lock`
+
+Manage deployment state locks. Locking is enabled in the deployment YAML via `spec.locking.enabled: true`. When enabled, `deploy run` acquires a lock before the first stage and releases it in a `finally` block — protecting the full pipeline (hooks, Terraform, Ansible, health checks) from concurrent runs.
+
+The lock backend is chosen automatically from the provisioner's `backend.type` — no separate connection configuration needed.
+
+#### `deploy lock status`
+
+```
+strata deploy lock status -f FILE [standard options]
+```
+
+Show the current lock state for the deployment. Exits `0` whether locked or unlocked.
+
+```bash
+strata deploy lock status -f xyz-deploy-prd.yaml
+strata deploy lock status -f xyz-deploy-prd.yaml --output json
+```
+
+**JSON output keys:** `locked` (bool), `deployment`, and when locked: `lock_id`, `holder`, `hostname`, `pid`, `acquired_at`, `expires_at`, `reason`.
+
+#### `deploy lock release`
+
+```
+strata deploy lock release -f FILE [--force] [standard options]
+```
+
+Release the deployment lock. Without `--force`, release is denied if the lock is held by a different user or host (exit code `3`). With `--force`, the lock is released regardless of holder — use for stuck CI runs or crashed deploys.
+
+| Option    | Description                                      |
+| --------- | ------------------------------------------------ |
+| `--force` | Release even if held by a different user or host |
+
+```bash
+strata deploy lock release -f xyz-deploy-prd.yaml
+strata deploy lock release -f xyz-deploy-prd.yaml --force
+```
+
+**Exit codes:** `0` released (or was not locked); `1` backend error; `3` lock held by another holder and `--force` not supplied.
+
+#### `deploy lock history`
+
+```
+strata deploy lock history -f FILE [--last N] [standard options]
+```
+
+Show recent lock events for the deployment (most recent first). History is stored locally in `{work_path}/.strata/locks/` as an append-only NDJSON file.
+
+| Option     | Type | Default | Description                               |
+| ---------- | ---- | ------- | ----------------------------------------- |
+| `--last N` | int  | `10`    | Number of recent events to show (max 100) |
+
+```bash
+strata deploy lock history -f xyz-deploy-prd.yaml
+strata deploy lock history -f xyz-deploy-prd.yaml --last 25
+strata deploy lock history -f xyz-deploy-prd.yaml --output json
+```
+
+**JSON output keys:** `deployment`, `entries[]` — each entry: `lock_id`, `holder`, `hostname`, `pid`, `acquired_at`, `expires_at`, `reason`, `stage`.
+
+---
+
+## `values`
+
+Inspect resolved deployment values (variables, secrets, feature flags).
+
+### `values list`
+
+```
+strata values list -f FILE [--stage NAME] [--type TYPE] [--show-store] [--unresolved] [standard options]
+```
+
+| Option                                | Description                                                    |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `-f FILE`                             | ✅ Required. Path to the deployment YAML file                   |
+| `--stage NAME`                        | Use the environment from this stage (default: first stage)     |
+| `--type variables\|secrets\|features` | Show only this value type                                      |
+| `--show-store`                        | Include the store reference (env var name, key path) in output |
+| `--unresolved`                        | Show only entries that failed to resolve                       |
+
+Secrets are masked (first 3 chars + `*****`). Exit code 3 if any entry is unresolved.
+
+```bash
+strata values list -f xyz-deploy-prd.yaml
+strata values list -f xyz-deploy-prd.yaml --type secrets --show-store
+strata values list -f xyz-deploy-prd.yaml --unresolved
+```
+
+### `values get`
+
+```
+strata values get -f FILE KEY... [standard options]
+```
+
+Retrieve the full resolved value for one or more keys. **Secrets are revealed in plain text.**
+
+```bash
+strata values get -f xyz-deploy-prd.yaml DB_PASSWORD
+strata values get -f xyz-deploy-prd.yaml DB_PASSWORD API_KEY
+```
+
+### `values set`
+
+```
+strata values set -f FILE -k KEY {--value VALUE | --from-file PATH | --stdin} [standard options]
+```
+
+Write a value to its configured store backend. Behaviour depends on the store type:
+
+| Store type                                                                                                                 | Action                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `constant`                                                                                                                 | Prints the file path and key location (cannot write to YAML)                  |
+| `environment`                                                                                                              | Prints the env var name and export instruction                                |
+| `github`                                                                                                                   | Calls `gh secret set` via the GitHub CLI                                      |
+| Integration-backed (`azure-keyvault`, `vault`, `consul`, `azure-appconfig`, `bitwarden`, `infisical`, `etcd`, `flagsmith`) | Calls the integration's `set_variable`, `set_secret`, or `set_feature` method |
+
+Multiline values (SSH keys, certificates) use `--from-file` or `--stdin`:
+
+```bash
+strata values set -f xyz-deploy-prd.yaml -k DB_HOST --value "new-host.example.com"
+strata values set -f xyz-deploy-prd.yaml -k TLS_CERT --from-file cert.pem
+cat key.pem | strata values set -f xyz-deploy-prd.yaml -k SSH_KEY --stdin
+```
+
+### `values resolve`
+
+```
+strata values resolve -f FILE [-k KEY] [--probe] [standard options]
+```
+
+Diagnose the resolution chain for each value key without revealing actual values.
+Reports store type, integration registration, availability, and optionally
+(with `--probe`) whether the reference exists in the backend.
+
+| Flag      | Effect                                                                    |
+| --------- | ------------------------------------------------------------------------- |
+| `-k KEY`  | Diagnose a single key only                                                |
+| `--probe` | Also attempt resolution against backends (pass/fail only, no value shown) |
+
+```bash
+strata values resolve -f xyz-deploy-prd.yaml
+strata values resolve -f xyz-deploy-prd.yaml -k DB_PASSWORD
+strata values resolve -f xyz-deploy-prd.yaml --probe
+```
+
+---
+
+## `version`
+
+Show the current CLI version.
+
+```bash
+strata version
+strata version --output json
+```
+
+---
+
+## `help`
+
+Show help topics for common workflows.
+
+```bash
+strata help
+strata help quickstart
+strata help profiles
+```
+
+Available topics: `quickstart`, `workspace`, `profiles`, `refs`, `config-merge`, `cross-repo`, `environments`, `troubleshooting`.
