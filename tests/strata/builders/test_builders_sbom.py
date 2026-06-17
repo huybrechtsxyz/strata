@@ -61,7 +61,7 @@ def _mock_provisioner(provisioner_type, chart_name=None, chart_version=None, cha
 class TestSbomBuilderInit:
     def test_default_collectors_count(self):
         builder = SbomBuilder()
-        assert len(builder._collectors) == 7
+        assert len(builder._collectors) == 8
 
     def test_injectable_collectors(self):
         custom = [MagicMock()]
@@ -83,7 +83,7 @@ class TestSbomBuilderInit:
         builder = SbomBuilder(no_deps=True)
         types = [type(c) for c in builder._collectors]
         assert DependencyFileCollector not in types
-        assert len(builder._collectors) == 6
+        assert len(builder._collectors) == 7
 
     def test_no_deps_false_includes_dependency_file_collector(self):
         from strata.builders.sbom.deps_collector import DependencyFileCollector

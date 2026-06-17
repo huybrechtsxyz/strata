@@ -11,11 +11,17 @@ from strata.builders.sbom.base_sbom_collector import BaseSbomCollector
 from strata.builders.sbom.collector_plugin_loader import CollectorPluginLoader
 from strata.builders.sbom.compose_collector import ComposeImageCollector
 from strata.builders.sbom.deps_collector import DependencyFileCollector
+from strata.builders.sbom.helm_chart_file_collector import HelmChartFileCollector
 from strata.builders.sbom.helm_collector import HelmChartCollector
 from strata.builders.sbom.image_collector import ContainerImageCollector
 from strata.builders.sbom.terraform_collector import TerraformProviderCollector
 from strata.builders.sbom.terraform_module_collector import TerraformModuleCollector
-from strata.models.platform_artifact_model import PlatformArtifactModel
+from strata.models.platform_artifact_model import (
+    PlatformArtifactModel,
+    PlatformMetaModel,
+    PlatformSpecModel,
+    PlatformWorkspaceModel,
+)
 from strata.models.sbom_model import SbomComponentModel, SbomReferenceModel
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
@@ -45,6 +51,7 @@ def _default_collectors() -> List[BaseSbomCollector]:
         ContainerImageCollector(),
         ComposeImageCollector(),
         HelmChartCollector(),
+        HelmChartFileCollector(),
         TerraformProviderCollector(),
         TerraformModuleCollector(),
         AnsibleCollectionCollector(),
@@ -231,6 +238,109 @@ class SbomBuilder(BaseBuilder):
             self._messages.append(f"SBOM verified at: {sbom_path}")
 
         return True
+
+    # ------------------------------------------------------------------
+    # Standalone scan (no deployment service required)
+    # ------------------------------------------------------------------
+
+    def scan(
+        self,
+        scan_path: Path,
+        output_file: Optional[Path] = None,
+    ) -> bool:
+        """Scan a directory tree for SBOM components without a deployment context.
+
+        Runs all collectors against *scan_path* using an empty platform model.
+        Model-dependent collectors (images from platform modules, Helm from
+        provisioners) return empty results gracefully.  File-based collectors
+        (Terraform, Compose, Chart.yaml, lockfiles) scan the directory tree.
+
+        When *output_file* is provided, writes CycloneDX JSON there.
+        When omitted, writes to ``{scan_path}/sbom.json``.
+
+        Returns ``True`` on success.
+        """
+        try:
+            from strata.models.common_models import PlatformKind, PlatformName, PlatformVersion
+
+            platform_model = PlatformArtifactModel(
+                apiVersion=PlatformVersion.v1,
+                kind=PlatformKind.PLATFORM_MODEL,
+                meta=PlatformMetaModel(name=PlatformName("scan")),
+                spec=PlatformSpecModel(workspace=PlatformWorkspaceModel(name=PlatformName("scan"))),
+            )
+
+            scan_path = scan_path.resolve()
+            extra_collectors = CollectorPluginLoader.load(scan_path)
+            active_collectors = self._collectors + extra_collectors
+
+            components: List[SbomComponentModel] = []
+            for collector in active_collectors:
+                collected = collector.collect(platform_model, scan_path, scan_path)
+                components.extend(collected)
+                for warning in collector.get_warnings():
+                    self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+
+            bom_json = self._build_cyclonedx_json(components)
+            if bom_json is None:
+                return False
+
+            dest = output_file if output_file else scan_path / _SBOM_FILENAME
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            sbom_bytes = bom_json.encode("utf-8")
+            dest.write_bytes(sbom_bytes)
+
+            sha256 = hashlib.sha256(sbom_bytes).hexdigest()
+            self._sbom_reference = SbomReferenceModel(
+                path=str(dest),
+                format=_SBOM_FORMAT,
+                sha256=f"sha256:{sha256}",
+                component_count=len(components),
+            )
+
+            if self.verbose:
+                self._messages.append(f"SBOM written: {dest} ({len(components)} components)")
+
+            return True
+
+        except Exception as exc:
+            self._errors.append(f"Failed to scan: {exc}")
+            self.logger.exception("Failed to scan for SBOM", error=str(exc))
+            return False
+
+    def scan_inventory(self, scan_path: Path) -> Optional[str]:
+        """Scan a directory and return a human-readable inventory string.
+
+        Same collector pipeline as ``scan()`` but does not write any files.
+        Returns ``None`` on failure.
+        """
+        try:
+            from strata.models.common_models import PlatformKind, PlatformName, PlatformVersion
+
+            platform_model = PlatformArtifactModel(
+                apiVersion=PlatformVersion.v1,
+                kind=PlatformKind.PLATFORM_MODEL,
+                meta=PlatformMetaModel(name=PlatformName("scan")),
+                spec=PlatformSpecModel(workspace=PlatformWorkspaceModel(name=PlatformName("scan"))),
+            )
+
+            scan_path = scan_path.resolve()
+            extra_collectors = CollectorPluginLoader.load(scan_path)
+            active_collectors = self._collectors + extra_collectors
+
+            components: List[SbomComponentModel] = []
+            for collector in active_collectors:
+                collected = collector.collect(platform_model, scan_path, scan_path)
+                components.extend(collected)
+                for warning in collector.get_warnings():
+                    self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+
+            return self._format_inventory(components, scan_path.name)
+
+        except Exception as exc:
+            self._errors.append(f"Failed to scan inventory: {exc}")
+            self.logger.exception("Failed to scan inventory", error=str(exc))
+            return None
 
     # ------------------------------------------------------------------
     # Inventory rendering

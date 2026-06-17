@@ -567,13 +567,31 @@ strata build plan --stage production --artifacts-only
 ### `build sbom`
 
 ```
-strata build sbom [-f FILE] [--report MODE] [--output-file PATH] [--no-deps] [standard options]
+strata build sbom [-f FILE | --scan PATH] [--report MODE] [--output-file PATH] [--no-deps] [standard options]
 ```
 
-Regenerates the SBOM from an existing `platform.json` without a full rebuild. Runs all
-collectors (images, Compose services, Helm charts, Terraform providers and modules,
-Ansible collections, application dependencies) and writes `sbom.json` alongside
-`platform.json`.
+Two modes of operation:
+
+- **Deployment mode** (`-f FILE`): Regenerates the SBOM from an existing `platform.json`
+  without a full rebuild. Requires a prior `strata build run`.
+- **Scan mode** (`--scan PATH`): Scans any directory for SBOM components without a
+  deployment file or workspace init. Useful for generating an SBOM from existing
+  Terraform, Helm, Compose, or application repos.
+
+Collectors run in both modes:
+
+| Collector                                | Deployment mode | Scan mode       |
+| ---------------------------------------- | --------------- | --------------- |
+| Container images (platform model)        | ✅               | — (empty model) |
+| Compose images (`docker-compose.yml`)    | ✅               | ✅               |
+| Helm charts (platform model)             | ✅               | — (empty model) |
+| Helm charts (`Chart.yaml` files)         | ✅               | ✅               |
+| Terraform providers (`*.tf`)             | ✅               | ✅               |
+| Terraform modules (`*.tf`)               | ✅               | ✅               |
+| Ansible collections (`requirements.yml`) | ✅               | ✅               |
+| Application dependencies (lockfiles)     | ✅               | ✅               |
+
+`--scan` and `-f` are mutually exclusive.
 
 `--report` selects the output style:
 
@@ -585,7 +603,7 @@ Ansible collections, application dependencies) and writes `sbom.json` alongside
 | `--no-deps`          | Skip `DependencyFileCollector` (faster for large repos)  |
 
 ```bash
-# Regenerate sbom.json
+# Regenerate sbom.json from deployment
 strata build sbom -f xyz-deploy-prd.yaml
 
 # Print a human-readable platform inventory
@@ -596,6 +614,15 @@ strata build sbom -f xyz-deploy-prd.yaml --report inventory --output-file invent
 
 # Skip lockfile scanning (faster)
 strata build sbom -f xyz-deploy-prd.yaml --no-deps
+
+# Scan a directory (no strata workspace required)
+strata build sbom --scan ./my-terraform-repo
+
+# Scan + human-readable overview
+strata build sbom --scan ./infra --report inventory
+
+# Scan + write SBOM to a specific file
+strata build sbom --scan . --output-file sbom.json
 ```
 
 ### `build clean`

@@ -137,9 +137,16 @@ def build_plan(
     handle_command_exit(command, success)
 
 
-@build.command(name="sbom", help="(Re)generate SBOM from an existing platform.json.")
+@build.command(name="sbom", help="(Re)generate SBOM from an existing platform.json or scan a directory.")
 @click_file
 @click_work_path
+@click.option(
+    "--scan",
+    "scan_path",
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    default=None,
+    help="Scan a directory for SBOM components without a deployment file. Mutually exclusive with -f.",
+)
 @click.option(
     "--report",
     type=click.Choice(["cyclonedx", "inventory"], case_sensitive=False),
@@ -171,6 +178,7 @@ def build_plan(
 def build_sbom(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
+    scan_path: Optional[str] = None,
     report: str = "cyclonedx",
     output_file: Optional[str] = None,
     no_deps: bool = False,
@@ -178,10 +186,14 @@ def build_sbom(
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
 ):
-    """(Re)generate the SBOM from an existing platform.json without re-running the full build."""
+    """(Re)generate the SBOM from an existing platform.json, or scan a directory directly."""
+    if scan_path and file:
+        raise click.UsageError("--scan and -f/--file are mutually exclusive.")
+
     command = SbomBuildCommand(
         file=file,
         work_path=work_path,
+        scan_path=scan_path,
         output=output,
         verbose=verbose,
         quiet=quiet,

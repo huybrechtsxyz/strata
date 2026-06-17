@@ -696,15 +696,21 @@ Both modes run the same collector pipeline — no second pass.
 
 `SbomBuilder` delegates component discovery to pluggable collectors. Each collector implements `BaseSbomCollector` and is responsible for one artifact type. The default set (in execution order):
 
-| Collector                    | Source                                                     | PURL type         |
-| ---------------------------- | ---------------------------------------------------------- | ----------------- |
-| `ContainerImageCollector`    | `platform.spec.modules[].services[].image`                 | `pkg:docker/…`    |
-| `ComposeImageCollector`      | `docker-compose.yml` service images in the build directory | `pkg:docker/…`    |
-| `HelmChartCollector`         | Provisioners with `type: helm`                             | `pkg:helm/…`      |
-| `TerraformProviderCollector` | `required_providers {}` blocks in `*.tf` build files       | `pkg:terraform/…` |
-| `TerraformModuleCollector`   | `module {}` blocks in `*.tf` build files                   | `pkg:terraform/…` |
-| `AnsibleCollectionCollector` | `requirements.yml` files in the build directory            | `pkg:ansible/…`   |
-| `DependencyFileCollector`    | Dependency manifests in workspace repos (see below)        | `pkg:pypi/…` etc. |
+| Collector                    | Source                                                     | PURL type         | Scan mode |
+| ---------------------------- | ---------------------------------------------------------- | ----------------- | --------- |
+| `ContainerImageCollector`    | `platform.spec.modules[].services[].image`                 | `pkg:docker/…`    | —         |
+| `ComposeImageCollector`      | `docker-compose.yml` service images in the build directory | `pkg:docker/…`    | ✅         |
+| `HelmChartCollector`         | Provisioners with `type: helm` (platform model)            | `pkg:helm/…`      | —         |
+| `HelmChartFileCollector`     | `Chart.yaml` files on disk (chart + dependencies)          | `pkg:helm/…`      | ✅         |
+| `TerraformProviderCollector` | `required_providers {}` blocks in `*.tf` build files       | `pkg:terraform/…` | ✅         |
+| `TerraformModuleCollector`   | `module {}` blocks in `*.tf` build files                   | `pkg:terraform/…` | ✅         |
+| `AnsibleCollectionCollector` | `requirements.yml` files in the build directory            | `pkg:ansible/…`   | ✅         |
+| `DependencyFileCollector`    | Dependency manifests in workspace repos (see below)        | `pkg:pypi/…` etc. | ✅         |
+
+**Scan mode** (`strata build sbom --scan PATH`) runs all collectors against an arbitrary
+directory without requiring a strata workspace, deployment file, or `platform.json`.
+Model-dependent collectors (`ContainerImageCollector`, `HelmChartCollector`) return
+empty results gracefully.  File-based collectors scan the directory tree normally.
 
 Collectors are injectable — pass `collectors=[…]` to the constructor for testing or extension:
 
