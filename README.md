@@ -19,6 +19,17 @@ strata deploy run --file deploy/my-environment.yaml     # deploy to the target e
 
 New here? See the [Getting Started guide](docs/platform/getting-started.md) for the full walkthrough. Dev install: `uv sync`.
 
+**No PyPI access? Using a Dev Container?** Inject strata from the published image — no Python install required:
+
+```dockerfile
+# .devcontainer/Dockerfile
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+COPY --from=ghcr.io/huybrechtsxyz/strata:latest /app/.venv /opt/strata
+ENV PATH="/opt/strata/bin:$PATH"
+```
+
+See the [Getting Started guide](docs/platform/getting-started.md#install) for the full devcontainer and air-gapped registry setup.
+
 ---
 
 ## Automation & AI Agents
