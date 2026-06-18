@@ -7,12 +7,30 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **Configuration YAML schema:** `spec.repositories` renamed to `spec.remotes` in configuration files (ADR 0010). Existing configuration YAML files must update the field name. Solution repos (`solution.json → spec.repositories`) are unchanged.
+
 ### Added
 
 - Self-SBOM generation in CI (`ci-build.yml` Job 3): `strata build sbom --scan .` runs against its own source tree, producing a CycloneDX 1.6 `sbom.json` artifact (dogfooding)
 - `sbom.json` artifact attached to every GitHub Release via `ci-release.yml`
 - `workflow_dispatch` trigger on `ci-docs.yml` for manual doc builds and testing
 - Edge image jobs now gate on SBOM job success (`needs: [build, docs, sbom]`)
+- ADR 0010: Decision record for renaming configuration repositories to remotes
+
+### Changed
+
+- `RepositoryModel` renamed to `RemoteModel` (backwards-compatible alias retained)
+- `RepositoryType` enum renamed to `RemoteType` (backwards-compatible alias retained)
+- `ConfigurationService.get_repositories()` → `get_remotes()`
+- `ConfigurationService.get_repo_map()` → `get_remote_map()`
+- `ConfigurationModel.get_repo_map()` → `get_remote_map()`
+- `SourceModel.repository` field description corrected to reference solution repos
+
+### Fixed
+
+- **Bug:** Workspace deep validation checked `configuration_model.spec.repositories` (manifest backends) instead of solution repos for provisioner `source.repository` references — repos registered via `strata repo add` now validate correctly
 
 ---
 
