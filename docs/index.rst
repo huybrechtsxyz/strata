@@ -81,6 +81,7 @@ strata
    decisions/0007-deployment-state-locking
    decisions/0008-infrastructure-drift-detection
    decisions/0009-sbom-extended-sources-and-inventory
+   decisions/0010-rename-configuration-repositories-to-remotes
 
 .. toctree::
    :maxdepth: 2

@@ -171,7 +171,7 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
 
         # Validate logging file reference exists on disk
         if work_path and self.model.spec.logging and self.model.spec.logging.file:
-            repo_map = self.get_repo_map()
+            repo_map = self.get_remote_map()
             errors.extend(
                 self._validate_file_refs(
                     work_path,
