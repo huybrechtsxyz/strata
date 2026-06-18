@@ -1341,6 +1341,25 @@
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0009-sbom-extended-sources-and-inventory.html#related">Related</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html">Rename configuration spec.repositories to spec.remotes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#option-a-rename-configuration-field-to-spec-remotes">Option A — Rename configuration field to <code class="docutils literal notranslate"><span class="pre">spec.remotes</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#option-b-rename-to-spec-stores">Option B — Rename to <code class="docutils literal notranslate"><span class="pre">spec.stores</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#option-c-rename-to-spec-origins">Option C — Rename to <code class="docutils literal notranslate"><span class="pre">spec.origins</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#option-d-rename-to-spec-catalogs">Option D — Rename to <code class="docutils literal notranslate"><span class="pre">spec.catalogs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#option-e-rename-to-spec-backends">Option E — Rename to <code class="docutils literal notranslate"><span class="pre">spec.backends</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#option-f-rename-to-spec-endpoints">Option F — Rename to <code class="docutils literal notranslate"><span class="pre">spec.endpoints</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#option-g-keep-both-as-repositories-status-quo-fix-descriptions-only">Option G — Keep both as <code class="docutils literal notranslate"><span class="pre">repositories</span></code> (status quo + fix descriptions only)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#decision-outcome">Decision Outcome</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#scope-of-change">Scope of Change</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#what-does-not-change">What Does NOT Change</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#consequences">Consequences</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Guides:</span></p>
 <ul>
@@ -1671,7 +1690,7 @@
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">manifest</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gitops</span>
 <span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;deployments&quot;</span><span class="w">                           </span><span class="c1"># Directory in target repo</span>
-<span class="w">  </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xyz-state-repo</span><span class="w">                    </span><span class="c1"># Repo name (must be in spec.repositories)</span>
+<span class="w">  </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xyz-state-repo</span><span class="w">                    </span><span class="c1"># Remote name (must be in spec.remotes)</span>
 <span class="w">  </span><span class="nt">branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">manifests</span><span class="w">                             </span><span class="c1"># Target branch</span>
 <span class="w">  </span><span class="nt">tag</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                                     </span><span class="c1"># Create git tag after commit</span>
 </pre></div>
@@ -1701,9 +1720,9 @@ git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </
 </pre></div>
 </div>
 <p><strong>Repository requirement:</strong></p>
-<p>The <code class="docutils literal notranslate"><span class="pre">repository</span></code> field must reference a registered repository in <code class="docutils literal notranslate"><span class="pre">spec.repositories</span></code>:</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">repository</span></code> field must reference a registered remote in <code class="docutils literal notranslate"><span class="pre">spec.remotes</span></code>:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">repositories</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">remotes</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xyz-state-repo</span>
 <span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">git@github.com:org/xyz-state-repo.git</span>
 <span class="w">      </span><span class="nt">branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
@@ -1859,8 +1878,8 @@ git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </
 <td><p>Add <code class="docutils literal notranslate"><span class="pre">manifest</span></code> section with <code class="docutils literal notranslate"><span class="pre">type</span></code> and <code class="docutils literal notranslate"><span class="pre">path</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>gitops type fails to push</p></td>
-<td><p>Repository not registered</p></td>
-<td><p>Verify <code class="docutils literal notranslate"><span class="pre">repository</span></code> field matches a name in <code class="docutils literal notranslate"><span class="pre">spec.repositories</span></code></p></td>
+<td><p>Remote not registered</p></td>
+<td><p>Verify <code class="docutils literal notranslate"><span class="pre">repository</span></code> field matches a name in <code class="docutils literal notranslate"><span class="pre">spec.remotes</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>gitops fails: branch not set</p></td>
 <td><p>Required field missing</p></td>

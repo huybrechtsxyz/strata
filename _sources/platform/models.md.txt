@@ -47,7 +47,7 @@ Never use plain `str` for `name` fields — always use `PlatformName` from `comm
 | `platform-artifact`   | `PlatformArtifactModel`   | Build output written to `.strata/build/`                          |
 | `workspace-template`  | `PlatformTemplateModel`   | Scaffold for `strata sln init --from-template`                    |
 | `solution`            | `SolutionModel`           | Solution registry (`solution.json`)                               |
-| `repository`          | `RepositoryModel`         | Registered repository entry                                       |
+| `remote`              | `RemoteModel`             | Named remote endpoint (artifact source/target)                    |
 | `integration`         | `IntegrationModel`        | Integration backend credential config                             |
 
 ## Two-Phase Validation
