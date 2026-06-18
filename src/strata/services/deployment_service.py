@@ -83,7 +83,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
             # Merge solution-level repo_map (self._repo_map) with config-level repo_map.
             # Solution names (e.g. 'haven') take precedence for resolving @repo/... refs
             # in deployment files, which use solution repo names, not config repo names.
-            config_repo_map = configuration_model.get_repo_map() if configuration_model else {}
+            config_repo_map = configuration_model.get_remote_map() if configuration_model else {}
             repo_map = {**config_repo_map, **(self._repo_map or {})}
             file_refs = []
             for i, env_path in enumerate(self.model.spec.environments or []):
@@ -608,7 +608,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
         # Build repo_map once for all @repo_name/... path resolutions in this call.
         # Merge solution-level map (caller-supplied) with config-service map.
         # Solution names take precedence so @haven/... refs resolve correctly.
-        config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_repo_map()
+        config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_remote_map()
         repo_map = {**config_repo_map, **(repo_map or {})}
 
         try:

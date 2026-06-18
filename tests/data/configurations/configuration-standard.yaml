@@ -19,14 +19,14 @@ spec:
   # Optional: Specify custom logging configuration
   logging:
     file: "examples/logging.development.yaml"
-  
+
   # Deployment hierarchy layers
   layering:
     - name: environment
       description: "Deployment environment (dev, staging, prod)"
       pattern: "^(dev|staging|prod)$"
       required: true
-  
+
   # Deployment configuration - defines required/optional properties for deployments
   deployment:
     additional_properties: false
@@ -43,7 +43,7 @@ spec:
         pattern: "^[a-z]{2}-[a-z]+(-[0-9]+)?$"
         required: false
         description: "Deployment region (e.g., eu-west-1, us-east-2)"
-  
+
   properties:
     # Example of arbitrary configuration properties
     deployment_manifests:
@@ -68,7 +68,7 @@ spec:
       validation:
         command: "git --version"
         min_version: "2.30.0"
-    
+
     - name: terraform
       type: terraform
       capabilities: [infrastructure]
@@ -78,7 +78,7 @@ spec:
       validation:
         command: "terraform --version"
         min_version: "1.0.0"
-    
+
     - name: bitwarden
       type: bitwarden
       capabilities: [secrets]
@@ -92,7 +92,7 @@ spec:
           api_secret: bitwarden_api_secret
       endpoints:
         address: https://vault.bitwarden.com/api
-    
+
     - name: consul
       type: consul
       capabilities: [variables, keyvalue]
@@ -101,7 +101,7 @@ spec:
       enabled: true
       endpoints:
         address: http://consul.example.local:8500
-    
+
     - name: azure-keyvault
       type: azure_keyvault
       capabilities: [secrets]
@@ -116,22 +116,22 @@ spec:
           tenant_id: azure_tenant_id
       endpoints:
         address: https://test-platform-kv.vault.azure.net/
-  
-  repositories:
+
+  remotes:
     - name: platform-iac
       type: bundled
       repository: /
       reference: main
       source_path: deploy
       description: "Platform IaC deployment artifacts"
-    
+
     - name: platform-modules
       type: gitops
       repository: https://github.com/example/platform-modules.git
       reference: main
       source_path: modules
       description: "Platform application modules"
-    
+
     - name: docker-registry
       type: container
       repository: registry.example.com/platform

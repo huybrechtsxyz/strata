@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from strata.exceptions import PlatformFileNotFoundError
 from strata.logger import get_logger
 from strata.models.configuration_model import ConfigurationModel
-from strata.models.repository_model import RepositoryModel
+from strata.models.repository_model import RemoteModel
 from strata.services.base_service import BaseService
 from strata.utils import config
 from strata.utils.configuration_loader import ConfigurationLoader
@@ -171,7 +171,7 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
 
         # Validate logging file reference exists on disk
         if work_path and self.model.spec.logging and self.model.spec.logging.file:
-            repo_map = self.get_repo_map()
+            repo_map = self.get_remote_map()
             errors.extend(
                 self._validate_file_refs(
                     work_path,
@@ -339,19 +339,19 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
         self._ensure_validated()
         return self.model if self.model else None
 
-    def get_repositories(self) -> Optional[List[RepositoryModel]]:
-        """Get the list of repositories from the configuration."""
+    def get_remotes(self) -> Optional[List[RemoteModel]]:
+        """Get the list of remotes from the configuration."""
         self._ensure_validated()
-        if self.model and self.model.spec and self.model.spec.repositories:
-            return self.model.spec.repositories
+        if self.model and self.model.spec and self.model.spec.remotes:
+            return self.model.spec.remotes
         return None
 
-    def get_repo_map(self) -> Dict[str, str]:
-        """Return a ``{repo_name: deploy_path}`` mapping for resolving ``@repo_name/...`` references."""
-        repos = self.get_repositories()
-        if not repos:
+    def get_remote_map(self) -> Dict[str, str]:
+        """Return a ``{remote_name: deploy_path}`` mapping for resolving ``@remote_name/...`` references."""
+        remotes = self.get_remotes()
+        if not remotes:
             return {}
-        return {repo.name: repo.deploy_path for repo in repos if repo.name and repo.deploy_path}
+        return {remote.name: remote.deploy_path for remote in remotes if remote.name and remote.deploy_path}
 
     # Environment variable APIs
 

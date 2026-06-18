@@ -211,7 +211,7 @@ spec:
   deployment:
     manifest:
       type: gitops
-      repository: state-repo          # must match a name in spec.repositories
+      repository: state-repo          # must match a name in spec.remotes
       branch: manifests
       path: deployments
       tag: true                       # create git tag {deployment}/{version} after write

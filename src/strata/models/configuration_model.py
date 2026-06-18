@@ -15,7 +15,7 @@ from strata.models.common_models import (
 )
 from strata.models.integration_model import IntegrationModel
 from strata.models.policy_model import PolicyModel
-from strata.models.repository_model import RepositoryModel
+from strata.models.repository_model import RemoteModel
 
 
 class ConfigurationSecurityModel(PlatformBaseModel):
@@ -256,7 +256,7 @@ class ConfigurationManifestModel(PlatformBaseModel):
     )
     repository: Optional[str] = Field(
         None,
-        description="Repository name from spec.repositories (required when type=gitops)",
+        description="Remote name from spec.remotes (required when type=gitops)",
     )
     branch: Optional[str] = Field(
         None,
@@ -407,8 +407,8 @@ class ConfigurationSpecModel(PlatformBaseModel):
         default_factory=list,
         description="External integrations that extend platform capabilities",
     )
-    repositories: Optional[List[RepositoryModel]] = Field(
-        None, description="Deployment manifest repositories (artifact storage backends)"
+    remotes: Optional[List[RemoteModel]] = Field(
+        None, description="Named remote endpoints (artifact sources and deployment targets)"
     )
     lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Configuration lifecycle phases")
     configuration: Optional[Dict[str, Any]] = Field(None, description="List of configuration defaults")
@@ -528,9 +528,9 @@ class ConfigurationModel(PlatformBaseModel):
     meta: ConfigurationMetaModel = Field(..., description="Metadata for the configuration model.")
     spec: ConfigurationSpecModel = Field(..., description="Specification for the configuration.")
 
-    def get_repo_map(self) -> Dict[str, str]:
-        """Return a ``{repo_name: deploy_path}`` mapping for resolving ``@repo_name/...`` references."""
-        repos = self.spec.repositories if self.spec and self.spec.repositories else {}
-        if not repos or len(repos) == 0:
+    def get_remote_map(self) -> Dict[str, str]:
+        """Return a ``{remote_name: deploy_path}`` mapping for resolving ``@remote_name/...`` references."""
+        remotes = self.spec.remotes if self.spec and self.spec.remotes else {}
+        if not remotes or len(remotes) == 0:
             return {}
-        return {repo.name: repo.deploy_path for repo in repos if repo.name and repo.deploy_path}
+        return {remote.name: remote.deploy_path for remote in remotes if remote.name and remote.deploy_path}

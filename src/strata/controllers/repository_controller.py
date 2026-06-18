@@ -1,4 +1,4 @@
-"""Controller for managing and fetching configuration repositories."""
+"""Controller for managing and fetching configuration remotes."""
 
 import shutil
 from pathlib import Path
@@ -8,17 +8,17 @@ from strata.controllers.base_controller import BaseController
 from strata.integrations.factory import IntegrationFactory
 from strata.integrations.git import GitIntegration
 from strata.models.integration_model import IntegrationModel
-from strata.models.repository_model import RepositoryModel, RepositoryType
+from strata.models.repository_model import RemoteModel, RemoteType
 from strata.models.solution_model import SolutionSpecRepositoryModel
 from strata.services.configuration_service import ConfigurationService
 
 
 class RepositoryController(BaseController):
     """
-    Controls repository operations for configuration management.
+    Controls remote operations for configuration management.
 
-    Orchestrates fetching repositories from various sources (gitops, bundled,
-    container) into the workspace directory based on configuration.spec.repositories.
+    Orchestrates fetching remotes from various sources (gitops, bundled,
+    container) into the workspace directory based on configuration.spec.remotes.
 
     Source routing:
     - GITOPS  : clone via GitIntegration (or pull if already on disk)
@@ -47,13 +47,13 @@ class RepositoryController(BaseController):
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
     ) -> Tuple[bool, List[str]]:
         """
-        Fetch all repositories defined in configuration.
+        Fetch all remotes defined in configuration.
 
         Args:
             work_path: Working directory for resolving bundled paths
-            force: If True, re-fetch even if repository already exists on disk
-            progress_callback: Optional callback(repo_name, current, total)
-                called before each repository fetch
+            force: If True, re-fetch even if remote already exists on disk
+            progress_callback: Optional callback(remote_name, current, total)
+                called before each remote fetch
 
         Returns:
             Tuple of (success, list of error messages)
@@ -73,9 +73,9 @@ class RepositoryController(BaseController):
             self._errors.append(error_msg)
             return False, self._errors.copy()
 
-        repositories = self._config_service.model.spec.repositories
+        repositories = self._config_service.model.spec.remotes
         if not repositories:
-            self.logger.info("No repositories configured")
+            self.logger.info("No remotes configured")
             return True, []
 
         total = len(repositories)
@@ -129,13 +129,13 @@ class RepositoryController(BaseController):
 
     def get_repository_status(self, work_path: str) -> Dict[str, Dict[str, Any]]:
         """
-        Get status of all configured repositories.
+        Get status of all configured remotes.
 
         Args:
-            work_path: Workspace root directory where repositories are materialized
+            work_path: Workspace root directory where remotes are materialized
 
         Returns:
-            Dict of repository name to status info
+            Dict of remote name to status info
         """
         if not self._config_service.model:
             self.logger.warning("No configuration loaded")
@@ -145,41 +145,41 @@ class RepositoryController(BaseController):
             self.logger.warning("Configuration spec not found")
             return {}
 
-        repositories = self._config_service.model.spec.repositories
-        if not repositories:
+        remotes = self._config_service.model.spec.remotes
+        if not remotes:
             return {}
 
         status: Dict[str, Dict[str, Any]] = {}
 
-        for repo in repositories:
-            target_path = self._resolve_target_path(work_path=work_path, source=repo)
-            repo_name = repo.name or repo.repository
+        for remote in remotes:
+            target_path = self._resolve_target_path(work_path=work_path, source=remote)
+            remote_name = remote.name or remote.repository
 
-            status[repo_name] = {
-                "name": repo.name or "unnamed",
-                "type": repo.type.value,
-                "repository": repo.repository,
-                "reference": repo.reference,
-                "source_path": repo.source_path,
-                "deploy_path": repo.deploy_path,
+            status[remote_name] = {
+                "name": remote.name or "unnamed",
+                "type": remote.type.value,
+                "repository": remote.repository,
+                "reference": remote.reference,
+                "source_path": remote.source_path,
+                "deploy_path": remote.deploy_path,
                 "target_path": str(target_path),
                 "exists": target_path.exists(),
                 "is_git": ((target_path / ".git").exists() if target_path.exists() else False),
             }
 
         self.logger.debug(
-            "Repository status retrieved",
-            repository_count=len(status),
+            "Remote status retrieved",
+            remote_count=len(status),
         )
 
         return status
 
     def count_repositories(self) -> int:
         """
-        Count total repositories in configuration.
+        Count total remotes in configuration.
 
         Returns:
-            Number of repositories configured
+            Number of remotes configured
         """
         if not self._config_service.model:
             return 0
@@ -187,15 +187,15 @@ class RepositoryController(BaseController):
         if not self._config_service.model.spec:
             return 0
 
-        repositories = self._config_service.model.spec.repositories
-        return len(repositories) if repositories else 0
+        remotes = self._config_service.model.spec.remotes
+        return len(remotes) if remotes else 0
 
     def validate_repositories(self, work_path: str) -> Tuple[bool, List[str]]:
         """
-        Validate that all repositories exist on disk.
+        Validate that all remotes exist on disk.
 
         Args:
-            work_path: Workspace root directory where repositories are materialized
+            work_path: Workspace root directory where remotes are materialized
 
         Returns:
             Tuple of (all_exist, list of missing repository names)
@@ -295,36 +295,36 @@ class RepositoryController(BaseController):
     def _fetch_single_repository(
         self,
         work_path: str,
-        source: RepositoryModel,
+        source: RemoteModel,
         force: bool,
     ) -> bool:
-        """Fetch a single repository based on its type."""
+        """Fetch a single remote based on its type."""
         target_path = self._resolve_target_path(work_path=work_path, source=source)
         repo_name = source.name or source.repository
 
         self.logger.debug(
-            "Fetching repository",
-            repository=repo_name,
+            "Fetching remote",
+            remote=repo_name,
             type=source.type.value,
             target_path=str(target_path),
             force=force,
         )
 
-        if source.type == RepositoryType.GITOPS:
+        if source.type == RemoteType.GITOPS:
             return self._fetch_gitops(source=source, target_path=target_path, force=force)
 
-        if source.type == RepositoryType.BUNDLED:
+        if source.type == RemoteType.BUNDLED:
             return self._fetch_bundled(work_path=work_path, source=source, target_path=target_path, force=force)
 
-        if source.type == RepositoryType.CONTAINER:
-            self.logger.warning("Container repository type not supported", repository=repo_name)
+        if source.type == RemoteType.CONTAINER:
+            self.logger.warning("Container remote type not supported", remote=repo_name)
             return True
 
-        self.logger.error("Unknown repository type", repository=repo_name, type=source.type)
+        self.logger.error("Unknown remote type", remote=repo_name, type=source.type)
         return False
 
-    def _resolve_target_path(self, work_path: str, source: RepositoryModel) -> Path:
-        """Resolve repository target directory under workspace root."""
+    def _resolve_target_path(self, work_path: str, source: RemoteModel) -> Path:
+        """Resolve remote target directory under workspace root."""
         target_name = source.deploy_path or source.name or source.repository
         return Path(work_path) / target_name
 
@@ -438,11 +438,11 @@ class RepositoryController(BaseController):
 
     def _fetch_gitops(
         self,
-        source: RepositoryModel,
+        source: RemoteModel,
         target_path: Path,
         force: bool,
     ) -> bool:
-        """Clone or pull a GitOps repository via GitIntegration."""
+        """Clone or pull a GitOps remote via GitIntegration."""
         repo_name = source.name or source.repository
 
         git = self._get_git_integration()
@@ -482,16 +482,16 @@ class RepositoryController(BaseController):
     def _fetch_bundled(
         self,
         work_path: str,
-        source: RepositoryModel,
+        source: RemoteModel,
         target_path: Path,
         force: bool,
     ) -> bool:
         """
-        Copy a bundled (local) repository to the workspace directory.
+        Copy a bundled (local) remote to the workspace directory.
 
         Args:
             work_path: Working directory used to resolve the relative source path
-            source: RepositoryModel for the repository
+            source: RemoteModel for the remote
             target_path: Resolved target directory
             force: Overwrite target if it already exists
 

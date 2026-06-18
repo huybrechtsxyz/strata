@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pydantic model for deployment source (repository) configuration validation."""
+"""Pydantic model for remote source configuration validation."""
 
 import re
 from enum import Enum
@@ -16,9 +16,9 @@ from pydantic import (
 from strata.models.common_models import PlatformBaseModel, PlatformName
 
 
-class RepositoryType(str, Enum):
+class RemoteType(str, Enum):
     """
-    Enumeration of supported deployment source types.
+    Enumeration of supported remote source types.
 
     BUNDLED: Platform-bundled modules (available within the platform)
     GITOPS: GitOps repository to clone from
@@ -30,12 +30,12 @@ class RepositoryType(str, Enum):
     CONTAINER = "container"
 
 
-# Model for deployment configuration.
-class RepositoryModel(PlatformBaseModel):
+# Model for remote configuration.
+class RemoteModel(PlatformBaseModel):
     """
-    Model for deployment source configuration.
+    Model for remote source configuration.
 
-    Supports two source types:
+    Supports three remote types:
 
     BUNDLED:
         - Platform-bundled modules available within the platform itself
@@ -59,9 +59,11 @@ class RepositoryModel(PlatformBaseModel):
         - deploy_path: Optional path to deployment artifacts
     """
 
-    name: Optional[PlatformName] = Field(None, description="Optional name for the source configuration")
-    description: Optional[str] = Field(None, description="Human-readable description of this repository")
-    type: RepositoryType = Field(description="Source type: bundled (platform-bundled) or gitops (Git repository)")
+    name: Optional[PlatformName] = Field(None, description="Optional name for the remote")
+    description: Optional[str] = Field(None, description="Human-readable description of this remote")
+    type: RemoteType = Field(
+        description="Remote type: bundled (platform-bundled), gitops (Git repository), or container"
+    )
     repository: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
         description="Source repository or image for the deployment"
     )
@@ -134,15 +136,15 @@ class RepositoryModel(PlatformBaseModel):
         """
         deployment_type = info.data.get("type")
 
-        if deployment_type == RepositoryType.BUNDLED:
+        if deployment_type == RemoteType.BUNDLED:
             # Bundled: validate format (paths can be created later)
             if v not in [".", "/"] and not re.match(r"^[a-zA-Z0-9.\-_/\\: ]+$", v):
                 raise ValueError(f"Bundled repository path format is invalid: {v}")
-        elif deployment_type == RepositoryType.GITOPS:
+        elif deployment_type == RemoteType.GITOPS:
             # Git URL: must look like a valid git URL
             if not re.match(r"^(https?://|git@|ssh://)", v):
                 raise ValueError(f"GitOps repository must be a valid Git URL: {v}")
-        elif deployment_type == RepositoryType.CONTAINER:
+        elif deployment_type == RemoteType.CONTAINER:
             # Container: validate registry/image format
             # Examples: docker.io/library/nginx, ghcr.io/org/image, myregistry.azurecr.io/namespace/image
             if not re.match(r"^[a-zA-Z0-9.\-_:/]+$", v):
@@ -158,14 +160,14 @@ class RepositoryModel(PlatformBaseModel):
         """
         deployment_type = info.data.get("type")
 
-        if deployment_type == RepositoryType.BUNDLED:
+        if deployment_type == RemoteType.BUNDLED:
             # Bundled: can be '.' or '/' or a version string
             pass  # Allow any value for bundled references
-        elif deployment_type == RepositoryType.GITOPS:
+        elif deployment_type == RemoteType.GITOPS:
             # Git: must be a valid branch/tag/commit
             if not re.match(r"^[a-zA-Z0-9.\-_/]+$", v):
                 raise ValueError(f"Git reference must be a valid branch, tag, or commit hash: {v}")
-        elif deployment_type == RepositoryType.CONTAINER:
+        elif deployment_type == RemoteType.CONTAINER:
             # Container: can be tag (v1.0.0, latest) or digest (sha256:abc123...)
             # Allow alphanumeric, dots, dashes, underscores, and sha256: prefix
             if not re.match(r"^(sha256:[a-f0-9]{64}|[a-zA-Z0-9.\-_]+)$", v):
@@ -198,17 +200,17 @@ class RepositoryModel(PlatformBaseModel):
         return cls._validate_relative_path(v, "deploy_path")
 
     @model_validator(mode="after")
-    def validate_type_specific_requirements(self) -> "RepositoryModel":
+    def validate_type_specific_requirements(self) -> "RemoteModel":
         """
         Cross-field validation for type-specific field requirements.
         """
         # BUNDLED and GITOPS require source_path
-        if self.type in [RepositoryType.BUNDLED, RepositoryType.GITOPS]:
+        if self.type in [RemoteType.BUNDLED, RemoteType.GITOPS]:
             if not self.source_path:
                 raise ValueError(f"source_path is required for {self.type.value} source type")
 
         # CONTAINER type should not use source_path
-        if self.type == RepositoryType.CONTAINER:
+        if self.type == RemoteType.CONTAINER:
             if self.source_path is not None:
                 raise ValueError(
                     "source_path is not applicable for container source type. Container images are self-contained."
@@ -217,9 +219,14 @@ class RepositoryModel(PlatformBaseModel):
         return self
 
     def get_label(self) -> str:  # Not Optional
-        """Get the label/name of the source configuration."""
+        """Get the label/name of the remote configuration."""
         if self.name and self.type:
             return f"{self.name} ({self.type.value})"
         elif self.type:
             return str(self.type.value)
-        return "Unnamed Source"
+        return "Unnamed Remote"
+
+
+# Backwards-compatible aliases (deprecated — will be removed before v1)
+RepositoryModel = RemoteModel
+RepositoryType = RemoteType

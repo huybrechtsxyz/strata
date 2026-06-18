@@ -34,7 +34,7 @@ spec:
       path: ".strata/deployments" # Base path (service appends /{deployment_name}/{version}/{timestamp}.json)
       # Uncomment below for gitops storage:
       # type: gitops
-      # repository: "state-repo"      # Reference to a repository entry from spec.repositories
+      # repository: "state-repo"      # Reference to a remote entry from spec.remotes
       # branch: "manifests"           # Target branch for manifest commits
       # tag: true                      # Create git tag {deployment_name}/{version} (default: true)
       # path: "deployments"            # Base path within the repo
@@ -52,8 +52,8 @@ spec:
         - de-fra
         - at-vie
 
-  # Required repositories for this configuration (bundled with platform)
-  repositories:
+  # Required remotes for this configuration (bundled with platform)
+  remotes:
     - name: xyz_configuration
       type: bundled
       repository: .

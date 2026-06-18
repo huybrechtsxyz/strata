@@ -72,7 +72,7 @@ Commit manifests automatically to a Git repository (state repo pattern):
 manifest:
   type: gitops
   path: "deployments"                           # Directory in target repo
-  repository: xyz-state-repo                    # Repo name (must be in spec.repositories)
+  repository: xyz-state-repo                    # Remote name (must be in spec.remotes)
   branch: manifests                             # Target branch
   tag: true                                     # Create git tag after commit
 ```
@@ -106,11 +106,11 @@ git push origin <branch_name> --tags
 
 **Repository requirement:**
 
-The `repository` field must reference a registered repository in `spec.repositories`:
+The `repository` field must reference a registered remote in `spec.remotes`:
 
 ```yaml
 spec:
-  repositories:
+  remotes:
     - name: xyz-state-repo
       url: git@github.com:org/xyz-state-repo.git
       branch: main
@@ -207,12 +207,12 @@ strata deploy run -f deployments/prod.yaml
 
 ## Troubleshooting
 
-| Issue                        | Cause                                | Solution                                                        |
-| ---------------------------- | ------------------------------------ | --------------------------------------------------------------- |
-| Manifest not written         | `manifest` section missing in config | Add `manifest` section with `type` and `path`                   |
-| gitops type fails to push    | Repository not registered            | Verify `repository` field matches a name in `spec.repositories` |
-| gitops fails: branch not set | Required field missing               | Add `branch` field when `type: gitops`                          |
-| Manifest has empty `content` | Platform artifact not generated      | Run `strata build run` before `strata deploy run`               |
+| Issue                        | Cause                                | Solution                                                   |
+| ---------------------------- | ------------------------------------ | ---------------------------------------------------------- |
+| Manifest not written         | `manifest` section missing in config | Add `manifest` section with `type` and `path`              |
+| gitops type fails to push    | Remote not registered                | Verify `repository` field matches a name in `spec.remotes` |
+| gitops fails: branch not set | Required field missing               | Add `branch` field when `type: gitops`                     |
+| Manifest has empty `content` | Platform artifact not generated      | Run `strata build run` before `strata deploy run`          |
 
 ---
 

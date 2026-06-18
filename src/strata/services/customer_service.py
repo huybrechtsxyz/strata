@@ -69,7 +69,7 @@ class CustomerService(BaseService["CustomerModel"]):
 
         # Validate environment file paths exist on disk
         if work_path and self.model.spec.environments:
-            config_repo_map = configuration_model.get_repo_map() if configuration_model else {}
+            config_repo_map = configuration_model.get_remote_map() if configuration_model else {}
             repo_map = {**config_repo_map, **(self._repo_map or {})}
             file_refs = [(f"Environment[{i}]", env_path) for i, env_path in enumerate(self.model.spec.environments)]
             errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
