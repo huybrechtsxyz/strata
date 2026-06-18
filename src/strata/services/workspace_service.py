@@ -63,9 +63,9 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         Phase 2: Dynamic validation against configuration.
 
         Validates:
-        1. Provisioner repository references (workspace.spec.provisioners -> configuration.spec.repositories)
+        1. Provisioner repository references (workspace.spec.provisioners -> solution registered repos)
         2. Provisioner validity (validated via ProvisionerType enum)
-        3. Module repository references (loaded modules -> configuration.spec.repositories)
+        3. Module repository references (loaded modules -> solution registered repos)
         4. Topology provider references (workspace.spec.providers)
         5. Topology provisioner references (workspace.spec.provisioners)
         6. Component roles against configuration topology definitions
@@ -90,16 +90,16 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         # Get workspace provisioner names (topology references provisioners by name)
         workspace_provisioner_names = {p.name for p in self.model.spec.provisioners}
 
-        # Build repository map from configuration
-        config_repository_names = set()
-        if configuration_model.spec.repositories:
-            config_repository_names = {repo.name for repo in configuration_model.spec.repositories}
+        # Build solution repository names from the repo map registered via `strata repo add`
+        # (stored in solution.json, set on self._repo_map before _validate_dynamic is called).
+        # Note: configuration_model.spec.repositories is for gitops manifest backends — a different concept.
+        solution_repository_names: Set[str] = set(self._repo_map.keys()) if self._repo_map else set()
 
         # STEP 1: Validate provisioner repository references
-        # Check that each provisioner's source.repository exists in configuration
+        # Check that each provisioner's source.repository exists in the solution's registered repos
         for provisioner in self.model.spec.provisioners:
             if provisioner.source and provisioner.source.repository:
-                if provisioner.source.repository not in config_repository_names:
+                if provisioner.source.repository not in solution_repository_names:
                     error = InvalidReferenceError(
                         source_type="Provisioner",
                         source_name=provisioner.name,
@@ -133,7 +133,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
                     and module_service.model.spec.source
                 ):
                     module_repo = module_service.model.spec.source.repository
-                    if module_repo not in config_repository_names:
+                    if module_repo not in solution_repository_names:
                         error = InvalidReferenceError(
                             source_type="Module",
                             source_name=module_name,
