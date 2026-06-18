@@ -84,6 +84,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.find-run.outputs.run_id }}
 
+      # Download the SBOM artifact stored by ci-build and place in dist/ so
+      # softprops/action-gh-release picks it up via files: dist/*
+      - name: Download SBOM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: sbom
+          path: dist/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-run.outputs.run_id }}
+
       - name: List dist contents
         run: ls -lh dist/
 

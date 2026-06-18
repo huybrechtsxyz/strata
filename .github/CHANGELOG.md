@@ -7,6 +7,13 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- Self-SBOM generation in CI (`ci-build.yml` Job 3): `strata build sbom --scan .` runs against its own source tree, producing a CycloneDX 1.6 `sbom.json` artifact (dogfooding)
+- `sbom.json` artifact attached to every GitHub Release via `ci-release.yml`
+- `workflow_dispatch` trigger on `ci-docs.yml` for manual doc builds and testing
+- Edge image jobs now gate on SBOM job success (`needs: [build, docs, sbom]`)
+
 ---
 
 ## [0.8.1] — 2026-06-17
