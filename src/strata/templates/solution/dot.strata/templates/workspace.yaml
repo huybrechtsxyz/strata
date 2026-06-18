@@ -12,7 +12,7 @@ meta:
     owner: ${owner}
   labels:
     version: ${version}
-  tags: [ "template", "workspace" ]
+  tags: ["template", "workspace"]
 spec:
   # Providers (cloud/infrastructure providers)
   providers:
@@ -24,7 +24,7 @@ spec:
     - name: template_provisioner
       provisioner: terraform # terraform, script
       source:
-        repository: main_repo # Repository name from configuration.spec.repositories
+        repository: main_repo # Remote name from solution registered repositories
         source_path: deploy/terraform
 
   # Topology (infrastructure layout)
@@ -58,7 +58,7 @@ spec:
       labels:
         role: manager
         environment: production
-      tags: [ "template", "manager" ]
+      tags: ["template", "manager"]
       # Optional: Dependencies
       depends_on: []
       # Optional: References to other resources

@@ -238,7 +238,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
 
         # STEP 5: Validate that all file: references resolve to existing files on disk
         if work_path:
-            config_repo_map = configuration_model.get_repo_map() if configuration_model else {}
+            config_repo_map = configuration_model.get_remote_map() if configuration_model else {}
             repo_map = {**config_repo_map, **(self._repo_map or {})}
             file_refs = []
             for p in self.model.spec.providers:
@@ -471,7 +471,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         # Build repo_map once for all @repo_name/... path resolutions in this call.
         # Merge solution-level map (caller-supplied) with config-service map.
         # Solution names take precedence so @haven/... refs resolve correctly.
-        config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_repo_map()
+        config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_remote_map()
         repo_map = {**config_repo_map, **(repo_map or {})}
 
         # Load firewall services from workspace spec firewalls

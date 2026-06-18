@@ -23,8 +23,8 @@ spec:
         required: true
         description: "Target environment"
 
-  # Repositories available via @${solution_name}/... references
-  repositories:
+  # Remotes available via @${solution_name}/... references
+  remotes:
     - name: ${solution_name}
       type: gitops
       repository: git@github.com:your-org/${solution_name}-config.git

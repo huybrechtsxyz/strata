@@ -13,11 +13,11 @@ meta:
   labels:
     version: ${version}
     category: "application"
-  tags: [ "template", "module" ]
+  tags: ["template", "module"]
 spec:
   # Module source
   source:
-    repository: main_repo # Repository name from configuration.spec.repositories
+    repository: main_repo # Remote name from solution registered repositories
     source_path: "services/app" # Path within repository
     target_path: "services/app" # Target deployment path
 

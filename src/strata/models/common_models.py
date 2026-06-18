@@ -205,7 +205,7 @@ class SourceModel(PlatformBaseModel):
     """
 
     repository: Optional[PlatformName] = Field(
-        None, description="Name of the repository from configuration's repositories list"
+        None, description="Name of the repository from solution registered repositories (via strata repo add)"
     )
     source_path: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
