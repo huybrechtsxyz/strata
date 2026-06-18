@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+---
+
+## [0.9.0] — 2026-06-18
+
 ### Breaking Changes
 
 - **Configuration YAML schema:** `spec.repositories` renamed to `spec.remotes` in configuration files (ADR 0010). Existing configuration YAML files must update the field name. Solution repos (`solution.json → spec.repositories`) are unchanged.
