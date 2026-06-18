@@ -116,7 +116,7 @@ jobs:
 
       # Run strata against its own source tree (dogfood)
       - name: Generate SBOM (scan mode)
-        run: uv run strata build sbom --scan . --report cyclonedx -o sbom.json
+        run: uv run strata build sbom --scan . --report cyclonedx --output-file sbom.json
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v7

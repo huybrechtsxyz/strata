@@ -43,6 +43,43 @@ uv sync
 uv run strata --version
 ```
 
+**Dev Container / no PyPI access:**
+
+If your repo already uses a Dev Container and you cannot reach PyPI, inject strata directly from the published container image — no Python install needed:
+
+```dockerfile
+# .devcontainer/Dockerfile
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+
+# Copy the pre-built strata venv from the GHCR image
+COPY --from=ghcr.io/huybrechtsxyz/strata:latest /app/.venv /opt/strata
+
+ENV PATH="/opt/strata/bin:$PATH"
+```
+
+```json
+// .devcontainer/devcontainer.json
+{
+  "name": "my-repo",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "vscode"
+}
+```
+
+Open the repo in VS Code → **Reopen in Container** → `strata --help` works immediately.
+
+**Air-gapped / private registry:**
+
+If you also cannot reach GHCR, mirror the image to your own registry first:
+
+```bash
+docker pull ghcr.io/huybrechtsxyz/strata:latest
+docker tag  ghcr.io/huybrechtsxyz/strata:latest myregistry.example.com/strata:latest
+docker push myregistry.example.com/strata:latest
+```
+
+Then reference `myregistry.example.com/strata:latest` in the `COPY --from` line above. No outbound internet required at container build time.
+
 ---
 
 ## Initialize a Workspace
