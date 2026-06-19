@@ -5,7 +5,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
-## [Unreleased]
+## [0.9.1] — 2026-06-19
 
 ### Changed
 
