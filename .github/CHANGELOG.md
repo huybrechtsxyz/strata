@@ -5,6 +5,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.9.2] — 2026-06-19
+
+### Fixed
+
+- Ansible builder now skips writing variable files for empty sections (providers, topologies, resources, modules, namespaces, firewalls, DNS, networks). Previously all 9 files were written unconditionally, producing empty `strata_*.yml` files for features not configured in a deployment.
+- `test_version.py` fixture replaced fragile `../../VERSION.txt` relative path with `Path(__file__)`-anchored navigation; added `.strip()` to handle trailing newline in `VERSION.txt`. Fixes version test failures in CI.
+- Removed invalid `sync` input from `astral-sh/setup-uv@v8.1.0` in `install-python` action, eliminating a warning on every CI job.
+
+---
+
 ## [0.9.1] — 2026-06-19
 
 ### Changed
