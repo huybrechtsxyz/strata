@@ -16,7 +16,7 @@ def _mock_svc(validated=True, build_path=None):
 
 
 def _minimal_vars_dict(resource_types=None):
-    """Return a minimal _build_ansible_vars result."""
+    """Return a minimal _build_ansible_vars result with empty sections."""
     return {
         "workspace": {"strata_workspace": {"name": "ws"}},
         "providers": {"strata_providers": {}},
@@ -28,6 +28,22 @@ def _minimal_vars_dict(resource_types=None):
         "firewalls": {"strata_firewalls": {}},
         "dns": {"strata_dns_zones": {}},
         "networks": {"strata_networks": {}},
+    }
+
+
+def _full_vars_dict(resource_types=None):
+    """Return a _build_ansible_vars result with non-empty sections."""
+    return {
+        "workspace": {"strata_workspace": {"name": "ws"}},
+        "providers": {"strata_providers": {"p1": {"type": "hetzner"}}},
+        "topologies": {"strata_topologies": {"t1": {"type": "vm"}}},
+        "resources": {"strata_resources": {"r1": {"type": "server"}}},
+        "resources_by_type": {rt: {"r1": {}} for rt in (resource_types or [])},
+        "modules": {"strata_modules": {"m1": {}}},
+        "namespaces": {"strata_namespaces": {"ns1": {}}},
+        "firewalls": {"strata_firewalls": {"fw1": {}}},
+        "dns": {"strata_dns_zones": {"dns1": {}}},
+        "networks": {"strata_networks": {"net1": {}}},
     }
 
 
@@ -107,7 +123,7 @@ class TestAnsibleBuilderBuild:
         build_dir = tmp_path / "dep-1.0.0"
         svc = _mock_svc(build_path=build_dir)
         platform_model = MagicMock()
-        vars_dict = _minimal_vars_dict(resource_types=["objectstorage", "virtualmachine"])
+        vars_dict = _full_vars_dict(resource_types=["objectstorage", "virtualmachine"])
 
         with patch.object(builder, "_build_ansible_vars", return_value=vars_dict):
             builder.build(svc, tmp_path, tmp_path, dry_run=True, platform_model=platform_model)
@@ -143,7 +159,7 @@ class TestAnsibleBuilderBuild:
         ansible_dir = tmp_path / "ansible"
         svc = _mock_svc(build_path=tmp_path)
         platform_model = MagicMock()
-        vars_dict = _minimal_vars_dict(resource_types=["objectstorage"])
+        vars_dict = _full_vars_dict(resource_types=["objectstorage"])
 
         with patch.object(builder, "_build_ansible_vars", return_value=vars_dict):
             with patch.object(builder, "_resolve_ansible_paths", return_value=[ansible_dir]):
@@ -160,6 +176,33 @@ class TestAnsibleBuilderBuild:
         assert (ansible_dir / "strata_dns.yml").exists()
         assert (ansible_dir / "strata_networks.yml").exists()
         assert (ansible_dir / "strata_resx_objectstorage.yml").exists()
+
+    def test_skips_empty_section_files(self, tmp_path):
+        """Empty data sections must NOT produce var files."""
+        builder = AnsibleBuilder()
+        ansible_dir = tmp_path / "ansible"
+        svc = _mock_svc(build_path=tmp_path)
+        platform_model = MagicMock()
+        vars_dict = _minimal_vars_dict()  # all sections empty
+
+        with patch.object(builder, "_build_ansible_vars", return_value=vars_dict):
+            with patch.object(builder, "_resolve_ansible_paths", return_value=[ansible_dir]):
+                result = builder.build(svc, tmp_path, tmp_path, dry_run=False, platform_model=platform_model)
+
+        assert result is True
+        assert (ansible_dir / "strata_workspace.yml").exists()
+        # None of the empty-section files should be written
+        for name in [
+            "strata_providers.yml",
+            "strata_topologies.yml",
+            "strata_resources.yml",
+            "strata_modules.yml",
+            "strata_namespaces.yml",
+            "strata_firewalls.yml",
+            "strata_dns.yml",
+            "strata_networks.yml",
+        ]:
+            assert not (ansible_dir / name).exists(), f"{name} should not be written for empty section"
 
     def test_written_yaml_is_valid(self, tmp_path):
         builder = AnsibleBuilder()
@@ -351,16 +394,25 @@ class TestAnsibleBuilderVarAssembly:
 
 
 class TestAnsibleBuilderPlannedFiles:
-    def test_base_files_list(self):
+    def test_base_files_list_empty_sections(self):
+        """With all sections empty, only workspace.yml should be planned."""
         builder = AnsibleBuilder()
         files = builder._get_planned_files(_minimal_vars_dict())
         assert "strata_workspace.yml" in files
+        assert "strata_resources.yml" not in files
+        assert len(files) == 1
+
+    def test_base_files_list_full_sections(self):
+        """With all sections populated, all 9 base files should be planned."""
+        builder = AnsibleBuilder()
+        files = builder._get_planned_files(_full_vars_dict())
+        assert "strata_workspace.yml" in files
         assert "strata_resources.yml" in files
-        assert len(files) == 9  # 9 base files, no resource type files
+        assert len(files) == 9  # workspace + 8 non-empty sections
 
     def test_includes_resource_type_files(self):
         builder = AnsibleBuilder()
-        files = builder._get_planned_files(_minimal_vars_dict(resource_types=["objectstorage", "vm"]))
+        files = builder._get_planned_files(_full_vars_dict(resource_types=["objectstorage", "vm"]))
         assert "strata_resx_objectstorage.yml" in files
         assert "strata_resx_vm.yml" in files
         assert len(files) == 11  # 9 base + 2 type files
