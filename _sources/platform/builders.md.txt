@@ -728,7 +728,13 @@ ref = builder.sbom_reference  # SbomReferenceModel with path, sha256, component_
 
 ### Floating Tags
 
-Container images with non-pinned tags (`latest`, `main`, `dev`, etc.) are flagged with a `strata:tag-stability=floating` CycloneDX property and emit a `WARNING` log. Pinned semver tags and digests do not trigger warnings.
+Container images with non-pinned tags (`latest`, `main`, `dev`, etc.) are flagged with a `strata:tag-stability=floating` CycloneDX property. Pinned semver tags and digests do not trigger this.
+
+**Silent by default** — during `strata build run`, floating-tag advisories are suppressed unless `--verbose` is passed or an `sbom_pinned_versions` policy is configured. The component property is always set regardless of verbosity, so policies evaluate correctly when later configured.
+
+To see all collector advisories, either:
+- Run `strata build sbom` explicitly, or
+- Add `--verbose` to `strata build run`
 
 ### Three-Phase Pipeline
 

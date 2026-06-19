@@ -2635,7 +2635,13 @@ empty results gracefully.  File-based collectors scan the directory tree normall
 </section>
 <section id="floating-tags">
 <h3>Floating Tags<a class="headerlink" href="#floating-tags" title="Link to this heading"></a></h3>
-<p>Container images with non-pinned tags (<code class="docutils literal notranslate"><span class="pre">latest</span></code>, <code class="docutils literal notranslate"><span class="pre">main</span></code>, <code class="docutils literal notranslate"><span class="pre">dev</span></code>, etc.) are flagged with a <code class="docutils literal notranslate"><span class="pre">strata:tag-stability=floating</span></code> CycloneDX property and emit a <code class="docutils literal notranslate"><span class="pre">WARNING</span></code> log. Pinned semver tags and digests do not trigger warnings.</p>
+<p>Container images with non-pinned tags (<code class="docutils literal notranslate"><span class="pre">latest</span></code>, <code class="docutils literal notranslate"><span class="pre">main</span></code>, <code class="docutils literal notranslate"><span class="pre">dev</span></code>, etc.) are flagged with a <code class="docutils literal notranslate"><span class="pre">strata:tag-stability=floating</span></code> CycloneDX property. Pinned semver tags and digests do not trigger this.</p>
+<p><strong>Silent by default</strong> — during <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code>, floating-tag advisories are suppressed unless <code class="docutils literal notranslate"><span class="pre">--verbose</span></code> is passed or an <code class="docutils literal notranslate"><span class="pre">sbom_pinned_versions</span></code> policy is configured. The component property is always set regardless of verbosity, so policies evaluate correctly when later configured.</p>
+<p>To see all collector advisories, either:</p>
+<ul class="simple">
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">sbom</span></code> explicitly, or</p></li>
+<li><p>Add <code class="docutils literal notranslate"><span class="pre">--verbose</span></code> to <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code></p></li>
+</ul>
 </section>
 <section id="id19">
 <h3>Three-Phase Pipeline<a class="headerlink" href="#id19" title="Link to this heading"></a></h3>
