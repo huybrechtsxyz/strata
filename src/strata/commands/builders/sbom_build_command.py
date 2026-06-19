@@ -135,7 +135,7 @@ class SbomBuildCommand(BaseBuildCommand):
             self._errors.append("Platform model validation failed")
             return False
 
-        builder = SbomBuilder(verbose=self._is_verbose(), no_deps=self._no_deps)
+        builder = SbomBuilder(verbose=self._is_verbose(), quiet=False, no_deps=self._no_deps)
 
         ok = builder.before_build(
             deployment_service=self._deployment_service,
@@ -191,7 +191,7 @@ class SbomBuildCommand(BaseBuildCommand):
             self._errors.append("Platform model validation failed")
             return False
 
-        builder = SbomBuilder(verbose=self._is_verbose(), no_deps=self._no_deps)
+        builder = SbomBuilder(verbose=self._is_verbose(), quiet=False, no_deps=self._no_deps)
         text = builder.render_inventory(
             deployment_service=self._deployment_service,
             work_path=self._work_path,
@@ -233,7 +233,7 @@ class SbomBuildCommand(BaseBuildCommand):
             self._finalize(success=False)
             return False
 
-        builder = SbomBuilder(verbose=self._is_verbose(), no_deps=self._no_deps)
+        builder = SbomBuilder(verbose=self._is_verbose(), quiet=False, no_deps=self._no_deps)
 
         if self._report == "inventory":
             text = builder.scan_inventory(self._scan_path)

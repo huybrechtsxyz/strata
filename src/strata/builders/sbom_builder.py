@@ -75,6 +75,11 @@ class SbomBuilder(BaseBuilder):
 
     Args:
         verbose: Enable progress messages.
+        quiet: When ``True`` (default), collector warnings (floating tags,
+            parse issues) are suppressed from output unless ``verbose`` is
+            also set.  The SBOM is still generated with full fidelity —
+            components retain their properties (e.g. ``strata:tag-stability``)
+            so that policies can evaluate them when configured.
         collectors: Injectable list of collectors (defaults to all seven
             built-in collectors when ``None``).
         no_deps: When ``True`` and *collectors* is ``None``, exclude
@@ -85,10 +90,12 @@ class SbomBuilder(BaseBuilder):
     def __init__(
         self,
         verbose: bool = False,
+        quiet: bool = True,
         collectors: Optional[List[BaseSbomCollector]] = None,
         no_deps: bool = False,
     ) -> None:
         super().__init__(verbose=verbose)
+        self._quiet = quiet
         if collectors is not None:
             self._collectors: List[BaseSbomCollector] = collectors
         elif no_deps:
@@ -180,13 +187,15 @@ class SbomBuilder(BaseBuilder):
             extra_collectors = CollectorPluginLoader.load(work_path)
             active_collectors = self._collectors + extra_collectors
 
-            # Collect components — drain warnings immediately after each collector
+            # Collect components — drain warnings after each collector
             components: List[SbomComponentModel] = []
             for collector in active_collectors:
                 collected = collector.collect(platform_model, work_path, deployment_build_path)
                 components.extend(collected)
-                for warning in collector.get_warnings():
-                    self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+                # Only surface collector warnings when not in quiet mode
+                if not self._quiet or self.verbose:
+                    for warning in collector.get_warnings():
+                        self._messages.append(f"[{collector.get_collector_name()}] {warning}")
 
             if dry_run:
                 sbom_path = deployment_build_path / _SBOM_FILENAME
@@ -286,8 +295,9 @@ class SbomBuilder(BaseBuilder):
             for collector in active_collectors:
                 collected = collector.collect(platform_model, scan_path, scan_path)
                 components.extend(collected)
-                for warning in collector.get_warnings():
-                    self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+                if not self._quiet or self.verbose:
+                    for warning in collector.get_warnings():
+                        self._messages.append(f"[{collector.get_collector_name()}] {warning}")
 
             self._last_components = components
 
@@ -342,8 +352,9 @@ class SbomBuilder(BaseBuilder):
             for collector in active_collectors:
                 collected = collector.collect(platform_model, scan_path, scan_path)
                 components.extend(collected)
-                for warning in collector.get_warnings():
-                    self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+                if not self._quiet or self.verbose:
+                    for warning in collector.get_warnings():
+                        self._messages.append(f"[{collector.get_collector_name()}] {warning}")
 
             self._last_components = components
 
@@ -399,8 +410,9 @@ class SbomBuilder(BaseBuilder):
             for collector in active_collectors:
                 collected = collector.collect(platform_model, work_path, deployment_build_path)
                 components.extend(collected)
-                for warning in collector.get_warnings():
-                    self._messages.append(f"[{collector.get_collector_name()}] {warning}")
+                if not self._quiet or self.verbose:
+                    for warning in collector.get_warnings():
+                        self._messages.append(f"[{collector.get_collector_name()}] {warning}")
 
             deployment_name = str(deployment_service.model.meta.name) if deployment_service.model else None
             return self._format_inventory(components, deployment_name)

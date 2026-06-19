@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Changed
+
+- SBOM collector warnings (floating tags, parse errors) are now silent by default during `strata build run`. The SBOM is still generated with full fidelity — use `--verbose` or run `strata build sbom` explicitly to see advisories. Configured policies continue to evaluate component properties regardless of warning visibility.
+
 ---
 
 ## [0.9.0] — 2026-06-18
