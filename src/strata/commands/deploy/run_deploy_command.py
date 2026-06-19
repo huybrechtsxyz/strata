@@ -396,16 +396,18 @@ class RunDeployCommand(BaseDeployCommand):
                 line_cb = self.make_ndjson_line_callback(step=step_name, stage=stage.name)
             elif self._is_verbose():
                 # Tier 1: print subprocess lines live to the console as they arrive.
-                def _make_verbose_cb(sn: str) -> Callable[[str, str], None]:
+                # Use the deployer name (e.g. "terraform") so the output is clearly
+                # attributed, with a │ gutter to separate it from strata messages.
+                def _make_verbose_cb(tool: str) -> Callable[[str, str], None]:
                     def _cb(stream: str, text: str) -> None:
                         if stream == "stderr":
-                            click.secho(f"      [{sn}] {text}", fg="yellow", err=True)
+                            click.secho(f"      {tool} │ {text}", fg="yellow", err=True)
                         else:
-                            click.echo(f"      [{sn}] {text}")
+                            click.secho(f"      {tool} │ {text}", fg="cyan")
 
                     return _cb
 
-                line_cb = _make_verbose_cb(step_name)
+                line_cb = _make_verbose_cb(deployer.get_deployer_name())
 
             if self._is_console_output():
                 prefix = "[DRY-RUN] " if self._dry_run else ""

@@ -177,7 +177,8 @@ class TerraformIntegration(BaseIntegration):
             upgrade: Whether to upgrade modules and plugins
             reconfigure: Whether to reconfigure the backend
             timeout: Command timeout in seconds
-            **kwargs: Additional arguments (ignored)
+            **kwargs: Forwarded to ``_run_integration`` / ``run_command``
+                (e.g. ``line_callback`` for streaming output)
 
         Returns:
             Command result dict with returncode, stdout, stderr
@@ -213,7 +214,7 @@ class TerraformIntegration(BaseIntegration):
             args.append("-reconfigure")
 
         try:
-            result = self._run_integration(args, cwd=working_dir, timeout=timeout)
+            result = self._run_integration(args, cwd=working_dir, timeout=timeout, **kwargs)
             logger.info(
                 "Terraform initialization completed",
                 working_dir=working_dir,
@@ -244,6 +245,8 @@ class TerraformIntegration(BaseIntegration):
             working_dir: Working directory containing Terraform configuration
             json_output: Whether to output validation results as JSON
             timeout: Command timeout in seconds
+            **kwargs: Forwarded to ``_run_integration`` / ``run_command``
+                (e.g. ``line_callback`` for streaming output)
 
         Returns:
             Command result dict with returncode, stdout, stderr
@@ -267,7 +270,7 @@ class TerraformIntegration(BaseIntegration):
             args.append("-json")
 
         try:
-            result = self._run_integration(args, cwd=working_dir, timeout=timeout)
+            result = self._run_integration(args, cwd=working_dir, timeout=timeout, **kwargs)
             logger.info(
                 "Terraform validation completed",
                 working_dir=working_dir,
@@ -309,7 +312,8 @@ class TerraformIntegration(BaseIntegration):
             destroy: Generate a plan to destroy all resources
             target: List of specific resources to target
             timeout: Command timeout in seconds
-            **kwargs: Additional arguments (ignored)
+            **kwargs: Forwarded to ``_run_integration`` / ``run_command``
+                (e.g. ``line_callback`` for streaming output)
 
         Returns:
             Command result dict with returncode, stdout, stderr
@@ -354,7 +358,7 @@ class TerraformIntegration(BaseIntegration):
         ok_codes = {2} if detailed_exitcode else None
 
         try:
-            result = self._run_integration(args, cwd=working_dir, timeout=timeout, ok_returncodes=ok_codes)
+            result = self._run_integration(args, cwd=working_dir, timeout=timeout, ok_returncodes=ok_codes, **kwargs)
             logger.info(
                 "Terraform plan completed",
                 working_dir=working_dir,
@@ -395,7 +399,8 @@ class TerraformIntegration(BaseIntegration):
             auto_approve: Skip interactive approval
             target: List of specific resources to target
             timeout: Command timeout in seconds
-            **kwargs: Additional arguments (ignored)
+            **kwargs: Forwarded to ``_run_integration`` / ``run_command``
+                (e.g. ``line_callback`` for streaming output)
 
         Returns:
             Command result dict with returncode, stdout, stderr
@@ -433,7 +438,7 @@ class TerraformIntegration(BaseIntegration):
                     args.extend(["-target", resource])
 
         try:
-            result = self._run_integration(args, cwd=working_dir, timeout=timeout)
+            result = self._run_integration(args, cwd=working_dir, timeout=timeout, **kwargs)
             logger.info(
                 "Terraform apply completed",
                 working_dir=working_dir,
@@ -470,6 +475,8 @@ class TerraformIntegration(BaseIntegration):
             auto_approve: Skip interactive approval
             target: List of specific resources to target
             timeout: Command timeout in seconds
+            **kwargs: Forwarded to ``_run_integration`` / ``run_command``
+                (e.g. ``line_callback`` for streaming output)
 
         Returns:
             Command result dict with returncode, stdout, stderr
@@ -504,7 +511,7 @@ class TerraformIntegration(BaseIntegration):
                 args.extend(["-target", resource])
 
         try:
-            result = self._run_integration(args, cwd=working_dir, timeout=timeout)
+            result = self._run_integration(args, cwd=working_dir, timeout=timeout, **kwargs)
             logger.info(
                 "Terraform destroy completed",
                 working_dir=working_dir,
