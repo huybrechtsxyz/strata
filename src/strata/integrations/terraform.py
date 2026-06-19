@@ -349,8 +349,12 @@ class TerraformIntegration(BaseIntegration):
             for resource in target:
                 args.extend(["-target", resource])
 
+        # When -detailed-exitcode is active, exit code 2 means "success, changes
+        # present" — it is not a failure and must not trigger the base-class warning.
+        ok_codes = {2} if detailed_exitcode else None
+
         try:
-            result = self._run_integration(args, cwd=working_dir, timeout=timeout)
+            result = self._run_integration(args, cwd=working_dir, timeout=timeout, ok_returncodes=ok_codes)
             logger.info(
                 "Terraform plan completed",
                 working_dir=working_dir,
