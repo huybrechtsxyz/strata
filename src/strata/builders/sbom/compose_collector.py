@@ -102,7 +102,7 @@ class ComposeImageCollector(BaseSbomCollector):
                 properties[_FLOATING_PROPERTY] = _FLOATING_VALUE
                 warning = f"floating image tag detected  service={service_name}  image={image}"
                 self._warnings.append(warning)
-                logger.warning(
+                logger.debug(
                     "floating image tag detected",
                     service=str(service_name),
                     image=image,

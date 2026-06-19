@@ -245,7 +245,7 @@ class TestRenderInventory:
         collector.collect.return_value = []
         collector.get_warnings.return_value = ["some warning"]
         collector.get_collector_name.return_value = "image"
-        builder = SbomBuilder(collectors=[collector])
+        builder = SbomBuilder(collectors=[collector], quiet=False)
         platform_model = MagicMock()
         deployment_svc = _mock_deployment_service(build_path=tmp_path)
 
