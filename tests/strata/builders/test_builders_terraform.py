@@ -211,11 +211,13 @@ class TestTerraformBuilderAfterBuild:
     def test_missing_files_returns_false(self, tmp_path):
         terraform_dir = tmp_path / "dep-1.0.0" / "terraform"
         terraform_dir.mkdir(parents=True)
-        # Only write some files
+        # Only write workspace; builder expects providers.auto.tfvars.json too
         (terraform_dir / "workspace.auto.tfvars.json").write_text("{}")
 
         svc = _mock_svc(build_path=tmp_path / "dep-1.0.0")
         builder = TerraformBuilder()
+        # Simulate that build() planned these files (one of which is missing)
+        builder._written_file_names = ["workspace.auto.tfvars.json", "providers.auto.tfvars.json"]
         result = builder.after_build(svc, tmp_path, tmp_path, dry_run=False)
         assert result is False
         assert builder.has_errors()
@@ -224,26 +226,13 @@ class TestTerraformBuilderAfterBuild:
     def test_verbose_reports_counts(self, tmp_path):
         terraform_dir = tmp_path / "dep-1.0.0" / "terraform"
         terraform_dir.mkdir(parents=True)
-        base_files = [
-            "workspace.auto.tfvars.json",
-            "providers.auto.tfvars.json",
-            "topologies.auto.tfvars.json",
-            "modules.auto.tfvars.json",
-            "namespaces.auto.tfvars.json",
-            "firewalls.auto.tfvars.json",
-            "dns.auto.tfvars.json",
-            "dns_secret_records.auto.tfvars.json",
-            "networks.auto.tfvars.json",
-            "tf_required_variables.json",
-            "tf_required_features.json",
-            "tf_required_secrets.json",
-        ]
-        for f in base_files:
-            (terraform_dir / f).write_text("{}")
+        # Only workspace is always written; simulate a minimal build output
+        (terraform_dir / "workspace.auto.tfvars.json").write_text("{}")
         (terraform_dir / "resx_vm.auto.tfvars.json").write_text("{}")
 
         svc = _mock_svc(build_path=tmp_path / "dep-1.0.0")
         builder = TerraformBuilder(verbose=True)
+        builder._written_file_names = ["workspace.auto.tfvars.json"]
         builder.after_build(svc, tmp_path, tmp_path, dry_run=False)
         assert builder.has_messages()
 

@@ -701,20 +701,43 @@ class AnsibleBuilder(BaseBuilder):
     # ------------------------------------------------------------------
 
     def _get_planned_files(self, ansible_vars: Dict[str, Any]) -> List[str]:
-        """Return the list of filenames that would be written."""
-        files = [
-            f"{self.FILE_PREFIX}workspace.yml",
-            f"{self.FILE_PREFIX}providers.yml",
-            f"{self.FILE_PREFIX}topologies.yml",
-            f"{self.FILE_PREFIX}resources.yml",
-            f"{self.FILE_PREFIX}modules.yml",
-            f"{self.FILE_PREFIX}namespaces.yml",
-            f"{self.FILE_PREFIX}firewalls.yml",
-            f"{self.FILE_PREFIX}dns.yml",
-            f"{self.FILE_PREFIX}networks.yml",
-        ]
-        for resource_type in ansible_vars.get("resources_by_type", {}):
-            files.append(f"{self.FILE_PREFIX}resx_{resource_type}.yml")
+        """Return the list of filenames that would be written (non-empty only)."""
+        return [name for name, _ in self._planned_file_pairs(ansible_vars)]
+
+    def _planned_file_pairs(self, ansible_vars: Dict[str, Any]) -> List[tuple]:
+        """Return ``(filename, payload)`` pairs for every non-empty Ansible variable file.
+
+        ``workspace.yml`` is always included.  All other files are omitted when
+        their data section is an empty dict, so Ansible plays that don't use a
+        given feature don't receive unexpected variable files.
+        """
+        p = self.FILE_PREFIX
+        files: List[tuple] = []
+
+        # Always write — workspace name/labels always present
+        files.append((f"{p}workspace.yml", ansible_vars["workspace"]))
+
+        # Conditional — only when the inner data dict is non-empty
+        for section_key, data_key, filename_suffix in [
+            ("providers", "strata_providers", "providers.yml"),
+            ("topologies", "strata_topologies", "topologies.yml"),
+            ("resources", "strata_resources", "resources.yml"),
+            ("modules", "strata_modules", "modules.yml"),
+            ("namespaces", "strata_namespaces", "namespaces.yml"),
+            ("firewalls", "strata_firewalls", "firewalls.yml"),
+            ("dns", "strata_dns_zones", "dns.yml"),
+            ("networks", "strata_networks", "networks.yml"),
+        ]:
+            payload = ansible_vars.get(section_key, {})
+            if payload.get(data_key):
+                files.append((f"{p}{filename_suffix}", payload))
+
+        for resource_type, resources in ansible_vars.get("resources_by_type", {}).items():
+            files.append((f"{p}resx_{resource_type}.yml", {f"strata_{resource_type}": resources}))
+
+        if ansible_vars.get("customer"):
+            files.append((f"{p}customer.yml", ansible_vars["customer"]))
+
         return files
 
     def _save_ansible_vars(
@@ -724,7 +747,7 @@ class AnsibleBuilder(BaseBuilder):
         build_path: Path,
         solution_controller: Optional["SolutionController"] = None,
     ) -> List[str]:
-        """Write all Ansible YAML variable files."""
+        """Write all non-empty Ansible YAML variable files."""
         messages: List[str] = []
 
         try:
@@ -732,31 +755,12 @@ class AnsibleBuilder(BaseBuilder):
             if not ansible_paths:
                 ansible_paths = [deployment_service.get_build_path(build_path) / "ansible"]
 
+            planned = self._planned_file_pairs(ansible_vars)
+
             for ansible_path in ansible_paths:
                 ansible_path.mkdir(parents=True, exist_ok=True)
-
-                self._write_yaml(ansible_path / f"{self.FILE_PREFIX}workspace.yml", ansible_vars["workspace"])
-                self._write_yaml(ansible_path / f"{self.FILE_PREFIX}providers.yml", ansible_vars["providers"])
-                self._write_yaml(ansible_path / f"{self.FILE_PREFIX}topologies.yml", ansible_vars["topologies"])
-                self._write_yaml(ansible_path / f"{self.FILE_PREFIX}resources.yml", ansible_vars["resources"])
-                self._write_yaml(ansible_path / f"{self.FILE_PREFIX}modules.yml", ansible_vars["modules"])
-                self._write_yaml(ansible_path / f"{self.FILE_PREFIX}namespaces.yml", ansible_vars["namespaces"])
-                self._write_yaml(ansible_path / f"{self.FILE_PREFIX}firewalls.yml", ansible_vars["firewalls"])
-                self._write_yaml(ansible_path / f"{self.FILE_PREFIX}dns.yml", ansible_vars["dns"])
-                self._write_yaml(ansible_path / f"{self.FILE_PREFIX}networks.yml", ansible_vars["networks"])
-
-                for resource_type, payload in ansible_vars.get("resources_by_type", {}).items():
-                    self._write_yaml(
-                        ansible_path / f"{self.FILE_PREFIX}resx_{resource_type}.yml",
-                        {f"strata_{resource_type}": payload},
-                    )
-
-                if ansible_vars.get("customer"):
-                    self._write_yaml(
-                        ansible_path / f"{self.FILE_PREFIX}customer.yml",
-                        ansible_vars["customer"],
-                    )
-
+                for filename, payload in planned:
+                    self._write_yaml(ansible_path / filename, payload)
                 messages.append(f"✓ Ansible artifacts saved to: {ansible_path}")
 
         except Exception as exc:

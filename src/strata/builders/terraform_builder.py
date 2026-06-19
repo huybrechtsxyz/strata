@@ -8,7 +8,7 @@ import json
 import shutil
 from glob import glob
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from strata.builders.base_builder import BaseBuilder
 from strata.models.environment_model import IncludeMergeStrategy
@@ -31,6 +31,10 @@ class TerraformBuilder(BaseBuilder):
         self.variable_refs: Dict[str, Dict[str, Any]] = {}
         self.feature_refs: Dict[str, Dict[str, Any]] = {}
         self.secret_refs: Dict[str, Dict[str, Any]] = {}
+
+        # Tracks which files were written during the last build() call.
+        # Used by after_build() to verify only the files that were actually written.
+        self._written_file_names: List[str] = []
 
     def build(
         self,
@@ -61,6 +65,7 @@ class TerraformBuilder(BaseBuilder):
             self.variable_refs = {}
             self.feature_refs = {}
             self.secret_refs = {}
+            self._written_file_names = []
 
             deployment_build_path = deployment_service.get_build_path(build_path)
 
@@ -108,22 +113,7 @@ class TerraformBuilder(BaseBuilder):
                     if terraform_paths
                     else deployment_service.get_build_path(build_path) / "terraform"
                 )
-                planned = [
-                    "workspace.auto.tfvars.json",
-                    "providers.auto.tfvars.json",
-                    "topologies.auto.tfvars.json",
-                    "modules.auto.tfvars.json",
-                    "namespaces.auto.tfvars.json",
-                    "firewalls.auto.tfvars.json",
-                    "dns.auto.tfvars.json",
-                    "dns_secret_records.auto.tfvars.json",
-                    "networks.auto.tfvars.json",
-                    "tf_required_variables.json",
-                    "tf_required_features.json",
-                    "tf_required_secrets.json",
-                ]
-                for resource_type in terraform_vars.get("resources_by_category", {}):
-                    planned.append(f"resx_{resource_type}.auto.tfvars.json")
+                planned = [name for name, _ in self._planned_files(terraform_vars)]
                 for filename in planned:
                     self._messages.append(f"[DRY-RUN] Would write: {terraform_path / filename}")
                 self._messages.append(f"[DRY-RUN] Planned {len(planned)} Terraform artifact file(s)")
@@ -246,30 +236,17 @@ class TerraformBuilder(BaseBuilder):
             terraform_paths = [deployment_service.get_build_path(build_path) / "terraform"]
         terraform_path = terraform_paths[0]
 
-        base_files = [
-            "workspace.auto.tfvars.json",
-            "providers.auto.tfvars.json",
-            "topologies.auto.tfvars.json",
-            "modules.auto.tfvars.json",
-            "namespaces.auto.tfvars.json",
-            "firewalls.auto.tfvars.json",
-            "dns.auto.tfvars.json",
-            "dns_secret_records.auto.tfvars.json",
-            "networks.auto.tfvars.json",
-            "tf_required_variables.json",
-            "tf_required_features.json",
-            "tf_required_secrets.json",
-        ]
-
-        missing = [f for f in base_files if not (terraform_path / f).exists()]
+        # Verify only the files that were actually written during build()
+        missing = [f for f in self._written_file_names if not (terraform_path / f).exists()]
         if missing:
             self._errors.append(f"Terraform artifact files missing: {', '.join(missing)}")
             return False
 
         type_files = list(terraform_path.glob("resx_*.auto.tfvars.json"))
         if self.verbose:
+            written_count = len(self._written_file_names)
             self._messages.append(f"Terraform artifacts created at: {terraform_path}")
-            self._messages.append(f"Generated {len(base_files)} base files + {len(type_files)} type files")
+            self._messages.append(f"Generated {written_count} file(s) ({len(type_files)} resource type file(s))")
 
         return True
 
@@ -738,6 +715,68 @@ class TerraformBuilder(BaseBuilder):
             if prov.provisioner.value == "terraform"
         ]
 
+    def _planned_files(self, terraform_vars: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
+        """Return ``(filename, payload)`` pairs for every non-empty tfvars file.
+
+        Only files whose payload contains actual data are included.
+        ``workspace.auto.tfvars.json`` is always included — it is always
+        populated from workspace metadata.  All other files are omitted when
+        their data section is an empty dict or list, so that Terraform modules
+        that do not declare those variables never receive an undeclared-variable
+        warning.
+        """
+        files: List[tuple] = []
+
+        # Always write — workspace name/version/labels are always present
+        files.append(("workspace.auto.tfvars.json", terraform_vars["workspace"]))
+
+        # Conditional — only when the config section has entries
+        if terraform_vars.get("providers", {}).get("platform_providers"):
+            files.append(("providers.auto.tfvars.json", terraform_vars["providers"]))
+
+        if terraform_vars.get("topologies", {}).get("topologies"):
+            files.append(("topologies.auto.tfvars.json", terraform_vars["topologies"]))
+
+        if terraform_vars.get("modules", {}).get("modules"):
+            files.append(("modules.auto.tfvars.json", terraform_vars["modules"]))
+
+        if terraform_vars.get("namespaces", {}).get("namespaces"):
+            files.append(("namespaces.auto.tfvars.json", terraform_vars["namespaces"]))
+
+        if terraform_vars.get("firewalls", {}).get("firewalls"):
+            files.append(("firewalls.auto.tfvars.json", terraform_vars["firewalls"]))
+
+        dns = terraform_vars.get("dns", {})
+        if dns.get("dns_zones"):
+            files.append(("dns.auto.tfvars.json", {"dns_zones": dns["dns_zones"]}))
+        if dns.get("dns_secret_records"):
+            files.append(
+                (
+                    "dns_secret_records.auto.tfvars.json",
+                    {"dns_secret_records": dns["dns_secret_records"]},
+                )
+            )
+
+        if terraform_vars.get("networks", {}).get("networks"):
+            files.append(("networks.auto.tfvars.json", terraform_vars["networks"]))
+
+        for resource_type, payload in terraform_vars.get("resources_by_category", {}).items():
+            files.append((f"resx_{resource_type}.auto.tfvars.json", payload))
+
+        if terraform_vars.get("required_variables", {}).get("variables"):
+            files.append(("tf_required_variables.json", terraform_vars["required_variables"]))
+
+        if terraform_vars.get("required_features", {}).get("features"):
+            files.append(("tf_required_features.json", terraform_vars["required_features"]))
+
+        if terraform_vars.get("required_secrets", {}).get("secrets"):
+            files.append(("tf_required_secrets.json", terraform_vars["required_secrets"]))
+
+        if terraform_vars.get("customer"):
+            files.append(("customer.auto.tfvars.json", terraform_vars["customer"]))
+
+        return files
+
     def _save_terraform_vars(
         self,
         terraform_vars: Dict[str, Any],
@@ -745,7 +784,7 @@ class TerraformBuilder(BaseBuilder):
         build_path: Path,
         solution_controller: Optional["SolutionController"] = None,
     ) -> List[str]:
-        """Write all Terraform payload files."""
+        """Write all non-empty Terraform payload files."""
         messages: List[str] = []
 
         try:
@@ -754,58 +793,13 @@ class TerraformBuilder(BaseBuilder):
                 # Fallback: legacy single directory
                 terraform_paths = [deployment_service.get_build_path(build_path) / "terraform"]
 
+            planned = self._planned_files(terraform_vars)
+            self._written_file_names = [name for name, _ in planned]
+
             for terraform_path in terraform_paths:
                 terraform_path.mkdir(parents=True, exist_ok=True)
-
-                self._write_json(
-                    terraform_path / "workspace.auto.tfvars.json",
-                    terraform_vars["workspace"],
-                )
-                self._write_json(
-                    terraform_path / "providers.auto.tfvars.json",
-                    terraform_vars["providers"],
-                )
-                self._write_json(
-                    terraform_path / "topologies.auto.tfvars.json",
-                    terraform_vars["topologies"],
-                )
-                self._write_json(terraform_path / "modules.auto.tfvars.json", terraform_vars["modules"])
-                self._write_json(terraform_path / "namespaces.auto.tfvars.json", terraform_vars["namespaces"])
-                self._write_json(terraform_path / "firewalls.auto.tfvars.json", terraform_vars["firewalls"])
-                self._write_json(
-                    terraform_path / "dns.auto.tfvars.json", {"dns_zones": terraform_vars["dns"]["dns_zones"]}
-                )
-                self._write_json(
-                    terraform_path / "dns_secret_records.auto.tfvars.json",
-                    {"dns_secret_records": terraform_vars["dns"]["dns_secret_records"]},
-                )
-                self._write_json(
-                    terraform_path / "networks.auto.tfvars.json",
-                    terraform_vars["networks"],
-                )
-
-                for resource_type, payload in terraform_vars["resources_by_category"].items():
-                    self._write_json(terraform_path / f"resx_{resource_type}.auto.tfvars.json", payload)
-
-                self._write_json(
-                    terraform_path / "tf_required_variables.json",
-                    terraform_vars["required_variables"],
-                )
-                self._write_json(
-                    terraform_path / "tf_required_features.json",
-                    terraform_vars["required_features"],
-                )
-                self._write_json(
-                    terraform_path / "tf_required_secrets.json",
-                    terraform_vars["required_secrets"],
-                )
-
-                if terraform_vars.get("customer"):
-                    self._write_json(
-                        terraform_path / "customer.auto.tfvars.json",
-                        terraform_vars["customer"],
-                    )
-
+                for filename, payload in planned:
+                    self._write_json(terraform_path / filename, payload)
                 messages.append(f"✓ Terraform artifacts saved to: {terraform_path}")
 
         except Exception as exc:
