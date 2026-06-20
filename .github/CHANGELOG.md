@@ -5,6 +5,26 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.9.3] — 2026-06-20
+
+### Added
+
+- **HelmBuilder:** `meta.yaml` now includes chart coordinates (`chartName`, `chartVersion`, `chartRepository`) for registry-based modules. Build artifacts are fully self-contained — deployers and external tools can drive `helm upgrade` without re-reading the module spec.
+- **HelmBuilder:** `spec.configuration` (module-level) is now merged into `values.yaml`. For service-less modules this creates the values file; for modules with services it merges on top as overrides.
+- **HelmBuilder:** Service-less helm modules (registry chart + values file pattern) now produce `meta.yaml` correctly. Previously these modules were silently skipped.
+- **HelmDeployer:** `--wait`, `--atomic`, and `--timeout 5m` flags added to `helm upgrade --install`. Deploys now block until pods are healthy and auto-rollback on failure.
+- **Docs:** New guide `docs/guides/helm-modules.md` covering the full helm lifecycle (define, build, deploy, GitOps integration).
+
+### Changed
+
+- **HelmDeployer:** Chart coordinates are now read from `meta.yaml` instead of `module.spec.source` at deploy time. The deployer no longer depends on the module YAML for chart resolution — only the build artifact.
+- **TerraformIntegration:** All integration methods (`init`, `validate`, `plan`, `apply`, `destroy`) now forward `**kwargs` to `_run_integration`, enabling `line_callback` for streaming output.
+- **TerraformIntegration:** `plan()` passes `ok_returncodes={2}` when using `-detailed-exitcode`, suppressing the spurious "Integration command failed" warning for exit code 2 (success with changes).
+- **BaseIntegration:** `_run_integration` accepts `ok_returncodes: Optional[set]` parameter to suppress warnings for expected non-zero exit codes.
+- **Deploy verbose output:** Streaming output now prefixed with deployer tool name and `│` gutter (e.g. `terraform │ ...`), with cyan for stdout and yellow for stderr.
+
+---
+
 ## [0.9.2] — 2026-06-19
 
 ### Fixed
