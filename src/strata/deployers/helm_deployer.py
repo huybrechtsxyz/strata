@@ -14,10 +14,11 @@ Supported steps (in execution order):
   show_plan    — no-op, returns empty dict
 
 Chart source resolution:
-  meta.yaml provides releaseName and namespace.
-  The chart reference is resolved from the module's spec.source:
-    - chart_repository + chart_name + optional chart_version → registry chart
-    - repository + source_path → local chart path in build directory
+  meta.yaml provides releaseName, namespace, and chart coordinates
+  (chartName, chartVersion, chartRepository).  The chart reference is resolved
+  from meta.yaml:
+    - chartRepository + chartName + optional chartVersion → registry chart
+    - No chart fields → local chart path in build directory
 """
 
 import re
@@ -195,13 +196,15 @@ class HelmDeployer(BaseDeployer):
                 release_name = meta_doc.get("releaseName") or module_name
                 chart_namespace = meta_doc.get("namespace") or ns_name_str
 
-                # Resolve chart reference from module source
-                source = module.spec.source
-                if source.chart_repository:
-                    repo_name = _sanitize_repo_name(source.chart_repository)
-                    chart_ref = f"{repo_name}/{source.chart_name}"
-                    repo_url = source.chart_repository
-                    chart_version = source.chart_version
+                # Resolve chart reference from meta.yaml (self-contained build artifact)
+                chart_repository = meta_doc.get("chartRepository")
+                chart_name = meta_doc.get("chartName")
+                chart_version = meta_doc.get("chartVersion")
+
+                if chart_repository:
+                    repo_name = _sanitize_repo_name(chart_repository)
+                    chart_ref = f"{repo_name}/{chart_name}"
+                    repo_url = chart_repository
                 else:
                     chart_ref = str(deployment_build_path / ns_name_str / module_name)
                     repo_url = None
@@ -413,6 +416,10 @@ class HelmDeployer(BaseDeployer):
                     "upgrade",
                     "--install",
                     "--create-namespace",
+                    "--wait",
+                    "--atomic",
+                    "--timeout",
+                    "5m",
                     "--namespace",
                     target.chart_namespace,
                     "-f",
