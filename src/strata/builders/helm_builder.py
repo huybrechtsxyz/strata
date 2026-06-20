@@ -226,19 +226,7 @@ class HelmBuilder(BaseBuilder):
                 # Not a helm module — skip silently
                 continue
 
-            if not module.spec.services:
-                # Helm module declared but no services — skip
-                continue
-
             module_name = str(module.meta.name)
-            values_doc, meta_doc = self._render_module_artifacts(
-                namespace_name=namespace_name,
-                module_name=module_name,
-                services=module.spec.services,
-                release_name=module.spec.release_name,
-                kubernetes_namespace=module.spec.kubernetes_namespace,
-            )
-
             module_dir = deployment_build_path / namespace_name / module_name
             values_path = module_dir / "values.yaml"
             meta_path = module_dir / "meta.yaml"
@@ -276,26 +264,68 @@ class HelmBuilder(BaseBuilder):
                     if self.verbose:
                         self._messages.append(f"Copied helm chart source: {src_dir} -> {module_dir}")
 
+            # Render values.yaml from spec.services when present; omit the file
+            # when there are no services (e.g. registry chart + values file via
+            # spec.files — the deployer uses the copied values.yaml directly).
+            if module.spec.services:
+                values_doc, meta_doc = self._render_module_artifacts(
+                    namespace_name=namespace_name,
+                    module_name=module_name,
+                    services=module.spec.services,
+                    release_name=module.spec.release_name,
+                    kubernetes_namespace=module.spec.kubernetes_namespace,
+                )
+            else:
+                values_doc = None
+                meta_doc = {
+                    "releaseName": module.spec.release_name if module.spec.release_name else module_name,
+                    "namespace": module.spec.kubernetes_namespace
+                    if module.spec.kubernetes_namespace
+                    else namespace_name,
+                }
+
+            # Enrich meta with chart coordinates so the build artifact is
+            # self-contained — deployers and GitOps tools (ArgoCD, Flux) can
+            # drive the install entirely from meta.yaml without re-reading the
+            # module spec.
+            if source.chart_repository:
+                meta_doc["chartName"] = source.chart_name
+                meta_doc["chartVersion"] = source.chart_version
+                meta_doc["chartRepository"] = source.chart_repository
+
+            # Merge module-level configuration into values.yaml.  This is the
+            # open bag for deployer-specific overrides at the module level
+            # (top-level helm values).  For service-less modules this creates
+            # the values doc; for modules with services it merges on top.
+            if module.spec.configuration:
+                if values_doc is None:
+                    values_doc = {}
+                values_doc.update(module.spec.configuration)
+
             if dry_run:
                 if self.verbose:
-                    self._messages.append(f"[DRY-RUN] Would write: {values_path}")
+                    if values_doc is not None:
+                        self._messages.append(f"[DRY-RUN] Would write: {values_path}")
                     self._messages.append(f"[DRY-RUN] Would write: {meta_path}")
                 continue
 
             module_dir.mkdir(parents=True, exist_ok=True)
 
-            try:
-                with values_path.open("w", encoding="utf-8") as fh:
-                    yaml.dump(
-                        values_doc,
-                        fh,
-                        default_flow_style=False,
-                        sort_keys=False,
-                        allow_unicode=True,
-                    )
-            except OSError as exc:
-                self._errors.append(f"Failed to write '{values_path}': {exc}")
-                return False
+            if values_doc is not None:
+                try:
+                    with values_path.open("w", encoding="utf-8") as fh:
+                        yaml.dump(
+                            values_doc,
+                            fh,
+                            default_flow_style=False,
+                            sort_keys=False,
+                            allow_unicode=True,
+                        )
+                except OSError as exc:
+                    self._errors.append(f"Failed to write '{values_path}': {exc}")
+                    return False
+                if self.verbose:
+                    self._messages.append(f"Wrote helm values: {values_path}")
 
             try:
                 with meta_path.open("w", encoding="utf-8") as fh:
@@ -311,7 +341,6 @@ class HelmBuilder(BaseBuilder):
                 return False
 
             if self.verbose:
-                self._messages.append(f"Wrote helm values: {values_path}")
                 self._messages.append(f"Wrote helm meta: {meta_path}")
 
         return True

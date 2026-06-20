@@ -417,7 +417,12 @@ class BaseIntegration(ABC):
             return False
 
     def _run_integration(
-        self, args: List[str], cwd: Optional[str] = None, timeout: int = 300, **kwargs
+        self,
+        args: List[str],
+        cwd: Optional[str] = None,
+        timeout: int = 300,
+        ok_returncodes: Optional[set] = None,
+        **kwargs,
     ) -> CommandResult:
         """
         Run integration command with arguments.
@@ -426,6 +431,8 @@ class BaseIntegration(ABC):
             args: Command arguments
             cwd: Working directory
             timeout: Command timeout in seconds
+            ok_returncodes: Set of additional return codes that are not failures
+                (e.g. {2} for ``terraform plan -detailed-exitcode``).
             **kwargs: Additional arguments for run_command
 
         Returns:
@@ -441,7 +448,8 @@ class BaseIntegration(ABC):
 
         result = run_command(command, cwd=cwd, timeout=timeout, **kwargs)
 
-        if result.returncode != 0:
+        expected = ok_returncodes or set()
+        if result.returncode != 0 and result.returncode not in expected:
             logger.warning(
                 "Integration command failed",
                 integration_name=self.integration_name,

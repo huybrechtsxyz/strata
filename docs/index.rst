@@ -89,6 +89,7 @@ strata
 
    guides/how-deployments-work
    guides/how-deployment-locking-works
+   guides/helm-modules
    guides/faq
    guides/cookbook-add-environment
    guides/pattern-cross-env-changes
