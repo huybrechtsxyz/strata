@@ -1412,6 +1412,41 @@
 <li class="toctree-l2"><a class="reference internal" href="how-deployment-locking-works.html#dry-runs-never-lock">Dry runs never lock</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="helm-modules.html">Helm Modules</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#defining-a-helm-module">Defining a Helm Module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#registry-chart-third-party">Registry chart (third-party)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#local-chart-your-own">Local chart (your own)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#source-modes">Source modes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#spec-fields-reference">Spec fields reference</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#wiring-into-a-deployment">Wiring into a Deployment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#namespace-references-the-module">1. Namespace references the module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#workspace-topology-references-the-namespace">2. Workspace topology references the namespace</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#deployment-stage-references-the-topology">3. Deployment stage references the topology</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#build-output">Build Output</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#meta-yaml">meta.yaml</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#values-yaml">values.yaml</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#deploy">Deploy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#what-executes">What executes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#safety-flags">Safety flags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#dry-run-only">Dry-run only</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#destroy">Destroy</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#gitops-integration">GitOps Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#minimal-deploy-a-registry-chart-with-custom-values">Minimal — deploy a registry chart with custom values</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#structured-services-generate-values-from-definitions">Structured services — generate values from definitions</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#why-not-terragrunt">Why not Terragrunt?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-do-i-provide-an-ssh-key-for-ansible-without-putting-it-in-the-yaml">How do I provide an SSH key for Ansible without putting it in the YAML?</a></li>

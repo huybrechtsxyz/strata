@@ -24,7 +24,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Cookbook: Add a New Environment" href="cookbook-add-environment.html" />
-    <link rel="prev" title="How Deployment Locking Works" href="how-deployment-locking-works.html" /> 
+    <link rel="prev" title="Helm Modules" href="helm-modules.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -1413,6 +1413,41 @@
 <li class="toctree-l2"><a class="reference internal" href="how-deployment-locking-works.html#dry-runs-never-lock">Dry runs never lock</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="helm-modules.html">Helm Modules</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#defining-a-helm-module">Defining a Helm Module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#registry-chart-third-party">Registry chart (third-party)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#local-chart-your-own">Local chart (your own)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#source-modes">Source modes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#spec-fields-reference">Spec fields reference</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#wiring-into-a-deployment">Wiring into a Deployment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#namespace-references-the-module">1. Namespace references the module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#workspace-topology-references-the-namespace">2. Workspace topology references the namespace</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#deployment-stage-references-the-topology">3. Deployment stage references the topology</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#build-output">Build Output</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#meta-yaml">meta.yaml</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#values-yaml">values.yaml</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#deploy">Deploy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#what-executes">What executes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#safety-flags">Safety flags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#dry-run-only">Dry-run only</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#destroy">Destroy</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#gitops-integration">GitOps Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#minimal-deploy-a-registry-chart-with-custom-values">Minimal — deploy a registry chart with custom values</a></li>
+<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#structured-services-generate-values-from-definitions">Structured services — generate values from definitions</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Frequently Asked Questions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#why-not-terragrunt">Why not Terragrunt?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#how-do-i-provide-an-ssh-key-for-ansible-without-putting-it-in-the-yaml">How do I provide an SSH key for Ansible without putting it in the YAML?</a></li>
@@ -1851,7 +1886,7 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="how-deployment-locking-works.html" class="btn btn-neutral float-left" title="How Deployment Locking Works" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="helm-modules.html" class="btn btn-neutral float-left" title="Helm Modules" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="cookbook-add-environment.html" class="btn btn-neutral float-right" title="Cookbook: Add a New Environment" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

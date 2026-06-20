@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Setting Up Azure OIDC for GitHub Actions &mdash; strata 0.8.0 documentation</title>
+  <title>Helm Modules &mdash; strata 0.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Deployment Manifests Guide" href="deployment-manifests.html" />
-    <link rel="prev" title="Troubleshooting: What Changed?" href="troubleshooting-what-changed.html" /> 
+    <link rel="next" title="Frequently Asked Questions" href="faq.html" />
+    <link rel="prev" title="How Deployment Locking Works" href="how-deployment-locking-works.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -1413,37 +1413,37 @@
 <li class="toctree-l2"><a class="reference internal" href="how-deployment-locking-works.html#dry-runs-never-lock">Dry runs never lock</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="helm-modules.html">Helm Modules</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#defining-a-helm-module">Defining a Helm Module</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#registry-chart-third-party">Registry chart (third-party)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#local-chart-your-own">Local chart (your own)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#source-modes">Source modes</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#spec-fields-reference">Spec fields reference</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Helm Modules</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#defining-a-helm-module">Defining a Helm Module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#registry-chart-third-party">Registry chart (third-party)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#local-chart-your-own">Local chart (your own)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#source-modes">Source modes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#spec-fields-reference">Spec fields reference</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#wiring-into-a-deployment">Wiring into a Deployment</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#namespace-references-the-module">1. Namespace references the module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#workspace-topology-references-the-namespace">2. Workspace topology references the namespace</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#deployment-stage-references-the-topology">3. Deployment stage references the topology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#wiring-into-a-deployment">Wiring into a Deployment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#namespace-references-the-module">1. Namespace references the module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#workspace-topology-references-the-namespace">2. Workspace topology references the namespace</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deployment-stage-references-the-topology">3. Deployment stage references the topology</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#build-output">Build Output</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#meta-yaml">meta.yaml</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#values-yaml">values.yaml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#build-output">Build Output</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#meta-yaml">meta.yaml</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#values-yaml">values.yaml</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#deploy">Deploy</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#what-executes">What executes</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#safety-flags">Safety flags</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#dry-run-only">Dry-run only</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#destroy">Destroy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deploy">Deploy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#what-executes">What executes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#safety-flags">Safety flags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dry-run-only">Dry-run only</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#destroy">Destroy</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#gitops-integration">GitOps Integration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="helm-modules.html#examples">Examples</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#minimal-deploy-a-registry-chart-with-custom-values">Minimal — deploy a registry chart with custom values</a></li>
-<li class="toctree-l3"><a class="reference internal" href="helm-modules.html#structured-services-generate-values-from-definitions">Structured services — generate values from definitions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#gitops-integration">GitOps Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#minimal-deploy-a-registry-chart-with-custom-values">Minimal — deploy a registry chart with custom values</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#structured-services-generate-values-from-definitions">Structured services — generate values from definitions</a></li>
 </ul>
 </li>
 </ul>
@@ -1510,16 +1510,16 @@
 <li class="toctree-l2"><a class="reference internal" href="troubleshooting-what-changed.html#prevention">Prevention</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Setting Up Azure OIDC for GitHub Actions</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#step-1-create-or-identify-an-app-registration">Step 1: Create (or identify) an App Registration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#step-2-add-a-federated-credential">Step 2: Add a Federated Credential</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#step-3-grant-azure-role-assignments">Step 3: Grant Azure Role Assignments</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#step-4-configure-github-variables">Step 4: Configure GitHub Variables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#step-5-update-the-calling-workflow">Step 5: Update the Calling Workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#verifying-the-setup">Verifying the Setup</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#switching-back-to-client-secret">Switching Back to Client Secret</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="setup-azure-oidc.html">Setting Up Azure OIDC for GitHub Actions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="setup-azure-oidc.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="setup-azure-oidc.html#step-1-create-or-identify-an-app-registration">Step 1: Create (or identify) an App Registration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="setup-azure-oidc.html#step-2-add-a-federated-credential">Step 2: Add a Federated Credential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="setup-azure-oidc.html#step-3-grant-azure-role-assignments">Step 3: Grant Azure Role Assignments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="setup-azure-oidc.html#step-4-configure-github-variables">Step 4: Configure GitHub Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="setup-azure-oidc.html#step-5-update-the-calling-workflow">Step 5: Update the Calling Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="setup-azure-oidc.html#verifying-the-setup">Verifying the Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="setup-azure-oidc.html#switching-back-to-client-secret">Switching Back to Client Secret</a></li>
+<li class="toctree-l2"><a class="reference internal" href="setup-azure-oidc.html#troubleshooting">Troubleshooting</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="deployment-manifests.html">Deployment Manifests Guide</a><ul>
@@ -1649,9 +1649,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Setting Up Azure OIDC for GitHub Actions</li>
+      <li class="breadcrumb-item active">Helm Modules</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/guides/setup-azure-oidc.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/guides/helm-modules.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -1659,196 +1659,349 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="setting-up-azure-oidc-for-github-actions">
-<h1>Setting Up Azure OIDC for GitHub Actions<a class="headerlink" href="#setting-up-azure-oidc-for-github-actions" title="Link to this heading"></a></h1>
-<p>OIDC (OpenID Connect) lets GitHub Actions authenticate to Azure without storing a client secret. Azure issues a short-lived token scoped to each individual run, meaning there is nothing to rotate, nothing to leak, and every authentication event is visible in Azure Entra ID sign-in logs.</p>
-<hr class="docutils" />
-<section id="prerequisites">
-<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p>An Azure subscription</p></li>
-<li><p>Owner, or Contributor + Application Administrator role on the Entra ID tenant</p></li>
-<li><p>A GitHub repository that calls the <code class="docutils literal notranslate"><span class="pre">deploy-workspace.yml</span></code> reusable workflow (or the <code class="docutils literal notranslate"><span class="pre">azure-login</span></code> composite action directly)</p></li>
-</ul>
+  <section id="helm-modules">
+<h1>Helm Modules<a class="headerlink" href="#helm-modules" title="Link to this heading"></a></h1>
+<p>How to define, build, and deploy Helm charts with strata.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>Strata handles the full Helm lifecycle: <strong>define → build → deploy</strong>.  You
+define what you want in YAML, strata builds self-contained artifacts, then
+deploys them to your Kubernetes cluster.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>strata build run --file config/deploy-prod.yaml   → artifacts
+strata deploy run --file config/deploy-prod.yaml  → helm upgrade --install
+</pre></div>
+</div>
 </section>
 <hr class="docutils" />
-<section id="step-1-create-or-identify-an-app-registration">
-<h2>Step 1: Create (or identify) an App Registration<a class="headerlink" href="#step-1-create-or-identify-an-app-registration" title="Link to this heading"></a></h2>
-<ol class="arabic simple">
-<li><p>Go to <strong>Azure Portal → Microsoft Entra ID → App registrations → New registration</strong>.</p></li>
-<li><p>Give it a descriptive name, e.g. <code class="docutils literal notranslate"><span class="pre">github-actions-&lt;repo-name&gt;</span></code>. Leave all other defaults.</p></li>
-<li><p>Click <strong>Register</strong>.</p></li>
-</ol>
-<p>If a service principal already exists for this repository, use it instead of creating a new one.</p>
-<p>Note the <strong>Application (client) ID</strong> and the <strong>Directory (tenant) ID</strong> from the Overview page — you will need both in Step 4.</p>
+<section id="defining-a-helm-module">
+<h2>Defining a Helm Module<a class="headerlink" href="#defining-a-helm-module" title="Link to this heading"></a></h2>
+<p>A module YAML tells strata: “I want this chart, at this version, with these
+values, deployed to this namespace.”</p>
+<section id="registry-chart-third-party">
+<h3>Registry chart (third-party)<a class="headerlink" href="#registry-chart-third-party" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">module</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Argo CD — GitOps continuous delivery</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">chart_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argo-cd</span>
+<span class="w">    </span><span class="nt">chart_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;7.8.0&quot;</span>
+<span class="w">    </span><span class="nt">chart_repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://argoproj.github.io/argo-helm</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helm</span>
+<span class="w">  </span><span class="nt">release_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="w">  </span><span class="nt">kubernetes_namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="w">  </span><span class="nt">files</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">services/forge/argocd/values.yaml</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">values.yaml</span>
+</pre></div>
+</div>
 </section>
-<hr class="docutils" />
-<section id="step-2-add-a-federated-credential">
-<h2>Step 2: Add a Federated Credential<a class="headerlink" href="#step-2-add-a-federated-credential" title="Link to this heading"></a></h2>
-<ol class="arabic">
-<li><p>Open the App Registration → <strong>Certificates &amp; secrets → Federated credentials → Add credential</strong>.</p></li>
-<li><p>Select the <strong>GitHub Actions deploying Azure resources</strong> scenario.</p></li>
-<li><p>Fill in the fields:</p>
+<section id="local-chart-your-own">
+<h3>Local chart (your own)<a class="headerlink" href="#local-chart-your-own" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">module</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-app</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-repo</span>
+<span class="w">    </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">services/my-app/helm</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helm</span>
+<span class="w">  </span><span class="nt">release_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-app</span>
+<span class="w">  </span><span class="nt">kubernetes_namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apps</span>
+<span class="w">  </span><span class="nt">files</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">services/my-app/values-prd.yaml</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">values.yaml</span>
+</pre></div>
+</div>
+</section>
+<section id="source-modes">
+<h3>Source modes<a class="headerlink" href="#source-modes" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Mode</p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>When to use</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Registry chart</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">chart_repository</span></code> + <code class="docutils literal notranslate"><span class="pre">chart_name</span></code> + <code class="docutils literal notranslate"><span class="pre">chart_version</span></code></p></td>
+<td><p>Third-party charts (ArgoCD, nginx-ingress, cert-manager, etc.)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Local chart</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">repository</span></code> + <code class="docutils literal notranslate"><span class="pre">source_path</span></code> (directory with <code class="docutils literal notranslate"><span class="pre">Chart.yaml</span></code>)</p></td>
+<td><p>Your own Helm charts stored in a config repo</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="spec-fields-reference">
+<h3>Spec fields reference<a class="headerlink" href="#spec-fields-reference" title="Link to this heading"></a></h3>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Field</p></th>
-<th class="head"><p>Value</p></th>
+<th class="head"><p>Purpose</p></th>
+<th class="head"><p>Default</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Organization</p></td>
-<td><p>Your GitHub org or username</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">release_name</span></code></p></td>
+<td><p>Helm release name</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">meta.name</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Repository</p></td>
-<td><p>The repo name (without the org prefix)</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">kubernetes_namespace</span></code></p></td>
+<td><p>Target Kubernetes namespace</p></td>
+<td><p>Strata namespace name</p></td>
 </tr>
-<tr class="row-even"><td><p>Entity type</p></td>
-<td><p><strong>Environment</strong> (recommended — locks the credential to a specific GitHub environment)</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">configuration</span></code></p></td>
+<td><p>Extra helm values merged into <code class="docutils literal notranslate"><span class="pre">values.yaml</span></code></p></td>
+<td><p>—</p></td>
 </tr>
-<tr class="row-odd"><td><p>GitHub environment name</p></td>
-<td><p>e.g. <code class="docutils literal notranslate"><span class="pre">production</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">files</span></code></p></td>
+<td><p>Files to copy into build output (values, etc.)</p></td>
+<td><p>—</p></td>
 </tr>
-<tr class="row-even"><td><p>Name</p></td>
-<td><p>e.g. <code class="docutils literal notranslate"><span class="pre">github-actions-production</span></code></p></td>
-</tr>
-</tbody>
-</table>
-</li>
-<li><p>Click <strong>Add</strong>.</p></li>
-</ol>
-<p>Azure generates a subject claim in the format:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">repo</span><span class="p">:</span><span class="o">&lt;</span><span class="n">org</span><span class="o">&gt;/&lt;</span><span class="n">repo</span><span class="o">&gt;</span><span class="p">:</span><span class="n">environment</span><span class="p">:</span><span class="o">&lt;</span><span class="n">environment</span><span class="o">-</span><span class="n">name</span><span class="o">&gt;</span>
-</pre></div>
-</div>
-<p>This claim must match exactly what GitHub sends during the OIDC token exchange. If you use <code class="docutils literal notranslate"><span class="pre">Entity</span> <span class="pre">type:</span> <span class="pre">Branch</span></code> or <code class="docutils literal notranslate"><span class="pre">Pull</span> <span class="pre">request</span></code> instead, the subject claim format changes accordingly — make sure the credential type matches how your workflow is configured.</p>
-<blockquote>
-<div><p><strong>Tip:</strong> You can add multiple federated credentials to a single App Registration — one per environment (e.g. <code class="docutils literal notranslate"><span class="pre">production</span></code>, <code class="docutils literal notranslate"><span class="pre">staging</span></code>, <code class="docutils literal notranslate"><span class="pre">dev</span></code>). Each credential is independent and maps to a different GitHub environment.</p>
-</div></blockquote>
-</section>
-<hr class="docutils" />
-<section id="step-3-grant-azure-role-assignments">
-<h2>Step 3: Grant Azure Role Assignments<a class="headerlink" href="#step-3-grant-azure-role-assignments" title="Link to this heading"></a></h2>
-<p>The App Registration needs at minimum the following role assignments, depending on which Azure stores your deployment reads from:</p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Azure Resource</p></th>
-<th class="head"><p>Role</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Key Vault</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">Key</span> <span class="pre">Vault</span> <span class="pre">Secrets</span> <span class="pre">User</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p>App Configuration</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">App</span> <span class="pre">Configuration</span> <span class="pre">Data</span> <span class="pre">Reader</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">services</span></code></p></td>
+<td><p>Structured service definitions → generates <code class="docutils literal notranslate"><span class="pre">values.yaml</span></code></p></td>
+<td><p>—</p></td>
 </tr>
 </tbody>
 </table>
-<p>To assign a role:</p>
-<ol class="arabic simple">
-<li><p>Navigate to the target resource in the Azure Portal.</p></li>
-<li><p>Open <strong>IAM → Add role assignment</strong>.</p></li>
-<li><p>Select the required role.</p></li>
-<li><p>On the <strong>Members</strong> tab, choose <strong>User, group, or service principal</strong> and search for the App Registration by name.</p></li>
-<li><p>Click <strong>Review + assign</strong>.</p></li>
-</ol>
-<p>Repeat for each Key Vault and App Configuration store that your deployment accesses.</p>
+</section>
 </section>
 <hr class="docutils" />
-<section id="step-4-configure-github-variables">
-<h2>Step 4: Configure GitHub Variables<a class="headerlink" href="#step-4-configure-github-variables" title="Link to this heading"></a></h2>
-<p>In your GitHub repository, go to <strong>Settings → Secrets and variables → Actions → Variables</strong>.</p>
-<p>Add the following <strong>repository variables</strong> (not secrets — these values are not sensitive):</p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Variable</p></th>
-<th class="head"><p>Value</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AZURE_TENANT_ID</span></code></p></td>
-<td><p>Directory (tenant) ID from Step 1</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">AZURE_SUBSCRIPTION_ID</span></code></p></td>
-<td><p>Your Azure subscription ID</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AZURE_CLIENT_ID</span></code></p></td>
-<td><p>Application (client) ID from Step 1</p></td>
-</tr>
-</tbody>
-</table>
-<blockquote>
-<div><p><strong>Important:</strong> Do <strong>not</strong> add <code class="docutils literal notranslate"><span class="pre">AZURE_CLIENT_SECRET</span></code>. If one already exists from a previous client-secret setup, you can leave it in place — as long as you do not pass it to the <code class="docutils literal notranslate"><span class="pre">azure-login</span></code> action, OIDC mode is used automatically.</p>
-</div></blockquote>
-<p>If you want the variables scoped to a specific environment instead of the whole repository, add them under <strong>Settings → Environments → &lt;environment name&gt; → Environment variables</strong>.</p>
-</section>
-<hr class="docutils" />
-<section id="step-5-update-the-calling-workflow">
-<h2>Step 5: Update the Calling Workflow<a class="headerlink" href="#step-5-update-the-calling-workflow" title="Link to this heading"></a></h2>
-<p>Pass the three variables to the reusable workflow. The absence of <code class="docutils literal notranslate"><span class="pre">azure_client_secret</span></code> is what triggers OIDC mode:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">jobs</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">deploy</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">uses</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">huybrechtsxyz/strata/.github/workflows/deploy-workspace.yml@v0</span>
-<span class="w">    </span><span class="nt">with</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">deployment_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy/deploy-prd.yaml</span>
-<span class="w">      </span><span class="nt">azure_tenant_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ vars.AZURE_TENANT_ID }}</span>
-<span class="w">      </span><span class="nt">azure_subscription_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ vars.AZURE_SUBSCRIPTION_ID }}</span>
-<span class="w">      </span><span class="nt">azure_client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${{ vars.AZURE_CLIENT_ID }}</span>
-<span class="w">      </span><span class="c1"># azure_client_secret is NOT passed — this triggers OIDC mode</span>
-<span class="w">    </span><span class="nt">secrets</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">inherit</span>
-</pre></div>
-</div>
-<p>The reusable workflow already declares <code class="docutils literal notranslate"><span class="pre">permissions:</span> <span class="pre">id-token:</span> <span class="pre">write</span></code> internally. If you are calling the <code class="docutils literal notranslate"><span class="pre">azure-login</span></code> action directly (not via the reusable workflow), add the permission to your job:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="nt">permissions</span><span class="p">:</span>
-<span class="w">      </span><span class="nt">contents</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">read</span>
-<span class="w">      </span><span class="nt">id-token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">write</span>
+<section id="wiring-into-a-deployment">
+<h2>Wiring into a Deployment<a class="headerlink" href="#wiring-into-a-deployment" title="Link to this heading"></a></h2>
+<section id="namespace-references-the-module">
+<h3>1. Namespace references the module<a class="headerlink" href="#namespace-references-the-module" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">namespace</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forge</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">modules</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="w">      </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config/forge/modules/mod-argocd.yaml</span>
 </pre></div>
 </div>
 </section>
-<hr class="docutils" />
-<section id="verifying-the-setup">
-<h2>Verifying the Setup<a class="headerlink" href="#verifying-the-setup" title="Link to this heading"></a></h2>
-<p>Trigger a run and open the <strong>Azure Login</strong> step in the GitHub Actions log. It should report <code class="docutils literal notranslate"><span class="pre">Login</span> <span class="pre">successful</span></code> without any secret value being printed.</p>
-<p>To confirm in Azure: go to <strong>Microsoft Entra ID → Sign-in logs → Service principal sign-ins</strong> and filter by the App Registration name. You should see the GitHub Actions run listed with authentication method <strong>Federated identity credential</strong>.</p>
+<section id="workspace-topology-references-the-namespace">
+<h3>2. Workspace topology references the namespace<a class="headerlink" href="#workspace-topology-references-the-namespace" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># In workspace spec.topologies:</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hetzner_forge</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hetzner_dc_eu_de</span>
+<span class="w">  </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">haven_iac</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">single_node</span>
+<span class="w">  </span><span class="nt">namespaces</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forge</span>
+</pre></div>
+</div>
+</section>
+<section id="deployment-stage-references-the-topology">
+<h3>3. Deployment stage references the topology<a class="headerlink" href="#deployment-stage-references-the-topology" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># In deployment spec.stages:</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">services_forge</span>
+<span class="w">  </span><span class="nt">topology</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hetzner_forge</span>
+<span class="w">  </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">all</span>
+<span class="w">  </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infrastructure_forge</span>
+<span class="w">  </span><span class="nt">on_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stop</span>
+</pre></div>
+</div>
+</section>
 </section>
 <hr class="docutils" />
-<section id="switching-back-to-client-secret">
-<h2>Switching Back to Client Secret<a class="headerlink" href="#switching-back-to-client-secret" title="Link to this heading"></a></h2>
-<p>To revert to client-secret mode, pass <code class="docutils literal notranslate"><span class="pre">azure_client_secret:</span> <span class="pre">${{</span> <span class="pre">secrets.AZURE_CLIENT_SECRET</span> <span class="pre">}}</span></code> in the calling workflow. The <code class="docutils literal notranslate"><span class="pre">azure-login</span></code> action detects the input and switches to client-secret mode automatically — no other changes are required.</p>
+<section id="build-output">
+<h2>Build Output<a class="headerlink" href="#build-output" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>build<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>config/deploy-prod.yaml
+</pre></div>
+</div>
+<p>Produces a self-contained artifact per module:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>build/&lt;deployment&gt;/&lt;namespace&gt;/&lt;module&gt;/
+├── meta.yaml       ← deployment identity + chart coordinates
+└── values.yaml     ← helm values
+</pre></div>
+</div>
+<section id="meta-yaml">
+<h3>meta.yaml<a class="headerlink" href="#meta-yaml" title="Link to this heading"></a></h3>
+<p>Contains everything needed to deploy — no source YAML required at deploy time:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">releaseName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="nt">chartName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argo-cd</span>
+<span class="nt">chartVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;7.8.0&quot;</span>
+<span class="nt">chartRepository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://argoproj.github.io/argo-helm</span>
+</pre></div>
+</div>
+<p>For local charts, <code class="docutils literal notranslate"><span class="pre">chartName</span></code>/<code class="docutils literal notranslate"><span class="pre">chartVersion</span></code>/<code class="docutils literal notranslate"><span class="pre">chartRepository</span></code> are absent.
+The deployer uses the build directory as the chart reference instead.</p>
 </section>
-<hr class="docutils" />
-<section id="troubleshooting">
-<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<section id="values-yaml">
+<h3>values.yaml<a class="headerlink" href="#values-yaml" title="Link to this heading"></a></h3>
+<p>Helm values assembled from three possible sources (in merge order):</p>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Symptom</p></th>
-<th class="head"><p>Likely cause</p></th>
-<th class="head"><p>Fix</p></th>
+<tr class="row-odd"><th class="head"><p>Source</p></th>
+<th class="head"><p>Use case</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">AADSTS70021:</span> <span class="pre">No</span> <span class="pre">matching</span> <span class="pre">federated</span> <span class="pre">identity</span> <span class="pre">record</span> <span class="pre">found</span></code></p></td>
-<td><p>Subject claim mismatch</p></td>
-<td><p>Verify the entity type (Environment) and environment name in the federated credential exactly match the GitHub environment name in your workflow</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">spec.services</span></code></p></td>
+<td><p>Structured definitions (env vars, mounts, ports) → generated values</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Resource</span> <span class="pre">not</span> <span class="pre">accessible</span> <span class="pre">by</span> <span class="pre">integration</span></code></p></td>
-<td><p>Missing <code class="docutils literal notranslate"><span class="pre">id-token:</span> <span class="pre">write</span></code> permission</p></td>
-<td><p>Ensure the calling job has <code class="docutils literal notranslate"><span class="pre">permissions:</span> <span class="pre">id-token:</span> <span class="pre">write</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code></p></td>
+<td><p>Extra top-level values merged on top</p></td>
 </tr>
-<tr class="row-even"><td><p>Login succeeds but Key Vault returns 403</p></td>
-<td><p>Missing role assignment</p></td>
-<td><p>Add the <code class="docutils literal notranslate"><span class="pre">Key</span> <span class="pre">Vault</span> <span class="pre">Secrets</span> <span class="pre">User</span></code> IAM role for the App Registration on the vault</p></td>
-</tr>
-<tr class="row-odd"><td><p>Login succeeds but App Configuration returns 403</p></td>
-<td><p>Missing role assignment</p></td>
-<td><p>Add the <code class="docutils literal notranslate"><span class="pre">App</span> <span class="pre">Configuration</span> <span class="pre">Data</span> <span class="pre">Reader</span></code> IAM role for the App Registration</p></td>
-</tr>
-<tr class="row-even"><td><p>Credential works for <code class="docutils literal notranslate"><span class="pre">main</span></code> branch but not for <code class="docutils literal notranslate"><span class="pre">production</span></code> environment</p></td>
-<td><p>Wrong entity type</p></td>
-<td><p>The federated credential entity type must match how your workflow is triggered; use <strong>Environment</strong> if the job targets a GitHub environment</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">spec.files</span></code></p></td>
+<td><p>Hand-crafted values.yaml copied verbatim</p></td>
 </tr>
 </tbody>
 </table>
+<p>For registry charts without <code class="docutils literal notranslate"><span class="pre">services</span></code> (like ArgoCD), use <code class="docutils literal notranslate"><span class="pre">files</span></code> to provide
+your own values.yaml.  For your own apps with structured services, use
+<code class="docutils literal notranslate"><span class="pre">services</span></code> + optionally <code class="docutils literal notranslate"><span class="pre">configuration</span></code> for overrides.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="deploy">
+<h2>Deploy<a class="headerlink" href="#deploy" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>config/deploy-prod.yaml
+</pre></div>
+</div>
+<section id="what-executes">
+<h3>What executes<a class="headerlink" href="#what-executes" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Step</p></th>
+<th class="head"><p>Command</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>setup</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">repo</span> <span class="pre">add</span></code> + <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">repo</span> <span class="pre">update</span></code></p></td>
+<td><p>Register chart repositories</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>plan</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">upgrade</span> <span class="pre">--dry-run</span> <span class="pre">--install</span> <span class="pre">...</span></code></p></td>
+<td><p>Preview changes without applying</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>apply</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">upgrade</span> <span class="pre">--install</span> <span class="pre">--wait</span> <span class="pre">--atomic</span> <span class="pre">--timeout</span> <span class="pre">5m</span> <span class="pre">...</span></code></p></td>
+<td><p>Install or upgrade the release</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="safety-flags">
+<h3>Safety flags<a class="headerlink" href="#safety-flags" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--wait</span></code> — blocks until all pods are Running (not just submitted)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--atomic</span></code> — automatically rolls back if the deploy fails</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--timeout</span> <span class="pre">5m</span></code> — gives complex charts time to stabilize</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--create-namespace</span></code> — creates the target namespace if it doesn’t exist</p></li>
+</ul>
+</section>
+<section id="dry-run-only">
+<h3>Dry-run only<a class="headerlink" href="#dry-run-only" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>config/deploy-prod.yaml<span class="w"> </span>--plan-only
+</pre></div>
+</div>
+</section>
+<section id="destroy">
+<h3>Destroy<a class="headerlink" href="#destroy" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>config/deploy-prod.yaml<span class="w"> </span>--destroy<span class="w"> </span>--force
+</pre></div>
+</div>
+<p>Runs <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">uninstall</span> <span class="pre">&lt;release&gt;</span> <span class="pre">--namespace</span> <span class="pre">&lt;namespace&gt;</span></code> for each module.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="gitops-integration">
+<h2>GitOps Integration<a class="headerlink" href="#gitops-integration" title="Link to this heading"></a></h2>
+<p>Strata deploys Helm charts directly.  It does <strong>not</strong> generate ArgoCD
+<code class="docutils literal notranslate"><span class="pre">Application</span></code> CRs or Flux <code class="docutils literal notranslate"><span class="pre">HelmRelease</span></code> CRs — that is out of scope.</p>
+<p>If you want GitOps after deploying ArgoCD:</p>
+<ul class="simple">
+<li><p><strong>Monitoring mode:</strong> ArgoCD discovers existing helm releases strata deployed
+(zero extra config)</p></li>
+<li><p><strong>Application CRs:</strong> Write them yourself — <code class="docutils literal notranslate"><span class="pre">meta.yaml</span></code> has all the fields
+you need to fill in the template</p></li>
+<li><p><strong>App-of-apps:</strong> Maintain an umbrella chart that generates Applications from
+strata’s values files</p></li>
+<li><p><strong>Git generator:</strong> Point ArgoCD’s <code class="docutils literal notranslate"><span class="pre">ApplicationSet</span></code> at the build output
+directory</p></li>
+</ul>
+<p>Strata’s role: deploy ArgoCD.  ArgoCD’s role: manage everything else.</p>
+</section>
+<hr class="docutils" />
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
+<section id="minimal-deploy-a-registry-chart-with-custom-values">
+<h3>Minimal — deploy a registry chart with custom values<a class="headerlink" href="#minimal-deploy-a-registry-chart-with-custom-values" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">chart_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nginx-ingress</span>
+<span class="w">    </span><span class="nt">chart_version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4.10.0&quot;</span>
+<span class="w">    </span><span class="nt">chart_repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://kubernetes.github.io/ingress-nginx</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helm</span>
+<span class="w">  </span><span class="nt">release_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ingress</span>
+<span class="w">  </span><span class="nt">kubernetes_namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ingress-nginx</span>
+<span class="w">  </span><span class="nt">files</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">services/ingress/values.yaml</span>
+<span class="w">      </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">values.yaml</span>
+</pre></div>
+</div>
+</section>
+<section id="structured-services-generate-values-from-definitions">
+<h3>Structured services — generate values from definitions<a class="headerlink" href="#structured-services-generate-values-from-definitions" title="Link to this heading"></a></h3>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-repo</span>
+<span class="w">    </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">charts/my-app</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helm</span>
+<span class="w">  </span><span class="nt">release_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-app</span>
+<span class="w">  </span><span class="nt">kubernetes_namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span>
+<span class="w">  </span><span class="nt">services</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">api</span>
+<span class="w">      </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-app:1.2.0</span>
+<span class="w">      </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DATABASE_URL</span>
+<span class="w">          </span><span class="nt">secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DB_URL</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">LOG_LEVEL</span>
+<span class="w">          </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">info</span>
+<span class="w">      </span><span class="nt">mounts</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data</span>
+<span class="w">          </span><span class="nt">storage_class</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fast-ssd</span>
+<span class="w">          </span><span class="nt">storage_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
+<span class="w">          </span><span class="nt">target_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/var/data</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">replicaCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="w">    </span><span class="nt">resources</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">limits</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512Mi</span>
+</pre></div>
+</div>
+<p>Produces:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># values.yaml (generated)</span>
+<span class="nt">my-app-api</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">DATABASE_URL</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${DB_URL}&quot;</span>
+<span class="w">    </span><span class="nt">LOG_LEVEL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">info</span>
+<span class="w">  </span><span class="nt">persistence</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">data</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fast-ssd</span>
+<span class="w">      </span><span class="nt">accessMode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ReadWriteOnce</span>
+<span class="w">      </span><span class="nt">size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
+<span class="nt">replicaCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="nt">resources</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">limits</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">512Mi</span>
+</pre></div>
+</div>
+</section>
 </section>
 </section>
 
@@ -1856,8 +2009,8 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="troubleshooting-what-changed.html" class="btn btn-neutral float-left" title="Troubleshooting: What Changed?" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="deployment-manifests.html" class="btn btn-neutral float-right" title="Deployment Manifests Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="how-deployment-locking-works.html" class="btn btn-neutral float-left" title="How Deployment Locking Works" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="faq.html" class="btn btn-neutral float-right" title="Frequently Asked Questions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
