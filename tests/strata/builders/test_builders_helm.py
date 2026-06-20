@@ -59,7 +59,7 @@ def _module_ref(name: str, file: str):
     return ref
 
 
-def _make_helm_module(name: str, services, release_name=None, kubernetes_namespace=None, source=None):
+def _make_helm_module(name: str, services, release_name=None, kubernetes_namespace=None, source=None, configuration=None):
     """Return a mock ModuleModel with type=helm and the given services."""
     mod = MagicMock()
     mod.meta = MagicMock()
@@ -69,6 +69,7 @@ def _make_helm_module(name: str, services, release_name=None, kubernetes_namespa
     mod.spec.services = services
     mod.spec.release_name = release_name
     mod.spec.kubernetes_namespace = kubernetes_namespace
+    mod.spec.configuration = configuration
     # Default source: git-based (no chart fields)
     if source is None:
         src = MagicMock()
@@ -255,6 +256,7 @@ class TestHelmBuilderBuildOutput:
         release_name=None,
         kubernetes_namespace=None,
         source=None,
+        configuration=None,
     ):
         """Helper: build one namespace with one helm module; return (values_doc, meta_doc)."""
         helm_module = _make_helm_module(
@@ -263,6 +265,7 @@ class TestHelmBuilderBuildOutput:
             release_name=release_name,
             kubernetes_namespace=kubernetes_namespace,
             source=source,
+            configuration=configuration,
         )
         mod_service = _make_mod_service(module=helm_module)
         mod_ref = _module_ref(module_name, "module.yaml")
@@ -432,6 +435,49 @@ class TestHelmBuilderBuildOutput:
         assert "chartName" not in meta
         assert "chartVersion" not in meta
         assert "chartRepository" not in meta
+
+    # --- values.yaml: module-level configuration ---
+
+    def test_module_configuration_merged_into_values_with_services(self, tmp_path):
+        """spec.configuration merges on top of service-generated values."""
+        svc = _make_service("web", image="nginx:alpine")
+        config = {"global": {"domain": "example.com"}, "replicaCount": 3}
+        values, _ = self._run_build(tmp_path, [svc], configuration=config)
+        assert values["global"] == {"domain": "example.com"}
+        assert values["replicaCount"] == 3
+        # Service entry still present
+        assert "mymod-web" in values
+
+    def test_module_configuration_creates_values_for_serviceless_module(self, tmp_path):
+        """spec.configuration creates values.yaml even when no services exist."""
+        config = {"server": {"insecure": True}, "redis": {"enabled": False}}
+        values, _ = self._run_build(tmp_path, services=None, configuration=config)
+        assert values["server"] == {"insecure": True}
+        assert values["redis"] == {"enabled": False}
+
+    def test_no_configuration_no_services_no_values_file(self, tmp_path):
+        """Without services or configuration, values.yaml is not written."""
+        helm_module = _make_helm_module("mod", services=None)
+        mod_service = _make_mod_service(module=helm_module)
+        mod_ref = _module_ref("mod", "module.yaml")
+
+        ns_svc = _mock_namespace_service([mod_ref])
+        dep_svc = _mock_deployment_service(build_path=tmp_path, namespace_services={"ns1": ns_svc})
+
+        module_path = tmp_path / "module.yaml"
+        module_path.write_text("")
+
+        builder = HelmBuilder()
+        with (
+            patch("strata.builders.helm_builder.resolve_path") as mock_rp,
+            patch("strata.builders.helm_builder.ModuleService.load", return_value=mod_service),
+        ):
+            mock_rp.return_value = module_path
+            ok = builder.build(dep_svc, tmp_path, tmp_path)
+
+        assert ok is True
+        assert not (tmp_path / "ns1" / "mod" / "values.yaml").exists()
+        assert (tmp_path / "ns1" / "mod" / "meta.yaml").exists()
 
     # --- dry_run ---
 

@@ -293,6 +293,15 @@ class HelmBuilder(BaseBuilder):
                 meta_doc["chartVersion"] = source.chart_version
                 meta_doc["chartRepository"] = source.chart_repository
 
+            # Merge module-level configuration into values.yaml.  This is the
+            # open bag for deployer-specific overrides at the module level
+            # (top-level helm values).  For service-less modules this creates
+            # the values doc; for modules with services it merges on top.
+            if module.spec.configuration:
+                if values_doc is None:
+                    values_doc = {}
+                values_doc.update(module.spec.configuration)
+
             if dry_run:
                 if self.verbose:
                     if values_doc is not None:
