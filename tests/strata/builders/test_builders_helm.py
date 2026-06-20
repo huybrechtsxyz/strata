@@ -59,7 +59,9 @@ def _module_ref(name: str, file: str):
     return ref
 
 
-def _make_helm_module(name: str, services, release_name=None, kubernetes_namespace=None, source=None, configuration=None):
+def _make_helm_module(
+    name: str, services, release_name=None, kubernetes_namespace=None, source=None, configuration=None
+):
     """Return a mock ModuleModel with type=helm and the given services."""
     mod = MagicMock()
     mod.meta = MagicMock()
