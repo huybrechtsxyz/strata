@@ -114,6 +114,85 @@ Strata handles concern #1 and generates the ArgoCD ApplicationSet entries for co
 
 ---
 
+## Workspace-per-Layer Pattern
+
+Each deployment layer owns **one workspace file**. This is the single most important
+structural decision for operating strata at scale.
+
+### Why one workspace per layer?
+
+A workspace defines all possible resources and modules for a deployment scope. When
+two deployment scopes share a workspace, the workspace grows to accommodate both —
+and both must be kept in sync even when only one changes.
+
+One workspace per layer keeps each workspace small (2–5 resources, 1–3 provisioners),
+scoped to its layer's blast radius, and independently evolvable.
+
+| Pattern                      | Workspace size  | Blast radius    | Independent evolution         |
+| ---------------------------- | --------------- | --------------- | ----------------------------- |
+| One workspace for everything | 20–50 resources | Entire platform | ❌ Changes affect all layers   |
+| One workspace per layer      | 2–5 resources   | That layer only | ✅ Layers evolve independently |
+
+### The three workspaces
+
+For the three-layer architecture above, this means three workspace files:
+
+```
+workspaces/
+  bootstrap.yaml        ← Layer 0: Key Vault, ACR, state backend
+  infrastructure.yaml   ← Layer 1: AKS, VNet, ArgoCD, monitoring
+  application.yaml      ← Layer 2: namespace, RBAC, secrets scope, storage
+```
+
+Each workspace defines the resources and modules for its layer. Deployments reference
+exactly one workspace. The workspace does not know about other layers — it only knows
+about its own resources.
+
+### Why this works at 400+ deployments
+
+The 400 customer slots (100 customers × 4 environments) all reference `application.yaml`.
+The workspace defines what *can* exist in a customer deployment. The environment files
+control what *is* active for each customer and environment. No workspace changes are
+needed when onboarding a new customer — only a new deployment manifest and environment
+overrides are needed.
+
+```
+application.yaml         ← defines: namespace, RBAC, webapp, storage, cdn, monitoring
+    ↑
+    referenced by 400 deployment manifests
+    each deployment selects its active resources via environment overrides
+```
+
+### Layer boundaries are enforced by convention
+
+A deployment manifest in Layer 2 references `workspace: application`. If someone
+accidentally puts `workspace: infrastructure` in a customer deployment, they get access
+to zone-level resources — a misconfiguration that crosses the layer boundary.
+
+`strata validate --path "deployments/**"` (GAP-03 overlap check) detects namespace
+and artifact_path collisions that would result from this, providing a safety net even
+without an explicit layer-boundary rule.
+
+### Example deployment structure
+
+```
+deployments/
+  bootstrap.yaml                    # Layer 0, workspace: bootstrap
+  zones/
+    eu.yaml                         # Layer 1, workspace: infrastructure
+    us.yaml                         # Layer 1, workspace: infrastructure
+  customers/
+    acme-eu-prd.yaml                # Layer 2, workspace: application
+    acme-eu-acc.yaml                # Layer 2, workspace: application
+    contoso-eu-prd.yaml             # Layer 2, workspace: application
+    ...
+```
+
+The directory structure mirrors the layer hierarchy. Each file references the workspace
+for its layer. New customers = new files, no workspace changes.
+
+---
+
 ## New Concepts
 
 ### Customer Registry (`kind: customer`)
@@ -279,6 +358,228 @@ spec:
 ```
 
 The application workspace defines all possible customer resources (namespace, RBAC, storage, network policies, app modules). The merged environments control which are active and how they're sized. Standard strata build/deploy pipeline handles the rest.
+
+---
+
+## Variable Flow: Customer Metadata → Terraform
+
+Customer files carry two kinds of data that look similar but flow differently:
+
+| Field                                                | Purpose                                               | Reaches Terraform?        |
+| ---------------------------------------------------- | ----------------------------------------------------- | ------------------------- |
+| `spec.configuration`                                 | Deployment metadata — routing, labeling, audit        | ❌ Not automatically       |
+| `spec.environments[]` → tier file `spec.variables[]` | Runtime values resolved at deploy time                | ✅ Yes, as `TF_VAR_*`      |
+| `spec.references.variables`                          | Declares which variable keys this customer *requires* | Contract only — no values |
+
+### `spec.configuration` is metadata, not Terraform input
+
+`spec.configuration` holds arbitrary key/value pairs that are injected into the
+generated deployment's `spec.properties` at slot generation time. These appear in
+the deployment manifest and are useful for routing, labeling, and audit. They are
+**not** automatically passed to Terraform.
+
+```yaml
+# customers/acme.yaml
+spec:
+  configuration:
+    crm_id: "42"
+    invoice_prefix: "ACM"
+    support_tier: gold
+```
+
+After slot generation, `spec.properties` in the deployment manifest contains:
+
+```yaml
+# build/customers/acme-eu-production.yaml (generated)
+spec:
+  properties:
+    customer: acme
+    zone: eu
+    crm_id: "42"          # ← from spec.configuration
+    invoice_prefix: "ACM"
+    support_tier: gold
+```
+
+These properties appear in `strata deploy list` output and the deployment manifest,
+but Terraform does not see them unless you also expose them as variables.
+
+### How values actually reach Terraform
+
+```
+customer.yaml  spec.environments            spec.references.variables
+      │                  │                          │
+      │            tier file                   (contract only —
+      │          spec.variables[]              declares required keys)
+      │                  │
+      │         environment variable             deployment
+      │           store definition             spec.variables[]
+      │                  │                          │
+      └──────────────────┴──────────────────────────┘
+                         │
+                  ValueController.resolve()
+                         │
+                  ResolvedValues.variables
+                         │
+                  inject_tf_vars()
+                         │
+                  TF_VAR_<key> in subprocess env
+                         │
+                  terraform plan / apply
+                         │
+                  var.<key> in .tf files
+```
+
+### Pattern A — Tier-wide constants (same value for all customers in a tier)
+
+Put the variable in the tier environment file. All customers using that tier share
+the same value.
+
+```yaml
+# environments/tiers/enterprise.yaml
+spec:
+  properties:
+    tier: enterprise
+  variables:
+    - key: vm_size
+      store: constant
+      value: Standard_D4s_v3
+    - key: replica_count
+      store: constant
+      value: "3"
+    - key: backup_retention_days
+      store: constant
+      value: "30"
+```
+
+Terraform root module:
+
+```hcl
+variable "vm_size"               {}
+variable "replica_count"         {}
+variable "backup_retention_days" {}
+```
+
+### Pattern B — Customer-specific constants
+
+Put the variable in a per-customer environment override file and reference it from
+the customer file. Only that customer sees the value.
+
+```yaml
+# environments/customers/acme-overrides.yaml
+spec:
+  variables:
+    - key: crm_id
+      store: constant
+      value: "42"
+    - key: invoice_prefix
+      store: constant
+      value: ACM
+```
+
+```yaml
+# customers/acme.yaml
+spec:
+  environments:
+    - environments/tiers/enterprise.yaml
+    - environments/customers/acme-overrides.yaml   # ← customer-specific values
+```
+
+Terraform root module:
+
+```hcl
+variable "crm_id"          {}
+variable "invoice_prefix"  {}
+```
+
+### Pattern C — CI-injected values
+
+Use `store: environment` to read from an environment variable in the CI runner.
+Useful for values that differ per pipeline run (e.g. a build number or deployment token)
+or values that must not appear in YAML source.
+
+```yaml
+# environments/tiers/enterprise.yaml (or deployment spec.variables)
+spec:
+  variables:
+    - key: deploy_token
+      store: environment
+      value: STRATA_DEPLOY_TOKEN    # reads os.environ["STRATA_DEPLOY_TOKEN"]
+```
+
+The CI pipeline sets `STRATA_DEPLOY_TOKEN` before running `strata deploy`. Strata
+reads it, adds it to `ResolvedValues.variables`, and injects it as `TF_VAR_deploy_token`.
+
+### Feature flags → Terraform booleans
+
+Feature flags set in a customer file or tier environment flow to Terraform as
+`TF_VAR_<flag>` with the value `"true"` or `"false"`.
+
+```yaml
+# customers/acme.yaml
+spec:
+  features:
+    new_dashboard: true
+```
+
+In Terraform:
+
+```hcl
+variable "new_dashboard" {
+  type    = bool
+  default = false
+}
+
+resource "kubernetes_config_map" "features" {
+  data = {
+    new_dashboard = var.new_dashboard
+  }
+}
+```
+
+### Secrets
+
+Secrets follow the same path as variables but are marked sensitive. Define them
+in environment files with a secret store backend:
+
+```yaml
+spec:
+  secrets:
+    - key: customer_api_key
+      store: azure-keyvault
+      value: customers/acme/api-key       # path in Key Vault
+```
+
+Strata injects secrets as `TF_VAR_<key>` alongside variables. Terraform treats
+them the same way — `variable "customer_api_key" { sensitive = true }`.
+
+### Declaring required keys (`spec.references`)
+
+Use `spec.references.variables` on the customer file to declare which variable
+keys a customer's deployments depend on. This is a contract — strata validates that
+every key is defined in the merged environment before the build runs:
+
+```yaml
+# customers/acme.yaml
+spec:
+  references:
+    variables: [vm_size, crm_id, deploy_token]
+    secrets:   [customer_api_key]
+    features:  [new_dashboard]
+```
+
+If a referenced key is missing from all merged environment layers, `strata build`
+fails with: *"Customer 'acme' requires variable 'crm_id' but it is not defined in any
+merged environment layer."*
+
+### Merge precedence (lowest → highest)
+
+1. Workspace defaults
+2. Customer tier environment files (`spec.environments`, in order)
+3. Lifecycle/deployment environment files (dev, test, acceptance, production)
+4. Deployment `spec.variables` (highest — overrides everything)
+
+Later layers override earlier ones by key. This means production secrets always
+win over tier defaults, and deployment-level overrides are the final word.
 
 ---
 

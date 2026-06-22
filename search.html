@@ -138,7 +138,11 @@
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#tools-status-options"><code class="docutils literal notranslate"><span class="pre">tools</span> <span class="pre">status</span></code> options</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="platform/commands.html#new"><code class="docutils literal notranslate"><span class="pre">new</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="platform/commands.html#new"><code class="docutils literal notranslate"><span class="pre">new</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="platform/commands.html#template-resolution-order">Template resolution order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="platform/commands.html#bundle-templates">Bundle templates</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="platform/commands.html#config"><code class="docutils literal notranslate"><span class="pre">config</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#config-set-key-value"><code class="docutils literal notranslate"><span class="pre">config</span> <span class="pre">set</span> <span class="pre">KEY</span> <span class="pre">VALUE</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#config-unset-key"><code class="docutils literal notranslate"><span class="pre">config</span> <span class="pre">unset</span> <span class="pre">KEY</span></code></a></li>
@@ -205,6 +209,8 @@
 <li class="toctree-l2"><a class="reference internal" href="platform/commands.html#deploy"><code class="docutils literal notranslate"><span class="pre">deploy</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-run"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-destroy"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-show"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-list"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">list</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-status"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">status</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-history"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">history</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="platform/commands.html#deploy-health"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">health</span></code></a></li>
@@ -258,7 +264,10 @@
 <li class="toctree-l3"><a class="reference internal" href="platform/workflow.html#inspect-resolved-values-for-a-deployment">4.5 Inspect resolved values for a deployment</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="platform/workflow.html#phase-4b-create-new-config-files">Phase 4b — Create New Config Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="platform/workflow.html#phase-4b-create-new-config-files">Phase 4b — Create New Config Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="platform/workflow.html#bundle-templates-multi-file-scaffolding">Bundle templates (multi-file scaffolding)</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="platform/workflow.html#phase-5-validate-yaml-files">Phase 5 — Validate YAML Files</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="platform/workflow.html#structural-validation-pydantic-schema">5.1 Structural validation (Pydantic schema)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="platform/workflow.html#deep-validation-cross-references-against-active-profile">5.2 Deep validation (cross-references against active profile)</a></li>
@@ -853,7 +862,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#provisioner-stage-types">Provisioner Stage Types</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config/deployment.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config/deployment.html#deploying-argocd-applicationsets">Deploying ArgoCD ApplicationSets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#best-practices">Best Practices</a></li>
 <li class="toctree-l2"><a class="reference internal" href="config/deployment.html#locking">Locking</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="config/deployment.html#lock-backend-by-provisioner-type">Lock Backend by Provisioner Type</a></li>
@@ -876,6 +885,7 @@
 <li class="toctree-l3"><a class="reference internal" href="config/environment.html#module-overrides">Module Overrides</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/environment.html#resource-overrides">Resource Overrides</a></li>
 <li class="toctree-l3"><a class="reference internal" href="config/environment.html#provider-overrides">Provider Overrides</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config/environment.html#remote-reference-overrides">Remote Reference Overrides</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="config/environment.html#variables">Variables</a></li>
@@ -1572,6 +1582,14 @@
 <li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#customer-slots-dedicated-per-customer">Customer Slots (dedicated, per-customer)</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="guides/at-scale.html#workspace-per-layer-pattern">Workspace-per-Layer Pattern</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#why-one-workspace-per-layer">Why one workspace per layer?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#the-three-workspaces">The three workspaces</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#why-this-works-at-400-deployments">Why this works at 400+ deployments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#layer-boundaries-are-enforced-by-convention">Layer boundaries are enforced by convention</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#example-deployment-structure">Example deployment structure</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="guides/at-scale.html#new-concepts">New Concepts</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#customer-registry-kind-customer">Customer Registry (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">customer</span></code>)</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="guides/at-scale.html#environment-merge-order">Environment Merge Order</a></li>
@@ -1582,6 +1600,18 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#generated-deployments-per-customer">Generated Deployments (per customer)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="guides/at-scale.html#variable-flow-customer-metadata-terraform">Variable Flow: Customer Metadata → Terraform</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#spec-configuration-is-metadata-not-terraform-input"><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> is metadata, not Terraform input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#how-values-actually-reach-terraform">How values actually reach Terraform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#pattern-a-tier-wide-constants-same-value-for-all-customers-in-a-tier">Pattern A — Tier-wide constants (same value for all customers in a tier)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#pattern-b-customer-specific-constants">Pattern B — Customer-specific constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#pattern-c-ci-injected-values">Pattern C — CI-injected values</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#feature-flags-terraform-booleans">Feature flags → Terraform booleans</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#secrets">Secrets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#declaring-required-keys-spec-references">Declaring required keys (<code class="docutils literal notranslate"><span class="pre">spec.references</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/at-scale.html#merge-precedence-lowest-highest">Merge precedence (lowest → highest)</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="guides/at-scale.html#cross-workspace-references">Cross-Workspace References</a><ul>

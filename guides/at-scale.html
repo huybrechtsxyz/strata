@@ -137,7 +137,11 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#tools-status-options"><code class="docutils literal notranslate"><span class="pre">tools</span> <span class="pre">status</span></code> options</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#new"><code class="docutils literal notranslate"><span class="pre">new</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#new"><code class="docutils literal notranslate"><span class="pre">new</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#template-resolution-order">Template resolution order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#bundle-templates">Bundle templates</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#config"><code class="docutils literal notranslate"><span class="pre">config</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#config-set-key-value"><code class="docutils literal notranslate"><span class="pre">config</span> <span class="pre">set</span> <span class="pre">KEY</span> <span class="pre">VALUE</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#config-unset-key"><code class="docutils literal notranslate"><span class="pre">config</span> <span class="pre">unset</span> <span class="pre">KEY</span></code></a></li>
@@ -204,6 +208,8 @@
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#deploy"><code class="docutils literal notranslate"><span class="pre">deploy</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-run"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-destroy"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-show"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-list"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">list</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-status"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">status</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-history"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">history</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-health"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">health</span></code></a></li>
@@ -257,7 +263,10 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#inspect-resolved-values-for-a-deployment">4.5 Inspect resolved values for a deployment</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/workflow.html#phase-4b-create-new-config-files">Phase 4b — Create New Config Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/workflow.html#phase-4b-create-new-config-files">Phase 4b — Create New Config Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#bundle-templates-multi-file-scaffolding">Bundle templates (multi-file scaffolding)</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/workflow.html#phase-5-validate-yaml-files">Phase 5 — Validate YAML Files</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#structural-validation-pydantic-schema">5.1 Structural validation (Pydantic schema)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#deep-validation-cross-references-against-active-profile">5.2 Deep validation (cross-references against active profile)</a></li>
@@ -852,7 +861,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#provisioner-stage-types">Provisioner Stage Types</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#deploying-argocd-applicationsets">Deploying ArgoCD ApplicationSets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#best-practices">Best Practices</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/deployment.html#locking">Locking</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../config/deployment.html#lock-backend-by-provisioner-type">Lock Backend by Provisioner Type</a></li>
@@ -875,6 +884,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../config/environment.html#module-overrides">Module Overrides</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/environment.html#resource-overrides">Resource Overrides</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/environment.html#provider-overrides">Provider Overrides</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/environment.html#remote-reference-overrides">Remote Reference Overrides</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#variables">Variables</a></li>
@@ -1571,6 +1581,14 @@
 <li class="toctree-l3"><a class="reference internal" href="#customer-slots-dedicated-per-customer">Customer Slots (dedicated, per-customer)</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#workspace-per-layer-pattern">Workspace-per-Layer Pattern</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#why-one-workspace-per-layer">Why one workspace per layer?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-three-workspaces">The three workspaces</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#why-this-works-at-400-deployments">Why this works at 400+ deployments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#layer-boundaries-are-enforced-by-convention">Layer boundaries are enforced by convention</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#example-deployment-structure">Example deployment structure</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#new-concepts">New Concepts</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#customer-registry-kind-customer">Customer Registry (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">customer</span></code>)</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#environment-merge-order">Environment Merge Order</a></li>
@@ -1581,6 +1599,18 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#generated-deployments-per-customer">Generated Deployments (per customer)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#variable-flow-customer-metadata-terraform">Variable Flow: Customer Metadata → Terraform</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#spec-configuration-is-metadata-not-terraform-input"><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> is metadata, not Terraform input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#how-values-actually-reach-terraform">How values actually reach Terraform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pattern-a-tier-wide-constants-same-value-for-all-customers-in-a-tier">Pattern A — Tier-wide constants (same value for all customers in a tier)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pattern-b-customer-specific-constants">Pattern B — Customer-specific constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pattern-c-ci-injected-values">Pattern C — CI-injected values</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#feature-flags-terraform-booleans">Feature flags → Terraform booleans</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#secrets">Secrets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#declaring-required-keys-spec-references">Declaring required keys (<code class="docutils literal notranslate"><span class="pre">spec.references</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#merge-precedence-lowest-highest">Merge precedence (lowest → highest)</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#cross-workspace-references">Cross-Workspace References</a><ul>
@@ -1769,6 +1799,94 @@
 </section>
 </section>
 <hr class="docutils" />
+<section id="workspace-per-layer-pattern">
+<h2>Workspace-per-Layer Pattern<a class="headerlink" href="#workspace-per-layer-pattern" title="Link to this heading"></a></h2>
+<p>Each deployment layer owns <strong>one workspace file</strong>. This is the single most important
+structural decision for operating strata at scale.</p>
+<section id="why-one-workspace-per-layer">
+<h3>Why one workspace per layer?<a class="headerlink" href="#why-one-workspace-per-layer" title="Link to this heading"></a></h3>
+<p>A workspace defines all possible resources and modules for a deployment scope. When
+two deployment scopes share a workspace, the workspace grows to accommodate both —
+and both must be kept in sync even when only one changes.</p>
+<p>One workspace per layer keeps each workspace small (2–5 resources, 1–3 provisioners),
+scoped to its layer’s blast radius, and independently evolvable.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Pattern</p></th>
+<th class="head"><p>Workspace size</p></th>
+<th class="head"><p>Blast radius</p></th>
+<th class="head"><p>Independent evolution</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>One workspace for everything</p></td>
+<td><p>20–50 resources</p></td>
+<td><p>Entire platform</p></td>
+<td><p>❌ Changes affect all layers</p></td>
+</tr>
+<tr class="row-odd"><td><p>One workspace per layer</p></td>
+<td><p>2–5 resources</p></td>
+<td><p>That layer only</p></td>
+<td><p>✅ Layers evolve independently</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="the-three-workspaces">
+<h3>The three workspaces<a class="headerlink" href="#the-three-workspaces" title="Link to this heading"></a></h3>
+<p>For the three-layer architecture above, this means three workspace files:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>workspaces/
+  bootstrap.yaml        ← Layer 0: Key Vault, ACR, state backend
+  infrastructure.yaml   ← Layer 1: AKS, VNet, ArgoCD, monitoring
+  application.yaml      ← Layer 2: namespace, RBAC, secrets scope, storage
+</pre></div>
+</div>
+<p>Each workspace defines the resources and modules for its layer. Deployments reference
+exactly one workspace. The workspace does not know about other layers — it only knows
+about its own resources.</p>
+</section>
+<section id="why-this-works-at-400-deployments">
+<h3>Why this works at 400+ deployments<a class="headerlink" href="#why-this-works-at-400-deployments" title="Link to this heading"></a></h3>
+<p>The 400 customer slots (100 customers × 4 environments) all reference <code class="docutils literal notranslate"><span class="pre">application.yaml</span></code>.
+The workspace defines what <em>can</em> exist in a customer deployment. The environment files
+control what <em>is</em> active for each customer and environment. No workspace changes are
+needed when onboarding a new customer — only a new deployment manifest and environment
+overrides are needed.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>application.yaml         ← defines: namespace, RBAC, webapp, storage, cdn, monitoring
+    ↑
+    referenced by 400 deployment manifests
+    each deployment selects its active resources via environment overrides
+</pre></div>
+</div>
+</section>
+<section id="layer-boundaries-are-enforced-by-convention">
+<h3>Layer boundaries are enforced by convention<a class="headerlink" href="#layer-boundaries-are-enforced-by-convention" title="Link to this heading"></a></h3>
+<p>A deployment manifest in Layer 2 references <code class="docutils literal notranslate"><span class="pre">workspace:</span> <span class="pre">application</span></code>. If someone
+accidentally puts <code class="docutils literal notranslate"><span class="pre">workspace:</span> <span class="pre">infrastructure</span></code> in a customer deployment, they get access
+to zone-level resources — a misconfiguration that crosses the layer boundary.</p>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--path</span> <span class="pre">&quot;deployments/**&quot;</span></code> (GAP-03 overlap check) detects namespace
+and artifact_path collisions that would result from this, providing a safety net even
+without an explicit layer-boundary rule.</p>
+</section>
+<section id="example-deployment-structure">
+<h3>Example deployment structure<a class="headerlink" href="#example-deployment-structure" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">deployments</span><span class="o">/</span>
+  <span class="n">bootstrap</span><span class="o">.</span><span class="n">yaml</span>                    <span class="c1"># Layer 0, workspace: bootstrap</span>
+  <span class="n">zones</span><span class="o">/</span>
+    <span class="n">eu</span><span class="o">.</span><span class="n">yaml</span>                         <span class="c1"># Layer 1, workspace: infrastructure</span>
+    <span class="n">us</span><span class="o">.</span><span class="n">yaml</span>                         <span class="c1"># Layer 1, workspace: infrastructure</span>
+  <span class="n">customers</span><span class="o">/</span>
+    <span class="n">acme</span><span class="o">-</span><span class="n">eu</span><span class="o">-</span><span class="n">prd</span><span class="o">.</span><span class="n">yaml</span>                <span class="c1"># Layer 2, workspace: application</span>
+    <span class="n">acme</span><span class="o">-</span><span class="n">eu</span><span class="o">-</span><span class="n">acc</span><span class="o">.</span><span class="n">yaml</span>                <span class="c1"># Layer 2, workspace: application</span>
+    <span class="n">contoso</span><span class="o">-</span><span class="n">eu</span><span class="o">-</span><span class="n">prd</span><span class="o">.</span><span class="n">yaml</span>             <span class="c1"># Layer 2, workspace: application</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p>The directory structure mirrors the layer hierarchy. Each file references the workspace
+for its layer. New customers = new files, no workspace changes.</p>
+</section>
+</section>
+<hr class="docutils" />
 <section id="new-concepts">
 <h2>New Concepts<a class="headerlink" href="#new-concepts" title="Link to this heading"></a></h2>
 <section id="customer-registry-kind-customer">
@@ -1953,6 +2071,224 @@
 </pre></div>
 </div>
 <p>The application workspace defines all possible customer resources (namespace, RBAC, storage, network policies, app modules). The merged environments control which are active and how they’re sized. Standard strata build/deploy pipeline handles the rest.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="variable-flow-customer-metadata-terraform">
+<h2>Variable Flow: Customer Metadata → Terraform<a class="headerlink" href="#variable-flow-customer-metadata-terraform" title="Link to this heading"></a></h2>
+<p>Customer files carry two kinds of data that look similar but flow differently:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Purpose</p></th>
+<th class="head"><p>Reaches Terraform?</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code></p></td>
+<td><p>Deployment metadata — routing, labeling, audit</p></td>
+<td><p>❌ Not automatically</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">spec.environments[]</span></code> → tier file <code class="docutils literal notranslate"><span class="pre">spec.variables[]</span></code></p></td>
+<td><p>Runtime values resolved at deploy time</p></td>
+<td><p>✅ Yes, as <code class="docutils literal notranslate"><span class="pre">TF_VAR_*</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">spec.references.variables</span></code></p></td>
+<td><p>Declares which variable keys this customer <em>requires</em></p></td>
+<td><p>Contract only — no values</p></td>
+</tr>
+</tbody>
+</table>
+<section id="spec-configuration-is-metadata-not-terraform-input">
+<h3><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> is metadata, not Terraform input<a class="headerlink" href="#spec-configuration-is-metadata-not-terraform-input" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> holds arbitrary key/value pairs that are injected into the
+generated deployment’s <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> at slot generation time. These appear in
+the deployment manifest and are useful for routing, labeling, and audit. They are
+<strong>not</strong> automatically passed to Terraform.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># customers/acme.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">crm_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;42&quot;</span>
+<span class="w">    </span><span class="nt">invoice_prefix</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ACM&quot;</span>
+<span class="w">    </span><span class="nt">support_tier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gold</span>
+</pre></div>
+</div>
+<p>After slot generation, <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> in the deployment manifest contains:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># build/customers/acme-eu-production.yaml (generated)</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">customer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="w">    </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu</span>
+<span class="w">    </span><span class="nt">crm_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;42&quot;</span><span class="w">          </span><span class="c1"># ← from spec.configuration</span>
+<span class="w">    </span><span class="nt">invoice_prefix</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ACM&quot;</span>
+<span class="w">    </span><span class="nt">support_tier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gold</span>
+</pre></div>
+</div>
+<p>These properties appear in <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">list</span></code> output and the deployment manifest,
+but Terraform does not see them unless you also expose them as variables.</p>
+</section>
+<section id="how-values-actually-reach-terraform">
+<h3>How values actually reach Terraform<a class="headerlink" href="#how-values-actually-reach-terraform" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>customer.yaml  spec.environments            spec.references.variables
+      │                  │                          │
+      │            tier file                   (contract only —
+      │          spec.variables[]              declares required keys)
+      │                  │
+      │         environment variable             deployment
+      │           store definition             spec.variables[]
+      │                  │                          │
+      └──────────────────┴──────────────────────────┘
+                         │
+                  ValueController.resolve()
+                         │
+                  ResolvedValues.variables
+                         │
+                  inject_tf_vars()
+                         │
+                  TF_VAR_&lt;key&gt; in subprocess env
+                         │
+                  terraform plan / apply
+                         │
+                  var.&lt;key&gt; in .tf files
+</pre></div>
+</div>
+</section>
+<section id="pattern-a-tier-wide-constants-same-value-for-all-customers-in-a-tier">
+<h3>Pattern A — Tier-wide constants (same value for all customers in a tier)<a class="headerlink" href="#pattern-a-tier-wide-constants-same-value-for-all-customers-in-a-tier" title="Link to this heading"></a></h3>
+<p>Put the variable in the tier environment file. All customers using that tier share
+the same value.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># environments/tiers/enterprise.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">enterprise</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vm_size</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Standard_D4s_v3</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">replica_count</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">backup_retention_days</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;30&quot;</span>
+</pre></div>
+</div>
+<p>Terraform root module:</p>
+<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;vm_size&quot;</span><span class="w">               </span><span class="p">{}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;replica_count&quot;</span><span class="w">         </span><span class="p">{}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;backup_retention_days&quot;</span><span class="w"> </span><span class="p">{}</span>
+</pre></div>
+</div>
+</section>
+<section id="pattern-b-customer-specific-constants">
+<h3>Pattern B — Customer-specific constants<a class="headerlink" href="#pattern-b-customer-specific-constants" title="Link to this heading"></a></h3>
+<p>Put the variable in a per-customer environment override file and reference it from
+the customer file. Only that customer sees the value.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># environments/customers/acme-overrides.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">crm_id</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;42&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">invoice_prefix</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ACM</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># customers/acme.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/tiers/enterprise.yaml</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/customers/acme-overrides.yaml</span><span class="w">   </span><span class="c1"># ← customer-specific values</span>
+</pre></div>
+</div>
+<p>Terraform root module:</p>
+<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;crm_id&quot;</span><span class="w">          </span><span class="p">{}</span>
+<span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;invoice_prefix&quot;</span><span class="w">  </span><span class="p">{}</span>
+</pre></div>
+</div>
+</section>
+<section id="pattern-c-ci-injected-values">
+<h3>Pattern C — CI-injected values<a class="headerlink" href="#pattern-c-ci-injected-values" title="Link to this heading"></a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">environment</span></code> to read from an environment variable in the CI runner.
+Useful for values that differ per pipeline run (e.g. a build number or deployment token)
+or values that must not appear in YAML source.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># environments/tiers/enterprise.yaml (or deployment spec.variables)</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy_token</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRATA_DEPLOY_TOKEN</span><span class="w">    </span><span class="c1"># reads os.environ[&quot;STRATA_DEPLOY_TOKEN&quot;]</span>
+</pre></div>
+</div>
+<p>The CI pipeline sets <code class="docutils literal notranslate"><span class="pre">STRATA_DEPLOY_TOKEN</span></code> before running <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code>. Strata
+reads it, adds it to <code class="docutils literal notranslate"><span class="pre">ResolvedValues.variables</span></code>, and injects it as <code class="docutils literal notranslate"><span class="pre">TF_VAR_deploy_token</span></code>.</p>
+</section>
+<section id="feature-flags-terraform-booleans">
+<h3>Feature flags → Terraform booleans<a class="headerlink" href="#feature-flags-terraform-booleans" title="Link to this heading"></a></h3>
+<p>Feature flags set in a customer file or tier environment flow to Terraform as
+<code class="docutils literal notranslate"><span class="pre">TF_VAR_&lt;flag&gt;</span></code> with the value <code class="docutils literal notranslate"><span class="pre">&quot;true&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;false&quot;</span></code>.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># customers/acme.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">features</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">new_dashboard</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>In Terraform:</p>
+<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="kr">variable</span><span class="w"> </span><span class="nv">&quot;new_dashboard&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">type</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="kt">bool</span>
+<span class="w">  </span><span class="na">default</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="no">false</span>
+<span class="p">}</span>
+
+<span class="kr">resource</span><span class="w"> </span><span class="nc">&quot;kubernetes_config_map&quot;</span><span class="w"> </span><span class="nv">&quot;features&quot;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nb">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="na">new_dashboard</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">var.new_dashboard</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="secrets">
+<h3>Secrets<a class="headerlink" href="#secrets" title="Link to this heading"></a></h3>
+<p>Secrets follow the same path as variables but are marked sensitive. Define them
+in environment files with a secret store backend:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer_api_key</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-keyvault</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customers/acme/api-key</span><span class="w">       </span><span class="c1"># path in Key Vault</span>
+</pre></div>
+</div>
+<p>Strata injects secrets as <code class="docutils literal notranslate"><span class="pre">TF_VAR_&lt;key&gt;</span></code> alongside variables. Terraform treats
+them the same way — <code class="docutils literal notranslate"><span class="pre">variable</span> <span class="pre">&quot;customer_api_key&quot;</span> <span class="pre">{</span> <span class="pre">sensitive</span> <span class="pre">=</span> <span class="pre">true</span> <span class="pre">}</span></code>.</p>
+</section>
+<section id="declaring-required-keys-spec-references">
+<h3>Declaring required keys (<code class="docutils literal notranslate"><span class="pre">spec.references</span></code>)<a class="headerlink" href="#declaring-required-keys-spec-references" title="Link to this heading"></a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">spec.references.variables</span></code> on the customer file to declare which variable
+keys a customer’s deployments depend on. This is a contract — strata validates that
+every key is defined in the merged environment before the build runs:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># customers/acme.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">references</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">variables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">vm_size</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">crm_id</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">deploy_token</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">secrets</span><span class="p">:</span><span class="w">   </span><span class="p p-Indicator">[</span><span class="nv">customer_api_key</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">features</span><span class="p">:</span><span class="w">  </span><span class="p p-Indicator">[</span><span class="nv">new_dashboard</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>If a referenced key is missing from all merged environment layers, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span></code>
+fails with: <em>“Customer ‘acme’ requires variable ‘crm_id’ but it is not defined in any
+merged environment layer.”</em></p>
+</section>
+<section id="merge-precedence-lowest-highest">
+<h3>Merge precedence (lowest → highest)<a class="headerlink" href="#merge-precedence-lowest-highest" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>Workspace defaults</p></li>
+<li><p>Customer tier environment files (<code class="docutils literal notranslate"><span class="pre">spec.environments</span></code>, in order)</p></li>
+<li><p>Lifecycle/deployment environment files (dev, test, acceptance, production)</p></li>
+<li><p>Deployment <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code> (highest — overrides everything)</p></li>
+</ol>
+<p>Later layers override earlier ones by key. This means production secrets always
+win over tier defaults, and deployment-level overrides are the final word.</p>
 </section>
 </section>
 <hr class="docutils" />

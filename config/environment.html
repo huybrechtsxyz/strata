@@ -138,7 +138,11 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#tools-status-options"><code class="docutils literal notranslate"><span class="pre">tools</span> <span class="pre">status</span></code> options</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#new"><code class="docutils literal notranslate"><span class="pre">new</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#new"><code class="docutils literal notranslate"><span class="pre">new</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#template-resolution-order">Template resolution order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#bundle-templates">Bundle templates</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#config"><code class="docutils literal notranslate"><span class="pre">config</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#config-set-key-value"><code class="docutils literal notranslate"><span class="pre">config</span> <span class="pre">set</span> <span class="pre">KEY</span> <span class="pre">VALUE</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#config-unset-key"><code class="docutils literal notranslate"><span class="pre">config</span> <span class="pre">unset</span> <span class="pre">KEY</span></code></a></li>
@@ -205,6 +209,8 @@
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#deploy"><code class="docutils literal notranslate"><span class="pre">deploy</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-run"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-destroy"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-show"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-list"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">list</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-status"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">status</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-history"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">history</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-health"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">health</span></code></a></li>
@@ -258,7 +264,10 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#inspect-resolved-values-for-a-deployment">4.5 Inspect resolved values for a deployment</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/workflow.html#phase-4b-create-new-config-files">Phase 4b — Create New Config Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/workflow.html#phase-4b-create-new-config-files">Phase 4b — Create New Config Files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#bundle-templates-multi-file-scaffolding">Bundle templates (multi-file scaffolding)</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/workflow.html#phase-5-validate-yaml-files">Phase 5 — Validate YAML Files</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#structural-validation-pydantic-schema">5.1 Structural validation (Pydantic schema)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#deep-validation-cross-references-against-active-profile">5.2 Deep validation (cross-references against active profile)</a></li>
@@ -853,7 +862,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#provisioner-stage-types">Provisioner Stage Types</a></li>
-<li class="toctree-l2"><a class="reference internal" href="deployment.html#source-types">Source Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deployment.html#deploying-argocd-applicationsets">Deploying ArgoCD ApplicationSets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#best-practices">Best Practices</a></li>
 <li class="toctree-l2"><a class="reference internal" href="deployment.html#locking">Locking</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="deployment.html#lock-backend-by-provisioner-type">Lock Backend by Provisioner Type</a></li>
@@ -876,6 +885,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#module-overrides">Module Overrides</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#resource-overrides">Resource Overrides</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#provider-overrides">Provider Overrides</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#remote-reference-overrides">Remote Reference Overrides</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#variables">Variables</a></li>
@@ -1572,6 +1582,14 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#customer-slots-dedicated-per-customer">Customer Slots (dedicated, per-customer)</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#workspace-per-layer-pattern">Workspace-per-Layer Pattern</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#why-one-workspace-per-layer">Why one workspace per layer?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#the-three-workspaces">The three workspaces</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#why-this-works-at-400-deployments">Why this works at 400+ deployments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#layer-boundaries-are-enforced-by-convention">Layer boundaries are enforced by convention</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#example-deployment-structure">Example deployment structure</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#new-concepts">New Concepts</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#customer-registry-kind-customer">Customer Registry (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">customer</span></code>)</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="../guides/at-scale.html#environment-merge-order">Environment Merge Order</a></li>
@@ -1582,6 +1600,18 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#generated-deployments-per-customer">Generated Deployments (per customer)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#variable-flow-customer-metadata-terraform">Variable Flow: Customer Metadata → Terraform</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#spec-configuration-is-metadata-not-terraform-input"><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> is metadata, not Terraform input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#how-values-actually-reach-terraform">How values actually reach Terraform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#pattern-a-tier-wide-constants-same-value-for-all-customers-in-a-tier">Pattern A — Tier-wide constants (same value for all customers in a tier)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#pattern-b-customer-specific-constants">Pattern B — Customer-specific constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#pattern-c-ci-injected-values">Pattern C — CI-injected values</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#feature-flags-terraform-booleans">Feature flags → Terraform booleans</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#secrets">Secrets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#declaring-required-keys-spec-references">Declaring required keys (<code class="docutils literal notranslate"><span class="pre">spec.references</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#merge-precedence-lowest-highest">Merge precedence (lowest → highest)</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#cross-workspace-references">Cross-Workspace References</a><ul>
@@ -1689,6 +1719,7 @@
 <span class="w">    </span><span class="nt">resources</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w"> </span><span class="c1"># Resource-level overrides</span>
 <span class="w">    </span><span class="nt">modules</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w"> </span><span class="c1"># Module-level overrides (images, chart versions, enabled state)</span>
 <span class="w">    </span><span class="nt">providers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w"> </span><span class="c1"># Provider-level overrides</span>
+<span class="w">    </span><span class="nt">remotes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w"> </span><span class="c1"># Remote reference overrides (pin version/tag/branch per environment)</span>
 <span class="w">    </span><span class="nt">properties</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span><span class="w"> </span><span class="c1"># Override workspace properties</span>
 <span class="w">    </span><span class="nt">includes</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w"> </span><span class="c1"># Terraform file includes</span>
 <span class="w">  </span><span class="nt">variables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w"> </span><span class="c1"># Override/extend workspace variables</span>
@@ -1840,6 +1871,49 @@ qualifiers to narrow the override:</p>
 <span class="w">          </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;eu-west-1&quot;</span>
 </pre></div>
 </div>
+</section>
+<section id="remote-reference-overrides">
+<h3>Remote Reference Overrides<a class="headerlink" href="#remote-reference-overrides" title="Link to this heading"></a></h3>
+<p>Each remote’s <strong>base reference</strong> (default version, tag, or branch) is defined once in
+<code class="docutils literal notranslate"><span class="pre">configuration.spec.remotes[].reference</span></code>. This is the version used for every environment
+unless an override is present.</p>
+<p>To use a different version in a specific environment, add an entry under
+<code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes</span></code>. The <code class="docutils literal notranslate"><span class="pre">remote</span></code> name must match an entry in <code class="docutils literal notranslate"><span class="pre">configuration.spec.remotes</span></code>.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># configuration.yaml — defines the base reference used when no override is present</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">remotes</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf_landscape</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gitops</span>
+<span class="w">      </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://github.com/org/tf-landscape.git</span>
+<span class="w">      </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span><span class="w">          </span><span class="c1"># ← base/default for all environments</span>
+<span class="w">      </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># env-prd.yaml — pins production to a specific release tag</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">overrides</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">remotes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">remote</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf_landscape</span><span class="w">   </span><span class="c1"># must match configuration spec.remotes[].name</span>
+<span class="w">        </span><span class="nt">reference</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1.2.3</span><span class="w">      </span><span class="c1"># overrides the base reference for this environment only</span>
+</pre></div>
+</div>
+<p><strong>Resolution chain (highest to lowest priority):</strong></p>
+<ol class="arabic simple">
+<li><p>Environment <code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[name].reference</span></code> — per-environment pin</p></li>
+<li><p>Configuration <code class="docutils literal notranslate"><span class="pre">spec.remotes[name].reference</span></code> — base/default for all environments</p></li>
+</ol>
+<blockquote>
+<div><p><strong>Design note:</strong> The base reference is intentionally defined in one place (configuration)
+and overridden per environment. There is no module-level version pin — versioning is a
+deployment concern, not a module concern.</p>
+</div></blockquote>
+<p>At build time the remote is fetched, the working tree is verified clean, and the ref
+is checked out in detached-HEAD mode. The resolved commit SHA is logged.</p>
+<p><strong>Validation:</strong></p>
+<ul class="simple">
+<li><p>Each <code class="docutils literal notranslate"><span class="pre">remote</span></code> name must exist in <code class="docutils literal notranslate"><span class="pre">configuration.spec.remotes</span></code> (Phase 2 cross-validation — build fails if not found)</p></li>
+<li><p>Duplicate remote names within one environment are rejected at parse time</p></li>
+</ul>
 </section>
 </section>
 <section id="variables">

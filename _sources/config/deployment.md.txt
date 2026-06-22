@@ -505,7 +505,104 @@ Stages reference a provisioner by name. The backend tool used by that provisione
 | `helm`      | `HelmDeployer`      | Requires `helm` CLI; deploys per-module Helm releases. See [HelmDeployer](../platform/deployers.md#helmdeployer)                                   |
 | `script`    | `ScriptDeployer`    | Executes lifecycle scripts; no external CLI required                                                                                               |
 
-## Source Types
+## Deploying ArgoCD ApplicationSets
+
+ArgoCD ApplicationSets are Kubernetes CRDs — raw YAML manifests, not Helm values.
+Strata's Helm deployer passes `values.yaml` and `--set` flags to `helm upgrade`; it
+does not apply raw manifest files. This means ApplicationSets cannot be deployed as
+standalone YAML files through a strata Helm stage.
+
+**Recommended pattern: embed ApplicationSets as Helm values**
+
+The ArgoCD Helm chart exposes `server.additionalApplications` (and the newer
+`extraObjects` in chart v6+) which accepts Kubernetes resource definitions as plain
+YAML under a Helm value. Pass your ApplicationSet definition there and Helm renders
+it as part of the ArgoCD chart installation — no separate `kubectl apply` step needed.
+
+```yaml
+# workspaces/infrastructure.yaml
+spec:
+  provisioners:
+    - name: argocd
+      provisioner: helm
+      source:
+        repository: argocd_charts
+        source_path: argocd
+```
+
+```yaml
+# modules/argocd/values.yaml  (in argocd_charts repo)
+server:
+  additionalApplications: []   # extended per-environment via overrides
+
+# ── OR with chart v6+ extraObjects ──────────────────────────────────────
+extraObjects:
+  - apiVersion: argoproj.io/v1alpha1
+    kind: ApplicationSet
+    metadata:
+      name: customer-webapp
+      namespace: argocd
+    spec:
+      generators:
+        - list:
+            elements: []        # populated via environment override
+      template:
+        spec:
+          source:
+            repoURL: https://git.company.com/deploy-charts
+            chart: company-webapp
+            targetRevision: "3.2.1"
+          destination:
+            server: https://kubernetes.default.svc
+            namespace: "{{namespace}}"
+```
+
+Environment overrides inject the per-environment generator list:
+
+```yaml
+# environments/production.yaml
+spec:
+  overrides:
+    modules:
+      - module: argocd
+        configuration:
+          extraObjects:
+            - apiVersion: argoproj.io/v1alpha1
+              kind: ApplicationSet
+              metadata:
+                name: customer-webapp
+                namespace: argocd
+              spec:
+                generators:
+                  - list:
+                      elements:
+                        - code: acme
+                          namespace: acme-prod
+                        - code: contoso
+                          namespace: contoso-prod
+                template:
+                  spec:
+                    source:
+                      chart: company-webapp
+                      targetRevision: "3.2.1"
+                    destination:
+                      namespace: "{{namespace}}"
+```
+
+**Why this is the right approach:**
+
+- No strata change required — strata passes values to Helm, Helm renders the CRD
+- The ApplicationSet definition is version-controlled in your chart values / overrides
+- Per-environment generator lists are managed through the standard environment override mechanism
+- ArgoCD owns the application lifecycle; strata owns the infrastructure lifecycle
+
+**Alternatives if you need raw manifest apply:**
+
+- Use a `script` provisioner that runs `kubectl apply -f` as a lifecycle hook
+- Apply ApplicationSets directly via ArgoCD's own GitOps sync (no strata involvement)
+- Wait for a future `kubectl` deployer type (tracked as a potential future enhancement)
+
+
 
 **Local:** Files in current repository (`type: local`)  
 **GitOps:** External Git repos (`type: gitops`)  

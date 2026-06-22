@@ -69,8 +69,8 @@ provisioners:
   - name: <provisioner_name>
     provisioner: terraform | ansible   # IaC tool
     source:
-      repository: <repository_name>    # must match a repo in configuration
-      source_path: <path>              # path within the repo
+      repository: <repository_name>    # optional — omit for single-repo workspaces
+      source_path: <path>              # path within the repo (or workspace root when repository is absent)
       target_path: <path>              # optional: path in the build output
     backend:                           # Terraform only — state storage
       type: terraform_cloud | azurerm | s3 | ...
@@ -81,6 +81,28 @@ provisioners:
       ssh_private_key_secret: <name>   # Ansible: secret key name in resolved_values.secrets
       extra_vars:                      # Ansible: extra -e variables
         key: value
+```
+
+**Single-repo form** — when IaC lives inside the workspace itself, omit `repository` and
+use `source_path` alone. strata resolves the path relative to the workspace root:
+
+```yaml
+provisioners:
+  - name: platform_iac
+    provisioner: terraform
+    source:
+      source_path: terraform   # resolved as <workspace_root>/terraform
+```
+
+**Multi-repo form** — when IaC lives in a separate registered repository:
+
+```yaml
+provisioners:
+  - name: platform_iac
+    provisioner: terraform
+    source:
+      repository: platform-iac   # must match a repo registered via `strata repo add`
+      source_path: deploy/terraform
 ```
 
 ### Provisioner types

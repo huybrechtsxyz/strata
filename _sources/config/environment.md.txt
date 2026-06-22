@@ -28,6 +28,7 @@ spec:
     resources: [] # Resource-level overrides
     modules: [] # Module-level overrides (images, chart versions, enabled state)
     providers: [] # Provider-level overrides
+    remotes: [] # Remote reference overrides (pin version/tag/branch per environment)
     properties: {} # Override workspace properties
     includes: [] # Terraform file includes
   variables: [] # Override/extend workspace variables
@@ -155,6 +156,50 @@ spec:
         configuration:
           region: "eu-west-1"
 ```
+
+### Remote Reference Overrides
+
+Each remote's **base reference** (default version, tag, or branch) is defined once in
+`configuration.spec.remotes[].reference`. This is the version used for every environment
+unless an override is present.
+
+To use a different version in a specific environment, add an entry under
+`spec.overrides.remotes`. The `remote` name must match an entry in `configuration.spec.remotes`.
+
+```yaml
+# configuration.yaml — defines the base reference used when no override is present
+spec:
+  remotes:
+    - name: tf_landscape
+      type: gitops
+      repository: https://github.com/org/tf-landscape.git
+      reference: main          # ← base/default for all environments
+      source_path: terraform
+```
+
+```yaml
+# env-prd.yaml — pins production to a specific release tag
+spec:
+  overrides:
+    remotes:
+      - remote: tf_landscape   # must match configuration spec.remotes[].name
+        reference: v1.2.3      # overrides the base reference for this environment only
+```
+
+**Resolution chain (highest to lowest priority):**
+1. Environment `spec.overrides.remotes[name].reference` — per-environment pin
+2. Configuration `spec.remotes[name].reference` — base/default for all environments
+
+> **Design note:** The base reference is intentionally defined in one place (configuration)
+> and overridden per environment. There is no module-level version pin — versioning is a
+> deployment concern, not a module concern.
+
+At build time the remote is fetched, the working tree is verified clean, and the ref
+is checked out in detached-HEAD mode. The resolved commit SHA is logged.
+
+**Validation:**
+- Each `remote` name must exist in `configuration.spec.remotes` (Phase 2 cross-validation — build fails if not found)
+- Duplicate remote names within one environment are rejected at parse time
 
 ## Variables
 
