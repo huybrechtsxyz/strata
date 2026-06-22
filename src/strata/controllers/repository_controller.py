@@ -127,6 +127,112 @@ class RepositoryController(BaseController):
 
         return len(self._errors) == 0, self._errors.copy()
 
+    def ensure_remote_refs(
+        self,
+        config_service: ConfigurationService,
+        work_path: "Path",
+        repo_map: Dict[str, str],
+    ) -> Tuple[bool, Dict[str, str]]:
+        """Check out each gitops remote to the reference currently on its RemoteModel.
+
+        Call this *after* ``DeploymentService.apply_environment_overrides()`` so that
+        environment-level remote overrides are already reflected in the model.
+
+        For each gitops remote whose ``reference`` is set the method:
+        1. Runs ``git fetch origin --tags`` (best-effort; failure is a warning, not fatal).
+        2. Checks the working tree is clean (fails with a clear message if dirty).
+        3. Runs ``git checkout --detach <reference>``.
+        4. Resolves HEAD to a full commit SHA via ``git rev-parse HEAD``.
+
+        Args:
+            config_service: Loaded, validated ``ConfigurationService`` instance.
+            work_path: Workspace root ``Path`` — used to resolve remote target directories.
+            repo_map: Solution-level repo name → path mapping (for ``_resolve_target_path``).
+
+        Returns:
+            ``(success, resolved_refs)`` where *resolved_refs* maps remote name → resolved
+            commit SHA.  On failure ``resolved_refs`` contains whichever SHAs were resolved
+            before the first error.
+        """
+        resolved_refs: Dict[str, str] = {}
+
+        if not config_service.model or not config_service.model.spec:
+            return True, resolved_refs
+
+        remotes = config_service.model.spec.remotes or []
+        gitops_with_ref = [r for r in remotes if r.type == RemoteType.GITOPS and r.reference]
+
+        if not gitops_with_ref:
+            return True, resolved_refs
+
+        git = self._get_git_integration()
+        if git is None:
+            return False, resolved_refs
+
+        all_ok = True
+
+        for remote in gitops_with_ref:
+            remote_name = str(remote.name)
+            target_path = self._resolve_target_path(work_path=str(work_path), source=remote)
+
+            if not target_path.exists():
+                self._errors.append(
+                    f"Remote '{remote_name}' has not been fetched yet "
+                    f"(expected at '{target_path}'). Run `strata config fetch` first."
+                )
+                all_ok = False
+                continue
+
+            ref = str(remote.reference)
+
+            # Step 1 — fetch with tags (best-effort; network may be unavailable)
+            fetch_result = git.fetch(str(target_path), tags=True)
+            if fetch_result.returncode != 0:
+                self.logger.warning(
+                    "git fetch failed — continuing with local objects",
+                    remote=remote_name,
+                    stderr=fetch_result.stderr,
+                )
+
+            # Step 2 — check for a dirty working tree
+            is_git, status = git.status(str(target_path))
+            if not is_git:
+                self._errors.append(f"Remote '{remote_name}' at '{target_path}' is not a git repository.")
+                all_ok = False
+                continue
+
+            if status.is_dirty:
+                self._errors.append(
+                    f"Remote '{remote_name}' has uncommitted changes at '{target_path}'. "
+                    f"Stash or commit changes before building."
+                )
+                all_ok = False
+                continue
+
+            # Step 3 — checkout the target ref in detached-HEAD mode
+            checkout_result = git.checkout(str(target_path), ref=ref, detach=True)
+            if checkout_result.returncode != 0:
+                self._errors.append(
+                    f"Remote '{remote_name}': git checkout --detach {ref!r} failed: {checkout_result.stderr.strip()}"
+                )
+                all_ok = False
+                continue
+
+            # Step 4 — resolve HEAD to a commit SHA
+            rev_result = git.rev_parse(str(target_path), ref="HEAD")
+            sha = rev_result.stdout.strip() if rev_result.returncode == 0 else ref
+            resolved_refs[remote_name] = sha
+
+            self.logger.info(
+                "Remote checked out",
+                remote=remote_name,
+                ref=ref,
+                sha=sha,
+                path=str(target_path),
+            )
+
+        return all_ok, resolved_refs
+
     def get_repository_status(self, work_path: str) -> Dict[str, Dict[str, Any]]:
         """
         Get status of all configured remotes.

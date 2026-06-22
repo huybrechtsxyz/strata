@@ -379,6 +379,70 @@ class GitIntegration(BaseIntegration):
             )
             return False, GitStatusResult()
 
+    def fetch(
+        self,
+        working_dir: str,
+        tags: bool = True,
+        timeout: int = 180,
+    ) -> CommandResult:
+        """Fetch from origin, optionally including tags.
+
+        Args:
+            working_dir: Git repository directory.
+            tags: If True (default), also fetch tags with ``--tags``.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            CommandResult from the git fetch invocation.
+        """
+        args = ["fetch", "origin"]
+        if tags:
+            args.append("--tags")
+        return self._run_integration(args, cwd=working_dir, timeout=timeout)
+
+    def checkout(
+        self,
+        working_dir: str,
+        ref: str,
+        detach: bool = True,
+        timeout: int = 60,
+    ) -> CommandResult:
+        """Checkout a ref, entering detached HEAD by default.
+
+        Args:
+            working_dir: Git repository directory.
+            ref: Branch, tag, or commit SHA to check out.
+            detach: If True (default), pass ``--detach`` so the repo ends up
+                in detached-HEAD state (correct for version-pinned builds).
+            timeout: Command timeout in seconds.
+
+        Returns:
+            CommandResult from the git checkout invocation.
+        """
+        args = ["checkout"]
+        if detach:
+            args.append("--detach")
+        args.append(ref)
+        return self._run_integration(args, cwd=working_dir, timeout=timeout)
+
+    def rev_parse(
+        self,
+        working_dir: str,
+        ref: str = "HEAD",
+        timeout: int = 30,
+    ) -> CommandResult:
+        """Resolve a ref to its full commit SHA.
+
+        Args:
+            working_dir: Git repository directory.
+            ref: Ref to resolve (default ``HEAD``).
+            timeout: Command timeout in seconds.
+
+        Returns:
+            CommandResult whose ``stdout`` contains the SHA when successful.
+        """
+        return self._run_integration(["rev-parse", ref], cwd=working_dir, timeout=timeout)
+
     def get_remote_url(self, working_dir: str, remote: str = "origin", timeout: int = 15) -> Optional[str]:
         """Return the fetch URL for a remote.
 

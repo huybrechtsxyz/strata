@@ -550,6 +550,43 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
             self.logger.debug("Applied provider override", provider=provider_name)
 
+        # Apply remote reference overrides (pin a remote to a specific version/tag/branch)
+        for remote_name in environment.get_overridden_remote_names():
+            remote_override = environment.get_remote_override(remote_name)
+            if not remote_override:
+                continue
+
+            config_service = ConfigurationService.get_instance()
+            config_remote = None
+            if (
+                config_service
+                and config_service.model
+                and config_service.model.spec
+                and config_service.model.spec.remotes
+            ):
+                config_remote = next(
+                    (r for r in config_service.model.spec.remotes if str(r.name) == remote_name),
+                    None,
+                )
+            if not config_remote:
+                # Phase 2 validation should have caught this; treat as critical if it slips through
+                errors.append(f"Remote override for '{remote_name}' does not match any remote in configuration")
+                self.logger.error(
+                    "Remote override targets unknown remote",
+                    remote=remote_name,
+                )
+                continue
+
+            # Mutate in-place — safe per-process (each CLI invocation is an isolated Python process)
+            old_ref = config_remote.reference
+            config_remote.reference = remote_override.reference
+            self.logger.info(
+                "Applied remote reference override",
+                remote=remote_name,
+                old_reference=old_ref,
+                new_reference=remote_override.reference,
+            )
+
         # Success if no critical errors (skipped overrides are warnings, not failures)
         critical_errors = [e for e in errors if "skipped" not in e.lower()]
         success = len(critical_errors) == 0

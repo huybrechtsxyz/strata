@@ -2,10 +2,11 @@
 """Pydantic model for environment configuration validation."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
     Field,
+    StringConstraints,
     field_validator,
     model_validator,
 )
@@ -227,6 +228,22 @@ class EnvironmentProviderOverrideModel(PlatformBaseModel):
     )
 
 
+class EnvironmentRemoteOverrideModel(PlatformBaseModel):
+    """Override a remote's reference (version/branch/tag) for this environment.
+
+    Only the ``reference`` field is overridable.  Structural fields (repository
+    URL, type, source_path, deploy_path) are defined once in the configuration
+    file and must not vary per environment.
+    """
+
+    remote: PlatformName = Field(
+        description="Name of the remote to override (must match a name in configuration spec.remotes)"
+    )
+    reference: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description="Version, tag, branch, or commit SHA to use instead of the configuration default"
+    )
+
+
 class EnvironmentOverridesModel(PlatformBaseModel):
     """Model for environment overrides on workspace configurations."""
 
@@ -245,6 +262,10 @@ class EnvironmentOverridesModel(PlatformBaseModel):
     includes: Optional[List[EnvironmentIncludeModel]] = Field(
         None,
         description="Environment-wide terraform file includes (not tied to a specific resource)",
+    )
+    remotes: Optional[List[EnvironmentRemoteOverrideModel]] = Field(
+        None,
+        description="Remote reference overrides — pin a remote to a specific version/tag/branch for this environment",
     )
 
     @model_validator(mode="after")
@@ -274,6 +295,13 @@ class EnvironmentOverridesModel(PlatformBaseModel):
             duplicates = [name for name in provider_names if provider_names.count(name) > 1]
             if duplicates:
                 errors.append(f"Duplicate provider overrides found: {', '.join(set(duplicates))}")
+
+        # Validate unique remote override names
+        if self.remotes:
+            remote_names = [str(rem.remote) for rem in self.remotes]
+            duplicates = [name for name in remote_names if remote_names.count(name) > 1]
+            if duplicates:
+                errors.append(f"Duplicate remote overrides found: {', '.join(set(duplicates))}")
 
         if errors:
             raise ValueError("; ".join(errors))
