@@ -96,7 +96,7 @@ jobs:
     steps:
       # Checkout the repository to access deployment files and actions.
       - name: Check Out
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Install yq (used to extract values from YAML deployment files)
       - name: Setup YQ
