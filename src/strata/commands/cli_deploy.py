@@ -17,7 +17,6 @@ from strata.commands.deploy.health_deploy_command import HealthDeployCommand
 from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
 from strata.commands.deploy.lock_deploy_command import LockHistoryCommand, LockReleaseCommand, LockStatusCommand
 from strata.commands.deploy.output_deploy_command import OutputDeployCommand
-from strata.commands.deploy.outputs_deploy_command import OutputsDeployCommand
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
 from strata.commands.deploy.status_deploy_command import StatusDeployCommand
 
@@ -261,64 +260,7 @@ def deploy_health(
     handle_command_exit(command, success)
 
 
-@deploy.command(name="outputs", help="Show stored output artifacts for a deployment.")
-@click_file
-@click_work_path
-@click.option(
-    "--stage",
-    default=None,
-    metavar="NAME",
-    help="Limit display to a specific deployment stage.",
-)
-@click.option(
-    "--key",
-    default=None,
-    metavar="NAME",
-    help="Show only a single output key.",
-)
-@click.option(
-    "--version",
-    default=None,
-    metavar="VERSION",
-    help="Show artifacts for a specific version tag (default: current version from deployment labels).",
-)
-@click.option(
-    "--all-versions",
-    is_flag=True,
-    default=False,
-    help="Show artifacts for every version found in the outputs directory.",
-)
-@click_output_format
-@click_output_verbose
-@click_output_quiet
-def deploy_outputs(
-    file: Optional[str] = None,
-    work_path: Optional[str] = None,
-    stage: Optional[str] = None,
-    key: Optional[str] = None,
-    version: Optional[str] = None,
-    all_versions: bool = False,
-    output: Optional[str] = None,
-    verbose: Optional[bool] = None,
-    quiet: Optional[bool] = None,
-):
-    """Show stored output artifacts written by deploy run."""
-    command = OutputsDeployCommand(
-        file=file,
-        work_path=work_path,
-        stage=stage,
-        key=key,
-        version=version,
-        all_versions=all_versions,
-        output=output,
-        verbose=verbose,
-        quiet=quiet,
-    )
-    success = command.execute()
-    handle_command_exit(command, success)
-
-
-@deploy.command(name="output", help="Show Terraform outputs for a deployment (cached or live.)")
+@deploy.command(name="output", help="Show Terraform outputs for a deployment (cached, live, or stored artifacts.)")
 @click_file
 @click_work_path
 @click.option(
@@ -339,6 +281,18 @@ def deploy_outputs(
     default=False,
     help="Fetch outputs live from the backend and update the cache.",
 )
+@click.option(
+    "--version",
+    default=None,
+    metavar="VERSION",
+    help="Show stored output artifacts for a specific version tag.",
+)
+@click.option(
+    "--all-versions",
+    is_flag=True,
+    default=False,
+    help="Show stored output artifacts for every version found.",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -348,17 +302,21 @@ def deploy_output(
     stage: Optional[str] = None,
     key: Optional[str] = None,
     refresh: bool = False,
+    version: Optional[str] = None,
+    all_versions: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
 ):
-    """Show Terraform outputs from cache or live backend."""
+    """Show Terraform outputs from cache, live backend, or stored artifacts."""
     command = OutputDeployCommand(
         file=file,
         work_path=work_path,
         stage=stage,
         key=key,
         refresh=refresh,
+        version=version,
+        all_versions=all_versions,
         output=output,
         verbose=verbose,
         quiet=quiet,

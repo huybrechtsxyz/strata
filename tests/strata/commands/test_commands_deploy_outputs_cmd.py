@@ -1,4 +1,4 @@
-"""Tests for the ``strata deploy outputs`` command."""
+"""Tests for the ``strata deploy output`` command (stored artifacts mode)."""
 
 import json
 from pathlib import Path
@@ -8,7 +8,7 @@ from click.testing import CliRunner
 
 from strata.commands.cli_deploy import deploy
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.commands.deploy.outputs_deploy_command import OutputsDeployCommand
+from strata.commands.deploy.output_deploy_command import OutputDeployCommand
 from strata.models.configuration_model import ConfigurationOutputsModel
 
 # ---------------------------------------------------------------------------
@@ -16,10 +16,12 @@ from strata.models.configuration_model import ConfigurationOutputsModel
 # ---------------------------------------------------------------------------
 
 
-def _make_command(tmp_path: Path, **kwargs) -> OutputsDeployCommand:
-    """Return an OutputsDeployCommand with work_path set and _initialize stubbed."""
+def _make_command(tmp_path: Path, **kwargs) -> OutputDeployCommand:
+    """Return an OutputDeployCommand configured for artifact mode."""
+    defaults = {"refresh": False}
+    defaults.update(kwargs)
     with patch.object(BaseDeployCommand, "_initialize", return_value=None):
-        cmd = OutputsDeployCommand(work_path=str(tmp_path), file="deploy.yaml", **kwargs)
+        cmd = OutputDeployCommand(work_path=str(tmp_path), file="deploy.yaml", **defaults)
     cmd._work_path = tmp_path
     cmd._configuration_service = None
     return cmd
@@ -45,92 +47,59 @@ def _write_artifact(dir_path: Path, stage: str, data: dict) -> Path:
 # ---------------------------------------------------------------------------
 
 
-class TestDeployOutputsCli:
-    def test_group_help_shows_outputs_subcommand(self):
+class TestDeployOutputCli:
+    def test_group_help_shows_output_subcommand(self):
         runner = CliRunner()
         result = runner.invoke(deploy, ["--help"])
-        assert "outputs" in result.output
+        assert "output" in result.output
 
-    def test_outputs_help_exits_zero(self):
+    def test_output_help_exits_zero(self):
         runner = CliRunner()
-        result = runner.invoke(deploy, ["outputs", "--help"])
+        result = runner.invoke(deploy, ["output", "--help"])
         assert result.exit_code == 0
 
-    def test_outputs_help_shows_file_option(self):
+    def test_output_help_shows_version_option(self):
         runner = CliRunner()
-        result = runner.invoke(deploy, ["outputs", "--help"])
-        assert "--file" in result.output or "-f" in result.output
-
-    def test_outputs_help_shows_stage_option(self):
-        runner = CliRunner()
-        result = runner.invoke(deploy, ["outputs", "--help"])
-        assert "--stage" in result.output
-
-    def test_outputs_help_shows_key_option(self):
-        runner = CliRunner()
-        result = runner.invoke(deploy, ["outputs", "--help"])
-        assert "--key" in result.output
-
-    def test_outputs_help_shows_version_option(self):
-        runner = CliRunner()
-        result = runner.invoke(deploy, ["outputs", "--help"])
+        result = runner.invoke(deploy, ["output", "--help"])
         assert "--version" in result.output
 
-    def test_outputs_help_shows_all_versions_option(self):
+    def test_output_help_shows_all_versions_option(self):
         runner = CliRunner()
-        result = runner.invoke(deploy, ["outputs", "--help"])
+        result = runner.invoke(deploy, ["output", "--help"])
         assert "--all-versions" in result.output
 
-    def test_file_required_without_it_fails(self, tmp_path):
+    def test_output_help_shows_refresh_option(self):
         runner = CliRunner()
-        result = runner.invoke(deploy, ["outputs", "--work-path", str(tmp_path)])
-        assert result.exit_code != 0
+        result = runner.invoke(deploy, ["output", "--help"])
+        assert "--refresh" in result.output
 
     def test_exits_zero_when_execute_succeeds(self, tmp_path):
         runner = CliRunner()
-        with patch.object(OutputsDeployCommand, "execute", return_value=True):
-            result = runner.invoke(deploy, ["outputs", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
+        with patch.object(OutputDeployCommand, "execute", return_value=True):
+            result = runner.invoke(deploy, ["output", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
     def test_exits_nonzero_when_execute_fails(self, tmp_path):
         runner = CliRunner()
-        with patch.object(OutputsDeployCommand, "execute", return_value=False):
-            result = runner.invoke(deploy, ["outputs", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
+        with patch.object(OutputDeployCommand, "execute", return_value=False):
+            result = runner.invoke(deploy, ["output", "-f", "deploy.yaml", "--work-path", str(tmp_path)])
         assert result.exit_code != 0
-
-    def test_accepts_stage_option(self, tmp_path):
-        runner = CliRunner()
-        with patch.object(OutputsDeployCommand, "execute", return_value=True):
-            result = runner.invoke(
-                deploy,
-                ["outputs", "-f", "deploy.yaml", "--stage", "infra", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
-
-    def test_accepts_key_option(self, tmp_path):
-        runner = CliRunner()
-        with patch.object(OutputsDeployCommand, "execute", return_value=True):
-            result = runner.invoke(
-                deploy,
-                ["outputs", "-f", "deploy.yaml", "--key", "endpoint", "--work-path", str(tmp_path)],
-            )
-        assert result.exit_code == 0
 
     def test_accepts_version_option(self, tmp_path):
         runner = CliRunner()
-        with patch.object(OutputsDeployCommand, "execute", return_value=True):
+        with patch.object(OutputDeployCommand, "execute", return_value=True):
             result = runner.invoke(
                 deploy,
-                ["outputs", "-f", "deploy.yaml", "--version", "2.0.0", "--work-path", str(tmp_path)],
+                ["output", "-f", "deploy.yaml", "--version", "2.0.0", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
     def test_accepts_all_versions_flag(self, tmp_path):
         runner = CliRunner()
-        with patch.object(OutputsDeployCommand, "execute", return_value=True):
+        with patch.object(OutputDeployCommand, "execute", return_value=True):
             result = runner.invoke(
                 deploy,
-                ["outputs", "-f", "deploy.yaml", "--all-versions", "--work-path", str(tmp_path)],
+                ["output", "-f", "deploy.yaml", "--all-versions", "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -198,24 +167,24 @@ class TestReadArtifact:
 # ---------------------------------------------------------------------------
 
 
-class TestResolveVersions:
+class TestResolveArtifactVersions:
     def test_defaults_to_label_version(self, tmp_path):
         cmd = _make_command(tmp_path)
         meta = _make_deploy_meta(version="1.5.0")
-        versions = cmd._resolve_versions(tmp_path, meta)
+        versions = cmd._resolve_artifact_versions(tmp_path, meta)
         assert versions == ["1.5.0"]
 
     def test_defaults_to_unknown_when_no_label(self, tmp_path):
         cmd = _make_command(tmp_path)
         meta = MagicMock()
         meta.labels = {}
-        versions = cmd._resolve_versions(tmp_path, meta)
+        versions = cmd._resolve_artifact_versions(tmp_path, meta)
         assert versions == ["unknown"]
 
     def test_explicit_version_overrides_label(self, tmp_path):
         cmd = _make_command(tmp_path, version="2.0.0")
         meta = _make_deploy_meta(version="1.0.0")
-        versions = cmd._resolve_versions(tmp_path, meta)
+        versions = cmd._resolve_artifact_versions(tmp_path, meta)
         assert versions == ["2.0.0"]
 
     def test_all_versions_lists_directories(self, tmp_path):
@@ -223,7 +192,7 @@ class TestResolveVersions:
             (tmp_path / v).mkdir()
         cmd = _make_command(tmp_path, all_versions=True)
         meta = _make_deploy_meta()
-        versions = cmd._resolve_versions(tmp_path, meta)
+        versions = cmd._resolve_artifact_versions(tmp_path, meta)
         assert set(versions) == {"1.0.0", "1.1.0", "2.0.0"}
 
     def test_all_versions_ignores_files(self, tmp_path):
@@ -231,7 +200,7 @@ class TestResolveVersions:
         (tmp_path / "notes.txt").write_text("x")
         cmd = _make_command(tmp_path, all_versions=True)
         meta = _make_deploy_meta()
-        versions = cmd._resolve_versions(tmp_path, meta)
+        versions = cmd._resolve_artifact_versions(tmp_path, meta)
         assert versions == ["1.0.0"]
 
 
@@ -240,8 +209,11 @@ class TestResolveVersions:
 # ---------------------------------------------------------------------------
 
 
-class TestOutputsDeployCommandRun:
-    def _setup_cmd(self, tmp_path, **kwargs) -> OutputsDeployCommand:
+class TestOutputDeployCommandArtifacts:
+    def _setup_cmd(self, tmp_path, **kwargs) -> OutputDeployCommand:
+        # Default to artifact mode: set version to trigger _run_artifacts
+        if "version" not in kwargs and "all_versions" not in kwargs:
+            kwargs["version"] = "1.0.0"
         cmd = _make_command(tmp_path, **kwargs)
         meta = _make_deploy_meta(name="prod", version="1.0.0")
         svc = MagicMock()
