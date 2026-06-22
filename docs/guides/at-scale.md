@@ -114,6 +114,85 @@ Strata handles concern #1 and generates the ArgoCD ApplicationSet entries for co
 
 ---
 
+## Workspace-per-Layer Pattern
+
+Each deployment layer owns **one workspace file**. This is the single most important
+structural decision for operating strata at scale.
+
+### Why one workspace per layer?
+
+A workspace defines all possible resources and modules for a deployment scope. When
+two deployment scopes share a workspace, the workspace grows to accommodate both —
+and both must be kept in sync even when only one changes.
+
+One workspace per layer keeps each workspace small (2–5 resources, 1–3 provisioners),
+scoped to its layer's blast radius, and independently evolvable.
+
+| Pattern                      | Workspace size  | Blast radius    | Independent evolution         |
+| ---------------------------- | --------------- | --------------- | ----------------------------- |
+| One workspace for everything | 20–50 resources | Entire platform | ❌ Changes affect all layers   |
+| One workspace per layer      | 2–5 resources   | That layer only | ✅ Layers evolve independently |
+
+### The three workspaces
+
+For the three-layer architecture above, this means three workspace files:
+
+```
+workspaces/
+  bootstrap.yaml        ← Layer 0: Key Vault, ACR, state backend
+  infrastructure.yaml   ← Layer 1: AKS, VNet, ArgoCD, monitoring
+  application.yaml      ← Layer 2: namespace, RBAC, secrets scope, storage
+```
+
+Each workspace defines the resources and modules for its layer. Deployments reference
+exactly one workspace. The workspace does not know about other layers — it only knows
+about its own resources.
+
+### Why this works at 400+ deployments
+
+The 400 customer slots (100 customers × 4 environments) all reference `application.yaml`.
+The workspace defines what *can* exist in a customer deployment. The environment files
+control what *is* active for each customer and environment. No workspace changes are
+needed when onboarding a new customer — only a new deployment manifest and environment
+overrides are needed.
+
+```
+application.yaml         ← defines: namespace, RBAC, webapp, storage, cdn, monitoring
+    ↑
+    referenced by 400 deployment manifests
+    each deployment selects its active resources via environment overrides
+```
+
+### Layer boundaries are enforced by convention
+
+A deployment manifest in Layer 2 references `workspace: application`. If someone
+accidentally puts `workspace: infrastructure` in a customer deployment, they get access
+to zone-level resources — a misconfiguration that crosses the layer boundary.
+
+`strata validate --path "deployments/**"` (GAP-03 overlap check) detects namespace
+and artifact_path collisions that would result from this, providing a safety net even
+without an explicit layer-boundary rule.
+
+### Example deployment structure
+
+```
+deployments/
+  bootstrap.yaml                    # Layer 0, workspace: bootstrap
+  zones/
+    eu.yaml                         # Layer 1, workspace: infrastructure
+    us.yaml                         # Layer 1, workspace: infrastructure
+  customers/
+    acme-eu-prd.yaml                # Layer 2, workspace: application
+    acme-eu-acc.yaml                # Layer 2, workspace: application
+    contoso-eu-prd.yaml             # Layer 2, workspace: application
+    ...
+```
+
+The directory structure mirrors the layer hierarchy. Each file references the workspace
+for its layer. New customers = new files, no workspace changes.
+
+---
+
 ## New Concepts
 
 ### Customer Registry (`kind: customer`)
