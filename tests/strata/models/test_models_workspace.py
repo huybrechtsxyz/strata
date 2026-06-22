@@ -15,6 +15,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from strata.models.common_models import SourceModel
 from strata.models.workspace_model import WorkspaceModel
 
 
@@ -55,3 +56,27 @@ def test_workspace_yaml_invalid(yaml_path):
         WorkspaceModel.model_validate(data)
     model = None
     assert model is None
+
+
+class TestSourceModelSingleRepo:
+    def test_source_path_only_is_valid(self):
+        """Phase 1: source_path without repository must pass SourceModel validation."""
+        model = SourceModel(source_path="terraform")
+        assert model.source_path == "terraform"
+        assert model.repository is None
+
+    def test_repository_plus_source_path_is_valid(self):
+        """Phase 1: explicit repository + source_path must still pass."""
+        model = SourceModel(repository="my_repo", source_path="terraform")
+        assert str(model.repository) == "my_repo"
+        assert model.source_path == "terraform"
+
+    def test_neither_git_nor_chart_raises(self):
+        """Phase 1: completely empty SourceModel must fail validation."""
+        with pytest.raises(ValidationError):
+            SourceModel()
+
+    def test_repository_without_source_path_raises(self):
+        """Phase 1: repository alone (no source_path) must fail — source_path is required."""
+        with pytest.raises(ValidationError):
+            SourceModel(repository="my_repo")
