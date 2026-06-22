@@ -2,9 +2,10 @@
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from strata.commands.base_command import BaseCommand
+from strata.controllers.repository_controller import RepositoryController
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 
@@ -34,6 +35,7 @@ class BaseBuildCommand(BaseCommand):
         self._deployment_service: Optional[DeploymentService] = None
         self._configuration_service: Optional[ConfigurationService] = None
         self._build_path: Path = self._work_path / "build"
+        self._resolved_remote_refs: Dict[str, str] = {}
 
     @abstractmethod
     def execute(self) -> bool:
@@ -112,6 +114,19 @@ class BaseBuildCommand(BaseCommand):
                 self._errors.extend(critical)
                 return False
             self._messages.extend(errors)  # non-critical warnings
+
+        # Ensure gitops remotes are checked out to their effective references
+        if self._configuration_service is not None:
+            repo_controller = RepositoryController()
+            checkout_ok, resolved_refs = repo_controller.ensure_remote_refs(
+                config_service=self._configuration_service,
+                work_path=self._work_path,
+                repo_map=repo_map,
+            )
+            if not checkout_ok:
+                self._errors.extend(repo_controller.get_errors())
+                return False
+            self._resolved_remote_refs = resolved_refs
 
         self._deployment_service = deployment_service
 

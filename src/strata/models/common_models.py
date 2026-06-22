@@ -216,11 +216,6 @@ class SourceModel(PlatformBaseModel):
         description="Target path where artifacts should be built/deployed (relative to build/deploy directory)",
     )
     description: Optional[str] = Field(None, description="Optional description for documentation purposes")
-    ref: Optional[str] = Field(
-        None,
-        description="Git ref to pin (tag, branch, or commit SHA). "
-        "Resolved to a commit SHA at build time and recorded in the deployment manifest.",
-    )
 
     # Helm / ArgoCD chart registry fields
     chart_name: Optional[str] = Field(

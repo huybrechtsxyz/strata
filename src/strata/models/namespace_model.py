@@ -2,6 +2,7 @@
 """Pydantic model for namespace configuration validation."""
 
 import warnings
+from enum import Enum
 from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import (
@@ -20,6 +21,13 @@ from strata.models.common_models import (
     SecretRefs,
     VariableRefs,
 )
+
+
+class NamespaceType(str, Enum):
+    """Namespace ownership type — controls cross-layer overlap validation."""
+
+    DEDICATED = "dedicated"
+    SHARED = "shared"
 
 
 class NamespaceReferenceModel(PlatformBaseModel):
@@ -54,6 +62,15 @@ class NamespaceModuleModel(PlatformBaseModel):
 class NamespaceSpecModel(PlatformBaseModel):
     """Model for namespace spec (lifecycle, modules, validation)."""
 
+    type: NamespaceType = Field(
+        default=NamespaceType.DEDICATED,
+        description=(
+            "Namespace ownership type. 'dedicated' (default) means this namespace belongs "
+            "to a single deployment layer — cross-layer overlap is flagged as a warning. "
+            "'shared' means the namespace is intentionally used by multiple layers (e.g. "
+            "kube-system, traefik) — cross-layer overlap is suppressed."
+        ),
+    )
     lifecycle: Optional[CommonLifecycleModel] = Field(None, description="Namespace lifecycle phases")
     modules: Optional[List[NamespaceModuleModel]] = Field(None, description="List of modules in the namespace")
     references: Optional[NamespaceReferenceModel] = Field(

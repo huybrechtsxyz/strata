@@ -44,7 +44,7 @@ These options are accepted by every command and subcommand:
 | `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
 | `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
 | `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
-| `deploy` †   | `run` `destroy` `status` `history` `health` `output` `outputs` `lock`        | Deploy platform using provisioners                        |
+| `deploy` †   | `run` `destroy` `show` `status` `history` `health` `output` `outputs` `lock` | Deploy platform using provisioners                        |
 | `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
 | `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
 | `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations             |
@@ -258,30 +258,76 @@ strata tools install terraform --env-file .env.template
 
 ## `new`
 
-Create a new platform configuration file from a built-in or custom template.
+Create a new platform configuration file (or set of files) from a built-in or
+workspace-local template.
 
 ```
 strata new TEMPLATE NAME [--path PATH] [--overwrite] [--set KEY=VALUE ...] [standard options]
 strata new --list
 ```
 
-| Option / Argument | Description                                                |
-| ----------------- | ---------------------------------------------------------- |
-| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `workspace`)  |
-| `NAME`            | Written into `meta.name` and used in the output filename   |
-| `--path PATH`     | Output file path or directory (default: current directory) |
-| `--overwrite`     | Overwrite the output file if it already exists             |
-| `--set KEY=VALUE` | Override a template variable (repeatable)                  |
-| `--list`          | List available templates and exit                          |
+| Option / Argument | Description                                                       |
+| ----------------- | ----------------------------------------------------------------- |
+| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `customer`)          |
+| `NAME`            | Injected as `${name}`; used in output filenames and path segments |
+| `--path PATH`     | Output directory (default: current directory)                     |
+| `--overwrite`     | Overwrite output file(s) if they already exist                    |
+| `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)           |
+| `--list`          | List available templates and bundles, then exit                   |
 
 ```bash
 strata new namespace my-app
 strata new provider azure --path config/
 strata new workspace my-ws --set owner=myteam
 strata new dns my-zones --path config/dns/
-strata new network my-networks --path config/networks/
+strata new customer newcorp --path repos/xyz-config/ --set zone=eu --set tier=premium
 strata new --list
 ```
+
+### Template resolution order
+
+For any `TEMPLATE` name, strata searches in this order — first match wins:
+
+1. `.strata/templates/<name>/` — workspace bundle directory
+2. `.strata/templates/<name>.yaml` — workspace single file
+3. Package bundle directory
+4. Package single-file template
+
+Workspace templates always override the package defaults.
+
+### Bundle templates
+
+A **bundle** is a directory under `.strata/templates/` that contains multiple
+template files. The directory tree is the output structure — `${var}`
+substitution runs on both file content and path segments using the same
+`${var}` syntax as single-file templates.
+
+```
+.strata/templates/
+└── customer/                  ← bundle directory
+    ├── customers/
+    │   └── ${name}/
+    │       ├── deployments/
+    │       │   ├── ${name}-dev.yaml
+    │       │   └── ${name}-prod.yaml
+    │       └── environments/
+    │           └── ${name}.yaml
+    └── README.md
+```
+
+Running `strata new customer newcorp --path repos/xyz-config/ --set zone=eu`
+produces:
+
+```
+repos/xyz-config/customers/newcorp/deployments/newcorp-dev.yaml
+repos/xyz-config/customers/newcorp/deployments/newcorp-prod.yaml
+repos/xyz-config/customers/newcorp/environments/newcorp.yaml
+```
+
+All `${var}` references in content and path segments are substituted from:
+- `name` — the `NAME` argument (always available)
+- `--set KEY=VALUE` overrides
+- Team context from `solution.json` (if present)
 
 ---
 
@@ -1033,6 +1079,115 @@ Tear down provisioned infrastructure. `--force` is required for a real destroy (
 ```bash
 strata deploy destroy -f xyz-deploy-prd.yaml --dry-run
 strata deploy destroy --stage production --force
+```
+
+### `deploy show`
+
+```
+strata deploy show [-f FILE] [standard options]
+```
+
+Show resolved deployment configuration: effective remote versions after applying
+environment overrides, plus the workspace and environment files in use.
+
+For each remote, displays the effective reference and whether it came from an
+environment override or the workspace default.
+
+```bash
+strata deploy show -f xyz-deploy-prd.yaml
+strata deploy show -f xyz-deploy-prd.yaml --output json
+```
+
+Example output:
+
+```
+📋  Deployment:   acme-prd
+    File:         deployments/acme-prd.yaml
+    Workspace:    workspaces/customer-acme.yaml
+    Environment:  env-prd (environments/env-prd.yaml)
+
+    Remote Versions:
+
+    Remote        Effective Ref  Source
+    ───────────────────────────────────────────────
+    tf_landscape  v2.2.0         env-prd (override)
+    ans_deploy    v1.1.0         workspace default
+```
+
+### `deploy list`
+
+```
+strata deploy list [-p DIR] [standard options]
+```
+
+Enumerate deployment manifests with extracted metadata. Scans a directory
+recursively for `kind: deployment` YAML files and returns one entry per
+manifest. Designed for CI matrix generation — pipe `--output json` into
+`jq` or consume directly as a GitHub Actions matrix input.
+
+All `spec.layers` dimensions are promoted to top-level fields so any layer
+key (e.g. `environment`, `zone`, `tier`) is directly usable as a matrix
+variable without further parsing.
+
+| Option   | Description                                               |
+| -------- | --------------------------------------------------------- |
+| `-p DIR` | Directory to scan (default: current directory, recursive) |
+
+```bash
+# Console table — all deployment manifests under ./deployments/
+strata deploy list -p deployments/
+
+# JSON for CI matrix
+strata deploy list -p deployments/ --output json
+```
+
+Example JSON output (inside the standard `data` envelope):
+
+```json
+{
+  "deployments": [
+    {
+      "file": "/repos/xyz-config/deployments/acme-prd.yaml",
+      "name": "acme_deploy_prd",
+      "environment": "prd",
+      "zone": "eu",
+      "customer": "acme",
+      "workspace": "xyz_platform"
+    },
+    {
+      "file": "/repos/xyz-config/deployments/globex-dev.yaml",
+      "name": "globex_deploy_dev",
+      "environment": "dev",
+      "zone": "eu",
+      "customer": "globex",
+      "workspace": "xyz_platform"
+    }
+  ],
+  "count": 2
+}
+```
+
+GitHub Actions matrix usage:
+
+```yaml
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - id: list
+        run: |
+          matrix=$(strata deploy list -p deployments/ --output json | jq -c '.data.deployments')
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: matrix
+    strategy:
+      matrix:
+        deployment: ${{ fromJson(needs.matrix.outputs.matrix) }}
+    steps:
+      - run: strata deploy run --file "${{ matrix.deployment.file }}"
 ```
 
 ### `deploy status`

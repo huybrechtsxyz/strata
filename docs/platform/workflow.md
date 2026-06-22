@@ -312,7 +312,7 @@ This is the fastest way to add namespaces, modules, providers, DNS zones,
 network definitions, and other config files to your repo.
 
 ```bash
-# See every available template
+# See every available template (single-file and bundle)
 strata new --list
 
 # Create a namespace config file in the current directory
@@ -334,6 +334,24 @@ strata new network my-networks --path repos/xyz-config/network/
 Each command writes a ready-to-edit YAML file with `meta.name` pre-filled and
 all spec fields present as commented placeholders. Use `--overwrite` to replace
 an existing file.
+
+### Bundle templates (multi-file scaffolding)
+
+A template can also be a **directory** under `.strata/templates/`. The
+directory tree is the output structure — `${var}` substitution runs on both
+file content and path segments. This is how you scaffold multiple related files
+(deployments, environments, values stubs) in a single command without
+hardcoding anything in strata itself.
+
+```bash
+# Scaffold a new customer across multiple files in one command
+strata new customer newcorp --path repos/xyz-config/ --set zone=eu --set tier=standard
+```
+
+The `customer` bundle lives in `.strata/templates/customer/`. Drop any
+directory there and `strata new <name>` picks it up automatically — no code
+changes needed. See [commands reference](commands.md#new) for the full bundle
+template format.
 
 ---
 

@@ -1,8 +1,11 @@
 """Unit tests for TerraformBuilder."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from strata.builders.terraform_builder import TerraformBuilder
+from strata.models.common_models import ProvisionerType, SourceModel
+from strata.models.workspace_model import WorkspaceIacModel
 
 
 def _mock_svc(validated=True, build_path=None):
@@ -343,3 +346,83 @@ class TestTerraformBuilderWorkspaceVars:
         platform = self._make_platform(deployment_labels={})
         result = builder._build_workspace_vars(platform, [])
         assert result["environment"] == "production"
+
+
+def _make_provisioner(source_path: str, repository: str | None = None) -> WorkspaceIacModel:
+    """Build a WorkspaceIacModel with a terraform provisioner for testing."""
+    source = SourceModel(source_path=source_path, repository=repository)
+    return WorkspaceIacModel(name="platform_iac", provisioner=ProvisionerType.TERRAFORM, source=source)
+
+
+def _make_deployment_svc(provisioner: WorkspaceIacModel, build_path: Path) -> MagicMock:
+    """Return a mock DeploymentService that surfaces the given provisioner."""
+    workspace_model = MagicMock()
+    workspace_model.spec.provisioners = [provisioner]
+
+    workspace_service = MagicMock()
+    workspace_service.model = workspace_model
+
+    deployment_svc = MagicMock()
+    deployment_svc.get_workspace_service.return_value = workspace_service
+    deployment_svc.get_build_path.return_value = build_path
+    return deployment_svc
+
+
+class TestCopyProvisionerSourceSingleRepo:
+    """_copy_provisioner_source resolves to work_path when repository is absent."""
+
+    def test_no_repository_resolves_to_work_path(self, tmp_path):
+        """Source dir must be work_path/source_path when repository is not set."""
+        src_dir = tmp_path / "terraform"
+        src_dir.mkdir()
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner(source_path="terraform")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = TerraformBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(depl_svc, build_path, tmp_path, repo_map={}, dry_run=True)
+
+        assert result is True
+        assert not builder.has_errors()
+        messages = "\n".join(builder.get_messages())
+        assert str(tmp_path / "terraform") in messages
+
+    def test_no_repository_missing_src_dir_returns_false(self, tmp_path):
+        """Error reported when source_path does not exist and repository is absent."""
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner(source_path="nonexistent")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = TerraformBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(depl_svc, build_path, tmp_path, repo_map={}, dry_run=True)
+
+        assert result is False
+        assert builder.has_errors()
+        assert any("nonexistent" in e for e in builder.get_errors())
+
+    def test_with_repository_uses_repo_map(self, tmp_path):
+        """When repository is set and present in repo_map, repo_map root is used."""
+        repo_root = tmp_path / "my-repo"
+        src_dir = repo_root / "terraform"
+        src_dir.mkdir(parents=True)
+        build_path = tmp_path / "build"
+        build_path.mkdir()
+
+        prov = _make_provisioner(source_path="terraform", repository="my_repo")
+        depl_svc = _make_deployment_svc(prov, build_path)
+
+        builder = TerraformBuilder()
+        with patch.object(builder, "_build_template_context", return_value={}):
+            result = builder._copy_provisioner_source(
+                depl_svc, build_path, tmp_path, repo_map={"my_repo": str(repo_root)}, dry_run=True
+            )
+
+        assert result is True
+        messages = "\n".join(builder.get_messages())
+        assert str(src_dir) in messages

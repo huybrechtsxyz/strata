@@ -8,6 +8,7 @@ from strata.models.environment_model import (
     EnvironmentModel,
     EnvironmentModuleOverrideModel,
     EnvironmentProviderOverrideModel,
+    EnvironmentRemoteOverrideModel,
     EnvironmentResourceOverrideModel,
 )
 from strata.models.store_models import (
@@ -185,7 +186,22 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
                 allowed_secret_stores=allowed_secret_stores,
                 allowed_feature_stores=allowed_feature_stores,
             )
-            return len(errors) == 0, errors
+            if errors:
+                return False, errors
+
+        # Phase 2: cross-check remote overrides against known configuration remotes
+        if configuration_model and spec and spec.overrides and spec.overrides.remotes:
+            known_remote_names = {str(r.name) for r in (configuration_model.spec.remotes or [])}
+            remote_errors = []
+            for remote_override in spec.overrides.remotes:
+                if str(remote_override.remote) not in known_remote_names:
+                    remote_errors.append(
+                        f"Remote override '{remote_override.remote}' does not match any remote "
+                        f"defined in configuration spec.remotes. "
+                        f"Known remotes: {sorted(known_remote_names) or '(none)'}"
+                    )
+            if remote_errors:
+                return False, remote_errors
 
         return True, []
 
@@ -236,7 +252,36 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
             return False
 
         overrides = self.model.spec.overrides
-        return bool(overrides.resources or overrides.modules or overrides.providers or overrides.properties)
+        return bool(
+            overrides.resources or overrides.modules or overrides.providers or overrides.properties or overrides.remotes
+        )
+
+    def get_overridden_remote_names(self) -> Set[str]:
+        """Return the set of remote names that have a reference override in this environment."""
+        self._ensure_validated()
+        if (
+            not self.model
+            or not self.model.spec
+            or not self.model.spec.overrides
+            or not self.model.spec.overrides.remotes
+        ):
+            return set()
+        return {str(r.remote) for r in self.model.spec.overrides.remotes}
+
+    def get_remote_override(self, remote_name: str) -> Optional[EnvironmentRemoteOverrideModel]:
+        """Return the remote override for *remote_name*, or ``None`` if absent."""
+        self._ensure_validated()
+        if (
+            not self.model
+            or not self.model.spec
+            or not self.model.spec.overrides
+            or not self.model.spec.overrides.remotes
+        ):
+            return None
+        return next(
+            (r for r in self.model.spec.overrides.remotes if str(r.remote) == remote_name),
+            None,
+        )
 
     def get_resource_override(self, resource_name: str) -> Optional[EnvironmentResourceOverrideModel]:
         """

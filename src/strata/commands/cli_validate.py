@@ -18,6 +18,18 @@ from strata.commands.validate.run_validate_command import ValidateCommand
 @click.command(name="validate")
 @click_file
 @click.option(
+    "--path",
+    "-p",
+    default=None,
+    metavar="GLOB",
+    help=(
+        "Glob pattern to select multiple deployment manifests for cross-manifest overlap validation. "
+        "Resolved relative to the workspace root against the active profile's configfile_paths. "
+        "Requires an initialized workspace with an active profile. "
+        "Example: 'deployments/**' or 'deployments/acme-*'"
+    ),
+)
+@click.option(
     "--deep",
     is_flag=True,
     default=False,
@@ -33,6 +45,7 @@ from strata.commands.validate.run_validate_command import ValidateCommand
 @click_output_quiet
 def validate_command(
     file: Optional[str] = None,
+    path: Optional[str] = None,
     deep: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
@@ -41,14 +54,20 @@ def validate_command(
 ) -> None:
     """Validate a platform YAML file against its kind-specific schema.
 
-    Specify the file with -f / --file (or set STRATA_FILE):
+    Single-file validation (requires -f / --file):
 
         strata validate -f config/deployment.yaml
+
+    Cross-manifest overlap validation (requires --path glob):
+
+        strata validate --path "deployments/**"
+        strata validate --path "deployments/acme-*"
     """
-    if not file:
-        raise click.UsageError("Missing option '-f' / '--file'. Specify the deployment YAML file path.")
+    if not file and not path:
+        raise click.UsageError("Specify a single file with '-f' / '--file', or a glob with '--path' / '-p'.")
     command = ValidateCommand(
         file=file,
+        path=path,
         deep=deep,
         work_path=work_path,
         output=output,

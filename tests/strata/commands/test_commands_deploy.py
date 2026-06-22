@@ -97,6 +97,26 @@ class TestDeployStatus:
         assert result.exit_code == 0
 
 
+class TestDeployShow:
+    def test_show_basic(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.show_deploy_command.ShowDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["show", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+
+    def test_show_with_file(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.show_deploy_command.ShowDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["show", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+
+    def test_show_execute_false_returns_nonzero(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.show_deploy_command.ShowDeployCommand.execute", return_value=False):
+            result = runner.invoke(deploy, ["show", "--work-path", str(tmp_path)])
+        assert result.exit_code != 0
+
+
 class TestDeployHistory:
     def test_history_basic(self, tmp_path):
         runner = CliRunner()
@@ -568,3 +588,130 @@ class TestLockingWiring:
 
         assert result is False
         assert len(cmd._errors) > 0
+
+
+class TestDeployList:
+    """Tests for `strata deploy list`."""
+
+    def _write_deployment(self, path: Path, name: str, layers: dict | None = None, customer: str | None = None) -> Path:
+        """Write a minimal deployment YAML to *path/<name>.yaml*."""
+        layers_yaml = ""
+        if layers:
+            lines = "\n".join(f"    {k}: {v}" for k, v in layers.items())
+            layers_yaml = f"  layers:\n{lines}\n"
+        customer_yaml = f"  customer: {customer}\n" if customer else ""
+        content = (
+            f"apiVersion: strata.huybrechts.xyz/v1\n"
+            f"kind: deployment\n"
+            f"meta:\n"
+            f"  name: {name}\n"
+            f"spec:\n"
+            f"{layers_yaml}"
+            f"{customer_yaml}"
+            f"  workspace:\n"
+            f"    name: ws_{name}\n"
+            f"  environments:\n"
+            f"    - env.yaml\n"
+        )
+        out = path / f"{name}.yaml"
+        out.write_text(content, encoding="utf-8")
+        return out
+
+    def test_list_basic(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.list_deploy_command.ListDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["list", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+
+    def test_list_with_path(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.list_deploy_command.ListDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["list", "--path", str(tmp_path), "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+
+    def test_list_execute_false_returns_nonzero(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.list_deploy_command.ListDeployCommand.execute", return_value=False):
+            result = runner.invoke(deploy, ["list", "--work-path", str(tmp_path)])
+        assert result.exit_code != 0
+
+    def test_list_finds_deployment_manifests(self, tmp_path):
+        """Real scan: deployment YAMLs are discovered; non-deployment files ignored."""
+        self._write_deployment(tmp_path, "acme_prd", layers={"environment": "prd"}, customer="acme")
+        self._write_deployment(tmp_path, "globex_dev", layers={"environment": "dev", "zone": "eu"})
+        (tmp_path / "not-a-deployment.yaml").write_text("kind: workspace\nmeta:\n  name: ws\n", encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(deploy, ["list", "--path", str(tmp_path), "--work-path", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "acme_prd" in result.output
+        assert "globex_dev" in result.output
+        assert "not-a-deployment" not in result.output
+
+    def test_list_json_output(self, tmp_path):
+        """--output json emits a JSON array of deployment entries."""
+        import json
+
+        self._write_deployment(tmp_path, "acme_prd", layers={"environment": "prd", "zone": "eu"}, customer="acme")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            deploy,
+            ["list", "--path", str(tmp_path), "--output", "json", "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert isinstance(data, dict)
+        deployments = data["data"]["deployments"]
+        assert len(deployments) == 1
+        entry = deployments[0]
+        assert entry["name"] == "acme_prd"
+        assert entry["environment"] == "prd"
+        assert entry["zone"] == "eu"
+        assert entry["customer"] == "acme"
+        assert entry["workspace"] == "ws_acme_prd"
+        assert "file" in entry
+
+    def test_list_layers_promoted_to_top_level(self, tmp_path):
+        """All spec.layers keys appear as top-level fields in each entry."""
+        import json
+
+        self._write_deployment(tmp_path, "d1", layers={"env": "prd", "region": "northeurope", "tier": "premium"})
+
+        runner = CliRunner()
+        result = runner.invoke(
+            deploy,
+            ["list", "--path", str(tmp_path), "--output", "json", "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+        entry = json.loads(result.output)["data"]["deployments"][0]
+        assert entry["env"] == "prd"
+        assert entry["region"] == "northeurope"
+        assert entry["tier"] == "premium"
+
+    def test_list_recursive_scan(self, tmp_path):
+        """Manifests in subdirectories are discovered."""
+        subdir = tmp_path / "customers" / "acme"
+        subdir.mkdir(parents=True)
+        self._write_deployment(subdir, "acme_prd", layers={"environment": "prd"}, customer="acme")
+
+        runner = CliRunner()
+        result = runner.invoke(deploy, ["list", "--path", str(tmp_path), "--work-path", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "acme_prd" in result.output
+
+    def test_list_empty_directory(self, tmp_path):
+        """Empty directory exits 0 with an appropriate message."""
+        runner = CliRunner()
+        result = runner.invoke(deploy, ["list", "--path", str(tmp_path), "--work-path", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert "no deployment" in result.output.lower()
+
+    def test_list_invalid_path_exits_nonzero(self, tmp_path):
+        """Non-existent scan path exits non-zero."""
+        runner = CliRunner()
+        result = runner.invoke(
+            deploy,
+            ["list", "--path", str(tmp_path / "does_not_exist"), "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code != 0

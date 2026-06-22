@@ -96,7 +96,7 @@ Write-Host ""
 Write-Host "[*] Docs index coverage..." -ForegroundColor Blue
 $indexContent = Get-Content "$projectRoot\docs\index.rst" -Raw
 $docsRoot = Join-Path $projectRoot "docs"
-$excludeTopDirs = @("_build", "_static")
+$excludeTopDirs = @("_build", "_static", "issues")
 $missingFromIndex = @()
 
 Get-ChildItem -Path $docsRoot -Recurse -Filter "*.md" | ForEach-Object {
