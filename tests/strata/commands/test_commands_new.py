@@ -167,3 +167,140 @@ class TestNewCommandContextSubstitution:
         assert rendered_context["name"] == "myapp"
         assert rendered_context["owner"] == "acme"
         assert rendered_context["version"] == "3.0.0"  # --set overrides context
+
+
+class TestNewCommandBundle:
+    """Tests for directory bundle templates (multi-file scaffolding)."""
+
+    def _make_bundle(self, work_path, bundle_name: str):
+        """Create a minimal bundle dir under .strata/templates/<bundle_name>/."""
+        bundle_dir = work_path / ".strata" / "templates" / bundle_name
+        bundle_dir.mkdir(parents=True)
+        return bundle_dir
+
+    def test_bundle_creates_flat_files(self, tmp_path):
+        """A flat bundle directory produces files in --path root."""
+        bundle = self._make_bundle(tmp_path, "widget")
+        (bundle / "${name}.yaml").write_text("kind: widget\nname: ${name}\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        result = runner.invoke(
+            new_command,
+            ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+        assert (out / "acme.yaml").exists()
+
+    def test_bundle_content_substitution(self, tmp_path):
+        """${var} in file content is substituted from context + --set."""
+        bundle = self._make_bundle(tmp_path, "widget")
+        (bundle / "file.yaml").write_text("zone: ${zone}\ntier: ${tier}\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        result = runner.invoke(
+            new_command,
+            [
+                "widget",
+                "acme",
+                "--path",
+                str(out),
+                "--set",
+                "zone=eu",
+                "--set",
+                "tier=premium",
+                "--work-path",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        content = (out / "file.yaml").read_text(encoding="utf-8")
+        assert "eu" in content
+        assert "premium" in content
+
+    def test_bundle_path_segment_substitution(self, tmp_path):
+        """${name} in directory names is substituted using the same engine."""
+        bundle = self._make_bundle(tmp_path, "widget")
+        subdir = bundle / "${name}"
+        subdir.mkdir()
+        (subdir / "deployment.yaml").write_text("name: ${name}\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        result = runner.invoke(
+            new_command,
+            ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+        assert (out / "acme" / "deployment.yaml").exists()
+        assert "acme" in (out / "acme" / "deployment.yaml").read_text(encoding="utf-8")
+
+    def test_bundle_nested_path_and_filename(self, tmp_path):
+        """${name} works in both directory and filename simultaneously."""
+        bundle = self._make_bundle(tmp_path, "widget")
+        subdir = bundle / "envs" / "${name}"
+        subdir.mkdir(parents=True)
+        (subdir / "${name}-dev.yaml").write_text("env: dev\nname: ${name}\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        result = runner.invoke(
+            new_command,
+            ["widget", "globex", "--path", str(out), "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+        assert (out / "envs" / "globex" / "globex-dev.yaml").exists()
+
+    def test_bundle_overwrite_guard(self, tmp_path):
+        """Second run without --overwrite exits 1 when output file exists."""
+        bundle = self._make_bundle(tmp_path, "widget")
+        (bundle / "file.yaml").write_text("x: 1\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        runner.invoke(new_command, ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)])
+        result = runner.invoke(new_command, ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)])
+        assert result.exit_code == 1
+
+    def test_bundle_overwrite_flag(self, tmp_path):
+        """Second run WITH --overwrite exits 0."""
+        bundle = self._make_bundle(tmp_path, "widget")
+        (bundle / "file.yaml").write_text("x: 1\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        runner.invoke(new_command, ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)])
+        result = runner.invoke(
+            new_command,
+            ["widget", "acme", "--path", str(out), "--overwrite", "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_bundle_appears_in_list(self, tmp_path):
+        """A workspace bundle directory appears in --list output."""
+        bundle = self._make_bundle(tmp_path, "widget")
+        (bundle / "file.yaml").write_text("x: 1\n", encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(new_command, ["--list", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "widget" in result.output
+
+    def test_bundle_workspace_overrides_package(self, tmp_path):
+        """Workspace bundle takes precedence over package single-file template of same name."""
+        # 'namespace' exists as a package single-file template.
+        # A workspace bundle of the same name should win.
+        bundle = self._make_bundle(tmp_path, "namespace")
+        (bundle / "${name}-custom.yaml").write_text("custom: true\nname: ${name}\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        result = runner.invoke(
+            new_command,
+            ["namespace", "myapp", "--path", str(out), "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.output
+        # Bundle output file (not the single-file default name)
+        assert (out / "myapp-custom.yaml").exists()
+        assert not (out / "myapp-namespace.yaml").exists()

@@ -16,7 +16,9 @@ def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
     """Collect template stems from workspace and package directories.
 
     Workspace templates (`.strata/templates/`) take precedence but both
-    sources contribute to the *available* list shown to the user.
+    sources contribute to the *available* list shown to the user.  A template
+    may be either a single YAML file (``namespace.yaml``) or a bundle
+    directory (``customer/``).
 
     Args:
         work_path: Root of the current workspace, or None.
@@ -32,6 +34,8 @@ def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
         for f in pkg_dir.iterdir():
             if f.is_file() and f.suffix == ".yaml":
                 stems.add(f.stem)
+            elif f.is_dir():
+                stems.add(f.name)
 
     # Workspace-local templates (may override package ones)
     if work_path is not None:
@@ -40,30 +44,47 @@ def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
             for f in ws_dir.iterdir():
                 if f.is_file() and f.suffix == ".yaml":
                     stems.add(f.stem)
+                elif f.is_dir():
+                    stems.add(f.name)
 
     return sorted(stems)
 
 
 def _resolve_template_path(template: str, work_path: Optional[Path]) -> Optional[Path]:
-    """Resolve the YAML file for *template*, preferring workspace over package.
+    """Resolve the template for *template*, preferring workspace over package.
+
+    Resolution order (first match wins):
+
+    1. Workspace bundle directory  (``.strata/templates/<name>/``)
+    2. Workspace single YAML file  (``.strata/templates/<name>.yaml``)
+    3. Package bundle directory
+    4. Package single YAML file
 
     Args:
-        template: Template stem (e.g. ``"namespace"``).
+        template: Template stem (e.g. ``"namespace"`` or ``"customer"``).
         work_path: Root of the current workspace, or None.
 
     Returns:
-        Path to the template file, or None when not found.
+        Path to the template file or bundle directory, or None when not found.
     """
-    # 1. Workspace-local templates
-    if work_path is not None:
-        ws_path = work_path / ".strata" / "templates" / f"{template}.yaml"
-        if ws_path.exists():
-            return ws_path
+    pkg_base = get_pkg_templates_path() / "solution" / "dot.strata" / "templates"
 
-    # 2. Package-bundled templates
-    pkg_path = get_pkg_templates_path() / "solution" / "dot.strata" / "templates" / f"{template}.yaml"
-    if pkg_path.exists():
-        return pkg_path
+    # 1 & 2 — workspace
+    if work_path is not None:
+        ws_bundle = work_path / ".strata" / "templates" / template
+        if ws_bundle.exists() and ws_bundle.is_dir():
+            return ws_bundle
+        ws_file = work_path / ".strata" / "templates" / f"{template}.yaml"
+        if ws_file.exists():
+            return ws_file
+
+    # 3 & 4 — package
+    pkg_bundle = pkg_base / template
+    if pkg_bundle.exists() and pkg_bundle.is_dir():
+        return pkg_bundle
+    pkg_file = pkg_base / f"{template}.yaml"
+    if pkg_file.exists():
+        return pkg_file
 
     return None
 
@@ -176,7 +197,7 @@ class NewCommand(BaseCommand):
                     click.echo("No templates found.")
             return True
 
-        # 1. Resolve template file
+        # 1. Resolve template (file or bundle directory)
         assert self._template is not None and self._name is not None  # guarded in cli_new.py
         template_path = _resolve_template_path(self._template, self._work_path)
         if template_path is None:
@@ -186,14 +207,7 @@ class NewCommand(BaseCommand):
             )
             return False
 
-        # 2. Read template content
-        try:
-            content = template_path.read_text(encoding="utf-8")
-        except Exception as e:
-            self._errors.append(f"Failed to read template '{template_path}': {e}")
-            return False
-
-        # 3. Build substitution context
+        # 2. Build substitution context (shared by both modes)
         context: Dict[str, str] = {"name": self._name}
 
         # Best-effort: load team context from solution.json if workspace is available
@@ -213,14 +227,29 @@ class NewCommand(BaseCommand):
             else:
                 self.logger.warning("Ignoring malformed --set value (expected KEY=VALUE)", value=kv)
 
-        # 4. Render
+        # 3. Dispatch
+        if template_path.is_dir():
+            return self._run_bundle_execution(template_path, context)
+        return self._run_file_execution(template_path, context)
+
+    def _run_file_execution(self, template_path: Path, context: Dict[str, str]) -> bool:
+        """Render a single-file template."""
+        assert self._template is not None and self._name is not None
+
+        # Read template content
+        try:
+            content = template_path.read_text(encoding="utf-8")
+        except Exception as e:
+            self._errors.append(f"Failed to read template '{template_path}': {e}")
+            return False
+
+        # Render
         rendered = TemplateProcessor.render(content, context)
 
-        # 5. Resolve output path
+        # Resolve output path
         output_path: Path
         if self._path:
             p = Path(self._path)
-            # Treat as directory when it ends with separator or already is a directory
             if self._path.endswith(("/", "\\")) or (p.exists() and p.is_dir()):
                 output_path = p / f"{self._name}-{self._template}.yaml"
             else:
@@ -228,12 +257,12 @@ class NewCommand(BaseCommand):
         else:
             output_path = Path(os.getcwd()) / f"{self._name}-{self._template}.yaml"
 
-        # 6. Overwrite guard
+        # Overwrite guard
         if output_path.exists() and not self._overwrite:
             self._errors.append(f"File already exists: {output_path}. Use --overwrite to replace it.")
             return False
 
-        # 7. Write file
+        # Write
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(rendered, encoding="utf-8")
@@ -243,8 +272,6 @@ class NewCommand(BaseCommand):
 
         self._messages.append(f"Created: {output_path}")
         self.logger.info("Configuration file created", path=str(output_path), template=self._template)
-
-        # 8. Store structured result
         self._output_data = {
             "template": self._template,
             "name": self._name,
@@ -252,9 +279,74 @@ class NewCommand(BaseCommand):
         }
         return True
 
+    def _run_bundle_execution(self, bundle_dir: Path, context: Dict[str, str]) -> bool:
+        """Render a directory bundle template.
+
+        Walks *bundle_dir* recursively. For every file:
+
+        - Each path segment is rendered through ``TemplateProcessor.render()``
+          (same ``${var}`` substitution as file content).
+        - The file content is rendered the same way.
+        - The rendered relative path is joined onto the output root (``--path``
+          or CWD) to produce the final destination.
+        """
+        output_root = Path(self._path) if self._path else Path(os.getcwd())
+
+        bundle_files = sorted(f for f in bundle_dir.rglob("*") if f.is_file())
+        if not bundle_files:
+            self._errors.append(f"Bundle '{self._template}' contains no files.")
+            return False
+
+        created: list[str] = []
+
+        for src_file in bundle_files:
+            # Render ${var} in every path segment
+            rel = src_file.relative_to(bundle_dir)
+            rendered_parts = [TemplateProcessor.render(part, context) for part in rel.parts]
+            output_path = output_root.joinpath(*rendered_parts)
+
+            # Overwrite guard
+            if output_path.exists() and not self._overwrite:
+                self._errors.append(f"File already exists: {output_path}. Use --overwrite to replace it.")
+                return False
+
+            # Read and render content
+            try:
+                content = src_file.read_text(encoding="utf-8")
+            except Exception as e:
+                self._errors.append(f"Failed to read bundle file '{src_file}': {e}")
+                return False
+
+            rendered = TemplateProcessor.render(content, context)
+
+            # Write
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except Exception as e:
+                self._errors.append(f"Failed to write output file '{output_path}': {e}")
+                return False
+
+            created.append(str(output_path))
+            self.logger.info("Bundle file created", path=str(output_path), template=self._template)
+
+        self._messages.extend(f"Created: {p}" for p in created)
+        self._output_data = {
+            "template": self._template,
+            "name": self._name,
+            "files": created,
+        }
+        return True
+
     def _after_execute(self) -> bool:
         if not self._list_templates and self._is_console_output():
             path = self._output_data.get("path", "")
+            files: list = self._output_data.get("files", [])
             if path:
                 click.echo(f"\n✅  Created: {path}\n")
+            elif files:
+                click.echo(f"\n✅  Created {len(files)} file(s):")
+                for f in files:
+                    click.echo(f"     {f}")
+                click.echo("")
         return super()._after_execute()

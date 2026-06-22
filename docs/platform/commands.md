@@ -258,30 +258,76 @@ strata tools install terraform --env-file .env.template
 
 ## `new`
 
-Create a new platform configuration file from a built-in or custom template.
+Create a new platform configuration file (or set of files) from a built-in or
+workspace-local template.
 
 ```
 strata new TEMPLATE NAME [--path PATH] [--overwrite] [--set KEY=VALUE ...] [standard options]
 strata new --list
 ```
 
-| Option / Argument | Description                                                |
-| ----------------- | ---------------------------------------------------------- |
-| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `workspace`)  |
-| `NAME`            | Written into `meta.name` and used in the output filename   |
-| `--path PATH`     | Output file path or directory (default: current directory) |
-| `--overwrite`     | Overwrite the output file if it already exists             |
-| `--set KEY=VALUE` | Override a template variable (repeatable)                  |
-| `--list`          | List available templates and exit                          |
+| Option / Argument | Description                                                       |
+| ----------------- | ----------------------------------------------------------------- |
+| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `customer`)          |
+| `NAME`            | Injected as `${name}`; used in output filenames and path segments |
+| `--path PATH`     | Output directory (default: current directory)                     |
+| `--overwrite`     | Overwrite output file(s) if they already exist                    |
+| `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)           |
+| `--list`          | List available templates and bundles, then exit                   |
 
 ```bash
 strata new namespace my-app
 strata new provider azure --path config/
 strata new workspace my-ws --set owner=myteam
 strata new dns my-zones --path config/dns/
-strata new network my-networks --path config/networks/
+strata new customer newcorp --path repos/xyz-config/ --set zone=eu --set tier=premium
 strata new --list
 ```
+
+### Template resolution order
+
+For any `TEMPLATE` name, strata searches in this order — first match wins:
+
+1. `.strata/templates/<name>/` — workspace bundle directory
+2. `.strata/templates/<name>.yaml` — workspace single file
+3. Package bundle directory
+4. Package single-file template
+
+Workspace templates always override the package defaults.
+
+### Bundle templates
+
+A **bundle** is a directory under `.strata/templates/` that contains multiple
+template files. The directory tree is the output structure — `${var}`
+substitution runs on both file content and path segments using the same
+`${var}` syntax as single-file templates.
+
+```
+.strata/templates/
+└── customer/                  ← bundle directory
+    ├── customers/
+    │   └── ${name}/
+    │       ├── deployments/
+    │       │   ├── ${name}-dev.yaml
+    │       │   └── ${name}-prod.yaml
+    │       └── environments/
+    │           └── ${name}.yaml
+    └── README.md
+```
+
+Running `strata new customer newcorp --path repos/xyz-config/ --set zone=eu`
+produces:
+
+```
+repos/xyz-config/customers/newcorp/deployments/newcorp-dev.yaml
+repos/xyz-config/customers/newcorp/deployments/newcorp-prod.yaml
+repos/xyz-config/customers/newcorp/environments/newcorp.yaml
+```
+
+All `${var}` references in content and path segments are substituted from:
+- `name` — the `NAME` argument (always available)
+- `--set KEY=VALUE` overrides
+- Team context from `solution.json` (if present)
 
 ---
 
