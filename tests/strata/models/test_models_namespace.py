@@ -15,7 +15,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from strata.models.namespace_model import NamespaceModel
+from strata.models.namespace_model import NamespaceModel, NamespaceType
 
 
 @pytest.fixture(autouse=True)
@@ -55,3 +55,56 @@ def test_namespaces_yaml_invalid(yaml_path):
         NamespaceModel.model_validate(data)
     model = None
     assert model is None
+
+
+class TestNamespaceType:
+    def test_default_type_is_dedicated(self):
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "namespace",
+            "meta": {"name": "my-ns"},
+            "spec": {
+                "modules": [{"name": "mod", "file": "mod.yaml"}],
+            },
+        }
+        model = NamespaceModel.model_validate(data)
+        assert model.spec.type == NamespaceType.DEDICATED
+
+    def test_explicit_shared_type(self):
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "namespace",
+            "meta": {"name": "traefik"},
+            "spec": {
+                "type": "shared",
+                "modules": [{"name": "traefik", "file": "traefik.yaml"}],
+            },
+        }
+        model = NamespaceModel.model_validate(data)
+        assert model.spec.type == NamespaceType.SHARED
+
+    def test_explicit_dedicated_type(self):
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "namespace",
+            "meta": {"name": "my-ns"},
+            "spec": {
+                "type": "dedicated",
+                "modules": [{"name": "mod", "file": "mod.yaml"}],
+            },
+        }
+        model = NamespaceModel.model_validate(data)
+        assert model.spec.type == NamespaceType.DEDICATED
+
+    def test_invalid_type_raises(self):
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "namespace",
+            "meta": {"name": "my-ns"},
+            "spec": {
+                "type": "exclusive",
+                "modules": [{"name": "mod", "file": "mod.yaml"}],
+            },
+        }
+        with pytest.raises(ValidationError):
+            NamespaceModel.model_validate(data)

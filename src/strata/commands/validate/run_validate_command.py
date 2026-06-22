@@ -1,21 +1,25 @@
-"""Command to validate a single platform YAML file."""
+"""Command to validate a single platform YAML file or run cross-manifest overlap checks."""
 
+import fnmatch
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import click
+import yaml
 
 from strata.commands.base_command import BaseCommand
 from strata.validators.platform_validator import PlatformValidator
 
 
 class ValidateCommand(BaseCommand):
-    """Validate a single platform YAML file against its kind-specific service.
+    """Validate a platform YAML file, or run cross-manifest overlap checks.
 
-    Works both inside and outside an initialized workspace.  The ``--deep``
-    flag enables Phase 2 (cross-reference) validation by loading
-    ``ConfigurationService`` from the active profile's ``configfile_paths``; it
-    is a no-op when the workspace is uninitialized or has no active profile.
+    Single-file mode (``--file``): works both inside and outside an initialized
+    workspace.  ``--deep`` enables Phase 2 cross-reference validation.
+
+    Overlap mode (``--path``): requires an initialized workspace with an active
+    profile.  Discovers all deployment manifests matching the glob, runs
+    per-file validation, then checks for cross-manifest overlaps.
     """
 
     OPERATION = "validate"
@@ -24,6 +28,7 @@ class ValidateCommand(BaseCommand):
     def __init__(
         self,
         file: Optional[str] = None,
+        path: Optional[str] = None,
         deep: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
@@ -32,12 +37,14 @@ class ValidateCommand(BaseCommand):
     ) -> None:
         super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
         self._file_path_raw: Optional[str] = file
+        self._path_glob: Optional[str] = path
         self._deep: bool = deep
         self._resolved_file: Optional[Path] = None
         self._validator: Optional[PlatformValidator] = None
         self._detected_kind: Optional[str] = None
         self._policy_configuration_service: Optional[Any] = None
         self._validate_policy_denied: bool = False
+        self._overlap_manifest_paths: List[Path] = []
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
@@ -93,10 +100,14 @@ class ValidateCommand(BaseCommand):
     # ------------------------------------------------------------------
 
     def _before_execute(self) -> bool:
-        """Resolve file_path to an absolute Path and verify it exists."""
+        """Resolve file/path and verify preconditions."""
         if not super()._before_execute():
             return False
 
+        if self._path_glob:
+            return self._before_execute_overlap()
+
+        # Single-file mode
         if not self._file_path_raw:
             raise click.UsageError("Missing option '-f' / '--file'. Specify the deployment YAML file path.")
 
@@ -121,8 +132,66 @@ class ValidateCommand(BaseCommand):
         self.logger.debug("Resolved file path", path=str(self._resolved_file))
         return True
 
+    def _before_execute_overlap(self) -> bool:
+        """Validate preconditions and resolve manifest paths for --path mode."""
+        if self._solution_controller.solution is None:
+            raise click.UsageError(
+                "Overlap check requires an initialized workspace with an active profile. Run `strata sln init` first."
+            )
+        profile, _ = self._solution_controller.get_active_profile()
+        if profile is None:
+            raise click.UsageError(
+                "Overlap check requires an active profile. Run `strata profile activate <name>` first."
+            )
+
+        glob_pattern = self._path_glob
+        repo_map = self._solution_controller.get_repo_map()
+        configfile_paths = profile.configfile_paths or []
+
+        from strata.utils.system import resolve_path
+
+        seen: set = set()
+        matched: List[Path] = []
+        for entry in configfile_paths:
+            try:
+                resolved = resolve_path(str(self._work_path), str(entry.path), repo_map=repo_map)
+            except Exception:
+                continue
+            if not resolved.exists():
+                continue
+            # Match relative-to-work_path against the glob
+            try:
+                rel = resolved.relative_to(self._work_path)
+            except ValueError:
+                rel = resolved
+            if not fnmatch.fnmatch(str(rel).replace("\\", "/"), glob_pattern or "**"):
+                continue
+            canonical = str(resolved.resolve())
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            try:
+                raw = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
+                if raw.get("kind") == "deployment":
+                    matched.append(resolved)
+            except Exception:
+                continue
+
+        if not matched:
+            raise click.UsageError(f"No deployment manifests found matching '{glob_pattern}' in the active profile.")
+
+        self._overlap_manifest_paths = matched
+        self.logger.debug("Overlap manifests found", count=len(matched), glob=glob_pattern)
+        return True
+
     def _run_execution(self) -> bool:
-        """Run the validator pipeline and collect errors."""
+        """Run validation — single-file or overlap mode."""
+        if self._path_glob:
+            return self._run_overlap_execution()
+        return self._run_single_file_execution()
+
+    def _run_single_file_execution(self) -> bool:
+        """Run the validator pipeline on a single file and collect errors."""
         config_svc = self._load_configuration_service()
         # _load_configuration_service appends to self._errors on hard failure
         if self._deep and config_svc is None:
@@ -180,6 +249,74 @@ class ValidateCommand(BaseCommand):
 
         return True
 
+    def _run_overlap_execution(self) -> bool:
+        """Run cross-manifest overlap checks via OverlapController."""
+        from strata.controllers.overlap_controller import OverlapController
+
+        config_svc = self._load_configuration_service_for_overlap()
+        if config_svc is None:
+            return False
+
+        repo_map = self._solution_controller.get_repo_map()
+        controller = OverlapController(
+            configuration_service=config_svc,
+            repo_map=repo_map,
+            work_path=self._work_path,
+        )
+
+        no_critical = controller.run(self._overlap_manifest_paths)
+        errors = controller.get_overlap_errors()
+        warnings = controller.get_overlap_warnings()
+
+        # Critical overlaps are validation errors (exit code 3)
+        for err in errors:
+            self._errors.append(err.message)
+
+        self._output_data = {
+            "glob": self._path_glob,
+            "manifests_checked": len(self._overlap_manifest_paths),
+            "critical_overlaps": [e.to_dict() for e in errors],
+            "warnings": [w.to_dict() for w in warnings],
+            "overlap_passed": no_critical,
+        }
+
+        return True
+
+    def _load_configuration_service_for_overlap(self):
+        """Load ConfigurationService for --path overlap mode (always required)."""
+        try:
+            from strata.services.configuration_service import ConfigurationService
+            from strata.utils.system import resolve_path
+
+            profile, _ = self._solution_controller.get_active_profile()
+            configfile_paths = profile.configfile_paths or []
+            repo_map = self._solution_controller.get_repo_map()
+
+            resolved_paths = []
+            for entry in configfile_paths:
+                try:
+                    resolved = resolve_path(str(self._work_path), str(entry.path), repo_map=repo_map)
+                except ValueError:
+                    continue
+                if resolved.exists():
+                    resolved_paths.append(str(resolved))
+
+            if not resolved_paths:
+                self._errors.append("--path: no configfile_paths resolved. Check active profile refs.")
+                return None
+
+            ConfigurationService.reset()
+            config_svc = ConfigurationService.get_instance()
+            success, load_errors = config_svc.load_from_paths(resolved_paths)
+            if not success:
+                self._errors.append(f"--path: failed to load configuration: {'; '.join(load_errors)}")
+                return None
+            return config_svc
+
+        except Exception as exc:
+            self._errors.append(f"--path: unexpected error loading configuration: {exc}")
+            return None
+
     def _evaluate_validate_policies(self) -> bool:
         """Evaluate 'validate' phase policies. Returns False if any deny-enforcement policy fails."""
         from strata.validators.policies.base_policy import PolicyContext
@@ -228,21 +365,59 @@ class ValidateCommand(BaseCommand):
             return False
 
         if self._is_console_output():
-            click.echo(f"\n📄  File  : {self._resolved_file}")
-            click.echo(f"🏷️   Kind  : {self._detected_kind or 'unknown'}")
-            click.echo(f"🔬  Deep  : {'yes' if self._deep else 'no'}")
-
-            if self.has_validation_errors():
-                click.echo("\n❌  Validation FAILED")
-                click.echo("    Errors:")
-                for err in self._validator.get_errors() if self._validator else []:
-                    click.secho(f"      - {err}", fg="red")
+            if self._path_glob:
+                self._print_overlap_output()
             else:
-                click.secho("\n✅  Validation PASSED", fg="green")
-
-            click.echo("")
+                self._print_single_file_output()
 
         return True
+
+    def _print_single_file_output(self) -> None:
+        click.echo(f"\n📄  File  : {self._resolved_file}")
+        click.echo(f"🏷️   Kind  : {self._detected_kind or 'unknown'}")
+        click.echo(f"🔬  Deep  : {'yes' if self._deep else 'no'}")
+
+        if self.has_validation_errors():
+            click.echo("\n❌  Validation FAILED")
+            click.echo("    Errors:")
+            for err in self._validator.get_errors() if self._validator else []:
+                click.secho(f"      - {err}", fg="red")
+        else:
+            click.secho("\n✅  Validation PASSED", fg="green")
+
+        click.echo("")
+
+    def _print_overlap_output(self) -> None:
+
+        data = self._output_data or {}
+        manifests_checked = data.get("manifests_checked", 0)
+        critical: list = data.get("critical_overlaps", [])
+        warnings: list = data.get("warnings", [])
+        passed: bool = data.get("overlap_passed", True)
+
+        click.echo(f"\n🔍  Overlap check  : {self._path_glob}")
+        click.echo(f"📄  Manifests      : {manifests_checked}")
+
+        if critical:
+            click.echo("")
+            for err in critical:
+                click.secho(f"❌  OVERLAP (Check #{err['check']}): {err['message']}", fg="red")
+                for f in err["files"]:
+                    click.secho(f"      - {f}", fg="red")
+
+        if warnings:
+            click.echo("")
+            for warn in warnings:
+                click.secho(f"⚠️   WARNING (Check #{warn['check']}): {warn['message']}", fg="yellow")
+                for f in warn["files"]:
+                    click.secho(f"      - {f}", fg="yellow")
+
+        click.echo("")
+        if passed:
+            click.secho("✅  No critical overlaps found", fg="green")
+        else:
+            click.secho("❌  Overlap check FAILED", fg="red")
+        click.echo("")
 
     # ------------------------------------------------------------------
     # Helpers

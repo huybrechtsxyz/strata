@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -18,7 +19,7 @@ from strata.models.configuration_model import ConfigurationOutputsModel
 
 def _make_command(tmp_path: Path, **kwargs) -> OutputDeployCommand:
     """Return an OutputDeployCommand configured for artifact mode."""
-    defaults = {"refresh": False}
+    defaults: dict[str, Any] = {"refresh": False}
     defaults.update(kwargs)
     with patch.object(BaseDeployCommand, "_initialize", return_value=None):
         cmd = OutputDeployCommand(work_path=str(tmp_path), file="deploy.yaml", **defaults)

@@ -46,7 +46,6 @@ class TestApplyEnvironmentOverridesRemotes:
     def _make_deployment_service_with_override(self, remote_name: str, initial_ref: str, new_ref: str):
         ds = DeploymentService.__new__(DeploymentService)
         ds._errors = []
-        ds._messages = []
         ds._validation_errors = []
         ds._structured_errors = []
         ds._repo_map = {}
@@ -98,7 +97,6 @@ class TestApplyEnvironmentOverridesRemotes:
     def test_no_remote_overrides_leaves_ref_unchanged(self):
         ds = DeploymentService.__new__(DeploymentService)
         ds._errors = []
-        ds._messages = []
         ds._validation_errors = []
         ds._structured_errors = []
         ds._repo_map = {}
