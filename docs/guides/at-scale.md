@@ -361,6 +361,228 @@ The application workspace defines all possible customer resources (namespace, RB
 
 ---
 
+## Variable Flow: Customer Metadata → Terraform
+
+Customer files carry two kinds of data that look similar but flow differently:
+
+| Field                                                | Purpose                                               | Reaches Terraform?        |
+| ---------------------------------------------------- | ----------------------------------------------------- | ------------------------- |
+| `spec.configuration`                                 | Deployment metadata — routing, labeling, audit        | ❌ Not automatically       |
+| `spec.environments[]` → tier file `spec.variables[]` | Runtime values resolved at deploy time                | ✅ Yes, as `TF_VAR_*`      |
+| `spec.references.variables`                          | Declares which variable keys this customer *requires* | Contract only — no values |
+
+### `spec.configuration` is metadata, not Terraform input
+
+`spec.configuration` holds arbitrary key/value pairs that are injected into the
+generated deployment's `spec.properties` at slot generation time. These appear in
+the deployment manifest and are useful for routing, labeling, and audit. They are
+**not** automatically passed to Terraform.
+
+```yaml
+# customers/acme.yaml
+spec:
+  configuration:
+    crm_id: "42"
+    invoice_prefix: "ACM"
+    support_tier: gold
+```
+
+After slot generation, `spec.properties` in the deployment manifest contains:
+
+```yaml
+# build/customers/acme-eu-production.yaml (generated)
+spec:
+  properties:
+    customer: acme
+    zone: eu
+    crm_id: "42"          # ← from spec.configuration
+    invoice_prefix: "ACM"
+    support_tier: gold
+```
+
+These properties appear in `strata deploy list` output and the deployment manifest,
+but Terraform does not see them unless you also expose them as variables.
+
+### How values actually reach Terraform
+
+```
+customer.yaml  spec.environments            spec.references.variables
+      │                  │                          │
+      │            tier file                   (contract only —
+      │          spec.variables[]              declares required keys)
+      │                  │
+      │         environment variable             deployment
+      │           store definition             spec.variables[]
+      │                  │                          │
+      └──────────────────┴──────────────────────────┘
+                         │
+                  ValueController.resolve()
+                         │
+                  ResolvedValues.variables
+                         │
+                  inject_tf_vars()
+                         │
+                  TF_VAR_<key> in subprocess env
+                         │
+                  terraform plan / apply
+                         │
+                  var.<key> in .tf files
+```
+
+### Pattern A — Tier-wide constants (same value for all customers in a tier)
+
+Put the variable in the tier environment file. All customers using that tier share
+the same value.
+
+```yaml
+# environments/tiers/enterprise.yaml
+spec:
+  properties:
+    tier: enterprise
+  variables:
+    - key: vm_size
+      store: constant
+      value: Standard_D4s_v3
+    - key: replica_count
+      store: constant
+      value: "3"
+    - key: backup_retention_days
+      store: constant
+      value: "30"
+```
+
+Terraform root module:
+
+```hcl
+variable "vm_size"               {}
+variable "replica_count"         {}
+variable "backup_retention_days" {}
+```
+
+### Pattern B — Customer-specific constants
+
+Put the variable in a per-customer environment override file and reference it from
+the customer file. Only that customer sees the value.
+
+```yaml
+# environments/customers/acme-overrides.yaml
+spec:
+  variables:
+    - key: crm_id
+      store: constant
+      value: "42"
+    - key: invoice_prefix
+      store: constant
+      value: ACM
+```
+
+```yaml
+# customers/acme.yaml
+spec:
+  environments:
+    - environments/tiers/enterprise.yaml
+    - environments/customers/acme-overrides.yaml   # ← customer-specific values
+```
+
+Terraform root module:
+
+```hcl
+variable "crm_id"          {}
+variable "invoice_prefix"  {}
+```
+
+### Pattern C — CI-injected values
+
+Use `store: environment` to read from an environment variable in the CI runner.
+Useful for values that differ per pipeline run (e.g. a build number or deployment token)
+or values that must not appear in YAML source.
+
+```yaml
+# environments/tiers/enterprise.yaml (or deployment spec.variables)
+spec:
+  variables:
+    - key: deploy_token
+      store: environment
+      value: STRATA_DEPLOY_TOKEN    # reads os.environ["STRATA_DEPLOY_TOKEN"]
+```
+
+The CI pipeline sets `STRATA_DEPLOY_TOKEN` before running `strata deploy`. Strata
+reads it, adds it to `ResolvedValues.variables`, and injects it as `TF_VAR_deploy_token`.
+
+### Feature flags → Terraform booleans
+
+Feature flags set in a customer file or tier environment flow to Terraform as
+`TF_VAR_<flag>` with the value `"true"` or `"false"`.
+
+```yaml
+# customers/acme.yaml
+spec:
+  features:
+    new_dashboard: true
+```
+
+In Terraform:
+
+```hcl
+variable "new_dashboard" {
+  type    = bool
+  default = false
+}
+
+resource "kubernetes_config_map" "features" {
+  data = {
+    new_dashboard = var.new_dashboard
+  }
+}
+```
+
+### Secrets
+
+Secrets follow the same path as variables but are marked sensitive. Define them
+in environment files with a secret store backend:
+
+```yaml
+spec:
+  secrets:
+    - key: customer_api_key
+      store: azure-keyvault
+      value: customers/acme/api-key       # path in Key Vault
+```
+
+Strata injects secrets as `TF_VAR_<key>` alongside variables. Terraform treats
+them the same way — `variable "customer_api_key" { sensitive = true }`.
+
+### Declaring required keys (`spec.references`)
+
+Use `spec.references.variables` on the customer file to declare which variable
+keys a customer's deployments depend on. This is a contract — strata validates that
+every key is defined in the merged environment before the build runs:
+
+```yaml
+# customers/acme.yaml
+spec:
+  references:
+    variables: [vm_size, crm_id, deploy_token]
+    secrets:   [customer_api_key]
+    features:  [new_dashboard]
+```
+
+If a referenced key is missing from all merged environment layers, `strata build`
+fails with: *"Customer 'acme' requires variable 'crm_id' but it is not defined in any
+merged environment layer."*
+
+### Merge precedence (lowest → highest)
+
+1. Workspace defaults
+2. Customer tier environment files (`spec.environments`, in order)
+3. Lifecycle/deployment environment files (dev, test, acceptance, production)
+4. Deployment `spec.variables` (highest — overrides everything)
+
+Later layers override earlier ones by key. This means production secrets always
+win over tier defaults, and deployment-level overrides are the final word.
+
+---
+
 ## Cross-Workspace References
 
 The infrastructure workspace produces outputs (AKS endpoint, resource group, ingress IP, ACR login server) that the application workspace needs as inputs. This is a cross-workspace dependency.
