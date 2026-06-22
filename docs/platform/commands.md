@@ -44,7 +44,7 @@ These options are accepted by every command and subcommand:
 | `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
 | `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
 | `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
-| `deploy` †   | `run` `destroy` `status` `history` `health` `output` `outputs` `lock`        | Deploy platform using provisioners                        |
+| `deploy` †   | `run` `destroy` `show` `status` `history` `health` `output` `outputs` `lock` | Deploy platform using provisioners                        |
 | `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
 | `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
 | `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations             |
@@ -1033,6 +1033,39 @@ Tear down provisioned infrastructure. `--force` is required for a real destroy (
 ```bash
 strata deploy destroy -f xyz-deploy-prd.yaml --dry-run
 strata deploy destroy --stage production --force
+```
+
+### `deploy show`
+
+```
+strata deploy show [-f FILE] [standard options]
+```
+
+Show resolved deployment configuration: effective remote versions after applying
+environment overrides, plus the workspace and environment files in use.
+
+For each remote, displays the effective reference and whether it came from an
+environment override or the workspace default.
+
+```bash
+strata deploy show -f xyz-deploy-prd.yaml
+strata deploy show -f xyz-deploy-prd.yaml --output json
+```
+
+Example output:
+
+```
+📋  Deployment:   acme-prd
+    File:         deployments/acme-prd.yaml
+    Workspace:    workspaces/customer-acme.yaml
+    Environment:  env-prd (environments/env-prd.yaml)
+
+    Remote Versions:
+
+    Remote        Effective Ref  Source
+    ───────────────────────────────────────────────
+    tf_landscape  v2.2.0         env-prd (override)
+    ans_deploy    v1.1.0         workspace default
 ```
 
 ### `deploy status`

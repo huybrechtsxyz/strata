@@ -97,6 +97,26 @@ class TestDeployStatus:
         assert result.exit_code == 0
 
 
+class TestDeployShow:
+    def test_show_basic(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.show_deploy_command.ShowDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["show", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+
+    def test_show_with_file(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.show_deploy_command.ShowDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["show", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+
+    def test_show_execute_false_returns_nonzero(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.show_deploy_command.ShowDeployCommand.execute", return_value=False):
+            result = runner.invoke(deploy, ["show", "--work-path", str(tmp_path)])
+        assert result.exit_code != 0
+
+
 class TestDeployHistory:
     def test_history_basic(self, tmp_path):
         runner = CliRunner()

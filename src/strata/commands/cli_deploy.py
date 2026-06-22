@@ -18,6 +18,7 @@ from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
 from strata.commands.deploy.lock_deploy_command import LockHistoryCommand, LockReleaseCommand, LockStatusCommand
 from strata.commands.deploy.output_deploy_command import OutputDeployCommand
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
+from strata.commands.deploy.show_deploy_command import ShowDeployCommand
 from strata.commands.deploy.status_deploy_command import StatusDeployCommand
 
 
@@ -133,6 +134,33 @@ def deploy_destroy(
         scope=scope,
         force=force,
         dry_run=dry_run,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@deploy.command(
+    name="show", help="Show resolved deployment configuration: remote versions, workspace, and environment."
+)
+@click_file
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_show(
+    file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Show resolved deployment configuration."""
+    command = ShowDeployCommand(
+        file=file,
+        work_path=work_path,
         output=output,
         verbose=verbose,
         quiet=quiet,
