@@ -5,6 +5,46 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.10.0] — 2026-06-22
+
+### Added
+
+- **`strata deploy show`** — new command that loads and displays the fully resolved deployment configuration (workspace, environments, variables, secrets, features) without executing. Useful for auditing what a deployment will use before running it.
+- **`strata deploy list`** — new command that recursively scans a directory for `kind: deployment` YAML files and emits a flat table of all deployments with their layer fields promoted to top-level columns. Designed for CI matrix generation — pipe the JSON output directly into a GitHub Actions matrix strategy via `jq -c '.data.deployments'`.
+- **`strata new` bundle templates** — `strata new <template>` now resolves bundle templates (directories) in addition to single-file templates. A bundle directory mirrors the desired output tree; `${var}` substitution is applied to both file contents and path segments. Workspace bundles override package bundles by the same name.
+- **Overlap validation (`strata validate --path`)** — new `--path GLOB` option validates multiple deployment manifests for cross-manifest conflicts: duplicate artifact paths, Terraform backend collisions, and namespace overlaps across deployment layers. The non-overlap guarantee is now machine-checkable.
+- **Remote reference overrides** — environment files now support `spec.overrides.remotes[]` to pin a specific remote to a version, tag, or branch for that environment only. The base reference is defined once in the configuration remote; deviations are explicit per-environment overrides. `BaseBuildCommand` checks out remotes to their effective reference at build time.
+- **`strata env` command group** — new top-level command group for environment inspection:
+  - `strata env info` — workspace context summary (deployment, workspace, resolved providers)
+  - `strata env doctor` — comprehensive health checks (integration availability, config validity, connectivity)
+  - `strata env output` — retrieve live Terraform outputs for a deployment
+  - `strata env state list` / `strata env state show` — inspect Terraform state resources
+  - `strata env status` — multi-environment state overview across all deployments
+  - `strata env drift` — detect infrastructure drift between desired and actual state
+- **`OverlapController`** — new controller that orchestrates cross-manifest overlap checks (artifact paths, Terraform backends, namespaces). Used by `strata validate --path`.
+- **`RepositoryController.ensure_remote_refs`** — new method that checks out all remotes in a deployment to their effective reference before a build begins.
+- **`GitIntegration`** — new methods: `fetch`, `checkout`, `resolve_commit_sha` for fine-grained remote management.
+- **`NamespaceType` enum** — `dedicated` vs `shared` namespace types added to the namespace model, affecting overlap validation behavior (shared namespaces are excluded from uniqueness checks).
+- **Docs:** New guide section "Variable Flow: Customer Metadata → Terraform" in `docs/guides/at-scale.md` — documents the full chain from `customer.yaml spec.configuration` through environment variable stores to `TF_VAR_*` injection with three concrete patterns (tier-wide constants, per-customer overrides, CI-injected values).
+- **Docs:** New section "Deploying ArgoCD ApplicationSets" in `docs/config/deployment.md` — covers the recommended pattern for managing ArgoCD via `server.additionalApplications` / `extraObjects` helm values, with full workspace + environment + override YAML examples.
+- **Docs:** `strata deploy list` documented in `docs/platform/commands.md` with usage, option table, JSON output shape, and a complete GitHub Actions matrix workflow snippet.
+- **Docs:** Workspace-per-layer pattern documented in `docs/guides/at-scale.md` (three workspaces: bootstrap, infrastructure, application; why one workspace per layer; 400-deployment example).
+
+### Changed
+
+- **`strata deploy output`** — unified output handling; stored artifact support enhanced.
+- **Environment model** — `spec.overrides.remotes[]` field added with `RemoteOverrideModel` (name, reference, description). Duplicate remote names within one environment rejected at parse time.
+- **`DeploymentService`** — applies remote reference overrides when resolving environments; effective reference for each remote is the environment override if present, otherwise the configuration default.
+
+### Dependencies (GitHub Actions)
+
+- `astral-sh/setup-uv` bumped from v2 to v7
+- `actions/setup-python` bumped from v4 to v6
+- `peaceiris/actions-gh-pages` bumped from v3 to v4
+- `actions/checkout` bumped from v4 to v7
+
+---
+
 ## [0.9.3] — 2026-06-20
 
 ### Added
