@@ -1114,6 +1114,82 @@ Example output:
     ans_deploy    v1.1.0         workspace default
 ```
 
+### `deploy list`
+
+```
+strata deploy list [-p DIR] [standard options]
+```
+
+Enumerate deployment manifests with extracted metadata. Scans a directory
+recursively for `kind: deployment` YAML files and returns one entry per
+manifest. Designed for CI matrix generation — pipe `--output json` into
+`jq` or consume directly as a GitHub Actions matrix input.
+
+All `spec.layers` dimensions are promoted to top-level fields so any layer
+key (e.g. `environment`, `zone`, `tier`) is directly usable as a matrix
+variable without further parsing.
+
+| Option   | Description                                               |
+| -------- | --------------------------------------------------------- |
+| `-p DIR` | Directory to scan (default: current directory, recursive) |
+
+```bash
+# Console table — all deployment manifests under ./deployments/
+strata deploy list -p deployments/
+
+# JSON for CI matrix
+strata deploy list -p deployments/ --output json
+```
+
+Example JSON output (inside the standard `data` envelope):
+
+```json
+{
+  "deployments": [
+    {
+      "file": "/repos/xyz-config/deployments/acme-prd.yaml",
+      "name": "acme_deploy_prd",
+      "environment": "prd",
+      "zone": "eu",
+      "customer": "acme",
+      "workspace": "xyz_platform"
+    },
+    {
+      "file": "/repos/xyz-config/deployments/globex-dev.yaml",
+      "name": "globex_deploy_dev",
+      "environment": "dev",
+      "zone": "eu",
+      "customer": "globex",
+      "workspace": "xyz_platform"
+    }
+  ],
+  "count": 2
+}
+```
+
+GitHub Actions matrix usage:
+
+```yaml
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - id: list
+        run: |
+          matrix=$(strata deploy list -p deployments/ --output json | jq -c '.data.deployments')
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: matrix
+    strategy:
+      matrix:
+        deployment: ${{ fromJson(needs.matrix.outputs.matrix) }}
+    steps:
+      - run: strata deploy run --file "${{ matrix.deployment.file }}"
+```
+
 ### `deploy status`
 
 ```

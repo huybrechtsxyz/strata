@@ -15,6 +15,7 @@ from strata.commands.cli_common import (
 from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
 from strata.commands.deploy.health_deploy_command import HealthDeployCommand
 from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
+from strata.commands.deploy.list_deploy_command import ListDeployCommand
 from strata.commands.deploy.lock_deploy_command import LockHistoryCommand, LockReleaseCommand, LockStatusCommand
 from strata.commands.deploy.output_deploy_command import OutputDeployCommand
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
@@ -203,6 +204,37 @@ def deploy_status(
         work_path=work_path,
         stage=stage,
         show_plan=show_plan,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@deploy.command(name="list", help="List deployment manifests with metadata for CI matrix generation.")
+@click.option(
+    "--path",
+    "-p",
+    default=None,
+    metavar="DIR",
+    help="Directory to scan for deployment manifests (default: current directory).",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_list(
+    path: Optional[str] = None,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """List deployment manifests with metadata."""
+    command = ListDeployCommand(
+        path=path,
+        work_path=work_path,
         output=output,
         verbose=verbose,
         quiet=quiet,
