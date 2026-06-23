@@ -463,6 +463,102 @@ class AzureKeyVaultIntegration(StoreIntegration):
             )
             return result
 
+    def set_secret(self, key: str, value: str, **kwargs) -> bool:
+        """
+        Write a secret to Azure Key Vault (create-if-not-exists semantics).
+
+        Implements ISecretStore interface.  Never overwrites an existing secret —
+        if the key already exists the method returns True without writing.  On a
+        concurrent write race the caller must re-read the value.
+
+        Args:
+            key: Secret name in Key Vault
+            value: Secret value to store
+            **kwargs: prefer_cli, timeout
+
+        Returns:
+            True if the secret exists (created now or already present), False on failure
+        """
+        prefer_cli = kwargs.get("prefer_cli", True)
+        timeout = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot write secret to Azure Key Vault", name=self.integration_name, error=error)
+            return False
+
+        # Check existence first — never overwrite
+        existing = self.get_secret(key, prefer_cli=prefer_cli, timeout=timeout)
+        if existing is not None:
+            logger.info(
+                "Secret already exists in Azure Key Vault — skipping write", name=self.integration_name, secret_name=key
+            )
+            return True
+
+        logger.debug("Writing secret to Azure Key Vault", name=self.integration_name, secret_name=key)
+
+        if prefer_cli:
+            result = self._run_integration(
+                args=[
+                    "keyvault",
+                    "secret",
+                    "set",
+                    "--vault-name",
+                    self._vault_name(),
+                    "--name",
+                    key,
+                    "--value",
+                    value,
+                    "--output",
+                    "none",
+                ],
+                timeout=timeout,
+            )
+            if result.returncode == 0:
+                logger.info("Secret written to Azure Key Vault via CLI", name=self.integration_name, secret_name=key)
+                return True
+            logger.warning(
+                "Failed to write secret via CLI — trying API",
+                name=self.integration_name,
+                secret_name=key,
+                stderr=result.stderr,
+            )
+
+        # API fallback
+        ok = self._set_secret_via_api(key, value, use_cli_token=True)
+        if not ok:
+            ok = self._set_secret_via_api(key, value, use_cli_token=False)
+        if ok:
+            logger.info("Secret written to Azure Key Vault via API", name=self.integration_name, secret_name=key)
+        else:
+            logger.warning("Failed to write secret to Azure Key Vault", name=self.integration_name, secret_name=key)
+        return ok
+
+    def _vault_name(self) -> str:
+        """Extract the vault name from the vault URL (e.g. 'myvault' from 'https://myvault.vault.azure.net/')."""
+        url = self.keyvault_url.rstrip("/")
+        # e.g. https://myvault.vault.azure.net -> myvault
+        host = url.split("//")[-1].split(".")[0] if "//" in url else url.split(".")[0]
+        return host
+
+    def _set_secret_via_api(self, key: str, value: str, use_cli_token: bool) -> bool:
+        """Write a secret via the Key Vault REST API."""
+        import json as _json  # local to keep top-level imports unchanged
+
+        token = self._get_access_token_via_cli() if use_cli_token else self._get_access_token_via_api()
+        if not token:
+            return False
+        try:
+            url = f"{self.keyvault_url.rstrip('/')}secrets/{urllib.parse.quote(key, safe='')}?api-version=7.4"
+            body = _json.dumps({"value": value}).encode("utf-8")
+            req = urllib.request.Request(url, data=body, method="PUT")
+            req.add_header("Authorization", f"Bearer {token}")
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return resp.status in (200, 201)
+        except Exception:
+            return False
+
     # Authentication methods
 
     def _get_access_token_via_cli(self) -> Optional[str]:

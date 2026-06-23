@@ -84,6 +84,7 @@ strata
    decisions/0010-rename-configuration-repositories-to-remotes
    decisions/0011-promotion-strategies-for-version-progression
    decisions/0012-rename-customer-to-tenant
+   decisions/0013-auto-generated-secrets
 
 .. toctree::
    :maxdepth: 2
@@ -92,7 +93,9 @@ strata
    guides/how-deployments-work
    guides/how-deployment-locking-works
    guides/helm-modules
+   guides/features
    guides/faq
+   guides/config-faq
    guides/cookbook-add-environment
    guides/pattern-cross-env-changes
    guides/troubleshooting-what-changed

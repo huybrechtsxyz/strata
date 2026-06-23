@@ -277,6 +277,90 @@ class VaultIntegration(StoreIntegration):
         timeout = kwargs.get("timeout", 60)
         return self._list_secretkeys(path=prefix, prefer_cli=prefer_cli, timeout=timeout)
 
+    def set_secret(self, key: str, value: str, **kwargs) -> bool:
+        """
+        Write a secret to HashiCorp Vault (create-if-not-exists semantics).
+
+        Implements ISecretStore interface.  Never overwrites an existing secret —
+        if the key already exists the method returns True without writing.
+
+        Args:
+            key: Secret path (e.g., "secret/myapp/db-password")
+            value: Secret value to store
+            **kwargs: field, prefer_cli, timeout
+
+        Returns:
+            True if the secret exists (created now or already present), False on failure
+        """
+        field = kwargs.get("field", "value")
+        prefer_cli = kwargs.get("prefer_cli", True)
+        timeout = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot write secret to HashiCorp Vault", name=self.integration_name, error=error)
+            return False
+
+        # Check existence first — never overwrite
+        existing = self.get_secret(key, field=field, prefer_cli=prefer_cli, timeout=timeout)
+        if existing is not None:
+            logger.info(
+                "Secret already exists in HashiCorp Vault — skipping write", name=self.integration_name, secret_path=key
+            )
+            return True
+
+        logger.debug("Writing secret to HashiCorp Vault", name=self.integration_name, secret_path=key)
+
+        if prefer_cli:
+            result = self._run_integration_with_env(
+                args=["kv", "put", key, f"{field}={value}"],
+                timeout=timeout,
+            )
+            if result.returncode == 0:
+                logger.info("Secret written to HashiCorp Vault via CLI", name=self.integration_name, secret_path=key)
+                return True
+            logger.warning(
+                "Failed to write secret via CLI — trying API",
+                name=self.integration_name,
+                secret_path=key,
+                stderr=result.stderr,
+            )
+
+        # API fallback
+        ok = self._set_secret_via_api(key, field, value)
+        if ok:
+            logger.info("Secret written to HashiCorp Vault via API", name=self.integration_name, secret_path=key)
+        else:
+            logger.warning("Failed to write secret to HashiCorp Vault", name=self.integration_name, secret_path=key)
+        return ok
+
+    def _set_secret_via_api(self, secret_path: str, field: str, value: str) -> bool:
+        """Write a secret via the Vault KV v2 API."""
+        try:
+            token = self._get_token()
+            if not token:
+                return False
+            # Normalise path for KV v2
+            if "/data/" not in secret_path and not secret_path.startswith("secret/data/"):
+                parts = secret_path.split("/", 1)
+                if len(parts) == 2:
+                    secret_path = f"{parts[0]}/data/{parts[1]}"
+            url = f"{self.vault_addr}/v1/{secret_path}"
+            body = json.dumps({"data": {field: value}}).encode("utf-8")
+            req = urllib.request.Request(url, data=body, method="POST")
+            req.add_header("X-Vault-Token", token)
+            req.add_header("Content-Type", "application/json")
+            if self.vault_namespace:
+                req.add_header("X-Vault-Namespace", self.vault_namespace)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return resp.status in (200, 204)
+        except Exception:
+            return False
+
+    def set_variable(self, key: str, value: Any, **kwargs) -> bool:
+        """Set a variable in HashiCorp Vault (delegates to set_secret)."""
+        return self.set_secret(key, str(value), **kwargs)
+
     # Auth helpers
 
     def _get_auth_var_name(self, field: str, default: str) -> str:

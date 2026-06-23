@@ -3,7 +3,14 @@
 import pytest
 from pydantic import ValidationError
 
-from strata.models.store_models import SecretStoreModel, SecretStoreType
+from strata.models.store_models import (
+    FeatureStoreModel,
+    SecretGenerateSpec,
+    SecretGenerateType,
+    SecretStoreModel,
+    SecretStoreType,
+    VariableStoreModel,
+)
 
 
 class TestSecretStoreTypeGithub:
@@ -27,3 +34,125 @@ class TestSecretStoreTypeGithub:
         model = SecretStoreModel(key="api_key", store="github", value="MY_API_KEY")
         dumped = model.model_dump()
         assert dumped["store"] == "github"
+
+
+# ---------------------------------------------------------------------------
+# SecretGenerateSpec validation
+# ---------------------------------------------------------------------------
+
+
+class TestSecretGenerateSpec:
+    def test_valid_spec_constructs(self):
+        spec = SecretGenerateSpec(type="password", length=32)
+        assert spec.type == SecretGenerateType.PASSWORD
+        assert spec.length == 32
+
+    def test_default_length_is_32(self):
+        spec = SecretGenerateSpec(type="urlsafe")
+        assert spec.length == 32
+
+    def test_length_too_small_raises(self):
+        with pytest.raises(ValidationError):
+            SecretGenerateSpec(type="hex", length=4)
+
+    def test_length_too_large_raises(self):
+        with pytest.raises(ValidationError):
+            SecretGenerateSpec(type="hex", length=2048)
+
+    def test_unknown_type_raises(self):
+        with pytest.raises(ValidationError):
+            SecretGenerateSpec(type="rsa-key", length=32)
+
+    def test_all_types_accepted(self):
+        for t in ["urlsafe", "hex", "password", "alphanumeric", "numeric", "base64", "uuid4", "uuid7"]:
+            spec = SecretGenerateSpec(type=t, length=16)
+            assert spec.type.value == t
+
+
+# ---------------------------------------------------------------------------
+# SecretStoreModel.generate field
+# ---------------------------------------------------------------------------
+
+
+class TestSecretStoreModelGenerate:
+    def test_generate_on_keyvault_is_valid(self):
+        m = SecretStoreModel(
+            key="DB_PASSWORD",
+            store="azure-keyvault",
+            value="myapp-db-password",
+            generate={"type": "password", "length": 32},
+        )
+        assert m.generate is not None
+        assert m.generate.type == SecretGenerateType.PASSWORD
+
+    def test_generate_on_constant_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            SecretStoreModel(key="k", store="constant", value="v", generate={"type": "hex", "length": 16})
+        assert "built-in store type" in str(exc_info.value)
+
+    def test_generate_on_environment_raises(self):
+        with pytest.raises(ValidationError):
+            SecretStoreModel(key="k", store="environment", value="MY_VAR", generate={"type": "uuid4", "length": 16})
+
+    def test_generate_on_github_raises(self):
+        with pytest.raises(ValidationError):
+            SecretStoreModel(key="k", store="github", value="MY_VAR", generate={"type": "urlsafe", "length": 16})
+
+    def test_generate_none_by_default(self):
+        m = SecretStoreModel(key="k", store="constant", value="v")
+        assert m.generate is None
+
+
+# ---------------------------------------------------------------------------
+# VariableStoreModel.default field
+# ---------------------------------------------------------------------------
+
+
+class TestVariableStoreModelDefault:
+    def test_default_on_appconfig_is_valid(self):
+        m = VariableStoreModel(key="LOG_LEVEL", store="azure-appconfig", value="myapp/log-level", default="info")
+        assert m.default == "info"
+
+    def test_default_on_constant_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            VariableStoreModel(key="k", store="constant", value="v", default="x")
+        assert "built-in store type" in str(exc_info.value)
+
+    def test_default_on_environment_raises(self):
+        with pytest.raises(ValidationError):
+            VariableStoreModel(key="k", store="environment", value="MY_VAR", default="x")
+
+    def test_default_none_by_default(self):
+        m = VariableStoreModel(key="k", store="constant", value="v")
+        assert m.default is None
+
+    def test_default_int_coerced_to_str(self):
+        m = VariableStoreModel(key="k", store="azure-appconfig", value="myapp/k", default="3")
+        assert m.default == "3"
+
+
+# ---------------------------------------------------------------------------
+# FeatureStoreModel.default field
+# ---------------------------------------------------------------------------
+
+
+class TestFeatureStoreModelDefault:
+    def test_default_on_appconfig_is_valid(self):
+        m = FeatureStoreModel(key="DARK_MODE", store="azure-appconfig", value="myapp-dark-mode", default="false")
+        assert m.default == "false"
+
+    def test_default_on_flagsmith_is_valid(self):
+        m = FeatureStoreModel(key="BETA", store="flagsmith", value="myapp-beta", default="true")
+        assert m.default == "true"
+
+    def test_default_on_constant_raises(self):
+        with pytest.raises(ValidationError):
+            FeatureStoreModel(key="k", store="constant", value=True, default="true")
+
+    def test_default_on_environment_raises(self):
+        with pytest.raises(ValidationError):
+            FeatureStoreModel(key="k", store="environment", value="MY_FLAG", default="false")
+
+    def test_default_none_by_default(self):
+        m = FeatureStoreModel(key="k", store="constant", value=True)
+        assert m.default is None

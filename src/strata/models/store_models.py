@@ -7,7 +7,7 @@ Store type enums map to integration types registered in IntegrationFactory.
 from enum import Enum
 from typing import Annotated, Any, List, Optional
 
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
 
 # Enumeration of store backend source categories.
@@ -65,6 +65,42 @@ class SecretStoreType(str, Enum):
     INFISICAL = "infisical"
 
 
+# Enumeration of secret generator types (mirrors --format options in strata secret generate).
+class SecretGenerateType(str, Enum):
+    """Supported cryptographic secret generator types."""
+
+    URLSAFE = "urlsafe"
+    HEX = "hex"
+    PASSWORD = "password"
+    ALPHANUMERIC = "alphanumeric"
+    NUMERIC = "numeric"
+    BASE64 = "base64"
+    UUID4 = "uuid4"
+    UUID7 = "uuid7"
+
+
+# Spec for auto-generating a secret value if the store key is missing.
+class SecretGenerateSpec(BaseModel):
+    """Spec for generating a cryptographically secure secret when the store key does not exist."""
+
+    type: SecretGenerateType = Field(
+        description="Generator type (urlsafe, hex, password, alphanumeric, numeric, base64, uuid4, uuid7)"
+    )
+    length: int = Field(
+        default=32,
+        description="Length in bytes (urlsafe/hex/base64) or characters (alphanumeric/password/numeric). Ignored for uuid4/uuid7.",
+    )
+
+    @field_validator("length")
+    @classmethod
+    def validate_length(cls, v: int) -> int:
+        if v < 8:
+            raise ValueError("length must be >= 8")
+        if v > 1024:
+            raise ValueError("length must be <= 1024")
+        return v
+
+
 # Enumeration of supported feature flag store types.
 class FeatureStoreType(str, Enum):
     """
@@ -108,6 +144,20 @@ class SecretStoreModel(BaseModel):
         description="Optional version for store-based secrets (supported by some integrations)",
     )
     description: Optional[str] = Field(None, description="Optional description for documentation purposes")
+    generate: Optional[SecretGenerateSpec] = Field(
+        None,
+        description="Auto-generate the secret when the store key is missing (integration-backed stores only)",
+    )
+
+    @model_validator(mode="after")
+    def validate_generate_not_on_builtin(self) -> "SecretStoreModel":
+        builtin = {SecretStoreType.CONSTANT, SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB}
+        if self.generate is not None and self.store in builtin:
+            raise ValueError(
+                f"Secret '{self.key}': 'generate' is not valid on built-in store type '{self.store.value}'. "
+                "Use an integration-backed store (azure-keyvault, vault, bitwarden, infisical)."
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_version_not_set_for_github(self) -> "SecretStoreModel":
@@ -143,6 +193,20 @@ class VariableStoreModel(BaseModel):
         description="Optional version for store-based variables (supported by some integrations)",
     )
     description: Optional[str] = Field(None, description="Optional description for documentation purposes")
+    default: Optional[str] = Field(
+        None,
+        description="Seed the store with this value when the key is missing (integration-backed stores only)",
+    )
+
+    @model_validator(mode="after")
+    def validate_default_not_on_builtin(self) -> "VariableStoreModel":
+        builtin = {VariableStoreType.CONSTANT, VariableStoreType.ENVIRONMENT}
+        if self.default is not None and self.store in builtin:
+            raise ValueError(
+                f"Variable '{self.key}': 'default' is not valid on built-in store type '{self.store.value}'. "
+                "Use an integration-backed store (azure-appconfig, consul, vault, infisical, etcd)."
+            )
+        return self
 
 
 # Model for feature flag definitions.
@@ -167,6 +231,20 @@ class FeatureStoreModel(BaseModel):
         description="Optional version for store-based feature flags (supported by some integrations)",
     )
     description: Optional[str] = Field(None, description="Optional description for documentation purposes")
+    default: Optional[str] = Field(
+        None,
+        description="Seed the store with this state when the flag is missing. Use 'true' or 'false' (integration-backed stores only)",
+    )
+
+    @model_validator(mode="after")
+    def validate_default_not_on_builtin(self) -> "FeatureStoreModel":
+        builtin = {FeatureStoreType.CONSTANT, FeatureStoreType.ENVIRONMENT}
+        if self.default is not None and self.store in builtin:
+            raise ValueError(
+                f"Feature '{self.key}': 'default' is not valid on built-in store type '{self.store.value}'. "
+                "Use an integration-backed store (azure-appconfig, flagsmith)."
+            )
+        return self
 
 
 # Validation helper functions for variables, secrets, and features

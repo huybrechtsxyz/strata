@@ -261,6 +261,69 @@ class ConsulIntegration(StoreIntegration):
         timeout = kwargs.get("timeout", 60)
         return self.list_keys(prefix, prefer_cli=prefer_cli, timeout=timeout)
 
+    def set_variable(self, key: str, value: Any, **kwargs) -> bool:
+        """
+        Write a key to Consul KV store (create-if-not-exists semantics).
+
+        Implements IVariableStore interface.  Never overwrites an existing key —
+        if the key already exists the method returns True without writing.
+
+        Args:
+            key: KV key path (e.g., "config/myapp/log-level")
+            value: Value to store (will be coerced to str)
+            **kwargs: prefer_cli, timeout
+
+        Returns:
+            True if the key exists (created now or already present), False on failure
+        """
+        prefer_cli = kwargs.get("prefer_cli", True)
+        timeout: int = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot write variable to HashiCorp Consul", name=self.integration_name, error=error)
+            return False
+
+        # Check existence first — never overwrite
+        existing = self.get_variable(key, prefer_cli=prefer_cli, timeout=timeout)
+        if existing is not None:
+            logger.info(
+                "Variable already exists in HashiCorp Consul — skipping write", name=self.integration_name, key=key
+            )
+            return True
+
+        logger.debug("Writing variable to HashiCorp Consul", name=self.integration_name, key=key)
+
+        ok = self._put_keyvalue(key, str(value), prefer_cli=prefer_cli, timeout=timeout)
+        if ok:
+            logger.info("Variable written to HashiCorp Consul", name=self.integration_name, key=key)
+        else:
+            logger.warning("Failed to write variable to HashiCorp Consul", name=self.integration_name, key=key)
+        return ok
+
+    def _put_keyvalue(self, key: str, value: str, prefer_cli: bool = True, timeout: int = 60) -> bool:
+        """Write a key-value to Consul KV store."""
+        if prefer_cli:
+            try:
+                result = self._run_integration_with_env(args=["kv", "put", key, value], timeout=timeout)
+                if result.returncode == 0:
+                    return True
+            except Exception:
+                pass
+        # API fallback
+        try:
+            kv_url = f"{self.consul_addr}/v1/kv/{key}"
+            if self.consul_namespace:
+                kv_url += f"?ns={self.consul_namespace}"
+            body = value.encode("utf-8")
+            req = urllib.request.Request(kv_url, data=body, method="PUT")
+            if self.consul_token:
+                req.add_header("X-Consul-Token", self.consul_token)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
     # KV store methods (IKVStore implementation)
 
     def get_keyvalue(

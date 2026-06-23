@@ -349,3 +349,64 @@ class BitwardenIntegration(StoreIntegration):
         )
 
         return secret_ids
+
+    def set_secret(self, key: str, value: str, **kwargs) -> bool:
+        """
+        Create a secret in Bitwarden Secrets Manager (create-if-not-exists semantics).
+
+        Implements ISecretStore interface.  Never overwrites an existing secret —
+        if a secret with the same key already exists the method returns True without writing.
+
+        Note: Bitwarden identifies secrets by UUID, but allows human-readable key names.
+        This method creates a new secret entry using ``bw secret create``.
+
+        Args:
+            key: Human-readable key / name for the secret
+            value: Secret value to store
+            **kwargs: project_id, timeout
+
+        Returns:
+            True if the secret exists (created now or already present), False on failure
+        """
+        timeout: int = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot write secret to Bitwarden", name=self.integration_name, error=error)
+            return False
+
+        # Check existence first — never overwrite.
+        # Bitwarden uses UUIDs as primary identifiers; key is the human name.
+        # We search by key in the listing.
+        existing_secrets = self._list_secrets_full(timeout=timeout) or []
+        for s in existing_secrets:
+            if s.get("key") == key:
+                logger.info(
+                    "Secret already exists in Bitwarden — skipping write", name=self.integration_name, secret_key=key
+                )
+                return True
+
+        logger.debug("Writing secret to Bitwarden", name=self.integration_name, secret_key=key)
+
+        env = {**os.environ}
+        if self.access_token:
+            env[self._get_token_var_name()] = self.access_token
+
+        try:
+            result = self._run_integration(
+                args=["secret", "create", key, value],
+                timeout=timeout,
+                env=env,
+            )
+            if result.returncode == 0:
+                logger.info("Secret written to Bitwarden", name=self.integration_name, secret_key=key)
+                return True
+            logger.warning(
+                "Failed to write secret to Bitwarden", name=self.integration_name, secret_key=key, stderr=result.stderr
+            )
+            return False
+        except Exception as e:
+            logger.warning(
+                "Error writing secret to Bitwarden", name=self.integration_name, secret_key=key, error=str(e)
+            )
+            return False

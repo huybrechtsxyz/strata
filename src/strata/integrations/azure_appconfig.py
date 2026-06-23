@@ -404,6 +404,195 @@ class AzureAppConfigIntegration(StoreIntegration):
 
         return result
 
+    def set_variable(self, key: str, value: Any, **kwargs) -> bool:
+        """
+        Write a configuration key to Azure App Configuration (create-if-not-exists semantics).
+
+        Implements IVariableStore interface.  Never overwrites an existing key —
+        if the key already exists the method returns True without writing.
+
+        Args:
+            key: Configuration key name
+            value: Value to store (will be coerced to str)
+            **kwargs: label, prefer_cli, timeout
+
+        Returns:
+            True if the key exists (created now or already present), False on failure
+        """
+        label = kwargs.get("label")
+        prefer_cli = kwargs.get("prefer_cli", True)
+        timeout: int = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot write variable to Azure App Configuration", name=self.integration_name, error=error)
+            return False
+
+        # Check existence first — never overwrite
+        existing = self.get_variable(key, label=label, prefer_cli=prefer_cli, timeout=timeout)
+        if existing is not None:
+            logger.info(
+                "Variable already exists in Azure App Configuration — skipping write",
+                name=self.integration_name,
+                key=key,
+            )
+            return True
+
+        logger.debug("Writing variable to Azure App Configuration", name=self.integration_name, key=key)
+
+        args = [
+            "appconfig",
+            "kv",
+            "set",
+            "--key",
+            key,
+            "--value",
+            str(value),
+            "--yes",
+            "--output",
+            "none",
+        ]
+        if self.appconfig_endpoint:
+            args.extend(["--endpoint", self.appconfig_endpoint.rstrip("/")])
+        elif self.connection_string:
+            args.extend(["--connection-string", self.connection_string])
+        if label:
+            args.extend(["--label", label])
+
+        result = self._run_integration(args=args, timeout=timeout)
+        if result.returncode == 0:
+            logger.info("Variable written to Azure App Configuration via CLI", name=self.integration_name, key=key)
+            return True
+
+        # API fallback
+        ok = self._set_value_via_api(key, str(value), label)
+        if ok:
+            logger.info("Variable written to Azure App Configuration via API", name=self.integration_name, key=key)
+        else:
+            logger.warning(
+                "Failed to write variable to Azure App Configuration",
+                name=self.integration_name,
+                key=key,
+                stderr=result.stderr,
+            )
+        return ok
+
+    def set_feature(self, key: str, value: bool, **kwargs) -> bool:
+        """
+        Create a feature flag in Azure App Configuration (create-if-not-exists semantics).
+
+        Implements IFeatureStore interface.  Never overwrites an existing flag —
+        if the flag already exists the method returns True without writing.
+
+        Args:
+            key: Feature flag name
+            value: Initial enabled state
+            **kwargs: label, prefer_cli, timeout
+
+        Returns:
+            True if the flag exists (created now or already present), False on failure
+        """
+        label = kwargs.get("label")
+        prefer_cli = kwargs.get("prefer_cli", True)
+        timeout: int = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning(
+                "Cannot write feature flag to Azure App Configuration", name=self.integration_name, error=error
+            )
+            return False
+
+        # Check existence first — never overwrite
+        existing = self.get_feature(key, label=label, prefer_cli=prefer_cli, timeout=timeout)
+        if existing is not None:
+            logger.info(
+                "Feature flag already exists in Azure App Configuration — skipping write",
+                name=self.integration_name,
+                key=key,
+            )
+            return True
+
+        logger.debug("Writing feature flag to Azure App Configuration", name=self.integration_name, key=key)
+
+        # Step 1: create the flag (disabled by default)
+        create_args = [
+            "appconfig",
+            "feature",
+            "set",
+            "--feature",
+            key,
+            "--yes",
+            "--output",
+            "none",
+        ]
+        if self.appconfig_endpoint:
+            create_args.extend(["--endpoint", self.appconfig_endpoint.rstrip("/")])
+        elif self.connection_string:
+            create_args.extend(["--connection-string", self.connection_string])
+        if label:
+            create_args.extend(["--label", label])
+
+        result = self._run_integration(args=create_args, timeout=timeout)
+        if result.returncode != 0:
+            logger.warning(
+                "Failed to create feature flag in Azure App Configuration",
+                name=self.integration_name,
+                key=key,
+                stderr=result.stderr,
+            )
+            return False
+
+        # Step 2: set the enabled/disabled state
+        state_cmd = "enable" if value else "disable"
+        state_args = [
+            "appconfig",
+            "feature",
+            state_cmd,
+            "--feature",
+            key,
+            "--yes",
+            "--output",
+            "none",
+        ]
+        if self.appconfig_endpoint:
+            state_args.extend(["--endpoint", self.appconfig_endpoint.rstrip("/")])
+        elif self.connection_string:
+            state_args.extend(["--connection-string", self.connection_string])
+        if label:
+            state_args.extend(["--label", label])
+
+        result = self._run_integration(args=state_args, timeout=timeout)
+        if result.returncode == 0:
+            logger.info(
+                "Feature flag written to Azure App Configuration", name=self.integration_name, key=key, enabled=value
+            )
+            return True
+        logger.warning(
+            "Feature flag created but state change failed", name=self.integration_name, key=key, stderr=result.stderr
+        )
+        return False
+
+    def _set_value_via_api(self, key: str, value: str, label: Optional[str]) -> bool:
+        """Write a configuration key via the App Configuration REST API."""
+        try:
+            token = self._get_access_token_via_cli() or self._get_access_token_via_api()
+            if not token:
+                return False
+            endpoint = self.appconfig_endpoint.rstrip("/")
+            encoded_key = urllib.parse.quote(key, safe="")
+            url = f"{endpoint}/kv/{encoded_key}?api-version=2023-10-01"
+            if label:
+                url += f"&label={urllib.parse.quote(label, safe='')}"
+            body = json.dumps({"value": value}).encode("utf-8")
+            req = urllib.request.Request(url, data=body, method="PUT")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return resp.status in (200, 201)
+        except Exception:
+            return False
+
     # App Configuration internal methods
 
     def _get_value(

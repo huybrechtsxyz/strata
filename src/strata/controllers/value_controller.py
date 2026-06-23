@@ -18,6 +18,7 @@ from strata.models.store_models import (
 )
 from strata.services.deployment_service import DeploymentService
 from strata.services.integration_service import IntegrationService
+from strata.utils.secret_generator import generate_secret
 
 logger = get_logger(__name__)
 
@@ -47,6 +48,9 @@ class ResolvedValues:
     stage_outputs: Dict[str, Any] = field(default_factory=dict)
     stage_outputs_sensitive: Dict[str, Any] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
+    variable_notes: Dict[str, str] = field(default_factory=dict)
+    secret_notes: Dict[str, str] = field(default_factory=dict)
+    feature_notes: Dict[str, str] = field(default_factory=dict)
 
     def is_empty(self) -> bool:
         """Return True when no values were resolved."""
@@ -73,6 +77,9 @@ class ResolvedValues:
                 stage_outputs=dict(self.stage_outputs),
                 stage_outputs_sensitive={},
                 errors=list(self.errors),
+                variable_notes=dict(self.variable_notes),
+                secret_notes={},
+                feature_notes=dict(self.feature_notes),
             )
 
         if allowed_secrets == ["*"]:
@@ -83,6 +90,9 @@ class ResolvedValues:
                 stage_outputs=dict(self.stage_outputs),
                 stage_outputs_sensitive=dict(self.stage_outputs_sensitive),
                 errors=list(self.errors),
+                variable_notes=dict(self.variable_notes),
+                secret_notes=dict(self.secret_notes),
+                feature_notes=dict(self.feature_notes),
             )
 
         allowed = set(allowed_secrets)
@@ -93,6 +103,9 @@ class ResolvedValues:
             stage_outputs=dict(self.stage_outputs),
             stage_outputs_sensitive={k: v for k, v in self.stage_outputs_sensitive.items() if k in allowed},
             errors=list(self.errors),
+            variable_notes=dict(self.variable_notes),
+            secret_notes={k: v for k, v in self.secret_notes.items() if k in allowed},
+            feature_notes=dict(self.feature_notes),
         )
 
     def debug_summary(self) -> Dict[str, Any]:
@@ -265,33 +278,39 @@ class ValueController(BaseController):
 
         # --- variables ---
         for item in environment_service.get_variables():
-            val, err = self._resolve_variable(item)
+            val, err, note = self._resolve_variable(item)
             if err:
                 resolved.errors.append(err)
                 if strict:
                     return False, resolved, resolved.errors
             else:
                 resolved.variables[item.key] = val
+                if note:
+                    resolved.variable_notes[item.key] = note
 
         # --- secrets ---
         for secret_item in environment_service.get_secrets():
-            val, err = self._resolve_secret(secret_item)
+            val, err, note = self._resolve_secret(secret_item)
             if err:
                 resolved.errors.append(err)
                 if strict:
                     return False, resolved, resolved.errors
             else:
                 resolved.secrets[secret_item.key] = val
+                if note:
+                    resolved.secret_notes[secret_item.key] = note
 
         # --- features ---
         for feature_item in environment_service.get_features():
-            val, err = self._resolve_feature(feature_item)
+            val, err, note = self._resolve_feature(feature_item)
             if err:
                 resolved.errors.append(err)
                 if strict:
                     return False, resolved, resolved.errors
             else:
                 resolved.features[feature_item.key] = val
+                if note:
+                    resolved.feature_notes[feature_item.key] = note
 
         logger.debug(
             "Value resolution complete",
@@ -306,40 +325,62 @@ class ValueController(BaseController):
 
     # Per-type resolvers
 
-    def _resolve_variable(self, item: VariableStoreModel) -> Tuple[Optional[Any], Optional[str]]:
-        """Resolve a single variable.  Returns (value, error_or_None)."""
+    def _resolve_variable(self, item: VariableStoreModel) -> Tuple[Optional[Any], Optional[str], Optional[str]]:
+        """Resolve a single variable.  Returns (value, error_or_None, note_or_None)."""
         store = item.store
 
         if store == VariableStoreType.CONSTANT:
-            return item.value, None
+            return item.value, None, None
 
         if store == VariableStoreType.ENVIRONMENT:
             env_val = os.environ.get(str(item.value))
             if env_val is None:
-                return None, (f"Variable '{item.key}': env var '{item.value}' is not set.")
-            return env_val, None
+                return None, (f"Variable '{item.key}': env var '{item.value}' is not set."), None
+            return env_val, None, None
 
         # Integration-backed store
         integration = self._get_integration_by_type(store.value)
         if integration is None:
-            return None, (f"Variable '{item.key}': no integration registered for store type '{store.value}'.")
+            return None, (f"Variable '{item.key}': no integration registered for store type '{store.value}'."), None
         val = integration.get_variable(str(item.value))
         if val is None:
-            return None, (f"Variable '{item.key}': key '{item.value}' not found in '{store.value}' store.")
-        return val, None
+            if item.default is None:
+                return None, (f"Variable '{item.key}': key '{item.value}' not found in '{store.value}' store."), None
+            # Seed-on-missing: write the declared default
+            ok = integration.set_variable(str(item.value), item.default)
+            if not ok:
+                # Race: another process may have just written it — try re-reading
+                reread = integration.get_variable(str(item.value))
+                if reread is not None:
+                    logger.warning(
+                        "Variable seeded by another process — using existing value",
+                        key=item.key,
+                        store=store.value,
+                    )
+                    return reread, None, None
+                return None, (f"Variable '{item.key}': store write for default failed in '{store.value}'."), None
+            logger.info(
+                "Variable seeded with default",
+                action="variable_seeded",
+                key=str(item.value),
+                store=store.value,
+                default=item.default,
+            )
+            return item.default, None, f"default: {item.default}"
+        return val, None, None
 
-    def _resolve_secret(self, item: SecretStoreModel) -> Tuple[Optional[Any], Optional[str]]:
-        """Resolve a single secret.  Returns (value, error_or_None)."""
+    def _resolve_secret(self, item: SecretStoreModel) -> Tuple[Optional[Any], Optional[str], Optional[str]]:
+        """Resolve a single secret.  Returns (value, error_or_None, note_or_None)."""
         store = item.store
 
         if store == SecretStoreType.CONSTANT:
-            return item.value, None
+            return item.value, None, None
 
         if store == SecretStoreType.ENVIRONMENT:
             env_val = os.environ.get(str(item.value))
             if env_val is None:
-                return None, (f"Secret '{item.key}': env var '{item.value}' is not set.")
-            return env_val, None
+                return None, (f"Secret '{item.key}': env var '{item.value}' is not set."), None
+            return env_val, None, None
 
         if store == SecretStoreType.GITHUB:
             if os.environ.get("GITHUB_ACTIONS") != "true":
@@ -351,43 +392,96 @@ class ValueController(BaseController):
             env_key = str(item.value).upper()
             env_val = os.environ.get(env_key)
             if env_val is None:
-                return None, (
-                    f"Secret '{item.key}': GitHub Actions env var '{env_key}' is not set. "
-                    f"Ensure the secret is declared in your GitHub Actions workflow and the workflow is running."
+                return (
+                    None,
+                    (
+                        f"Secret '{item.key}': GitHub Actions env var '{env_key}' is not set. "
+                        f"Ensure the secret is declared in your GitHub Actions workflow and the workflow is running."
+                    ),
+                    None,
                 )
-            return env_val, None
+            return env_val, None, None
 
         integration = self._get_integration_by_type(store.value)
         if integration is None:
-            return None, (f"Secret '{item.key}': no integration registered for store type '{store.value}'.")
+            return None, (f"Secret '{item.key}': no integration registered for store type '{store.value}'."), None
         val = integration.get_secret(str(item.value))
         if val is None:
-            return None, (f"Secret '{item.key}': key '{item.value}' not found in '{store.value}' store.")
-        return val, None
+            if item.generate is None:
+                return None, (f"Secret '{item.key}': key '{item.value}' not found in '{store.value}' store."), None
+            # Generate-on-missing: create a new cryptographic value
+            generated = generate_secret(item.generate.type.value, item.generate.length)
+            ok = integration.set_secret(str(item.value), generated)
+            if not ok:
+                # Race: another process may have just written it — try re-reading
+                reread = integration.get_secret(str(item.value))
+                if reread is not None:
+                    logger.warning(
+                        "Secret created by another process — using existing value",
+                        key=item.key,
+                        store=store.value,
+                    )
+                    return reread, None, None
+                return (
+                    None,
+                    (f"Secret '{item.key}': generation succeeded but store write failed in '{store.value}'."),
+                    None,
+                )
+            logger.info(
+                "Secret generated and stored",
+                action="secret_generated",
+                key=str(item.value),
+                store=store.value,
+                generator_type=item.generate.type.value,
+            )
+            return generated, None, "generated"
+        return val, None, None
 
-    def _resolve_feature(self, item: FeatureStoreModel) -> Tuple[Optional[bool], Optional[str]]:
-        """Resolve a single feature flag.  Returns (value, error_or_None)."""
+    def _resolve_feature(self, item: FeatureStoreModel) -> Tuple[Optional[bool], Optional[str], Optional[str]]:
+        """Resolve a single feature flag.  Returns (value, error_or_None, note_or_None)."""
         store = item.store
 
         if store == FeatureStoreType.CONSTANT:
             try:
-                return bool(item.value), None
+                return bool(item.value), None, None
             except (TypeError, ValueError):
-                return None, (f"Feature '{item.key}': cannot convert constant value '{item.value}' to bool.")
+                return None, (f"Feature '{item.key}': cannot convert constant value '{item.value}' to bool."), None
 
         if store == FeatureStoreType.ENVIRONMENT:
             env_val = os.environ.get(str(item.value))
             if env_val is None:
-                return None, (f"Feature '{item.key}': env var '{item.value}' is not set.")
-            return env_val.lower() not in ("0", "false", "no", "off"), None
+                return None, (f"Feature '{item.key}': env var '{item.value}' is not set."), None
+            return env_val.lower() not in ("0", "false", "no", "off"), None, None
 
         integration = self._get_integration_by_type(store.value)
         if integration is None:
-            return None, (f"Feature '{item.key}': no integration registered for store type '{store.value}'.")
+            return None, (f"Feature '{item.key}': no integration registered for store type '{store.value}'."), None
         val = integration.get_feature(str(item.value))
         if val is None:
-            return None, (f"Feature '{item.key}': flag '{item.value}' not found in '{store.value}' store.")
-        return val, None
+            if item.default is None:
+                return None, (f"Feature '{item.key}': flag '{item.value}' not found in '{store.value}' store."), None
+            # Seed-on-missing: write the declared default state
+            default_bool = item.default.lower() not in ("0", "false", "no", "off")
+            ok = integration.set_feature(str(item.value), default_bool)
+            if not ok:
+                reread = integration.get_feature(str(item.value))
+                if reread is not None:
+                    logger.warning(
+                        "Feature flag seeded by another process — using existing value",
+                        key=item.key,
+                        store=store.value,
+                    )
+                    return reread, None, None
+                return None, (f"Feature '{item.key}': store write for default failed in '{store.value}'."), None
+            logger.info(
+                "Feature flag seeded with default",
+                action="feature_seeded",
+                key=str(item.value),
+                store=store.value,
+                default=item.default,
+            )
+            return default_bool, None, f"default: {item.default}"
+        return val, None, None
 
     # Helpers
 
