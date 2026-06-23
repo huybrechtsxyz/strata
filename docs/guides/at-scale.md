@@ -365,11 +365,11 @@ The application workspace defines all possible customer resources (namespace, RB
 
 Tenant files carry two kinds of data that look similar but flow differently:
 
-| Field                                                | Purpose                                               | Reaches Terraform?        |
-| ---------------------------------------------------- | ----------------------------------------------------- | ------------------------- |
-| `spec.configuration`                                 | Deployment metadata — routing, labeling, audit        | ❌ Not automatically       |
-| `spec.environments[]` → tier file `spec.variables[]` | Runtime values resolved at deploy time                | ✅ Yes, as `TF_VAR_*`      |
-| `spec.references.variables`                          | Declares which variable keys this tenant *requires*   | Contract only — no values |
+| Field                                                | Purpose                                             | Reaches Terraform?        |
+| ---------------------------------------------------- | --------------------------------------------------- | ------------------------- |
+| `spec.configuration`                                 | Deployment metadata — routing, labeling, audit      | ❌ Not automatically       |
+| `spec.environments[]` → tier file `spec.variables[]` | Runtime values resolved at deploy time              | ✅ Yes, as `TF_VAR_*`      |
+| `spec.references.variables`                          | Declares which variable keys this tenant *requires* | Contract only — no values |
 
 ### `spec.configuration` is metadata, not Terraform input
 
@@ -959,16 +959,16 @@ build/
 
 ## Scale Characteristics
 
-| Dimension                        | Count          | Management                                     |
-| -------------------------------- | -------------- | ---------------------------------------------- |
-| Landscapes                       | 2–5            | One config repo per team                       |
-| Zones per landscape              | 1–3            | Manual, evolves with the landscape             |
-| Landscape deployments            | ~6–15          | Standard strata workflow                       |
-| Tenant files                     | ~100           | One YAML per tenant per landscape              |
-| Tenant deployments (generated)   | ~400           | Generated from tenant files × lifecycle envs   |
-| Onboarding rate                  | ~1/week        | Add one YAML file via PR                       |
-| App upgrade frequency            | Weekly–monthly | Update tier env file or per-tenant env         |
-| Infrastructure changes           | Ongoing        | Non-breaking evolution of the landscape        |
+| Dimension                      | Count          | Management                                   |
+| ------------------------------ | -------------- | -------------------------------------------- |
+| Landscapes                     | 2–5            | One config repo per team                     |
+| Zones per landscape            | 1–3            | Manual, evolves with the landscape           |
+| Landscape deployments          | ~6–15          | Standard strata workflow                     |
+| Tenant files                   | ~100           | One YAML per tenant per landscape            |
+| Tenant deployments (generated) | ~400           | Generated from tenant files × lifecycle envs |
+| Onboarding rate                | ~1/week        | Add one YAML file via PR                     |
+| App upgrade frequency          | Weekly–monthly | Update tier env file or per-tenant env       |
+| Infrastructure changes         | Ongoing        | Non-breaking evolution of the landscape      |
 
 ---
 
