@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Operating Strata at Scale — Multi-Customer Design &mdash; strata 0.8.0 documentation</title>
+  <title>Operating Strata at Scale — Multi-Tenant Design &mdash; strata 0.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -717,7 +717,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/policies.html#policy-types">Policy Types</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#built-in-types">Built-in types</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#customer-zone"><code class="docutils literal notranslate"><span class="pre">customer_zone</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#tenant-zone"><code class="docutils literal notranslate"><span class="pre">tenant_zone</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#required-tags"><code class="docutils literal notranslate"><span class="pre">required_tags</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#naming-pattern"><code class="docutils literal notranslate"><span class="pre">naming_pattern</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#script"><code class="docutils literal notranslate"><span class="pre">script</span></code></a></li>
@@ -1369,6 +1369,79 @@
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#consequences">Consequences</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html">Promotion strategies for version progression across environments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#key-observations">Key Observations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#terraform-vs-helm-different-risk-profiles">Terraform vs Helm: different risk profiles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#a-promotion-is-a-yaml-edit">A promotion is a YAML edit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#canary-is-a-special-case-of-waves">Canary is a special case of waves</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#option-a-configuration-defined-strategies-strata-promote-command">Option A: Configuration-defined strategies, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span></code> command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#option-b-environment-only-no-command-automation-not-chosen">Option B: Environment-only, no command automation (not chosen)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#option-c-external-promotion-tool-no-strata-involvement-not-chosen">Option C: External promotion tool (no strata involvement, not chosen)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#implementation-approach">Implementation approach</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#issues-to-resolve-phase-3-blockers">Issues to Resolve (Phase 3 Blockers)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#appendix-how-spec-tenant-works-on-deployments">Appendix: How <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> Works on Deployments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#design-promotion-system">Design: Promotion System</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#concepts">Concepts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#configuration-model">Configuration Model</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#configuration-spec-promotions"><code class="docutils literal notranslate"><span class="pre">configuration.spec.promotions</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#environment-spec-promotion"><code class="docutils literal notranslate"><span class="pre">environment.spec.promotion</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#wave-assignment-on-deployments">Wave assignment on deployments</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#cli-interface">CLI Interface</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-start"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">start</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-rollback"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">rollback</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-matrix"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">matrix</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-status"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-history"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">history</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#gates">Gates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#state-management">State Management</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#activity-log-diagnostic-strata-promotions">Activity log (diagnostic — <code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code>)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#promotion-record-audit-artifact-store">Promotion record (audit — artifact store)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#git-flow">Git Flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#interaction-with-existing-systems">Interaction with Existing Systems</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#constraints-and-non-goals">Constraints and Non-Goals</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#more-information">More Information</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html">Rename CustomerModel to TenantModel</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-a-rename-to-tenant-recommended">Option A — Rename to <code class="docutils literal notranslate"><span class="pre">tenant</span></code> (recommended)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-b-rename-to-account">Option B — Rename to <code class="docutils literal notranslate"><span class="pre">account</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-c-rename-to-party">Option C — Rename to <code class="docutils literal notranslate"><span class="pre">party</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-d-rename-to-owner">Option D — Rename to <code class="docutils literal notranslate"><span class="pre">owner</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-e-rename-to-subscriber">Option E — Rename to <code class="docutils literal notranslate"><span class="pre">subscriber</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-f-keep-customer-status-quo">Option F — Keep <code class="docutils literal notranslate"><span class="pre">customer</span></code> (status quo)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#decision-outcome">Decision Outcome</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#impact-assessment">Impact Assessment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#files-requiring-changes">Files requiring changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#migration-path">Migration path</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#more-information">More Information</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Guides:</span></p>
 <ul class="current">
@@ -1572,13 +1645,13 @@
 <li class="toctree-l2"><a class="reference internal" href="deployment-manifests.html#see-also">See Also</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Operating Strata at Scale — Multi-Customer Design</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Operating Strata at Scale — Multi-Tenant Design</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#scenario">Scenario</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#three-layer-bootstrap-architecture">Three-Layer Bootstrap Architecture</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#layer-0-global-bootstrap-one-time">Layer 0: Global Bootstrap (one-time)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#layer-1-zone-bootstrap-per-zone-stable">Layer 1: Zone Bootstrap (per zone, stable)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#layer-2-customer-bootstrap-per-customer-per-zone">Layer 2: Customer Bootstrap (per customer, per zone)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#customer-slots-dedicated-per-customer">Customer Slots (dedicated, per-customer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#layer-2-tenant-bootstrap-per-tenant-per-zone">Layer 2: Tenant Bootstrap (per tenant, per zone)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tenant-slots-dedicated-per-tenant">Tenant Slots (dedicated, per-tenant)</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#workspace-per-layer-pattern">Workspace-per-Layer Pattern</a><ul>
@@ -1590,9 +1663,9 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#new-concepts">New Concepts</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#customer-registry-kind-customer">Customer Registry (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">customer</span></code>)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#tenant-registry-kind-tenant">Tenant Registry (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#environment-merge-order">Environment Merge Order</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#per-customer-file-customers-code-yaml">Per-Customer File (<code class="docutils literal notranslate"><span class="pre">customers/{code}.yaml</span></code>)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#per-tenant-file-tenants-code-yaml">Per-Tenant File (<code class="docutils literal notranslate"><span class="pre">tenants/{code}.yaml</span></code>)</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#tier-environment-files">Tier Environment Files</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#why-one-file-per-customer">Why One File Per Customer?</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#validation-rules">Validation Rules</a></li>
@@ -1601,11 +1674,11 @@
 <li class="toctree-l3"><a class="reference internal" href="#generated-deployments-per-customer">Generated Deployments (per customer)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#variable-flow-customer-metadata-terraform">Variable Flow: Customer Metadata → Terraform</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#variable-flow-tenant-metadata-terraform">Variable Flow: Tenant Metadata → Terraform</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#spec-configuration-is-metadata-not-terraform-input"><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> is metadata, not Terraform input</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#how-values-actually-reach-terraform">How values actually reach Terraform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#pattern-a-tier-wide-constants-same-value-for-all-customers-in-a-tier">Pattern A — Tier-wide constants (same value for all customers in a tier)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#pattern-b-customer-specific-constants">Pattern B — Customer-specific constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pattern-b-tenant-specific-constants">Pattern B — Tenant-specific constants</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#pattern-c-ci-injected-values">Pattern C — CI-injected values</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#feature-flags-terraform-booleans">Feature flags → Terraform booleans</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#secrets">Secrets</a></li>
@@ -1623,15 +1696,16 @@
 <li class="toctree-l2"><a class="reference internal" href="#hybrid-ownership-model">Hybrid Ownership Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#zones-and-data-residency">Zones and Data Residency</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#zones-in-configuration">Zones in Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id2">Zones in Configuration</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#how-zones-link-to-providers">How zones link to providers</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#customers-reference-zones">Customers reference zones</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#zone-deployments">Zone deployments</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#id2">Validation rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id3">Validation rules</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#audit-trail">Audit Trail</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#cli-commands">CLI Commands</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#strata-customer-command-group"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">customer</span></code> Command Group</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#strata-tenant-command-group"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tenant</span></code> Command Group</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#onboarding">Onboarding</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#lifecycle">Lifecycle</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#slot-generation">Slot Generation</a></li>
@@ -1647,7 +1721,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#scale-characteristics">Scale Characteristics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#implementation-phases">Implementation Phases</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#phase-1-customer-model-directory-based-discovery">Phase 1: Customer Model + Directory-Based Discovery</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#phase-1-tenant-model-directory-based-discovery">Phase 1: Tenant Model + Directory-Based Discovery</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#phase-2-deployment-generation">Phase 2: Deployment Generation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#phase-3-cross-workspace-inputs">Phase 3: Cross-Workspace Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#phase-4-lifecycle-commands">Phase 4: Lifecycle Commands</a></li>
@@ -1655,7 +1729,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#application-deployment-via-argocd">Application Deployment via ArgoCD</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#id3">How it works</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id4">How it works</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#applicationset-generation">ApplicationSet Generation</a></li>
 </ul>
 </li>
@@ -1678,7 +1752,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Operating Strata at Scale — Multi-Customer Design</li>
+      <li class="breadcrumb-item active">Operating Strata at Scale — Multi-Tenant Design</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/guides/at-scale.md.txt" rel="nofollow"> View page source</a>
       </li>
@@ -1688,16 +1762,16 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="operating-strata-at-scale-multi-customer-design">
-<h1>Operating Strata at Scale — Multi-Customer Design<a class="headerlink" href="#operating-strata-at-scale-multi-customer-design" title="Link to this heading"></a></h1>
+  <section id="operating-strata-at-scale-multi-tenant-design">
+<h1>Operating Strata at Scale — Multi-Tenant Design<a class="headerlink" href="#operating-strata-at-scale-multi-tenant-design" title="Link to this heading"></a></h1>
 <blockquote>
 <div><p><strong>Status:</strong> Design draft — not yet implemented.<br />
-<strong>Context:</strong> A company using strata to manage 100+ customers across multiple regions with shared infrastructure and dedicated application resources.</p>
+<strong>Context:</strong> A company using strata to manage 100+ tenants across multiple regions with shared infrastructure and dedicated application resources.</p>
 </div></blockquote>
 <hr class="docutils" />
 <section id="scenario">
 <h2>Scenario<a class="headerlink" href="#scenario" title="Link to this heading"></a></h2>
-<p>A managed services company operates a platform for 100+ customers. Each customer has:</p>
+<p>A managed services company operates a platform for 100+ tenants. Each tenant has:</p>
 <ul class="simple">
 <li><p>A <strong>code</strong> (e.g. <code class="docutils literal notranslate"><span class="pre">acme</span></code>, <code class="docutils literal notranslate"><span class="pre">contoso</span></code>) — unique short identifier</p></li>
 <li><p>A <strong>name</strong> (e.g. “Acme Corporation”)</p></li>
@@ -1707,7 +1781,7 @@
 </ul>
 <p>Key constraints:</p>
 <ul class="simple">
-<li><p><strong>In-house deployments only</strong> — internal ops team, no customer self-service</p></li>
+<li><p><strong>In-house deployments only</strong> — internal ops team, no tenant self-service</p></li>
 <li><p><strong>Shared infrastructure</strong> — one AKS cluster (or similar) per zone/region, shared networking and ingress</p></li>
 <li><p><strong>Dedicated application resources</strong> — per-customer namespace, web app, database, DNS, secrets</p></li>
 <li><p><strong>Evolving landscapes</strong> — new services get added, old ones get deprecated; changes should be non-breaking where possible</p></li>
@@ -1770,24 +1844,24 @@
 <p><strong>Count:</strong> ~2–6 deployments per landscape. Changes rarely. Standard strata workflow.</p>
 <p><strong>Key resources per zone:</strong> AKS cluster, VNet + subnets, ACR (container registry), Key Vault (zone-scoped, path-based isolation per customer), ArgoCD instance, monitoring stack. The zone’s environment file selects which provider regions are targeted.</p>
 </section>
-<section id="layer-2-customer-bootstrap-per-customer-per-zone">
-<h3>Layer 2: Customer Bootstrap (per customer, per zone)<a class="headerlink" href="#layer-2-customer-bootstrap-per-customer-per-zone" title="Link to this heading"></a></h3>
-<p>Customer-specific resources provisioned <strong>into</strong> an existing zone. Creates the isolation boundary before apps are deployed:</p>
+<section id="layer-2-tenant-bootstrap-per-tenant-per-zone">
+<h3>Layer 2: Tenant Bootstrap (per tenant, per zone)<a class="headerlink" href="#layer-2-tenant-bootstrap-per-tenant-per-zone" title="Link to this heading"></a></h3>
+<p>Tenant-specific resources provisioned <strong>into</strong> an existing zone. Creates the isolation boundary before apps are deployed:</p>
 <ul class="simple">
 <li><p>Kubernetes namespace + RBAC policies</p></li>
-<li><p>Key Vault secret scope (path-based: <code class="docutils literal notranslate"><span class="pre">customers/{code}/*</span></code>)</p></li>
-<li><p>Customer storage account</p></li>
+<li><p>Key Vault secret scope (path-based: <code class="docutils literal notranslate"><span class="pre">tenants/{code}/*</span></code>)</p></li>
+<li><p>Tenant storage account</p></li>
 <li><p>Network policies (ingress/egress rules)</p></li>
 <li><p>DNS records</p></li>
 </ul>
-<p>This is what the <strong>customer slot</strong> concept automates (see below).</p>
+<p>This is what the <strong>tenant slot</strong> concept automates (see below).</p>
 </section>
-<section id="customer-slots-dedicated-per-customer">
-<h3>Customer Slots (dedicated, per-customer)<a class="headerlink" href="#customer-slots-dedicated-per-customer" title="Link to this heading"></a></h3>
-<p>A <strong>customer slot</strong> is a lightweight deployment of dedicated resources <strong>into</strong> an existing zone. It covers two concerns:</p>
+<section id="tenant-slots-dedicated-per-tenant">
+<h3>Tenant Slots (dedicated, per-tenant)<a class="headerlink" href="#tenant-slots-dedicated-per-tenant" title="Link to this heading"></a></h3>
+<p>A <strong>tenant slot</strong> is a lightweight deployment of dedicated resources <strong>into</strong> an existing zone. It covers two concerns:</p>
 <ol class="arabic simple">
 <li><p><strong>Infrastructure bootstrap</strong> (Terraform, via strata) — namespace, RBAC, secrets scope, storage, network policies</p></li>
-<li><p><strong>Application deployment</strong> (Helm, via ArgoCD) — the actual app instances running in the customer’s namespace</p></li>
+<li><p><strong>Application deployment</strong> (Helm, via ArgoCD) — the actual app instances running in the tenant’s namespace</p></li>
 </ol>
 <p>Strata handles concern #1 and generates the ArgoCD ApplicationSet entries for concern #2. This separation means:</p>
 <ul class="simple">
@@ -1795,7 +1869,7 @@
 <li><p>ArgoCD manages application lifecycle (deploy, upgrade, rollback app versions)</p></li>
 <li><p>App teams own their Helm values; platform team owns base charts and infrastructure</p></li>
 </ul>
-<p><strong>Count:</strong> ~100 customers × 4 environments = ~400 slots. Generated from a registry, not hand-authored.</p>
+<p><strong>Count:</strong> ~100 tenants × 4 environments = ~400 slots. Generated from a registry, not hand-authored.</p>
 </section>
 </section>
 <hr class="docutils" />
@@ -1847,10 +1921,10 @@ about its own resources.</p>
 </section>
 <section id="why-this-works-at-400-deployments">
 <h3>Why this works at 400+ deployments<a class="headerlink" href="#why-this-works-at-400-deployments" title="Link to this heading"></a></h3>
-<p>The 400 customer slots (100 customers × 4 environments) all reference <code class="docutils literal notranslate"><span class="pre">application.yaml</span></code>.
-The workspace defines what <em>can</em> exist in a customer deployment. The environment files
-control what <em>is</em> active for each customer and environment. No workspace changes are
-needed when onboarding a new customer — only a new deployment manifest and environment
+<p>The 400 tenant slots (100 tenants × 4 environments) all reference <code class="docutils literal notranslate"><span class="pre">application.yaml</span></code>.
+The workspace defines what <em>can</em> exist in a tenant deployment. The environment files
+control what <em>is</em> active for each tenant and environment. No workspace changes are
+needed when onboarding a new tenant — only a new deployment manifest and environment
 overrides are needed.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>application.yaml         ← defines: namespace, RBAC, webapp, storage, cdn, monitoring
     ↑
@@ -1875,7 +1949,7 @@ without an explicit layer-boundary rule.</p>
   <span class="n">zones</span><span class="o">/</span>
     <span class="n">eu</span><span class="o">.</span><span class="n">yaml</span>                         <span class="c1"># Layer 1, workspace: infrastructure</span>
     <span class="n">us</span><span class="o">.</span><span class="n">yaml</span>                         <span class="c1"># Layer 1, workspace: infrastructure</span>
-  <span class="n">customers</span><span class="o">/</span>
+  <span class="n">tenants</span><span class="o">/</span>
     <span class="n">acme</span><span class="o">-</span><span class="n">eu</span><span class="o">-</span><span class="n">prd</span><span class="o">.</span><span class="n">yaml</span>                <span class="c1"># Layer 2, workspace: application</span>
     <span class="n">acme</span><span class="o">-</span><span class="n">eu</span><span class="o">-</span><span class="n">acc</span><span class="o">.</span><span class="n">yaml</span>                <span class="c1"># Layer 2, workspace: application</span>
     <span class="n">contoso</span><span class="o">-</span><span class="n">eu</span><span class="o">-</span><span class="n">prd</span><span class="o">.</span><span class="n">yaml</span>             <span class="c1"># Layer 2, workspace: application</span>
@@ -1883,35 +1957,35 @@ without an explicit layer-boundary rule.</p>
 </pre></div>
 </div>
 <p>The directory structure mirrors the layer hierarchy. Each file references the workspace
-for its layer. New customers = new files, no workspace changes.</p>
+for its layer. New tenants = new files, no workspace changes.</p>
 </section>
 </section>
 <hr class="docutils" />
 <section id="new-concepts">
 <h2>New Concepts<a class="headerlink" href="#new-concepts" title="Link to this heading"></a></h2>
-<section id="customer-registry-kind-customer">
-<h3>Customer Registry (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">customer</span></code>)<a class="headerlink" href="#customer-registry-kind-customer" title="Link to this heading"></a></h3>
-<p>One YAML file per customer. Onboarding = adding a file. Offboarding = removing it. Git blame shows who changed what for which customer.</p>
-<p>The customer file carries an <code class="docutils literal notranslate"><span class="pre">environments</span></code> list — these are environment files that define the customer’s capability profile (sizing, modules, HA, features). There is no separate “tier” concept; tiers are just environment files by convention (e.g. <code class="docutils literal notranslate"><span class="pre">environments/tiers/enterprise.yaml</span></code>).</p>
+<section id="tenant-registry-kind-tenant">
+<h3>Tenant Registry (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)<a class="headerlink" href="#tenant-registry-kind-tenant" title="Link to this heading"></a></h3>
+<p>One YAML file per tenant. Onboarding = adding a file. Offboarding = removing it. Git blame shows who changed what for which tenant.</p>
+<p>The tenant file carries an <code class="docutils literal notranslate"><span class="pre">environments</span></code> list — these are environment files that define the tenant’s capability profile (sizing, modules, HA, features). There is no separate “tier” concept; tiers are just environment files by convention (e.g. <code class="docutils literal notranslate"><span class="pre">environments/tiers/enterprise.yaml</span></code>).</p>
 <section id="environment-merge-order">
 <h4>Environment Merge Order<a class="headerlink" href="#environment-merge-order" title="Link to this heading"></a></h4>
 <p>At slot generation, strata merges two environment lists:</p>
 <ol class="arabic simple">
-<li><p><strong>Customer environments</strong> — from the customer file (<code class="docutils literal notranslate"><span class="pre">spec.environments</span></code>)</p></li>
+<li><p><strong>Tenant environments</strong> — from the tenant file (<code class="docutils literal notranslate"><span class="pre">spec.environments</span></code>)</p></li>
 <li><p><strong>Deployment environments</strong> — from the deployment matrix (lifecycle stage)</p></li>
 </ol>
-<p>Later layers override earlier ones. This means deployment-level settings (secrets, endpoints, approval gates) always win over customer-level settings (sizing, modules).</p>
+<p>Later layers override earlier ones. This means deployment-level settings (secrets, endpoints, approval gates) always win over tenant-level settings (sizing, modules).</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>workspace (all resources/modules defined)
-    ↓ customer environments applied (tier: toggle modules, set sizing)
+    ↓ tenant environments applied (tier: toggle modules, set sizing)
         ↓ deployment environments applied (lifecycle: secrets, endpoints)
             = final resolved configuration for this slot
 </pre></div>
 </div>
 </section>
-<section id="per-customer-file-customers-code-yaml">
-<h4>Per-Customer File (<code class="docutils literal notranslate"><span class="pre">customers/{code}.yaml</span></code>)<a class="headerlink" href="#per-customer-file-customers-code-yaml" title="Link to this heading"></a></h4>
+<section id="per-tenant-file-tenants-code-yaml">
+<h4>Per-Tenant File (<code class="docutils literal notranslate"><span class="pre">tenants/{code}.yaml</span></code>)<a class="headerlink" href="#per-tenant-file-tenants-code-yaml" title="Link to this heading"></a></h4>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
-<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span>
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
@@ -1930,7 +2004,7 @@ for its layer. New customers = new files, no workspace changes.</p>
 </pre></div>
 </div>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
-<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span>
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globex</span>
 <span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
@@ -1944,7 +2018,7 @@ for its layer. New customers = new files, no workspace changes.</p>
 <span class="w">  </span><span class="nt">onboarded</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-01</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/tiers/standard.yaml</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/customers/globex-overrides.yaml</span><span class="w">  </span><span class="c1"># customer-specific tweaks</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/tenants/globex-overrides.yaml</span><span class="w">  </span><span class="c1"># tenant-specific tweaks</span>
 </pre></div>
 </div>
 </section>
@@ -2049,22 +2123,22 @@ for its layer. New customers = new files, no workspace changes.</p>
 </section>
 <section id="generated-deployments-per-customer">
 <h3>Generated Deployments (per customer)<a class="headerlink" href="#generated-deployments-per-customer" title="Link to this heading"></a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">customer</span> <span class="pre">generate</span></code> produces standard <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code> files — one per customer × zone × lifecycle environment. No new kind needed.</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># build/customers/acme-eu-production.yaml (GENERATED — not hand-authored)</span>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tenant</span> <span class="pre">generate</span></code> produces standard <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code> files — one per tenant × zone × lifecycle environment. No new kind needed.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># build/tenants/acme-eu-production.yaml (GENERATED — not hand-authored)</span>
 <span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_eu_production</span>
 <span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">customer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="w">    </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
 <span class="w">    </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">customer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
+<span class="w">    </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
 <span class="w">    </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eu</span>
 <span class="w">  </span><span class="nt">workspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">application</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/tiers/enterprise.yaml</span><span class="w">     </span><span class="c1"># from customer.environments</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/tiers/enterprise.yaml</span><span class="w">     </span><span class="c1"># from tenant.environments</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/production.yaml</span><span class="w">            </span><span class="c1"># from deployment matrix</span>
 <span class="w">  </span><span class="nt">inputs</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">from</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy/zone-eu.yaml</span><span class="w">                </span><span class="c1"># cross-workspace reference</span>
@@ -2074,9 +2148,9 @@ for its layer. New customers = new files, no workspace changes.</p>
 </section>
 </section>
 <hr class="docutils" />
-<section id="variable-flow-customer-metadata-terraform">
-<h2>Variable Flow: Customer Metadata → Terraform<a class="headerlink" href="#variable-flow-customer-metadata-terraform" title="Link to this heading"></a></h2>
-<p>Customer files carry two kinds of data that look similar but flow differently:</p>
+<section id="variable-flow-tenant-metadata-terraform">
+<h2>Variable Flow: Tenant Metadata → Terraform<a class="headerlink" href="#variable-flow-tenant-metadata-terraform" title="Link to this heading"></a></h2>
+<p>Tenant files carry two kinds of data that look similar but flow differently:</p>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Field</p></th>
@@ -2094,7 +2168,7 @@ for its layer. New customers = new files, no workspace changes.</p>
 <td><p>✅ Yes, as <code class="docutils literal notranslate"><span class="pre">TF_VAR_*</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">spec.references.variables</span></code></p></td>
-<td><p>Declares which variable keys this customer <em>requires</em></p></td>
+<td><p>Declares which variable keys this tenant <em>requires</em></p></td>
 <td><p>Contract only — no values</p></td>
 </tr>
 </tbody>
@@ -2180,11 +2254,11 @@ the same value.</p>
 </pre></div>
 </div>
 </section>
-<section id="pattern-b-customer-specific-constants">
-<h3>Pattern B — Customer-specific constants<a class="headerlink" href="#pattern-b-customer-specific-constants" title="Link to this heading"></a></h3>
-<p>Put the variable in a per-customer environment override file and reference it from
-the customer file. Only that customer sees the value.</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># environments/customers/acme-overrides.yaml</span>
+<section id="pattern-b-tenant-specific-constants">
+<h3>Pattern B — Tenant-specific constants<a class="headerlink" href="#pattern-b-tenant-specific-constants" title="Link to this heading"></a></h3>
+<p>Put the variable in a per-tenant environment override file and reference it from
+the tenant file. Only that tenant sees the value.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># environments/tenants/acme-overrides.yaml</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">crm_id</span>
@@ -2195,11 +2269,11 @@ the customer file. Only that customer sees the value.</p>
 <span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ACM</span>
 </pre></div>
 </div>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># customers/acme.yaml</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/acme.yaml</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/tiers/enterprise.yaml</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/customers/acme-overrides.yaml</span><span class="w">   </span><span class="c1"># ← customer-specific values</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/tenants/acme-overrides.yaml</span><span class="w">   </span><span class="c1"># ← tenant-specific values</span>
 </pre></div>
 </div>
 <p>Terraform root module:</p>
@@ -2276,14 +2350,14 @@ every key is defined in the merged environment before the build runs:</p>
 </pre></div>
 </div>
 <p>If a referenced key is missing from all merged environment layers, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span></code>
-fails with: <em>“Customer ‘acme’ requires variable ‘crm_id’ but it is not defined in any
+fails with: <em>“Tenant ‘acme’ requires variable ‘crm_id’ but it is not defined in any
 merged environment layer.”</em></p>
 </section>
 <section id="merge-precedence-lowest-highest">
 <h3>Merge precedence (lowest → highest)<a class="headerlink" href="#merge-precedence-lowest-highest" title="Link to this heading"></a></h3>
 <ol class="arabic simple">
 <li><p>Workspace defaults</p></li>
-<li><p>Customer tier environment files (<code class="docutils literal notranslate"><span class="pre">spec.environments</span></code>, in order)</p></li>
+<li><p>Tenant tier environment files (<code class="docutils literal notranslate"><span class="pre">spec.environments</span></code>, in order)</p></li>
 <li><p>Lifecycle/deployment environment files (dev, test, acceptance, production)</p></li>
 <li><p>Deployment <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code> (highest — overrides everything)</p></li>
 </ol>
@@ -2443,6 +2517,9 @@ terraform plan/apply receives: var.aks_cluster_name, var.aks_resource_group, ...
 <h2>Zones and Data Residency<a class="headerlink" href="#zones-and-data-residency" title="Link to this heading"></a></h2>
 <section id="zones-in-configuration">
 <h3>Zones in Configuration<a class="headerlink" href="#zones-in-configuration" title="Link to this heading"></a></h3>
+</section>
+<section id="id2">
+<h3>Zones in Configuration<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
 <p>A <strong>zone</strong> is a logical grouping of provider regions. Zones are defined in the configuration model and serve as the bridge between customer constraints and physical infrastructure.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># In configuration.yaml</span>
 <span class="nt">spec</span><span class="p">:</span>
@@ -2494,7 +2571,7 @@ providers/azure-eu-north.yaml: regions: [northeurope]    ← Amsterdam
 </section>
 <section id="customers-reference-zones">
 <h3>Customers reference zones<a class="headerlink" href="#customers-reference-zones" title="Link to this heading"></a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># customers/acme.yaml</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/acme.yaml</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">code</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
 <span class="w">  </span><span class="nt">zones</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">eu</span><span class="p p-Indicator">]</span><span class="w">           </span><span class="c1"># allowed in EU zone only — Dublin or Amsterdam</span>
@@ -2502,7 +2579,7 @@ providers/azure-eu-north.yaml: regions: [northeurope]    ← Amsterdam
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/tiers/enterprise.yaml</span>
 </pre></div>
 </div>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># customers/globalcorp.yaml</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/globalcorp.yaml</span>
 <span class="nt">spec</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">code</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">globalcorp</span>
 <span class="w">  </span><span class="nt">zones</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">eu</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">us</span><span class="p p-Indicator">]</span><span class="w">       </span><span class="c1"># multi-zone — allowed in both EU and US</span>
@@ -2528,8 +2605,8 @@ providers/azure-eu-north.yaml: regions: [northeurope]    ← Amsterdam
 </div>
 <p>The zone environment file (<code class="docutils literal notranslate"><span class="pre">environments/zones/eu.yaml</span></code>) sets the provider, region-specific sizing, and any zone-specific overrides.</p>
 </section>
-<section id="id2">
-<h3>Validation rules<a class="headerlink" href="#id2" title="Link to this heading"></a></h3>
+<section id="id3">
+<h3>Validation rules<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
 <ul class="simple">
 <li><p>Customer <code class="docutils literal notranslate"><span class="pre">zones</span></code> must reference zones defined in <code class="docutils literal notranslate"><span class="pre">configuration.zones</span></code></p></li>
 <li><p>Each zone must have at least one provider whose <code class="docutils literal notranslate"><span class="pre">regions</span></code> intersect with the zone’s <code class="docutils literal notranslate"><span class="pre">regions</span></code></p></li>
@@ -2541,7 +2618,7 @@ providers/azure-eu-north.yaml: regions: [northeurope]    ← Amsterdam
 <h3>Audit Trail<a class="headerlink" href="#audit-trail" title="Link to this heading"></a></h3>
 <p>The deployment manifest records:</p>
 <ul class="simple">
-<li><p>Customer code and name</p></li>
+<li><p>Tenant code and name</p></li>
 <li><p>Zone deployed to (logical) and region deployed to (physical)</p></li>
 <li><p>Jurisdiction and data residency classification</p></li>
 <li><p>Tier and feature flags active at deploy time</p></li>
@@ -2551,26 +2628,26 @@ providers/azure-eu-north.yaml: regions: [northeurope]    ← Amsterdam
 <hr class="docutils" />
 <section id="cli-commands">
 <h2>CLI Commands<a class="headerlink" href="#cli-commands" title="Link to this heading"></a></h2>
-<section id="strata-customer-command-group">
-<h3><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">customer</span></code> Command Group<a class="headerlink" href="#strata-customer-command-group" title="Link to this heading"></a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">customer</span> <span class="nb">list</span>                              <span class="c1"># list all customers from registry</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">show</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span>                  <span class="c1"># show details for one customer</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">status</span>                            <span class="c1"># deployment status across all customers</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">status</span> <span class="o">--</span><span class="n">landscape</span> <span class="n">alpha</span>           <span class="c1"># filter by landscape</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">status</span> <span class="o">--</span><span class="n">env</span> <span class="n">production</span>            <span class="c1"># filter by environment</span>
+<section id="strata-tenant-command-group">
+<h3><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tenant</span></code> Command Group<a class="headerlink" href="#strata-tenant-command-group" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">tenant</span> <span class="nb">list</span>                              <span class="c1"># list all tenants from registry</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">show</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span>                  <span class="c1"># show details for one tenant</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">status</span>                            <span class="c1"># deployment status across all tenants</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">status</span> <span class="o">--</span><span class="n">landscape</span> <span class="n">alpha</span>           <span class="c1"># filter by landscape</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">status</span> <span class="o">--</span><span class="n">env</span> <span class="n">production</span>            <span class="c1"># filter by environment</span>
 </pre></div>
 </div>
 </section>
 <section id="onboarding">
 <h3>Onboarding<a class="headerlink" href="#onboarding" title="Link to this heading"></a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">customer</span> <span class="n">onboard</span> <span class="o">--</span><span class="n">code</span> <span class="n">newcorp</span> <span class="o">--</span><span class="n">name</span> <span class="s2">&quot;New Corp&quot;</span> \
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">tenant</span> <span class="n">onboard</span> <span class="o">--</span><span class="n">code</span> <span class="n">newcorp</span> <span class="o">--</span><span class="n">name</span> <span class="s2">&quot;New Corp&quot;</span> \
   <span class="o">--</span><span class="n">zones</span> <span class="n">eu</span> <span class="o">--</span><span class="n">env</span> <span class="n">environments</span><span class="o">/</span><span class="n">tiers</span><span class="o">/</span><span class="n">standard</span><span class="o">.</span><span class="n">yaml</span>
 </pre></div>
 </div>
 <p>Steps:</p>
 <ol class="arabic simple">
 <li><p>Validate zones against configuration provider regions and data residency constraints</p></li>
-<li><p>Create customer YAML file (from template)</p></li>
+<li><p>Create tenant YAML file (from template)</p></li>
 <li><p>Generate slot descriptors for all deployment environments</p></li>
 <li><p>Create secret placeholders (team fills in values)</p></li>
 <li><p>Optionally run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span></code> + <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code> for the dev environment</p></li>
@@ -2578,27 +2655,27 @@ providers/azure-eu-north.yaml: regions: [northeurope]    ← Amsterdam
 </section>
 <section id="lifecycle">
 <h3>Lifecycle<a class="headerlink" href="#lifecycle" title="Link to this heading"></a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">customer</span> <span class="n">upgrade</span> <span class="o">--</span><span class="n">chart</span><span class="o">-</span><span class="n">version</span> <span class="s2">&quot;3.3.0&quot;</span>              <span class="c1"># upgrade all customers</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">upgrade</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span> <span class="o">--</span><span class="n">chart</span><span class="o">-</span><span class="n">version</span> <span class="s2">&quot;3.3.0&quot;</span>  <span class="c1"># upgrade one</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">upgrade</span> <span class="o">--</span><span class="n">env</span> <span class="n">dev</span> <span class="o">--</span><span class="n">chart</span><span class="o">-</span><span class="n">version</span> <span class="s2">&quot;3.3.0&quot;</span>    <span class="c1"># upgrade all dev envs</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">tenant</span> <span class="n">upgrade</span> <span class="o">--</span><span class="n">chart</span><span class="o">-</span><span class="n">version</span> <span class="s2">&quot;3.3.0&quot;</span>              <span class="c1"># upgrade all tenants</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">upgrade</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span> <span class="o">--</span><span class="n">chart</span><span class="o">-</span><span class="n">version</span> <span class="s2">&quot;3.3.0&quot;</span>  <span class="c1"># upgrade one</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">upgrade</span> <span class="o">--</span><span class="n">env</span> <span class="n">dev</span> <span class="o">--</span><span class="n">chart</span><span class="o">-</span><span class="n">version</span> <span class="s2">&quot;3.3.0&quot;</span>    <span class="c1"># upgrade all dev envs</span>
 
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">offboard</span> <span class="o">--</span><span class="n">code</span> <span class="n">oldcorp</span> <span class="o">--</span><span class="n">confirm</span>            <span class="c1"># remove customer</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">migrate</span> <span class="o">--</span><span class="n">code</span> <span class="n">contoso</span> <span class="o">--</span><span class="kn">from</span><span class="w"> </span><span class="nn">eu</span> <span class="o">--</span><span class="n">to</span> <span class="n">us</span>      <span class="c1"># zone migration</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">offboard</span> <span class="o">--</span><span class="n">code</span> <span class="n">oldcorp</span> <span class="o">--</span><span class="n">confirm</span>            <span class="c1"># remove tenant</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">migrate</span> <span class="o">--</span><span class="n">code</span> <span class="n">contoso</span> <span class="o">--</span><span class="kn">from</span><span class="w"> </span><span class="nn">eu</span> <span class="o">--</span><span class="n">to</span> <span class="n">us</span>      <span class="c1"># zone migration</span>
 </pre></div>
 </div>
 </section>
 <section id="slot-generation">
 <h3>Slot Generation<a class="headerlink" href="#slot-generation" title="Link to this heading"></a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">customer</span> <span class="n">generate</span>                          <span class="c1"># generate all slot descriptors</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">generate</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span>              <span class="c1"># generate for one customer</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">generate</span> <span class="o">--</span><span class="n">env</span> <span class="n">production</span>         <span class="c1"># generate all production slots</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">tenant</span> <span class="n">generate</span>                          <span class="c1"># generate all slot descriptors</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">generate</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span>              <span class="c1"># generate for one tenant</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">generate</span> <span class="o">--</span><span class="n">env</span> <span class="n">production</span>         <span class="c1"># generate all production slots</span>
 </pre></div>
 </div>
-<p>Generated slot files go into <code class="docutils literal notranslate"><span class="pre">build/customers/</span></code> — they are outputs, not hand-edited source files.</p>
+<p>Generated slot files go into <code class="docutils literal notranslate"><span class="pre">build/tenants/</span></code> — they are outputs, not hand-edited source files.</p>
 </section>
 <section id="status-dashboard">
 <h3>Status Dashboard<a class="headerlink" href="#status-dashboard" title="Link to this heading"></a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>strata customer status --landscape alpha
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>strata tenant status --landscape alpha
 
 LANDSCAPE: alpha
 ZONE: eu (AKS: healthy, nodes: 12/12)
@@ -2613,10 +2690,10 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 </section>
 <section id="bulk-operations">
 <h3>Bulk Operations<a class="headerlink" href="#bulk-operations" title="Link to this heading"></a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">customer</span> <span class="n">build</span> <span class="o">--</span><span class="nb">all</span>                        <span class="c1"># build all 400 slots</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">build</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span>                  <span class="c1"># build 4 slots for acme</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">build</span> <span class="o">--</span><span class="n">env</span> <span class="n">production</span>             <span class="c1"># build 100 production slots</span>
-<span class="n">strata</span> <span class="n">customer</span> <span class="n">deploy</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span> <span class="o">--</span><span class="n">env</span> <span class="n">prod</span>      <span class="c1"># deploy one specific slot</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">tenant</span> <span class="n">build</span> <span class="o">--</span><span class="nb">all</span>                        <span class="c1"># build all 400 slots</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">build</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span>                  <span class="c1"># build 4 slots for acme</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">build</span> <span class="o">--</span><span class="n">env</span> <span class="n">production</span>             <span class="c1"># build 100 production slots</span>
+<span class="n">strata</span> <span class="n">tenant</span> <span class="n">deploy</span> <span class="o">--</span><span class="n">code</span> <span class="n">acme</span> <span class="o">--</span><span class="n">env</span> <span class="n">prod</span>      <span class="c1"># deploy one specific slot</span>
 </pre></div>
 </div>
 </section>
@@ -2640,7 +2717,7 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 <td><p>Infrequent</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">{team}-config</span></code></p></td>
-<td><p>Team’s config: customers, environments, providers, deployments</p></td>
+<td><p>Team’s config: tenants, environments, providers, deployments</p></td>
 <td><p>Team</p></td>
 <td><p>Frequent</p></td>
 </tr>
@@ -2654,8 +2731,8 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 <td><p>Team</p></td>
 <td><p>On infra changes</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">{team}-customer</span></code></p></td>
-<td><p>Customer bootstrap templates (namespace, RBAC) per team</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">{team}-tenant</span></code></p></td>
+<td><p>Tenant bootstrap templates (namespace, RBAC) per team</p></td>
 <td><p>Team</p></td>
 <td><p>Infrequent</p></td>
 </tr>
@@ -2676,11 +2753,11 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 </tr>
 </tbody>
 </table>
-<p><strong>Team isolation principle:</strong> Each team has its own <code class="docutils literal notranslate"><span class="pre">{team}-config</span></code> repo (or directory) containing its customers, environments, and zone configs. Teams share only global resources (identity, DNS, base charts) and interfaces (provider definitions, environment templates). A team can evolve its landscape — add services, deprecate old ones — without affecting other teams.</p>
+<p><strong>Team isolation principle:</strong> Each team has its own <code class="docutils literal notranslate"><span class="pre">{team}-config</span></code> repo (or directory) containing its tenants, environments, and zone configs. Teams share only global resources (identity, DNS, base charts) and interfaces (provider definitions, environment templates). A team can evolve its landscape — add services, deprecate old ones — without affecting other teams.</p>
 <p><strong>Why separate config from workspace?</strong></p>
 <ul class="simple">
 <li><p>Config is data, not code — lightweight review process</p></li>
-<li><p>App teams can propose customer config changes without touching tooling</p></li>
+<li><p>App teams can propose tenant config changes without touching tooling</p></li>
 <li><p>CI/CD clarity: config repo triggers <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> → <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code>; workspace repo triggers tool tests</p></li>
 </ul>
 </section>
@@ -2688,28 +2765,28 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 <h2>Directory Structure<a class="headerlink" href="#directory-structure" title="Link to this heading"></a></h2>
 <section id="config-repository-team-config">
 <h3>Config Repository (<code class="docutils literal notranslate"><span class="pre">{team}-config</span></code>)<a class="headerlink" href="#config-repository-team-config" title="Link to this heading"></a></h3>
-<p>Each team has its own config repo. Teams don’t see or touch each other’s customers.</p>
+<p>Each team has its own config repo. Teams don’t see or touch each other’s tenants.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>alpha-config/
 ├── .strata/                         # links to platform-workspace
-├── customers/
-│   ├── acme.yaml                    # one file per customer
+├── tenants/
+│   ├── acme.yaml                    # one file per tenant
 │   ├── contoso.yaml
 │   ├── globex.yaml
-│   └── ...                          # ~100 files, one per customer
+│   └── ...                          # ~100 files, one per tenant
 ├── environments/
 │   ├── tiers/
 │   │   ├── starter.yaml             # kind: environment — minimal modules
 │   │   ├── standard.yaml            # kind: environment — base modules
 │   │   └── enterprise.yaml          # kind: environment — all modules, HA
-│   ├── customers/
-│   │   └── acme-overrides.yaml      # optional per-customer env overrides
+│   ├── tenants/
+│   │   └── acme-overrides.yaml      # optional per-tenant env overrides
 │   ├── dev.yaml                     # lifecycle environments
 │   ├── test.yaml
 │   ├── acceptance.yaml
 │   └── production.yaml
 ├── workspaces/
 │   ├── infrastructure.yaml          # shared infrastructure workspace
-│   └── application.yaml             # per-customer application workspace
+│   └── application.yaml             # per-tenant application workspace
 ├── providers/
 │   ├── azure-eu-west.yaml           # westeurope (Dublin)
 │   ├── azure-eu-north.yaml          # northeurope (Amsterdam)
@@ -2729,7 +2806,7 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 ├── landscape-alpha-eu/            # landscape build output
 │   ├── platform.json
 │   └── sbom.json
-├── customers/                       # generated customer slots
+├── tenants/                         # generated tenant slots
 │   ├── acme-dev/
 │   ├── acme-test/
 │   ├── acme-acceptance/
@@ -2738,7 +2815,7 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 │   │   ...
 │   └── globex-production/
 └── argocd/                          # generated ArgoCD manifests
-    ├── customer-appsets.yaml         # ApplicationSets per customer
+    ├── tenant-appsets.yaml         # ApplicationSets per tenant
     └── overlays/
         ├── acme-dev/
         │   └── values.yaml
@@ -2771,13 +2848,13 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 <td><p>~6–15</p></td>
 <td><p>Standard strata workflow</p></td>
 </tr>
-<tr class="row-odd"><td><p>Customer files</p></td>
+<tr class="row-odd"><td><p>Tenant files</p></td>
 <td><p>~100</p></td>
-<td><p>One YAML per customer per landscape</p></td>
+<td><p>One YAML per tenant per landscape</p></td>
 </tr>
-<tr class="row-even"><td><p>Customer deployments (generated)</p></td>
+<tr class="row-even"><td><p>Tenant deployments (generated)</p></td>
 <td><p>~400</p></td>
-<td><p>Generated from customer files × lifecycle envs</p></td>
+<td><p>Generated from tenant files × lifecycle envs</p></td>
 </tr>
 <tr class="row-odd"><td><p>Onboarding rate</p></td>
 <td><p>~1/week</p></td>
@@ -2785,7 +2862,7 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 </tr>
 <tr class="row-even"><td><p>App upgrade frequency</p></td>
 <td><p>Weekly–monthly</p></td>
-<td><p>Update tier env file or per-customer env</p></td>
+<td><p>Update tier env file or per-tenant env</p></td>
 </tr>
 <tr class="row-odd"><td><p>Infrastructure changes</p></td>
 <td><p>Ongoing</p></td>
@@ -2797,24 +2874,24 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 <hr class="docutils" />
 <section id="implementation-phases">
 <h2>Implementation Phases<a class="headerlink" href="#implementation-phases" title="Link to this heading"></a></h2>
-<section id="phase-1-customer-model-directory-based-discovery">
-<h3>Phase 1: Customer Model + Directory-Based Discovery<a class="headerlink" href="#phase-1-customer-model-directory-based-discovery" title="Link to this heading"></a></h3>
+<section id="phase-1-tenant-model-directory-based-discovery">
+<h3>Phase 1: Tenant Model + Directory-Based Discovery<a class="headerlink" href="#phase-1-tenant-model-directory-based-discovery" title="Link to this heading"></a></h3>
 <ul class="simple">
-<li><p>New <code class="docutils literal notranslate"><span class="pre">customer</span></code> kind — model, service, validation</p></li>
-<li><p>Directory-based discovery: scan <code class="docutils literal notranslate"><span class="pre">customers/*.yaml</span></code>, assemble registry at load time</p></li>
-<li><p>Customer <code class="docutils literal notranslate"><span class="pre">environments</span></code> list resolved and validated (files must exist, must be <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">customer</span> <span class="pre">list</span></code> / <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">customer</span> <span class="pre">show</span></code></p></li>
+<li><p>New <code class="docutils literal notranslate"><span class="pre">tenant</span></code> kind — model, service, validation</p></li>
+<li><p>Directory-based discovery: scan <code class="docutils literal notranslate"><span class="pre">tenants/*.yaml</span></code>, assemble registry at load time</p></li>
+<li><p>Tenant <code class="docutils literal notranslate"><span class="pre">environments</span></code> list resolved and validated (files must exist, must be <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tenant</span> <span class="pre">list</span></code> / <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tenant</span> <span class="pre">show</span></code></p></li>
 <li><p>Zone validation against configuration provider regions</p></li>
-<li><p>No generation, no slots — just the customer files as source of truth</p></li>
+<li><p>No generation, no slots — just the tenant files as source of truth</p></li>
 </ul>
 </section>
 <section id="phase-2-deployment-generation">
 <h3>Phase 2: Deployment Generation<a class="headerlink" href="#phase-2-deployment-generation" title="Link to this heading"></a></h3>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">customer</span> <span class="pre">generate</span></code> — generates standard <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code> files per customer × zone × lifecycle env</p></li>
-<li><p>Merge order: customer environments first, deployment environments on top</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tenant</span> <span class="pre">generate</span></code> — generates standard <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code> files per tenant × zone × lifecycle env</p></li>
+<li><p>Merge order: tenant environments first, deployment environments on top</p></li>
 <li><p>Generated files reference the application workspace + merged environments</p></li>
-<li><p>Generated files are build outputs, stored in <code class="docutils literal notranslate"><span class="pre">build/customers/</span></code></p></li>
+<li><p>Generated files are build outputs, stored in <code class="docutils literal notranslate"><span class="pre">build/tenants/</span></code></p></li>
 <li><p>Standard <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span></code> / <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code> pipeline handles them — no new builder</p></li>
 </ul>
 </section>
@@ -2824,8 +2901,8 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.inputs.from</span></code> field on deployment model — references upstream deployment</p></li>
 <li><p>Build resolves upstream <code class="docutils literal notranslate"><span class="pre">platform.json</span></code> and injects outputs as properties</p></li>
 <li><p>Validation: upstream must be built before downstream can build</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">customer</span> <span class="pre">build</span></code> resolves infrastructure outputs automatically</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">customer</span> <span class="pre">deploy</span></code> deploys into existing infrastructure</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tenant</span> <span class="pre">build</span></code> resolves infrastructure outputs automatically</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tenant</span> <span class="pre">deploy</span></code> deploys into existing infrastructure</p></li>
 </ul>
 </section>
 <section id="phase-4-lifecycle-commands">
@@ -2851,8 +2928,8 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 <section id="application-deployment-via-argocd">
 <h2>Application Deployment via ArgoCD<a class="headerlink" href="#application-deployment-via-argocd" title="Link to this heading"></a></h2>
 <p>Strata does <strong>not</strong> deploy customer applications directly. Instead, it generates ArgoCD ApplicationSet configurations that ArgoCD syncs from Git.</p>
-<section id="id3">
-<h3>How it works<a class="headerlink" href="#id3" title="Link to this heading"></a></h3>
+<section id="id4">
+<h3>How it works<a class="headerlink" href="#id4" title="Link to this heading"></a></h3>
 <ol class="arabic simple">
 <li><p><strong>Strata generates</strong> customer bootstrap infrastructure (namespace, RBAC, secrets) via Terraform</p></li>
 <li><p><strong>Strata generates</strong> ArgoCD ApplicationSet entries from the customer registry</p></li>

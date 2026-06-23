@@ -718,7 +718,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="policies.html#policy-types">Policy Types</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="policies.html#built-in-types">Built-in types</a></li>
-<li class="toctree-l3"><a class="reference internal" href="policies.html#customer-zone"><code class="docutils literal notranslate"><span class="pre">customer_zone</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="policies.html#tenant-zone"><code class="docutils literal notranslate"><span class="pre">tenant_zone</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="policies.html#required-tags"><code class="docutils literal notranslate"><span class="pre">required_tags</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="policies.html#naming-pattern"><code class="docutils literal notranslate"><span class="pre">naming_pattern</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="policies.html#script"><code class="docutils literal notranslate"><span class="pre">script</span></code></a></li>
@@ -1370,6 +1370,79 @@
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0010-rename-configuration-repositories-to-remotes.html#consequences">Consequences</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html">Promotion strategies for version progression across environments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#key-observations">Key Observations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#terraform-vs-helm-different-risk-profiles">Terraform vs Helm: different risk profiles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#a-promotion-is-a-yaml-edit">A promotion is a YAML edit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#canary-is-a-special-case-of-waves">Canary is a special case of waves</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#option-a-configuration-defined-strategies-strata-promote-command">Option A: Configuration-defined strategies, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span></code> command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#option-b-environment-only-no-command-automation-not-chosen">Option B: Environment-only, no command automation (not chosen)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#option-c-external-promotion-tool-no-strata-involvement-not-chosen">Option C: External promotion tool (no strata involvement, not chosen)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#implementation-approach">Implementation approach</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#issues-to-resolve-phase-3-blockers">Issues to Resolve (Phase 3 Blockers)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#appendix-how-spec-tenant-works-on-deployments">Appendix: How <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> Works on Deployments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#design-promotion-system">Design: Promotion System</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#concepts">Concepts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#configuration-model">Configuration Model</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#configuration-spec-promotions"><code class="docutils literal notranslate"><span class="pre">configuration.spec.promotions</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#environment-spec-promotion"><code class="docutils literal notranslate"><span class="pre">environment.spec.promotion</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#wave-assignment-on-deployments">Wave assignment on deployments</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#cli-interface">CLI Interface</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-start"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">start</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-rollback"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">rollback</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-matrix"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">matrix</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-status"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#strata-promote-history"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">history</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#gates">Gates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#state-management">State Management</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#activity-log-diagnostic-strata-promotions">Activity log (diagnostic — <code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code>)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#promotion-record-audit-artifact-store">Promotion record (audit — artifact store)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#git-flow">Git Flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#interaction-with-existing-systems">Interaction with Existing Systems</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#constraints-and-non-goals">Constraints and Non-Goals</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#more-information">More Information</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html">Rename CustomerModel to TenantModel</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-a-rename-to-tenant-recommended">Option A — Rename to <code class="docutils literal notranslate"><span class="pre">tenant</span></code> (recommended)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-b-rename-to-account">Option B — Rename to <code class="docutils literal notranslate"><span class="pre">account</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-c-rename-to-party">Option C — Rename to <code class="docutils literal notranslate"><span class="pre">party</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-d-rename-to-owner">Option D — Rename to <code class="docutils literal notranslate"><span class="pre">owner</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-e-rename-to-subscriber">Option E — Rename to <code class="docutils literal notranslate"><span class="pre">subscriber</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#option-f-keep-customer-status-quo">Option F — Keep <code class="docutils literal notranslate"><span class="pre">customer</span></code> (status quo)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#decision-outcome">Decision Outcome</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#impact-assessment">Impact Assessment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#files-requiring-changes">Files requiring changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#migration-path">Migration path</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#more-information">More Information</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Guides:</span></p>
 <ul>
@@ -1573,13 +1646,13 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/deployment-manifests.html#see-also">See Also</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../guides/at-scale.html">Operating Strata at Scale — Multi-Customer Design</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="../guides/at-scale.html">Operating Strata at Scale — Multi-Tenant Design</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#scenario">Scenario</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#three-layer-bootstrap-architecture">Three-Layer Bootstrap Architecture</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#layer-0-global-bootstrap-one-time">Layer 0: Global Bootstrap (one-time)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#layer-1-zone-bootstrap-per-zone-stable">Layer 1: Zone Bootstrap (per zone, stable)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#layer-2-customer-bootstrap-per-customer-per-zone">Layer 2: Customer Bootstrap (per customer, per zone)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#customer-slots-dedicated-per-customer">Customer Slots (dedicated, per-customer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#layer-2-tenant-bootstrap-per-tenant-per-zone">Layer 2: Tenant Bootstrap (per tenant, per zone)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#tenant-slots-dedicated-per-tenant">Tenant Slots (dedicated, per-tenant)</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#workspace-per-layer-pattern">Workspace-per-Layer Pattern</a><ul>
@@ -1591,9 +1664,9 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#new-concepts">New Concepts</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#customer-registry-kind-customer">Customer Registry (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">customer</span></code>)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#tenant-registry-kind-tenant">Tenant Registry (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="../guides/at-scale.html#environment-merge-order">Environment Merge Order</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../guides/at-scale.html#per-customer-file-customers-code-yaml">Per-Customer File (<code class="docutils literal notranslate"><span class="pre">customers/{code}.yaml</span></code>)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../guides/at-scale.html#per-tenant-file-tenants-code-yaml">Per-Tenant File (<code class="docutils literal notranslate"><span class="pre">tenants/{code}.yaml</span></code>)</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../guides/at-scale.html#tier-environment-files">Tier Environment Files</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../guides/at-scale.html#why-one-file-per-customer">Why One File Per Customer?</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../guides/at-scale.html#validation-rules">Validation Rules</a></li>
@@ -1602,11 +1675,11 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#generated-deployments-per-customer">Generated Deployments (per customer)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#variable-flow-customer-metadata-terraform">Variable Flow: Customer Metadata → Terraform</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#variable-flow-tenant-metadata-terraform">Variable Flow: Tenant Metadata → Terraform</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#spec-configuration-is-metadata-not-terraform-input"><code class="docutils literal notranslate"><span class="pre">spec.configuration</span></code> is metadata, not Terraform input</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#how-values-actually-reach-terraform">How values actually reach Terraform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#pattern-a-tier-wide-constants-same-value-for-all-customers-in-a-tier">Pattern A — Tier-wide constants (same value for all customers in a tier)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#pattern-b-customer-specific-constants">Pattern B — Customer-specific constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#pattern-b-tenant-specific-constants">Pattern B — Tenant-specific constants</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#pattern-c-ci-injected-values">Pattern C — CI-injected values</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#feature-flags-terraform-booleans">Feature flags → Terraform booleans</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#secrets">Secrets</a></li>
@@ -1624,15 +1697,16 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#hybrid-ownership-model">Hybrid Ownership Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#zones-and-data-residency">Zones and Data Residency</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#zones-in-configuration">Zones in Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#id2">Zones in Configuration</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#how-zones-link-to-providers">How zones link to providers</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#customers-reference-zones">Customers reference zones</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#zone-deployments">Zone deployments</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#id2">Validation rules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#id3">Validation rules</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#audit-trail">Audit Trail</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#cli-commands">CLI Commands</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#strata-customer-command-group"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">customer</span></code> Command Group</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#strata-tenant-command-group"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tenant</span></code> Command Group</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#onboarding">Onboarding</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#lifecycle">Lifecycle</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#slot-generation">Slot Generation</a></li>
@@ -1648,7 +1722,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#scale-characteristics">Scale Characteristics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#implementation-phases">Implementation Phases</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#phase-1-customer-model-directory-based-discovery">Phase 1: Customer Model + Directory-Based Discovery</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#phase-1-tenant-model-directory-based-discovery">Phase 1: Tenant Model + Directory-Based Discovery</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#phase-2-deployment-generation">Phase 2: Deployment Generation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#phase-3-cross-workspace-inputs">Phase 3: Cross-Workspace Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#phase-4-lifecycle-commands">Phase 4: Lifecycle Commands</a></li>
@@ -1656,7 +1730,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#application-deployment-via-argocd">Application Deployment via ArgoCD</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#id3">How it works</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#id4">How it works</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/at-scale.html#applicationset-generation">ApplicationSet Generation</a></li>
 </ul>
 </li>

@@ -82,6 +82,8 @@ strata
    decisions/0008-infrastructure-drift-detection
    decisions/0009-sbom-extended-sources-and-inventory
    decisions/0010-rename-configuration-repositories-to-remotes
+   decisions/0011-promotion-strategies-for-version-progression
+   decisions/0012-rename-customer-to-tenant
 
 .. toctree::
    :maxdepth: 2

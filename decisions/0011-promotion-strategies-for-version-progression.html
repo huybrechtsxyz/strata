@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Python + Click for the CLI, not a compiled binary &mdash; strata 0.8.0 documentation</title>
+  <title>Promotion strategies for version progression across environments &mdash; strata 0.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Strict layered architecture (commands → controllers → services)" href="0003-layered-architecture.html" />
-    <link rel="prev" title="Kubernetes-style YAML schema for config documents" href="0001-kubernetes-style-yaml-schema.html" /> 
+    <link rel="next" title="Rename CustomerModel to TenantModel" href="0012-rename-customer-to-tenant.html" />
+    <link rel="prev" title="Rename configuration spec.repositories to spec.remotes" href="0010-rename-configuration-repositories-to-remotes.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -1090,20 +1090,20 @@
 <li class="toctree-l2"><a class="reference internal" href="0001-kubernetes-style-yaml-schema.html#more-information">More Information</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Python + Click for the CLI, not a compiled binary</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#context-and-problem-statement">Context and Problem Statement</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#considered-options">Considered Options</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#decision-outcome">Decision Outcome</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#consequences">Consequences</a></li>
+<li class="toctree-l1"><a class="reference internal" href="0002-python-click-not-compiled-cli.html">Python + Click for the CLI, not a compiled binary</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0002-python-click-not-compiled-cli.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0002-python-click-not-compiled-cli.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0002-python-click-not-compiled-cli.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0002-python-click-not-compiled-cli.html#consequences">Consequences</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#pros-and-cons-of-the-options">Pros and Cons of the Options</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#go">Go</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#rust">Rust</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#python-typer">Python + Typer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0002-python-click-not-compiled-cli.html#pros-and-cons-of-the-options">Pros and Cons of the Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0002-python-click-not-compiled-cli.html#go">Go</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0002-python-click-not-compiled-cli.html#rust">Rust</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0002-python-click-not-compiled-cli.html#python-typer">Python + Typer</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#more-information">More Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0002-python-click-not-compiled-cli.html#more-information">More Information</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0003-layered-architecture.html">Strict layered architecture (commands → controllers → services)</a><ul>
@@ -1370,56 +1370,56 @@
 <li class="toctree-l2"><a class="reference internal" href="0010-rename-configuration-repositories-to-remotes.html#consequences">Consequences</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html">Promotion strategies for version progression across environments</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#context-and-problem-statement">Context and Problem Statement</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#key-observations">Key Observations</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#terraform-vs-helm-different-risk-profiles">Terraform vs Helm: different risk profiles</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#a-promotion-is-a-yaml-edit">A promotion is a YAML edit</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#canary-is-a-special-case-of-waves">Canary is a special case of waves</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Promotion strategies for version progression across environments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#key-observations">Key Observations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#terraform-vs-helm-different-risk-profiles">Terraform vs Helm: different risk profiles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#a-promotion-is-a-yaml-edit">A promotion is a YAML edit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#canary-is-a-special-case-of-waves">Canary is a special case of waves</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#considered-options">Considered Options</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#option-a-configuration-defined-strategies-strata-promote-command">Option A: Configuration-defined strategies, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span></code> command</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#option-b-environment-only-no-command-automation-not-chosen">Option B: Environment-only, no command automation (not chosen)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#option-c-external-promotion-tool-no-strata-involvement-not-chosen">Option C: External promotion tool (no strata involvement, not chosen)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#option-a-configuration-defined-strategies-strata-promote-command">Option A: Configuration-defined strategies, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span></code> command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#option-b-environment-only-no-command-automation-not-chosen">Option B: Environment-only, no command automation (not chosen)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#option-c-external-promotion-tool-no-strata-involvement-not-chosen">Option C: External promotion tool (no strata involvement, not chosen)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#decision-outcome">Decision Outcome</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#implementation-approach">Implementation approach</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#consequences">Consequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#implementation-approach">Implementation approach</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#consequences">Consequences</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#open-questions">Open Questions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#issues-to-resolve-phase-3-blockers">Issues to Resolve (Phase 3 Blockers)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#appendix-how-spec-tenant-works-on-deployments">Appendix: How <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> Works on Deployments</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#design-promotion-system">Design: Promotion System</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#concepts">Concepts</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#configuration-model">Configuration Model</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#configuration-spec-promotions"><code class="docutils literal notranslate"><span class="pre">configuration.spec.promotions</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#environment-spec-promotion"><code class="docutils literal notranslate"><span class="pre">environment.spec.promotion</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#wave-assignment-on-deployments">Wave assignment on deployments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#issues-to-resolve-phase-3-blockers">Issues to Resolve (Phase 3 Blockers)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#appendix-how-spec-tenant-works-on-deployments">Appendix: How <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> Works on Deployments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#design-promotion-system">Design: Promotion System</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#concepts">Concepts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#configuration-model">Configuration Model</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#configuration-spec-promotions"><code class="docutils literal notranslate"><span class="pre">configuration.spec.promotions</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#environment-spec-promotion"><code class="docutils literal notranslate"><span class="pre">environment.spec.promotion</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#wave-assignment-on-deployments">Wave assignment on deployments</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#cli-interface">CLI Interface</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#strata-promote-start"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">start</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#strata-promote-rollback"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">rollback</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#strata-promote-matrix"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">matrix</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#strata-promote-status"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#strata-promote-history"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">history</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cli-interface">CLI Interface</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#strata-promote-start"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">start</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#strata-promote-rollback"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">rollback</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#strata-promote-matrix"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">matrix</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#strata-promote-status"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#strata-promote-history"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">history</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#gates">Gates</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#state-management">State Management</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#activity-log-diagnostic-strata-promotions">Activity log (diagnostic — <code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code>)</a></li>
-<li class="toctree-l4"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#promotion-record-audit-artifact-store">Promotion record (audit — artifact store)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gates">Gates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#state-management">State Management</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#activity-log-diagnostic-strata-promotions">Activity log (diagnostic — <code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code>)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#promotion-record-audit-artifact-store">Promotion record (audit — artifact store)</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#git-flow">Git Flow</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#interaction-with-existing-systems">Interaction with Existing Systems</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#constraints-and-non-goals">Constraints and Non-Goals</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#git-flow">Git Flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#interaction-with-existing-systems">Interaction with Existing Systems</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#constraints-and-non-goals">Constraints and Non-Goals</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="0011-promotion-strategies-for-version-progression.html#more-information">More Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#more-information">More Information</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0012-rename-customer-to-tenant.html">Rename CustomerModel to TenantModel</a><ul>
@@ -1753,9 +1753,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Python + Click for the CLI, not a compiled binary</li>
+      <li class="breadcrumb-item active">Promotion strategies for version progression across environments</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/decisions/0002-python-click-not-compiled-cli.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/decisions/0011-promotion-strategies-for-version-progression.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -1763,78 +1763,1010 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="python-click-for-the-cli-not-a-compiled-binary">
-<h1>Python + Click for the CLI, not a compiled binary<a class="headerlink" href="#python-click-for-the-cli-not-a-compiled-binary" title="Link to this heading"></a></h1>
+  <section id="promotion-strategies-for-version-progression-across-environments">
+<h1>Promotion strategies for version progression across environments<a class="headerlink" href="#promotion-strategies-for-version-progression-across-environments" title="Link to this heading"></a></h1>
 <ul class="simple">
-<li><p>Status: accepted</p></li>
-<li><p>Date: 2025-07-16</p></li>
+<li><p>Status: proposed</p></li>
+<li><p>Date: 2026-06-23</p></li>
 </ul>
 <section id="context-and-problem-statement">
 <h2>Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Link to this heading"></a></h2>
-<p>strata is a DevOps CLI tool. The implementation language and CLI framework determine: install experience, cross-platform support, iteration speed, contributor accessibility, and long-term maintenance cost.</p>
-<p>What language and CLI framework should strata use?</p>
+<p>Strata manages deployments across multiple environments (dev, test, acceptance, production)
+and multiple tenants. Version changes — whether Terraform landscape references or Helm
+chart versions — must progress through environments in a controlled, auditable way.</p>
+<p>Today, promotion is entirely manual: an operator edits a <code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[].reference</span></code>
+or a module <code class="docutils literal notranslate"><span class="pre">chart_version</span></code> in an environment YAML file, commits, and deploys. There is no
+guardrail preventing a direct jump to production, no canary mechanism, no rollback tracking,
+and no visibility into what version is running where across the fleet.</p>
+<p>The platform needs a structured promotion system that:</p>
+<ul class="simple">
+<li><p>Defines allowed progressions (dev → test → acc → prd)</p></li>
+<li><p>Supports gradual rollout strategies (single tenant first, waves, all-at-once)</p></li>
+<li><p>Distinguishes between infrastructure changes (high blast radius) and application changes (lower blast radius)</p></li>
+<li><p>Integrates with the existing git-based workflow (branch, commit YAML edits, PR, merge, deploy)</p></li>
+<li><p>Provides visibility into current versions and in-flight promotions</p></li>
+<li><p>Supports unpromotion (controlled rollback) using the same strategy and safety checks</p></li>
+</ul>
+</section>
+<section id="key-observations">
+<h2>Key Observations<a class="headerlink" href="#key-observations" title="Link to this heading"></a></h2>
+<section id="terraform-vs-helm-different-risk-profiles">
+<h3>Terraform vs Helm: different risk profiles<a class="headerlink" href="#terraform-vs-helm-different-risk-profiles" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Dimension</p></th>
+<th class="head"><p>Terraform (remote ref)</p></th>
+<th class="head"><p>Helm (chart version)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>What changes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[].reference</span></code></p></td>
+<td><p>Module override <code class="docutils literal notranslate"><span class="pre">chart_version</span></code> or <code class="docutils literal notranslate"><span class="pre">services[].image</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Blast radius</p></td>
+<td><p>Infrastructure — add/remove/modify cloud resources</p></td>
+<td><p>Application — new containers, config values</p></td>
+</tr>
+<tr class="row-even"><td><p>Validation before apply</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">plan</span></code> diff is essential</p></td>
+<td><p>Helm diff is nice-to-have</p></td>
+</tr>
+<tr class="row-odd"><td><p>Rollback cost</p></td>
+<td><p>High — may require state surgery</p></td>
+<td><p>Low — helm rollback or redeploy previous version</p></td>
+</tr>
+<tr class="row-even"><td><p>Canary feasibility</p></td>
+<td><p>Hard — infra is usually shared per zone</p></td>
+<td><p>Natural — each tenant has own helm release</p></td>
+</tr>
+<tr class="row-odd"><td><p>Shared vs isolated</p></td>
+<td><p>Shared: all tenants in a zone use the same AKS</p></td>
+<td><p>Isolated: each tenant has own namespace + release</p></td>
+</tr>
+</tbody>
+</table>
+<p>This means the promotion strategy must be type-aware — the same progression
+may use different approaches depending on what’s being promoted.</p>
+</section>
+<section id="a-promotion-is-a-yaml-edit">
+<h3>A promotion is a YAML edit<a class="headerlink" href="#a-promotion-is-a-yaml-edit" title="Link to this heading"></a></h3>
+<p>The mechanism is always the same:</p>
+<ol class="arabic simple">
+<li><p>Determine which file to edit and what value to change</p></li>
+<li><p>Create a branch, make the edit, commit</p></li>
+<li><p>CI validates (plan, lint, overlap check)</p></li>
+<li><p>PR reviewed and merged</p></li>
+<li><p>CI deploys</p></li>
+</ol>
+<p>Strata’s job is steps 1-2 and providing visibility. Git and CI handle steps 3-5.</p>
+</section>
+<section id="canary-is-a-special-case-of-waves">
+<h3>Canary is a special case of waves<a class="headerlink" href="#canary-is-a-special-case-of-waves" title="Link to this heading"></a></h3>
+<p>All rollout approaches reduce to a single model:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Approach</p></th>
+<th class="head"><p>Waves</p></th>
+<th class="head"><p>Wave 1 target</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>All-at-once</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+<td><p>Shared environment file (all deployments)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Canary-first</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">2</span></code></p></td>
+<td><p>Deployments matching wave 1, then shared env file</p></td>
+</tr>
+<tr class="row-even"><td><p>Multi-wave</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">3</span></code></p></td>
+<td><p>Deployments declaring iteration 1, then 2, then all</p></td>
+</tr>
+</tbody>
+</table>
+<p>The underlying mechanic is always: “which deployments get this version in this wave?”
+Wave membership is determined per-deployment via <code class="docutils literal notranslate"><span class="pre">spec.promotion.wave</span></code> (explicit
+<code class="docutils literal notranslate"><span class="pre">iteration</span></code> or <code class="docutils literal notranslate"><span class="pre">match_labels</span></code>). Deployments without wave config default to the last wave.</p>
+</section>
 </section>
 <section id="considered-options">
 <h2>Considered Options<a class="headerlink" href="#considered-options" title="Link to this heading"></a></h2>
+<section id="option-a-configuration-defined-strategies-strata-promote-command">
+<h3>Option A: Configuration-defined strategies, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span></code> command<a class="headerlink" href="#option-a-configuration-defined-strategies-strata-promote-command" title="Link to this heading"></a></h3>
+<p>Promotion strategies are defined in <code class="docutils literal notranslate"><span class="pre">configuration.yaml</span></code>. Environments reference which
+strategy applies to them. A new <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span></code> command group automates the YAML edits
+and tracks promotion state.</p>
+<p><strong>Configuration model:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># configuration.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotions</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">progressions</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span>
+<span class="w">        </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">dev</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">test</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">acceptance</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">production</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hotfix</span>
+<span class="w">        </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">dev</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">production</span><span class="p p-Indicator">]</span>
+
+<span class="w">    </span><span class="nt">strategies</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra-cautious</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">remote</span><span class="w">                          </span><span class="c1"># promotes spec.overrides.remotes[].reference</span>
+<span class="w">        </span><span class="nt">progression</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span>
+<span class="w">        </span><span class="nt">waves</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">100</span><span class="p p-Indicator">]</span><span class="w">                       </span><span class="c1"># canary first, then all</span>
+<span class="w">        </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span><span class="w">                         </span><span class="c1"># only tenant-layer deployments are waved</span>
+<span class="w">        </span><span class="nt">gates</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">require_progression_order</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">     </span><span class="c1"># previous env in progression must have this version</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app-wave</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">module</span><span class="w">                          </span><span class="c1"># promotes chart_version / image tags</span>
+<span class="w">        </span><span class="nt">progression</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span>
+<span class="w">        </span><span class="nt">waves</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">25</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">100</span><span class="p p-Indicator">]</span><span class="w">                   </span><span class="c1"># 1 tenant, 25% of tenants, then all</span>
+<span class="w">        </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span><span class="w">                         </span><span class="c1"># only tenant-layer deployments are waved</span>
+<span class="w">        </span><span class="nt">gates</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">require_progression_order</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">     </span><span class="c1"># previous env in progression must have this version</span>
+</pre></div>
+</div>
+<p><strong>Environment references the strategy:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># environments/production.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotion</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">strategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra-cautious</span>
+</pre></div>
+</div>
+<p><strong>Wave assignment on deployments:</strong></p>
+<p>Wave assignment is decentralized — each deployment declares its own wave membership.
+Deployments without a <code class="docutils literal notranslate"><span class="pre">wave</span></code> block default to the last wave (the “everyone else” catch-all).
+Resolution order: <code class="docutils literal notranslate"><span class="pre">iteration</span></code> wins over <code class="docutils literal notranslate"><span class="pre">match_labels</span></code>.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/acme.yaml — explicit wave assignment</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotion</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">wave</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">                            </span><span class="c1"># acme is always the canary</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/contoso.yaml — label-based wave assignment</span>
+<span class="c1"># (matches against this deployment&#39;s resolved meta.labels)</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotion</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">wave</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">match_labels</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> tier</span><span class="p">:</span><span class="w"> </span><span class="nv">standard</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w">        </span><span class="c1"># standard-tier deployments go in wave 1</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">wave:scope</span></code> on the strategy determines which layer of deployments can be waved
+at all. Zone-layer infrastructure (shared AKS, shared networking) is always all-at-once
+regardless of wave config — only the layer matching <code class="docutils literal notranslate"><span class="pre">scope</span></code> participates in gradual
+rollout.</p>
+<p><strong>CLI commands:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Initiate a promotion (wave 1 by default)</span>
+strata<span class="w"> </span>promote<span class="w"> </span>start<span class="w"> </span>--remote<span class="w"> </span>tf_landscape<span class="w"> </span>--version<span class="w"> </span>v2.4.0<span class="w"> </span>--to<span class="w"> </span>production
+
+<span class="c1"># Advance to wave 2 (explicit — same command, specify wave)</span>
+strata<span class="w"> </span>promote<span class="w"> </span>start<span class="w"> </span>--remote<span class="w"> </span>tf_landscape<span class="w"> </span>--version<span class="w"> </span>v2.4.0<span class="w"> </span>--to<span class="w"> </span>production<span class="w"> </span>--wave<span class="w"> </span><span class="m">2</span>
+
+<span class="c1"># Check status of all promotions</span>
+strata<span class="w"> </span>promote<span class="w"> </span>status
+
+<span class="c1"># Roll back (reverse promotion, same strategy applies)</span>
+strata<span class="w"> </span>promote<span class="w"> </span>rollback<span class="w"> </span>--id<span class="w"> </span>prom-20260623-001
+
+<span class="c1"># Show version matrix across environments</span>
+strata<span class="w"> </span>promote<span class="w"> </span>matrix
+
+<span class="c1"># Show historical promotions from artifact store</span>
+strata<span class="w"> </span>promote<span class="w"> </span><span class="nb">history</span><span class="w"> </span>--environment<span class="w"> </span>production
+strata<span class="w"> </span>promote<span class="w"> </span><span class="nb">history</span><span class="w"> </span>--remote<span class="w"> </span>tf_landscape<span class="w"> </span>--last<span class="w"> </span><span class="m">5</span>
+
+<span class="c1"># Show activity log for a promotion (CI/CD diagnostic output)</span>
+strata<span class="w"> </span>promote<span class="w"> </span>log<span class="w"> </span>--remote<span class="w"> </span>tf_landscape<span class="w"> </span>--to<span class="w"> </span>production
+</pre></div>
+</div>
+<p><strong>Promotion state tracking:</strong></p>
+<p>Promotion state is split into two concerns: <strong>activity log</strong> (diagnostic trace for DevOps)
+and <strong>completed record</strong> (durable audit evidence stored alongside deployment manifests).</p>
+<p><em>Activity log</em> — lives in <code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code> as a running diagnostic file. Not required
+for the promotion to function — strata derives all state from environment files and git.
+DevOps engineers can watch this file to follow what’s happening without reading git logs.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># .strata/promotions/tf_landscape-v2.4.0-production.yaml</span>
+<span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf_landscape</span>
+<span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.4.0</span>
+<span class="nt">previous_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.3.0</span>
+<span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span>
+<span class="nt">strategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra-cautious</span>
+<span class="nt">progression</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">dev</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">test</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">acceptance</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">production</span><span class="p p-Indicator">]</span>
+<span class="nt">branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">promote/tf_landscape-v2.4.0-production</span>
+<span class="nt">events</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-23T10:00:00Z</span>
+<span class="w">    </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start</span>
+<span class="w">    </span><span class="nt">wave</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">    </span><span class="nt">initiated_by</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">brady</span>
+<span class="w">    </span><span class="nt">deployments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">acme</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">files_modified</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenants/acme.yaml</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-23T10:01:12Z</span>
+<span class="w">    </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gate_passed</span>
+<span class="w">    </span><span class="nt">gate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">require_progression_order</span>
+<span class="w">    </span><span class="nt">detail</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;acceptance</span><span class="nv"> </span><span class="s">has</span><span class="nv"> </span><span class="s">v2.4.0</span><span class="nv"> </span><span class="s">—</span><span class="nv"> </span><span class="s">ok</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">promote</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">production&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-23T10:01:15Z</span>
+<span class="w">    </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">branch_created</span>
+<span class="w">    </span><span class="nt">branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">promote/tf_landscape-v2.4.0-production</span>
+<span class="w">    </span><span class="nt">commit</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">abc123f</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-24T14:30:00Z</span>
+<span class="w">    </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start</span>
+<span class="w">    </span><span class="nt">wave</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">initiated_by</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">brady</span>
+<span class="w">    </span><span class="nt">deployments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">all</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">files_modified</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environments/production.yaml</span>
+<span class="w">    </span><span class="nt">fields_removed</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenants/acme.yaml → spec.overrides.remotes[tf_landscape]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">timestamp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-24T15:10:00Z</span>
+<span class="w">    </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">completed</span>
+<span class="w">    </span><span class="nt">outcome</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">completed</span>
+</pre></div>
+</div>
+<p>This file is append-only during the promotion. It is never deleted — <code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code>
+is gitignored, so logs accumulate locally without polluting the config repo. The information
+is purely diagnostic — the promotion-record in the artifact store is the authoritative
+audit trail.</p>
+<p><em>Completed record</em> — written to the configured artifact store (same remote as deployment
+manifests) on promotion completion or rollback. This is the audit evidence:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Stored in artifact remote, e.g. manifests/promotions/prom-20260623-001.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">promotion-record</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prom-20260623-001</span>
+<span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf_landscape</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">remote</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf_landscape</span>
+<span class="w">    </span><span class="nt">from_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.3.0</span>
+<span class="w">    </span><span class="nt">to_version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v2.4.0</span>
+<span class="w">  </span><span class="nt">strategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra-cautious</span>
+<span class="w">  </span><span class="nt">progression</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">dev</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">test</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">acceptance</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">production</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">outcome</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">completed</span><span class="w">                          </span><span class="c1"># completed | rolled-back</span>
+<span class="w">  </span><span class="nt">waves</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wave</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">      </span><span class="nt">deployments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">acme</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">started</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-23T10:00:00Z</span>
+<span class="w">      </span><span class="nt">deployed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-23T15:00:00Z</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">wave</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">      </span><span class="nt">deployments</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">all</span>
+<span class="w">      </span><span class="nt">started</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-24T14:30:00Z</span>
+<span class="w">      </span><span class="nt">deployed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-24T15:10:00Z</span>
+<span class="w">  </span><span class="nt">initiated_by</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">brady</span>
+<span class="w">  </span><span class="nt">started</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-23T10:00:00Z</span>
+<span class="w">  </span><span class="nt">completed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2026-06-24T15:10:00Z</span>
+<span class="w">  </span><span class="nt">branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">promote/tf_landscape-v2.4.0-production</span>
+<span class="w">  </span><span class="nt">manifests</span><span class="p">:</span><span class="w">                                  </span><span class="c1"># links to deployment manifests produced</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme_eu_production/manifest-20260623.yaml</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso_eu_production/manifest-20260624.yaml</span>
+</pre></div>
+</div>
+<p><strong>Why two artifacts?</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Concern</p></th>
+<th class="head"><p>Activity log (<code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code>)</p></th>
+<th class="head"><p>Completed record (artifact store)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Purpose</p></td>
+<td><p>Diagnostic trace — watch what strata is doing, debug failures</p></td>
+<td><p>Audit evidence — who, when, what, outcome</p></td>
+</tr>
+<tr class="row-odd"><td><p>Required</p></td>
+<td><p>No — promotion works without it (all state derived from git)</p></td>
+<td><p>Yes — authoritative audit trail</p></td>
+</tr>
+<tr class="row-even"><td><p>Lifetime</p></td>
+<td><p>Kept permanently (gitignored — local only)</p></td>
+<td><p>Permanent — never deleted</p></td>
+</tr>
+<tr class="row-odd"><td><p>Content</p></td>
+<td><p>Timestamped event log: actions, gates, files, commits</p></td>
+<td><p>Summary: waves, outcome, manifests produced</p></td>
+</tr>
+<tr class="row-even"><td><p>Storage</p></td>
+<td><p>Local workspace (<code class="docutils literal notranslate"><span class="pre">.strata/</span></code>), gitignored</p></td>
+<td><p>Same artifact remote as deployment manifests</p></td>
+</tr>
+<tr class="row-odd"><td><p>Queryable by</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span></code> (in-flight diagnostics)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">history</span></code> (historical)</p></td>
+</tr>
+<tr class="row-even"><td><p>Retention</p></td>
+<td><p>Always kept locally — accumulates for debugging</p></td>
+<td><p>Always written</p></td>
+</tr>
+</tbody>
+</table>
+<p>The completed record follows the same pattern as deployment manifests: it uses the
+Kubernetes-style schema (<code class="docutils literal notranslate"><span class="pre">apiVersion</span></code>, <code class="docutils literal notranslate"><span class="pre">kind</span></code>, <code class="docutils literal notranslate"><span class="pre">meta</span></code>, <code class="docutils literal notranslate"><span class="pre">spec</span></code>), is stored in a configured
+<code class="docutils literal notranslate"><span class="pre">spec.remotes</span></code> artifact store, and provides the audit trail showing that version changes
+followed the declared promotion strategy.</p>
+<p><strong>Git flow for wave progression:</strong></p>
+<p>Strata resolves all deployments in the target environment, evaluates each deployment’s
+<code class="docutils literal notranslate"><span class="pre">spec.promotion.wave</span></code> config (iteration, match_labels, or default=last), and groups
+them into waves defined by the strategy.</p>
+<p>Wave 1 (canary — deployments matching wave 1):</p>
 <ul class="simple">
-<li><p><strong>Python + Click</strong> — interpreted Python, Click for argument parsing and command structure</p></li>
-<li><p><strong>Go</strong> — compiled binary, single executable distribution, fast startup</p></li>
-<li><p><strong>Rust</strong> — compiled binary, very fast startup, strong type safety</p></li>
-<li><p><strong>Python + Typer</strong> — Python with Typer (Click wrapper with type annotation-driven interface)</p></li>
+<li><p>For each wave-1 deployment, edits the existing tenant file directly:
+<code class="docutils literal notranslate"><span class="pre">tenants/acme.yaml</span></code> → adds <code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[tf_landscape].reference:</span> <span class="pre">v2.4.0</span></code></p></li>
+<li><p>Already in the merge chain — no new files, no auto-discovery needed</p></li>
+<li><p>This is exactly what a manual promotion does today, just automated</p></li>
 </ul>
+<p>Wave N (final — all remaining):</p>
+<ul class="simple">
+<li><p>Edits the shared environment file:
+<code class="docutils literal notranslate"><span class="pre">environments/production.yaml</span></code> → <code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[tf_landscape].reference:</span> <span class="pre">v2.4.0</span></code></p></li>
+<li><p>Removes per-tenant overrides (shared file now covers everyone, tenant-level pin is redundant)</p></li>
+</ul>
+<p><strong>Unpromotion (rollback):</strong></p>
+<ul class="simple">
+<li><p>Same mechanism in reverse: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">rollback</span></code> reads <code class="docutils literal notranslate"><span class="pre">previous_version</span></code> from state,
+applies it using the same strategy (canary-first if that’s the policy)</p></li>
+<li><p>No shortcuts: if production required canary-first going forward, it requires canary-first
+going backward</p></li>
+<li><p>The completed record stores <code class="docutils literal notranslate"><span class="pre">outcome:</span> <span class="pre">rolled-back</span></code> for audit trail</p></li>
+</ul>
+</section>
+<section id="option-b-environment-only-no-command-automation-not-chosen">
+<h3>Option B: Environment-only, no command automation (not chosen)<a class="headerlink" href="#option-b-environment-only-no-command-automation-not-chosen" title="Link to this heading"></a></h3>
+<p>Define progressions and strategies in configuration, but don’t automate the edits.
+Strata only provides <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span></code> (read-only visibility) and validates that
+promotions follow the declared progression (e.g., reject a direct dev→prd jump during <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>).</p>
+<p>The operator manually edits environment YAML files and creates branches/PRs.</p>
+<ul class="simple">
+<li><p>Good: Simpler implementation. No state tracking file. No git automation.</p></li>
+<li><p>Good: Teams keep full control over how they manage branches and PRs.</p></li>
+<li><p>Bad: Manual process is error-prone — the operator must know which file to edit for canary vs full rollout.</p></li>
+<li><p>Bad: No tracking of in-flight promotions — “is production on wave 1 or wave 2?” requires reading git history.</p></li>
+<li><p>Bad: Unpromotion requires the operator to look up the previous version manually.</p></li>
+</ul>
+</section>
+<section id="option-c-external-promotion-tool-no-strata-involvement-not-chosen">
+<h3>Option C: External promotion tool (no strata involvement, not chosen)<a class="headerlink" href="#option-c-external-promotion-tool-no-strata-involvement-not-chosen" title="Link to this heading"></a></h3>
+<p>Promotions are handled by CI/CD pipeline logic or a separate tool (e.g., ArgoCD progressive
+delivery, Flux + Flagger). Strata just deploys whatever version is in the YAML files.</p>
+<ul class="simple">
+<li><p>Good: No new strata features needed.</p></li>
+<li><p>Good: Leverages mature external tools for canary/progressive delivery.</p></li>
+<li><p>Bad: Only works for Helm/Kubernetes applications — doesn’t cover Terraform infrastructure promotions.</p></li>
+<li><p>Bad: Breaks the single-source-of-truth principle — promotion state lives outside the config repo.</p></li>
+<li><p>Bad: No unified visibility — Terraform version matrix requires a separate mechanism from Helm version matrix.</p></li>
+</ul>
+</section>
 </section>
 <section id="decision-outcome">
 <h2>Decision Outcome<a class="headerlink" href="#decision-outcome" title="Link to this heading"></a></h2>
-<p>Chosen: <strong>Python + Click</strong>, because strata’s primary users are infrastructure engineers who already operate in Python-heavy environments (Ansible, Pulumi, Azure DevOps pipelines), and because the business logic — YAML parsing, Pydantic validation, subprocess orchestration — is most naturally expressed in Python. Click provides the exact CLI primitives needed (command groups, context passing, env var binding) without abstraction overhead.</p>
+<p><strong>Proposed: Option A</strong> — Configuration-defined strategies with <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span></code> automation.</p>
+<p>The promotion system should be a first-class strata concept because:</p>
+<ol class="arabic simple">
+<li><p><strong>Both Terraform and Helm need it.</strong> External tools like Flagger only cover Kubernetes.
+Infrastructure version progression is the harder problem and has no off-the-shelf solution.</p></li>
+<li><p><strong>The YAML edit is the promotion.</strong> Strata already owns the YAML schema, validation, and
+deployment. Generating the correct YAML edit for a canary vs full rollout is a natural extension.</p></li>
+<li><p><strong>State tracking enables visibility.</strong> Without tracking, “what version is running where”
+requires cross-referencing environment files, deployment manifests, and git history.
+A small state file makes this queryable.</p></li>
+<li><p><strong>Unpromotion is critical for safety.</strong> Rolling back under pressure is when mistakes happen.
+Automating the reverse edit with the same safety checks prevents shortcuts.</p></li>
+</ol>
+<section id="implementation-approach">
+<h3>Implementation approach<a class="headerlink" href="#implementation-approach" title="Link to this heading"></a></h3>
+<p><strong>Phase 1 — Visibility (read-only, no automation):</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span></code> / <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">matrix</span></code> — scan environment files and deployment
+manifests to show the version matrix across all environments</p></li>
+<li><p>No new models, no state files, no git automation</p></li>
+<li><p>Validates the concept and surfaces the data operators need</p></li>
+</ul>
+<p><strong>Phase 2 — Strategy model + validation:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">configuration.spec.promotions</span></code> model (progressions, strategies)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">environment.spec.promotion</span></code> reference (which strategy applies)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks: warn if a version jump skips a progression step</p></li>
+<li><p>Still no automation — strategies are advisory guardrails</p></li>
+</ul>
+<p><strong>Phase 3 — Promotion automation:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">start</span></code> — creates branch, makes YAML edits, commits (explicit <code class="docutils literal notranslate"><span class="pre">--wave</span></code> for each wave)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">rollback</span></code> — reverse promotion using the same strategy</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code> activity log (diagnostic trace, gitignored, kept locally)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">promotion-record</span></code> written to artifact store on completion/rollback</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">history</span></code> — query completed records from artifact store</p></li>
+<li><p>Gate: <code class="docutils literal notranslate"><span class="pre">require_progression_order</span></code> — refuse if previous env doesn’t have this version
+(pure YAML inspection, no external tool integration needed)</p></li>
+<li><p>Future gates added incrementally: <code class="docutils literal notranslate"><span class="pre">require_plan_clean</span></code>, <code class="docutils literal notranslate"><span class="pre">require_healthy</span></code>, <code class="docutils literal notranslate"><span class="pre">require_no_drift</span></code></p></li>
+</ul>
+</section>
 <section id="consequences">
 <h3>Consequences<a class="headerlink" href="#consequences" title="Link to this heading"></a></h3>
 <ul class="simple">
-<li><p>Good: Pydantic v2 for YAML validation is a natural fit — rich error messages, type coercion, and cross-field validators with minimal boilerplate.</p></li>
-<li><p>Good: <code class="docutils literal notranslate"><span class="pre">structlog</span></code> for structured logging integrates cleanly.</p></li>
-<li><p>Good: <code class="docutils literal notranslate"><span class="pre">uv</span></code> provides fast, reproducible installs with lockfile support — install experience is comparable to compiled tools.</p></li>
-<li><p>Good: Contributors familiar with Python can read, test, and modify the codebase without learning a new language.</p></li>
-<li><p>Good: <code class="docutils literal notranslate"><span class="pre">subprocess</span></code> for Terraform/Helm/Ansible invocation is straightforward — no FFI or cgo complexity.</p></li>
-<li><p>Bad: Python startup time (~100ms) is slower than a compiled binary. Acceptable for a deployment tool where operations take seconds to minutes.</p></li>
-<li><p>Bad: Requires Python 3.13 to be installed — one more prerequisite for end users (mitigated by dev container and <code class="docutils literal notranslate"><span class="pre">pipx</span> <span class="pre">install</span></code>).</p></li>
-<li><p>Bad: No single-binary distribution — users must have Python available (mitigated by <code class="docutils literal notranslate"><span class="pre">pipx</span> <span class="pre">install</span> <span class="pre">xyz-strata</span></code> which handles isolation).</p></li>
+<li><p>Good: Unified promotion model for both infrastructure and application changes.</p></li>
+<li><p>Good: Strategies are configuration-as-code — auditable, versioned, team-shared.</p></li>
+<li><p>Good: Phased implementation means visibility ships first, automation ships when the model is proven.</p></li>
+<li><p>Good: Git remains the source of truth — strata automates the edits but the PR/merge flow is unchanged.</p></li>
+<li><p>Good: Unpromotion uses the same strategy, preventing unsafe shortcuts under pressure.</p></li>
+<li><p>Good: Completed promotion records stored in the same artifact remote as deployment manifests — no new infrastructure for audit storage. Reuses existing <code class="docutils literal notranslate"><span class="pre">spec.remotes</span></code> configuration.</p></li>
+<li><p>Good: <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">promotion-record</span></code> follows the Kubernetes-style schema, consistent with all other strata documents.</p></li>
+<li><p>Good: No required runtime state — all promotion state derived from environment files and git. Activity log is diagnostic-only.</p></li>
+<li><p>Good: Terraform landscapes benefit equally — remote reference versions progress through environments via the same progression gate. Zone-layer infra uses <code class="docutils literal notranslate"><span class="pre">waves:</span> <span class="pre">[100]</span></code> (all-at-once per env, still gated by <code class="docutils literal notranslate"><span class="pre">require_progression_order</span></code>). Tenant-layer infra can canary via <code class="docutils literal notranslate"><span class="pre">scope:</span> <span class="pre">tenant</span></code>.</p></li>
+<li><p>Neutral: Zone-layer infrastructure is structurally shared per environment — canary within a single env is not possible. This is inherent to shared infra, not a system limitation. The <code class="docutils literal notranslate"><span class="pre">scope</span></code> field makes this explicit.</p></li>
+<li><p>Neutral: Multi-promotion of the same target to the same environment (e.g., v2.4.0 and v2.5.0 both in flight) produces a git merge conflict on the second PR. This is correct behavior — git is the conflict detector. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">start</span></code> can warn if a competing branch exists, but enforcement is via the normal PR process.</p></li>
 </ul>
 </section>
 </section>
-<section id="pros-and-cons-of-the-options">
-<h2>Pros and Cons of the Options<a class="headerlink" href="#pros-and-cons-of-the-options" title="Link to this heading"></a></h2>
-<section id="go">
-<h3>Go<a class="headerlink" href="#go" title="Link to this heading"></a></h3>
+<section id="open-questions">
+<h2>Open Questions<a class="headerlink" href="#open-questions" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>~~<strong>Observation period enforcement:</strong>~~ Resolved — not applicable. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">continue</span></code>
+no longer exists (each wave is explicit <code class="docutils literal notranslate"><span class="pre">start</span> <span class="pre">--wave</span> <span class="pre">N</span></code>). Strata is a config tool, not a
+runtime system — it doesn’t track deployment timestamps. The operator decides when enough
+time has passed. The explicit wave command and PR review process ARE the observation gate.</p></li>
+<li><p>~~<strong>Wave tenant selection:</strong>~~ Resolved — no auto-selection. Wave membership is always
+a deliberate choice: pilots declare <code class="docutils literal notranslate"><span class="pre">iteration:</span> <span class="pre">1</span></code>, middle waves use explicit <code class="docutils literal notranslate"><span class="pre">iteration</span></code>
+or <code class="docutils literal notranslate"><span class="pre">match_labels</span></code>, everyone else defaults to last wave. The wave array on the strategy
+declares how many waves exist, not a selection algorithm. No randomness needed.</p></li>
+<li><p>~~<strong>Promotion scope per layer:</strong>~~ Resolved — the <code class="docutils literal notranslate"><span class="pre">scope</span></code> field on the strategy handles
+this. Zone-layer uses <code class="docutils literal notranslate"><span class="pre">waves:</span> <span class="pre">[100]</span></code> (all-at-once). Tenant-layer uses <code class="docutils literal notranslate"><span class="pre">scope:</span> <span class="pre">tenant</span></code>
+for canary. No automatic adaptation needed — the operator picks the strategy per env.</p></li>
+<li><p>~~<strong>Multi-promotion conflicts:</strong>~~ Resolved — independent targets edit different files,
+so no conflict. Same target to the same environment produces a git merge conflict on
+the second PR — correct behavior, already covered in Consequences (Neutral).</p></li>
+<li><p>~~<strong>Promotion and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">list</span></code>:</strong>~~ Resolved — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">list</span></code> already
+resolves the effective configuration per deployment through the merge chain. Promotion
+overrides are standard YAML files (per-deployment or shared), so deploy naturally sees
+them. No special integration needed — they’re the same system.</p></li>
+<li><p>~~<strong>Should <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span></code> be part of <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">env</span></code>?</strong>~~ Resolved — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span></code> is
+its own command group. It has <code class="docutils literal notranslate"><span class="pre">start</span></code>, <code class="docutils literal notranslate"><span class="pre">rollback</span></code>, <code class="docutils literal notranslate"><span class="pre">status</span></code>, <code class="docutils literal notranslate"><span class="pre">matrix</span></code>, <code class="docutils literal notranslate"><span class="pre">history</span></code>, <code class="docutils literal notranslate"><span class="pre">log</span></code> —
+too many subcommands to nest under <code class="docutils literal notranslate"><span class="pre">env</span></code>.</p></li>
+</ol>
+</section>
+<section id="issues-to-resolve-phase-3-blockers">
+<h2>Issues to Resolve (Phase 3 Blockers)<a class="headerlink" href="#issues-to-resolve-phase-3-blockers" title="Link to this heading"></a></h2>
+<ol class="arabic simple" start="7">
+<li><p>~~<strong>Promotion override file not in merge chain:</strong>~~ Resolved — no new files needed.
+Promotion edits the existing tenant file’s <code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes</span></code> field directly
+(wave 1), then edits the shared environment file and removes the per-tenant override
+(wave N). Same files, same merge chain, same mechanism as manual promotion.
+No auto-include or glob needed.</p></li>
+<li><p>~~<strong><code class="docutils literal notranslate"><span class="pre">scope:</span> <span class="pre">tenant</span></code> has no mechanical definition:</strong>~~ Resolved — <code class="docutils literal notranslate"><span class="pre">scope</span></code> references a
+layer name from <code class="docutils literal notranslate"><span class="pre">configuration.spec.layering[]</span></code>. The predicate is:
+<code class="docutils literal notranslate"><span class="pre">layer_name</span> <span class="pre">in</span> <span class="pre">deployment.spec.layers</span></code> — if the deployment has that layer key, it
+participates in wave logic. Zone-level deployments lack the <code class="docutils literal notranslate"><span class="pre">tenant</span></code> layer key →
+excluded from waving → always all-at-once. Generic: works for any layer name.</p></li>
+<li><p>~~<strong>”Percentage waves” table in Key Observations is stale:</strong>~~ Fixed — renamed to
+“Multi-wave” with wave count instead of percentages. Membership is always deliberate.</p></li>
+<li><p><strong>Deployment properties beyond layering:</strong> Deployments have attributes like <code class="docutils literal notranslate"><span class="pre">tenant</span></code>,
+<code class="docutils literal notranslate"><span class="pre">costcenter</span></code>, <code class="docutils literal notranslate"><span class="pre">region</span></code>, <code class="docutils literal notranslate"><span class="pre">project</span></code> that aren’t all layers (layers define artifact path
+structure). Some are metadata for filtering, billing, or organizational purposes.
+Need to decide: where do these live? Options: <code class="docutils literal notranslate"><span class="pre">meta.labels</span></code> (free-form key-value),
+dedicated <code class="docutils literal notranslate"><span class="pre">spec</span></code> fields, or a <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> dict. This affects <code class="docutils literal notranslate"><span class="pre">match_labels</span></code> in
+wave assignment — what label namespace does it match against?</p></li>
+</ol>
+</section>
+<section id="appendix-how-spec-tenant-works-on-deployments">
+<h2>Appendix: How <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> Works on Deployments<a class="headerlink" href="#appendix-how-spec-tenant-works-on-deployments" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">deployment.spec.tenant</span></code> is an <strong>Optional[PlatformName]</strong> field that drives file-based
+resolution and zone validation — it is not merely metadata.</p>
+<p><strong>When defined</strong> (<code class="docutils literal notranslate"><span class="pre">spec.tenant:</span> <span class="pre">acme</span></code>):</p>
+<ol class="arabic simple">
+<li><p><strong>File resolution:</strong> The system loads <code class="docutils literal notranslate"><span class="pre">tenants/acme.yaml</span></code> from the repository.
+Validation fails if the file doesn’t exist.</p></li>
+<li><p><strong>Zone alignment:</strong> Tenant zones (from the tenant file) are cross-checked against
+<code class="docutils literal notranslate"><span class="pre">configuration.spec.zones</span></code> and against provider zones. A provider cannot deploy to a
+zone the tenant isn’t allowed in.</p></li>
+<li><p><strong>Platform artifact:</strong> The tenant model is embedded in the build artifact
+(<code class="docutils literal notranslate"><span class="pre">PlatformTenantModel</span></code>) and available to builders (Terraform, Ansible).</p></li>
+</ol>
+<p><strong>When omitted</strong> (<code class="docutils literal notranslate"><span class="pre">spec.tenant:</span> <span class="pre">null</span></code> or absent):</p>
 <ul class="simple">
-<li><p>Good: Single statically-linked binary — zero runtime dependencies for end users.</p></li>
-<li><p>Good: Fast startup, easy to distribute via GitHub releases.</p></li>
-<li><p>Bad: YAML + Pydantic-style validation in Go requires significantly more boilerplate (no equivalent of Pydantic v2).</p></li>
-<li><p>Bad: Contributor pool for a DevOps Python tool is smaller in Go.</p></li>
-<li><p>Bad: Cross-compiling for all target platforms adds CI complexity.</p></li>
+<li><p>No tenant file is loaded. No zone-alignment checks run.</p></li>
+<li><p>The deployment is treated as a <strong>shared/platform deployment</strong> serving all tenants.</p></li>
+<li><p>Builders receive <code class="docutils literal notranslate"><span class="pre">tenant</span> <span class="pre">=</span> <span class="pre">None</span></code> — templates can branch on this.</p></li>
+</ul>
+<p><strong>Relationship to layers:</strong> <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> is a <em>structural</em> field (resolves files, drives
+validation). It happens to correspond to the <code class="docutils literal notranslate"><span class="pre">tenant</span></code> layer key in <code class="docutils literal notranslate"><span class="pre">spec.layers</span></code>, but
+serves a different purpose. The layer key controls artifact path structure; the <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code>
+field controls tenant-scoped validation and embedding.</p>
+<p><strong>Relationship to <code class="docutils literal notranslate"><span class="pre">match_labels</span></code>:</strong> Wave assignment via <code class="docutils literal notranslate"><span class="pre">match_labels</span></code> matches against
+<code class="docutils literal notranslate"><span class="pre">meta.labels</span></code> on any artifact (deployment, environment, tenant file). It does <strong>not</strong> read
+<code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code> directly — if you want to wave by tenant, label the deployment
+(<code class="docutils literal notranslate"><span class="pre">meta.labels.tenant:</span> <span class="pre">acme</span></code>) or use <code class="docutils literal notranslate"><span class="pre">spec.layers</span></code> as the scope predicate.</p>
+<p><strong>Informational properties</strong> (<code class="docutils literal notranslate"><span class="pre">costcenter</span></code>, <code class="docutils literal notranslate"><span class="pre">region</span></code>, <code class="docutils literal notranslate"><span class="pre">project</span></code>, etc.) that don’t drive file
+resolution belong in <code class="docutils literal notranslate"><span class="pre">spec.properties</span></code> (both deployment and environment models already have
+this as <code class="docutils literal notranslate"><span class="pre">Dict[str,</span> <span class="pre">Any]</span></code>) or <code class="docutils literal notranslate"><span class="pre">meta.labels</span></code> for filtering/matching purposes.</p>
+</section>
+<hr class="docutils" />
+<section id="design-promotion-system">
+<h2>Design: Promotion System<a class="headerlink" href="#design-promotion-system" title="Link to this heading"></a></h2>
+<p>This section consolidates the full design for the promotion system as a reference for
+implementation. It supersedes the exploratory examples in Option A above.</p>
+<section id="concepts">
+<h3>Concepts<a class="headerlink" href="#concepts" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Concept</p></th>
+<th class="head"><p>Definition</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Progression</strong></p></td>
+<td><p>An ordered list of environments that a version must traverse (e.g., <code class="docutils literal notranslate"><span class="pre">[dev,</span> <span class="pre">test,</span> <span class="pre">acc,</span> <span class="pre">prd]</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strategy</strong></p></td>
+<td><p>A named policy that governs HOW a version moves into a specific environment (wave count, scope, gates)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Wave</strong></p></td>
+<td><p>A subset of deployments that receive the version together. Waves execute sequentially within an environment</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Scope</strong></p></td>
+<td><p>A layer name from <code class="docutils literal notranslate"><span class="pre">configuration.spec.layering[]</span></code> that determines which deployments participate in waving</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Gate</strong></p></td>
+<td><p>A precondition that must pass before promotion proceeds (e.g., previous env must have the version)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Promotion target</strong></p></td>
+<td><p>The thing being versioned — a remote reference (<code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[].reference</span></code>) or a module field (<code class="docutils literal notranslate"><span class="pre">chart_version</span></code>, <code class="docutils literal notranslate"><span class="pre">image</span></code>)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="configuration-model">
+<h3>Configuration Model<a class="headerlink" href="#configuration-model" title="Link to this heading"></a></h3>
+<section id="configuration-spec-promotions">
+<h4><code class="docutils literal notranslate"><span class="pre">configuration.spec.promotions</span></code><a class="headerlink" href="#configuration-spec-promotions" title="Link to this heading"></a></h4>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">configuration</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotions</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">progressions</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span>
+<span class="w">        </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">dev</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">test</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">acceptance</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">production</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hotfix</span>
+<span class="w">        </span><span class="nt">environments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">dev</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">production</span><span class="p p-Indicator">]</span>
+
+<span class="w">    </span><span class="nt">strategies</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra-cautious</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">remote</span>
+<span class="w">        </span><span class="nt">progression</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span>
+<span class="w">        </span><span class="nt">waves</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">canary</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">all</span>
+<span class="w">        </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span>
+<span class="w">        </span><span class="nt">gates</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">require_progression_order</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app-gradual</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">module</span>
+<span class="w">        </span><span class="nt">progression</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span>
+<span class="w">        </span><span class="nt">waves</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">canary</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">early-adopters</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">all</span>
+<span class="w">        </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant</span>
+<span class="w">        </span><span class="nt">gates</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">require_progression_order</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra-zone</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">remote</span>
+<span class="w">        </span><span class="nt">progression</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span>
+<span class="w">        </span><span class="nt">waves</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">all</span>
+<span class="w">        </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">                           </span><span class="c1"># no waving — all-at-once for zone infra</span>
+<span class="w">        </span><span class="nt">gates</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">require_progression_order</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p><strong>Strategy fields:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Required</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>string</p></td>
+<td><p>yes</p></td>
+<td><p>Unique identifier for the strategy</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></td>
+<td><p>enum</p></td>
+<td><p>yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">remote</span></code> (promotes <code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[].reference</span></code>) or <code class="docutils literal notranslate"><span class="pre">module</span></code> (promotes <code class="docutils literal notranslate"><span class="pre">chart_version</span></code> / <code class="docutils literal notranslate"><span class="pre">image</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">progression</span></code></p></td>
+<td><p>string</p></td>
+<td><p>yes</p></td>
+<td><p>References a named progression</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">waves</span></code></p></td>
+<td><p>list[Wave]</p></td>
+<td><p>yes</p></td>
+<td><p>Ordered list of wave definitions. Position = execution order</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scope</span></code></p></td>
+<td><p>string | null</p></td>
+<td><p>no</p></td>
+<td><p>Layer name from <code class="docutils literal notranslate"><span class="pre">configuration.spec.layering[]</span></code>. Only deployments with this layer key participate in waving. <code class="docutils literal notranslate"><span class="pre">null</span></code> = all-at-once, no waving</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gates</span></code></p></td>
+<td><p>dict</p></td>
+<td><p>no</p></td>
+<td><p>Named gate conditions (see Gates section)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wave definition:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Required</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>string</p></td>
+<td><p>yes</p></td>
+<td><p>Wave identifier (used in CLI: <code class="docutils literal notranslate"><span class="pre">--wave</span> <span class="pre">canary</span></code>)</p></td>
+</tr>
+</tbody>
+</table>
+<p>Waves are implicitly ordered by position in the list. The last wave is always the
+“everyone else” catch-all — deployments without explicit wave assignment land here.</p>
+</section>
+<section id="environment-spec-promotion">
+<h4><code class="docutils literal notranslate"><span class="pre">environment.spec.promotion</span></code><a class="headerlink" href="#environment-spec-promotion" title="Link to this heading"></a></h4>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># environments/production.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">environment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotion</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">strategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra-cautious</span>
+</pre></div>
+</div>
+<p>Each environment references which strategy applies. Environments without a <code class="docutils literal notranslate"><span class="pre">promotion</span></code>
+block have no promotion guardrails (useful for dev/sandbox — versions can be set freely).</p>
+</section>
+<section id="wave-assignment-on-deployments">
+<h4>Wave assignment on deployments<a class="headerlink" href="#wave-assignment-on-deployments" title="Link to this heading"></a></h4>
+<p>Wave membership is declared on the deployment (or tenant file) — decentralized, not
+centrally managed in the strategy.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/acme.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotion</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">wave</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">                </span><span class="c1"># always in the first wave (canary)</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/contoso.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">promotion</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">wave</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">match_labels</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">tier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">enterprise</span><span class="w">          </span><span class="c1"># matched against meta.labels on the deployment</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># tenants/fabrikam.yaml</span>
+<span class="c1"># No spec.promotion.wave — defaults to last wave (&quot;all&quot;)</span>
+</pre></div>
+</div>
+<p><strong>Resolution order:</strong></p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">iteration</span></code> (explicit wave position, 1-indexed) — wins if present</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">match_labels</span></code> (matches against <code class="docutils literal notranslate"><span class="pre">meta.labels</span></code> of the deployment) — evaluated if no iteration</p></li>
+<li><p>Default = last wave — deployments without wave config are in the final catch-all</p></li>
+</ol>
+<p><strong>Scope filtering:</strong> Before wave assignment is evaluated, the strategy’s <code class="docutils literal notranslate"><span class="pre">scope</span></code> field
+filters deployments. Only deployments where <code class="docutils literal notranslate"><span class="pre">scope_layer_name</span> <span class="pre">in</span> <span class="pre">deployment.spec.layers</span></code>
+participate. Zone-level deployments (no tenant layer) are excluded from waving entirely —
+they follow the <code class="docutils literal notranslate"><span class="pre">scope:</span> <span class="pre">null</span></code> / all-at-once path.</p>
+</section>
+</section>
+<section id="cli-interface">
+<h3>CLI Interface<a class="headerlink" href="#cli-interface" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">promote</span> <span class="o">&lt;</span><span class="n">subcommand</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Subcommand</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">start</span></code></p></td>
+<td><p>Initiate or advance a promotion (creates branch, edits YAML, commits)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rollback</span></code></p></td>
+<td><p>Reverse a promotion using the same strategy</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">status</span></code></p></td>
+<td><p>Show in-flight promotions (from activity log)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">matrix</span></code></p></td>
+<td><p>Show version matrix across all environments</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">history</span></code></p></td>
+<td><p>Query completed promotion records from artifact store</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">log</span></code></p></td>
+<td><p>Show activity log for a specific promotion</p></td>
+</tr>
+</tbody>
+</table>
+<section id="strata-promote-start">
+<h4><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">start</span></code><a class="headerlink" href="#strata-promote-start" title="Link to this heading"></a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>promote<span class="w"> </span>start<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--remote<span class="w"> </span>tf_landscape<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--version<span class="w"> </span>v2.4.0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--to<span class="w"> </span>production<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--wave<span class="w"> </span>canary
+</pre></div>
+</div>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Flag</p></th>
+<th class="head"><p>Required</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--remote</span></code></p></td>
+<td><p>yes*</p></td>
+<td><p>Remote name being promoted (mutually exclusive with <code class="docutils literal notranslate"><span class="pre">--module</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--module</span></code></p></td>
+<td><p>yes*</p></td>
+<td><p>Module name being promoted (mutually exclusive with <code class="docutils literal notranslate"><span class="pre">--remote</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--version</span></code></p></td>
+<td><p>yes</p></td>
+<td><p>Target version</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--to</span></code></p></td>
+<td><p>yes</p></td>
+<td><p>Target environment</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--wave</span></code></p></td>
+<td><p>no</p></td>
+<td><p>Wave name to execute. Defaults to first wave. Use <code class="docutils literal notranslate"><span class="pre">all</span></code> or last wave name for full rollout</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></p></td>
+<td><p>no</p></td>
+<td><p>Show what would be edited without making changes</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What <code class="docutils literal notranslate"><span class="pre">start</span></code> does:</strong></p>
+<ol class="arabic simple">
+<li><p>Loads strategy from the target environment’s <code class="docutils literal notranslate"><span class="pre">spec.promotion.strategy</span></code></p></li>
+<li><p>Validates gates (progression order, etc.)</p></li>
+<li><p>Resolves deployments in the target environment</p></li>
+<li><p>Filters by scope (layer predicate)</p></li>
+<li><p>Assigns deployments to waves (iteration → match_labels → default)</p></li>
+<li><p>For the specified wave: determines which files to edit</p></li>
+<li><p>Creates branch <code class="docutils literal notranslate"><span class="pre">promote/{target}-{version}-{environment}</span></code></p></li>
+<li><p>Makes YAML edits, commits</p></li>
+<li><p>Appends to activity log (<code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code>)</p></li>
+<li><p>Outputs: files modified, branch name, suggested PR command</p></li>
+</ol>
+<p><strong>Wave mechanics — what gets edited:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Wave position</p></th>
+<th class="head"><p>Action</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>First/middle wave (not last)</p></td>
+<td><p>Edit each wave-member’s tenant file: add <code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[{name}].reference:</span> <span class="pre">{version}</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Last wave (<code class="docutils literal notranslate"><span class="pre">all</span></code>)</p></td>
+<td><p>Edit shared environment file: set <code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[{name}].reference:</span> <span class="pre">{version}</span></code>. Remove per-tenant overrides from previous waves (now redundant)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="strata-promote-rollback">
+<h4><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">rollback</span></code><a class="headerlink" href="#strata-promote-rollback" title="Link to this heading"></a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>promote<span class="w"> </span>rollback<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--remote<span class="w"> </span>tf_landscape<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--to<span class="w"> </span>production
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Reads <code class="docutils literal notranslate"><span class="pre">previous_version</span></code> from the active promotion’s activity log</p></li>
+<li><p>Applies the reverse using the <strong>same strategy</strong> (if production requires canary-first
+going forward, it requires canary-first going backward)</p></li>
+<li><p>Writes <code class="docutils literal notranslate"><span class="pre">outcome:</span> <span class="pre">rolled-back</span></code> to the promotion record</p></li>
 </ul>
 </section>
-<section id="rust">
-<h3>Rust<a class="headerlink" href="#rust" title="Link to this heading"></a></h3>
+<section id="strata-promote-matrix">
+<h4><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">matrix</span></code><a class="headerlink" href="#strata-promote-matrix" title="Link to this heading"></a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>promote<span class="w"> </span>matrix
+strata<span class="w"> </span>promote<span class="w"> </span>matrix<span class="w"> </span>--remote<span class="w"> </span>tf_landscape
+</pre></div>
+</div>
+<p>Scans environment files and deployment manifests. Outputs a table:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Remote: tf_landscape
+┌─────────────┬─────────┬──────────┬────────────┬────────────┐
+│ Environment │ Shared  │ acme     │ contoso    │ fabrikam   │
+├─────────────┼─────────┼──────────┼────────────┼────────────┤
+│ dev         │ v2.5.0  │ —        │ —          │ —          │
+│ test        │ v2.4.0  │ —        │ —          │ —          │
+│ acceptance  │ v2.4.0  │ —        │ —          │ —          │
+│ production  │ v2.3.0  │ v2.4.0 ⚡│ —          │ —          │
+└─────────────┴─────────┴──────────┴────────────┴────────────┘
+⚡ = per-tenant override (promotion in progress)
+</pre></div>
+</div>
+</section>
+<section id="strata-promote-status">
+<h4><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span></code><a class="headerlink" href="#strata-promote-status" title="Link to this heading"></a></h4>
+<p>Shows active/in-flight promotions from <code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>In-flight promotions:
+  tf_landscape → production  v2.3.0 → v2.4.0  wave: canary (1/2)  started: 2026-06-23
+</pre></div>
+</div>
+</section>
+<section id="strata-promote-history">
+<h4><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">history</span></code><a class="headerlink" href="#strata-promote-history" title="Link to this heading"></a></h4>
+<p>Queries completed <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">promotion-record</span></code> documents from the artifact store:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>promote<span class="w"> </span><span class="nb">history</span><span class="w"> </span>--to<span class="w"> </span>production<span class="w"> </span>--last<span class="w"> </span><span class="m">5</span>
+strata<span class="w"> </span>promote<span class="w"> </span><span class="nb">history</span><span class="w"> </span>--remote<span class="w"> </span>tf_landscape
+</pre></div>
+</div>
+</section>
+</section>
+<section id="gates">
+<h3>Gates<a class="headerlink" href="#gates" title="Link to this heading"></a></h3>
+<p>Gates are preconditions evaluated before <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">start</span></code> proceeds.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Gate</p></th>
+<th class="head"><p>Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">require_progression_order</span></code></p></td>
+<td><p>Refuses promotion if the previous environment in the progression doesn’t have this version. Example: can’t promote to production if acceptance is still on an older version</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Future gates</strong> (not in Phase 3, added incrementally):</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Gate</p></th>
+<th class="head"><p>Behavior</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">require_plan_clean</span></code></p></td>
+<td><p>Refuses if the last Terraform plan for this deployment showed drift</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">require_healthy</span></code></p></td>
+<td><p>Refuses if the deployment’s health check (external) reports unhealthy</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">require_no_active_promotion</span></code></p></td>
+<td><p>Refuses if another promotion for the same target+env is in progress</p></td>
+</tr>
+</tbody>
+</table>
+<p>Gates are evaluated at <code class="docutils literal notranslate"><span class="pre">start</span></code> time. If a gate fails, strata prints the reason and exits
+with code 3 (validation failure). No branch is created, no files are edited.</p>
+</section>
+<section id="state-management">
+<h3>State Management<a class="headerlink" href="#state-management" title="Link to this heading"></a></h3>
+<section id="activity-log-diagnostic-strata-promotions">
+<h4>Activity log (diagnostic — <code class="docutils literal notranslate"><span class="pre">.strata/promotions/</span></code>)<a class="headerlink" href="#activity-log-diagnostic-strata-promotions" title="Link to this heading"></a></h4>
 <ul class="simple">
-<li><p>Good: Fastest startup, best binary size.</p></li>
-<li><p>Bad: Steepest learning curve — reduces contributor pool most severely.</p></li>
-<li><p>Bad: No mature equivalent of Pydantic for config validation.</p></li>
-<li><p>Neutral: Same distribution benefits as Go, with higher implementation cost.</p></li>
+<li><p>One file per active promotion: <code class="docutils literal notranslate"><span class="pre">{target}-{version}-{environment}.yaml</span></code></p></li>
+<li><p>Append-only event log: timestamped actions, gates, files modified, commits</p></li>
+<li><p>Gitignored — local diagnostic only. Strata does NOT require this file to function</p></li>
+<li><p>All promotion state can be derived from environment files + git history</p></li>
+<li><p>Used by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">status</span></code> and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">log</span></code></p></li>
 </ul>
 </section>
-<section id="python-typer">
-<h3>Python + Typer<a class="headerlink" href="#python-typer" title="Link to this heading"></a></h3>
+<section id="promotion-record-audit-artifact-store">
+<h4>Promotion record (audit — artifact store)<a class="headerlink" href="#promotion-record-audit-artifact-store" title="Link to this heading"></a></h4>
 <ul class="simple">
-<li><p>Good: Type annotation-driven interface reduces CLI boilerplate further.</p></li>
-<li><p>Bad: Typer is a thin wrapper over Click — adds a dependency without adding capabilities needed here.</p></li>
-<li><p>Bad: Typer’s auto-generated help text is harder to customise precisely.</p></li>
-<li><p>Neutral: Would be equivalent to Click for most practical purposes; no strong reason to prefer it.</p></li>
+<li><p>Written on completion or rollback to the configured <code class="docutils literal notranslate"><span class="pre">spec.remotes</span></code> artifact store</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">promotion-record</span></code> — Kubernetes-style schema</p></li>
+<li><p>Contains: target, versions (from/to), strategy used, waves executed, outcome, timestamps,
+initiated_by, branch, links to produced deployment manifests</p></li>
+<li><p>Used by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">history</span></code></p></li>
+<li><p>Never deleted — permanent audit trail</p></li>
+</ul>
+</section>
+</section>
+<section id="git-flow">
+<h3>Git Flow<a class="headerlink" href="#git-flow" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>main ─────────────────────────────────────────────────────────────►
+       │                              │
+       │ promote/tf_landscape-v2.4.0-production
+       ├──── wave 1: edit tenants/acme.yaml ──── PR ──── merge ───►
+       │                                                  │
+       │                                                  │
+       ├──── wave 2: edit environments/production.yaml ── PR ── merge ─►
+       │           + remove acme override
+</pre></div>
+</div>
+<p>Each wave is an explicit <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">promote</span> <span class="pre">start</span> <span class="pre">--wave</span> <span class="pre">{name}</span></code> invocation. The operator
+decides when to advance (after observing canary, after CI passes, after stakeholder
+approval). There is no auto-advance — strata is a config tool, not a runtime system.</p>
+</section>
+<section id="interaction-with-existing-systems">
+<h3>Interaction with Existing Systems<a class="headerlink" href="#interaction-with-existing-systems" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>System</p></th>
+<th class="head"><p>Interaction</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code></p></td>
+<td><p>Phase 2+: warns if a version jump skips a progression step</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">list</span></code></p></td>
+<td><p>Already resolves effective config through the merge chain — sees promotion overrides natively</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span></code></p></td>
+<td><p>Unchanged — builds whatever version is in the resolved config</p></td>
+</tr>
+<tr class="row-odd"><td><p>CI/CD pipeline</p></td>
+<td><p>Unchanged — deploys on merge to main. Strata creates the branch and edits, CI validates and deploys</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes</span></code></p></td>
+<td><p>The exact field being edited by promotions. Existing override merge chain handles layering</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code></p></td>
+<td><p>Drives file resolution for wave-1 edits (which tenant file to edit). Not read by <code class="docutils literal notranslate"><span class="pre">match_labels</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">meta.labels</span></code></p></td>
+<td><p>Matched by <code class="docutils literal notranslate"><span class="pre">match_labels</span></code> for wave assignment. Informational labels live here</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">spec.layers</span></code></p></td>
+<td><p>Used by <code class="docutils literal notranslate"><span class="pre">scope</span></code> predicate to filter which deployments participate in waving</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="constraints-and-non-goals">
+<h3>Constraints and Non-Goals<a class="headerlink" href="#constraints-and-non-goals" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong>No runtime monitoring.</strong> Strata does not watch deployments, check health, or auto-advance.
+The operator (or CI) decides when to proceed.</p></li>
+<li><p><strong>No percentage-based wave sizing.</strong> Wave membership is always deliberate (explicit iteration
+or label matching). No random selection, no “deploy to 25% of tenants.”</p></li>
+<li><p><strong>No cross-environment atomicity.</strong> Each environment is promoted independently. The
+progression gate ensures ordering but doesn’t create atomic multi-env transactions.</p></li>
+<li><p><strong>No promotion of arbitrary fields.</strong> Only <code class="docutils literal notranslate"><span class="pre">spec.overrides.remotes[].reference</span></code> (type: remote)
+and module version fields (type: module) are supported promotion targets.</p></li>
+<li><p><strong>No auto-discovery of what to promote.</strong> The operator specifies the target and version
+explicitly. Strata doesn’t scan registries or detect new versions.</p></li>
 </ul>
 </section>
 </section>
 <section id="more-information">
 <h2>More Information<a class="headerlink" href="#more-information" title="Link to this heading"></a></h2>
-<p>Click’s <code class="docutils literal notranslate"><span class="pre">auto_envvar_prefix</span></code> feature is heavily used — every option accepts a <code class="docutils literal notranslate"><span class="pre">STRATA_</span></code> environment variable automatically, enabling CI integration without explicit <code class="docutils literal notranslate"><span class="pre">--flag</span></code> passing. This feature is not available in Typer without custom wiring.</p>
-<p>Related: <a class="reference internal" href="../platform/getting-started.html"><span class="std std-doc">Getting Started</span></a>, <a class="reference internal" href="../platform/ci-integration.html"><span class="std std-doc">CI Integration</span></a></p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#../issues/VCT-INT-architecture.md"><span class="xref myst">VCT-INT Architecture</span></a> — landscape versioning section</p></li>
+<li><p><a class="reference internal" href="../config/environment.html"><span class="std std-doc">Environment Configuration</span></a> — remote reference overrides</p></li>
+<li><p><a class="reference internal" href="../guides/at-scale.html"><span class="std std-doc">At Scale Guide</span></a> — variable flow, tenant model, tier environments</p></li>
+</ul>
 </section>
 </section>
 
@@ -1842,8 +2774,8 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="0001-kubernetes-style-yaml-schema.html" class="btn btn-neutral float-left" title="Kubernetes-style YAML schema for config documents" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="0003-layered-architecture.html" class="btn btn-neutral float-right" title="Strict layered architecture (commands → controllers → services)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="0010-rename-configuration-repositories-to-remotes.html" class="btn btn-neutral float-left" title="Rename configuration spec.repositories to spec.remotes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="0012-rename-customer-to-tenant.html" class="btn btn-neutral float-right" title="Rename CustomerModel to TenantModel" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

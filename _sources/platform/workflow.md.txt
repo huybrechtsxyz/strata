@@ -329,6 +329,9 @@ strata new dns my-zones --path repos/xyz-config/dns/
 
 # Create a network topology file
 strata new network my-networks --path repos/xyz-config/network/
+
+# Create a tenant config across multiple files
+strata new tenant newcorp --path repos/xyz-config/ --set zone=eu --set tier=standard
 ```
 
 Each command writes a ready-to-edit YAML file with `meta.name` pre-filled and
@@ -343,12 +346,7 @@ file content and path segments. This is how you scaffold multiple related files
 (deployments, environments, values stubs) in a single command without
 hardcoding anything in strata itself.
 
-```bash
-# Scaffold a new customer across multiple files in one command
-strata new customer newcorp --path repos/xyz-config/ --set zone=eu --set tier=standard
-```
-
-The `customer` bundle lives in `.strata/templates/customer/`. Drop any
+The `tenant` bundle lives in `.strata/templates/tenant/`. Drop any
 directory there and `strata new <name>` picks it up automatically — no code
 changes needed. See [commands reference](commands.md#new) for the full bundle
 template format.
