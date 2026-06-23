@@ -9,7 +9,6 @@ import click
 from strata.commands.cli_common import click_output_format
 from strata.models.common_models import PlatformKind
 from strata.models.configuration_model import ConfigurationModel
-from strata.models.customer_model import CustomerModel
 from strata.models.deployment_manifest_model import DeploymentManifestModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.dns_model import DnsModel
@@ -21,12 +20,13 @@ from strata.models.network_model import NetworkModel
 from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
+from strata.models.tenant_model import TenantModel
 from strata.models.workspace_model import WorkspaceModel
 
 # Maps every PlatformKind to its top-level Pydantic model class.
 _KIND_TO_MODEL = {
     PlatformKind.CONFIGURATION: ConfigurationModel,
-    PlatformKind.CUSTOMER: CustomerModel,
+    PlatformKind.TENANT: TenantModel,
     PlatformKind.DEPLOYMENT: DeploymentModel,
     PlatformKind.DEPLOYMENT_MANIFEST: DeploymentManifestModel,
     PlatformKind.DNS: DnsModel,

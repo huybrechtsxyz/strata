@@ -15,14 +15,14 @@ class PolicyModel(PlatformBaseModel):
 
         policies:
           - name: zone_enforcement
-            type: customer_zone
+            type: tenant_zone
             phase: plan
             enforcement: deny
-            description: "Ensure all planned resources are in customer-allowed zones"
+            description: "Ensure all planned resources are in tenant-allowed zones"
     """
 
     name: PlatformName
-    type: str = Field(..., description="Policy type: customer_zone | required_tags | naming_pattern | script")
+    type: str = Field(..., description="Policy type: tenant_zone | required_tags | naming_pattern | script")
     phase: str = Field(..., description="Evaluation phase: validate | build | plan | deploy")
     enforcement: str = Field("deny", description="Enforcement level: deny | warn | audit")
     description: Optional[str] = None

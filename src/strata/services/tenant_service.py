@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Service for loading and validating customer configurations."""
+"""Service for loading and validating tenant configurations."""
 
 from typing import List, Optional, Tuple
 
 from strata.models.configuration_model import ConfigurationModel
-from strata.models.customer_model import CustomerModel
+from strata.models.tenant_model import TenantModel
 from strata.services.base_service import BaseService
 
 
-class CustomerService(BaseService["CustomerModel"]):
-    """Service for handling customer configuration files (kind: customer)."""
+class TenantService(BaseService["TenantModel"]):
+    """Service for handling tenant configuration files (kind: tenant)."""
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
-        """Initialize the CustomerService."""
+        """Initialize the TenantService."""
         super().__init__(path=path, data=data)
         self.model = None
 
     def _get_model_class(self):
-        """Return the CustomerModel class for validation."""
-        return CustomerModel
+        """Return the TenantModel class for validation."""
+        return TenantModel
 
     def _validate_dynamic(
         self,
@@ -42,12 +42,12 @@ class CustomerService(BaseService["CustomerModel"]):
         errors: List[str] = []
 
         if self.model is None:
-            return False, ["Customer model is not initialized"]
+            return False, ["tenant model is not initialized"]
 
         # Validate spec.code matches meta.name
         if self.model.spec.code != self.model.meta.name:
             errors.append(
-                f"Customer spec.code '{self.model.spec.code}' must match meta.name '{self.model.meta.name}'. "
+                f"tenant spec.code '{self.model.spec.code}' must match meta.name '{self.model.meta.name}'. "
                 "Use the same value for both fields."
             )
 
@@ -57,13 +57,13 @@ class CustomerService(BaseService["CustomerModel"]):
             for zone in self.model.spec.zones:
                 if zone not in config_zone_names:
                     errors.append(
-                        f"Customer '{self.model.meta.name}' references zone '{zone}' "
+                        f"Tenant '{self.model.meta.name}' references zone '{zone}' "
                         f"which is not defined in configuration.spec.zones. "
                         f"Available zones: {sorted(config_zone_names)}"
                     )
         elif self.model.spec.zones and configuration_model and not configuration_model.spec.zones:
             errors.append(
-                f"Customer '{self.model.meta.name}' specifies zones {self.model.spec.zones} "
+                f"Tenant '{self.model.meta.name}' specifies zones {self.model.spec.zones} "
                 "but configuration.spec.zones is not defined."
             )
 
@@ -79,25 +79,25 @@ class CustomerService(BaseService["CustomerModel"]):
     # --- Accessors ---
 
     def get_code(self) -> str:
-        """Return the customer's short code identifier."""
+        """Return the tenant's short code identifier."""
         self._ensure_validated()
         assert self.model is not None
         return self.model.spec.code
 
     def get_display_name(self) -> str:
-        """Return the customer's human-readable display name."""
+        """Return the tenant's human-readable display name."""
         self._ensure_validated()
         assert self.model is not None
         return self.model.spec.name
 
     def get_zones(self) -> List[str]:
-        """Return the list of zone names this customer is allowed to deploy into."""
+        """Return the list of zone names this tenant is allowed to deploy into."""
         self._ensure_validated()
         assert self.model is not None
         return list(self.model.spec.zones)
 
     def get_environments(self) -> List[str]:
-        """Return the ordered list of environment file paths for this customer."""
+        """Return the ordered list of environment file paths for this tenant."""
         self._ensure_validated()
         assert self.model is not None
         return list(self.model.spec.environments or [])

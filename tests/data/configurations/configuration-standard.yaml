@@ -9,7 +9,7 @@ meta:
   labels:
     version: "1.0.1"
     environment: "production"
-    customer: "example-xyz"
+    tenant: "example-xyz"
     project: "cloud-platform"
   tags:
     - "platform"
@@ -35,10 +35,10 @@ spec:
         pattern: "^(development|production|testing)$"
         required: true
         description: "Type of deployment"
-      customer:
+      tenant:
         pattern: "^[a-z][a-z0-9-]*$"
         required: true
-        description: "Customer identifier"
+        description: "Tenant identifier"
       region:
         pattern: "^[a-z]{2}-[a-z]+(-[0-9]+)?$"
         required: false

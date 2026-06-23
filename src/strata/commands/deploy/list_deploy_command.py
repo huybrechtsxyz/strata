@@ -22,7 +22,7 @@ def _extract_entry(yaml_path: Path) -> Optional[Dict[str, Any]]:
 
     - ``file``      — absolute path to the manifest
     - ``name``      — ``meta.name``
-    - ``customer``  — ``spec.customer`` (or ``null``)
+    - ``tenant``    — ``spec.tenant`` (or ``null``)
     - ``workspace`` — ``spec.workspace.name`` (or ``null``)
 
     All entries from ``spec.layers`` are promoted to the top level so that CI
@@ -52,7 +52,7 @@ def _extract_entry(yaml_path: Path) -> Optional[Dict[str, Any]]:
         for k, v in layers.items():
             entry[k] = v
 
-    entry["customer"] = spec.get("customer") or None
+    entry["tenant"] = spec.get("tenant") or None
 
     ws = spec.get("workspace") or {}
     entry["workspace"] = ws.get("name") if isinstance(ws, dict) else None
@@ -65,7 +65,7 @@ class ListDeployCommand(BaseCommand):
 
     Scans a directory recursively for ``kind: deployment`` YAML files and
     emits a structured list — one entry per manifest — carrying the deployment
-    name, all ``spec.layers`` dimensions, customer, and workspace.
+    name, all ``spec.layers`` dimensions, tenant, and workspace.
 
     Designed for CI matrix generation: pipe ``--output json`` output to
     ``jq`` or consume directly as a GitHub Actions matrix.
@@ -155,7 +155,7 @@ class ListDeployCommand(BaseCommand):
 
         # Collect all layer dimension keys so the table adapts to what's present
         layer_keys: list[str] = []
-        reserved = {"file", "name", "customer", "workspace"}
+        reserved = {"file", "name", "tenant", "workspace"}
         for e in entries:
             for k in e:
                 if k not in reserved and k not in layer_keys:
@@ -172,8 +172,8 @@ class ListDeployCommand(BaseCommand):
             vals = [str(e.get(k) or "") for e in entries]
             col_layer[k] = max(max(len(v) for v in vals), len(k))
 
-        col_customer = max(len(str(e.get("customer") or "")) for e in entries)
-        col_customer = max(col_customer, 8)  # "customer" header
+        col_tenant = max(len(str(e.get("tenant") or "")) for e in entries)
+        col_tenant = max(col_tenant, 8)  # "Tenant" header
 
         # Header
         header_parts = [
@@ -182,7 +182,7 @@ class ListDeployCommand(BaseCommand):
         ]
         for k in layer_keys:
             header_parts.append(f"{k:<{col_layer[k]}}")
-        header_parts.append(f"{'customer':<{col_customer}}")
+        header_parts.append(f"{'Tenant':<{col_tenant}}")
         header = "  ".join(header_parts)
 
         click.echo(f"\n  {header}")
@@ -195,7 +195,7 @@ class ListDeployCommand(BaseCommand):
             ]
             for k in layer_keys:
                 row_parts.append(f"{str(e.get(k) or ''):<{col_layer[k]}}")
-            row_parts.append(f"{str(e.get('customer') or ''):<{col_customer}}")
+            row_parts.append(f"{str(e.get('tenant') or ''):<{col_tenant}}")
             click.echo(f"  {'  '.join(row_parts)}")
 
         click.echo(f"\n  {len(entries)} deployment(s) found\n")

@@ -1,14 +1,14 @@
-# Customer Template
-# Copy this file and customize for each tenant/customer
+# Tenant Template
+# Copy this file and customize for each tenant
 #
-# Usage: cp .strata/templates/customer.yaml config/{platform}/customers/{code}.yaml
+# Usage: cp .strata/templates/tenant.yaml config/{platform}/tenants/{code}.yaml
 
 apiVersion: strata.huybrechts.xyz/v1
-kind: customer
+kind: tenant
 meta:
   name: ${code}
   annotations:
-    description: "${name} - Customer configuration"
+    description: "${name} - Tenant configuration"
   labels:
     tier: standard
 spec:
@@ -18,9 +18,9 @@ spec:
     - ${zone} # Must match a zone name from configuration.spec.zones
   onboarded: ${onboarded} # ISO 8601 date (YYYY-MM-DD)
   environments:
-    - environments/${code}.yaml # Path to customer environment file
+    - environments/${code}.yaml # Path to tenant environment file
   configuration:
-    # Arbitrary key/value pairs specific to this customer
+    # Arbitrary key/value pairs specific to this tenant
     crm_id: "${crm_id}"
     support_level: "standard" # standard | premium | enterprise
   references:

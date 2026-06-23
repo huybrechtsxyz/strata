@@ -12,7 +12,7 @@ Services provide a consistent interface for loading, validating, and managing pl
 - Automatic service caching (prevents redundant YAML parsing)
 - Lifecycle hooks: `on_init()`, `on_ready()`, `on_shutdown()`, `is_healthy()`
 
-**Available Services:** `ConfigurationService` (singleton), `WorkspaceService`, `DeploymentService`, `ProviderService`, `ResourceService`, `NamespaceService`, `FirewallService`, `EnvironmentService`, `ModuleService`, `CustomerService`
+**Available Services:** `ConfigurationService` (singleton), `WorkspaceService`, `DeploymentService`, `ProviderService`, `ResourceService`, `NamespaceService`, `FirewallService`, `EnvironmentService`, `ModuleService`, `TenantService`
 
 ## Basic Usage
 

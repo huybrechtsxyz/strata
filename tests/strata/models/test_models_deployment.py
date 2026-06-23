@@ -97,8 +97,8 @@ class TestDeploymentStageModelSecretsField:
         assert stage.timeouts.apply == 1200
 
 
-class TestDeploymentCustomerField:
-    """Tests for the optional customer field on DeploymentSpecModel."""
+class TestDeploymentTenantField:
+    """Tests for the optional tenant field on DeploymentSpecModel."""
 
     def _spec(self, **overrides):
         base = {
@@ -118,20 +118,20 @@ class TestDeploymentCustomerField:
             }
         )
 
-    def test_customer_absent_defaults_none(self):
-        """customer is None when not specified."""
+    def test_tenant_absent_defaults_none(self):
+        """tenant is None when not specified."""
         model = self._model()
-        assert model.spec.customer is None
+        assert model.spec.tenant is None
 
-    def test_customer_valid_platform_name(self):
+    def test_tenant_valid_platform_name(self):
         """A valid PlatformName is accepted."""
-        model = self._model(customer="acme")
-        assert model.spec.customer == "acme"
+        model = self._model(tenant="acme")
+        assert model.spec.tenant == "acme"
 
-    def test_customer_invalid_platform_name_rejected(self):
+    def test_tenant_invalid_platform_name_rejected(self):
         """Uppercase / spaces are rejected by PlatformName constraint."""
         with pytest.raises(ValidationError):
-            self._model(customer="ACME Corp")
+            self._model(tenant="ACME Corp")
 
 
 class TestDeploymentLockingModel:

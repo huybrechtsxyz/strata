@@ -82,7 +82,7 @@ if not IMPL_MISSING:
 
 def _make_policy_model(
     name="test_policy",
-    type="customer_zone",
+    type="tenant_zone",
     phase="plan",
     enforcement="deny",
     enabled=True,

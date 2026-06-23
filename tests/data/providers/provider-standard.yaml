@@ -8,7 +8,7 @@ meta:
   labels:
     version: "1.0.0"
     environment: production
-    customer: example-xyz
+    tenant: example-xyz
     project: cloud-platform
   tags: ["kamatera", "eu-fr", "provider"]
 spec:

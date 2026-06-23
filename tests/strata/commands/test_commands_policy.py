@@ -98,7 +98,7 @@ class TestListPolicyCommandOutputData:
         "policies": [
             {
                 "name": "no-public-zones",
-                "type": "customer_zone",
+                "type": "tenant_zone",
                 "phase": "deploy",
                 "enforcement": "deny",
                 "enabled": True,

@@ -15,12 +15,12 @@ spec:
 
   # Policy rules — evaluated at validate, build, plan, and deploy phases
   # policies:
-  #   # Enforce customer zone restrictions on all planned Terraform resources
+  #   # Enforce tenant zone restrictions on all planned Terraform resources
   #   - name: zone_enforcement
-  #     type: customer_zone
+  #     type: tenant_zone
   #     phase: plan
   #     enforcement: deny
-  #     description: "Block apply when resources target regions outside customer-allowed zones"
+  #     description: "Block apply when resources target regions outside tenant-allowed zones"
   #
   #   # Warn when required tags are missing from resources (build phase)
   #   # - name: required_tags

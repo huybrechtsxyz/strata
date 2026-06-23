@@ -8,14 +8,19 @@ were considered, and why. They exist so the rationale survives beyond the author
 
 ## Index
 
-| #                                                       | Title                                                           | Status   |
-| ------------------------------------------------------- | --------------------------------------------------------------- | -------- |
-| [0001](0001-kubernetes-style-yaml-schema.md)            | Kubernetes-style YAML schema for config documents               | Accepted |
-| [0002](0002-python-click-not-compiled-cli.md)           | Python + Click for the CLI, not a compiled binary               | Accepted |
-| [0003](0003-layered-architecture.md)                    | Strict layered architecture (commands → controllers → services) | Accepted |
-| [0004](0004-exit-code-convention.md)                    | Four exit codes: 0 success, 1 system, 2 usage, 3 validation     | Accepted |
-| [0005](0005-secret-resolution-at-build-time.md)         | Resolve secrets at build time, not deploy time                  | Accepted |
-| [0006](0006-policy-engine-for-deployment-guardrails.md) | Policy engine for deployment guardrails                         | Proposed |
+| #                                                            | Title                                                            | Status   |
+| ------------------------------------------------------------ | ---------------------------------------------------------------- | -------- |
+| [0001](0001-kubernetes-style-yaml-schema.md)                 | Kubernetes-style YAML schema for config documents                | Accepted |
+| [0002](0002-python-click-not-compiled-cli.md)                | Python + Click for the CLI, not a compiled binary                | Accepted |
+| [0003](0003-layered-architecture.md)                         | Strict layered architecture (commands → controllers → services)  | Accepted |
+| [0004](0004-exit-code-convention.md)                         | Four exit codes: 0 success, 1 system, 2 usage, 3 validation      | Accepted |
+| [0005](0005-secret-resolution-at-build-time.md)              | Resolve secrets at build time, not deploy time                   | Accepted |
+| [0006](0006-policy-engine-for-deployment-guardrails.md)      | Policy engine for deployment guardrails                          | Proposed |
+| [0007](0007-deployment-state-locking.md)                     | Deployment state locking                                         | Proposed |
+| [0008](0008-infrastructure-drift-detection.md)               | Infrastructure drift detection                                   | Proposed |
+| [0009](0009-sbom-extended-sources-and-inventory.md)          | SBOM extended sources and inventory                              | Proposed |
+| [0010](0010-rename-configuration-repositories-to-remotes.md) | Rename configuration spec.repositories to spec.remotes           | Proposed |
+| [0011](0011-promotion-strategies-for-version-progression.md) | Promotion strategies for version progression across environments | Proposed |
 
 ## Adding a new ADR
 
