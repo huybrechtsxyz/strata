@@ -282,7 +282,7 @@ class TestValueControllerResolveVariable:
     def test_resolve_constant_variable(self):
         ctrl = ValueController()
         item = VariableStoreModel(key="region", store=VariableStoreType.CONSTANT, value="eu-west-1")
-        val, err = ctrl._resolve_variable(item)
+        val, err, _ = ctrl._resolve_variable(item)
         assert err is None
         assert val == "eu-west-1"
 
@@ -290,7 +290,7 @@ class TestValueControllerResolveVariable:
         monkeypatch.setenv("TEST_REGION_VAR", "us-east-1")
         ctrl = ValueController()
         item = VariableStoreModel(key="region", store=VariableStoreType.ENVIRONMENT, value="TEST_REGION_VAR")
-        val, err = ctrl._resolve_variable(item)
+        val, err, _ = ctrl._resolve_variable(item)
         assert err is None
         assert val == "us-east-1"
 
@@ -298,7 +298,7 @@ class TestValueControllerResolveVariable:
         monkeypatch.delenv("MISSING_XYZ_VAR", raising=False)
         ctrl = ValueController()
         item = VariableStoreModel(key="region", store=VariableStoreType.ENVIRONMENT, value="MISSING_XYZ_VAR")
-        val, err = ctrl._resolve_variable(item)
+        val, err, _ = ctrl._resolve_variable(item)
         assert val is None
         assert err is not None
         assert "not set" in err
@@ -313,7 +313,7 @@ class TestValueControllerResolveSecret:
     def test_resolve_constant_secret(self):
         ctrl = ValueController()
         item = SecretStoreModel(key="api_key", store=SecretStoreType.CONSTANT, value="my-secret")
-        val, err = ctrl._resolve_secret(item)
+        val, err, _ = ctrl._resolve_secret(item)
         assert err is None
         assert val == "my-secret"
 
@@ -321,7 +321,7 @@ class TestValueControllerResolveSecret:
         monkeypatch.setenv("TEST_SECRET_ENV", "super-secret")
         ctrl = ValueController()
         item = SecretStoreModel(key="token", store=SecretStoreType.ENVIRONMENT, value="TEST_SECRET_ENV")
-        val, err = ctrl._resolve_secret(item)
+        val, err, _ = ctrl._resolve_secret(item)
         assert err is None
         assert val == "super-secret"
 
@@ -329,7 +329,7 @@ class TestValueControllerResolveSecret:
         monkeypatch.delenv("MISSING_SECRET_ENV", raising=False)
         ctrl = ValueController()
         item = SecretStoreModel(key="token", store=SecretStoreType.ENVIRONMENT, value="MISSING_SECRET_ENV")
-        val, err = ctrl._resolve_secret(item)
+        val, err, _ = ctrl._resolve_secret(item)
         assert val is None
         assert err is not None
         assert "not set" in err
@@ -344,14 +344,14 @@ class TestValueControllerResolveFeature:
     def test_resolve_constant_feature_true(self):
         ctrl = ValueController()
         item = FeatureStoreModel(key="flag", store=FeatureStoreType.CONSTANT, value=True)
-        val, err = ctrl._resolve_feature(item)
+        val, err, _ = ctrl._resolve_feature(item)
         assert err is None
         assert val is True
 
     def test_resolve_constant_feature_false(self):
         ctrl = ValueController()
         item = FeatureStoreModel(key="flag", store=FeatureStoreType.CONSTANT, value=False)
-        val, err = ctrl._resolve_feature(item)
+        val, err, _ = ctrl._resolve_feature(item)
         assert err is None
         assert val is False
 
@@ -359,7 +359,7 @@ class TestValueControllerResolveFeature:
         monkeypatch.setenv("TEST_FEATURE_FLAG", "true")
         ctrl = ValueController()
         item = FeatureStoreModel(key="flag", store=FeatureStoreType.ENVIRONMENT, value="TEST_FEATURE_FLAG")
-        val, err = ctrl._resolve_feature(item)
+        val, err, _ = ctrl._resolve_feature(item)
         assert err is None
         assert val is True
 
@@ -367,7 +367,7 @@ class TestValueControllerResolveFeature:
         monkeypatch.setenv("TEST_FEATURE_FLAG_OFF", "false")
         ctrl = ValueController()
         item = FeatureStoreModel(key="flag", store=FeatureStoreType.ENVIRONMENT, value="TEST_FEATURE_FLAG_OFF")
-        val, err = ctrl._resolve_feature(item)
+        val, err, _ = ctrl._resolve_feature(item)
         assert err is None
         assert val is False
 
@@ -375,7 +375,7 @@ class TestValueControllerResolveFeature:
         monkeypatch.delenv("MISSING_FEATURE_FLAG", raising=False)
         ctrl = ValueController()
         item = FeatureStoreModel(key="flag", store=FeatureStoreType.ENVIRONMENT, value="MISSING_FEATURE_FLAG")
-        val, err = ctrl._resolve_feature(item)
+        val, err, _ = ctrl._resolve_feature(item)
         assert val is None
         assert err is not None
         assert "not set" in err
@@ -411,7 +411,7 @@ class TestValueControllerGithubStore:
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         ctrl = ValueController()
         item = SecretStoreModel(key="my_secret", store=SecretStoreType.GITHUB, value="MY_SECRET")
-        val, err = ctrl._resolve_secret(item)
+        val, err, _ = ctrl._resolve_secret(item)
         assert err is None
         assert val == "s3cr3t"
 
@@ -421,7 +421,7 @@ class TestValueControllerGithubStore:
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         ctrl = ValueController()
         item = SecretStoreModel(key="db_password", store=SecretStoreType.GITHUB, value="my_secret")
-        val, err = ctrl._resolve_secret(item)
+        val, err, _ = ctrl._resolve_secret(item)
         assert err is None
         assert val == "s3cr3t"
 
@@ -431,7 +431,7 @@ class TestValueControllerGithubStore:
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         ctrl = ValueController()
         item = SecretStoreModel(key="token", store=SecretStoreType.GITHUB, value="MISSING_GH_SECRET")
-        val, err = ctrl._resolve_secret(item)
+        val, err, _ = ctrl._resolve_secret(item)
         assert val is None
         assert err is not None
         assert "GitHub Actions" in err
@@ -443,7 +443,7 @@ class TestValueControllerGithubStore:
         ctrl = ValueController()
         item = SecretStoreModel(key="my_secret", store=SecretStoreType.GITHUB, value="MY_SECRET")
         with patch("strata.controllers.value_controller.logger") as mock_logger:
-            val, err = ctrl._resolve_secret(item)
+            val, err, _ = ctrl._resolve_secret(item)
         assert err is None
         assert val == "s3cr3t"
         mock_logger.warning.assert_called_once()
@@ -455,7 +455,7 @@ class TestValueControllerGithubStore:
         ctrl = ValueController()
         item = SecretStoreModel(key="my_secret", store=SecretStoreType.GITHUB, value="MY_SECRET")
         with patch("strata.controllers.value_controller.logger") as mock_logger:
-            val, err = ctrl._resolve_secret(item)
+            val, err, _ = ctrl._resolve_secret(item)
         assert err is None
         assert val == "s3cr3t"
         mock_logger.warning.assert_not_called()
@@ -605,7 +605,7 @@ class TestValueControllerSecretGenerateOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_secret(self._make_item())
+        val, err, _ = ctrl._resolve_secret(self._make_item())
 
         assert err is None
         assert val == "existing-value"
@@ -621,7 +621,7 @@ class TestValueControllerSecretGenerateOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_secret(self._make_item())
+        val, err, _ = ctrl._resolve_secret(self._make_item())
 
         assert err is None
         assert val is not None
@@ -638,7 +638,7 @@ class TestValueControllerSecretGenerateOnMissing:
 
         ctrl = ValueController()
         item = SecretStoreModel(key="TOKEN", store=SecretStoreType.AZURE_KEYVAULT, value="myapp-token")
-        val, err = ctrl._resolve_secret(item)
+        val, err, _ = ctrl._resolve_secret(item)
 
         assert val is None
         assert err is not None
@@ -654,7 +654,7 @@ class TestValueControllerSecretGenerateOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_secret(self._make_item())
+        val, err, _ = ctrl._resolve_secret(self._make_item())
 
         assert err is None
         assert val == "race-winner-value"
@@ -669,7 +669,7 @@ class TestValueControllerSecretGenerateOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_secret(self._make_item())
+        val, err, _ = ctrl._resolve_secret(self._make_item())
 
         assert val is None
         assert err is not None
@@ -685,11 +685,11 @@ class TestValueControllerSecretGenerateOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val1, err1 = ctrl._resolve_secret(self._make_item())
+        val1, err1, _ = ctrl._resolve_secret(self._make_item())
         assert err1 is None
         mock_integration.set_secret.assert_called_once()
 
-        val2, err2 = ctrl._resolve_secret(self._make_item())
+        val2, err2, _ = ctrl._resolve_secret(self._make_item())
         assert err2 is None
         assert val2 == "generated-value"
         # Still only called once
@@ -718,7 +718,7 @@ class TestValueControllerVariableSeedOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_variable(self._make_item())
+        val, err, _ = ctrl._resolve_variable(self._make_item())
 
         assert err is None
         assert val == "debug"
@@ -733,7 +733,7 @@ class TestValueControllerVariableSeedOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_variable(self._make_item("info"))
+        val, err, _ = ctrl._resolve_variable(self._make_item("info"))
 
         assert err is None
         assert val == "info"
@@ -748,7 +748,7 @@ class TestValueControllerVariableSeedOnMissing:
 
         ctrl = ValueController()
         item = VariableStoreModel(key="KEY", store=VariableStoreType.AZURE_APPCONFIG, value="myapp/key")
-        val, err = ctrl._resolve_variable(item)
+        val, err, _ = ctrl._resolve_variable(item)
 
         assert val is None
         assert err is not None
@@ -763,7 +763,7 @@ class TestValueControllerVariableSeedOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_variable(self._make_item())
+        val, err, _ = ctrl._resolve_variable(self._make_item())
 
         assert err is None
         assert val == "race-value"
@@ -791,7 +791,7 @@ class TestValueControllerFeatureSeedOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_feature(self._make_item())
+        val, err, _ = ctrl._resolve_feature(self._make_item())
 
         assert err is None
         assert val is True
@@ -806,7 +806,7 @@ class TestValueControllerFeatureSeedOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_feature(self._make_item("false"))
+        val, err, _ = ctrl._resolve_feature(self._make_item("false"))
 
         assert err is None
         assert val is False
@@ -821,7 +821,7 @@ class TestValueControllerFeatureSeedOnMissing:
         mock_get_integration.return_value = mock_integration
 
         ctrl = ValueController()
-        val, err = ctrl._resolve_feature(self._make_item("true"))
+        val, err, _ = ctrl._resolve_feature(self._make_item("true"))
 
         assert err is None
         assert val is True
@@ -836,7 +836,7 @@ class TestValueControllerFeatureSeedOnMissing:
 
         ctrl = ValueController()
         item = FeatureStoreModel(key="FLAG", store=FeatureStoreType.AZURE_APPCONFIG, value="myapp-flag")
-        val, err = ctrl._resolve_feature(item)
+        val, err, _ = ctrl._resolve_feature(item)
 
         assert val is None
         assert err is not None
