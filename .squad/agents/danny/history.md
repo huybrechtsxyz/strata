@@ -50,6 +50,22 @@ initialization orchestration (`ConfigurationService.add_configurations()` is nev
 - Testing pattern: plain pytest classes (`class TestConfigSet:`) — no `unittest.TestCase`.
 - copilot-instructions.md updated 2026-05-06.
 
+### 2026-06-23 — ADR 0011 Promotion Strategies rubber-duck review
+
+**Requested by:** Vincent Huybrechts.
+
+**Reviewed:** `docs/decisions/0011-promotion-strategies-for-version-progression.md` — full stress-test.
+
+**Key findings:**
+1. "Percentage waves" table in Key Observations (`[10, 50, 100]`) is misleading — resolved design says wave membership is always explicit, not percentage-based. Table should use wording like "3 waves" not "10%, 50%, 100%".
+2. The promotion override file mechanic (`environments/customers/{name}-promotion-override.yaml`) is sound BUT the ADR doesn't explain how this file gets into the deployment's `spec.environments` list. Deployment merge chain requires explicit file references in the deployment YAML — a new override file isn't auto-discovered.
+3. No `continue` stale references found — clean.
+4. `strata promote` as a new command group fits the existing pattern (same shape as `strata deploy` group with subcommands).
+5. The `scope: customer` field semantics need tightening — implies only customer-layer deployments participate in waves, but never defines what "customer-layer" means mechanically (is it `spec.customer != null`? A label? A layer value?).
+6. `PromotionStrategyModel` on `ConfigurationSpecModel` is a clean addition — no field conflicts.
+7. `spec.promotion.wave` on deployment model is clean — new optional field, no conflicts with existing `DeploymentSpecModel` fields.
+8. The `kind: promotion-record` artifact model follows existing conventions perfectly.
+
 ### 2026-06-01 — Helm integration completeness review
 
 **Requested by:** Vincent Huybrechts.
