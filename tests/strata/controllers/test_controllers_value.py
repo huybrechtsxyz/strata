@@ -578,3 +578,266 @@ class TestResolvedValuesStageOutputs:
         os.environ.pop("DB_PASSWORD", None)
         with inject_compose_env(rv):
             assert "DB_PASSWORD" not in os.environ
+
+
+# ---------------------------------------------------------------------------
+# ValueController._resolve_secret — generate-on-missing (Phase 1)
+# ---------------------------------------------------------------------------
+
+
+class TestValueControllerSecretGenerateOnMissing:
+    def _make_item(self, generate_type="password", length=16):
+        from strata.models.store_models import SecretGenerateSpec
+
+        return SecretStoreModel(
+            key="DB_PASSWORD",
+            store=SecretStoreType.AZURE_KEYVAULT,
+            value="myapp-db-password",
+            generate=SecretGenerateSpec(type=generate_type, length=length),
+        )
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_secret_exists_no_generate_called(self, mock_get_integration, _mock_init):
+        """If the secret already exists, set_secret is never called."""
+        mock_integration = MagicMock()
+        mock_integration.get_secret.return_value = "existing-value"
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_secret(self._make_item())
+
+        assert err is None
+        assert val == "existing-value"
+        mock_integration.set_secret.assert_not_called()
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_secret_missing_with_generate_writes_and_returns_generated(self, mock_get_integration, _mock_init):
+        """Missing secret + generate spec → generates, writes, returns the value."""
+        mock_integration = MagicMock()
+        mock_integration.get_secret.return_value = None
+        mock_integration.set_secret.return_value = True
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_secret(self._make_item())
+
+        assert err is None
+        assert val is not None
+        assert len(val) > 0
+        mock_integration.set_secret.assert_called_once()
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_secret_missing_no_generate_returns_error(self, mock_get_integration, _mock_init):
+        """Missing secret without generate spec → error."""
+        mock_integration = MagicMock()
+        mock_integration.get_secret.return_value = None
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        item = SecretStoreModel(key="TOKEN", store=SecretStoreType.AZURE_KEYVAULT, value="myapp-token")
+        val, err = ctrl._resolve_secret(item)
+
+        assert val is None
+        assert err is not None
+        assert "not found" in err
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_set_secret_fails_reread_succeeds_uses_existing(self, mock_get_integration, _mock_init):
+        """Race condition: set_secret fails but re-read finds a value → use it."""
+        mock_integration = MagicMock()
+        mock_integration.get_secret.side_effect = [None, "race-winner-value"]
+        mock_integration.set_secret.return_value = False
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_secret(self._make_item())
+
+        assert err is None
+        assert val == "race-winner-value"
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_set_secret_fails_reread_also_fails_returns_error(self, mock_get_integration, _mock_init):
+        """set_secret fails and re-read also returns None → error."""
+        mock_integration = MagicMock()
+        mock_integration.get_secret.return_value = None
+        mock_integration.set_secret.return_value = False
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_secret(self._make_item())
+
+        assert val is None
+        assert err is not None
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_generate_idempotent_second_call_reads_not_writes(self, mock_get_integration, _mock_init):
+        """Second call finds the existing value — set_secret called only once total."""
+        mock_integration = MagicMock()
+        # First call: missing; second call: present
+        mock_integration.get_secret.side_effect = [None, "generated-value"]
+        mock_integration.set_secret.return_value = True
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val1, err1 = ctrl._resolve_secret(self._make_item())
+        assert err1 is None
+        mock_integration.set_secret.assert_called_once()
+
+        val2, err2 = ctrl._resolve_secret(self._make_item())
+        assert err2 is None
+        assert val2 == "generated-value"
+        # Still only called once
+        mock_integration.set_secret.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# ValueController._resolve_variable — seed-on-missing (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class TestValueControllerVariableSeedOnMissing:
+    def _make_item(self, default="info"):
+        return VariableStoreModel(
+            key="LOG_LEVEL",
+            store=VariableStoreType.AZURE_APPCONFIG,
+            value="myapp/log-level",
+            default=default,
+        )
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_variable_exists_no_seed_called(self, mock_get_integration, _mock_init):
+        mock_integration = MagicMock()
+        mock_integration.get_variable.return_value = "debug"
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_variable(self._make_item())
+
+        assert err is None
+        assert val == "debug"
+        mock_integration.set_variable.assert_not_called()
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_variable_missing_with_default_seeds_and_returns_default(self, mock_get_integration, _mock_init):
+        mock_integration = MagicMock()
+        mock_integration.get_variable.return_value = None
+        mock_integration.set_variable.return_value = True
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_variable(self._make_item("info"))
+
+        assert err is None
+        assert val == "info"
+        mock_integration.set_variable.assert_called_once_with("myapp/log-level", "info")
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_variable_missing_no_default_returns_error(self, mock_get_integration, _mock_init):
+        mock_integration = MagicMock()
+        mock_integration.get_variable.return_value = None
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        item = VariableStoreModel(key="KEY", store=VariableStoreType.AZURE_APPCONFIG, value="myapp/key")
+        val, err = ctrl._resolve_variable(item)
+
+        assert val is None
+        assert err is not None
+        assert "not found" in err
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_variable_seed_race_re_read_used(self, mock_get_integration, _mock_init):
+        mock_integration = MagicMock()
+        mock_integration.get_variable.side_effect = [None, "race-value"]
+        mock_integration.set_variable.return_value = False
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_variable(self._make_item())
+
+        assert err is None
+        assert val == "race-value"
+
+
+# ---------------------------------------------------------------------------
+# ValueController._resolve_feature — seed-on-missing (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class TestValueControllerFeatureSeedOnMissing:
+    def _make_item(self, default="false"):
+        return FeatureStoreModel(
+            key="DARK_MODE",
+            store=FeatureStoreType.AZURE_APPCONFIG,
+            value="myapp-dark-mode",
+            default=default,
+        )
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_feature_exists_no_seed_called(self, mock_get_integration, _mock_init):
+        mock_integration = MagicMock()
+        mock_integration.get_feature.return_value = True
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_feature(self._make_item())
+
+        assert err is None
+        assert val is True
+        mock_integration.set_feature.assert_not_called()
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_feature_missing_default_false_seeds_disabled(self, mock_get_integration, _mock_init):
+        mock_integration = MagicMock()
+        mock_integration.get_feature.return_value = None
+        mock_integration.set_feature.return_value = True
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_feature(self._make_item("false"))
+
+        assert err is None
+        assert val is False
+        mock_integration.set_feature.assert_called_once_with("myapp-dark-mode", False)
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_feature_missing_default_true_seeds_enabled(self, mock_get_integration, _mock_init):
+        mock_integration = MagicMock()
+        mock_integration.get_feature.return_value = None
+        mock_integration.set_feature.return_value = True
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        val, err = ctrl._resolve_feature(self._make_item("true"))
+
+        assert err is None
+        assert val is True
+        mock_integration.set_feature.assert_called_once_with("myapp-dark-mode", True)
+
+    @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
+    @patch("strata.controllers.value_controller.ValueController._get_integration_by_type")
+    def test_feature_missing_no_default_returns_error(self, mock_get_integration, _mock_init):
+        mock_integration = MagicMock()
+        mock_integration.get_feature.return_value = None
+        mock_get_integration.return_value = mock_integration
+
+        ctrl = ValueController()
+        item = FeatureStoreModel(key="FLAG", store=FeatureStoreType.AZURE_APPCONFIG, value="myapp-flag")
+        val, err = ctrl._resolve_feature(item)
+
+        assert val is None
+        assert err is not None
+        assert "not found" in err

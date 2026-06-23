@@ -116,9 +116,13 @@ class ListValuesDeployCommand(BaseDeployCommand):
         _, resolved, _ = controller.resolve_values(self._deployment_service, strict=False)
 
         # Build per-type result rows
-        var_rows = self._build_var_rows(declared_vars, resolved.variables, resolved.errors)
-        secret_rows = self._build_secret_rows(declared_secrets, resolved.secrets, resolved.errors)
-        feature_rows = self._build_feature_rows(declared_features, resolved.features, resolved.errors)
+        var_rows = self._build_var_rows(declared_vars, resolved.variables, resolved.errors, resolved.variable_notes)
+        secret_rows = self._build_secret_rows(
+            declared_secrets, resolved.secrets, resolved.errors, resolved.secret_notes
+        )
+        feature_rows = self._build_feature_rows(
+            declared_features, resolved.features, resolved.errors, resolved.feature_notes
+        )
 
         if self._unresolved_only:
             var_rows = [r for r in var_rows if not r["ok"]]
@@ -157,6 +161,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         declared: List[VariableStoreModel],
         resolved: Dict[str, Any],
         errors: List[str],
+        notes: Dict[str, str],
     ) -> List[Dict[str, Any]]:
         rows = []
         for item in declared:
@@ -170,6 +175,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "store_ref": str(item.value),
                         "display": display,
                         "ok": True,
+                        "note": notes.get(key, ""),
                         "description": item.description,
                     }
                 )
@@ -182,6 +188,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "store_ref": str(item.value),
                         "display": f"❌  {err}",
                         "ok": False,
+                        "note": "",
                         "description": item.description,
                     }
                 )
@@ -192,6 +199,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         declared: List[SecretStoreModel],
         resolved: Dict[str, Any],
         errors: List[str],
+        notes: Dict[str, str],
     ) -> List[Dict[str, Any]]:
         rows = []
         for item in declared:
@@ -204,6 +212,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "store_ref": str(item.value),
                         "display": _mask(resolved[key]),
                         "ok": True,
+                        "note": notes.get(key, ""),
                         "description": item.description,
                     }
                 )
@@ -216,6 +225,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "store_ref": str(item.value),
                         "display": f"❌  {err}",
                         "ok": False,
+                        "note": "",
                         "description": item.description,
                     }
                 )
@@ -226,6 +236,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         declared: List[FeatureStoreModel],
         resolved: Dict[str, Optional[bool]],
         errors: List[str],
+        notes: Dict[str, str],
     ) -> List[Dict[str, Any]]:
         rows = []
         for item in declared:
@@ -240,6 +251,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "store_ref": str(item.value),
                         "display": display,
                         "ok": True,
+                        "note": notes.get(key, ""),
                         "description": item.description,
                     }
                 )
@@ -252,6 +264,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "store_ref": str(item.value),
                         "display": f"❌  {err}",
                         "ok": False,
+                        "note": "",
                         "description": item.description,
                     }
                 )
@@ -304,5 +317,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
             line = f"  {row['key']:<{col_key}}  {row['store']:<{col_store}}"
             if self._show_store:
                 line += f"  {row['store_ref']:<{col_ref}}"
-            line += f"  {row['display']}"
+            line += f"  {row['display']:<{col_val}}"
+            if row.get("note"):
+                line += f"  [{row['note']}]"
             click.echo(line)
