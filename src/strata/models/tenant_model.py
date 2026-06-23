@@ -51,8 +51,7 @@ class TenantSpecModel(PlatformBaseModel):
     zones: List[str] = Field(
         min_length=1,
         description=(
-            "Zone names this tenant is allowed to deploy into. "
-            "Validated against configuration.spec.zones at load time."
+            "Zone names this tenant is allowed to deploy into. Validated against configuration.spec.zones at load time."
         ),
     )
 

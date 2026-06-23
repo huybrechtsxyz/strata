@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 from strata.models.platform_artifact_model import (
     PlatformArtifactModel,
     PlatformComponentModel,
-    PlatformTenantModel,
     PlatformFirewallModel,
     PlatformLifecycleModel,
     PlatformMetaModel,
@@ -24,6 +23,7 @@ from strata.models.platform_artifact_model import (
     PlatformProvisionerModel,
     PlatformResourceModel,
     PlatformSpecModel,
+    PlatformTenantModel,
     PlatformTopologyModel,
     PlatformWorkspaceModel,
 )
@@ -32,9 +32,9 @@ from strata.models.store_models import (
     SecretStoreModel,
     VariableStoreModel,
 )
-from strata.services.tenant_service import TenantService
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
+from strata.services.tenant_service import TenantService
 
 
 class PlatformBuilder(BaseBuilder):

@@ -11,7 +11,6 @@ from strata.models.common_models import CommonLifecycleModel, PlatformKind
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.validation_error import ValidationError
 from strata.services.base_service import BaseService
-from strata.services.tenant_service import TenantService
 from strata.services.deployment_service import DeploymentService
 from strata.services.dns_service import DnsService
 from strata.services.environment_service import EnvironmentService
@@ -22,6 +21,7 @@ from strata.services.network_service import NetworkService
 from strata.services.platform_artifact_service import PlatformService
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
+from strata.services.tenant_service import TenantService
 from strata.services.workspace_service import WorkspaceService
 from strata.validators.base_validator import BaseValidator
 
