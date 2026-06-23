@@ -5,6 +5,107 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [Unreleased]
+
+---
+
+## [0.12.0] — 2026-06-23
+
+### Added
+
+- **Secret generation utilities (`strata/utils/secret_generator.py`)**
+  - `generate_secret(fmt, length)` — cryptographically secure generation for formats: `urlsafe`, `hex`, `alphanumeric`, `password`, `numeric`, `base64`, `uuid4`, `uuid7`
+  - `mask_secret(value, show, char)` — safe masking for log/output display; moved from `commands/` into shared utils so controllers can import without violating layer rules
+  - `generate_secret_command.py` and `mask_secret_command.py` converted to re-export shims
+
+- **Auto-generated secrets (ADR 0013)**
+  - `SecretGenerateSpec` on `SecretStoreModel` — declare a generator spec alongside the secret reference
+  - `ValueController._resolve_secret` — generate-on-missing: if a secret is absent and `generate:` is declared, strata generates a value, writes it to the backing store, and returns it
+  - Race-safe: if `set_secret` fails but a concurrent write is detected via re-read, the existing value is used without error
+
+- **Seed-on-missing for variables and feature flags**
+  - `VariableStoreModel.default` — if a variable key is absent from an integration-backed store, strata writes the declared default and returns it
+  - `FeatureStoreModel.default` — same pattern for feature flags; default parsed as `"true"`/`"false"` string to boolean
+  - Race-safe re-read fallback on write failure for both types
+
+- **New store integrations**
+  - `azure_appconfig.py` — Azure App Configuration (variables + feature flags)
+  - `azure_keyvault.py` — Azure Key Vault (secrets)
+  - `bitwarden.py` — Bitwarden CLI (secrets)
+  - `hashicorp_consul.py` — HashiCorp Consul (variables)
+  - `hashicorp_vault.py` — HashiCorp Vault (secrets)
+
+- **`strata env` command group** — consolidated environment inspection commands:
+  - `strata env drift` — infrastructure drift detection
+  - `strata env info` — workspace context summary
+  - `strata env output` — live Terraform output retrieval
+  - `strata env state` — Terraform state inspection
+  - `strata env status` — multi-environment state overview
+  - `strata env doctor` — environment health check and validation
+
+### Changed
+
+- `ValueController._resolve_variable`, `_resolve_secret`, `_resolve_feature` — return signature extended from `(value, error)` to `(value, error, note)` to carry seed/generate annotations without polluting error lists
+- `ResolvedValues.for_stage` — filters `secret_notes` alongside secrets when building a stage-scoped copy
+
+### Fixed
+
+- Error message for `password` format minimum length corrected from `"--length >= 4"` to `"length >= 4"` in both CLI output and test assertions
+
+### Documentation
+
+- `docs/guides/faq.md` — restructured as high-level explainer (what is strata, how it works with Terraform/Ansible/Helm)
+- `docs/guides/config-faq.md` — new; configuration-specific questions (SSH key setup, existing Terraform state adoption, multi-stage deployment YAML, rollback procedure)
+- `docs/guides/features.md` — new; practical capability overview aimed at DevOps engineers evaluating strata
+- `docs/decisions/0013-auto-generated-secrets.md` — ADR for auto-generated secret design
+
+### Testing
+
+- `tests/strata/utils/test_utils_secret_generator.py` — new; covers all `generate_secret` formats and `mask_secret` edge cases
+- `tests/strata/commands/secret/` — removed; unit tests relocated to `utils/`, CLI tests consolidated into `test_commands_secret.py`
+- `tests/strata/commands/test_commands_secret.py` — renamed from `test_cli_secret.py` to match project convention
+- `tests/strata/controllers/test_controllers_value.py` — updated all `_resolve_*` call sites to unpack 3-tuple `(val, err, _)`
+
+---
+
+## [0.11.0] — 2026-06-23
+
+### Added
+
+- **Promotion Strategies System (ADR 0011)**
+  - Named progressions: ordered lists of environments for version promotion
+  - Named strategies: policies that govern promotion waves and guardrails
+  - Wave assignment on deployments via `spec.promotion.wave` (iteration, match_labels, or default)
+  - Scope predicates: layer-based filtering for promotion targets
+  - CLI command group: `strata promote` (start, rollback, status, matrix, history, log)
+  - Activity log: `.strata/promotions/` for audit trail (gitignored)
+  - Promotion-record in artifact store for state tracking
+
+### Changed
+
+- **Tenant Naming (ADR 0012) — BREAKING CHANGE**
+  - Renamed concept: `customer` → `tenant`
+  - Kind: `customer` → `tenant`; Model: `CustomerModel` → `TenantModel`; Service: `CustomerService` → `TenantService`
+  - Policy: `customer_zone` → `tenant_zone`; Directory: `customers/` → `tenants/`
+  - Field: `spec.customer` → `spec.tenant`; Properties: `properties.customer` → `properties.tenant`
+  - Terraform variables: `customer.auto.tfvars.json` → `tenant.auto.tfvars.json`
+  - Ansible hostvars: `strata_customer` → `strata_tenant`
+
+### Migration Guide (v0.10.0 → v0.11.0)
+
+```bash
+mv customers/ tenants/
+# Update kind: customer → kind: tenant and spec.customer → spec.tenant in all YAML files
+```
+
+### Documentation
+
+- Updated all platform docs to reflect tenant terminology
+- Added ADR 0011 (Promotion Strategies), ADR 0012 (Rename Customer → Tenant)
+- Updated `at-scale.md` with multi-tenant design patterns
+
+---
+
 ## [0.10.0] — 2026-06-22
 
 ### Added
