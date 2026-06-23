@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pattern: Change a Value Across All Environments &mdash; strata 0.8.0 documentation</title>
+  <title>Configuration FAQ &mdash; strata 0.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Troubleshooting: What Changed?" href="troubleshooting-what-changed.html" />
-    <link rel="prev" title="Cookbook: Add a New Environment" href="cookbook-add-environment.html" /> 
+    <link rel="next" title="Cookbook: Add a New Environment" href="cookbook-add-environment.html" />
+    <link rel="prev" title="Frequently Asked Questions" href="faq.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -1707,22 +1707,22 @@
 <li class="toctree-l2"><a class="reference internal" href="faq.html#can-multiple-people-deploy-at-the-same-time">Can multiple people deploy at the same time?</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="config-faq.html">Configuration FAQ</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#what-is-the-difference-between-a-workspace-and-a-deployment">What is the difference between a workspace and a deployment?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#do-i-need-an-environment-file-or-can-i-put-everything-in-the-deployment">Do I need an environment file, or can I put everything in the deployment?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#what-is-the-difference-between-variables-and-secrets">What is the difference between variables and secrets?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-variables-layer-across-workspace-environment-and-deployment">How do variables layer across workspace, environment, and deployment?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#what-does-meta-name-allow">What does <code class="docutils literal notranslate"><span class="pre">meta.name</span></code> allow?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#what-is-the-difference-between-properties-custom-and-labels">What is the difference between <code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>, and <code class="docutils literal notranslate"><span class="pre">labels</span></code>?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#when-do-i-need-a-configuration-file">When do I need a <code class="docutils literal notranslate"><span class="pre">configuration</span></code> file?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-many-provisioners-does-a-workspace-need">How many provisioners does a workspace need?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-share-a-provider-file-across-multiple-workspaces">How do I share a provider file across multiple workspaces?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-environment-overrides-work">How do environment overrides work?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#can-the-same-workspace-be-deployed-to-multiple-environments-simultaneously">Can the same workspace be deployed to multiple environments simultaneously?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-provide-an-ssh-key-for-ansible-without-putting-it-in-the-yaml">How do I provide an SSH key for Ansible without putting it in the YAML?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-adopt-strata-with-existing-terraform-state">How do I adopt strata with existing Terraform state?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-configure-multiple-stages-in-a-deployment">How do I configure multiple stages in a deployment?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-roll-back-a-deployment">How do I roll back a deployment?</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Configuration FAQ</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#what-is-the-difference-between-a-workspace-and-a-deployment">What is the difference between a workspace and a deployment?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#do-i-need-an-environment-file-or-can-i-put-everything-in-the-deployment">Do I need an environment file, or can I put everything in the deployment?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-is-the-difference-between-variables-and-secrets">What is the difference between variables and secrets?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-do-variables-layer-across-workspace-environment-and-deployment">How do variables layer across workspace, environment, and deployment?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-does-meta-name-allow">What does <code class="docutils literal notranslate"><span class="pre">meta.name</span></code> allow?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-is-the-difference-between-properties-custom-and-labels">What is the difference between <code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>, and <code class="docutils literal notranslate"><span class="pre">labels</span></code>?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#when-do-i-need-a-configuration-file">When do I need a <code class="docutils literal notranslate"><span class="pre">configuration</span></code> file?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-many-provisioners-does-a-workspace-need">How many provisioners does a workspace need?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-do-i-share-a-provider-file-across-multiple-workspaces">How do I share a provider file across multiple workspaces?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-do-environment-overrides-work">How do environment overrides work?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#can-the-same-workspace-be-deployed-to-multiple-environments-simultaneously">Can the same workspace be deployed to multiple environments simultaneously?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-do-i-provide-an-ssh-key-for-ansible-without-putting-it-in-the-yaml">How do I provide an SSH key for Ansible without putting it in the YAML?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-do-i-adopt-strata-with-existing-terraform-state">How do I adopt strata with existing Terraform state?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-do-i-configure-multiple-stages-in-a-deployment">How do I configure multiple stages in a deployment?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-do-i-roll-back-a-deployment">How do I roll back a deployment?</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cookbook-add-environment.html">Cookbook: Add a New Environment</a><ul>
@@ -1741,13 +1741,13 @@
 <li class="toctree-l2"><a class="reference internal" href="cookbook-add-environment.html#common-mistakes">Common mistakes</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Pattern: Change a Value Across All Environments</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#the-layering-model">The layering model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#recipe-change-a-resource-property-everywhere">Recipe: Change a resource property everywhere</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#recipe-change-a-variable-in-all-environments">Recipe: Change a variable in all environments</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#recipe-change-a-variable-in-only-one-environment">Recipe: Change a variable in only one environment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#verification-workflow">Verification workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#tips">Tips</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pattern-cross-env-changes.html">Pattern: Change a Value Across All Environments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#the-layering-model">The layering model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#recipe-change-a-resource-property-everywhere">Recipe: Change a resource property everywhere</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#recipe-change-a-variable-in-all-environments">Recipe: Change a variable in all environments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#recipe-change-a-variable-in-only-one-environment">Recipe: Change a variable in only one environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#verification-workflow">Verification workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#tips">Tips</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting-what-changed.html">Troubleshooting: What Changed?</a><ul>
@@ -1930,9 +1930,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Pattern: Change a Value Across All Environments</li>
+      <li class="breadcrumb-item active">Configuration FAQ</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/guides/pattern-cross-env-changes.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/guides/config-faq.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -1940,134 +1940,497 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="pattern-change-a-value-across-all-environments">
-<h1>Pattern: Change a Value Across All Environments<a class="headerlink" href="#pattern-change-a-value-across-all-environments" title="Link to this heading"></a></h1>
-<blockquote>
-<div><p><strong>Audience:</strong> Operator who needs to change a configuration value (RAM, disk size, feature flag, variable) and apply it everywhere consistently.</p>
-</div></blockquote>
+  <section id="configuration-faq">
+<h1>Configuration FAQ<a class="headerlink" href="#configuration-faq" title="Link to this heading"></a></h1>
+<p>Common questions about structuring and writing strata YAML configuration files.</p>
 <hr class="docutils" />
-<section id="the-layering-model">
-<h2>The layering model<a class="headerlink" href="#the-layering-model" title="Link to this heading"></a></h2>
-<p>strata merges configuration in this order (later wins):</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>workspace variables  →  environment variables  →  deployment variables
-    (base)                   (override)                  (final)
-</pre></div>
-</div>
-<p>Where you make a change depends on the scope you want:</p>
+<section id="what-is-the-difference-between-a-workspace-and-a-deployment">
+<h2>What is the difference between a workspace and a deployment?<a class="headerlink" href="#what-is-the-difference-between-a-workspace-and-a-deployment" title="Link to this heading"></a></h2>
+<p>They operate at different levels of abstraction:</p>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Scope</p></th>
-<th class="head"><p>Where to edit</p></th>
-<th class="head"><p>Example</p></th>
+<tr class="row-odd"><th class="head"><p>File kind</p></th>
+<th class="head"><p>Answers</p></th>
+<th class="head"><p>Contains</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>All environments</p></td>
-<td><p>Workspace (<code class="docutils literal notranslate"><span class="pre">ws-*.yaml</span></code>) or resource (<code class="docutils literal notranslate"><span class="pre">vm-*.yaml</span></code>)</p></td>
-<td><p>Bump RAM on all worker VMs</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">workspace</span></code></p></td>
+<td><p>What to build</p></td>
+<td><p>Providers, provisioners, topology, namespaces</p></td>
 </tr>
-<tr class="row-odd"><td><p>One environment only</p></td>
-<td><p>Environment (<code class="docutils literal notranslate"><span class="pre">env-*.yaml</span></code>)</p></td>
-<td><p>Enable debug logging in staging only</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">environment</span></code></p></td>
+<td><p>How to adapt it</p></td>
+<td><p>Variable/secret overrides, module pins, feature flags</p></td>
 </tr>
-<tr class="row-even"><td><p>One deployment only</p></td>
-<td><p>Deployment (<code class="docutils literal notranslate"><span class="pre">deploy-*.yaml</span></code>) — <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code> section</p></td>
-<td><p>Override a value for a specific deploy run</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">deployment</span></code></p></td>
+<td><p>What to run</p></td>
+<td><p>References to workspace + environment(s) + configs</p></td>
 </tr>
 </tbody>
 </table>
-</section>
-<hr class="docutils" />
-<section id="recipe-change-a-resource-property-everywhere">
-<h2>Recipe: Change a resource property everywhere<a class="headerlink" href="#recipe-change-a-resource-property-everywhere" title="Link to this heading"></a></h2>
-<p><strong>Scenario:</strong> Bump worker VM RAM from 2048 MB to 4096 MB across all environments.</p>
-<p>Since RAM is defined in the resource file (shared by all deployments), edit it once:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># stack/vm-worker.yaml</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">cpu_cores</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="w">    </span><span class="nt">ram_mb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4096</span><span class="w">          </span><span class="c1"># ← changed from 2048</span>
+<p>A <strong>workspace</strong> is an infrastructure blueprint — it is reusable across environments. A <strong>deployment</strong> is a concrete runnable instance that binds a workspace to one or more environments and adds any deployment-level overrides.</p>
+<p>The typical layout for one application across two environments:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>workspaces/
+  platform.yaml          ← kind: workspace (shared)
+environments/
+  env-prd.yaml           ← kind: environment
+  env-stg.yaml           ← kind: environment
+deployments/
+  deploy-prd.yaml        ← kind: deployment → refs platform + env-prd
+  deploy-stg.yaml        ← kind: deployment → refs platform + env-stg
 </pre></div>
 </div>
-<p>Then validate and plan ALL deployments:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>validate<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>validate<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
-
-strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
-</pre></div>
-</div>
-<p>The plan shows the RAM change propagating to every environment that uses this resource.</p>
 </section>
 <hr class="docutils" />
-<section id="recipe-change-a-variable-in-all-environments">
-<h2>Recipe: Change a variable in all environments<a class="headerlink" href="#recipe-change-a-variable-in-all-environments" title="Link to this heading"></a></h2>
-<p><strong>Scenario:</strong> Add a new variable <code class="docutils literal notranslate"><span class="pre">LOG_RETENTION_DAYS</span></code> with value <code class="docutils literal notranslate"><span class="pre">30</span></code> for all environments.</p>
-<p>Add it to the workspace (the base layer everyone inherits):</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># stack/ws-platform.yaml</span>
+<section id="do-i-need-an-environment-file-or-can-i-put-everything-in-the-deployment">
+<h2>Do I need an environment file, or can I put everything in the deployment?<a class="headerlink" href="#do-i-need-an-environment-file-or-can-i-put-everything-in-the-deployment" title="Link to this heading"></a></h2>
+<p>Both work. Environment files are optional — variables and secrets can go directly in the deployment:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># Deployment-only approach (fine for one-off deployments)</span>
 <span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_workspace</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
 <span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">LOG_RETENTION_DAYS</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DATACENTER</span>
 <span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
-<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;30&quot;</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera-eu-fr</span>
+<span class="w">  </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KAMATERA_API_KEY</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">env</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">KAMATERA_API_KEY</span>
 </pre></div>
 </div>
-<p>If one environment needs a different value, override in that environment file:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># envs/env-stg.yaml</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">LOG_RETENTION_DAYS</span>
-<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
-<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;7&quot;</span><span class="w">            </span><span class="c1"># staging keeps logs for less time</span>
-</pre></div>
-</div>
-<p>The variable resolution order ensures staging gets <code class="docutils literal notranslate"><span class="pre">7</span></code> while production gets the workspace default <code class="docutils literal notranslate"><span class="pre">30</span></code>.</p>
+<p>Use a separate <strong>environment file</strong> when:</p>
+<ul class="simple">
+<li><p>Multiple deployments share the same environment-level settings (staging creds, staging-specific variables).</p></li>
+<li><p>You want a clear audit boundary between “what the workspace defines” and “how staging differs from production.”</p></li>
+<li><p>You use <code class="docutils literal notranslate"><span class="pre">overrides</span></code> to pin module image versions or disable features per environment.</p></li>
+</ul>
 </section>
 <hr class="docutils" />
-<section id="recipe-change-a-variable-in-only-one-environment">
-<h2>Recipe: Change a variable in only one environment<a class="headerlink" href="#recipe-change-a-variable-in-only-one-environment" title="Link to this heading"></a></h2>
-<p><strong>Scenario:</strong> Enable debug mode in staging but not production.</p>
-<p>Only edit the staging environment file:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># envs/env-stg.yaml</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DEBUG_MODE</span>
-<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
-<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
+<section id="what-is-the-difference-between-variables-and-secrets">
+<h2>What is the difference between variables and secrets?<a class="headerlink" href="#what-is-the-difference-between-variables-and-secrets" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspect</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">variables</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">secrets</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Sensitivity</p></td>
+<td><p>Non-sensitive (hostnames, counts, flags)</p></td>
+<td><p>Sensitive (API keys, passwords, tokens)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Storage</p></td>
+<td><p>Plain YAML, committed to git</p></td>
+<td><p>Resolved at runtime from an external store</p></td>
+</tr>
+<tr class="row-even"><td><p>In logs</p></td>
+<td><p>May appear in build output</p></td>
+<td><p>Never logged — memory-only</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Variable stores</strong> (<code class="docutils literal notranslate"><span class="pre">spec.variables[].store</span></code>):</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Store</p></th>
+<th class="head"><p>Resolves from</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">constant</span></code></p></td>
+<td><p>Literal value in the YAML file</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">environment</span></code></p></td>
+<td><p>Environment variable on the runner</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">azure-appconfig</span></code></p></td>
+<td><p>Azure App Configuration key</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">consul</span></code></p></td>
+<td><p>HashiCorp Consul key</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vault</span></code></p></td>
+<td><p>HashiCorp Vault path</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">infisical</span></code></p></td>
+<td><p>Infisical secret path</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">etcd</span></code></p></td>
+<td><p>etcd key</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Secret stores</strong> (<code class="docutils literal notranslate"><span class="pre">spec.secrets[].store</span></code>):</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Store</p></th>
+<th class="head"><p>Resolves from</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">constant</span></code></p></td>
+<td><p>Literal value in YAML — avoid for real secrets</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">environment</span></code></p></td>
+<td><p>Environment variable on the runner</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">github</span></code></p></td>
+<td><p>GitHub Actions secret (env var injected by runner)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">azure-keyvault</span></code></p></td>
+<td><p>Azure Key Vault secret</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bitwarden</span></code></p></td>
+<td><p>Bitwarden item (by item ID)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vault</span></code></p></td>
+<td><p>HashiCorp Vault path</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">infisical</span></code></p></td>
+<td><p>Infisical secret path</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">REPLICA_COUNT</span>
+<span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3&quot;</span>
+
+<span class="nt">secrets</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DB_PASSWORD</span>
+<span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bitwarden</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">a1b2c3d4-0000-0000-0000-000000000000</span><span class="w">   </span><span class="c1"># Bitwarden item ID</span>
 </pre></div>
 </div>
-<p>Production doesn’t have this variable defined in its environment file, so it inherits the workspace default (or the variable simply doesn’t exist in production — your Terraform can use a default).</p>
+<p>If a value would be embarrassing to see in a CI log, it belongs in <code class="docutils literal notranslate"><span class="pre">secrets</span></code>.</p>
 </section>
 <hr class="docutils" />
-<section id="verification-workflow">
-<h2>Verification workflow<a class="headerlink" href="#verification-workflow" title="Link to this heading"></a></h2>
-<p>After making cross-environment changes:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Validate all affected deployments</span>
-strata<span class="w"> </span>validate<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>validate<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
+<section id="how-do-variables-layer-across-workspace-environment-and-deployment">
+<h2>How do variables layer across workspace, environment, and deployment?<a class="headerlink" href="#how-do-variables-layer-across-workspace-environment-and-deployment" title="Link to this heading"></a></h2>
+<p>Later layers override earlier ones for the same key. The merge order is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>workspace variables
+  ↓ (overridden by)
+environment variables   (applied in order if multiple environments are listed)
+  ↓ (overridden by)
+deployment variables    (highest precedence)
+</pre></div>
+</div>
+<p>The same rule applies to secrets. This means you can set sensible defaults in the workspace and only override the values that differ per environment:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># workspace: sets REPLICA_COUNT = 1 as a baseline</span>
+<span class="c1"># env-prd: overrides REPLICA_COUNT = 3</span>
+<span class="c1"># deploy-prd: no override needed — inherits 3 from the environment</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="what-does-meta-name-allow">
+<h2>What does <code class="docutils literal notranslate"><span class="pre">meta.name</span></code> allow?<a class="headerlink" href="#what-does-meta-name-allow" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">meta.name</span></code> is a <code class="docutils literal notranslate"><span class="pre">PlatformName</span></code> — it follows the pattern <code class="docutils literal notranslate"><span class="pre">^[a-z][a-z0-9_-]*$</span></code>:</p>
+<ul class="simple">
+<li><p>Starts with a lowercase letter</p></li>
+<li><p>Only lowercase letters, digits, underscores, and hyphens</p></li>
+<li><p>No uppercase, no spaces</p></li>
+<li><p>1–64 characters</p></li>
+</ul>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_workspace</span><span class="w">   </span><span class="c1"># ✓ underscores allowed</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform-workspace</span><span class="w">   </span><span class="c1"># ✓ hyphens allowed</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PlatformWorkspace</span><span class="w">    </span><span class="c1"># ✗ uppercase not allowed</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1_workspace</span><span class="w">          </span><span class="c1"># ✗ must start with a letter</span>
+</pre></div>
+</div>
+<p>File names on disk can be chosen freely — the restriction is only on <code class="docutils literal notranslate"><span class="pre">meta.name</span></code> inside the file.</p>
+</section>
+<hr class="docutils" />
+<section id="what-is-the-difference-between-properties-custom-and-labels">
+<h2>What is the difference between <code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>, and <code class="docutils literal notranslate"><span class="pre">labels</span></code>?<a class="headerlink" href="#what-is-the-difference-between-properties-custom-and-labels" title="Link to this heading"></a></h2>
+<p>All three are optional metadata fields but serve different purposes:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Purpose</p></th>
+<th class="head"><p>Who reads it</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">properties</span></code></p></td>
+<td><p>Tool-specific settings strata acts on</p></td>
+<td><p>strata internals</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">custom</span></code></p></td>
+<td><p>Free-form organizational metadata</p></td>
+<td><p>Your tooling / humans</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">labels</span></code></p></td>
+<td><p>Document-level tags (version, environment)</p></td>
+<td><p>Filtering, display</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">labels</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0.0&quot;</span><span class="w">           </span><span class="c1"># document version</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span><span class="w">    </span><span class="c1"># used for filtering</span>
 
-<span class="c1"># 2. Build plan — see what would change in each environment</span>
-strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">terraform</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">organization</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-tfc-org</span><span class="w">   </span><span class="c1"># strata reads this for Terraform Cloud backend</span>
+<span class="w">      </span><span class="nt">cloudspace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production</span>
 
-<span class="c1"># 3. Commit the change</span>
-git<span class="w"> </span>add<span class="w"> </span>-A<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Bump worker RAM to 4096 MB&quot;</span>
+<span class="w">  </span><span class="nt">custom</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">owner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Platform Team</span><span class="w">         </span><span class="c1"># free-form — strata ignores these</span>
+<span class="w">    </span><span class="nt">costcenter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PROD-INFRA-001</span>
+<span class="w">    </span><span class="nt">compliance</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PCI-DSS</span>
+</pre></div>
+</div>
+<p>Put values that strata needs to function in <code class="docutils literal notranslate"><span class="pre">properties</span></code>; put values your organisation cares about but strata ignores in <code class="docutils literal notranslate"><span class="pre">custom</span></code>.</p>
+</section>
+<hr class="docutils" />
+<section id="when-do-i-need-a-configuration-file">
+<h2>When do I need a <code class="docutils literal notranslate"><span class="pre">configuration</span></code> file?<a class="headerlink" href="#when-do-i-need-a-configuration-file" title="Link to this heading"></a></h2>
+<p>A <code class="docutils literal notranslate"><span class="pre">configuration</span></code> file (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>) defines validation rules and defaults for providers, resources, and topologies. It is not required for a deployment to run, but it provides:</p>
+<ul class="simple">
+<li><p><strong>Allowed region lists</strong> — reject deployments targeting unsupported regions.</p></li>
+<li><p><strong>Resource validation</strong> — enforce CPU/RAM combinations with regex patterns.</p></li>
+<li><p><strong>Topology rules</strong> — set min/max counts per role (e.g., Docker Swarm managers must be odd, 1–7).</p></li>
+</ul>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">configuration</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">providers</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera</span>
+<span class="w">      </span><span class="nt">additional_regions</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">     </span><span class="c1"># only allow the listed regions</span>
+<span class="w">      </span><span class="nt">regions</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">eu-fr</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">us-ny</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">additional_resources</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">   </span><span class="c1"># only allow the listed resource types</span>
+<span class="w">      </span><span class="nt">resources</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">virtualmachine</span>
+<span class="w">          </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">cpu_cores</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^[1-9][0-9]?$&quot;</span><span class="w">        </span><span class="c1"># 1–99</span>
+<span class="w">            </span><span class="nt">ram_mb</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^(512|1024|2048|4096)$&quot;</span><span class="w">   </span><span class="c1"># fixed sizes only</span>
+<span class="w">  </span><span class="nt">topologies</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker-swarm</span>
+<span class="w">      </span><span class="nt">components</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">manager</span>
+<span class="w">          </span><span class="nt">min_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">          </span><span class="nt">max_count</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7</span>
+</pre></div>
+</div>
+<p>A deployment references a configuration file the same way it references an environment — through the <code class="docutils literal notranslate"><span class="pre">configurations</span></code> list. Multiple configuration layers merge in order.</p>
+</section>
+<hr class="docutils" />
+<section id="how-many-provisioners-does-a-workspace-need">
+<h2>How many provisioners does a workspace need?<a class="headerlink" href="#how-many-provisioners-does-a-workspace-need" title="Link to this heading"></a></h2>
+<p>At minimum one — typically a <code class="docutils literal notranslate"><span class="pre">terraform</span></code> provisioner for infrastructure. Add an <code class="docutils literal notranslate"><span class="pre">ansible</span></code> provisioner when you need OS-level configuration after infrastructure is up:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_iac</span>
+<span class="w">    </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">    </span><span class="nt">backend</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azurerm</span>
+<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">resource_group_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rg-terraform-state</span>
+<span class="w">        </span><span class="nt">storage_account_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">satfstate</span>
+<span class="w">        </span><span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tfstate</span>
+<span class="w">        </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform.tfstate</span>
 
-<span class="c1"># 4. Deploy (staging first, then production)</span>
-strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_config</span>
+<span class="w">    </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ansible</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ansible</span>
+<span class="w">    </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">playbook</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">site.yml</span>
+<span class="w">      </span><span class="nt">ssh_private_key_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_ssh_key</span>
+</pre></div>
+</div>
+<p>Provisioners are referenced by name in topology components and deployment stages. A workspace can define multiple provisioners of the same type (e.g., two separate Terraform root modules).</p>
+</section>
+<hr class="docutils" />
+<section id="how-do-i-share-a-provider-file-across-multiple-workspaces">
+<h2>How do I share a provider file across multiple workspaces?<a class="headerlink" href="#how-do-i-share-a-provider-file-across-multiple-workspaces" title="Link to this heading"></a></h2>
+<p>Reference it via a cross-repo path using <code class="docutils literal notranslate"><span class="pre">&#64;repo_name/</span></code> notation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># workspace A
+providers:
+  - name: kamatera_eu
+    file: @platform-config/providers/kamatera-eu-fr.yaml
+
+# workspace B — reuses the same provider file
+providers:
+  - name: kamatera_eu
+    file: @platform-config/providers/kamatera-eu-fr.yaml
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">platform-config</span></code> must be a repository registered in the solution (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">repo</span> <span class="pre">add</span></code>). The <code class="docutils literal notranslate"><span class="pre">&#64;repo_name/</span></code> prefix is resolved to the local clone path at build time.</p>
+<p>For single-repo setups, use a relative path without the <code class="docutils literal notranslate"><span class="pre">&#64;</span></code> prefix:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">providers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_eu</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">config/providers/kamatera-eu-fr.yaml</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="how-do-environment-overrides-work">
+<h2>How do environment overrides work?<a class="headerlink" href="#how-do-environment-overrides-work" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">spec.overrides</span></code> in an environment file lets you customize workspace resources, modules, and providers without touching the shared workspace definition.</p>
+<p><strong>Pin container image versions per environment:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">overrides</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">modules</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xyz_backend</span>
+<span class="w">        </span><span class="nt">services</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">server</span>
+<span class="w">            </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry.example.com/backend:2025.3.0</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">worker</span>
+<span class="w">            </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">registry.example.com/backend:2025.3.0</span>
+</pre></div>
+</div>
+<p><strong>Enable or disable a module in a specific environment:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">overrides</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">modules</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">module</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">debug_dashboard</span>
+<span class="w">        </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">   </span><span class="c1"># disable in production</span>
+</pre></div>
+</div>
+<p><strong>Change a provider region:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">overrides</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">providers</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kamatera_eu</span>
+<span class="w">        </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">region</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">us-ny</span><span class="w">   </span><span class="c1"># staging deploys to a different region</span>
+</pre></div>
+</div>
+<p>Overrides are additive and non-destructive — they only change the fields you specify, leaving everything else from the workspace definition intact.</p>
+</section>
+<hr class="docutils" />
+<section id="can-the-same-workspace-be-deployed-to-multiple-environments-simultaneously">
+<h2>Can the same workspace be deployed to multiple environments simultaneously?<a class="headerlink" href="#can-the-same-workspace-be-deployed-to-multiple-environments-simultaneously" title="Link to this heading"></a></h2>
+<p>Yes — that is the intended pattern. Create one deployment file per environment, each pointing to the same workspace:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># deploy-prd.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_workspace</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">haven_env_prd</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># deploy-stg.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_workspace</span><span class="w">   </span><span class="c1"># same workspace</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">haven_env_stg</span><span class="w">      </span><span class="c1"># different environment</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+</pre></div>
+</div>
+<p>Each deployment builds into its own output directory and uses its own Terraform state key — they are completely independent at runtime.</p>
+</section>
+<hr class="docutils" />
+<section id="how-do-i-provide-an-ssh-key-for-ansible-without-putting-it-in-the-yaml">
+<h2>How do I provide an SSH key for Ansible without putting it in the YAML?<a class="headerlink" href="#how-do-i-provide-an-ssh-key-for-ansible-without-putting-it-in-the-yaml" title="Link to this heading"></a></h2>
+<p>Store the private key in your secret store (Bitwarden, HashiCorp Vault, Azure Key Vault, etc.) and reference it by name in <code class="docutils literal notranslate"><span class="pre">configuration.ssh_private_key_secret</span></code>. The key never appears in any YAML file — it is resolved into memory at deploy time and written to a <code class="docutils literal notranslate"><span class="pre">chmod</span> <span class="pre">600</span></code> temp file that is deleted when the step completes.</p>
+<p><strong>1. Store the key in Bitwarden (or any other supported store):</strong></p>
+<p>Keep the full PEM content (from <code class="docutils literal notranslate"><span class="pre">-----BEGIN</span> <span class="pre">OPENSSH</span> <span class="pre">PRIVATE</span> <span class="pre">KEY-----</span></code> to <code class="docutils literal notranslate"><span class="pre">-----END</span> <span class="pre">OPENSSH</span> <span class="pre">PRIVATE</span> <span class="pre">KEY-----</span></code>) as a secure note or password field in your secret store. Note the item ID.</p>
+<p><strong>2. Reference it in the workspace provisioner:</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">haven_init</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ansible</span>
+<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">haven</span>
+<span class="w">        </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ansible</span>
+<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">playbook</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">site.yml</span>
+<span class="w">        </span><span class="nt">ssh_private_key_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">haven_ssh_key</span><span class="w">   </span><span class="c1"># name used to look up the key at runtime</span>
+</pre></div>
+</div>
+<p>And in your environment or deployment YAML, declare the secret source:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">haven_ssh_key</span>
+<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bitwarden</span>
+<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">b2f90a12-3c4d-5678-abcd-ef1234567890</span><span class="w">   </span><span class="c1"># Bitwarden item ID</span>
+</pre></div>
+</div>
+<p><strong>3. What happens at deploy time:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>strata deploy run
+  └─ resolves secrets from Bitwarden into memory (ResolvedValues)
+  └─ AnsibleDeployer looks up resolved_values.secrets[&quot;haven_ssh_key&quot;]
+  └─ writes PEM to /tmp/ansible_ssh_XXXXX.pem  (chmod 600)
+  └─ ansible-playbook site.yml --private-key /tmp/ansible_ssh_XXXXX.pem
+  └─ temp file deleted (even if the playbook fails)
+</pre></div>
+</div>
+<p>The key is never written to disk except during the subprocess window, and never logged.</p>
+<p><strong>Host key checking:</strong> Because the runner has no prior trust with freshly provisioned VMs, set <code class="docutils literal notranslate"><span class="pre">ANSIBLE_HOST_KEY_CHECKING=false</span></code> in your CI environment (or in <code class="docutils literal notranslate"><span class="pre">ansible.cfg</span></code>). For fixed infrastructure with stable IPs, populate <code class="docutils literal notranslate"><span class="pre">~/.ssh/known_hosts</span></code> via <code class="docutils literal notranslate"><span class="pre">ssh-keyscan</span></code> and remove the env var.</p>
+</section>
+<hr class="docutils" />
+<section id="how-do-i-adopt-strata-with-existing-terraform-state">
+<h2>How do I adopt strata with existing Terraform state?<a class="headerlink" href="#how-do-i-adopt-strata-with-existing-terraform-state" title="Link to this heading"></a></h2>
+<p>strata generates standard Terraform files that point to your existing state backend — it never creates, manages, or migrates state.</p>
+<ol class="arabic simple">
+<li><p><strong>Create your strata workspace YAML</strong> describing the infrastructure you already have.</p></li>
+<li><p><strong>Point the backend config</strong> to your existing state backend (same storage account, same key).</p></li>
+<li><p><strong>Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code></strong> to generate Terraform files.</p></li>
+<li><p><strong>Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span></code></strong> (or <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">plan</span></code> directly in <code class="docutils literal notranslate"><span class="pre">.strata/build/</span></code>):</p>
+<ul class="simple">
+<li><p>If the plan shows no changes → your YAML accurately describes reality. Done.</p></li>
+<li><p>If the plan shows changes → adjust your YAML until the plan is clean.</p></li>
+</ul>
+</li>
+</ol>
+<p>Your Terraform state stays exactly where it is. strata just generates the <code class="docutils literal notranslate"><span class="pre">.tf</span></code> files that Terraform reads — it never touches <code class="docutils literal notranslate"><span class="pre">.tfstate</span></code>.</p>
+<p><strong>What about <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">import</span></code>?</strong></p>
+<p>If you have infrastructure that was created outside Terraform (manually, or via another tool), you’ll still need <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">import</span></code> to bring it under state management. strata doesn’t change this workflow — after import, your state reflects reality, and strata generates the config that matches.</p>
+</section>
+<hr class="docutils" />
+<section id="how-do-i-configure-multiple-stages-in-a-deployment">
+<h2>How do I configure multiple stages in a deployment?<a class="headerlink" href="#how-do-i-configure-multiple-stages-in-a-deployment" title="Link to this heading"></a></h2>
+<p>Define each stage in <code class="docutils literal notranslate"><span class="pre">spec.stages</span></code>, referencing a named provisioner from the workspace. Use <code class="docutils literal notranslate"><span class="pre">depends_on</span></code> to control execution order.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
+<span class="w">    </span><span class="c1"># Stage 1 — provision infrastructure with Terraform</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infrastructure</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_iac</span><span class="w">       </span><span class="c1"># must match a name in workspace spec.provisioners</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">all</span>
+<span class="w">      </span><span class="nt">on_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stop</span>
+
+<span class="w">    </span><span class="c1"># Stage 2 — configure VMs with Ansible after provisioning</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">configuration</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_config</span><span class="w">    </span><span class="c1"># must match a name in workspace spec.provisioners</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">all</span>
+<span class="w">      </span><span class="nt">depends_on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">infrastructure</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">on_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stop</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">provisioner</span></code> must match a <code class="docutils literal notranslate"><span class="pre">name</span></code> defined in <code class="docutils literal notranslate"><span class="pre">spec.provisioners</span></code> of the referenced workspace YAML. strata orchestrates the stages in dependency order — each stage calls its provisioner via subprocess and receives only the secrets it is explicitly allowed to access via <code class="docutils literal notranslate"><span class="pre">stage.secrets</span></code>.</p>
+<p>Alternatively, use <code class="docutils literal notranslate"><span class="pre">topology</span></code> instead of <code class="docutils literal notranslate"><span class="pre">provisioner</span></code> to scope a stage to a specific workspace topology entry, which derives the provisioner automatically and limits execution to that topology’s resources.</p>
+</section>
+<hr class="docutils" />
+<section id="how-do-i-roll-back-a-deployment">
+<h2>How do I roll back a deployment?<a class="headerlink" href="#how-do-i-roll-back-a-deployment" title="Link to this heading"></a></h2>
+<p>The model is declarative — there is no imperative rollback command. Revert the YAML change in git and redeploy:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>revert<span class="w"> </span>&lt;commit-that-broke-things&gt;
+git<span class="w"> </span>push
+
+strata<span class="w"> </span>build<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
 strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
 </pre></div>
 </div>
-</section>
-<hr class="docutils" />
-<section id="tips">
-<h2>Tips<a class="headerlink" href="#tips" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><strong>Use <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span></code> before deploying</strong> — it shows the exact infrastructure changes that would apply.</p></li>
-<li><p><strong>Commit config changes before deploying</strong> — so the git history reflects what was deployed and when.</p></li>
-<li><p><strong>Deploy staging first</strong> — catch issues before they hit production.</p></li>
-<li><p><strong>One change per commit</strong> — makes <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">log</span></code> useful for debugging later.</p></li>
-</ul>
+<p>Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span> <span class="pre">--file</span> <span class="pre">deploy/deploy-prd.yaml</span></code> first to review exactly what Terraform will change before applying. The plan shows resources reverting to their previous state and is auditable before any change is applied.</p>
 </section>
 </section>
 
@@ -2075,8 +2438,8 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="cookbook-add-environment.html" class="btn btn-neutral float-left" title="Cookbook: Add a New Environment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="troubleshooting-what-changed.html" class="btn btn-neutral float-right" title="Troubleshooting: What Changed?" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="faq.html" class="btn btn-neutral float-left" title="Frequently Asked Questions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="cookbook-add-environment.html" class="btn btn-neutral float-right" title="Cookbook: Add a New Environment" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

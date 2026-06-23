@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pattern: Change a Value Across All Environments &mdash; strata 0.8.0 documentation</title>
+  <title>What strata Does — A Practical Overview &mdash; strata 0.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Troubleshooting: What Changed?" href="troubleshooting-what-changed.html" />
-    <link rel="prev" title="Cookbook: Add a New Environment" href="cookbook-add-environment.html" /> 
+    <link rel="next" title="Frequently Asked Questions" href="faq.html" />
+    <link rel="prev" title="Helm Modules" href="helm-modules.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -1651,44 +1651,44 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="features.html">What strata Does — A Practical Overview</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="features.html#configuration-as-yaml-layers-not-copy-paste">Configuration as YAML layers, not copy-paste</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="features.html#cross-repo-references">Cross-repo references</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">What strata Does — A Practical Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#configuration-as-yaml-layers-not-copy-paste">Configuration as YAML layers, not copy-paste</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#cross-repo-references">Cross-repo references</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#secret-resolution-never-in-git">Secret resolution — never in git</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="features.html#auto-generated-secrets">Auto-generated secrets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#secret-resolution-never-in-git">Secret resolution — never in git</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#auto-generated-secrets">Auto-generated secrets</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#variable-stores-for-non-sensitive-config">Variable stores for non-sensitive config</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#build-generate-your-terraform-helm-inputs">Build — generate your Terraform/Helm inputs</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="features.html#preview-changes-before-you-apply">Preview changes before you apply</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#variable-stores-for-non-sensitive-config">Variable stores for non-sensitive config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#build-generate-your-terraform-helm-inputs">Build — generate your Terraform/Helm inputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#preview-changes-before-you-apply">Preview changes before you apply</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#deploy-run-the-provisioner-pipeline">Deploy — run the provisioner pipeline</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="features.html#supported-provisioners">Supported provisioners</a></li>
-<li class="toctree-l3"><a class="reference internal" href="features.html#other-deploy-subcommands">Other deploy subcommands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deploy-run-the-provisioner-pipeline">Deploy — run the provisioner pipeline</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#supported-provisioners">Supported provisioners</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-deploy-subcommands">Other deploy subcommands</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#deployment-locking">Deployment locking</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#lifecycle-hooks-run-scripts-at-any-phase">Lifecycle hooks — run scripts at any phase</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#policy-guardrails">Policy guardrails</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#schema-validation-on-any-yaml-file">Schema validation on any YAML file</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#inspect-resolved-values-before-you-deploy">Inspect resolved values before you deploy</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#tool-health-check">Tool health check</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#secret-utilities">Secret utilities</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#ci-friendly-by-design">CI-friendly by design</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#dev-container-out-of-the-box">Dev container out of the box</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#workspace-templates">Workspace templates</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#create-config-files-from-templates">Create config files from templates</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#inspect-json-schemas">Inspect JSON schemas</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#persistent-cli-defaults">Persistent CLI defaults</a></li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#extend-strata-without-touching-core-code">Extend strata without touching core code</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="features.html#custom-integrations">Custom integrations</a></li>
-<li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deployment-locking">Deployment locking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#lifecycle-hooks-run-scripts-at-any-phase">Lifecycle hooks — run scripts at any phase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#policy-guardrails">Policy guardrails</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schema-validation-on-any-yaml-file">Schema validation on any YAML file</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inspect-resolved-values-before-you-deploy">Inspect resolved values before you deploy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tool-health-check">Tool health check</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#secret-utilities">Secret utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ci-friendly-by-design">CI-friendly by design</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#dev-container-out-of-the-box">Dev container out of the box</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workspace-templates">Workspace templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#create-config-files-from-templates">Create config files from templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inspect-json-schemas">Inspect JSON schemas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#persistent-cli-defaults">Persistent CLI defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#extend-strata-without-touching-core-code">Extend strata without touching core code</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#custom-integrations">Custom integrations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#custom-policies">Custom policies</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-escape-hatch">The escape hatch</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
@@ -1741,13 +1741,13 @@
 <li class="toctree-l2"><a class="reference internal" href="cookbook-add-environment.html#common-mistakes">Common mistakes</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Pattern: Change a Value Across All Environments</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#the-layering-model">The layering model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#recipe-change-a-resource-property-everywhere">Recipe: Change a resource property everywhere</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#recipe-change-a-variable-in-all-environments">Recipe: Change a variable in all environments</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#recipe-change-a-variable-in-only-one-environment">Recipe: Change a variable in only one environment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#verification-workflow">Verification workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#tips">Tips</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pattern-cross-env-changes.html">Pattern: Change a Value Across All Environments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#the-layering-model">The layering model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#recipe-change-a-resource-property-everywhere">Recipe: Change a resource property everywhere</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#recipe-change-a-variable-in-all-environments">Recipe: Change a variable in all environments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#recipe-change-a-variable-in-only-one-environment">Recipe: Change a variable in only one environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#verification-workflow">Verification workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pattern-cross-env-changes.html#tips">Tips</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="troubleshooting-what-changed.html">Troubleshooting: What Changed?</a><ul>
@@ -1930,9 +1930,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Pattern: Change a Value Across All Environments</li>
+      <li class="breadcrumb-item active">What strata Does — A Practical Overview</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/guides/pattern-cross-env-changes.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/guides/features.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -1940,134 +1940,577 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="pattern-change-a-value-across-all-environments">
-<h1>Pattern: Change a Value Across All Environments<a class="headerlink" href="#pattern-change-a-value-across-all-environments" title="Link to this heading"></a></h1>
+  <section id="what-strata-does-a-practical-overview">
+<h1>What strata Does — A Practical Overview<a class="headerlink" href="#what-strata-does-a-practical-overview" title="Link to this heading"></a></h1>
 <blockquote>
-<div><p><strong>Audience:</strong> Operator who needs to change a configuration value (RAM, disk size, feature flag, variable) and apply it everywhere consistently.</p>
+<div><p><strong>Audience:</strong> DevOps engineer / sysadmin who lives in the terminal. You know Terraform, Ansible,
+and Helm. You’ve managed the copy-paste <code class="docutils literal notranslate"><span class="pre">.tfvars</span></code> sprawl. You want to know what strata actually
+does before deciding if it’s worth your time.</p>
 </div></blockquote>
+<p>strata is a CLI tool that sits in front of your IaC toolchain. It generates Terraform, Helm, and
+Ansible inputs from layered YAML configuration, resolves secrets from external stores, and
+orchestrates multi-stage deployments. The output is plain Terraform/Helm/Ansible — nothing
+proprietary, no lock-in.</p>
 <hr class="docutils" />
-<section id="the-layering-model">
-<h2>The layering model<a class="headerlink" href="#the-layering-model" title="Link to this heading"></a></h2>
-<p>strata merges configuration in this order (later wins):</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>workspace variables  →  environment variables  →  deployment variables
-    (base)                   (override)                  (final)
+<section id="configuration-as-yaml-layers-not-copy-paste">
+<h2>Configuration as YAML layers, not copy-paste<a class="headerlink" href="#configuration-as-yaml-layers-not-copy-paste" title="Link to this heading"></a></h2>
+<p>Instead of duplicating <code class="docutils literal notranslate"><span class="pre">.tfvars</span></code> per environment, you write it once and override per environment:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>workspaces/platform.yaml     ← what to build (providers, topology, modules)
+environments/env-prd.yaml    ← production overrides (image versions, secrets, region)
+environments/env-stg.yaml    ← staging overrides
+deployments/deploy-prd.yaml  ← binds workspace + env, declares stages
+deployments/deploy-stg.yaml
 </pre></div>
 </div>
-<p>Where you make a change depends on the scope you want:</p>
+<p>strata merges the layers at build time and generates the final Terraform/Helm inputs. No manual
+diffing. No “which tfvars is the real one?”</p>
+<section id="cross-repo-references">
+<h3>Cross-repo references<a class="headerlink" href="#cross-repo-references" title="Link to this heading"></a></h3>
+<p>IaC can live in a separate repository. Reference it with <code class="docutils literal notranslate"><span class="pre">&#64;repo_name/path</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">provisioners</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_iac</span>
+<span class="w">    </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">repository</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">xyz-infrastructure</span><span class="w">    </span><span class="c1"># registered with `strata repo add`</span>
+<span class="w">      </span><span class="nt">source_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform/platform</span>
+</pre></div>
+</div>
+<p>strata resolves the path to the local clone at build time. Single-repo setups skip the <code class="docutils literal notranslate"><span class="pre">repository</span></code>
+field and use a relative path directly.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="secret-resolution-never-in-git">
+<h2>Secret resolution — never in git<a class="headerlink" href="#secret-resolution-never-in-git" title="Link to this heading"></a></h2>
+<p>Declare where a secret lives. strata fetches it at runtime and injects it into the build output.</p>
+<p><strong>Supported secret backends:</strong></p>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Scope</p></th>
-<th class="head"><p>Where to edit</p></th>
-<th class="head"><p>Example</p></th>
+<tr class="row-odd"><th class="head"><p>Store</p></th>
+<th class="head"><p>Value field contains</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>All environments</p></td>
-<td><p>Workspace (<code class="docutils literal notranslate"><span class="pre">ws-*.yaml</span></code>) or resource (<code class="docutils literal notranslate"><span class="pre">vm-*.yaml</span></code>)</p></td>
-<td><p>Bump RAM on all worker VMs</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">environment</span></code></p></td>
+<td><p>Environment variable name on the runner</p></td>
 </tr>
-<tr class="row-odd"><td><p>One environment only</p></td>
-<td><p>Environment (<code class="docutils literal notranslate"><span class="pre">env-*.yaml</span></code>)</p></td>
-<td><p>Enable debug logging in staging only</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">github</span></code></p></td>
+<td><p>GitHub Actions secret name (runner-injected)</p></td>
 </tr>
-<tr class="row-even"><td><p>One deployment only</p></td>
-<td><p>Deployment (<code class="docutils literal notranslate"><span class="pre">deploy-*.yaml</span></code>) — <code class="docutils literal notranslate"><span class="pre">spec.variables</span></code> section</p></td>
-<td><p>Override a value for a specific deploy run</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">azure-keyvault</span></code></p></td>
+<td><p>Secret name in Azure Key Vault</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bitwarden</span></code></p></td>
+<td><p>Bitwarden item ID</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vault</span></code></p></td>
+<td><p>HashiCorp Vault path</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">infisical</span></code></p></td>
+<td><p>Infisical secret path</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DB_PASSWORD</span>
+<span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-keyvault</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prod-db-password</span><span class="w">          </span><span class="c1"># secret name in Key Vault</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">API_TOKEN</span>
+<span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MY_API_TOKEN</span><span class="w">              </span><span class="c1"># GitHub Actions secret name</span>
+</pre></div>
+</div>
+<p>Secrets are resolved into memory, written to build output, and never logged. For Ansible SSH keys:
+the PEM is written to a <code class="docutils literal notranslate"><span class="pre">chmod</span> <span class="pre">600</span></code> temp file for the subprocess window, then deleted — even if the
+playbook fails.</p>
+<section id="auto-generated-secrets">
+<h3>Auto-generated secrets<a class="headerlink" href="#auto-generated-secrets" title="Link to this heading"></a></h3>
+<p>For secrets that don’t yet exist, declare a generator spec. strata creates the secret in the
+backing store on first run:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">secrets</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SESSION_KEY</span>
+<span class="w">    </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-keyvault</span>
+<span class="w">    </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app-session-key</span>
+<span class="w">    </span><span class="nt">generate</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">urlsafe</span>
+<span class="w">      </span><span class="nt">length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">64</span>
+</pre></div>
+</div>
+<p>Supported generators: <code class="docutils literal notranslate"><span class="pre">urlsafe</span></code>, <code class="docutils literal notranslate"><span class="pre">hex</span></code>, <code class="docutils literal notranslate"><span class="pre">password</span></code>, <code class="docutils literal notranslate"><span class="pre">alphanumeric</span></code>, <code class="docutils literal notranslate"><span class="pre">numeric</span></code>, <code class="docutils literal notranslate"><span class="pre">base64</span></code>, <code class="docutils literal notranslate"><span class="pre">uuid4</span></code>,
+<code class="docutils literal notranslate"><span class="pre">uuid7</span></code>. Minimum length: 8. Maximum: 1024.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="variable-stores-for-non-sensitive-config">
+<h2>Variable stores for non-sensitive config<a class="headerlink" href="#variable-stores-for-non-sensitive-config" title="Link to this heading"></a></h2>
+<p>Variables (non-sensitive) support the same pluggable backend pattern:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Store</p></th>
+<th class="head"><p>Resolves from</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">constant</span></code></p></td>
+<td><p>Literal value in the YAML file</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">environment</span></code></p></td>
+<td><p>Environment variable on the runner</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">azure-appconfig</span></code></p></td>
+<td><p>Azure App Configuration key</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">consul</span></code></p></td>
+<td><p>HashiCorp Consul key</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vault</span></code></p></td>
+<td><p>HashiCorp Vault path</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">infisical</span></code></p></td>
+<td><p>Infisical secret path</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">etcd</span></code></p></td>
+<td><p>etcd key</p></td>
+</tr>
+</tbody>
+</table>
+<p>Feature flags use <code class="docutils literal notranslate"><span class="pre">constant</span></code>, <code class="docutils literal notranslate"><span class="pre">environment</span></code>, <code class="docutils literal notranslate"><span class="pre">azure-appconfig</span></code>, or <code class="docutils literal notranslate"><span class="pre">flagsmith</span></code>.</p>
+</section>
+<hr class="docutils" />
+<section id="build-generate-your-terraform-helm-inputs">
+<h2>Build — generate your Terraform/Helm inputs<a class="headerlink" href="#build-generate-your-terraform-helm-inputs" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>build<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
+</pre></div>
+</div>
+<p>Generates <code class="docutils literal notranslate"><span class="pre">.strata/build/deploy-prd/&lt;stage&gt;/</span></code> containing:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">main.tf</span></code>, <code class="docutils literal notranslate"><span class="pre">variables.tf</span></code>, <code class="docutils literal notranslate"><span class="pre">terraform.tfvars.json</span></code> (Terraform stages)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">values.yaml</span></code> (Helm stages)</p></li>
+<li><p>Populated <code class="docutils literal notranslate"><span class="pre">backend.tf</span></code> pointing to your existing state backend</p></li>
+</ul>
+<p>Your state backend, your Terraform modules, your provider plugins — untouched. The output is plain
+files that work without strata installed.</p>
+<section id="preview-changes-before-you-apply">
+<h3>Preview changes before you apply<a class="headerlink" href="#preview-changes-before-you-apply" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
+</pre></div>
+</div>
+<p>Runs <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">plan</span></code> in the generated output directory. Review the diff before committing to
+<code class="docutils literal notranslate"><span class="pre">apply</span></code>. Useful as a PR gate — fail the pipeline on unexpected changes.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Clean generated artifacts and start fresh</span>
+strata<span class="w"> </span>build<span class="w"> </span>clean<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="deploy-run-the-provisioner-pipeline">
+<h2>Deploy — run the provisioner pipeline<a class="headerlink" href="#deploy-run-the-provisioner-pipeline" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w">   </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
+strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w">   </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--stage<span class="w"> </span>infrastructure<span class="w">   </span><span class="c1"># single stage</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w">   </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--force<span class="w">                  </span><span class="c1"># skip prompts</span>
+</pre></div>
+</div>
+<p>Orchestrates stages in dependency order. Each stage calls the provisioner via subprocess —
+<code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">apply</span></code>, <code class="docutils literal notranslate"><span class="pre">ansible-playbook</span></code>, <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">upgrade</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stack</span> <span class="pre">deploy</span></code>, or a script.</p>
+<section id="supported-provisioners">
+<h3>Supported provisioners<a class="headerlink" href="#supported-provisioners" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Provisioner</p></th>
+<th class="head"><p>What it calls</p></th>
+<th class="head"><p>Typical stage type</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">terraform</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">init/plan/apply</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">infrastructure</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">opentofu</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">tofu</span> <span class="pre">init/plan/apply</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">infrastructure</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ansible</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ansible-playbook</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">configure</span></code>, <code class="docutils literal notranslate"><span class="pre">initialize</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">helm</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">upgrade</span> <span class="pre">--install</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">deploy</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">compose</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stack</span> <span class="pre">deploy</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">deploy</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">script</span></code></p></td>
+<td><p>Shell / PowerShell / Python scripts</p></td>
+<td><p>any</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="other-deploy-subcommands">
+<h3>Other deploy subcommands<a class="headerlink" href="#other-deploy-subcommands" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>show<span class="w">     </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">   </span><span class="c1"># inspect the last plan</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>status<span class="w">   </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">   </span><span class="c1"># current state summary</span>
+strata<span class="w"> </span>deploy<span class="w"> </span><span class="nb">history</span><span class="w">  </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">   </span><span class="c1"># deployment history</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>health<span class="w">   </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">   </span><span class="c1"># run health checks</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>output<span class="w">   </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">   </span><span class="c1"># print infrastructure outputs</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>destroy<span class="w">  </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">   </span><span class="c1"># tear down (with confirmation)</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>lock<span class="w">     </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">   </span><span class="c1"># acquire deployment lock</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="deployment-locking">
+<h2>Deployment locking<a class="headerlink" href="#deployment-locking" title="Link to this heading"></a></h2>
+<p>Before applying, strata can acquire a lease on your state backend to prevent concurrent deploys.
+Set <code class="docutils literal notranslate"><span class="pre">locking:</span> <span class="pre">true</span></code> in your deployment YAML or pass <code class="docutils literal notranslate"><span class="pre">--lock</span></code> on the CLI. Backed by the same
+mechanism as your Terraform backend (Azure Blob lease, S3 DynamoDB lock, etc.).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>lock<span class="w">    </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">      </span><span class="c1"># acquire lock</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w">     </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">      </span><span class="c1"># fails if another lock is held</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="lifecycle-hooks-run-scripts-at-any-phase">
+<h2>Lifecycle hooks — run scripts at any phase<a class="headerlink" href="#lifecycle-hooks-run-scripts-at-any-phase" title="Link to this heading"></a></h2>
+<p>Attach shell, PowerShell, or Python scripts to any phase of the pipeline:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># workspace.yaml</span>
+<span class="nt">lifecycle</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">deploy_apply_before</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">scripts</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/backup-state.ps1</span><span class="w">    </span><span class="c1"># take a snapshot before applying</span>
+<span class="w">  </span><span class="nt">deploy_provision</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">scripts</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/notify-slack.sh</span><span class="w">     </span><span class="c1"># post to Slack when provisioning starts</span>
+<span class="w">  </span><span class="nt">deploy_output</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">scripts</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scripts/export-ips.ps1</span><span class="w">      </span><span class="c1"># write IPs to a config file after deploy</span>
+</pre></div>
+</div>
+<p>Scripts receive context via environment variables (<code class="docutils literal notranslate"><span class="pre">STRATA_PHASE</span></code>, <code class="docutils literal notranslate"><span class="pre">STRATA_BUILD_PATH</span></code>,
+<code class="docutils literal notranslate"><span class="pre">STRATA_WORKSPACE_PATH</span></code>, etc.). Works cross-platform — strata tries <code class="docutils literal notranslate"><span class="pre">.sh</span></code> on Linux, <code class="docutils literal notranslate"><span class="pre">.ps1</span></code> on
+Windows, with fallbacks. Skip all hooks with <code class="docutils literal notranslate"><span class="pre">--no-hooks</span></code>.</p>
+</section>
+<hr class="docutils" />
+<section id="policy-guardrails">
+<h2>Policy guardrails<a class="headerlink" href="#policy-guardrails" title="Link to this heading"></a></h2>
+<p>Declare compliance rules in a <code class="docutils literal notranslate"><span class="pre">configuration.yaml</span></code>. strata evaluates them at the appropriate
+phase — no wrappers, no external policy server.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">policies</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">enforce_regions</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tenant_zone</span>
+<span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span><span class="w">           </span><span class="c1"># deny | warn | audit</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">require_tags</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">required_tags</span>
+<span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">naming_convention</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">naming_pattern</span>
+<span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">validate</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">checkov_scan</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">script</span>
+<span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
+<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">checkov --directory .strata/build/deploy-prd/infra</span>
+</pre></div>
+</div>
+<p><strong>Built-in policy types:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>Checks</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tenant_zone</span></code></p></td>
+<td><p>Terraform resource regions vs. allowed zones</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">required_tags</span></code></p></td>
+<td><p>Required tags present on all resources</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">naming_pattern</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">meta.name</span></code> fields match a configured regex</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">script</span></code></p></td>
+<td><p>Delegates to any external command (OPA, Checkov, custom)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sbom_pinned_versions</span></code></p></td>
+<td><p>Container images use pinned (non-floating) tags</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sbom_allowed_registries</span></code></p></td>
+<td><p>Images come only from approved registries</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sbom_denied_packages</span></code></p></td>
+<td><p>No dependency matches a purl/name blocklist</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sbom_max_components</span></code></p></td>
+<td><p>Total SBOM component count stays within a budget</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sbom_license</span></code></p></td>
+<td><p>Dependency licenses match an allow/deny list</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <hr class="docutils" />
-<section id="recipe-change-a-resource-property-everywhere">
-<h2>Recipe: Change a resource property everywhere<a class="headerlink" href="#recipe-change-a-resource-property-everywhere" title="Link to this heading"></a></h2>
-<p><strong>Scenario:</strong> Bump worker VM RAM from 2048 MB to 4096 MB across all environments.</p>
-<p>Since RAM is defined in the resource file (shared by all deployments), edit it once:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># stack/vm-worker.yaml</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">cpu_cores</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<span class="w">    </span><span class="nt">ram_mb</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4096</span><span class="w">          </span><span class="c1"># ← changed from 2048</span>
+<section id="schema-validation-on-any-yaml-file">
+<h2>Schema validation on any YAML file<a class="headerlink" href="#schema-validation-on-any-yaml-file" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>validate<span class="w"> </span>--file<span class="w"> </span>workspaces/platform.yaml
 </pre></div>
 </div>
-<p>Then validate and plan ALL deployments:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>validate<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>validate<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
-
-strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
+<p>Returns exit code <code class="docutils literal notranslate"><span class="pre">3</span></code> on schema violations, with structured error output:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;code&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;VALIDATION_ERROR&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Field &#39;spec.provider&#39; is required&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;line&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
 </pre></div>
 </div>
-<p>The plan shows the RAM change propagating to every environment that uses this resource.</p>
+<p>Use as a pre-commit hook or PR gate. Fast — no external tools required.</p>
 </section>
 <hr class="docutils" />
-<section id="recipe-change-a-variable-in-all-environments">
-<h2>Recipe: Change a variable in all environments<a class="headerlink" href="#recipe-change-a-variable-in-all-environments" title="Link to this heading"></a></h2>
-<p><strong>Scenario:</strong> Add a new variable <code class="docutils literal notranslate"><span class="pre">LOG_RETENTION_DAYS</span></code> with value <code class="docutils literal notranslate"><span class="pre">30</span></code> for all environments.</p>
-<p>Add it to the workspace (the base layer everyone inherits):</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># stack/ws-platform.yaml</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">LOG_RETENTION_DAYS</span>
-<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
-<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;30&quot;</span>
+<section id="inspect-resolved-values-before-you-deploy">
+<h2>Inspect resolved values before you deploy<a class="headerlink" href="#inspect-resolved-values-before-you-deploy" title="Link to this heading"></a></h2>
+<p>Check exactly what strata will inject into the build — variables, secrets, feature flags — without
+running the full build:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>values<span class="w"> </span>list<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
+strata<span class="w"> </span>values<span class="w"> </span>get<span class="w">  </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--key<span class="w"> </span>DB_PASSWORD
 </pre></div>
 </div>
-<p>If one environment needs a different value, override in that environment file:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># envs/env-stg.yaml</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">LOG_RETENTION_DAYS</span>
-<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
-<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;7&quot;</span><span class="w">            </span><span class="c1"># staging keeps logs for less time</span>
-</pre></div>
-</div>
-<p>The variable resolution order ensures staging gets <code class="docutils literal notranslate"><span class="pre">7</span></code> while production gets the workspace default <code class="docutils literal notranslate"><span class="pre">30</span></code>.</p>
+<p>Secrets are masked in output unless you pass <code class="docutils literal notranslate"><span class="pre">--reveal</span></code>. Useful for debugging “why is the wrong
+value being used?”</p>
 </section>
 <hr class="docutils" />
-<section id="recipe-change-a-variable-in-only-one-environment">
-<h2>Recipe: Change a variable in only one environment<a class="headerlink" href="#recipe-change-a-variable-in-only-one-environment" title="Link to this heading"></a></h2>
-<p><strong>Scenario:</strong> Enable debug mode in staging but not production.</p>
-<p>Only edit the staging environment file:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># envs/env-stg.yaml</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DEBUG_MODE</span>
-<span class="w">      </span><span class="nt">store</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
-<span class="w">      </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
+<section id="tool-health-check">
+<h2>Tool health check<a class="headerlink" href="#tool-health-check" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>tools<span class="w"> </span>status<span class="w">             </span><span class="c1"># show all external tools and their versions</span>
+strata<span class="w"> </span>tools<span class="w"> </span>status<span class="w"> </span>--missing<span class="w">   </span><span class="c1"># show only tools not on PATH</span>
+strata<span class="w"> </span>tools<span class="w"> </span>check<span class="w">              </span><span class="c1"># exit non-zero if any required tool is absent</span>
+strata<span class="w"> </span>tools<span class="w"> </span>install<span class="w">            </span><span class="c1"># attempt to install missing tools</span>
 </pre></div>
 </div>
-<p>Production doesn’t have this variable defined in its environment file, so it inherits the workspace default (or the variable simply doesn’t exist in production — your Terraform can use a default).</p>
+<p>Covers: Terraform, OpenTofu, Ansible, Docker, Helm, Azure CLI, kubectl, Bitwarden CLI, Vault CLI,
+and more.</p>
 </section>
 <hr class="docutils" />
-<section id="verification-workflow">
-<h2>Verification workflow<a class="headerlink" href="#verification-workflow" title="Link to this heading"></a></h2>
-<p>After making cross-environment changes:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># 1. Validate all affected deployments</span>
-strata<span class="w"> </span>validate<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>validate<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
+<section id="secret-utilities">
+<h2>Secret utilities<a class="headerlink" href="#secret-utilities" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Generate a cryptographically secure secret value (without storing it anywhere)</span>
+strata<span class="w"> </span>secret<span class="w"> </span>generate<span class="w"> </span>--type<span class="w"> </span>urlsafe<span class="w"> </span>--length<span class="w"> </span><span class="m">64</span>
+strata<span class="w"> </span>secret<span class="w"> </span>generate<span class="w"> </span>--type<span class="w"> </span>uuid4
+strata<span class="w"> </span>secret<span class="w"> </span>generate<span class="w"> </span>--type<span class="w"> </span>password<span class="w"> </span>--length<span class="w"> </span><span class="m">32</span>
 
-<span class="c1"># 2. Build plan — see what would change in each environment</span>
-strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
-strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
+<span class="c1"># Mask a secret value in a string (replaces it with ***)</span>
+strata<span class="w"> </span>secret<span class="w"> </span>mask<span class="w"> </span><span class="s2">&quot;my text containing secretvalue123&quot;</span>
+</pre></div>
+</div>
+<p>Useful for seeding Key Vault or Bitwarden from a setup script.</p>
+</section>
+<hr class="docutils" />
+<section id="ci-friendly-by-design">
+<h2>CI-friendly by design<a class="headerlink" href="#ci-friendly-by-design" title="Link to this heading"></a></h2>
+<p><strong>JSON output everywhere:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--output<span class="w"> </span>json
+</pre></div>
+</div>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;changes&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;additions&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;deletions&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nt">&quot;errors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Environment variable config:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">STRATA_FILE</span><span class="o">=</span>deploy/deploy-prd.yaml
+<span class="nb">export</span><span class="w"> </span><span class="nv">STRATA_OUTPUT</span><span class="o">=</span>json
+<span class="nb">export</span><span class="w"> </span><span class="nv">STRATA_WORK_PATH</span><span class="o">=</span>/workspace
 
-<span class="c1"># 3. Commit the change</span>
-git<span class="w"> </span>add<span class="w"> </span>-A<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Bump worker RAM to 4096 MB&quot;</span>
-
-<span class="c1"># 4. Deploy (staging first, then production)</span>
-strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-stg.yaml
-strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>--file<span class="w"> </span>deploy/deploy-prd.yaml
+strata<span class="w"> </span>build<span class="w"> </span>plan<span class="w">    </span><span class="c1"># no flags needed</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>run
+</pre></div>
+</div>
+<p><strong>Exit codes:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Code</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">0</span></code></p></td>
+<td><p>Success</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">1</span></code></p></td>
+<td><p>Execution failure / crash</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">2</span></code></p></td>
+<td><p>Usage error (bad flags)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">3</span></code></p></td>
+<td><p>Validation failure (schema-invalid)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Shell completions:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>completion<span class="w"> </span>bash<span class="w">   </span>&gt;&gt;<span class="w"> </span>~/.bashrc
+strata<span class="w"> </span>completion<span class="w"> </span>zsh<span class="w">    </span>&gt;&gt;<span class="w"> </span>~/.zshrc
+strata<span class="w"> </span>completion<span class="w"> </span>fish<span class="w">   </span>&gt;&gt;<span class="w"> </span>~/.config/fish/completions/strata.fish
+strata<span class="w"> </span>completion<span class="w"> </span>powershell<span class="w"> </span>&gt;&gt;<span class="w"> </span><span class="nv">$PROFILE</span>
 </pre></div>
 </div>
 </section>
 <hr class="docutils" />
-<section id="tips">
-<h2>Tips<a class="headerlink" href="#tips" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><strong>Use <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span></code> before deploying</strong> — it shows the exact infrastructure changes that would apply.</p></li>
-<li><p><strong>Commit config changes before deploying</strong> — so the git history reflects what was deployed and when.</p></li>
-<li><p><strong>Deploy staging first</strong> — catch issues before they hit production.</p></li>
-<li><p><strong>One change per commit</strong> — makes <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">log</span></code> useful for debugging later.</p></li>
-</ul>
+<section id="dev-container-out-of-the-box">
+<h2>Dev container out of the box<a class="headerlink" href="#dev-container-out-of-the-box" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code> creates a <code class="docutils literal notranslate"><span class="pre">.devcontainer/</span></code> in your workspace with Python 3.13, Terraform, Azure
+CLI, kubectl, and Helm pre-installed. Open in VS Code → <strong>Reopen in Container</strong>, or push to GitHub
+and open as a Codespace — no local tool setup required.</p>
+</section>
+<hr class="docutils" />
+<section id="workspace-templates">
+<h2>Workspace templates<a class="headerlink" href="#workspace-templates" title="Link to this heading"></a></h2>
+<p>Seed a new workspace with a standard structure in one command:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>sln<span class="w"> </span>init<span class="w"> </span>--name<span class="w"> </span>my-platform<span class="w"> </span>--template<span class="w"> </span>.strata/templates/three-repo-standard.yaml
+</pre></div>
+</div>
+<p>Templates declare which repos to clone, which profiles to create, and which files to link. Skip the
+manual Phase 1–4 setup for standard layouts.</p>
+</section>
+<hr class="docutils" />
+<section id="create-config-files-from-templates">
+<h2>Create config files from templates<a class="headerlink" href="#create-config-files-from-templates" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>new<span class="w"> </span>workspace
+strata<span class="w"> </span>new<span class="w"> </span>environment
+strata<span class="w"> </span>new<span class="w"> </span>deployment
+strata<span class="w"> </span>new<span class="w"> </span>provider
+strata<span class="w"> </span>new<span class="w"> </span>resource
+</pre></div>
+</div>
+<p>Scaffolds a valid YAML skeleton for the chosen kind. Faster than looking up the schema.</p>
+</section>
+<hr class="docutils" />
+<section id="inspect-json-schemas">
+<h2>Inspect JSON schemas<a class="headerlink" href="#inspect-json-schemas" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>schema<span class="w"> </span>list<span class="w">              </span><span class="c1"># list all supported YAML kinds</span>
+strata<span class="w"> </span>schema<span class="w"> </span>get<span class="w"> </span>workspace<span class="w">     </span><span class="c1"># print the full JSON schema for kind: workspace</span>
+</pre></div>
+</div>
+<p>Feed the schema into your editor’s YAML plugin for inline validation and autocompletion.</p>
+</section>
+<hr class="docutils" />
+<section id="persistent-cli-defaults">
+<h2>Persistent CLI defaults<a class="headerlink" href="#persistent-cli-defaults" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>output<span class="w"> </span>json<span class="w">           </span><span class="c1"># always use JSON output</span>
+strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>verbose<span class="w"> </span><span class="nb">true</span><span class="w">          </span><span class="c1"># always show verbose logs</span>
+strata<span class="w"> </span>config<span class="w"> </span><span class="nb">set</span><span class="w"> </span>file<span class="w"> </span>deploy/prd.yaml<span class="w">  </span><span class="c1"># default deployment file</span>
+strata<span class="w"> </span>config<span class="w"> </span>list<span class="w">                      </span><span class="c1"># verify what&#39;s set</span>
+strata<span class="w"> </span>config<span class="w"> </span><span class="nb">unset</span><span class="w"> </span>verbose<span class="w">             </span><span class="c1"># remove a default</span>
+</pre></div>
+</div>
+<p>Stored in <code class="docutils literal notranslate"><span class="pre">.strata/cli.yaml</span></code> — per-workspace, committed to git so the team shares the same
+defaults.</p>
+</section>
+<hr class="docutils" />
+<section id="extend-strata-without-touching-core-code">
+<h2>Extend strata without touching core code<a class="headerlink" href="#extend-strata-without-touching-core-code" title="Link to this heading"></a></h2>
+<p>Drop Python files into your workspace’s <code class="docutils literal notranslate"><span class="pre">.strata/</span></code> directory. strata auto-discovers and loads them
+at startup — no version upgrade, no pull request to the core repo required.</p>
+<section id="custom-integrations">
+<h3>Custom integrations<a class="headerlink" href="#custom-integrations" title="Link to this heading"></a></h3>
+<p>Add support for a new secret store, variable backend, or external tool by dropping a <code class="docutils literal notranslate"><span class="pre">.py</span></code> file
+into <code class="docutils literal notranslate"><span class="pre">.strata/integrations/</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>.strata/
+  integrations/
+    my_vault.py       ← loaded automatically at startup
+</pre></div>
+</div>
+<p>Each file’s <code class="docutils literal notranslate"><span class="pre">register()</span></code> function inserts a <code class="docutils literal notranslate"><span class="pre">type</span> <span class="pre">→</span> <span class="pre">class</span></code> mapping into <code class="docutils literal notranslate"><span class="pre">IntegrationFactory</span></code>.
+Any YAML entry whose <code class="docutils literal notranslate"><span class="pre">type:</span></code> matches the registered string gets instantiated through the factory
+from that point on:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># In your workspace or configuration YAML</span>
+<span class="nt">integrations</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_vault</span>
+<span class="w">    </span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">endpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://vault.example.com</span>
+</pre></div>
+</div>
+<p>Declare <strong>capability protocols</strong> to signal what your integration can do — the same interfaces the
+built-in integrations use:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Protocol</p></th>
+<th class="head"><p>What it enables</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ISecretStore</span></code></p></td>
+<td><p>Read secrets by key (plugs into secret resolution)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">IVariableStore</span></code></p></td>
+<td><p>Read key/value config (plugs into variable resolution)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">IFeatureFlagStore</span></code></p></td>
+<td><p>Read feature flags</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">IRepositoryTool</span></code></p></td>
+<td><p>Clone / fetch / push (git-style)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">IInfrastructureTool</span></code></p></td>
+<td><p>Plan / apply (Terraform-style)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">IContainerTool</span></code></p></td>
+<td><p>Build / run (Docker-style)</p></td>
+</tr>
+</tbody>
+</table>
+<p>A starter template is scaffolded at <code class="docutils literal notranslate"><span class="pre">.strata/integrations/my_integration.py</span></code> by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code>.</p>
+</section>
+<section id="custom-policies">
+<h3>Custom policies<a class="headerlink" href="#custom-policies" title="Link to this heading"></a></h3>
+<p>Enforce team-specific compliance rules by dropping a <code class="docutils literal notranslate"><span class="pre">.py</span></code> file into <code class="docutils literal notranslate"><span class="pre">.strata/policies/</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>.strata/
+  policies/
+    require_cost_tags.py    ← loaded automatically at startup
+</pre></div>
+</div>
+<p>The file’s <code class="docutils literal notranslate"><span class="pre">register()</span></code> call adds the type to the policy engine registry. Reference it in any
+<code class="docutils literal notranslate"><span class="pre">configuration.yaml</span></code> the same way as a built-in type:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">policies</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">require_cost_tags</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">require_cost_tags</span><span class="w">    </span><span class="c1"># matches your registered TYPE_NAME</span>
+<span class="w">      </span><span class="nt">phase</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plan</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deny</span>
+<span class="w">      </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">required_tags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">CostCenter</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Owner</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Environment</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">evaluate()</span></code> receives a <code class="docutils literal notranslate"><span class="pre">PolicyContext</span></code> containing the current phase, workspace path, resolved
+artifact, and (for the plan phase) the raw <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">show</span> <span class="pre">-json</span></code> output. Return a <code class="docutils literal notranslate"><span class="pre">PolicyResult</span></code>
+with pass/fail and structured violations.</p>
+<p>A starter template is scaffolded at <code class="docutils literal notranslate"><span class="pre">.strata/policies/my_policy.py</span></code> by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code>.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="the-escape-hatch">
+<h2>The escape hatch<a class="headerlink" href="#the-escape-hatch" title="Link to this heading"></a></h2>
+<p>If strata stops fitting your workflow:</p>
+<ol class="arabic simple">
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> one last time.</p></li>
+<li><p>Copy <code class="docutils literal notranslate"><span class="pre">.strata/build/&lt;deployment&gt;/&lt;stage&gt;/</span></code> to wherever you keep Terraform code.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">init</span> <span class="pre">&amp;&amp;</span> <span class="pre">terraform</span> <span class="pre">plan</span></code> — works without strata, no proprietary files.</p></li>
+</ol>
+<p>Your state backend is unchanged. Your modules are unchanged. Your infrastructure is unchanged.
+strata never touches <code class="docutils literal notranslate"><span class="pre">.tfstate</span></code>.</p>
 </section>
 </section>
 
@@ -2075,8 +2518,8 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="cookbook-add-environment.html" class="btn btn-neutral float-left" title="Cookbook: Add a New Environment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="troubleshooting-what-changed.html" class="btn btn-neutral float-right" title="Troubleshooting: What Changed?" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="helm-modules.html" class="btn btn-neutral float-left" title="Helm Modules" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="faq.html" class="btn btn-neutral float-right" title="Frequently Asked Questions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

@@ -23,7 +23,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Frequently Asked Questions" href="faq.html" />
+    <link rel="next" title="What strata Does — A Practical Overview" href="features.html" />
     <link rel="prev" title="How Deployment Locking Works" href="how-deployment-locking-works.html" /> 
 </head>
 
@@ -1443,6 +1443,126 @@
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0012-rename-customer-to-tenant.html#more-information">More Information</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html">Auto-generated store values (secrets, variables, features)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#yaml-declaration">YAML Declaration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#supported-generator-types">Supported Generator Types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#resolution-flow">Resolution Flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#guardrails">Guardrails</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#overwrite-protection">Overwrite Protection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#audit-logging">Audit Logging</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#security-considerations">Security Considerations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#secret-rotation-phase-3-design-sketch">Secret Rotation (Phase 3 — Design Sketch)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#approach-age-based-advisory-opt-in-regeneration">Approach: Age-Based Advisory + Opt-In Regeneration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#how-strata-knows-the-secret-s-age">How Strata Knows the Secret’s Age</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#interaction-with-overwrite-protection">Interaction with Overwrite Protection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#deployment-coordination">Deployment Coordination</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#pros-and-cons-of-the-options">Pros and Cons of the Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#option-b-separate-strata-values-seed-command">Option B: Separate <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">values</span> <span class="pre">seed</span></code> command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#option-c-terraform-native-random-password">Option C: Terraform-native random_password</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#phase-1-secret-generation-generate-on-missing">Phase 1: Secret generation (generate-on-missing)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#phase-2-variable-and-feature-defaults-seed-on-missing">Phase 2: Variable and feature defaults (seed-on-missing)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#phase-3-implementation-steps">Phase 3 Implementation Steps</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#open-questions-design-issues">Open Questions &amp; Design Issues</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#race-condition-between-parallel-builds">1. ~~Race condition between parallel builds~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#set-secret-set-variable-set-feature-don-t-exist-yet">2. ~~<code class="docutils literal notranslate"><span class="pre">set_secret()</span></code> / <code class="docutils literal notranslate"><span class="pre">set_variable()</span></code> / <code class="docutils literal notranslate"><span class="pre">set_feature()</span></code> don’t exist yet~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#dry-run-and-strata-build-plan-how-does-it-know-already-seeded">3. ~~Dry-run and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span></code> — how does it know “already seeded”?~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#multi-environment-secret-sharing">4. ~~Multi-environment secret sharing~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#default-field-type-ambiguity-for-variables">5. ~~<code class="docutils literal notranslate"><span class="pre">default</span></code> field type ambiguity for variables~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#integration-availability-at-build-time">6. ~~Integration availability at build time~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#phase-3-rotation-contradicts-phase-1-overwrite-protection">7. ~~Phase 3 rotation contradicts Phase 1 overwrite protection~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#rotation-dependency-chain-downstream-consumers">9. ~~Rotation dependency chain — downstream consumers~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#no-rollback-if-set-secret-succeeds-but-the-build-fails-later">8. ~~No rollback if <code class="docutils literal notranslate"><span class="pre">set_secret()</span></code> succeeds but the build fails later~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#spec-drift-generate-spec-changed-but-value-already-exists">10. ~~Spec drift — generate spec changed but value already exists~~</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#detailed-design">Detailed Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#layer-impact-summary">Layer Impact Summary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#models-src-strata-models-store-models-py">1. Models — <code class="docutils literal notranslate"><span class="pre">src/strata/models/store_models.py</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#secretgeneratetype-enum">1.1 <code class="docutils literal notranslate"><span class="pre">SecretGenerateType</span></code> enum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#secretgeneratespec-model-phase-1">1.2 <code class="docutils literal notranslate"><span class="pre">SecretGenerateSpec</span></code> model (Phase 1)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#secretrotatespec-model-phase-3">1.3 <code class="docutils literal notranslate"><span class="pre">SecretRotateSpec</span></code> model (Phase 3)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#updated-secretstoremodel">1.4 Updated <code class="docutils literal notranslate"><span class="pre">SecretStoreModel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#updated-variablestoremodel-phase-2">1.5 Updated <code class="docutils literal notranslate"><span class="pre">VariableStoreModel</span></code> (Phase 2)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#updated-featurestoremodel-phase-2">1.6 Updated <code class="docutils literal notranslate"><span class="pre">FeatureStoreModel</span></code> (Phase 2)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#utility-src-strata-utils-secret-generator-py">2. Utility — <code class="docutils literal notranslate"><span class="pre">src/strata/utils/secret_generator.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#integration-set-implementations">3. Integration <code class="docutils literal notranslate"><span class="pre">set_*</span></code> Implementations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#set-secret-implementations">3.1 <code class="docutils literal notranslate"><span class="pre">set_secret()</span></code> Implementations</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#azure-key-vault-azure-keyvault-py">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">azure_keyvault.py</span></code>)</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#hashicorp-vault-hashicorp-vault-py">HashiCorp Vault (<code class="docutils literal notranslate"><span class="pre">hashicorp_vault.py</span></code>)</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#bitwarden-bitwarden-py">Bitwarden (<code class="docutils literal notranslate"><span class="pre">bitwarden.py</span></code>)</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#infisical-infisical-py">Infisical (<code class="docutils literal notranslate"><span class="pre">infisical.py</span></code>)</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#set-variable-implementations">3.2 <code class="docutils literal notranslate"><span class="pre">set_variable()</span></code> Implementations</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#azure-app-configuration-azure-appconfig-py">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">azure_appconfig.py</span></code>)</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#hashicorp-consul-hashicorp-consul-py">HashiCorp Consul (<code class="docutils literal notranslate"><span class="pre">hashicorp_consul.py</span></code>)</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#id1">HashiCorp Vault (<code class="docutils literal notranslate"><span class="pre">hashicorp_vault.py</span></code>)</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#etcd-etcd-py">etcd (<code class="docutils literal notranslate"><span class="pre">etcd.py</span></code>)</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#id2">Infisical (<code class="docutils literal notranslate"><span class="pre">infisical.py</span></code>)</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#set-feature-implementations">3.3 <code class="docutils literal notranslate"><span class="pre">set_feature()</span></code> Implementations</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#id3">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">azure_appconfig.py</span></code>)</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#flagsmith-flagsmith-py">Flagsmith (<code class="docutils literal notranslate"><span class="pre">flagsmith.py</span></code>)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#valuecontroller-seed-on-missing-logic">4. ValueController — Seed-on-Missing Logic</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#updated-resolve-secret-phase-1">4.1 Updated <code class="docutils literal notranslate"><span class="pre">_resolve_secret()</span></code> (Phase 1)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#updated-resolve-variable-phase-2">4.2 Updated <code class="docutils literal notranslate"><span class="pre">_resolve_variable()</span></code> (Phase 2)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#updated-resolve-feature-phase-2">4.3 Updated <code class="docutils literal notranslate"><span class="pre">_resolve_feature()</span></code> (Phase 2)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#plan-commands-reporting-seed-status">5. Plan Commands — Reporting Seed Status</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#strata-build-plan-yaml-only-no-network">5.1 <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span></code> (YAML-only, no network)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#strata-deploy-plan-store-aware">5.2 <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">plan</span></code> (store-aware)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#id4">6. Audit Logging</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#audit-entry-fields">6.1 Audit entry fields</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#passing-deployment-context">6.2 Passing deployment context</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#phase-3-rotation-design">7. Phase 3 — Rotation Design</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#secretmetadata-dataclass">7.1 <code class="docutils literal notranslate"><span class="pre">SecretMetadata</span></code> dataclass</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#get-secret-metadata-on-storeintegration">7.2 <code class="docutils literal notranslate"><span class="pre">get_secret_metadata()</span></code> on <code class="docutils literal notranslate"><span class="pre">StoreIntegration</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#update-secret-on-storeintegration">7.3 <code class="docutils literal notranslate"><span class="pre">update_secret()</span></code> on <code class="docutils literal notranslate"><span class="pre">StoreIntegration</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#rotation-flow-in-resolve-secret">7.4 Rotation flow in <code class="docutils literal notranslate"><span class="pre">_resolve_secret()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#affected-module-detection">7.5 Affected module detection</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#integration-capability-matrix">8. Integration Capability Matrix</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#test-plan">9. Test Plan</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#model-tests">9.1 Model Tests</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#controller-tests-mock-integrations">9.2 Controller Tests (mock integrations)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#integration-tests-mock-subprocess">9.3 Integration Tests (mock subprocess)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#plan-tests">9.4 Plan Tests</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#file-change-summary">10. File Change Summary</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Guides:</span></p>
 <ul class="current">
@@ -1531,21 +1651,78 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="faq.html#why-not-terragrunt">Why not Terragrunt?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="faq.html#how-do-i-provide-an-ssh-key-for-ansible-without-putting-it-in-the-yaml">How do I provide an SSH key for Ansible without putting it in the YAML?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="faq.html#why-not-ansible">Why not Ansible?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-use-this-with-existing-terraform-state">Can I use this with existing Terraform state?</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="faq.html#adopting-strata-with-existing-infrastructure">Adopting strata with existing infrastructure:</a></li>
-<li class="toctree-l3"><a class="reference internal" href="faq.html#what-about-terraform-import">What about <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">import</span></code>?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="features.html">What strata Does — A Practical Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="features.html#configuration-as-yaml-layers-not-copy-paste">Configuration as YAML layers, not copy-paste</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="features.html#cross-repo-references">Cross-repo references</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#secret-resolution-never-in-git">Secret resolution — never in git</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="features.html#auto-generated-secrets">Auto-generated secrets</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#variable-stores-for-non-sensitive-config">Variable stores for non-sensitive config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#build-generate-your-terraform-helm-inputs">Build — generate your Terraform/Helm inputs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="features.html#preview-changes-before-you-apply">Preview changes before you apply</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#deploy-run-the-provisioner-pipeline">Deploy — run the provisioner pipeline</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="features.html#supported-provisioners">Supported provisioners</a></li>
+<li class="toctree-l3"><a class="reference internal" href="features.html#other-deploy-subcommands">Other deploy subcommands</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#deployment-locking">Deployment locking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#lifecycle-hooks-run-scripts-at-any-phase">Lifecycle hooks — run scripts at any phase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#policy-guardrails">Policy guardrails</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#schema-validation-on-any-yaml-file">Schema validation on any YAML file</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#inspect-resolved-values-before-you-deploy">Inspect resolved values before you deploy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#tool-health-check">Tool health check</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#secret-utilities">Secret utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#ci-friendly-by-design">CI-friendly by design</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#dev-container-out-of-the-box">Dev container out of the box</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#workspace-templates">Workspace templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#create-config-files-from-templates">Create config files from templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#inspect-json-schemas">Inspect JSON schemas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#persistent-cli-defaults">Persistent CLI defaults</a></li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#extend-strata-without-touching-core-code">Extend strata without touching core code</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="features.html#custom-integrations">Custom integrations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="features.html#custom-policies">Custom policies</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="features.html#the-escape-hatch">The escape hatch</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="faq.html">Frequently Asked Questions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-terraform">How does strata work with Terraform?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-ansible">How does strata work with Ansible?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#how-does-strata-work-with-helm-and-docker-compose">How does strata work with Helm and Docker Compose?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#why-not-terragrunt">Why not Terragrunt?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#why-not-ansible">Why not Ansible?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#why-yaml-and-not-hcl">Why YAML and not HCL?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-use-this-with-existing-terraform-state">Can I use this with existing Terraform state?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#can-i-mix-provisioners">Can I mix provisioners?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-support-multiple-clouds">Does strata support multiple clouds?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#what-happens-if-i-delete-strata">What happens if I delete <code class="docutils literal notranslate"><span class="pre">.strata/</span></code>?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#how-do-i-roll-back-a-deployment">How do I roll back a deployment?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="faq.html#does-strata-support-multiple-clouds">Does strata support multiple clouds?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="faq.html#can-multiple-people-deploy-at-the-same-time">Can multiple people deploy at the same time?</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="config-faq.html">Configuration FAQ</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#what-is-the-difference-between-a-workspace-and-a-deployment">What is the difference between a workspace and a deployment?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#do-i-need-an-environment-file-or-can-i-put-everything-in-the-deployment">Do I need an environment file, or can I put everything in the deployment?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#what-is-the-difference-between-variables-and-secrets">What is the difference between variables and secrets?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-variables-layer-across-workspace-environment-and-deployment">How do variables layer across workspace, environment, and deployment?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#what-does-meta-name-allow">What does <code class="docutils literal notranslate"><span class="pre">meta.name</span></code> allow?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#what-is-the-difference-between-properties-custom-and-labels">What is the difference between <code class="docutils literal notranslate"><span class="pre">properties</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>, and <code class="docutils literal notranslate"><span class="pre">labels</span></code>?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#when-do-i-need-a-configuration-file">When do I need a <code class="docutils literal notranslate"><span class="pre">configuration</span></code> file?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-many-provisioners-does-a-workspace-need">How many provisioners does a workspace need?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-share-a-provider-file-across-multiple-workspaces">How do I share a provider file across multiple workspaces?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-environment-overrides-work">How do environment overrides work?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#can-the-same-workspace-be-deployed-to-multiple-environments-simultaneously">Can the same workspace be deployed to multiple environments simultaneously?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-provide-an-ssh-key-for-ansible-without-putting-it-in-the-yaml">How do I provide an SSH key for Ansible without putting it in the YAML?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-adopt-strata-with-existing-terraform-state">How do I adopt strata with existing Terraform state?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-configure-multiple-stages-in-a-deployment">How do I configure multiple stages in a deployment?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config-faq.html#how-do-i-roll-back-a-deployment">How do I roll back a deployment?</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cookbook-add-environment.html">Cookbook: Add a New Environment</a><ul>
@@ -2114,7 +2291,7 @@ directory</p></li>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="how-deployment-locking-works.html" class="btn btn-neutral float-left" title="How Deployment Locking Works" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="faq.html" class="btn btn-neutral float-right" title="Frequently Asked Questions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="features.html" class="btn btn-neutral float-right" title="What strata Does — A Practical Overview" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
