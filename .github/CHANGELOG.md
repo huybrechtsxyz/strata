@@ -28,21 +28,6 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - `FeatureStoreModel.default` — same pattern for feature flags; default parsed as `"true"`/`"false"` string to boolean
   - Race-safe re-read fallback on write failure for both types
 
-- **New store integrations**
-  - `azure_appconfig.py` — Azure App Configuration (variables + feature flags)
-  - `azure_keyvault.py` — Azure Key Vault (secrets)
-  - `bitwarden.py` — Bitwarden CLI (secrets)
-  - `hashicorp_consul.py` — HashiCorp Consul (variables)
-  - `hashicorp_vault.py` — HashiCorp Vault (secrets)
-
-- **`strata env` command group** — consolidated environment inspection commands:
-  - `strata env drift` — infrastructure drift detection
-  - `strata env info` — workspace context summary
-  - `strata env output` — live Terraform output retrieval
-  - `strata env state` — Terraform state inspection
-  - `strata env status` — multi-environment state overview
-  - `strata env doctor` — environment health check and validation
-
 ### Changed
 
 - `ValueController._resolve_variable`, `_resolve_secret`, `_resolve_feature` — return signature extended from `(value, error)` to `(value, error, note)` to carry seed/generate annotations without polluting error lists
@@ -115,13 +100,6 @@ mv customers/ tenants/
 - **`strata new` bundle templates** — `strata new <template>` now resolves bundle templates (directories) in addition to single-file templates. A bundle directory mirrors the desired output tree; `${var}` substitution is applied to both file contents and path segments. Workspace bundles override package bundles by the same name.
 - **Overlap validation (`strata validate --path`)** — new `--path GLOB` option validates multiple deployment manifests for cross-manifest conflicts: duplicate artifact paths, Terraform backend collisions, and namespace overlaps across deployment layers. The non-overlap guarantee is now machine-checkable.
 - **Remote reference overrides** — environment files now support `spec.overrides.remotes[]` to pin a specific remote to a version, tag, or branch for that environment only. The base reference is defined once in the configuration remote; deviations are explicit per-environment overrides. `BaseBuildCommand` checks out remotes to their effective reference at build time.
-- **`strata env` command group** — new top-level command group for environment inspection:
-  - `strata env info` — workspace context summary (deployment, workspace, resolved providers)
-  - `strata env doctor` — comprehensive health checks (integration availability, config validity, connectivity)
-  - `strata env output` — retrieve live Terraform outputs for a deployment
-  - `strata env state list` / `strata env state show` — inspect Terraform state resources
-  - `strata env status` — multi-environment state overview across all deployments
-  - `strata env drift` — detect infrastructure drift between desired and actual state
 - **`OverlapController`** — new controller that orchestrates cross-manifest overlap checks (artifact paths, Terraform backends, namespaces). Used by `strata validate --path`.
 - **`RepositoryController.ensure_remote_refs`** — new method that checks out all remotes in a deployment to their effective reference before a build begins.
 - **`GitIntegration`** — new methods: `fetch`, `checkout`, `resolve_commit_sha` for fine-grained remote management.
