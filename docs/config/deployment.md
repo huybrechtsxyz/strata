@@ -53,7 +53,7 @@ spec:
 
 ```yaml
 properties:
-  customer: acme-corp
+  tenant: acme-corp
   project: platform
   environment: production
 ```
@@ -109,15 +109,15 @@ Additional configuration layers (optional):
 
 ```yaml
 configurations:
-  - name: customer_config
+  - name: tenant_config
     source:
       type: local
       repository: /
       reference: /
-      source_path: config/configurations/customer-a.yaml
+      source_path: config/configurations/tenant-a.yaml
 ```
 
-_Use for: application-specific settings, customer configs, compliance requirements_
+_Use for: application-specific settings, tenant configs, compliance requirements_
 
 ## Features, Variables & Secrets
 
@@ -135,16 +135,16 @@ features:
 variables:
   - key: DEPLOYMENT_ID
     source: constant
-    value: prod-customer-001
+    value: prod-tenant-001
 ```
 
 **Secrets** - Deployment secrets (highest precedence):
 
 ```yaml
 secrets:
-  - key: CUSTOMER_API_KEY
+  - key: TENANT_API_KEY
     source: bitwarden
-    value: customer-api-key-id
+    value: tenant-api-key-id
 ```
 
 ## Configuration Merge Order
@@ -171,7 +171,7 @@ meta:
     version: "1.0.0"
 spec:
   properties:
-    customer: acme-corp
+    tenant: acme-corp
     environment: production
   workspace:
     name: platform_workspace
@@ -193,15 +193,15 @@ spec:
 
 ```yaml
 meta:
-  name: customer_deployment
+  name: tenant_deployment
   labels:
     version: "2.0.0"
 spec:
   properties:
-    customer: customer-a
+    tenant: tenant-a
     project: saas-platform
   custom:
-    customer_id: "CUST-001"
+    tenant_id: "CUST-001"
     tier: "premium"
     sla: "99.99%"
   workspace:
@@ -225,23 +225,23 @@ spec:
         reference: /
         source_path: config/environments/us-east.yaml
   configurations:
-    - name: customer_a_config
+    - name: tenant_a_config
       source:
         type: local
         repository: /
         reference: /
-        source_path: config/configurations/customer-a.yaml
+        source_path: config/configurations/tenant-a.yaml
   features:
     premium_features: true
     advanced_analytics: true
   variables:
     - key: DEPLOYMENT_ID
       source: constant
-      value: prod-customer-a-001
+      value: prod-tenant-a-001
   secrets:
-    - key: CUSTOMER_API_KEY
+    - key: TENANT_API_KEY
       source: bitwarden
-      value: customer-a-api-key-id
+      value: tenant-a-api-key-id
 ```
 
 **GitOps:**
@@ -268,14 +268,14 @@ spec:
 
 ## Use Cases
 
-**Multi-customer SaaS:**
+**Multi-tenant SaaS:**
 
 ```text
 workspace: saas-platform.yaml (same for all)
 deployments/
-├── customer-a-deployment.yaml  # Premium tier
-├── customer-b-deployment.yaml  # Standard tier
-└── customer-c-deployment.yaml  # Enterprise tier
+├── tenant-a-deployment.yaml  # Premium tier
+├── tenant-b-deployment.yaml  # Standard tier
+└── tenant-c-deployment.yaml  # Enterprise tier
 ```
 
 **Multi-region:**
@@ -611,7 +611,7 @@ spec:
 
 ## Best Practices
 
-- **Naming:** Use pattern `<customer>_<environment>_<region>`
+- **Naming:** Use pattern `<tenant>_<environment>_<region>`
 - **Version control:** Track deployment files
 - **Immutable references:** Use specific versions for workspace/environment
 - **Layered config:** Environments for reusable, configurations for one-offs

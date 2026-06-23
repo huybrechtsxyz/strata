@@ -62,7 +62,7 @@ spec:
 
 | Type                      | Phase      | What it checks                                                                   |
 | ------------------------- | ---------- | -------------------------------------------------------------------------------- |
-| `customer_zone`           | `plan`     | Terraform resource regions vs. the customer's allowed zones                      |
+| `tenant_zone`             | `plan`     | Terraform resource regions vs. the tenant's allowed zones                        |
 | `required_tags`           | `build`    | Required tags/labels present on all resources in the platform artifact           |
 | `naming_pattern`          | `validate` | `meta.name` fields match a configured regex pattern                              |
 | `script`                  | any        | Delegates to an external command (OPA, Checkov, custom script)                   |
@@ -72,17 +72,17 @@ spec:
 | `sbom_max_components`     | `build`    | Total SBOM component count stays within a configured budget                      |
 | `sbom_license`            | `build`    | SBOM component licenses match an allow/deny list (via `strata:license` property) |
 
-### `customer_zone`
+### `tenant_zone`
 
 Evaluates at the `plan` phase, after `terraform plan` produces a plan JSON and before `terraform apply` runs.
 
 It reads:
 
-1. The customer's allowed zones from `customer.auto.tfvars.json` in the working directory.
+1. The tenant's allowed zones from `tenant.auto.tfvars.json` in the working directory.
 2. The zone-to-region mapping from `configuration.spec.zones`.
 3. Every `create` and `update` resource change in the plan JSON.
 
-For each resource change, it checks whether the target region (from `location` or `region` in the plan) falls within the customer's allowed regions. Any resource targeting a disallowed region is reported as a violation.
+For each resource change, it checks whether the target region (from `location` or `region` in the plan) falls within the tenant's allowed regions. Any resource targeting a disallowed region is reported as a violation.
 
 No `configuration` block is needed — the policy reads zone data from the configuration file automatically.
 

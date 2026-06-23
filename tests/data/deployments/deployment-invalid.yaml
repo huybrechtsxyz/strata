@@ -15,7 +15,7 @@ spec:
   # properties has invalid and missing required fields
   properties:
     deployment_type: invalid-type # Should match ^(development|production|testing)$ pattern
-    # Missing required 'customer' field
+    # Missing required 'tenant' field
     invalid_field: test # Not allowed when additional_properties=false
 
   # 'workspace' is missing required fields and has wrong types

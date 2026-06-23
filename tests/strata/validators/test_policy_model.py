@@ -28,7 +28,7 @@ def _make_policy(**kwargs):
     """Build a minimal valid PolicyModel, merging caller overrides."""
     defaults = {
         "name": "zone_check",
-        "type": "customer_zone",
+        "type": "tenant_zone",
         "phase": "plan",
     }
     defaults.update(kwargs)
@@ -46,20 +46,20 @@ class TestPolicyModel:
         model = _make_policy()
 
         assert model.name == "zone_check"
-        assert model.type == "customer_zone"
+        assert model.type == "tenant_zone"
         assert model.phase == "plan"
 
     def test_valid_with_enforcement(self):
         """All fields populated — enforcement, description, configuration, enabled."""
         model = _make_policy(
             enforcement="warn",
-            description="Ensure resources are in customer-allowed zones",
+            description="Ensure resources are in tenant-allowed zones",
             configuration={"check_all": True},
             enabled=True,
         )
 
         assert model.enforcement == "warn"
-        assert model.description == "Ensure resources are in customer-allowed zones"
+        assert model.description == "Ensure resources are in tenant-allowed zones"
         assert model.configuration == {"check_all": True}
         assert model.enabled is True
 

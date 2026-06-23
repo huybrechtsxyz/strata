@@ -20,10 +20,10 @@ spec:
         pattern: "^(dev|test|staging|prod)$"
         required: true
         description: "Deployment environment"
-      customer:
+      tenant:
         pattern: "^[a-z][a-z0-9-]*$"
         required: true
-        description: "Customer identifier"
+        description: "Tenant identifier"
 
   properties:
     deployment_manifests:

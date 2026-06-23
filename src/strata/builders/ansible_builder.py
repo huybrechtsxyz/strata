@@ -241,7 +241,7 @@ class AnsibleBuilder(BaseBuilder):
             "firewalls": self._build_firewall_vars(platform, messages),
             "dns": self._build_dns_vars(platform, messages),
             "networks": self._build_network_vars(platform, messages),
-            "customer": self._build_customer_vars(platform, messages),
+            "Tenant": self._build_tenant_vars(platform, messages),
         }
 
     def _build_workspace_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
@@ -577,26 +577,26 @@ class AnsibleBuilder(BaseBuilder):
 
         return {"strata_networks": networks_dict}
 
-    def _build_customer_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
-        """Build customer Ansible variable payload. Returns empty dict when no customer is linked."""
-        customer = platform.spec.customer
-        if not customer:
+    def _build_tenant_vars(self, platform: PlatformArtifactModel, messages: List[str]) -> Dict[str, Any]:
+        """Build tenant Ansible variable payload. Returns empty dict when no tenant is linked."""
+        tenant = platform.spec.tenant
+        if not tenant:
             return {}
 
-        customer_dict: Dict[str, Any] = {
-            "code": str(customer.code),
-            "name": customer.name,
-            "zones": list(customer.zones),
+        tenant_dict: Dict[str, Any] = {
+            "code": str(tenant.code),
+            "name": tenant.name,
+            "zones": list(tenant.zones),
         }
-        if customer.onboarded is not None:
-            customer_dict["onboarded"] = str(customer.onboarded)
-        if customer.configuration:
-            customer_dict["configuration"] = dict(customer.configuration)
+        if tenant.onboarded is not None:
+            tenant_dict["onboarded"] = str(tenant.onboarded)
+        if tenant.configuration:
+            tenant_dict["configuration"] = dict(tenant.configuration)
 
         if self.verbose:
-            messages.append(f"Built customer vars: {customer.code}")
+            messages.append(f"Built tenant vars: {tenant.code}")
 
-        return {"strata_customer": customer_dict}
+        return {"strata_tenant": tenant_dict}
 
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
@@ -735,8 +735,8 @@ class AnsibleBuilder(BaseBuilder):
         for resource_type, resources in ansible_vars.get("resources_by_type", {}).items():
             files.append((f"{p}resx_{resource_type}.yml", {f"strata_{resource_type}": resources}))
 
-        if ansible_vars.get("customer"):
-            files.append((f"{p}customer.yml", ansible_vars["customer"]))
+        if ansible_vars.get("Tenant"):
+            files.append((f"{p}tenant.yml", ansible_vars["Tenant"]))
 
         return files
 

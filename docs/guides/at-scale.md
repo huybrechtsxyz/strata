@@ -1,13 +1,13 @@
-# Operating Strata at Scale — Multi-Customer Design
+# Operating Strata at Scale — Multi-Tenant Design
 
 > **Status:** Design draft — not yet implemented.  
-> **Context:** A company using strata to manage 100+ customers across multiple regions with shared infrastructure and dedicated application resources.
+> **Context:** A company using strata to manage 100+ tenants across multiple regions with shared infrastructure and dedicated application resources.
 
 ---
 
 ## Scenario
 
-A managed services company operates a platform for 100+ customers. Each customer has:
+A managed services company operates a platform for 100+ tenants. Each tenant has:
 
 - A **code** (e.g. `acme`, `contoso`) — unique short identifier
 - A **name** (e.g. "Acme Corporation")
@@ -17,7 +17,7 @@ A managed services company operates a platform for 100+ customers. Each customer
 
 Key constraints:
 
-- **In-house deployments only** — internal ops team, no customer self-service
+- **In-house deployments only** — internal ops team, no tenant self-service
 - **Shared infrastructure** — one AKS cluster (or similar) per zone/region, shared networking and ingress
 - **Dedicated application resources** — per-customer namespace, web app, database, DNS, secrets
 - **Evolving landscapes** — new services get added, old ones get deprecated; changes should be non-breaking where possible
@@ -85,24 +85,24 @@ spec:
 
 **Key resources per zone:** AKS cluster, VNet + subnets, ACR (container registry), Key Vault (zone-scoped, path-based isolation per customer), ArgoCD instance, monitoring stack. The zone’s environment file selects which provider regions are targeted.
 
-### Layer 2: Customer Bootstrap (per customer, per zone)
+### Layer 2: Tenant Bootstrap (per tenant, per zone)
 
-Customer-specific resources provisioned **into** an existing zone. Creates the isolation boundary before apps are deployed:
+Tenant-specific resources provisioned **into** an existing zone. Creates the isolation boundary before apps are deployed:
 
 - Kubernetes namespace + RBAC policies
-- Key Vault secret scope (path-based: `customers/{code}/*`)
-- Customer storage account
+- Key Vault secret scope (path-based: `tenants/{code}/*`)
+- Tenant storage account
 - Network policies (ingress/egress rules)
 - DNS records
 
-This is what the **customer slot** concept automates (see below).
+This is what the **tenant slot** concept automates (see below).
 
-### Customer Slots (dedicated, per-customer)
+### Tenant Slots (dedicated, per-tenant)
 
-A **customer slot** is a lightweight deployment of dedicated resources **into** an existing zone. It covers two concerns:
+A **tenant slot** is a lightweight deployment of dedicated resources **into** an existing zone. It covers two concerns:
 
 1. **Infrastructure bootstrap** (Terraform, via strata) — namespace, RBAC, secrets scope, storage, network policies
-2. **Application deployment** (Helm, via ArgoCD) — the actual app instances running in the customer's namespace
+2. **Application deployment** (Helm, via ArgoCD) — the actual app instances running in the tenant's namespace
 
 Strata handles concern #1 and generates the ArgoCD ApplicationSet entries for concern #2. This separation means:
 
@@ -110,7 +110,7 @@ Strata handles concern #1 and generates the ArgoCD ApplicationSet entries for co
 - ArgoCD manages application lifecycle (deploy, upgrade, rollback app versions)
 - App teams own their Helm values; platform team owns base charts and infrastructure
 
-**Count:** ~100 customers × 4 environments = ~400 slots. Generated from a registry, not hand-authored.
+**Count:** ~100 tenants × 4 environments = ~400 slots. Generated from a registry, not hand-authored.
 
 ---
 
@@ -150,10 +150,10 @@ about its own resources.
 
 ### Why this works at 400+ deployments
 
-The 400 customer slots (100 customers × 4 environments) all reference `application.yaml`.
-The workspace defines what *can* exist in a customer deployment. The environment files
-control what *is* active for each customer and environment. No workspace changes are
-needed when onboarding a new customer — only a new deployment manifest and environment
+The 400 tenant slots (100 tenants × 4 environments) all reference `application.yaml`.
+The workspace defines what *can* exist in a tenant deployment. The environment files
+control what *is* active for each tenant and environment. No workspace changes are
+needed when onboarding a new tenant — only a new deployment manifest and environment
 overrides are needed.
 
 ```
@@ -181,7 +181,7 @@ deployments/
   zones/
     eu.yaml                         # Layer 1, workspace: infrastructure
     us.yaml                         # Layer 1, workspace: infrastructure
-  customers/
+  tenants/
     acme-eu-prd.yaml                # Layer 2, workspace: application
     acme-eu-acc.yaml                # Layer 2, workspace: application
     contoso-eu-prd.yaml             # Layer 2, workspace: application
@@ -189,39 +189,39 @@ deployments/
 ```
 
 The directory structure mirrors the layer hierarchy. Each file references the workspace
-for its layer. New customers = new files, no workspace changes.
+for its layer. New tenants = new files, no workspace changes.
 
 ---
 
 ## New Concepts
 
-### Customer Registry (`kind: customer`)
+### Tenant Registry (`kind: tenant`)
 
-One YAML file per customer. Onboarding = adding a file. Offboarding = removing it. Git blame shows who changed what for which customer.
+One YAML file per tenant. Onboarding = adding a file. Offboarding = removing it. Git blame shows who changed what for which tenant.
 
-The customer file carries an `environments` list — these are environment files that define the customer's capability profile (sizing, modules, HA, features). There is no separate "tier" concept; tiers are just environment files by convention (e.g. `environments/tiers/enterprise.yaml`).
+The tenant file carries an `environments` list — these are environment files that define the tenant's capability profile (sizing, modules, HA, features). There is no separate "tier" concept; tiers are just environment files by convention (e.g. `environments/tiers/enterprise.yaml`).
 
 #### Environment Merge Order
 
 At slot generation, strata merges two environment lists:
 
-1. **Customer environments** — from the customer file (`spec.environments`)
+1. **Tenant environments** — from the tenant file (`spec.environments`)
 2. **Deployment environments** — from the deployment matrix (lifecycle stage)
 
-Later layers override earlier ones. This means deployment-level settings (secrets, endpoints, approval gates) always win over customer-level settings (sizing, modules).
+Later layers override earlier ones. This means deployment-level settings (secrets, endpoints, approval gates) always win over tenant-level settings (sizing, modules).
 
 ```
 workspace (all resources/modules defined)
-    ↓ customer environments applied (tier: toggle modules, set sizing)
+    ↓ tenant environments applied (tier: toggle modules, set sizing)
         ↓ deployment environments applied (lifecycle: secrets, endpoints)
             = final resolved configuration for this slot
 ```
 
-#### Per-Customer File (`customers/{code}.yaml`)
+#### Per-Tenant File (`tenants/{code}.yaml`)
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
-kind: customer
+kind: tenant
 meta:
   name: acme
   annotations:
@@ -241,7 +241,7 @@ spec:
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
-kind: customer
+kind: tenant
 meta:
   name: globex
   annotations:
@@ -255,7 +255,7 @@ spec:
   onboarded: 2026-06-01
   environments:
     - environments/tiers/standard.yaml
-    - environments/customers/globex-overrides.yaml  # customer-specific tweaks
+    - environments/tenants/globex-overrides.yaml  # tenant-specific tweaks
 ```
 
 #### Tier Environment Files
@@ -334,24 +334,24 @@ Strata discovers all `*.yaml` files in `customers/` and assembles the full regis
 
 ### Generated Deployments (per customer)
 
-`strata customer generate` produces standard `kind: deployment` files — one per customer × zone × lifecycle environment. No new kind needed.
+`strata tenant generate` produces standard `kind: deployment` files — one per tenant × zone × lifecycle environment. No new kind needed.
 
 ```yaml
-# build/customers/acme-eu-production.yaml (GENERATED — not hand-authored)
+# build/tenants/acme-eu-production.yaml (GENERATED — not hand-authored)
 apiVersion: strata.huybrechts.xyz/v1
 kind: deployment
 meta:
   name: acme_eu_production
   labels:
-    customer: acme
+    tenant: acme
     zone: eu
 spec:
   properties:
-    customer: acme
+    tenant: acme
     zone: eu
   workspace: application
   environments:
-    - environments/tiers/enterprise.yaml     # from customer.environments
+    - environments/tiers/enterprise.yaml     # from tenant.environments
     - environments/production.yaml            # from deployment matrix
   inputs:
     from: deploy/zone-eu.yaml                # cross-workspace reference
@@ -361,15 +361,15 @@ The application workspace defines all possible customer resources (namespace, RB
 
 ---
 
-## Variable Flow: Customer Metadata → Terraform
+## Variable Flow: Tenant Metadata → Terraform
 
-Customer files carry two kinds of data that look similar but flow differently:
+Tenant files carry two kinds of data that look similar but flow differently:
 
 | Field                                                | Purpose                                               | Reaches Terraform?        |
 | ---------------------------------------------------- | ----------------------------------------------------- | ------------------------- |
 | `spec.configuration`                                 | Deployment metadata — routing, labeling, audit        | ❌ Not automatically       |
 | `spec.environments[]` → tier file `spec.variables[]` | Runtime values resolved at deploy time                | ✅ Yes, as `TF_VAR_*`      |
-| `spec.references.variables`                          | Declares which variable keys this customer *requires* | Contract only — no values |
+| `spec.references.variables`                          | Declares which variable keys this tenant *requires*   | Contract only — no values |
 
 ### `spec.configuration` is metadata, not Terraform input
 
@@ -459,13 +459,13 @@ variable "replica_count"         {}
 variable "backup_retention_days" {}
 ```
 
-### Pattern B — Customer-specific constants
+### Pattern B — Tenant-specific constants
 
-Put the variable in a per-customer environment override file and reference it from
-the customer file. Only that customer sees the value.
+Put the variable in a per-tenant environment override file and reference it from
+the tenant file. Only that tenant sees the value.
 
 ```yaml
-# environments/customers/acme-overrides.yaml
+# environments/tenants/acme-overrides.yaml
 spec:
   variables:
     - key: crm_id
@@ -477,11 +477,11 @@ spec:
 ```
 
 ```yaml
-# customers/acme.yaml
+# tenants/acme.yaml
 spec:
   environments:
     - environments/tiers/enterprise.yaml
-    - environments/customers/acme-overrides.yaml   # ← customer-specific values
+    - environments/tenants/acme-overrides.yaml   # ← tenant-specific values
 ```
 
 Terraform root module:
@@ -568,13 +568,13 @@ spec:
 ```
 
 If a referenced key is missing from all merged environment layers, `strata build`
-fails with: *"Customer 'acme' requires variable 'crm_id' but it is not defined in any
+fails with: *"Tenant 'acme' requires variable 'crm_id' but it is not defined in any
 merged environment layer."*
 
 ### Merge precedence (lowest → highest)
 
 1. Workspace defaults
-2. Customer tier environment files (`spec.environments`, in order)
+2. Tenant tier environment files (`spec.environments`, in order)
 3. Lifecycle/deployment environment files (dev, test, acceptance, production)
 4. Deployment `spec.variables` (highest — overrides everything)
 
@@ -686,6 +686,8 @@ The application workspace provisions the **isolation boundary** (namespace, RBAC
 
 ### Zones in Configuration
 
+### Zones in Configuration
+
 A **zone** is a logical grouping of provider regions. Zones are defined in the configuration model and serve as the bridge between customer constraints and physical infrastructure.
 
 ```yaml
@@ -739,7 +741,7 @@ A customer says `zones: [eu]`. At validation time, strata resolves:
 ### Customers reference zones
 
 ```yaml
-# customers/acme.yaml
+# tenants/acme.yaml
 spec:
   code: acme
   zones: [eu]           # allowed in EU zone only — Dublin or Amsterdam
@@ -748,7 +750,7 @@ spec:
 ```
 
 ```yaml
-# customers/globalcorp.yaml
+# tenants/globalcorp.yaml
 spec:
   code: globalcorp
   zones: [eu, us]       # multi-zone — allowed in both EU and US
@@ -786,7 +788,7 @@ The zone environment file (`environments/zones/eu.yaml`) sets the provider, regi
 
 The deployment manifest records:
 
-- Customer code and name
+- Tenant code and name
 - Zone deployed to (logical) and region deployed to (physical)
 - Jurisdiction and data residency classification
 - Tier and feature flags active at deploy time
@@ -795,26 +797,26 @@ The deployment manifest records:
 
 ## CLI Commands
 
-### `strata customer` Command Group
+### `strata tenant` Command Group
 
 ```
-strata customer list                              # list all customers from registry
-strata customer show --code acme                  # show details for one customer
-strata customer status                            # deployment status across all customers
-strata customer status --landscape alpha           # filter by landscape
-strata customer status --env production            # filter by environment
+strata tenant list                              # list all tenants from registry
+strata tenant show --code acme                  # show details for one tenant
+strata tenant status                            # deployment status across all tenants
+strata tenant status --landscape alpha           # filter by landscape
+strata tenant status --env production            # filter by environment
 ```
 
 ### Onboarding
 
 ```
-strata customer onboard --code newcorp --name "New Corp" \
+strata tenant onboard --code newcorp --name "New Corp" \
   --zones eu --env environments/tiers/standard.yaml
 ```
 
 Steps:
 1. Validate zones against configuration provider regions and data residency constraints
-2. Create customer YAML file (from template)
+2. Create tenant YAML file (from template)
 3. Generate slot descriptors for all deployment environments
 4. Create secret placeholders (team fills in values)
 5. Optionally run `strata build` + `strata deploy` for the dev environment
@@ -822,28 +824,28 @@ Steps:
 ### Lifecycle
 
 ```
-strata customer upgrade --chart-version "3.3.0"              # upgrade all customers
-strata customer upgrade --code acme --chart-version "3.3.0"  # upgrade one
-strata customer upgrade --env dev --chart-version "3.3.0"    # upgrade all dev envs
+strata tenant upgrade --chart-version "3.3.0"              # upgrade all tenants
+strata tenant upgrade --code acme --chart-version "3.3.0"  # upgrade one
+strata tenant upgrade --env dev --chart-version "3.3.0"    # upgrade all dev envs
 
-strata customer offboard --code oldcorp --confirm            # remove customer
-strata customer migrate --code contoso --from eu --to us      # zone migration
+strata tenant offboard --code oldcorp --confirm            # remove tenant
+strata tenant migrate --code contoso --from eu --to us      # zone migration
 ```
 
 ### Slot Generation
 
 ```
-strata customer generate                          # generate all slot descriptors
-strata customer generate --code acme              # generate for one customer
-strata customer generate --env production         # generate all production slots
+strata tenant generate                          # generate all slot descriptors
+strata tenant generate --code acme              # generate for one tenant
+strata tenant generate --env production         # generate all production slots
 ```
 
-Generated slot files go into `build/customers/` — they are outputs, not hand-edited source files.
+Generated slot files go into `build/tenants/` — they are outputs, not hand-edited source files.
 
 ### Status Dashboard
 
 ```
-strata customer status --landscape alpha
+strata tenant status --landscape alpha
 
 LANDSCAPE: alpha
 ZONE: eu (AKS: healthy, nodes: 12/12)
@@ -858,10 +860,10 @@ newcorp    standard     eu      ✅     🔄     —      —      3.2.1     onb
 ### Bulk Operations
 
 ```
-strata customer build --all                        # build all 400 slots
-strata customer build --code acme                  # build 4 slots for acme
-strata customer build --env production             # build 100 production slots
-strata customer deploy --code acme --env prod      # deploy one specific slot
+strata tenant build --all                        # build all 400 slots
+strata tenant build --code acme                  # build 4 slots for acme
+strata tenant build --env production             # build 100 production slots
+strata tenant deploy --code acme --env prod      # deploy one specific slot
 ```
 
 ---
@@ -873,50 +875,50 @@ At scale, configuration data and tooling have different change frequencies and r
 | Repository           | Purpose                                                          | Changes by    | Frequency            |
 | -------------------- | ---------------------------------------------------------------- | ------------- | -------------------- |
 | `platform-workspace` | Strata tooling, schemas, scripts, pipelines                      | Platform team | Infrequent           |
-| `{team}-config`      | Team's config: customers, environments, providers, deployments   | Team          | Frequent             |
+| `{team}-config`      | Team's config: tenants, environments, providers, deployments     | Team          | Frequent             |
 | `platform-global`    | Global bootstrap (Terraform + Ansible)                           | Platform team | Rare                 |
 | `{team}-zone`        | Zone bootstrap (AKS, networking, ArgoCD) per team                | Team          | On infra changes     |
-| `{team}-customer`    | Customer bootstrap templates (namespace, RBAC) per team          | Team          | Infrequent           |
+| `{team}-tenant`      | Tenant bootstrap templates (namespace, RBAC) per team            | Team          | Infrequent           |
 | `deploy-charts`      | Shared base Helm charts                                          | Platform team | On platform releases |
 | `deploy-argocd`      | ArgoCD Application manifests and ApplicationSets                 | Platform team | On app deployments   |
 | `app-*`              | Application source + app-owned Helm values + app-owned Terraform | App teams     | Frequent             |
 
-**Team isolation principle:** Each team has its own `{team}-config` repo (or directory) containing its customers, environments, and zone configs. Teams share only global resources (identity, DNS, base charts) and interfaces (provider definitions, environment templates). A team can evolve its landscape — add services, deprecate old ones — without affecting other teams.
+**Team isolation principle:** Each team has its own `{team}-config` repo (or directory) containing its tenants, environments, and zone configs. Teams share only global resources (identity, DNS, base charts) and interfaces (provider definitions, environment templates). A team can evolve its landscape — add services, deprecate old ones — without affecting other teams.
 
 **Why separate config from workspace?**
 
 - Config is data, not code — lightweight review process
-- App teams can propose customer config changes without touching tooling
+- App teams can propose tenant config changes without touching tooling
 - CI/CD clarity: config repo triggers `strata validate` → `strata deploy`; workspace repo triggers tool tests
 
 ## Directory Structure
 
 ### Config Repository (`{team}-config`)
 
-Each team has its own config repo. Teams don't see or touch each other's customers.
+Each team has its own config repo. Teams don't see or touch each other's tenants.
 
 ```
 alpha-config/
 ├── .strata/                         # links to platform-workspace
-├── customers/
-│   ├── acme.yaml                    # one file per customer
+├── tenants/
+│   ├── acme.yaml                    # one file per tenant
 │   ├── contoso.yaml
 │   ├── globex.yaml
-│   └── ...                          # ~100 files, one per customer
+│   └── ...                          # ~100 files, one per tenant
 ├── environments/
 │   ├── tiers/
 │   │   ├── starter.yaml             # kind: environment — minimal modules
 │   │   ├── standard.yaml            # kind: environment — base modules
 │   │   └── enterprise.yaml          # kind: environment — all modules, HA
-│   ├── customers/
-│   │   └── acme-overrides.yaml      # optional per-customer env overrides
+│   ├── tenants/
+│   │   └── acme-overrides.yaml      # optional per-tenant env overrides
 │   ├── dev.yaml                     # lifecycle environments
 │   ├── test.yaml
 │   ├── acceptance.yaml
 │   └── production.yaml
 ├── workspaces/
 │   ├── infrastructure.yaml          # shared infrastructure workspace
-│   └── application.yaml             # per-customer application workspace
+│   └── application.yaml             # per-tenant application workspace
 ├── providers/
 │   ├── azure-eu-west.yaml           # westeurope (Dublin)
 │   ├── azure-eu-north.yaml          # northeurope (Amsterdam)
@@ -936,7 +938,7 @@ build/
 ├── landscape-alpha-eu/            # landscape build output
 │   ├── platform.json
 │   └── sbom.json
-├── customers/                       # generated customer slots
+├── tenants/                         # generated tenant slots
 │   ├── acme-dev/
 │   ├── acme-test/
 │   ├── acme-acceptance/
@@ -945,7 +947,7 @@ build/
 │   │   ...
 │   └── globex-production/
 └── argocd/                          # generated ArgoCD manifests
-    ├── customer-appsets.yaml         # ApplicationSets per customer
+    ├── tenant-appsets.yaml         # ApplicationSets per tenant
     └── overlays/
         ├── acme-dev/
         │   └── values.yaml
@@ -962,31 +964,31 @@ build/
 | Landscapes                       | 2–5            | One config repo per team                       |
 | Zones per landscape              | 1–3            | Manual, evolves with the landscape             |
 | Landscape deployments            | ~6–15          | Standard strata workflow                       |
-| Customer files                   | ~100           | One YAML per customer per landscape            |
-| Customer deployments (generated) | ~400           | Generated from customer files × lifecycle envs |
+| Tenant files                     | ~100           | One YAML per tenant per landscape              |
+| Tenant deployments (generated)   | ~400           | Generated from tenant files × lifecycle envs   |
 | Onboarding rate                  | ~1/week        | Add one YAML file via PR                       |
-| App upgrade frequency            | Weekly–monthly | Update tier env file or per-customer env       |
+| App upgrade frequency            | Weekly–monthly | Update tier env file or per-tenant env         |
 | Infrastructure changes           | Ongoing        | Non-breaking evolution of the landscape        |
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: Customer Model + Directory-Based Discovery
+### Phase 1: Tenant Model + Directory-Based Discovery
 
-- New `customer` kind — model, service, validation
-- Directory-based discovery: scan `customers/*.yaml`, assemble registry at load time
-- Customer `environments` list resolved and validated (files must exist, must be `kind: environment`)
-- `strata customer list` / `strata customer show`
+- New `tenant` kind — model, service, validation
+- Directory-based discovery: scan `tenants/*.yaml`, assemble registry at load time
+- Tenant `environments` list resolved and validated (files must exist, must be `kind: environment`)
+- `strata tenant list` / `strata tenant show`
 - Zone validation against configuration provider regions
-- No generation, no slots — just the customer files as source of truth
+- No generation, no slots — just the tenant files as source of truth
 
 ### Phase 2: Deployment Generation
 
-- `strata customer generate` — generates standard `kind: deployment` files per customer × zone × lifecycle env
-- Merge order: customer environments first, deployment environments on top
+- `strata tenant generate` — generates standard `kind: deployment` files per tenant × zone × lifecycle env
+- Merge order: tenant environments first, deployment environments on top
 - Generated files reference the application workspace + merged environments
-- Generated files are build outputs, stored in `build/customers/`
+- Generated files are build outputs, stored in `build/tenants/`
 - Standard `strata build` / `strata deploy` pipeline handles them — no new builder
 
 ### Phase 3: Cross-Workspace Inputs
@@ -994,8 +996,8 @@ build/
 - `spec.inputs.from` field on deployment model — references upstream deployment
 - Build resolves upstream `platform.json` and injects outputs as properties
 - Validation: upstream must be built before downstream can build
-- `strata customer build` resolves infrastructure outputs automatically
-- `strata customer deploy` deploys into existing infrastructure
+- `strata tenant build` resolves infrastructure outputs automatically
+- `strata tenant deploy` deploys into existing infrastructure
 
 ### Phase 4: Lifecycle Commands
 

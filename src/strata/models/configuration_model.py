@@ -339,10 +339,10 @@ class ConfigurationDeploymentModel(PlatformBaseModel):
                 pattern: "^(dev|test|staging|prod)$"
                 required: true
                 description: "Deployment environment"
-              customer:
+              tenant:
                 pattern: "^[a-z][a-z0-9-]*$"
                 required: true
-                description: "Customer identifier"
+                description: "tenant identifier"
               region:
                 pattern: "^[a-z]{2}-[a-z]+(-[0-9]+)?$"
                 required: false
@@ -381,7 +381,7 @@ class ConfigurationDeploymentModel(PlatformBaseModel):
 class ConfigurationZoneModel(PlatformBaseModel):
     """A logical zone grouping one or more provider regions.
 
-    Zones are used to enforce data residency constraints — a customer
+    Zones are used to enforce data residency constraints — a tenant
     restricted to zone 'eu' may only be deployed to providers whose
     region is in that zone's regions list.
     """

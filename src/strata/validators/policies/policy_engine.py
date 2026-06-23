@@ -61,7 +61,7 @@ class PolicyEngine:
 
     def _create(self, policy_model: PolicyModel) -> BasePolicy:
         """Dispatch policy type to its concrete implementation."""
-        from strata.validators.policies.customer_zone_policy import CustomerZonePolicy
+        from strata.validators.policies.tenant_zone_policy import TenantZonePolicy
         from strata.validators.policies.naming_policy import NamingPolicy
         from strata.validators.policies.required_tags_policy import RequiredTagsPolicy
         from strata.validators.policies.sbom_allowed_registries_policy import SbomAllowedRegistriesPolicy
@@ -72,7 +72,7 @@ class PolicyEngine:
         from strata.validators.policies.script_policy import ScriptPolicy
 
         _builtin = {
-            "customer_zone": CustomerZonePolicy,
+            "tenant_zone": TenantZonePolicy,
             "required_tags": RequiredTagsPolicy,
             "naming_pattern": NamingPolicy,
             "script": ScriptPolicy,

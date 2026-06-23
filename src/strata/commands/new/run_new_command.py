@@ -18,7 +18,7 @@ def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
     Workspace templates (`.strata/templates/`) take precedence but both
     sources contribute to the *available* list shown to the user.  A template
     may be either a single YAML file (``namespace.yaml``) or a bundle
-    directory (``customer/``).
+    directory (``tenant/``).
 
     Args:
         work_path: Root of the current workspace, or None.
@@ -61,7 +61,7 @@ def _resolve_template_path(template: str, work_path: Optional[Path]) -> Optional
     4. Package single YAML file
 
     Args:
-        template: Template stem (e.g. ``"namespace"`` or ``"customer"``).
+        template: Template stem (e.g. ``"namespace"`` or ``"Tenant"``).
         work_path: Root of the current workspace, or None.
 
     Returns:

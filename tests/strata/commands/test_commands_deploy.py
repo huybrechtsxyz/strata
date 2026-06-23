@@ -593,13 +593,13 @@ class TestLockingWiring:
 class TestDeployList:
     """Tests for `strata deploy list`."""
 
-    def _write_deployment(self, path: Path, name: str, layers: dict | None = None, customer: str | None = None) -> Path:
+    def _write_deployment(self, path: Path, name: str, layers: dict | None = None, tenant: str | None = None) -> Path:
         """Write a minimal deployment YAML to *path/<name>.yaml*."""
         layers_yaml = ""
         if layers:
             lines = "\n".join(f"    {k}: {v}" for k, v in layers.items())
             layers_yaml = f"  layers:\n{lines}\n"
-        customer_yaml = f"  customer: {customer}\n" if customer else ""
+        tenant_yaml = f"  tenant: {tenant}\n" if tenant else ""
         content = (
             f"apiVersion: strata.huybrechts.xyz/v1\n"
             f"kind: deployment\n"
@@ -607,7 +607,7 @@ class TestDeployList:
             f"  name: {name}\n"
             f"spec:\n"
             f"{layers_yaml}"
-            f"{customer_yaml}"
+            f"{tenant_yaml}"
             f"  workspace:\n"
             f"    name: ws_{name}\n"
             f"  environments:\n"
@@ -637,7 +637,7 @@ class TestDeployList:
 
     def test_list_finds_deployment_manifests(self, tmp_path):
         """Real scan: deployment YAMLs are discovered; non-deployment files ignored."""
-        self._write_deployment(tmp_path, "acme_prd", layers={"environment": "prd"}, customer="acme")
+        self._write_deployment(tmp_path, "acme_prd", layers={"environment": "prd"}, tenant="acme")
         self._write_deployment(tmp_path, "globex_dev", layers={"environment": "dev", "zone": "eu"})
         (tmp_path / "not-a-deployment.yaml").write_text("kind: workspace\nmeta:\n  name: ws\n", encoding="utf-8")
 
@@ -652,7 +652,7 @@ class TestDeployList:
         """--output json emits a JSON array of deployment entries."""
         import json
 
-        self._write_deployment(tmp_path, "acme_prd", layers={"environment": "prd", "zone": "eu"}, customer="acme")
+        self._write_deployment(tmp_path, "acme_prd", layers={"environment": "prd", "zone": "eu"}, tenant="acme")
 
         runner = CliRunner()
         result = runner.invoke(
@@ -668,7 +668,7 @@ class TestDeployList:
         assert entry["name"] == "acme_prd"
         assert entry["environment"] == "prd"
         assert entry["zone"] == "eu"
-        assert entry["customer"] == "acme"
+        assert entry["tenant"] == "acme"
         assert entry["workspace"] == "ws_acme_prd"
         assert "file" in entry
 
@@ -691,9 +691,9 @@ class TestDeployList:
 
     def test_list_recursive_scan(self, tmp_path):
         """Manifests in subdirectories are discovered."""
-        subdir = tmp_path / "customers" / "acme"
+        subdir = tmp_path / "tenants" / "acme"
         subdir.mkdir(parents=True)
-        self._write_deployment(subdir, "acme_prd", layers={"environment": "prd"}, customer="acme")
+        self._write_deployment(subdir, "acme_prd", layers={"environment": "prd"}, tenant="acme")
 
         runner = CliRunner()
         result = runner.invoke(deploy, ["list", "--path", str(tmp_path), "--work-path", str(tmp_path)])

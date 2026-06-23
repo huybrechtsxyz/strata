@@ -18,10 +18,10 @@ spec:
   # Define deployment layering hierarchy (optional)
   # Used to construct artifact_path from deployment.spec.deployment values
   layering:
-    - name: customer
+    - name: tenant
       required: false
       default: "default"
-      description: "Customer/tenant identifier"
+      description: "Tenant identifier"
     - name: region
       required: false
       default: "global"

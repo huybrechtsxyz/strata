@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from strata.models.platform_artifact_model import (
     PlatformArtifactModel,
     PlatformComponentModel,
-    PlatformCustomerModel,
+    PlatformTenantModel,
     PlatformFirewallModel,
     PlatformLifecycleModel,
     PlatformMetaModel,
@@ -32,7 +32,7 @@ from strata.models.store_models import (
     SecretStoreModel,
     VariableStoreModel,
 )
-from strata.services.customer_service import CustomerService
+from strata.services.tenant_service import TenantService
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
 
@@ -458,36 +458,36 @@ class PlatformBuilder(BaseBuilder):
             lifecycle_model = PlatformLifecycleModel.model_validate(deployment_model.spec.lifecycle.model_dump())
 
         # ------------------------------------------------------------------
-        # Customer (load, embed, validate zone alignment)
+        # Tenant (load, embed, validate zone alignment)
         # ------------------------------------------------------------------
-        platform_customer: Optional[PlatformCustomerModel] = None
-        if deployment_model.spec.customer and work_path:
-            customer_file = work_path / "customers" / f"{deployment_model.spec.customer}.yaml"
-            if customer_file.exists():
-                customer_svc = CustomerService(str(customer_file))
-                is_valid, c_errors = customer_svc.validate()
-                if is_valid and customer_svc.model:
-                    platform_customer = PlatformCustomerModel.from_customer_model(customer_svc.model)
-                    # Zone alignment: each provider's resolved zone must be in customer.zones
-                    allowed_zones = set(platform_customer.zones)
+        platform_tenant: Optional[PlatformTenantModel] = None
+        if deployment_model.spec.tenant and work_path:
+            tenant_file = work_path / "tenants" / f"{deployment_model.spec.tenant}.yaml"
+            if tenant_file.exists():
+                tenant_svc = TenantService(str(tenant_file))
+                is_valid, c_errors = tenant_svc.validate()
+                if is_valid and tenant_svc.model:
+                    platform_tenant = PlatformTenantModel.from_tenant_model(tenant_svc.model)
+                    # Zone alignment: each provider's resolved zone must be in tenant.zones
+                    allowed_zones = set(platform_tenant.zones)
                     if providers and allowed_zones:
                         for prov in providers:
                             if prov.zone and prov.zone not in allowed_zones:
                                 self._errors.append(
                                     f"Provider '{prov.name}' is in zone '{prov.zone}' which is not "
-                                    f"allowed for customer '{platform_customer.code}'. "
-                                    f"Customer zones: {sorted(allowed_zones)}"
+                                    f"allowed for tenant '{platform_tenant.code}'. "
+                                    f"tenant zones: {sorted(allowed_zones)}"
                                 )
                             elif prov.zone is None and allowed_zones:
                                 self.logger.warning(
-                                    "Provider has no resolved zone — cannot verify customer zone alignment",
+                                    "Provider has no resolved zone — cannot verify tenant zone alignment",
                                     provider=str(prov.name),
-                                    customer=str(platform_customer.code),
+                                    tenant=str(platform_tenant.code),
                                 )
                 else:
                     self._errors.extend(c_errors)
             else:
-                self._errors.append(f"Customer file not found for '{deployment_model.spec.customer}': {customer_file}")
+                self._errors.append(f"tenant file not found for '{deployment_model.spec.tenant}': {tenant_file}")
 
         return PlatformSpecModel(
             workspace=workspace,
@@ -509,7 +509,7 @@ class PlatformBuilder(BaseBuilder):
             secrets=all_secrets,
             provisioners=provisioners,
             stereotypes=None,
-            customer=platform_customer,
+            tenant=platform_tenant,
             policies=getattr(configuration_model.spec, "policies", None) or None if configuration_model else None,
         )
 
@@ -551,16 +551,16 @@ class PlatformBuilder(BaseBuilder):
                 messages.append(f"Saved platform model to: {json_path}")
                 messages.append(f"Saved platform model to: {yaml_path}")
 
-            # Write standalone customer.json / customer.yaml when a customer is linked
-            if platform.spec.customer:
-                customer_data = platform.spec.customer.model_dump(exclude_none=True, mode="json")
-                customer_json_path = deployment_build_path / "customer.json"
-                customer_json_path.write_text(json.dumps(customer_data, indent=2), encoding="utf-8")
-                customer_yaml_path = deployment_build_path / "customer.yaml"
-                with open(customer_yaml_path, "w", encoding="utf-8") as f:
-                    yaml.dump(customer_data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-                messages.append(f"Customer snapshot written to: {customer_json_path}")
-                messages.append(f"Customer snapshot written to: {customer_yaml_path}")
+            # Write standalone tenant.json / tenant.yaml when a tenant is linked
+            if platform.spec.tenant:
+                tenant_data = platform.spec.tenant.model_dump(exclude_none=True, mode="json")
+                tenant_json_path = deployment_build_path / "tenant.json"
+                tenant_json_path.write_text(json.dumps(tenant_data, indent=2), encoding="utf-8")
+                tenant_yaml_path = deployment_build_path / "tenant.yaml"
+                with open(tenant_yaml_path, "w", encoding="utf-8") as f:
+                    yaml.dump(tenant_data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                messages.append(f"Tenant snapshot written to: {tenant_json_path}")
+                messages.append(f"Tenant snapshot written to: {tenant_yaml_path}")
 
         except Exception as exc:
             msg = f"Failed to save platform model: {exc}"

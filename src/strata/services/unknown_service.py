@@ -55,10 +55,10 @@ class UnknownService(BaseService["UnknownModel"]):
 
             return ConfigurationService.get_instance()
 
-        elif kind == PlatformKind.CUSTOMER:
-            from strata.services.customer_service import CustomerService
+        elif kind == PlatformKind.TENANT:
+            from strata.services.tenant_service import TenantService
 
-            return CustomerService(self.path)
+            return TenantService(self.path)
 
         elif kind == PlatformKind.ENVIRONMENT:
             from strata.services.environment_service import EnvironmentService

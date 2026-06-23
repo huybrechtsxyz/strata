@@ -268,7 +268,7 @@ strata new --list
 
 | Option / Argument | Description                                                       |
 | ----------------- | ----------------------------------------------------------------- |
-| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `customer`)          |
+| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `tenant`)            |
 | `NAME`            | Injected as `${name}`; used in output filenames and path segments |
 | `--path PATH`     | Output directory (default: current directory)                     |
 | `--overwrite`     | Overwrite output file(s) if they already exist                    |
@@ -280,7 +280,7 @@ strata new namespace my-app
 strata new provider azure --path config/
 strata new workspace my-ws --set owner=myteam
 strata new dns my-zones --path config/dns/
-strata new customer newcorp --path repos/xyz-config/ --set zone=eu --set tier=premium
+strata new tenant newcorp --path repos/xyz-config/ --set zone=eu --set tier=premium
 strata new --list
 ```
 
@@ -304,8 +304,8 @@ substitution runs on both file content and path segments using the same
 
 ```
 .strata/templates/
-└── customer/                  ← bundle directory
-    ├── customers/
+└── tenant/                    ← bundle directory
+    ├── tenants/
     │   └── ${name}/
     │       ├── deployments/
     │       │   ├── ${name}-dev.yaml
@@ -315,13 +315,13 @@ substitution runs on both file content and path segments using the same
     └── README.md
 ```
 
-Running `strata new customer newcorp --path repos/xyz-config/ --set zone=eu`
+Running `strata new tenant newcorp --path repos/xyz-config/ --set zone=eu`
 produces:
 
 ```
-repos/xyz-config/customers/newcorp/deployments/newcorp-dev.yaml
-repos/xyz-config/customers/newcorp/deployments/newcorp-prod.yaml
-repos/xyz-config/customers/newcorp/environments/newcorp.yaml
+repos/xyz-config/tenants/newcorp/deployments/newcorp-dev.yaml
+repos/xyz-config/tenants/newcorp/deployments/newcorp-prod.yaml
+repos/xyz-config/tenants/newcorp/environments/newcorp.yaml
 ```
 
 All `${var}` references in content and path segments are substituted from:

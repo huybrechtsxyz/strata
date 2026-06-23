@@ -1,9 +1,9 @@
 apiVersion: strata.huybrechts.xyz/v1
-kind: customer
+kind: tenant
 meta:
   # Missing required 'name' field
   annotations:
-    description: Invalid customer - missing name
+    description: Invalid tenant - missing name
 spec:
   code: invalid_co
   name: Invalid Co

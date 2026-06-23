@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, RootModel, StringConstraints
 from strata.models.auth_models import AuthenticationModel
 
 if TYPE_CHECKING:
-    from strata.models.customer_model import CustomerModel as InputCustomerModel
+    from strata.models.tenant_model import TenantModel as InputTenantModel
 
 # Core shared types
 from strata.models.common_models import (
@@ -585,29 +585,29 @@ class PlatformLifecycleModel(RootModel):
 
 
 # ---------------------------------------------------------------------------
-# Customer (snapshot of the linked CustomerModel)
+# Tenant (snapshot of the linked TenantModel)
 # ---------------------------------------------------------------------------
 
 
-class PlatformCustomerModel(BaseModel):
-    """Customer context snapshot embedded in the platform artifact.
+class PlatformTenantModel(BaseModel):
+    """tenant context snapshot embedded in the platform artifact.
 
-    Populated by the builder when ``spec.customer`` is set on the deployment.
+    Populated by the builder when ``spec.tenant`` is set on the deployment.
     Contains the fields needed by deployers/builders at runtime.
     """
 
-    code: PlatformName = Field(description="Customer code — matches meta.name and customers/<code>.yaml")
-    name: str = Field(description="Human-readable customer display name")
-    zones: List[str] = Field(description="Zones this customer is authorised to deploy into")
-    onboarded: Optional[date] = Field(None, description="ISO date the customer was onboarded")
+    code: PlatformName = Field(description="tenant code — matches meta.name and tenants/<code>.yaml")
+    name: str = Field(description="Human-readable tenant display name")
+    zones: List[str] = Field(description="Zones this tenant is authorised to deploy into")
+    onboarded: Optional[date] = Field(None, description="ISO date the tenant was onboarded")
     configuration: Optional[Dict[str, Any]] = Field(
         None,
-        description="Customer-specific key/value settings injected at slot generation time",
+        description="tenant-specific key/value settings injected at slot generation time",
     )
 
     @classmethod
-    def from_customer_model(cls, model: "InputCustomerModel") -> "PlatformCustomerModel":
-        """Create from a loaded CustomerModel."""
+    def from_tenant_model(cls, model: "InputTenantModel") -> "PlatformTenantModel":
+        """Create from a loaded TenantModel."""
         return cls(
             code=model.spec.code,
             name=model.spec.name,
@@ -683,9 +683,9 @@ class PlatformSpecModel(BaseModel):
     )
     dns_zones: Optional[List[PlatformDnsModel]] = Field(None, description="List of DNS zone definitions")
     networks: Optional[List[PlatformNetworkModel]] = Field(None, description="List of network topology definitions")
-    customer: Optional[PlatformCustomerModel] = Field(
+    tenant: Optional[PlatformTenantModel] = Field(
         None,
-        description="Customer context snapshot — present when this deployment is scoped to a customer",
+        description="tenant context snapshot — present when this deployment is scoped to a tenant",
     )
     policies: Optional[List[PolicyModel]] = Field(
         None,

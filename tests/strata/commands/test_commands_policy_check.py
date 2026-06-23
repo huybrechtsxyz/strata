@@ -379,7 +379,7 @@ class TestCheckPolicyCommandRunExecution:
         assert cmd._denied is False
 
     def test_failed_deny_policy_sets_denied(self, tmp_path):
-        pm = _make_policy_model("zone_check", "plan", enforcement="deny", type_="customer_zone")
+        pm = _make_policy_model("zone_check", "plan", enforcement="deny", type_="tenant_zone")
         pr = _make_policy_result("zone_check", "deny", passed=False, violations=["region us-east-1 not allowed"])
         cmd = self._run_with_policies(tmp_path, [pm], [pr])
         assert cmd._denied is True
@@ -392,7 +392,7 @@ class TestCheckPolicyCommandRunExecution:
         assert cmd._denied is False
 
     def test_plan_note_added_when_no_plan_file(self, tmp_path):
-        pm = _make_policy_model("zone_check", "plan", type_="customer_zone")
+        pm = _make_policy_model("zone_check", "plan", type_="tenant_zone")
         pr = _make_policy_result("zone_check", "deny", passed=True)
         cmd = self._run_with_policies(tmp_path, [pm], [pr])
         plan_notes = [n for n in cmd._notes if n["phase"] == "plan"]

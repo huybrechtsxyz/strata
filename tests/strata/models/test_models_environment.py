@@ -477,14 +477,14 @@ class TestEnvironmentIncludes:
                             "resource": "worker",
                             "includes": [
                                 {
-                                    "source": "@haven/customers/standard.tfvars",
-                                    "target": "customers.auto.tfvars.json",
+                                    "source": "@haven/tenants/standard.tfvars",
+                                    "target": "tenants.auto.tfvars.json",
                                     "strategy": "merge",
                                     "order": 0,
                                 },
                                 {
-                                    "source": "@haven/customers/acme/overrides.tfvars",
-                                    "target": "customers.auto.tfvars.json",
+                                    "source": "@haven/tenants/acme/overrides.tfvars",
+                                    "target": "tenants.auto.tfvars.json",
                                     "strategy": "merge",
                                     "order": 1,
                                 },

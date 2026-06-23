@@ -1,9 +1,9 @@
 apiVersion: strata.huybrechts.xyz/v1
-kind: customer
+kind: tenant
 meta:
   name: acme
   annotations:
-    description: ACME Corporation - standard tier customer
+    description: ACME Corporation - standard tier tenant
   labels:
     tier: standard
     version: "1.0.0"

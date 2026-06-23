@@ -46,7 +46,7 @@ class EnvironmentIncludeModel(PlatformBaseModel):
 
     source: str = Field(
         description="Source file path or glob pattern. Supports @repo/ references. "
-        "Examples: '@haven/terraform/waf/listeners/*.tf', 'customers/acme/overrides.tfvars'",
+        "Examples: '@haven/terraform/waf/listeners/*.tf', 'tenants/acme/overrides.tfvars'",
         min_length=1,
     )
     target: str = Field(
