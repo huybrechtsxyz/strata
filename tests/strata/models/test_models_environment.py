@@ -31,7 +31,7 @@ ENVIRONMENT_VALID_FILES = [
     os.path.join(ENVIRONMENT_FOLDER, "environment-insecure-secrets.yaml"),
     os.path.join(ENVIRONMENT_FOLDER, "environment-overrides.yaml"),
     os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "xyz-configuration", "environments", "xyz-env-prd.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "config", "kamatera-swarm", "environments", "kamatera-swarm-env-prd.yaml"
     ),
 ]
 
