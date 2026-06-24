@@ -21,10 +21,10 @@
 | 12  | `strata validate --path "**"` batch validation                      | 3     | done   |
 | 13  | `strata validate --explain` — plain-English file summary            | 3     | done   |
 | 14  | Validation error fix suggestions                                    | 3     | done   |
-| 15  | Interactive `strata new` inside the guide REPL                      | 3     | todo   |
-| 16  | Session progress persistence (`.strata/guide-progress.json`)        | 3     | todo   |
-| 17  | `strata env doctor` — non-interactive health check                  | 3     | issue  |
-| 18  | Standalone LLM skill file (`strata-onboarding`)                     | 4     | todo   |
+| 15  | Interactive `strata new` inside the guide REPL                      | 3     | future |
+| 16  | Session progress persistence (`.strata/guide-progress.json`)        | 3     | done   |
+| 17  | `strata env doctor` — non-interactive health check                  | 3     | future |
+| 18  | Standalone LLM skill file (`strata-onboarding`)                     | 4     | done   |
 | 19  | Progressive dependency scaffolding                                  | 5     | future |
 | 20  | Auto-refresh mode (`strata guide --auto`)                           | 5     | future |
 | 21  | Template marketplace / community templates                          | 5     | future |
