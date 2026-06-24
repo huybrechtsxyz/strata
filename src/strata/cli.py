@@ -28,6 +28,7 @@ import yaml
 from strata.commands.cli_builders import build as build_group
 from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
+from strata.commands.cli_console import console_command
 from strata.commands.cli_deploy import deploy as deploy_group
 from strata.commands.cli_env import env_group
 from strata.commands.cli_guide import guide_command
@@ -266,6 +267,7 @@ main.add_command(repo_group, name="repo")
 main.add_command(profile_group, name="profile")
 main.add_command(ref_group, name="ref")
 main.add_command(guide_command, name="guide")
+main.add_command(console_command, name="console")
 main.add_command(validate_command, name="validate")
 main.add_command(schema_group, name="schema")
 main.add_command(policy_group, name="policy")

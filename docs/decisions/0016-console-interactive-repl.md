@@ -1,6 +1,6 @@
 # `strata console` — Interactive Workspace Console
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-06-24
 - Parent: [0014-onboarding-experience.md](0014-onboarding-experience.md) (items #6, #7, #8, #9)
 
