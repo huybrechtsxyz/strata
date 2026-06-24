@@ -284,7 +284,8 @@ class InitSolutionCommand(BaseCommand):
 
 
 def _substitute(text: str, variables: dict[str, str]) -> str:
-    """Replace ``${key}`` placeholders in *text* with values from *variables*."""
+    """Replace ``${key}`` and ``{{ key }}`` placeholders in *text* with values from *variables*."""
     for key, value in variables.items():
         text = text.replace(f"${{{key}}}", value)
+        text = text.replace(f"{{{{ {key} }}}}", value)
     return text

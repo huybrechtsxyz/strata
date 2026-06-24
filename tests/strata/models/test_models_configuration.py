@@ -31,9 +31,7 @@ SCRIPTS_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "sc
 # List of YAML files to test (extensible)
 CONFIGURATION_VALID_FILES = [
     os.path.join(CONFIGURATION_FOLDER, "configuration-standard.yaml"),
-    os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "azure-aks", "config", "azure-aks-config.yaml"
-    ),
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", "azure-aks", "config", "azure-aks-config.yaml"),
 ]
 
 # List of invalid YAML files to test (extensible)
