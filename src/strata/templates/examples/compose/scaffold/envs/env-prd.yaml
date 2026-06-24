@@ -26,7 +26,7 @@ spec:
     # Set DB_PASSWORD in the environment before deploying:
     #   $env:DB_PASSWORD = "..."
     - key: DB_PASSWORD
-      store: env
+      store: environment
       value: DB_PASSWORD
 
   features:

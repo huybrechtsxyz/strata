@@ -25,14 +25,12 @@ spec:
   stages:
     # Stage 1 — provision the AKS cluster with Terraform
     - name: infrastructure
-      type: infrastructure
       provisioner: terraform
       scope: all
       on_failure: stop
 
     # Stage 2 — deploy Helm charts onto the provisioned cluster
     - name: platform
-      type: platform
       provisioner: helm
       scope: all
       depends_on: [infrastructure]

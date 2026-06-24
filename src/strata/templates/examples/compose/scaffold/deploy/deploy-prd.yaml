@@ -24,7 +24,6 @@ spec:
 
   stages:
     - name: services
-      type: platform
       provisioner: compose
       scope: all
       on_failure: stop

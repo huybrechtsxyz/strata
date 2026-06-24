@@ -16,7 +16,7 @@ spec:
       store: constant
       value: prd
     - key: AZURE_SUBSCRIPTION_ID
-      store: env
+      store: environment
       value: AZURE_SUBSCRIPTION_ID
     - key: AZURE_RESOURCE_GROUP
       store: constant
@@ -26,11 +26,11 @@ spec:
     # Azure service principal — used by Terraform
     # Replace with your Key Vault reference or secret manager entry
     - key: ARM_CLIENT_ID
-      store: env
+      store: environment
       value: ARM_CLIENT_ID
     - key: ARM_CLIENT_SECRET
-      store: env
+      store: environment
       value: ARM_CLIENT_SECRET
     - key: ARM_TENANT_ID
-      store: env
+      store: environment
       value: ARM_TENANT_ID
