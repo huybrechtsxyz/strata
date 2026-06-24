@@ -1,0 +1,26 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: gcp_gcs_artifacts
+  annotations:
+    description: GCP Cloud Storage bucket for build artifacts and state
+  labels:
+    version: "1.0.0"
+  tags: [gcp, resource, gcs, storage]
+spec:
+  properties:
+    provider_type: gcp
+    resource_type: gcs_bucket
+    category: storage
+    subcategory: object
+  configuration:
+    location: EU
+    storage_class: STANDARD
+    versioning: true
+    uniform_bucket_level_access: true
+    lifecycle_rules:
+      - action: SetStorageClass
+        storage_class: NEARLINE
+        age_days: 90
+      - action: Delete
+        age_days: 365

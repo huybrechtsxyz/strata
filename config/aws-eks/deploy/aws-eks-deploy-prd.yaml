@@ -1,0 +1,35 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: aws_eks_deploy_prd
+  annotations:
+    description: Production deployment for AWS EKS platform
+  labels:
+    version: "1.0.0"
+  tags: [aws, eks, production, deployment]
+spec:
+  layers:
+    environment: prd
+
+  properties:
+    environment: prd
+
+  workspace:
+    name: aws_eks_platform
+    description: AWS EKS Platform
+    file: "@aws_eks/stack/aws-ws-platform.yaml"
+
+  environments:
+    - "@aws_eks/environments/aws-eks-env-prd.yaml"
+
+  stages:
+    - name: infrastructure
+      provisioner: terraform
+      scope: all
+      on_failure: stop
+
+    - name: platform
+      provisioner: helm
+      scope: all
+      depends_on: [infrastructure]
+      on_failure: stop

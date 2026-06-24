@@ -1,0 +1,92 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: azure_aks_config
+  annotations:
+    description: Azure AKS platform — Terraform + Helm on Azure Kubernetes Service
+  labels:
+    version: "1.0.0"
+  tags: [azure, aks, configuration]
+spec:
+  layering:
+    - name: environment
+      description: "Deployment environment (dev, staging, prd)"
+      required: true
+
+  deployment:
+    additional_properties: false
+    properties:
+      environment:
+        pattern: "^(dev|staging|prd)$"
+        required: true
+        description: "Target environment"
+
+  zones:
+    - name: eu_west
+      description: "Western Europe (Netherlands, UK, France)"
+      regions:
+        - westeurope
+        - uksouth
+        - francecentral
+    - name: us_east
+      description: "US East (Virginia, New York)"
+      regions:
+        - eastus
+        - eastus2
+
+  remotes:
+    - name: azure_aks
+      type: gitops
+      repository: git@github.com:your-org/azure-aks-config.git
+      reference: main
+      source_path: .
+      deploy_path: .
+
+  integrations:
+    - name: git
+      type: git
+      capabilities: [repository]
+      required: true
+      validation:
+        command: git --version
+        min_version: "2.30.0"
+      authentication:
+        method: cli
+
+    - name: terraform
+      type: terraform
+      capabilities: [infrastructure]
+      required: true
+      validation:
+        command: terraform --version
+        min_version: "1.6.0"
+      authentication:
+        method: cli
+
+    - name: azure_cli
+      type: azure_cli
+      capabilities: [infrastructure]
+      required: true
+      validation:
+        command: az --version
+      authentication:
+        method: cli
+
+    - name: kubectl
+      type: kubectl
+      capabilities: [container]
+      required: true
+      validation:
+        command: kubectl version --client
+      authentication:
+        method: cli
+
+    - name: helm
+      type: helm
+      capabilities: [container]
+      required: true
+      validation:
+        command: helm version
+        min_version: "3.12.0"
+      authentication:
+        method: cli

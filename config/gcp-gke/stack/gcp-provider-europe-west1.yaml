@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: provider
+meta:
+  name: gcp_europe_west1
+  annotations:
+    description: GCP Europe West 1 (Belgium) region
+  labels:
+    version: "1.0.0"
+  tags: [gcp, provider, belgium]
+spec:
+  properties:
+    type: gcp
+    region: europe-west1

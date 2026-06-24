@@ -2,9 +2,10 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import click
+import yaml
 
 from strata.commands.base_command import BaseCommand
 from strata.logger import get_logger
@@ -48,6 +49,86 @@ def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
                     stems.add(f.name)
 
     return sorted(stems)
+
+
+def _collect_templates_with_descriptions(work_path: Optional[Path]) -> List[Dict[str, str]]:
+    """Collect all templates with descriptions from all sources.
+
+    Scans:
+    1. Package single-file templates (``.strata/templates/*.yaml``)
+    2. Package bundle templates (``templates/examples/``)
+    3. Workspace single-file templates
+    4. Workspace bundle templates
+
+    Returns a sorted list of dicts with keys: ``name``, ``description``, ``type``.
+    """
+    templates: Dict[str, Dict[str, str]] = {}
+
+    # Package single-file templates
+    pkg_dir = get_pkg_templates_path() / "solution" / "dot.strata" / "templates"
+    if pkg_dir.exists() and pkg_dir.is_dir():
+        for f in pkg_dir.iterdir():
+            if f.is_file() and f.suffix == ".yaml":
+                templates[f.stem] = {
+                    "name": f.stem,
+                    "description": f"Single-file {f.stem} template",
+                    "type": "file",
+                }
+            elif f.is_dir():
+                desc = _read_bundle_description(f)
+                templates[f.name] = {
+                    "name": f.name,
+                    "description": desc or f"Bundle template: {f.name}",
+                    "type": "bundle",
+                }
+
+    # Package scaffold templates (examples/)
+    examples_dir = get_pkg_templates_path() / "examples"
+    if examples_dir.is_dir():
+        for p in examples_dir.iterdir():
+            if p.is_dir():
+                desc = _read_bundle_description(p)
+                templates[p.name] = {
+                    "name": p.name,
+                    "description": desc or f"Scaffold template: {p.name}",
+                    "type": "scaffold",
+                }
+
+    # Workspace-local templates
+    if work_path is not None:
+        ws_dir = work_path / ".strata" / "templates"
+        if ws_dir.is_dir():
+            for f in ws_dir.iterdir():
+                if f.is_file() and f.suffix == ".yaml":
+                    templates[f.stem] = {
+                        "name": f.stem,
+                        "description": f"Workspace {f.stem} template",
+                        "type": "file (workspace)",
+                    }
+                elif f.is_dir():
+                    desc = _read_bundle_description(f)
+                    tpl_type = "scaffold (workspace)" if (f / "scaffold").is_dir() else "bundle (workspace)"
+                    templates[f.name] = {
+                        "name": f.name,
+                        "description": desc or f"Workspace template: {f.name}",
+                        "type": tpl_type,
+                    }
+
+    return sorted(templates.values(), key=lambda t: t["name"])
+
+
+def _read_bundle_description(bundle_dir: Path) -> str:
+    """Read description from template.yaml manifest if present."""
+    manifest_path = bundle_dir / "template.yaml"
+    if not manifest_path.exists():
+        return ""
+    try:
+        data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data.get("description", "")
+    except Exception:
+        pass
+    return ""
 
 
 def _resolve_template_path(template: str, work_path: Optional[Path]) -> Optional[Path]:
@@ -185,14 +266,34 @@ class NewCommand(BaseCommand):
     def _run_execution(self) -> bool:
         # --list: show available templates and exit cleanly
         if self._list_templates:
-            available = _collect_available_templates(self._work_path)
-            self._output_data = {"templates": available}
+            templates = _collect_templates_with_descriptions(self._work_path)
+            available = [t["name"] for t in templates]
+            self._output_data = {"templates": templates}
             if self._is_console_output():
-                if available:
-                    click.echo("\nAvailable templates:")
-                    for t in available:
-                        click.echo(f"  {t}")
-                    click.echo("")
+                if templates:
+                    click.echo("\nAvailable templates:\n")
+                    # Group by type
+                    file_templates = [t for t in templates if "file" in t["type"]]
+                    scaffold_templates = [t for t in templates if "scaffold" in t["type"] or "bundle" in t["type"]]
+
+                    if file_templates:
+                        click.echo("  Single-file templates (strata new <name> <NAME>):")
+                        for t in file_templates:
+                            ws_tag = " *" if "workspace" in t["type"] else ""
+                            click.echo(f"    {t['name']}{ws_tag}")
+                        click.echo("")
+
+                    if scaffold_templates:
+                        click.echo("  Scaffold bundles (strata sln init --template <name>):")
+                        for t in scaffold_templates:
+                            ws_tag = " *" if "workspace" in t["type"] else ""
+                            desc = f" — {t['description']}" if t["description"] else ""
+                            click.echo(f"    {t['name']}{desc}{ws_tag}")
+                        click.echo("")
+
+                    if any("workspace" in t["type"] for t in templates):
+                        click.echo("  * = workspace-local template (.strata/templates/)")
+                        click.echo("")
                 else:
                     click.echo("No templates found.")
             return True
@@ -285,7 +386,7 @@ class NewCommand(BaseCommand):
         Walks *bundle_dir* recursively. For every file:
 
         - Each path segment is rendered through ``TemplateProcessor.render()``
-          (same ``${var}`` substitution as file content).
+          (same ``{{ var }}`` substitution as file content).
         - The file content is rendered the same way.
         - The rendered relative path is joined onto the output root (``--path``
           or CWD) to produce the final destination.
@@ -300,7 +401,7 @@ class NewCommand(BaseCommand):
         created: list[str] = []
 
         for src_file in bundle_files:
-            # Render ${var} in every path segment
+            # Render {{ var }} in every path segment
             rel = src_file.relative_to(bundle_dir)
             rendered_parts = [TemplateProcessor.render(part, context) for part in rel.parts]
             output_path = output_root.joinpath(*rendered_parts)

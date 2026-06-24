@@ -1,0 +1,21 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: hetzner_vm_app
+  annotations:
+    description: Hetzner Cloud server for application workloads
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, resource, server]
+spec:
+  properties:
+    provider_type: hetzner
+    resource_type: cloud_server
+    category: compute
+    subcategory: virtual_machine
+  configuration:
+    server_type: cx31
+    image: ubuntu-24.04
+    location: fsn1
+    ssh_keys: [deploy-key]
+    backups: true

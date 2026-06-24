@@ -1,0 +1,72 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: hetzner_config
+  annotations:
+    description: Hetzner Cloud platform — Terraform + Docker Compose with INWX DNS
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, inwx, configuration]
+spec:
+  layering:
+    - name: environment
+      description: "Deployment environment (dev, staging, prd)"
+      required: true
+
+  deployment:
+    additional_properties: false
+    properties:
+      environment:
+        pattern: "^(dev|staging|prd)$"
+        required: true
+        description: "Target environment"
+
+  zones:
+    - name: eu_central
+      description: "Central Europe (Falkenstein, Nuremberg)"
+      regions:
+        - fsn1
+        - nbg1
+    - name: eu_west
+      description: "Western Europe (Helsinki, Ashburn)"
+      regions:
+        - hel1
+
+  remotes:
+    - name: hetzner_platform
+      type: gitops
+      repository: git@github.com:your-org/hetzner-platform.git
+      reference: main
+      source_path: .
+      deploy_path: .
+
+  integrations:
+    - name: git
+      type: git
+      capabilities: [repository]
+      required: true
+      validation:
+        command: git --version
+        min_version: "2.30.0"
+      authentication:
+        method: cli
+
+    - name: terraform
+      type: terraform
+      capabilities: [infrastructure]
+      required: true
+      validation:
+        command: terraform --version
+        min_version: "1.6.0"
+      authentication:
+        method: cli
+
+    - name: docker
+      type: docker
+      capabilities: [container]
+      required: true
+      validation:
+        command: docker --version
+        min_version: "24.0.0"
+      authentication:
+        method: cli

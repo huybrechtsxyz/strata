@@ -1,0 +1,23 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: gcp_gke_cluster
+  annotations:
+    description: GKE Autopilot cluster
+  labels:
+    version: "1.0.0"
+  tags: [gcp, gke, resource, kubernetes]
+spec:
+  properties:
+    provider_type: gcp
+    resource_type: gke_cluster
+    category: compute
+    subcategory: kubernetes
+  configuration:
+    cluster_mode: autopilot
+    release_channel: REGULAR
+    network: vpc-platform-prd
+    subnetwork: subnet-gke-prd
+    master_ipv4_cidr: "172.16.0.0/28"
+    enable_private_nodes: true
+    enable_private_endpoint: false

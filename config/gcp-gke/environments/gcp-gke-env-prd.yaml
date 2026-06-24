@@ -1,0 +1,43 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: gcp_gke_env_prd
+  annotations:
+    description: Production environment for GCP GKE platform
+  labels:
+    version: "1.0.0"
+  tags: [gcp, gke, production, environment]
+spec:
+  variables:
+    - key: WORKSPACE
+      store: constant
+      value: gcp_gke
+    - key: ENVIRONMENT
+      store: constant
+      value: prd
+    - key: GCP_PROJECT_ID
+      store: environment
+      value: GCP_PROJECT_ID
+    - key: GCP_REGION
+      store: constant
+      value: europe-west1
+    - key: GKE_CLUSTER_NAME
+      store: constant
+      value: gke-platform-prd
+    - key: GKE_NETWORK
+      store: constant
+      value: vpc-platform-prd
+    - key: CLOUD_SQL_INSTANCE
+      store: constant
+      value: cloudsql-platform-prd
+    - key: ARTIFACT_REGISTRY
+      store: constant
+      value: europe-west1-docker.pkg.dev/${GCP_PROJECT_ID}/platform
+    - key: GCS_ARTIFACTS_BUCKET
+      store: constant
+      value: platform-artifacts-prd
+
+  secrets:
+    - key: GOOGLE_CREDENTIALS
+      store: environment
+      value: GOOGLE_CREDENTIALS

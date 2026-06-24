@@ -1,0 +1,23 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: aws_eks_cluster
+  annotations:
+    description: AWS EKS cluster with managed node group
+  labels:
+    version: "1.0.0"
+  tags: [aws, eks, resource, kubernetes]
+spec:
+  properties:
+    provider_type: aws
+    resource_type: eks_cluster
+    category: compute
+    subcategory: kubernetes
+  configuration:
+    kubernetes_version: "1.30"
+    node_group_instance_types: ["m5.xlarge"]
+    node_group_desired: 3
+    node_group_min: 2
+    node_group_max: 6
+    endpoint_private_access: true
+    endpoint_public_access: false

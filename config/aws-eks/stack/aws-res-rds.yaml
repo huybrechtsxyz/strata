@@ -1,0 +1,25 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: aws_rds_postgres
+  annotations:
+    description: AWS RDS PostgreSQL instance with Multi-AZ
+  labels:
+    version: "1.0.0"
+  tags: [aws, resource, rds, postgresql, database]
+spec:
+  properties:
+    provider_type: aws
+    resource_type: rds_instance
+    category: database
+    subcategory: relational
+  configuration:
+    engine: postgres
+    engine_version: "16.3"
+    instance_class: db.r6g.large
+    allocated_storage: 100
+    max_allocated_storage: 500
+    multi_az: true
+    storage_encrypted: true
+    deletion_protection: true
+    backup_retention_period: 14

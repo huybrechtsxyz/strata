@@ -1,61 +1,39 @@
 # config/
 
-Live workspace configuration for the XYZ Platform deployment. This folder is the primary `work_path` consumed by the CLI — it contains the YAML documents that describe what the platform runs and where.
+Reference example workspaces demonstrating strata across different cloud providers and deployment patterns. Each sub-directory is a self-contained workspace showing the full file dependency chain: **configuration → environment → workspace → resources/namespaces/modules → deployment**.
 
-Each sub-folder is an independent xyz workspace (has its own `.platform/` state directory).
+Use these as a starting point or learning resource alongside `strata new --list` and `strata sln init --template`.
 
-## Sub-workspaces
+## Example Workspaces
 
-### `xyz-configuration/`
+| Directory | Cloud | Stack | Description |
+|-----------|-------|-------|-------------|
+| [`azure-aks/`](azure-aks/) | Azure | Terraform + Helm | AKS cluster with Traefik ingress |
+| [`aws-eks/`](aws-eks/) | AWS | Terraform + Helm | EKS cluster with ALB Controller |
+| [`gcp-gke/`](gcp-gke/) | GCP | Terraform + Helm | GKE Autopilot with NGINX ingress |
+| [`hetzner-compose/`](hetzner-compose/) | Hetzner | Terraform + Compose | Cloud server with Docker Compose + INWX DNS |
+| [`kamatera-swarm/`](kamatera-swarm/) | Kamatera | Terraform + Swarm | Virtual machines with Docker Swarm + Traefik |
 
-Platform configuration documents: providers, namespaces, firewalls, modules, workspaces, and the cluster stack. These files are the source of truth for what services run on the platform.
+## Common Structure
 
-```
-xyz-configuration/
-├── config/             # CLI preferences and logging profile
-│   ├── xyz-config.yaml
-│   └── xyz-logging.yaml
-├── environments/       # Environment overlays (prd, stg, …)
-│   └── xyz-env-prd.yaml
-└── stack/              # Per-service configuration documents
-    ├── xyz-dc-eu-fr.yaml    # kind: provider  — Kamatera EU-FR datacenter
-    ├── xyz-fw-base.yaml     # kind: firewall   — base firewall rules
-    ├── xyz-md-traefik.yaml  # kind: module     — Traefik ingress module
-    ├── xyz-ns-base.yaml     # kind: namespace  — base namespace
-    ├── xyz-rx-vm-infra.yaml # kind: resource   — infra VM
-    ├── xyz-rx-vm-manager.yaml
-    ├── xyz-rx-vm-worker.yaml
-    └── xyz-ws-platform.yaml # kind: workspace  — platform workspace
-```
-
-### `xyz-infrastructure/`
-
-Terraform infrastructure and deployment configuration for the underlying cloud resources.
+Every example follows the same directory layout:
 
 ```
-xyz-infrastructure/
-├── deployments/        # Deployment YAML documents consumed by xyz deploy
-│   └── xyz-deploy-prd.yaml
-├── scripts/            # Operational helper scripts
-│   └── deploy.ps1
-└── terraform/          # Terraform root module
-    ├── main.tf
-    ├── variables.tf
-    ├── outputs.tf
-    ├── locals.tf
-    └── backends/       # Per-environment backend configurations
+<workspace>/
+├── config/          # kind: configuration — remotes, integrations, zones
+├── environments/    # kind: environment   — variables + secrets per env
+├── stack/           # kind: workspace, provider, resource, namespace, module
+└── deploy/          # kind: deployment    — ties workspace + env into stages
 ```
 
-### `xyz-svc-traefik/`
+## Validating Examples
 
-Static configuration for the Traefik reverse proxy service running on the platform.
+```bash
+# Validate a single deployment
+strata validate -f config/azure-aks/deploy/azure-aks-deploy-prd.yaml
 
-## Usage
-
-```powershell
-# Validate all configuration documents
-uv run xyz-platform validate --work-path config/xyz-configuration
-
-# Check workspace status
-uv run xyz-platform status --work-path config/xyz-configuration
+# Validate all YAML files in an example
+for f in config/azure-aks/**/*.yaml; do strata validate -f "$f"; done
 ```
+
+---

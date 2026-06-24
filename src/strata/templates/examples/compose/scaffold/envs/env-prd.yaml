@@ -1,17 +1,17 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: environment
 meta:
-  name: ${solution_name}_env_prd
+  name: {{ solution_name }}_env_prd
   annotations:
-    description: Production environment variables for ${solution_name}
+    description: Production environment variables for {{ solution_name }}
   labels:
     version: "1.0.0"
-  tags: [${solution_name}, production, environment]
+  tags: [{{ solution_name }}, production, environment]
 spec:
   variables:
     - key: WORKSPACE
       store: constant
-      value: ${solution_name}
+      value: {{ solution_name }}
     - key: ENVIRONMENT
       store: constant
       value: prd
@@ -24,9 +24,9 @@ spec:
 
   secrets:
     # Set DB_PASSWORD in the environment before deploying:
-    #   $env:DB_PASSWORD = "..."
+    #   {{ env }}:DB_PASSWORD = "..."
     - key: DB_PASSWORD
-      store: env
+      store: environment
       value: DB_PASSWORD
 
   features:

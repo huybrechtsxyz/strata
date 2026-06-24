@@ -1,0 +1,57 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: workspace
+meta:
+  name: aws_eks_platform
+  annotations:
+    description: AWS EKS workspace — Terraform provisions, Helm deploys
+  labels:
+    version: "1.0.0"
+  tags: [aws, eks, workspace]
+spec:
+  providers:
+    - name: aws_eu_west_1
+      file: "@aws_eks/stack/aws-provider-eu-west-1.yaml"
+
+  provisioners:
+    - name: terraform
+      provisioner: terraform
+      source:
+        repository: aws_eks
+        source_path: terraform
+
+    - name: helm
+      provisioner: helm
+      source:
+        repository: aws_eks
+        source_path: charts
+
+  topology:
+    - name: eks_cluster
+      provider: aws_eu_west_1
+      provisioner: terraform
+      type: kubernetes
+      components:
+        - resource: eks_cluster
+        - resource: rds_postgres
+        - resource: ecr
+        - resource: s3_artifacts
+      namespaces:
+        - namespace: platform
+
+  resources:
+    - name: eks_cluster
+      file: "@aws_eks/stack/aws-res-eks.yaml"
+      description: AWS EKS managed Kubernetes cluster
+    - name: rds_postgres
+      file: "@aws_eks/stack/aws-res-rds.yaml"
+      description: AWS RDS PostgreSQL (Multi-AZ)
+    - name: ecr
+      file: "@aws_eks/stack/aws-res-ecr.yaml"
+      description: AWS Elastic Container Registry
+    - name: s3_artifacts
+      file: "@aws_eks/stack/aws-res-s3.yaml"
+      description: S3 bucket for artifacts and state
+
+  namespaces:
+    - name: platform
+      file: "@aws_eks/stack/aws-ns-platform.yaml"

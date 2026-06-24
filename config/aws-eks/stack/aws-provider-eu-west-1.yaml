@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: provider
+meta:
+  name: aws_eu_west_1
+  annotations:
+    description: AWS Europe (Ireland) region
+  labels:
+    version: "1.0.0"
+  tags: [aws, provider, ireland]
+spec:
+  properties:
+    type: aws
+    region: eu-west-1

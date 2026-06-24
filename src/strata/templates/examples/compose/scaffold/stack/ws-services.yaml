@@ -1,22 +1,22 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: workspace
 meta:
-  name: ${solution_name}_services
+  name: {{ solution_name }}_services
   annotations:
-    description: Docker Compose / Swarm services workspace for ${solution_name}
+    description: Docker Compose / Swarm services workspace for {{ solution_name }}
   labels:
     version: "1.0.0"
-  tags: [${solution_name}, workspace, compose]
+  tags: [{{ solution_name }}, workspace, compose]
 spec:
   providers:
     - name: docker
-      file: "@${solution_name}/config/${solution_name}-config.yaml"
+      file: "@{{ solution_name }}/config/{{ solution_name }}-config.yaml"
 
   provisioners:
     - name: compose
       provisioner: compose
       source:
-        repository: ${solution_name}
+        repository: {{ solution_name }}
         source_path: stack
 
   topology:
@@ -31,9 +31,9 @@ spec:
 
   resources:
     - name: docker_host
-      file: "@${solution_name}/stack/res-host.yaml"
+      file: "@{{ solution_name }}/stack/res-host.yaml"
       description: Docker Swarm manager node
 
   namespaces:
     - name: app
-      file: "@${solution_name}/stack/ns-app.yaml"
+      file: "@{{ solution_name }}/stack/ns-app.yaml"

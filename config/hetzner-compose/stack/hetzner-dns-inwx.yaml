@@ -1,0 +1,30 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: dns
+meta:
+  name: hetzner_dns_inwx
+  annotations:
+    description: INWX DNS records for Hetzner platform services
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, inwx, dns]
+spec:
+  provider: inwx
+  references:
+    variables:
+      - SERVER_IP
+  zones:
+    - name: example.com
+      ttl: 3600
+      records:
+        - name: "@"
+          type: A
+          var: SERVER_IP
+        - name: "www"
+          type: CNAME
+          value: "example.com."
+        - name: "api"
+          type: A
+          var: SERVER_IP
+        - name: "traefik"
+          type: A
+          var: SERVER_IP

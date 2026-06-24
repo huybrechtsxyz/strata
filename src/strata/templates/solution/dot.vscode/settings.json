@@ -37,9 +37,9 @@
       "source.organizeImports.ruff": "explicit"
     }
   },
-  "python.envFile": "${workspaceFolder}/.env",
-  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-  "python.testing.cwd": "${workspaceFolder}",
+  "python.envFile": "{{ workspaceFolder }}/.env",
+  "python.defaultInterpreterPath": "{{ workspaceFolder }}\\.venv\\Scripts\\python.exe",
+  "python.testing.cwd": "{{ workspaceFolder }}",
   "python.testing.pytestArgs": [
     "tests"
   ],
@@ -56,16 +56,16 @@
     ".coverage": true
   },
   "yaml.schemas": {
-    "${workspaceFolder}/.strata/schemas/configuration.json": [
+    "{{ workspaceFolder }}/.strata/schemas/configuration.json": [
       "config/**/*.yaml"
     ],
-    "${workspaceFolder}/.strata/schemas/deployment.json": [
+    "{{ workspaceFolder }}/.strata/schemas/deployment.json": [
       "deploy/**/*.yaml"
     ],
-    "${workspaceFolder}/.strata/schemas/environment.json": [
+    "{{ workspaceFolder }}/.strata/schemas/environment.json": [
       "envs/**/*.yaml"
     ],
-    "${workspaceFolder}/.strata/schemas/workspace.json": [
+    "{{ workspaceFolder }}/.strata/schemas/workspace.json": [
       "stack/**/*.yaml"
     ]
   }

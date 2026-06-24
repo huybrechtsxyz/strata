@@ -30,7 +30,7 @@ WORKSPACE_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "
 WORKSPACE_VALID_FILES = [
     os.path.join(WORKSPACE_FOLDER, "workspace-standard.yaml"),
     os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "xyz-configuration", "stack", "xyz-ws-platform.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "config", "kamatera-swarm", "stack", "kamatera-ws-platform.yaml"
     ),
 ]
 

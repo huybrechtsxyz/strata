@@ -66,13 +66,22 @@ Solution workspace lifecycle commands.
 Initialize a new strata solution workspace. Creates the `.strata/` state directory, workspace defaults, and a ready-to-use `.devcontainer/` for VS Code Dev Containers and GitHub Codespaces.
 
 ```
-strata sln init --name NAME [--template NAME-OR-PATH] [standard options]
+strata sln init --name NAME [--template NAME-OR-PATH] [--list] [standard options]
 ```
 
 | Option                    | Required | Description                                                                                                                               |
 | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `--name NAME`             | ✅        | Name of the solution workspace                                                                                                            |
 | `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`, `compose`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
+| `--list`                  | —        | List available scaffold templates and exit. Does not require `--name`.                                                                     |
+
+**Discovering templates:**
+
+```bash
+strata sln init --list
+```
+
+Shows built-in templates (shipped with strata) and workspace-local templates (`.strata/templates/` directories with a `scaffold/` subdirectory). Each template's description is pulled from its `template.yaml` manifest.
 
 **Files created:**
 
@@ -90,6 +99,7 @@ All `.devcontainer/` files are written **idempotently** — existing files are n
 
 ```bash
 strata sln init --name my-platform
+strata sln init --name my-platform --template aks
 strata sln init --name my-platform --template .strata/templates/my-corp-base/
 ```
 
@@ -170,7 +180,7 @@ strata sln status --output json
 
 ### `sln export`
 
-Export the current workspace as a reusable scaffold template. Copies all workspace files into `.strata/templates/<name>/scaffold/`, replaces every occurrence of the solution name with `${solution_name}` in file content and file paths, then generates a `template.yaml` manifest.
+Export the current workspace as a reusable scaffold template. Copies all workspace files into `.strata/templates/<name>/scaffold/`, replaces every occurrence of the solution name with `{{ solution_name }}` in file content and file paths, then generates a `template.yaml` manifest.
 
 ```
 strata sln export --name NAME [--force] [--dry-run] [standard options]
@@ -186,7 +196,7 @@ strata sln export --name NAME [--force] [--dry-run] [standard options]
 
 | Path                                     | Description                                           |
 | ---------------------------------------- | ----------------------------------------------------- |
-| `.strata/templates/<name>/scaffold/`     | Workspace files with `${solution_name}` substitutions |
+| `.strata/templates/<name>/scaffold/`     | Workspace files with `{{ solution_name }}` substitutions |
 | `.strata/templates/<name>/template.yaml` | Template manifest (name, description, variables)      |
 
 **Excluded from export:** `.git/`, `repos/`, `.venv/`, `node_modules/`, `.strata/logs/`, `__pycache__/`, `*.pyc`, `*.log`
@@ -205,7 +215,7 @@ strata sln export --name my-corp-base --force
 
 ## `vars`
 
-Manage team-shared template variables stored in `solution.json`. Variables are substituted as `${key}` in platform YAML files.
+Manage team-shared template variables stored in `solution.json`. Variables are substituted as `{{ key }}` in platform YAML files.
 
 | Subcommand      | Description                          |
 | --------------- | ------------------------------------ |
@@ -269,11 +279,18 @@ strata new --list
 | Option / Argument | Description                                                       |
 | ----------------- | ----------------------------------------------------------------- |
 | `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `tenant`)            |
-| `NAME`            | Injected as `${name}`; used in output filenames and path segments |
+| `NAME`            | Injected as `{{ name }}`; used in output filenames and path segments |
 | `--path PATH`     | Output directory (default: current directory)                     |
 | `--overwrite`     | Overwrite output file(s) if they already exist                    |
 | `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)           |
 | `--list`          | List available templates and bundles, then exit                   |
+
+**Template discovery** — `strata new --list` shows all templates grouped by type:
+
+- **Single-file templates** — create one YAML file (e.g. `namespace`, `provider`, `tenant`)
+- **Scaffold bundles** — multi-file workspace starters from `templates/examples/` and `.strata/templates/` (e.g. `aks`, `compose`). Use via `strata sln init --template <name>`.
+
+Workspace-local templates are marked with `*` in the output.
 
 ```bash
 strata new namespace my-app
@@ -298,20 +315,20 @@ Workspace templates always override the package defaults.
 ### Bundle templates
 
 A **bundle** is a directory under `.strata/templates/` that contains multiple
-template files. The directory tree is the output structure — `${var}`
+template files. The directory tree is the output structure — `{{ var }}`
 substitution runs on both file content and path segments using the same
-`${var}` syntax as single-file templates.
+`{{ var }}` syntax as single-file templates.
 
 ```
 .strata/templates/
 └── tenant/                    ← bundle directory
     ├── tenants/
-    │   └── ${name}/
+    │   └── {{ name }}/
     │       ├── deployments/
-    │       │   ├── ${name}-dev.yaml
-    │       │   └── ${name}-prod.yaml
+    │       │   ├── {{ name }}-dev.yaml
+    │       │   └── {{ name }}-prod.yaml
     │       └── environments/
-    │           └── ${name}.yaml
+    │           └── {{ name }}.yaml
     └── README.md
 ```
 
@@ -324,7 +341,7 @@ repos/xyz-config/tenants/newcorp/deployments/newcorp-prod.yaml
 repos/xyz-config/tenants/newcorp/environments/newcorp.yaml
 ```
 
-All `${var}` references in content and path segments are substituted from:
+All `{{ var }}` references in content and path segments are substituted from:
 - `name` — the `NAME` argument (always available)
 - `--set KEY=VALUE` overrides
 - Team context from `solution.json` (if present)
@@ -839,6 +856,55 @@ strata guide
 strata guide --output json
 strata guide --file config/my-config.yaml
 strata guide -f @myrepo/config/app.yaml
+```
+
+---
+
+## `console`
+
+Interactive workspace session with guided onboarding. Launches a persistent REPL that keeps workspace state in memory, offers command completion, and provides a guided experience where users can scaffold, validate, and explore without leaving the session.
+
+```
+strata console [OPTIONS]
+```
+
+| Option             | Type | Default       | Description                                                                 |
+| ------------------ | ---- | ------------- | --------------------------------------------------------------------------- |
+| `--work-path PATH` | path | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH`, then CWD walk.  |
+| `--no-color`       | flag | off           | Disable color output.                                                       |
+
+**Exit code:** `0` on normal exit · `1` on crash.
+
+### REPL Commands
+
+| Command                 | Alias | Action                                  |
+| ----------------------- | ----- | --------------------------------------- |
+| `status`                | `s`   | Show workspace checklist                |
+| `check <file>`          | `c`   | Inspect a YAML file                     |
+| `next`                  | `n`   | Show next step with hint                |
+| `do`                    | `d`   | Execute the suggested next-step command |
+| `new <template> [name]` | —     | Scaffold a file via `strata new`        |
+| `validate [file\|glob]` | `v`   | Run validation                          |
+| `graph [--mode]`        | `g`   | Render dependency graph                 |
+| `templates`             | `t`   | List available templates                |
+| `tools`                 | —     | Check external tool availability        |
+| `open <file>`           | `o`   | Open file in editor                     |
+| `reload`                | —     | Reload workspace state from disk        |
+| `help`                  | `?`   | Show command table                      |
+| `clear`                 | —     | Clear terminal                          |
+| `quit`                  | `q`   | Exit console                            |
+
+### Features
+
+- **Tab completion** for commands, template names, and file paths
+- **Session history** persisted to `.strata/console-history`
+- **Auto-refresh** — checklist re-evaluates after state-changing commands and shows deltas
+- **Rich output** — panels, tables, and progress bars via the Rich library
+- **Works without init** — starts even when `.strata/` is absent; shows phase 1 as pending
+
+```bash
+strata console
+strata console --no-color
 ```
 
 ---

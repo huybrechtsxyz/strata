@@ -1,5 +1,5 @@
 {
-  "name": "${SOLUTION_NAME}",
+  "name": "{{ SOLUTION_NAME }}",
   "image": "mcr.microsoft.com/devcontainers/python:3.13",
   "features": {
     "ghcr.io/devcontainers/features/azure-cli:1": {
@@ -43,6 +43,6 @@
     }
   },
   "remoteEnv": {
-    "STRATA_WORK_PATH": "${containerWorkspaceFolder}"
+    "STRATA_WORK_PATH": "{{ containerWorkspaceFolder }}"
   }
 }

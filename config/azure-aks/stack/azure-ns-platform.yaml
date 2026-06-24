@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: azure_aks_ns_platform
+  annotations:
+    description: Platform namespace — ingress, monitoring, and shared services
+  labels:
+    version: "1.0.0"
+  tags: [azure, aks, namespace, platform]
+spec:
+  modules:
+    - name: traefik
+      file: "@azure_aks/stack/azure-mod-traefik.yaml"

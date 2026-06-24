@@ -1,0 +1,21 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: aws_ecr
+  annotations:
+    description: AWS Elastic Container Registry for container images
+  labels:
+    version: "1.0.0"
+  tags: [aws, resource, ecr, registry]
+spec:
+  properties:
+    provider_type: aws
+    resource_type: ecr_repository
+    category: container
+    subcategory: registry
+  configuration:
+    image_tag_mutability: IMMUTABLE
+    scan_on_push: true
+    encryption_type: KMS
+    lifecycle_policy:
+      max_image_count: 50

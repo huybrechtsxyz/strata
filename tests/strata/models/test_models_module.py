@@ -35,7 +35,7 @@ MODULE_FOLDER = os.path.join(os.path.dirname(__file__), "..", "..", "data", "mod
 MODULE_VALID_FILES = [
     os.path.join(MODULE_FOLDER, "module-standard.yaml"),
     os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "config", "xyz-configuration", "stack", "xyz-md-traefik.yaml"
+        os.path.dirname(__file__), "..", "..", "..", "config", "kamatera-swarm", "stack", "kamatera-mod-traefik.yaml"
     ),
 ]
 

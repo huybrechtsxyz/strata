@@ -1,0 +1,26 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: module
+meta:
+  name: azure_aks_mod_traefik
+  annotations:
+    description: Traefik ingress controller deployed via Helm on AKS
+  labels:
+    version: "1.0.0"
+  tags: [azure, aks, module, traefik, ingress]
+spec:
+  type: helm
+  source:
+    chart_repository: https://helm.traefik.io/traefik
+    chart_name: traefik
+    chart_version: "28.0.0"
+  kubernetes_namespace: traefik
+  services:
+    - name: traefik
+      configuration:
+        ingressClass:
+          enabled: true
+          isDefaultClass: true
+        service:
+          type: LoadBalancer
+          annotations:
+            service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /ping

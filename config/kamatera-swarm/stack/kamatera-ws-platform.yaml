@@ -1,0 +1,69 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: workspace
+meta:
+  name: kamatera_swarm_platform
+  annotations:
+    description: Kamatera Docker Swarm platform workspace
+  labels:
+    version: "1.0.0"
+  tags: [kamatera, swarm, workspace]
+spec:
+  providers:
+    - name: kamatera_eu_fr
+      file: "@kamatera_swarm/stack/kamatera-provider-eu-fr.yaml"
+
+  provisioners:
+    - name: terraform
+      provisioner: terraform
+      source:
+        repository: kamatera_swarm
+        source_path: terraform
+
+  topology:
+    - name: kamatera_swarm
+      provider: kamatera_eu_fr
+      provisioner: terraform
+      type: docker_swarm
+      volumes:
+        - name: config
+          type: replicated
+        - name: docs
+          type: replicated
+        - name: data
+          type: local
+        - name: logs
+          type: local
+        - name: serve
+          type: distributed
+      components:
+        - resource: kamatera_vm_manager
+        - resource: kamatera_vm_infra
+        - resource: kamatera_vm_worker
+
+  resources:
+    - name: kamatera_vm_manager
+      file: "@kamatera_swarm/stack/kamatera-res-vm-manager.yaml"
+      role: manager
+      count: 1
+      firewalls:
+        - kamatera_fw
+    - name: kamatera_vm_infra
+      file: "@kamatera_swarm/stack/kamatera-res-vm-infra.yaml"
+      role: worker
+      count: 2
+      firewalls:
+        - kamatera_fw
+    - name: kamatera_vm_worker
+      file: "@kamatera_swarm/stack/kamatera-res-vm-worker.yaml"
+      role: worker
+      count: 2
+      firewalls:
+        - kamatera_fw
+
+  namespaces:
+    - name: kamatera_ns_base
+      file: "@kamatera_swarm/stack/kamatera-ns-base.yaml"
+
+  firewalls:
+    - name: kamatera_fw
+      file: "@kamatera_swarm/stack/kamatera-fw-base.yaml"

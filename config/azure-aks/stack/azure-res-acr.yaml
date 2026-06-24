@@ -1,0 +1,21 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: azure_acr
+  annotations:
+    description: Azure Container Registry for storing container images
+  labels:
+    version: "1.0.0"
+  tags: [azure, resource, acr, registry]
+spec:
+  properties:
+    provider_type: azure
+    resource_type: container_registry
+    category: container
+    subcategory: registry
+  configuration:
+    sku: Premium
+    admin_enabled: false
+    geo_replication:
+      - westeurope
+      - uksouth

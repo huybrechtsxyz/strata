@@ -1,12 +1,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: resource
 meta:
-  name: ${solution_name}_aks_cluster
+  name: {{ solution_name }}_aks_cluster
   annotations:
-    description: Azure Kubernetes Service cluster for ${solution_name}
+    description: Azure Kubernetes Service cluster for {{ solution_name }}
   labels:
     version: "1.0.0"
-  tags: [${solution_name}, resource, azure, aks, kubernetes]
+  tags: [{{ solution_name }}, resource, azure, aks, kubernetes]
 spec:
   properties:
     provider_type: azure

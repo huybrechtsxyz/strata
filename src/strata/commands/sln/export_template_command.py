@@ -244,19 +244,19 @@ class SolutionExportCommand(BaseCommand):
             click.echo(f"    {rel_path}{sub_info}")
         click.echo("")
         click.echo(
-            f"🔁  Total substitutions of '{solution_name}' → '${{solution_name}}': {sum(s for _, _, s in files)}"
+            f"🔁  Total substitutions of '{solution_name}' → '{{{{ solution_name }}}}': {sum(s for _, _, s in files)}"
         )
 
 
 def _substitute(text: str, solution_name: str) -> tuple:
-    """Replace all occurrences of *solution_name* with ``${solution_name}`` in *text*.
+    """Replace all occurrences of *solution_name* with ``{{ solution_name }}`` in *text*.
 
     Returns (new_text, count).
     """
     if not solution_name:
         return text, 0
     count = text.count(solution_name)
-    return text.replace(solution_name, "${solution_name}"), count
+    return text.replace(solution_name, "{{ solution_name }}"), count
 
 
 @click.command(name="export", help="Export the current workspace as a reusable scaffold template.")

@@ -24,6 +24,26 @@ function Get-ProjectRoot {
 $projectRoot = Get-ProjectRoot
 Set-Location $projectRoot
 
+# ── 0. Clean stray .strata/ folders ─────────────────────────────────────────
+# Tests and manual runs can leave .strata/ folders in places they shouldn't be.
+# Only the config/ example workspaces should have them.
+$strayStrata = Get-ChildItem -Path $projectRoot -Recurse -Directory -Filter ".strata" -Force |
+Where-Object {
+    $rel = $_.FullName.Substring($projectRoot.Length + 1)
+    # Keep .strata in config/ example workspaces (they're part of the examples)
+    $rel -notlike "config\*" -and
+    # Keep the workspace root .strata/ (if this IS a strata workspace)
+    $rel -ne ".strata"
+}
+if ($strayStrata.Count -gt 0) {
+    Write-Host "[*] Cleaning stray .strata/ folders..." -ForegroundColor DarkYellow
+    $strayStrata | ForEach-Object {
+        Write-Host "    [-] $($_.FullName.Substring($projectRoot.Length + 1))" -ForegroundColor DarkYellow
+        Remove-Item -Recurse -Force $_.FullName
+    }
+    Write-Host ""
+}
+
 Write-Host "[*] ==========================================" -ForegroundColor Cyan
 Write-Host "[*] strata - Code Quality Check" -ForegroundColor Cyan
 Write-Host "[*] ==========================================" -ForegroundColor Cyan

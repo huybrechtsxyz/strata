@@ -6,12 +6,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: workspace
 meta:
-  name: ${name}
+  name: {{ name }}
   annotations:
     description: "Platform workspace template"
-    owner: ${owner}
+    owner: {{ owner }}
   labels:
-    version: ${version}
+    version: {{ version }}
   tags: ["template", "workspace"]
 spec:
   # Providers (cloud/infrastructure providers)

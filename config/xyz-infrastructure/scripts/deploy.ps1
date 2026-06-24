@@ -1,1 +1,0 @@
-Write-Host "Deploying infrastructure using Terraform..."

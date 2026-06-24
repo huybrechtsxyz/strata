@@ -1,0 +1,29 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: kamatera_swarm_deploy_prd
+  annotations:
+    description: Production deployment for Kamatera Docker Swarm platform
+  labels:
+    version: "1.0.0"
+  tags: [kamatera, swarm, production, deployment]
+spec:
+  layers:
+    environment: prd
+
+  properties:
+    environment: prd
+
+  workspace:
+    name: kamatera_swarm_platform
+    description: Kamatera Docker Swarm Platform Workspace
+    file: "@kamatera_swarm/stack/kamatera-ws-platform.yaml"
+
+  environments:
+    - "@kamatera_swarm/environments/kamatera-swarm-env-prd.yaml"
+
+  stages:
+    - name: infrastructure
+      provisioner: terraform
+      scope: all
+      on_failure: stop

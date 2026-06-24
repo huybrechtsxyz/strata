@@ -20,7 +20,7 @@ class InitSolutionCommand(BaseCommand):
     ``<name>.code-workspace`` file in the work path.
 
     When *template* is given, the matching scaffold folder is copied into
-    the workspace root with ``${solution_name}`` (and any other declared
+    the workspace root with ``{{ solution_name }}`` (and any other declared
     variables) substituted throughout file contents and filenames.
     """
 
@@ -173,7 +173,7 @@ class InitSolutionCommand(BaseCommand):
 
         - Substitutes ``${variable_name}`` in file contents and relative paths.
         - Skips files that already exist (idempotent).
-        - ``${solution_name}`` is always available from ``--name``.
+        - ``{{ solution_name }}`` is always available from ``--name``.
         """
         variables = self._build_variables()
 
@@ -284,7 +284,8 @@ class InitSolutionCommand(BaseCommand):
 
 
 def _substitute(text: str, variables: dict[str, str]) -> str:
-    """Replace ``${key}`` placeholders in *text* with values from *variables*."""
+    """Replace ``${key}`` and ``{{ key }}`` placeholders in *text* with values from *variables*."""
     for key, value in variables.items():
         text = text.replace(f"${{{key}}}", value)
+        text = text.replace(f"{{{{ {key} }}}}", value)
     return text

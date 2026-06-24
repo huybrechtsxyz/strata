@@ -1,0 +1,22 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: azure_postgres
+  annotations:
+    description: Azure Database for PostgreSQL — Flexible Server
+  labels:
+    version: "1.0.0"
+  tags: [azure, resource, postgresql, database]
+spec:
+  properties:
+    provider_type: azure
+    resource_type: postgresql_flexible
+    category: database
+    subcategory: relational
+  configuration:
+    sku_name: GP_Standard_D2s_v3
+    storage_mb: 32768
+    postgresql_version: "16"
+    geo_redundant_backup: true
+    high_availability:
+      mode: ZoneRedundant

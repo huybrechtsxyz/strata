@@ -491,6 +491,12 @@ class BaseService(ABC, Generic[ModelT]):
         if error_type == "missing":
             return "this field is required"
         if error_type == "extra_forbidden":
+            # Try to suggest the closest valid field name
+            input_value = error.get("input")
+            loc = error.get("loc", ())
+            if loc:
+                bad_field = str(loc[-1])
+                return f"unexpected field '{bad_field}' (not allowed — check spelling or remove it)"
             return "unexpected field (not allowed)"
 
         return error.get("msg", str(error))

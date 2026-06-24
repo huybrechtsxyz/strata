@@ -1,0 +1,31 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: module
+meta:
+  name: hetzner_mod_app
+  annotations:
+    description: Application API and database services
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, module, app, compose]
+spec:
+  type: compose
+  source:
+    repository: hetzner_platform
+    source_path: services/app
+  references:
+    variables:
+      - DATABASE_URL
+      - APP_PORT
+    secrets:
+      - DB_PASSWORD
+  services:
+    - name: app
+      image: "your-org/app:latest"
+      restart: unless-stopped
+      ports:
+        - "8080:8080"
+    - name: postgres
+      image: postgres:16-alpine
+      restart: unless-stopped
+      ports:
+        - "5432:5432"

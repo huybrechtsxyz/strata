@@ -8,6 +8,7 @@ from strata.models.firewall_model import FirewallModel
 from strata.models.workspace_model import WorkspaceModel
 from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
+from strata.services.dns_service import DnsService
 from strata.services.firewall_service import FirewallService
 from strata.services.module_service import ModuleService
 from strata.services.namespace_service import NamespaceService
@@ -255,6 +256,9 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
             if self.model.spec.firewalls:
                 for fw in self.model.spec.firewalls:
                     file_refs.append((f"Firewall '{fw.name}'", fw.file))
+            if self.model.spec.dns_zones:
+                for dz in self.model.spec.dns_zones:
+                    file_refs.append((f"DNS zone '{dz.name}'", dz.file))
             errors.extend(self._validate_file_refs(work_path, repo_map, file_refs))
 
         return len(errors) == 0, errors
@@ -460,6 +464,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
             "resources": {},
             "namespaces": {},
             "firewalls": {},
+            "dns_zones": {},
             "modules": {},
         }
         if self.model is None:
@@ -473,6 +478,40 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         # Solution names take precedence so @haven/... refs resolve correctly.
         config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_remote_map()
         repo_map = {**config_repo_map, **(repo_map or {})}
+
+        # Load DNS zone services from workspace spec dns_zones
+        if workspace.spec.dns_zones:
+            self.logger.debug("Loading DNS zones", count=len(workspace.spec.dns_zones))
+            for dns_ref in workspace.spec.dns_zones:
+                dns_path = self._resolve_file_path(dns_ref.file, objects_path, repo_map)
+                dns_key = dns_ref.name
+                try:
+                    dns_service = cast(DnsService, DnsService.load(dns_path, validate=True))
+                    if dns_service.is_validated():
+                        services["dns_zones"][dns_key] = dns_service
+                        self.logger.debug("Loaded DNS zone", name=dns_key, path=dns_path)
+                    else:
+                        success = False
+                        errors = dns_service.get_validation_errors()
+                        self._validation_errors.append(f"DNS zone '{dns_ref.name}' validation failed")
+                        self._validation_errors.extend(errors)
+                        self.logger.warning(
+                            "DNS zone validation failed",
+                            name=dns_ref.name,
+                            path=dns_path,
+                            error_count=len(errors),
+                        )
+                except Exception as e:
+                    success = False
+                    self._validation_errors.append(
+                        f"Failed to load DNS zone '{dns_ref.name}' from {dns_path}: {str(e)}"
+                    )
+                    self.logger.error(
+                        "Failed to load DNS zone",
+                        name=dns_ref.name,
+                        path=dns_path,
+                        exc_info=True,
+                    )
 
         # Load firewall services from workspace spec firewalls
         if workspace.spec.firewalls:
@@ -770,6 +809,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
                 modules=len(services["modules"]),
                 namespaces=len(services["namespaces"]),
                 firewalls=len(services["firewalls"]),
+                dns_zones=len(services["dns_zones"]),
             )
         else:
             self.logger.warning(
@@ -779,6 +819,21 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
             )
 
         return services, success
+
+    def get_dns_services(self) -> Optional[Dict[str, DnsService]]:
+        """Get all DNS zone services keyed by name."""
+        value = self._get_workspace_related_services("dns_zones", None)
+        if value is not None and isinstance(value, dict):
+            casted = {k: cast(DnsService, v) for k, v in value.items() if isinstance(v, DnsService)}
+            return casted
+        return None
+
+    def get_dns_service(self, dns_name: str) -> Optional[DnsService]:
+        """Get a specific DNS zone service by name."""
+        value = self._get_workspace_related_services("dns_zones", dns_name)
+        if value is not None and isinstance(value, DnsService):
+            return cast(DnsService, value)
+        return None
 
     def get_firewall_services(self) -> Optional[Dict[str, FirewallService]]:
         """Get a specific firewall service by name."""

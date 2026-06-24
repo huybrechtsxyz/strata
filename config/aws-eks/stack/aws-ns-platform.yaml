@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: aws_eks_ns_platform
+  annotations:
+    description: Platform namespace — ingress controller and monitoring
+  labels:
+    version: "1.0.0"
+  tags: [aws, eks, namespace, platform]
+spec:
+  modules:
+    - name: alb_controller
+      file: "@aws_eks/stack/aws-mod-alb-controller.yaml"

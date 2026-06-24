@@ -1,12 +1,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: deployment
 meta:
-  name: ${solution_name}_deploy_prd
+  name: {{ solution_name }}_deploy_prd
   annotations:
-    description: Production deployment for the ${solution_name} AKS platform
+    description: Production deployment for the {{ solution_name }} AKS platform
   labels:
     version: "1.0.0"
-  tags: [${solution_name}, production, deployment, aks]
+  tags: [{{ solution_name }}, production, deployment, aks]
 spec:
   layers:
     environment: prd
@@ -15,24 +15,22 @@ spec:
     environment: prd
 
   workspace:
-    name: ${solution_name}_platform
-    description: ${solution_name} Platform Workspace
-    file: "@${solution_name}/stack/ws-platform.yaml"
+    name: {{ solution_name }}_platform
+    description: {{ solution_name }} Platform Workspace
+    file: "@{{ solution_name }}/stack/ws-platform.yaml"
 
   environments:
-    - "@${solution_name}/envs/env-prd.yaml"
+    - "@{{ solution_name }}/envs/env-prd.yaml"
 
   stages:
     # Stage 1 — provision the AKS cluster with Terraform
     - name: infrastructure
-      type: infrastructure
       provisioner: terraform
       scope: all
       on_failure: stop
 
     # Stage 2 — deploy Helm charts onto the provisioned cluster
     - name: platform
-      type: platform
       provisioner: helm
       scope: all
       depends_on: [infrastructure]

@@ -45,6 +45,51 @@ class TestInitCommand:
             result = runner.invoke(init_command, ["--name", "myapp", "--work-path", str(tmp_path)])
         assert result.exit_code != 0
 
+    def test_list_templates_shows_builtins(self, tmp_path):
+        """--list shows built-in scaffold templates without requiring --name."""
+        runner = CliRunner()
+        result = runner.invoke(init_command, ["--list", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "aks" in result.output
+        assert "compose" in result.output
+
+    def test_list_templates_json_output(self, tmp_path):
+        """--list --output json returns structured template data."""
+        import json
+
+        runner = CliRunner()
+        result = runner.invoke(init_command, ["--list", "--output", "json", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["success"] is True
+        names = [t["name"] for t in data["data"]["templates"]]
+        assert "aks" in names
+        assert "compose" in names
+
+    def test_list_templates_includes_workspace_templates(self, tmp_path):
+        """--list picks up scaffold templates from .strata/templates/."""
+        # Create a workspace-local scaffold template
+        tpl_dir = tmp_path / ".strata" / "templates" / "custom-stack"
+        scaffold_dir = tpl_dir / "scaffold"
+        scaffold_dir.mkdir(parents=True)
+        (scaffold_dir / "file.yaml").write_text("x: 1\n", encoding="utf-8")
+        (tpl_dir / "template.yaml").write_text(
+            "name: custom-stack\ndescription: My custom workspace template\nvariables: []\n",
+            encoding="utf-8",
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(init_command, ["--list", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "custom-stack" in result.output
+        assert "My custom workspace template" in result.output
+
+    def test_list_without_name_does_not_error(self):
+        """--list without --name must succeed (no missing option error)."""
+        runner = CliRunner()
+        result = runner.invoke(init_command, ["--list"])
+        assert result.exit_code == 0
+
 
 class TestSlnInitCommand:
     def test_sln_init_missing_name_returns_exit_2(self):
@@ -61,3 +106,12 @@ class TestSlnInitCommand:
         with patch("strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True):
             result = runner.invoke(sln_group, ["init", "--name", "myapp", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
+
+    def test_sln_init_list(self, tmp_path):
+        """sln init --list shows available templates via the sln group."""
+        from strata.commands.cli_sln import sln_group
+
+        runner = CliRunner()
+        result = runner.invoke(sln_group, ["init", "--list", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "aks" in result.output

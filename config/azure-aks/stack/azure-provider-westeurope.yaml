@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: provider
+meta:
+  name: azure_westeurope
+  annotations:
+    description: Azure West Europe region
+  labels:
+    version: "1.0.0"
+  tags: [azure, provider, westeurope]
+spec:
+  properties:
+    type: azure
+    region: westeurope

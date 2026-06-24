@@ -315,7 +315,7 @@ class TestSolutionControllerScaffoldDevcontainer:
         """Populate templates_root/solution/dot.devcontainer/ with minimal fixtures."""
         dc_dir = templates_root / "solution" / "dot.devcontainer"
         dc_dir.mkdir(parents=True)
-        (dc_dir / "devcontainer.json").write_text('{"name": "${SOLUTION_NAME}"}', encoding="utf-8")
+        (dc_dir / "devcontainer.json").write_text('{"name": "{{ SOLUTION_NAME }}"}', encoding="utf-8")
         (dc_dir / "post-create.sh").write_text("#!/bin/bash\necho hello\n", encoding="utf-8")
 
     @staticmethod
@@ -366,7 +366,7 @@ class TestSolutionControllerScaffoldDevcontainer:
             ctrl._scaffold_platform_dir()
         content = (tmp_path / ".devcontainer" / "devcontainer.json").read_text(encoding="utf-8")
         assert "my-solution" in content
-        assert "${SOLUTION_NAME}" not in content
+        assert "{{ SOLUTION_NAME }}" not in content
 
     def test_post_create_sh_no_substitution(self, tmp_path):
         """post-create.sh is copied verbatim — no variable substitution."""

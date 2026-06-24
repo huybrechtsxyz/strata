@@ -341,7 +341,7 @@ an existing file.
 ### Bundle templates (multi-file scaffolding)
 
 A template can also be a **directory** under `.strata/templates/`. The
-directory tree is the output structure — `${var}` substitution runs on both
+directory tree is the output structure — `{{ var }}` substitution runs on both
 file content and path segments. This is how you scaffold multiple related files
 (deployments, environments, values stubs) in a single command without
 hardcoding anything in strata itself.

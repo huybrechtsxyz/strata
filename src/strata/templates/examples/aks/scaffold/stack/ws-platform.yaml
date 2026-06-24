@@ -1,30 +1,30 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: workspace
 meta:
-  name: ${solution_name}_platform
+  name: {{ solution_name }}_platform
   annotations:
-    description: AKS platform workspace for ${solution_name}
+    description: AKS platform workspace for {{ solution_name }}
   labels:
     version: "1.0.0"
-  tags: [${solution_name}, workspace, aks]
+  tags: [{{ solution_name }}, workspace, aks]
 spec:
   providers:
     - name: azure
-      file: "@${solution_name}/config/${solution_name}-config.yaml"
+      file: "@{{ solution_name }}/config/{{ solution_name }}-config.yaml"
 
   provisioners:
     # Terraform provisions the AKS cluster and supporting infrastructure
     - name: terraform
       provisioner: terraform
       source:
-        repository: ${solution_name}
+        repository: {{ solution_name }}
         source_path: terraform
 
     # Helm deploys application charts onto the provisioned cluster
     - name: helm
       provisioner: helm
       source:
-        repository: ${solution_name}
+        repository: {{ solution_name }}
         source_path: stack
 
   topology:
@@ -39,9 +39,9 @@ spec:
 
   resources:
     - name: aks_cluster
-      file: "@${solution_name}/stack/res-aks.yaml"
+      file: "@{{ solution_name }}/stack/res-aks.yaml"
       description: Azure Kubernetes Service cluster
 
   namespaces:
     - name: base
-      file: "@${solution_name}/stack/ns-base.yaml"
+      file: "@{{ solution_name }}/stack/ns-base.yaml"

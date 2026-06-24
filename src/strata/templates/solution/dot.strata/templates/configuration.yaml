@@ -6,12 +6,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: configuration
 meta:
-  name: ${name}
+  name: {{ name }}
   annotations:
     description: "Configuration template for platform setup"
-    owner: ${owner}
+    owner: {{ owner }}
   labels:
-    version: ${version}
+    version: {{ version }}
     environment: "template"
   tags: [ "template", "example" ]
 spec:

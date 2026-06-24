@@ -1,0 +1,28 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: network
+meta:
+  name: azure_net_platform
+  annotations:
+    description: Azure Virtual Network for the AKS platform
+  labels:
+    version: "1.0.0"
+  tags: [azure, network, vnet]
+spec:
+  networks:
+    - name: vnet_platform
+      description: Platform VNet for AKS and supporting services
+      address_space:
+        - value: "10.0.0.0/16"
+      subnets:
+        - name: snet_aks
+          cidr:
+            value: "10.0.0.0/20"
+          description: AKS node pool subnet
+        - name: snet_postgres
+          cidr:
+            value: "10.0.16.0/24"
+          description: PostgreSQL delegated subnet
+        - name: snet_endpoints
+          cidr:
+            value: "10.0.17.0/24"
+          description: Private endpoints (ACR, Key Vault)
