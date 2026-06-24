@@ -97,6 +97,7 @@ strata
    decisions/0012-rename-customer-to-tenant
    decisions/0013-auto-generated-secrets
    decisions/0014-onboarding-experience
+   decisions/0015-flow-command-dependency-graph
 
 .. toctree::
    :maxdepth: 2
