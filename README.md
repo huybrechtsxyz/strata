@@ -13,11 +13,12 @@ You already have Terraform. The problem is you have eight environment folders â€
 ```bash
 pipx install xyz-strata                        # install
 strata sln init                                             # scaffold a new config workspace
+strata console                                              # interactive guided session
 strata validate --file stack/my-environment.yaml        # validate before you touch anything
 strata deploy run --file deploy/my-environment.yaml     # deploy to the target environment
 ```
 
-New here? See the [feature overview](docs/guides/features.md) for a practical rundown of what strata does, or the [Getting Started guide](docs/platform/getting-started.md) for the full walkthrough. Dev install: `uv sync`.
+New here? See the [feature overview](docs/guides/features.md) for a practical rundown of what strata does, or the [Getting Started guide](docs/platform/getting-started.md) for the full walkthrough. Run `strata --help` to see all commands. Dev install: `uv sync`.
 
 **No PyPI access? Using a Dev Container?** Inject strata from the published image â€” no Python install required:
 

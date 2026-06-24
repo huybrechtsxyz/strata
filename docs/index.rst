@@ -98,6 +98,8 @@ strata
    decisions/0013-auto-generated-secrets
    decisions/0014-onboarding-experience
    decisions/0015-flow-command-dependency-graph
+   decisions/0016-console-interactive-repl
+   decisions/0017-jinja2-template-engine
 
 .. toctree::
    :maxdepth: 2

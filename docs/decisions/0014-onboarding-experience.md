@@ -12,7 +12,7 @@
 | 3 | Fix template bundles (`type:` → `provisioner:`) | 1 | done |
 | 4 | CI template validation test | 1 | done |
 | 5 | Formalize `config/` as reference example workspace | 1 | done |
-| 6 | `strata guide` → interactive REPL (prompt_toolkit) | 2 | todo |
+| 6 | `strata console` — interactive workspace session (prompt_toolkit) | 2 | todo |
 | 7 | REPL commands: status, check, next, do, new, validate, flow, tools | 2 | todo |
 | 8 | `GuideController` extraction from `GuideCommand` | 2 | todo |
 | 9 | Rich rendering (panels, tables, progress bar) | 2 | todo |
