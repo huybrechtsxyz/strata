@@ -100,6 +100,30 @@ Always use `handle_command_exit(command, success)` from `cli_common.py` to map t
 
 ---
 
+## Contributing Example Workspaces
+
+The `config/` directory contains complete, validated reference workspaces that demonstrate strata for different cloud providers and deployment strategies. These serve as living documentation and are validated in CI.
+
+**To add a new example workspace:**
+
+1. Create a folder under `config/` named after the pattern: `<cloud>-<orchestrator>` (e.g., `aws-eks`, `hetzner-compose`, `azure-aks`).
+2. Include the full dependency chain:
+   - `config/` — configuration file (provisioners, providers, remotes)
+   - `environments/` — at least one environment (e.g., `env-dev.yaml`)
+   - `stack/` — workspace + resources + namespaces + modules
+   - `deployments/` — at least one deployment tying it together
+3. Every YAML file must pass `strata validate`. CI runs validation on all files in `config/`.
+4. Add a `README.md` to your folder explaining: what it demonstrates, prerequisites (e.g., Terraform, Helm), and how to `strata build plan` against it.
+5. Use realistic but non-sensitive values (fake subscription IDs, placeholder domains).
+
+**Guidelines:**
+- Keep examples minimal but complete — enough to validate end-to-end, not a production-ready setup.
+- Use `provisioner:` on stages, never `type:`.
+- Use `secret:` refs for credentials, never plain values.
+- Reference the example from `docs/skills/strata-onboarding.md` if it demonstrates a new pattern.
+
+---
+
 ## Questions & Support
 
 - See [SUPPORT](./support.md) for where to get help and expected response times.
