@@ -1,4 +1,0 @@
-# Backend config for prd environment
-# Used with: terraform init -backend-config=backends/prd.tfbackend
-
-path = "state/prd/terraform.tfstate"

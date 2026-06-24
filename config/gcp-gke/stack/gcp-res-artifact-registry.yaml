@@ -1,0 +1,21 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: gcp_artifact_registry
+  annotations:
+    description: GCP Artifact Registry for container images
+  labels:
+    version: "1.0.0"
+  tags: [gcp, resource, artifact_registry, registry]
+spec:
+  properties:
+    provider_type: gcp
+    resource_type: artifact_registry
+    category: container
+    subcategory: registry
+  configuration:
+    format: DOCKER
+    mode: STANDARD_REPOSITORY
+    cleanup_policy:
+      keep_count: 50
+      tag_state: TAGGED

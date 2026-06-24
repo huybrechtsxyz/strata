@@ -1,0 +1,23 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: azure_aks_cluster
+  annotations:
+    description: Azure Kubernetes Service cluster
+  labels:
+    version: "1.0.0"
+  tags: [azure, aks, resource, kubernetes]
+spec:
+  properties:
+    provider_type: azure
+    resource_type: aks_cluster
+    category: compute
+    subcategory: kubernetes
+  configuration:
+    kubernetes_version: "1.30"
+    node_pool_vm_size: Standard_D4s_v5
+    node_pool_count: 3
+    node_pool_min: 2
+    node_pool_max: 5
+    network_plugin: azure
+    network_policy: calico

@@ -1,0 +1,57 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: workspace
+meta:
+  name: azure_aks_platform
+  annotations:
+    description: Azure AKS platform workspace — Terraform provisions, Helm deploys
+  labels:
+    version: "1.0.0"
+  tags: [azure, aks, workspace]
+spec:
+  providers:
+    - name: azure_westeurope
+      file: "@azure_aks/stack/azure-provider-westeurope.yaml"
+
+  provisioners:
+    - name: terraform
+      provisioner: terraform
+      source:
+        repository: azure_aks
+        source_path: terraform
+
+    - name: helm
+      provisioner: helm
+      source:
+        repository: azure_aks
+        source_path: charts
+
+  topology:
+    - name: aks_cluster
+      provider: azure_westeurope
+      provisioner: terraform
+      type: kubernetes
+      components:
+        - resource: aks_cluster
+        - resource: postgres
+        - resource: acr
+        - resource: keyvault
+      namespaces:
+        - namespace: platform
+
+  resources:
+    - name: aks_cluster
+      file: "@azure_aks/stack/azure-res-aks.yaml"
+      description: Azure Kubernetes Service cluster
+    - name: postgres
+      file: "@azure_aks/stack/azure-res-postgres.yaml"
+      description: Azure Database for PostgreSQL Flexible Server
+    - name: acr
+      file: "@azure_aks/stack/azure-res-acr.yaml"
+      description: Azure Container Registry
+    - name: keyvault
+      file: "@azure_aks/stack/azure-res-keyvault.yaml"
+      description: Azure Key Vault for secrets management
+
+  namespaces:
+    - name: platform
+      file: "@azure_aks/stack/azure-ns-platform.yaml"

@@ -1,0 +1,169 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: kamatera_swarm_config
+  annotations:
+    description: Kamatera Cloud platform — Terraform + Docker Swarm
+  labels:
+    version: "1.0.0"
+  tags: [kamatera, swarm, configuration]
+spec:
+  # Deployment hierarchy
+  layering:
+    - name: environment
+      description: "Deployment environment (dev, staging, prd)"
+      required: true
+
+  # Deployment properties schema — defines required properties for all deployments
+  deployment:
+    additional_properties: false
+    properties:
+      environment:
+        pattern: "^(dev|staging|prd)$"
+        required: true
+        description: "Target environment"
+    # Deployment manifest storage
+    manifest:
+      type: local
+      path: ".strata/deployments"
+
+  # Zones group provider regions for data residency enforcement
+  zones:
+    - name: eu_west
+      description: "Western Europe (France, Belgium, Netherlands)"
+      regions:
+        - fr-par
+        - be-bru
+    - name: eu_central
+      description: "Central Europe (Germany, Austria)"
+      regions:
+        - de-fra
+        - at-vie
+
+  # Remotes declare the git repositories this configuration uses
+  remotes:
+    - name: kamatera_swarm
+      type: gitops
+      repository: git@github.com:your-org/kamatera-swarm-config.git
+      reference: main
+      source_path: .
+      deploy_path: .
+
+  # Integrations define external tools the platform uses
+  integrations:
+    - name: git
+      type: git
+      capabilities: [repository]
+      required: true
+      validation:
+        command: git --version
+        min_version: "2.30.0"
+      authentication:
+        method: cli
+
+    - name: terraform
+      type: terraform
+      capabilities: [infrastructure]
+      required: true
+      validation:
+        command: terraform version
+        min_version: "1.0.0"
+      authentication:
+        method: cli
+        env_vars:
+          - TERRAFORM_API_TOKEN
+
+    - name: docker
+      type: docker
+      capabilities: [container]
+      required: true
+      validation:
+        command: docker --version
+        min_version: "24.0.0"
+      authentication:
+        method: cli
+
+    - name: bitwarden
+      type: bitwarden
+      capabilities: [secrets]
+      required: false
+      validation:
+        command: bws --version
+        min_version: "0.3.0"
+      endpoints:
+        address: https://bitwarden.com/api
+      authentication:
+        method: api_key
+        env_vars:
+          - BWS_ACCESS_TOKEN
+
+  # Providers define supported infrastructure providers and their resource schemas
+  providers:
+    - name: kamatera
+      description: Kamatera Cloud Provider
+      additional_regions: false
+      regions:
+        - name: eu-fr
+          description: Europe - France
+        - name: be-bru
+          description: Europe - Belgium
+        - name: de-fra
+          description: Europe - Germany
+      additional_resources: false
+      resources:
+        - name: virtualmachine
+          category: compute
+          subcategory: virtualmachine
+          description: Kamatera Virtual Machine
+          additional_configurations: false
+          configuration:
+            os_name:
+              pattern: "^[A-Za-z0-9_\\-]{2,32}$"
+              required: true
+              description: "Operating system name"
+            os_code:
+              pattern: "^[A-Za-z0-9.\\- ]{2,32}$"
+              required: true
+              description: "Operating system version code"
+            cpu_type:
+              pattern: "^(A|B|P|T)$"
+              required: true
+              description: "CPU type: A (Availability), B (Balanced), P (Performance), T (Turbo)"
+            cpu_cores:
+              pattern: "^[1-9][0-9]?$"
+              required: true
+              description: "Number of CPU cores (1-99)"
+            ram_mb:
+              pattern: "^(512|1024|2048|4096|8192|16384|32768)$"
+              required: true
+              description: "RAM in MB"
+            billing:
+              pattern: "^(hourly|monthly)$"
+              required: true
+              description: "Billing frequency"
+            disk_size:
+              pattern: "^[1-9][0-9]*$"
+              required: false
+              description: "Optional custom disk size in GB"
+
+  # Topologies define supported deployment topologies
+  additional_topologies: false
+  topologies:
+    - type: docker_swarm
+      description: Docker Swarm Cluster Topology
+      additional_components: false
+      components:
+        - role: manager
+          description: Docker Swarm Manager Node
+          uses_module: false
+          is_control: true
+          required: true
+          min_count: 1
+          max_count: 5
+        - role: worker
+          description: Docker Swarm Worker Node
+          uses_module: false
+          is_control: false
+          required: true
+          min_count: 1
+          max_count: 5

@@ -1,0 +1,35 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: azure_aks_deploy_prd
+  annotations:
+    description: Production deployment for Azure AKS platform
+  labels:
+    version: "1.0.0"
+  tags: [azure, aks, production, deployment]
+spec:
+  layers:
+    environment: prd
+
+  properties:
+    environment: prd
+
+  workspace:
+    name: azure_aks_platform
+    description: Azure AKS Platform Workspace
+    file: "@azure_aks/stack/azure-ws-platform.yaml"
+
+  environments:
+    - "@azure_aks/environments/azure-aks-env-prd.yaml"
+
+  stages:
+    - name: infrastructure
+      provisioner: terraform
+      scope: all
+      on_failure: stop
+
+    - name: platform
+      provisioner: helm
+      scope: all
+      depends_on: [infrastructure]
+      on_failure: stop

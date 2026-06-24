@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: kamatera_ns_base
+  annotations:
+    description: Base infrastructure stack for the Kamatera Swarm platform
+  labels:
+    version: "1.0.0"
+  tags: [kamatera, namespace]
+spec:
+  modules:
+    - name: traefik
+      file: "@kamatera_swarm/stack/kamatera-mod-traefik.yaml"

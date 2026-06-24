@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: provider
+meta:
+  name: hetzner_fsn1
+  annotations:
+    description: Hetzner Cloud — Falkenstein datacenter
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, provider, falkenstein]
+spec:
+  properties:
+    type: hetzner
+    region: fsn1

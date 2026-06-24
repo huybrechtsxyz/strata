@@ -1,0 +1,22 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: module
+meta:
+  name: hetzner_mod_traefik
+  annotations:
+    description: Traefik reverse proxy with Let's Encrypt TLS
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, module, traefik]
+spec:
+  type: compose
+  source:
+    repository: hetzner_platform
+    source_path: services/traefik
+  services:
+    - name: traefik
+      image: traefik:v3.1
+      restart: unless-stopped
+      ports:
+        - "80:80"
+        - "443:443"
+        - "8080:8080"

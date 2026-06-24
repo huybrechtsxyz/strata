@@ -1,0 +1,23 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: aws_s3_artifacts
+  annotations:
+    description: AWS S3 bucket for build artifacts and deployment state
+  labels:
+    version: "1.0.0"
+  tags: [aws, resource, s3, storage]
+spec:
+  properties:
+    provider_type: aws
+    resource_type: s3_bucket
+    category: storage
+    subcategory: object
+  configuration:
+    versioning: true
+    encryption: aws:kms
+    block_public_access: true
+    lifecycle_rules:
+      - transition_days: 90
+        storage_class: GLACIER
+      - expiration_days: 365

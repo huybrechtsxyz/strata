@@ -1,0 +1,20 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: azure_keyvault
+  annotations:
+    description: Azure Key Vault for secrets and certificate management
+  labels:
+    version: "1.0.0"
+  tags: [azure, resource, keyvault, secrets]
+spec:
+  properties:
+    provider_type: azure
+    resource_type: key_vault
+    category: security
+    subcategory: secrets
+  configuration:
+    sku: premium
+    soft_delete_retention_days: 90
+    purge_protection: true
+    enable_rbac_authorization: true

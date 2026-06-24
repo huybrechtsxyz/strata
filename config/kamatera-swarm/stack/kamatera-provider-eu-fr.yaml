@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: provider
+meta:
+  name: kamatera_provider_eu_fr
+  annotations:
+    description: Kamatera Cloud — France datacenter
+  labels:
+    version: "1.0.0"
+  tags: [kamatera, provider]
+spec:
+  properties:
+    type: kamatera
+    region: eu-fr

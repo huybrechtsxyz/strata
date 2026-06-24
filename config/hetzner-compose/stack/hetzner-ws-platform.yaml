@@ -1,0 +1,45 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: workspace
+meta:
+  name: hetzner_platform
+  annotations:
+    description: Hetzner Cloud workspace — Terraform provisions VMs, Compose deploys services
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, workspace]
+spec:
+  providers:
+    - name: hetzner_fsn1
+      file: "@hetzner_platform/stack/hetzner-provider-fsn1.yaml"
+
+  provisioners:
+    - name: terraform
+      provisioner: terraform
+      source:
+        repository: hetzner_platform
+        source_path: terraform
+
+    - name: compose
+      provisioner: compose
+      source:
+        repository: hetzner_platform
+        source_path: services
+
+  topology:
+    - name: app_servers
+      provider: hetzner_fsn1
+      provisioner: terraform
+      type: docker_host
+      components:
+        - resource: vm_app
+      namespaces:
+        - namespace: services
+
+  resources:
+    - name: vm_app
+      file: "@hetzner_platform/stack/hetzner-res-app.yaml"
+      description: Application server
+
+  namespaces:
+    - name: services
+      file: "@hetzner_platform/stack/hetzner-ns-services.yaml"

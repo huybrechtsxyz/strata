@@ -1,0 +1,37 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: hetzner_env_prd
+  annotations:
+    description: Production environment for Hetzner Cloud platform
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, production, environment]
+spec:
+  variables:
+    - key: WORKSPACE
+      store: constant
+      value: hetzner_platform
+    - key: ENVIRONMENT
+      store: constant
+      value: prd
+    - key: HCLOUD_LOCATION
+      store: constant
+      value: fsn1
+    - key: DOMAIN
+      store: constant
+      value: example.com
+
+  secrets:
+    - key: HCLOUD_TOKEN
+      store: environment
+      value: HCLOUD_TOKEN
+    - key: INWX_USERNAME
+      store: environment
+      value: INWX_USERNAME
+    - key: INWX_PASSWORD
+      store: environment
+      value: INWX_PASSWORD
+    - key: SSH_PRIVATE_KEY
+      store: environment
+      value: SSH_PRIVATE_KEY

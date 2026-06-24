@@ -1,0 +1,92 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: gcp_gke_config
+  annotations:
+    description: GCP GKE platform — Terraform + Helm on Google Kubernetes Engine
+  labels:
+    version: "1.0.0"
+  tags: [gcp, gke, configuration]
+spec:
+  layering:
+    - name: environment
+      description: "Deployment environment (dev, staging, prd)"
+      required: true
+
+  deployment:
+    additional_properties: false
+    properties:
+      environment:
+        pattern: "^(dev|staging|prd)$"
+        required: true
+        description: "Target environment"
+
+  zones:
+    - name: eu_west
+      description: "Europe West (Belgium, Netherlands, London)"
+      regions:
+        - europe-west1
+        - europe-west4
+        - europe-west2
+    - name: us_central
+      description: "US Central (Iowa, South Carolina)"
+      regions:
+        - us-central1
+        - us-east1
+
+  remotes:
+    - name: gcp_gke
+      type: gitops
+      repository: git@github.com:your-org/gcp-gke-config.git
+      reference: main
+      source_path: .
+      deploy_path: .
+
+  integrations:
+    - name: git
+      type: git
+      capabilities: [repository]
+      required: true
+      validation:
+        command: git --version
+        min_version: "2.30.0"
+      authentication:
+        method: cli
+
+    - name: terraform
+      type: terraform
+      capabilities: [infrastructure]
+      required: true
+      validation:
+        command: terraform --version
+        min_version: "1.6.0"
+      authentication:
+        method: cli
+
+    - name: gcloud
+      type: gcloud
+      capabilities: [infrastructure]
+      required: true
+      validation:
+        command: gcloud --version
+      authentication:
+        method: cli
+
+    - name: kubectl
+      type: kubectl
+      capabilities: [container]
+      required: true
+      validation:
+        command: kubectl version --client
+      authentication:
+        method: cli
+
+    - name: helm
+      type: helm
+      capabilities: [container]
+      required: true
+      validation:
+        command: helm version
+        min_version: "3.12.0"
+      authentication:
+        method: cli

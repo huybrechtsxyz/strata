@@ -1,0 +1,13 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: gcp_gke_ns_platform
+  annotations:
+    description: Platform namespace — ingress and service mesh
+  labels:
+    version: "1.0.0"
+  tags: [gcp, gke, namespace, platform]
+spec:
+  modules:
+    - name: ingress_nginx
+      file: "@gcp_gke/stack/gcp-mod-ingress-nginx.yaml"

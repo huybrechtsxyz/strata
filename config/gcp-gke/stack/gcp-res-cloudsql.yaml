@@ -1,0 +1,27 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: resource
+meta:
+  name: gcp_cloud_sql
+  annotations:
+    description: GCP Cloud SQL for PostgreSQL with high availability
+  labels:
+    version: "1.0.0"
+  tags: [gcp, resource, cloudsql, postgresql, database]
+spec:
+  properties:
+    provider_type: gcp
+    resource_type: cloud_sql
+    category: database
+    subcategory: relational
+  configuration:
+    database_version: POSTGRES_16
+    tier: db-custom-4-16384
+    availability_type: REGIONAL
+    disk_size: 100
+    disk_autoresize: true
+    backup_enabled: true
+    point_in_time_recovery: true
+    deletion_protection: true
+    ip_configuration:
+      ipv4_enabled: false
+      private_network: vpc-platform-prd

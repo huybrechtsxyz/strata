@@ -1,0 +1,49 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: azure_aks_env_prd
+  annotations:
+    description: Production environment for Azure AKS platform
+  labels:
+    version: "1.0.0"
+  tags: [azure, aks, production, environment]
+spec:
+  variables:
+    - key: WORKSPACE
+      store: constant
+      value: azure_aks
+    - key: ENVIRONMENT
+      store: constant
+      value: prd
+    - key: AZURE_SUBSCRIPTION_ID
+      store: environment
+      value: AZURE_SUBSCRIPTION_ID
+    - key: AZURE_RESOURCE_GROUP
+      store: constant
+      value: rg-aks-prd-westeurope
+    - key: AZURE_LOCATION
+      store: constant
+      value: westeurope
+    - key: AKS_CLUSTER_NAME
+      store: constant
+      value: aks-platform-prd
+    - key: ACR_NAME
+      store: constant
+      value: acrplatformprd
+    - key: KEYVAULT_NAME
+      store: constant
+      value: kv-platform-prd
+    - key: POSTGRES_SERVER_NAME
+      store: constant
+      value: psql-platform-prd
+
+  secrets:
+    - key: ARM_CLIENT_ID
+      store: environment
+      value: ARM_CLIENT_ID
+    - key: ARM_CLIENT_SECRET
+      store: environment
+      value: ARM_CLIENT_SECRET
+    - key: ARM_TENANT_ID
+      store: environment
+      value: ARM_TENANT_ID

@@ -1,0 +1,35 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: gcp_gke_deploy_prd
+  annotations:
+    description: Production deployment for GCP GKE platform
+  labels:
+    version: "1.0.0"
+  tags: [gcp, gke, production, deployment]
+spec:
+  layers:
+    environment: prd
+
+  properties:
+    environment: prd
+
+  workspace:
+    name: gcp_gke_platform
+    description: GCP GKE Platform
+    file: "@gcp_gke/stack/gcp-ws-platform.yaml"
+
+  environments:
+    - "@gcp_gke/environments/gcp-gke-env-prd.yaml"
+
+  stages:
+    - name: infrastructure
+      provisioner: terraform
+      scope: all
+      on_failure: stop
+
+    - name: platform
+      provisioner: helm
+      scope: all
+      depends_on: [infrastructure]
+      on_failure: stop

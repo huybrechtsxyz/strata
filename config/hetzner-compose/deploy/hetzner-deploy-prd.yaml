@@ -1,0 +1,35 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: hetzner_deploy_prd
+  annotations:
+    description: Production deployment for Hetzner Cloud platform
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, production, deployment]
+spec:
+  layers:
+    environment: prd
+
+  properties:
+    environment: prd
+
+  workspace:
+    name: hetzner_platform
+    description: Hetzner Cloud Platform
+    file: "@hetzner_platform/stack/hetzner-ws-platform.yaml"
+
+  environments:
+    - "@hetzner_platform/environments/hetzner-env-prd.yaml"
+
+  stages:
+    - name: infrastructure
+      provisioner: terraform
+      scope: all
+      on_failure: stop
+
+    - name: services
+      provisioner: compose
+      scope: all
+      depends_on: [infrastructure]
+      on_failure: stop

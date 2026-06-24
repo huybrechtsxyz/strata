@@ -1,0 +1,57 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: workspace
+meta:
+  name: gcp_gke_platform
+  annotations:
+    description: GCP GKE workspace — Terraform provisions, Helm deploys
+  labels:
+    version: "1.0.0"
+  tags: [gcp, gke, workspace]
+spec:
+  providers:
+    - name: gcp_europe_west1
+      file: "@gcp_gke/stack/gcp-provider-europe-west1.yaml"
+
+  provisioners:
+    - name: terraform
+      provisioner: terraform
+      source:
+        repository: gcp_gke
+        source_path: terraform
+
+    - name: helm
+      provisioner: helm
+      source:
+        repository: gcp_gke
+        source_path: charts
+
+  topology:
+    - name: gke_cluster
+      provider: gcp_europe_west1
+      provisioner: terraform
+      type: kubernetes
+      components:
+        - resource: gke_cluster
+        - resource: cloud_sql
+        - resource: artifact_registry
+        - resource: gcs_artifacts
+      namespaces:
+        - namespace: platform
+
+  resources:
+    - name: gke_cluster
+      file: "@gcp_gke/stack/gcp-res-gke.yaml"
+      description: GKE Autopilot cluster
+    - name: cloud_sql
+      file: "@gcp_gke/stack/gcp-res-cloudsql.yaml"
+      description: Cloud SQL for PostgreSQL (regional HA)
+    - name: artifact_registry
+      file: "@gcp_gke/stack/gcp-res-artifact-registry.yaml"
+      description: Artifact Registry for container images
+    - name: gcs_artifacts
+      file: "@gcp_gke/stack/gcp-res-gcs.yaml"
+      description: Cloud Storage bucket for artifacts
+
+  namespaces:
+    - name: platform
+      file: "@gcp_gke/stack/gcp-ns-platform.yaml"

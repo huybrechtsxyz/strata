@@ -1,0 +1,29 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: network
+meta:
+  name: gcp_net_vpc
+  annotations:
+    description: GCP VPC network for GKE platform and supporting services
+  labels:
+    version: "1.0.0"
+  tags: [gcp, network, vpc]
+spec:
+  networks:
+    - name: vpc_platform
+      description: Platform VPC with dedicated subnet ranges
+      address_space:
+        - value: "10.0.0.0/16"
+        - value: "10.4.0.0/14"
+      subnets:
+        - name: subnet_gke_nodes
+          cidr:
+            value: "10.0.0.0/20"
+          description: GKE node IP range
+        - name: subnet_gke_pods
+          cidr:
+            value: "10.4.0.0/14"
+          description: GKE pod secondary range
+        - name: subnet_cloudsql
+          cidr:
+            value: "10.0.16.0/24"
+          description: Cloud SQL private services range

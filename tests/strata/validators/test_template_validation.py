@@ -3,8 +3,10 @@
 Runs `sln init --template <name>` for each built-in scaffold template, then
 validates every generated platform YAML file with PlatformValidator.
 
+Also validates all YAML in config/ reference example workspaces.
+
 Prevents schema drift (e.g., extra fields that violate ``extra="forbid"``).
-See ADR 0014, item #4.
+See ADR 0014, items #4 and #5.
 """
 
 from pathlib import Path
@@ -76,4 +78,53 @@ class TestBuiltinTemplateValidation:
 
         if failures:
             msg = "Template validation failures:\n" + "\n".join(failures)
+            pytest.fail(msg)
+
+
+# ---------------------------------------------------------------------------
+# Reference example workspaces (config/)
+# ---------------------------------------------------------------------------
+
+_CONFIG_DIR = Path(__file__).parent.parent.parent.parent / "config"
+
+# New example workspaces (exclude legacy xyz-* which may use deprecated kinds)
+_EXAMPLE_WORKSPACES = ["azure-aks", "aws-eks", "gcp-gke", "hetzner-compose"]
+
+
+def _available_example_workspaces() -> list[str]:
+    """Return example workspace names that exist on disk."""
+    return [name for name in _EXAMPLE_WORKSPACES if (_CONFIG_DIR / name).is_dir()]
+
+
+class TestConfigReferenceExamples:
+    """All YAML files in config/ reference workspaces must pass validation."""
+
+    @pytest.fixture(params=_available_example_workspaces(), ids=_available_example_workspaces())
+    def workspace_dir(self, request) -> Path:
+        """Return the path to a config/ example workspace."""
+        return _CONFIG_DIR / request.param
+
+    def test_all_yaml_files_validate(self, workspace_dir: Path):
+        """Every .yaml file in the reference workspace must pass PlatformValidator."""
+        yaml_files = [
+            f
+            for f in workspace_dir.rglob("*.yaml")
+            if f.is_file() and ".strata" not in f.parts and ".vscode" not in f.parts
+        ]
+
+        assert yaml_files, f"Expected YAML files in {workspace_dir.name}"
+
+        failures: list[str] = []
+        for yaml_file in sorted(yaml_files):
+            validator = PlatformValidator(file_path=yaml_file)
+            if not validator.before_validate(work_path=workspace_dir):
+                errors = validator.get_errors()
+                failures.append(f"  {yaml_file.relative_to(workspace_dir)}: {errors}")
+                continue
+            if not validator.validate(work_path=workspace_dir):
+                errors = validator.get_errors()
+                failures.append(f"  {yaml_file.relative_to(workspace_dir)}: {errors}")
+
+        if failures:
+            msg = f"Config example '{workspace_dir.name}' validation failures:\n" + "\n".join(failures)
             pytest.fail(msg)

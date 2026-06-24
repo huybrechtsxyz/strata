@@ -1,0 +1,46 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: aws_eks_env_prd
+  annotations:
+    description: Production environment for AWS EKS platform
+  labels:
+    version: "1.0.0"
+  tags: [aws, eks, production, environment]
+spec:
+  variables:
+    - key: WORKSPACE
+      store: constant
+      value: aws_eks
+    - key: ENVIRONMENT
+      store: constant
+      value: prd
+    - key: AWS_REGION
+      store: constant
+      value: eu-west-1
+    - key: AWS_ACCOUNT_ID
+      store: environment
+      value: AWS_ACCOUNT_ID
+    - key: EKS_CLUSTER_NAME
+      store: constant
+      value: eks-platform-prd
+    - key: VPC_CIDR
+      store: constant
+      value: "10.0.0.0/16"
+    - key: RDS_INSTANCE_NAME
+      store: constant
+      value: rds-platform-prd
+    - key: ECR_REGISTRY
+      store: constant
+      value: "${AWS_ACCOUNT_ID}.dkr.ecr.eu-west-1.amazonaws.com"
+    - key: S3_ARTIFACTS_BUCKET
+      store: constant
+      value: platform-artifacts-prd-eu-west-1
+
+  secrets:
+    - key: AWS_ACCESS_KEY_ID
+      store: environment
+      value: AWS_ACCESS_KEY_ID
+    - key: AWS_SECRET_ACCESS_KEY
+      store: environment
+      value: AWS_SECRET_ACCESS_KEY

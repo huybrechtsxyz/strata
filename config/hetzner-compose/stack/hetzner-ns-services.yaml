@@ -1,0 +1,15 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: namespace
+meta:
+  name: hetzner_ns_services
+  annotations:
+    description: Application services namespace
+  labels:
+    version: "1.0.0"
+  tags: [hetzner, namespace, services]
+spec:
+  modules:
+    - name: traefik
+      file: "@hetzner_platform/stack/hetzner-mod-traefik.yaml"
+    - name: app
+      file: "@hetzner_platform/stack/hetzner-mod-app.yaml"

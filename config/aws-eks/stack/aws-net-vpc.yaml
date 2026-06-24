@@ -1,0 +1,40 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: network
+meta:
+  name: aws_net_vpc
+  annotations:
+    description: AWS VPC for EKS platform and supporting services
+  labels:
+    version: "1.0.0"
+  tags: [aws, network, vpc]
+spec:
+  networks:
+    - name: vpc_platform
+      description: Platform VPC with multi-AZ subnets
+      address_space:
+        - value: "10.0.0.0/16"
+      subnets:
+        - name: subnet_eks_private_a
+          cidr:
+            value: "10.0.0.0/19"
+          description: EKS private subnet (AZ-a)
+        - name: subnet_eks_private_b
+          cidr:
+            value: "10.0.32.0/19"
+          description: EKS private subnet (AZ-b)
+        - name: subnet_rds_a
+          cidr:
+            value: "10.0.64.0/24"
+          description: RDS subnet (AZ-a)
+        - name: subnet_rds_b
+          cidr:
+            value: "10.0.65.0/24"
+          description: RDS subnet (AZ-b)
+        - name: subnet_public_a
+          cidr:
+            value: "10.0.128.0/24"
+          description: Public subnet for ALB (AZ-a)
+        - name: subnet_public_b
+          cidr:
+            value: "10.0.129.0/24"
+          description: Public subnet for ALB (AZ-b)
