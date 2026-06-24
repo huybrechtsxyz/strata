@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-06-24
+
 ### Added
 
 - **Guided Onboarding Experience (ADR 0014)**
@@ -28,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Template bundles: replaced invalid `type:` fields on stages with `provisioner:` (Pydantic `extra="forbid"` compliance)
 - Validation error messages: `extra_forbidden` now names the offending field
+- Template scaffold: `deploy.yml` wrapped in `{% raw %}` to prevent Jinja2 conflicts with GitHub Actions `${{ }}` expressions
+- Template scaffold: `_substitute()` now handles both `${key}` and `{{ key }}` placeholder syntax
+- Model tests: updated references from deleted `config/xyz-configuration/` to new cloud-provider examples
 
 ### Documentation
 
