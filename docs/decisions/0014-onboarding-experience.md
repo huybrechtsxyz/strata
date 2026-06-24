@@ -7,8 +7,8 @@
 
 | # | Item | Phase | Status |
 |---|------|-------|--------|
-| 1 | `strata sln init --list` — discover available templates | 1 | todo |
-| 2 | `strata new --list` shows bundles + descriptions | 1 | todo |
+| 1 | `strata sln init --list` — discover available templates | 1 | done |
+| 2 | `strata new --list` shows bundles + descriptions | 1 | done |
 | 3 | Fix template bundles (`type:` → `provisioner:`) | 1 | todo |
 | 4 | CI template validation test | 1 | todo |
 | 5 | Formalize `config/` as reference example workspace | 1 | todo |

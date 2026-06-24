@@ -57,6 +57,37 @@ class TestNewCommand:
         result = runner.invoke(new_command, ["--list", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
+    def test_list_templates_shows_single_file_templates(self, tmp_path):
+        """--list shows built-in single-file templates (e.g. namespace, provider)."""
+        runner = CliRunner()
+        result = runner.invoke(new_command, ["--list", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "namespace" in result.output
+        assert "provider" in result.output
+
+    def test_list_templates_shows_scaffold_bundles(self, tmp_path):
+        """--list shows scaffold bundles from examples/ with descriptions."""
+        runner = CliRunner()
+        result = runner.invoke(new_command, ["--list", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "aks" in result.output
+        assert "compose" in result.output
+        # Descriptions from template.yaml should be shown
+        assert "Kubernetes" in result.output or "Terraform" in result.output
+
+    def test_list_templates_json_output(self, tmp_path):
+        """--list --output json returns structured data with all templates."""
+        import json
+
+        runner = CliRunner()
+        result = runner.invoke(new_command, ["--list", "--output", "json", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["success"] is True
+        names = [t["name"] for t in data["data"]["templates"]]
+        assert "namespace" in names
+        assert "aks" in names
+
     def test_missing_template_exits_2(self, tmp_path):
         runner = CliRunner()
         result = runner.invoke(new_command, ["--work-path", str(tmp_path)])

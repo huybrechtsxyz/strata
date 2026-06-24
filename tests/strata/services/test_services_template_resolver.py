@@ -8,6 +8,7 @@ import pytest
 from strata.exceptions import ModelValidationError, PlatformError
 from strata.services.template_resolver import (
     list_builtin_templates,
+    list_scaffold_templates,
     resolve_template,
 )
 
@@ -127,3 +128,72 @@ class TestResolveTemplateBuiltin:
         with pytest.raises(PlatformError) as exc_info:
             resolve_template("nonexistent_xyz_template")
         assert "aks" in exc_info.value.message
+
+
+# ---------------------------------------------------------------------------
+# list_scaffold_templates
+# ---------------------------------------------------------------------------
+
+
+class TestListScaffoldTemplates:
+    def test_returns_builtins_without_work_path(self):
+        """With no work_path, built-in templates are still returned."""
+        templates = list_scaffold_templates(work_path=None)
+        names = [t["name"] for t in templates]
+        assert "aks" in names
+        assert "compose" in names
+
+    def test_builtin_templates_have_descriptions(self):
+        """Built-in templates include descriptions from template.yaml manifests."""
+        templates = list_scaffold_templates(work_path=None)
+        aks = next(t for t in templates if t["name"] == "aks")
+        assert aks["description"] != ""
+        assert aks["source"] == "builtin"
+
+    def test_workspace_templates_detected(self, tmp_path):
+        """Workspace scaffold templates in .strata/templates/ are discovered."""
+        tpl_dir = tmp_path / ".strata" / "templates" / "my-custom"
+        (tpl_dir / "scaffold").mkdir(parents=True)
+        (tpl_dir / "scaffold" / "file.yaml").write_text("x: 1\n", encoding="utf-8")
+        (tpl_dir / "template.yaml").write_text(
+            "name: my-custom\ndescription: A custom template\nvariables: []\n",
+            encoding="utf-8",
+        )
+
+        templates = list_scaffold_templates(work_path=tmp_path)
+        names = [t["name"] for t in templates]
+        assert "my-custom" in names
+        custom = next(t for t in templates if t["name"] == "my-custom")
+        assert custom["source"] == "workspace"
+        assert custom["description"] == "A custom template"
+
+    def test_workspace_overrides_builtin(self, tmp_path):
+        """A workspace template with the same name as a builtin overrides it."""
+        tpl_dir = tmp_path / ".strata" / "templates" / "aks"
+        (tpl_dir / "scaffold").mkdir(parents=True)
+        (tpl_dir / "scaffold" / "override.yaml").write_text("x: 1\n", encoding="utf-8")
+        (tpl_dir / "template.yaml").write_text(
+            "name: aks\ndescription: My custom AKS\nvariables: []\n",
+            encoding="utf-8",
+        )
+
+        templates = list_scaffold_templates(work_path=tmp_path)
+        aks = next(t for t in templates if t["name"] == "aks")
+        assert aks["source"] == "workspace"
+        assert aks["description"] == "My custom AKS"
+
+    def test_returns_sorted_by_name(self, tmp_path):
+        """Templates are returned sorted alphabetically by name."""
+        templates = list_scaffold_templates(work_path=tmp_path)
+        names = [t["name"] for t in templates]
+        assert names == sorted(names)
+
+    def test_dir_without_scaffold_ignored(self, tmp_path):
+        """A directory without scaffold/ is not picked up as a workspace template."""
+        tpl_dir = tmp_path / ".strata" / "templates" / "incomplete"
+        tpl_dir.mkdir(parents=True)
+        (tpl_dir / "template.yaml").write_text("name: incomplete\n", encoding="utf-8")
+
+        templates = list_scaffold_templates(work_path=tmp_path)
+        names = [t["name"] for t in templates]
+        assert "incomplete" not in names

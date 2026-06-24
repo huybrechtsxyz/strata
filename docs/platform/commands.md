@@ -66,13 +66,22 @@ Solution workspace lifecycle commands.
 Initialize a new strata solution workspace. Creates the `.strata/` state directory, workspace defaults, and a ready-to-use `.devcontainer/` for VS Code Dev Containers and GitHub Codespaces.
 
 ```
-strata sln init --name NAME [--template NAME-OR-PATH] [standard options]
+strata sln init --name NAME [--template NAME-OR-PATH] [--list] [standard options]
 ```
 
 | Option                    | Required | Description                                                                                                                               |
 | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `--name NAME`             | ✅        | Name of the solution workspace                                                                                                            |
 | `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`, `compose`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
+| `--list`                  | —        | List available scaffold templates and exit. Does not require `--name`.                                                                     |
+
+**Discovering templates:**
+
+```bash
+strata sln init --list
+```
+
+Shows built-in templates (shipped with strata) and workspace-local templates (`.strata/templates/` directories with a `scaffold/` subdirectory). Each template's description is pulled from its `template.yaml` manifest.
 
 **Files created:**
 
@@ -90,6 +99,7 @@ All `.devcontainer/` files are written **idempotently** — existing files are n
 
 ```bash
 strata sln init --name my-platform
+strata sln init --name my-platform --template aks
 strata sln init --name my-platform --template .strata/templates/my-corp-base/
 ```
 
@@ -274,6 +284,13 @@ strata new --list
 | `--overwrite`     | Overwrite output file(s) if they already exist                    |
 | `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)           |
 | `--list`          | List available templates and bundles, then exit                   |
+
+**Template discovery** — `strata new --list` shows all templates grouped by type:
+
+- **Single-file templates** — create one YAML file (e.g. `namespace`, `provider`, `tenant`)
+- **Scaffold bundles** — multi-file workspace starters from `templates/examples/` and `.strata/templates/` (e.g. `aks`, `compose`). Use via `strata sln init --template <name>`.
+
+Workspace-local templates are marked with `*` in the output.
 
 ```bash
 strata new namespace my-app

@@ -2,7 +2,7 @@
 """Resolves a --template argument to a scaffold folder and optional manifest."""
 
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import yaml
 from pydantic import ValidationError
@@ -30,6 +30,51 @@ def list_builtin_templates() -> List[str]:
     if not examples_dir.is_dir():
         return []
     return sorted(p.name for p in examples_dir.iterdir() if p.is_dir())
+
+
+def list_scaffold_templates(work_path: Optional[Path] = None) -> List[Dict[str, str]]:
+    """Return scaffold templates with metadata from built-in and workspace sources.
+
+    Discovers template bundles (directories with an optional ``template.yaml``
+    manifest) from:
+
+    1. Built-in: ``strata/templates/examples/``
+    2. Workspace: ``<work_path>/.strata/templates/`` (directories only)
+
+    Workspace templates take precedence over built-in ones with the same name.
+
+    Returns:
+        List of dicts with keys: ``name``, ``description``, ``source``
+        (``"builtin"`` or ``"workspace"``).  Sorted by name.
+    """
+    templates: Dict[str, Dict[str, str]] = {}
+
+    # Built-in templates
+    examples_dir = get_pkg_templates_path() / _EXAMPLES_DIR
+    if examples_dir.is_dir():
+        for p in examples_dir.iterdir():
+            if p.is_dir():
+                manifest = _load_manifest_safe(p)
+                templates[p.name] = {
+                    "name": p.name,
+                    "description": manifest.description if manifest else "",
+                    "source": "builtin",
+                }
+
+    # Workspace-local templates (override built-in)
+    if work_path is not None:
+        ws_dir = work_path / ".strata" / "templates"
+        if ws_dir.is_dir():
+            for p in ws_dir.iterdir():
+                if p.is_dir() and (p / _SCAFFOLD_DIR).is_dir():
+                    manifest = _load_manifest_safe(p)
+                    templates[p.name] = {
+                        "name": p.name,
+                        "description": manifest.description if manifest else "(workspace template)",
+                        "source": "workspace",
+                    }
+
+    return sorted(templates.values(), key=lambda t: t["name"])
 
 
 def resolve_template(template_arg: str) -> Tuple[Path, Optional[ScaffoldTemplateModel]]:
@@ -125,6 +170,14 @@ def _resolve_folder(template_arg: str) -> Path:
         error_code="TEMPLATE_NOT_FOUND",
         details={"template": template_arg},
     )
+
+
+def _load_manifest_safe(template_folder: Path) -> Optional[ScaffoldTemplateModel]:
+    """Load manifest without raising — returns ``None`` on any failure."""
+    try:
+        return _load_manifest(template_folder)
+    except (PlatformError, ModelValidationError):
+        return None
 
 
 def _load_manifest(template_folder: Path) -> Optional[ScaffoldTemplateModel]:
