@@ -243,6 +243,24 @@ def _configure_from_yaml(config_path: str) -> None:
             else:
                 logging.warning("Azure enabled in config but no connection string provided")
 
+        # Audit log — optional section, parallel to azure: pattern
+        if "audit" in config:
+            from .audit import configure_audit_log
+
+            audit_cfg = config["audit"] or {}
+            kwargs: dict = {}
+            if "path" in audit_cfg:
+                kwargs["log_path"] = audit_cfg["path"]
+            if "rotation" in audit_cfg:
+                kwargs["rotation"] = audit_cfg["rotation"]
+            if "max_bytes" in audit_cfg:
+                kwargs["max_bytes"] = audit_cfg["max_bytes"]
+            if "backup_count" in audit_cfg:
+                kwargs["backup_count"] = audit_cfg["backup_count"]
+            if "date_suffix" in audit_cfg:
+                kwargs["date_suffix"] = audit_cfg["date_suffix"]
+            configure_audit_log(**kwargs)
+
     except Exception as exc:
         logging.basicConfig(
             level=logging.INFO,
