@@ -8,11 +8,12 @@ from typing import List, Optional
 from strata.builders.sbom.base_sbom_collector import BaseSbomCollector
 from strata.exceptions.base_exception import PlatformError
 from strata.logger import get_logger
+from strata.utils.config import SOLUTION_COLLECTORS_FILE, SOLUTION_DIR, SOLUTION_LOCKFILE_PARSERS_DIR
 
 logger = get_logger(__name__)
 
-_COLLECTORS_CONFIG = ".strata/collectors.yaml"
-_LOCKFILE_PARSERS_DIR = ".strata/lockfile_parsers"
+_COLLECTORS_CONFIG = f"{SOLUTION_DIR}/{SOLUTION_COLLECTORS_FILE}"
+_LOCKFILE_PARSERS_DIR = f"{SOLUTION_DIR}/{SOLUTION_LOCKFILE_PARSERS_DIR}"
 _SUPPORTED_TYPES = {"collector", "lockfile_parser"}
 
 

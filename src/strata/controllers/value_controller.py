@@ -1,10 +1,6 @@
 """Resolves variables, secrets, and feature flags from configured store integrations into concrete runtime values."""
 
-import json
-import os
-from contextlib import contextmanager
-from dataclasses import dataclass, field
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Tuple
 
 from strata.controllers.base_controller import BaseController
 from strata.logger import get_logger
@@ -18,13 +14,35 @@ from strata.models.store_models import (
 )
 from strata.services.deployment_service import DeploymentService
 from strata.services.integration_service import IntegrationService
+from strata.utils.resolved_values import ResolvedValues, inject_compose_env, inject_tf_vars  # noqa: F401 — re-exported for callers
 from strata.utils.secret_generator import generate_secret
 
 logger = get_logger(__name__)
 
 
-@dataclass
-class ResolvedValues:
+class ValueController(BaseController):
+    """Resolves variables, secrets, and feature flags for a deployment.
+
+    Typical usage inside a command or deployer:
+
+        controller = ValueController()
+        ok, resolved, errors = controller.resolve_values(deployment_service)
+        if not ok:
+            # handle errors
+        with inject_tf_vars(resolved):
+            terraform.apply(...)
+    """
+
+    def resolve_values(
+        self,
+        deployment_service: "DeploymentService",
+        strict: bool = False,
+    ) -> Tuple[bool, ResolvedValues, List[str]]:
+        """Resolve all variables, secrets, and feature flags from the deployment.
+
+        Args:
+            deployment_service: Loaded, validated deployment service.
+            strict:             When True, any resolution failure is treated as
     """Concrete runtime values resolved from variables, secrets, and feature flags.
 
     Attributes:

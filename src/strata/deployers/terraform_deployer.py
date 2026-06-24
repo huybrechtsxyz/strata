@@ -27,7 +27,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from strata.controllers.value_controller import ResolvedValues, inject_tf_vars
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -44,6 +43,7 @@ from strata.models.deployment_model import DeploymentStageModel
 from strata.models.workspace_model import WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
+from strata.utils.resolved_values import ResolvedValues, inject_tf_vars
 
 
 class TerraformDeployer(BaseDeployer):

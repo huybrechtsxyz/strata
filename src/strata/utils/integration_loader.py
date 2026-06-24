@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from strata.logger import get_logger
+from strata.utils.config import SOLUTION_DIR, SOLUTION_INTEGRATIONS_DIR
 
 logger = get_logger(__name__)
 
@@ -32,7 +33,7 @@ def load_workspace_integrations(work_path: Path) -> int:
         Number of files successfully loaded (i.e. ``register()`` was called
         without raising).
     """
-    integrations_dir = work_path / ".strata" / "integrations"
+    integrations_dir = work_path / SOLUTION_DIR / SOLUTION_INTEGRATIONS_DIR
     if not integrations_dir.is_dir():
         return 0
 

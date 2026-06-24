@@ -26,11 +26,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from strata.utils.config import SOLUTION_AUDIT_LOG_FILE, SOLUTION_DIR
+
 _audit_logger: Optional[logging.Logger] = None
 
 
 def configure_audit_log(
-    log_path: str = ".strata/audit.log",
+    log_path: str = f"{SOLUTION_DIR}/{SOLUTION_AUDIT_LOG_FILE}",
     rotation: str = "size",
     max_bytes: int = 5 * 1024 * 1024,
     backup_count: int = 3,

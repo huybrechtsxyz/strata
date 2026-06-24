@@ -100,6 +100,7 @@ strata
    decisions/0015-flow-command-dependency-graph
    decisions/0016-console-interactive-repl
    decisions/0017-jinja2-template-engine
+   decisions/0018-deployment-audit-traceability
 
 .. toctree::
    :maxdepth: 2

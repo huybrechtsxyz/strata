@@ -16,6 +16,7 @@ from strata.models.common_models import (
 from strata.models.integration_model import IntegrationModel
 from strata.models.policy_model import PolicyModel
 from strata.models.repository_model import RemoteModel
+from strata.utils.config import SOLUTION_DEPLOYMENTS_DIR, SOLUTION_DIR, SOLUTION_OUTPUTS_DIR
 
 
 class ConfigurationSecurityModel(PlatformBaseModel):
@@ -251,7 +252,7 @@ class ConfigurationManifestModel(PlatformBaseModel):
 
     type: ManifestStoreType = Field(description="Storage backend: 'local' (filesystem) or 'gitops' (git repository)")
     path: str = Field(
-        default=".strata/deployments",
+        default=f"{SOLUTION_DIR}/{SOLUTION_DEPLOYMENTS_DIR}",
         description="Base path for manifests. Service appends /{deployment_name}/{version}/{timestamp}.json",
     )
     repository: Optional[str] = Field(
@@ -312,7 +313,7 @@ class ConfigurationOutputsModel(PlatformBaseModel):
         description="Write output artifacts after a successful deploy. Set to false to disable.",
     )
     path: str = Field(
-        default=".strata/outputs",
+        default=f"{SOLUTION_DIR}/{SOLUTION_OUTPUTS_DIR}",
         description=("Base path for output artifacts. The deployer appends /{deployment_name}/{version}/{stage}.json"),
     )
     sensitive: SensitiveOutputHandling = Field(

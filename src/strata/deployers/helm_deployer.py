@@ -28,7 +28,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 
-from strata.controllers.value_controller import ResolvedValues, inject_compose_env
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -47,6 +46,7 @@ from strata.models.integration_model import IntegrationModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 from strata.services.module_service import ModuleService
+from strata.utils.resolved_values import ResolvedValues, inject_compose_env
 from strata.utils.system import resolve_path
 
 

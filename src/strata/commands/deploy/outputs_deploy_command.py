@@ -7,8 +7,9 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
+from strata.utils.config import SOLUTION_DIR, SOLUTION_OUTPUTS_DIR
 
-_DEFAULT_OUTPUTS_PATH = ".strata/outputs"
+_DEFAULT_OUTPUTS_PATH = f"{SOLUTION_DIR}/{SOLUTION_OUTPUTS_DIR}"
 
 
 class OutputsDeployCommand(BaseDeployCommand):

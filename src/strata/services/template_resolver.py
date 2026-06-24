@@ -63,7 +63,7 @@ def list_scaffold_templates(work_path: Optional[Path] = None) -> List[Dict[str, 
 
     # Workspace-local templates (override built-in)
     if work_path is not None:
-        ws_dir = work_path / ".strata" / "templates"
+        ws_dir = work_path / SOLUTION_DIR / SOLUTION_TEMPLATES_DIR
         if ws_dir.is_dir():
             for p in ws_dir.iterdir():
                 if p.is_dir() and (p / _SCAFFOLD_DIR).is_dir():

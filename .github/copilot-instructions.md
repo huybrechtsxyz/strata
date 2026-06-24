@@ -6,16 +6,25 @@ Python DevOps CLI tool. Click + Pydantic v2 + structlog. Python 3.13. Package ma
 
 ## Architecture Layers
 
-Code is organized into six layers. Respect the dependency direction — lower layers never import higher ones.
+Code is organized into layers. Respect the dependency direction — lower layers never import higher ones.
 
 ```
 commands/     ← Click CLI entry points (thin wrappers, call BaseCommand subclasses)
-controllers/  ← Orchestrate multiple services + integrations for a single operation
+controllers/  ← Orchestrate operations; delegate heavy domain work to builders/deployers/validators
+builders/     ← Produce build artifacts from configuration (assemble, render, package)
+deployers/    ← Execute provisioner steps (terraform, helm, compose, ansible, script)
+validators/   ← Cross-file and cross-repo validation (policy, schema, platform rules)
 services/     ← Load, validate, and expose a single YAML model type
 integrations/ ← Subprocess wrappers for external tools (git, terraform, docker, etc.)
 models/       ← Pydantic v2 models for YAML documents
 utils/        ← Pure utilities (no business logic, no service imports)
 ```
+
+**Dependency rules:**
+- `commands` → `controllers` → `builders/deployers/validators` → `services` → `integrations` → `models` → `utils`
+- `builders`, `deployers`, and `validators` are peers of `controllers` in the orchestration tier; they may import from `services`, `integrations`, `models`, and `utils` at runtime.
+- Deployers and builders receive `SolutionController` as a parameter (dependency injection); they declare it only under `TYPE_CHECKING`, never as a runtime import.
+- `utils/resolved_values.py` holds `ResolvedValues` and the `inject_tf_vars` / `inject_compose_env` context managers so that deployers can use them without importing from `controllers/`.
 
 ---
 
