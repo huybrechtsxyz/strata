@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from strata.models.platform_artifact_model import (
     PlatformArtifactModel,
     PlatformComponentModel,
+    PlatformDnsModel,
     PlatformFirewallModel,
     PlatformLifecycleModel,
     PlatformMetaModel,
@@ -427,6 +428,17 @@ class PlatformBuilder(BaseBuilder):
             )
 
         # ------------------------------------------------------------------
+        # DNS zones
+        # ------------------------------------------------------------------
+        dns_zones = None
+        dns_services = workspace_service.get_dns_services()
+        if dns_services:
+            dns_zones = [
+                PlatformDnsModel.from_dns_model(svc.model) for svc in dns_services.values() if svc.model is not None
+            ]
+            self.logger.debug(f"Built {len(dns_zones)} DNS zone(s)")
+
+        # ------------------------------------------------------------------
         # Variables / Secrets / Features  (optional — service may not exist yet)
         # ------------------------------------------------------------------
         environment_service = deployment_service.get_environment_service()
@@ -497,6 +509,7 @@ class PlatformBuilder(BaseBuilder):
             namespaces=namespaces,
             modules=modules,
             firewalls=firewalls,
+            dns_zones=dns_zones,
             deployment=deployment_model.spec.layers,
             artifact_path=artifact_path,
             stages=deployment_model.spec.stages,

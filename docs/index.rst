@@ -65,6 +65,17 @@ strata
 
 .. toctree::
    :maxdepth: 2
+   :caption: Platform Examples:
+
+   examples/readme
+   examples/azure-aks
+   examples/aws-eks
+   examples/gcp-gke
+   examples/hetzner-compose
+   examples/kamatera-swarm
+
+.. toctree::
+   :maxdepth: 2
    :caption: CLI Reference:
 
 .. toctree::
