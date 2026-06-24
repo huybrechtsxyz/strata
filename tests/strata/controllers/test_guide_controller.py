@@ -110,8 +110,19 @@ class TestGuideControllerEvaluate:
         repo_dir = tmp_path / "repos" / "xyz-svc-app"
         repo_dir.mkdir(parents=True)
         solution = _make_solution_json(
-            repositories=[{"name": "xyz-svc-app", "url": "https://x.git", "path": str(repo_dir), "type": "git", "branch": "main"}],
-            profiles=[{"name": "prd", "active": True, "configfile_paths": [{"name": "c", "path": "@repo/x.yaml"}], "envfile_paths": [], "datafile_paths": [], "secretfile_paths": []}],
+            repositories=[
+                {"name": "xyz-svc-app", "url": "https://x.git", "path": str(repo_dir), "type": "git", "branch": "main"}
+            ],
+            profiles=[
+                {
+                    "name": "prd",
+                    "active": True,
+                    "configfile_paths": [{"name": "c", "path": "@repo/x.yaml"}],
+                    "envfile_paths": [],
+                    "datafile_paths": [],
+                    "secretfile_paths": [],
+                }
+            ],
         )
         _make_workspace(tmp_path, solution=solution, build_files=["platform.json"])
         # Add sbom
@@ -145,8 +156,19 @@ class TestGuideControllerNextStep:
         repo_dir = tmp_path / "repos" / "xyz-svc-app"
         repo_dir.mkdir(parents=True)
         solution = _make_solution_json(
-            repositories=[{"name": "xyz-svc-app", "url": "https://x.git", "path": str(repo_dir), "type": "git", "branch": "main"}],
-            profiles=[{"name": "prd", "active": True, "configfile_paths": [{"name": "c", "path": "@repo/x.yaml"}], "envfile_paths": [], "datafile_paths": [], "secretfile_paths": []}],
+            repositories=[
+                {"name": "xyz-svc-app", "url": "https://x.git", "path": str(repo_dir), "type": "git", "branch": "main"}
+            ],
+            profiles=[
+                {
+                    "name": "prd",
+                    "active": True,
+                    "configfile_paths": [{"name": "c", "path": "@repo/x.yaml"}],
+                    "envfile_paths": [],
+                    "datafile_paths": [],
+                    "secretfile_paths": [],
+                }
+            ],
         )
         _make_workspace(tmp_path, solution=solution, build_files=["platform.json"])
         sbom_path = tmp_path / "build" / "sbom.json"

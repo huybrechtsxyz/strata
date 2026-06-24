@@ -118,6 +118,12 @@ strata
    guides/deployment-manifests
    guides/at-scale
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Skills:
+
+   skills/strata-onboarding
+
 .. :orphan:
 
 Indices and tables
