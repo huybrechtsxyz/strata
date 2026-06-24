@@ -114,7 +114,7 @@ Add `--template <name>` to get a ready-to-edit config folder alongside the works
 strata sln init --name my-aks --template aks
 ```
 
-This copies a working set of example config files into the repo root, with `my-aks` substituted wherever the template uses `${solution_name}`:
+This copies a working set of example config files into the repo root, with `my-aks` substituted wherever the template uses `{{ solution_name }}`:
 
 ```
 my-config-repo/
@@ -172,7 +172,7 @@ strata sln export --name my-corp-base
 
 What it does:
 - Copies all workspace config files into `.strata/templates/my-corp-base/scaffold/`
-- Replaces the current solution name with `${solution_name}` throughout — ready to substitute on next init
+- Replaces the current solution name with `{{ solution_name }}` throughout — ready to substitute on next init
 - Shows every substitution so you can spot false positives
 
 Output:

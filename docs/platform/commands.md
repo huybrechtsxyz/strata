@@ -180,7 +180,7 @@ strata sln status --output json
 
 ### `sln export`
 
-Export the current workspace as a reusable scaffold template. Copies all workspace files into `.strata/templates/<name>/scaffold/`, replaces every occurrence of the solution name with `${solution_name}` in file content and file paths, then generates a `template.yaml` manifest.
+Export the current workspace as a reusable scaffold template. Copies all workspace files into `.strata/templates/<name>/scaffold/`, replaces every occurrence of the solution name with `{{ solution_name }}` in file content and file paths, then generates a `template.yaml` manifest.
 
 ```
 strata sln export --name NAME [--force] [--dry-run] [standard options]
@@ -196,7 +196,7 @@ strata sln export --name NAME [--force] [--dry-run] [standard options]
 
 | Path                                     | Description                                           |
 | ---------------------------------------- | ----------------------------------------------------- |
-| `.strata/templates/<name>/scaffold/`     | Workspace files with `${solution_name}` substitutions |
+| `.strata/templates/<name>/scaffold/`     | Workspace files with `{{ solution_name }}` substitutions |
 | `.strata/templates/<name>/template.yaml` | Template manifest (name, description, variables)      |
 
 **Excluded from export:** `.git/`, `repos/`, `.venv/`, `node_modules/`, `.strata/logs/`, `__pycache__/`, `*.pyc`, `*.log`
@@ -215,7 +215,7 @@ strata sln export --name my-corp-base --force
 
 ## `vars`
 
-Manage team-shared template variables stored in `solution.json`. Variables are substituted as `${key}` in platform YAML files.
+Manage team-shared template variables stored in `solution.json`. Variables are substituted as `{{ key }}` in platform YAML files.
 
 | Subcommand      | Description                          |
 | --------------- | ------------------------------------ |
@@ -279,7 +279,7 @@ strata new --list
 | Option / Argument | Description                                                       |
 | ----------------- | ----------------------------------------------------------------- |
 | `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `tenant`)            |
-| `NAME`            | Injected as `${name}`; used in output filenames and path segments |
+| `NAME`            | Injected as `{{ name }}`; used in output filenames and path segments |
 | `--path PATH`     | Output directory (default: current directory)                     |
 | `--overwrite`     | Overwrite output file(s) if they already exist                    |
 | `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)           |
@@ -315,20 +315,20 @@ Workspace templates always override the package defaults.
 ### Bundle templates
 
 A **bundle** is a directory under `.strata/templates/` that contains multiple
-template files. The directory tree is the output structure — `${var}`
+template files. The directory tree is the output structure — `{{ var }}`
 substitution runs on both file content and path segments using the same
-`${var}` syntax as single-file templates.
+`{{ var }}` syntax as single-file templates.
 
 ```
 .strata/templates/
 └── tenant/                    ← bundle directory
     ├── tenants/
-    │   └── ${name}/
+    │   └── {{ name }}/
     │       ├── deployments/
-    │       │   ├── ${name}-dev.yaml
-    │       │   └── ${name}-prod.yaml
+    │       │   ├── {{ name }}-dev.yaml
+    │       │   └── {{ name }}-prod.yaml
     │       └── environments/
-    │           └── ${name}.yaml
+    │           └── {{ name }}.yaml
     └── README.md
 ```
 
@@ -341,7 +341,7 @@ repos/xyz-config/tenants/newcorp/deployments/newcorp-prod.yaml
 repos/xyz-config/tenants/newcorp/environments/newcorp.yaml
 ```
 
-All `${var}` references in content and path segments are substituted from:
+All `{{ var }}` references in content and path segments are substituted from:
 - `name` — the `NAME` argument (always available)
 - `--set KEY=VALUE` overrides
 - Team context from `solution.json` (if present)
