@@ -61,6 +61,12 @@ def validate_group() -> None:
         "Fails with exit code 1 if the configuration cannot be loaded."
     ),
 )
+@click.option(
+    "--explain",
+    is_flag=True,
+    default=False,
+    help="After validation, emit a plain-English summary of what the file describes.",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -69,6 +75,7 @@ def validate_run(
     file: Optional[str] = None,
     path: Optional[str] = None,
     deep: bool = False,
+    explain: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
@@ -91,6 +98,7 @@ def validate_run(
         file=file,
         path=path,
         deep=deep,
+        explain=explain,
         work_path=work_path,
         output=output,
         verbose=verbose,

@@ -5,29 +5,29 @@
 
 ## Summary
 
-| # | Item | Phase | Status |
-|---|------|-------|--------|
-| 1 | `strata sln init --list` — discover available templates | 1 | done |
-| 2 | `strata new --list` shows bundles + descriptions | 1 | done |
-| 3 | Fix template bundles (`type:` → `provisioner:`) | 1 | done |
-| 4 | CI template validation test | 1 | done |
-| 5 | Formalize `config/` as reference example workspace | 1 | done |
-| 6 | `strata console` — interactive workspace session (prompt_toolkit) | 2 | todo |
-| 7 | REPL commands: status, check, next, do, new, validate, flow, tools | 2 | todo |
-| 8 | `GuideController` extraction from `GuideCommand` | 2 | todo |
-| 9 | Rich rendering (panels, tables, progress bar) | 2 | todo |
-| 10 | `init` wizard inside the guide REPL | 3 | todo |
-| 11 | `flow` command — Mermaid dependency graph (`strata validate graph`) | 3 | done |
-| 12 | `strata validate --path "**"` batch validation | 3 | todo |
-| 13 | `strata validate --explain` — plain-English file summary | 3 | TBD |
-| 14 | Validation error fix suggestions | 3 | TBD |
-| 15 | Interactive `strata new` inside the guide REPL | 3 | todo |
-| 16 | Session progress persistence (`.strata/guide-progress.json`) | 3 | todo |
-| 17 | `strata env doctor` — non-interactive health check | 3 | issue |
-| 18 | Standalone LLM skill file (`strata-onboarding`) | 4 | todo |
-| 19 | Progressive dependency scaffolding | 5 | future |
-| 20 | Auto-refresh mode (`strata guide --auto`) | 5 | future |
-| 21 | Template marketplace / community templates | 5 | future |
+| #   | Item                                                                | Phase | Status |
+| --- | ------------------------------------------------------------------- | ----- | ------ |
+| 1   | `strata sln init --list` — discover available templates             | 1     | done   |
+| 2   | `strata new --list` shows bundles + descriptions                    | 1     | done   |
+| 3   | Fix template bundles (`type:` → `provisioner:`)                     | 1     | done   |
+| 4   | CI template validation test                                         | 1     | done   |
+| 5   | Formalize `config/` as reference example workspace                  | 1     | done   |
+| 6   | `strata console` — interactive workspace session (prompt_toolkit)   | 2     | done   |
+| 7   | REPL commands: status, check, next, do, new, validate, flow, tools  | 2     | done   |
+| 8   | `GuideController` extraction from `GuideCommand`                    | 2     | done   |
+| 9   | Rich rendering (panels, tables, progress bar)                       | 2     | done   |
+| 10  | `init` wizard inside the guide REPL                                 | 3     | todo   |
+| 11  | `flow` command — Mermaid dependency graph (`strata validate graph`) | 3     | done   |
+| 12  | `strata validate --path "**"` batch validation                      | 3     | done   |
+| 13  | `strata validate --explain` — plain-English file summary            | 3     | done   |
+| 14  | Validation error fix suggestions                                    | 3     | done   |
+| 15  | Interactive `strata new` inside the guide REPL                      | 3     | todo   |
+| 16  | Session progress persistence (`.strata/guide-progress.json`)        | 3     | todo   |
+| 17  | `strata env doctor` — non-interactive health check                  | 3     | issue  |
+| 18  | Standalone LLM skill file (`strata-onboarding`)                     | 4     | todo   |
+| 19  | Progressive dependency scaffolding                                  | 5     | future |
+| 20  | Auto-refresh mode (`strata guide --auto`)                           | 5     | future |
+| 21  | Template marketplace / community templates                          | 5     | future |
 
 ---
 
@@ -293,19 +293,19 @@ The existing `strata guide` command already has the right bones: 8-phase workspa
 
 6. **REPL commands** — Each maps to existing or new capability:
 
-   | Command | Alias | What it does |
-   |---------|-------|--------------|
-   | `status` | `s` | Run the 8-phase workspace checklist (existing `_evaluate_checklist`) |
-   | `check <file>` | `c` | Run file-mode analysis (existing `_run_file_mode`) |
-   | `next` | `n` | Show the next step hint (existing `_find_next_step`) |
-   | `do` | `d` | Execute the suggested next-step command directly (shell out) |
-   | `new <template> [name]` | | Scaffold a file via `strata new` inline |
-   | `validate [file]` | `v` | Run `strata validate` on a file or all found YAML |
-   | `templates` | `t` | List available templates (single-file + bundles) |
-   | `tools` | | Run `strata tools status` inline |
-   | `open <file>` | `o` | Open a file in the default editor |
-   | `help` | `?` | Show command table |
-   | `quit` | `q` | Exit the REPL |
+   | Command                 | Alias | What it does                                                         |
+   | ----------------------- | ----- | -------------------------------------------------------------------- |
+   | `status`                | `s`   | Run the 8-phase workspace checklist (existing `_evaluate_checklist`) |
+   | `check <file>`          | `c`   | Run file-mode analysis (existing `_run_file_mode`)                   |
+   | `next`                  | `n`   | Show the next step hint (existing `_find_next_step`)                 |
+   | `do`                    | `d`   | Execute the suggested next-step command directly (shell out)         |
+   | `new <template> [name]` |       | Scaffold a file via `strata new` inline                              |
+   | `validate [file]`       | `v`   | Run `strata validate` on a file or all found YAML                    |
+   | `templates`             | `t`   | List available templates (single-file + bundles)                     |
+   | `tools`                 |       | Run `strata tools status` inline                                     |
+   | `open <file>`           | `o`   | Open a file in the default editor                                    |
+   | `help`                  | `?`   | Show command table                                                   |
+   | `quit`                  | `q`   | Exit the REPL                                                        |
 
 7. **`GuideController`** — Extract the stateful logic from `GuideCommand` into a controller (per architecture rules: controllers orchestrate, commands are thin wrappers). The controller holds:
    - Current workspace state (solution, checklist, detected files)
@@ -389,13 +389,13 @@ The sterling CLI (`E:\Sources\app-int-agentic-workflow`) implements two relevant
 
 **Mapping to strata:**
 
-| Sterling concept | Strata equivalent |
-|---|---|
-| Rules | YAML files (configuration, environment, deployment, etc.) |
-| Outcome edges | Cross-file references (`@repo/path`, `spec.workspace.file`, provisioner names) |
-| Item position highlighting | File validation status (exists + valid / exists + invalid / missing) |
-| Per-squad output | Per-deployment or whole-workspace graph |
-| Mermaid Live URL | Same — include in `graph.md` output |
+| Sterling concept           | Strata equivalent                                                              |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| Rules                      | YAML files (configuration, environment, deployment, etc.)                      |
+| Outcome edges              | Cross-file references (`@repo/path`, `spec.workspace.file`, provisioner names) |
+| Item position highlighting | File validation status (exists + valid / exists + invalid / missing)           |
+| Per-squad output           | Per-deployment or whole-workspace graph                                        |
+| Mermaid Live URL           | Same — include in `graph.md` output                                            |
 
 Key differences:
 - Sterling watches a single work item (external state). Strata guides through local workspace setup (filesystem state).

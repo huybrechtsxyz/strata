@@ -30,6 +30,7 @@ class ValidateCommand(BaseCommand):
         file: Optional[str] = None,
         path: Optional[str] = None,
         deep: bool = False,
+        explain: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -39,6 +40,7 @@ class ValidateCommand(BaseCommand):
         self._file_path_raw: Optional[str] = file
         self._path_glob: Optional[str] = path
         self._deep: bool = deep
+        self._explain: bool = explain
         self._resolved_file: Optional[Path] = None
         self._validator: Optional[PlatformValidator] = None
         self._detected_kind: Optional[str] = None
@@ -247,6 +249,16 @@ class ValidateCommand(BaseCommand):
             "errors": [e.to_dict() for e in self._validator.get_structured_errors()],
         }
 
+        # Add explanation and suggestions to output data
+        if validation_passed and self._explain:
+            explanation = self._generate_explanation()
+            if explanation:
+                self._output_data["explanation"] = explanation
+        if not validation_passed:
+            suggestions = self._generate_fix_suggestions()
+            if suggestions:
+                self._output_data["suggestions"] = suggestions
+
         return True
 
     def _run_overlap_execution(self) -> bool:
@@ -382,8 +394,19 @@ class ValidateCommand(BaseCommand):
             click.echo("    Errors:")
             for err in self._validator.get_errors() if self._validator else []:
                 click.secho(f"      - {err}", fg="red")
+            # Show fix suggestions for Pydantic errors
+            if self._validator:
+                suggestions = self._generate_fix_suggestions()
+                if suggestions:
+                    click.echo("\n💡  Suggestions:")
+                    for suggestion in suggestions:
+                        click.secho(f"      → {suggestion}", fg="yellow")
         else:
             click.secho("\n✅  Validation PASSED", fg="green")
+            if self._explain:
+                explanation = self._generate_explanation()
+                if explanation:
+                    click.echo(f"\n📝  Summary: {explanation}")
 
         click.echo("")
 
@@ -495,3 +518,259 @@ class ValidateCommand(BaseCommand):
         except Exception as exc:
             self._errors.append(f"--deep: unexpected error loading configuration: {exc}")
             return None
+
+    def _generate_explanation(self) -> Optional[str]:
+        """Generate a plain-English summary of what the validated file describes."""
+        if not self._validator or not self._validator.service:
+            return None
+
+        service = self._validator.service
+        model = service.model
+        if model is None:
+            return None
+
+        kind = self._detected_kind or "unknown"
+        name = getattr(getattr(model, "meta", None), "name", None) or "unnamed"
+        spec = getattr(model, "spec", None)
+
+        parts: List[str] = [f"This {kind} '{name}'"]
+
+        if kind == "deployment":
+            envs = getattr(spec, "environments", None) or []
+            ws = getattr(spec, "workspace", None)
+            stages = getattr(spec, "stages", None) or []
+            tenant = getattr(spec, "tenant", None)
+            ws_file = getattr(ws, "file", None) if ws else None
+
+            if tenant:
+                parts.append(f"belongs to tenant '{tenant}'")
+            if envs:
+                env_names = [str(e).rsplit("/", 1)[-1].replace(".yaml", "") for e in envs]
+                parts.append(f"targets environment(s) {', '.join(env_names)}")
+            if stages:
+                stage_desc = [s.name for s in stages]
+                parts.append(f"runs {len(stages)} stage(s): {', '.join(stage_desc)}")
+            if ws_file:
+                parts.append(f"references workspace '{ws_file}'")
+
+        elif kind == "environment":
+            region = getattr(spec, "region", None)
+            includes = getattr(spec, "includes", None) or []
+            overrides = getattr(spec, "overrides", None)
+            if region:
+                parts.append(f"targets region '{region}'")
+            if includes:
+                parts.append(f"includes {len(includes)} file(s)")
+            if overrides:
+                override_sections = []
+                if getattr(overrides, "resources", None):
+                    override_sections.append("resources")
+                if getattr(overrides, "modules", None):
+                    override_sections.append("modules")
+                if getattr(overrides, "providers", None):
+                    override_sections.append("providers")
+                if override_sections:
+                    parts.append(f"overrides: {', '.join(override_sections)}")
+
+        elif kind == "workspace":
+            resources = getattr(spec, "resources", None) or []
+            namespaces = getattr(spec, "namespaces", None) or []
+            modules = getattr(spec, "modules", None) or []
+            parts.append(
+                f"defines {len(resources)} resource(s), {len(namespaces)} namespace(s), {len(modules)} module(s)"
+            )
+
+        elif kind == "configuration":
+            provisioners = getattr(spec, "provisioners", None) or []
+            providers = getattr(spec, "providers", None) or []
+            remotes = getattr(spec, "remotes", None) or []
+            parts.append(
+                f"declares {len(provisioners)} provisioner(s), {len(providers)} provider(s), {len(remotes)} remote(s)"
+            )
+
+        elif kind == "module":
+            services = getattr(spec, "services", None) or []
+            parts.append(f"defines {len(services)} service(s)")
+
+        elif kind == "resource":
+            provider = getattr(spec, "provider", None)
+            resource_type = getattr(spec, "type", None)
+            if provider:
+                parts.append(f"uses provider '{provider}'")
+            if resource_type:
+                parts.append(f"of type '{resource_type}'")
+
+        elif kind == "namespace":
+            resources = getattr(spec, "resources", None) or []
+            modules = getattr(spec, "modules", None) or []
+            parts.append(f"contains {len(resources)} resource(s), {len(modules)} module(s)")
+
+        elif kind == "provider":
+            provider_type = getattr(spec, "type", None)
+            if provider_type:
+                parts.append(f"of type '{provider_type}'")
+
+        elif kind == "tenant":
+            description = getattr(getattr(model, "meta", None), "annotations", None) or {}
+            desc = description.get("description", "")
+            if desc:
+                parts.append(f"— {desc}")
+
+        elif kind == "dns":
+            zones = getattr(spec, "zones", None) or []
+            parts.append(f"manages {len(zones)} DNS zone(s)")
+
+        elif kind == "firewall":
+            rules = getattr(spec, "rules", None) or []
+            parts.append(f"defines {len(rules)} firewall rule(s)")
+
+        elif kind == "network":
+            subnets = getattr(spec, "subnets", None) or []
+            parts.append(f"defines {len(subnets)} subnet(s)")
+
+        return " — ".join(parts) if len(parts) > 1 else parts[0]
+
+    def _generate_fix_suggestions(self) -> List[str]:
+        """Generate actionable fix suggestions from structured validation errors."""
+        import difflib
+
+        if not self._validator:
+            return []
+
+        suggestions: List[str] = []
+        seen: set = set()
+
+        for err in self._validator.get_structured_errors():
+            ctx = err.context or {}
+            error_type = ctx.get("type", "")
+
+            if error_type == "extra_forbidden" and err.field:
+                # Get the offending field name (last segment of the path)
+                field_parts = err.field.replace(" -> ", ".").split(".")
+                bad_field = field_parts[-1]
+                # Try to find valid fields from the model
+                valid_fields = self._get_valid_fields_for_path(field_parts[:-1])
+                if valid_fields:
+                    matches = difflib.get_close_matches(bad_field, valid_fields, n=3, cutoff=0.5)
+                    if matches:
+                        suggestion = f"Unknown field '{bad_field}'. Did you mean: {', '.join(matches)}?"
+                    else:
+                        suggestion = f"Unknown field '{bad_field}'. Valid fields: {', '.join(sorted(valid_fields)[:8])}"
+                    if suggestion not in seen:
+                        suggestions.append(suggestion)
+                        seen.add(suggestion)
+
+            elif error_type == "missing" and err.field:
+                suggestion = f"Required field '{err.field}' is missing — add it to your YAML."
+                if suggestion not in seen:
+                    suggestions.append(suggestion)
+                    seen.add(suggestion)
+
+        return suggestions
+
+    def _get_valid_fields_for_path(self, path_parts: List[str]) -> List[str]:
+        """Resolve the Pydantic model at a given field path and return its valid field names."""
+        if not self._validator or not self._detected_kind:
+            return []
+
+        from strata.models.common_models import PlatformKind
+
+        try:
+            kind = PlatformKind(self._detected_kind)
+        except ValueError:
+            return []
+
+        # Get the root model class for this kind
+        from strata.models.configuration_model import ConfigurationModel
+        from strata.models.deployment_model import DeploymentModel
+        from strata.models.dns_model import DnsModel
+        from strata.models.environment_model import EnvironmentModel
+        from strata.models.firewall_model import FirewallModel
+        from strata.models.module_model import ModuleModel
+        from strata.models.namespace_model import NamespaceModel
+        from strata.models.network_model import NetworkModel
+        from strata.models.provider_model import ProviderModel
+        from strata.models.resource_model import ResourceModel
+        from strata.models.tenant_model import TenantModel
+        from strata.models.workspace_model import WorkspaceModel
+
+        kind_to_model = {
+            PlatformKind.CONFIGURATION: ConfigurationModel,
+            PlatformKind.DEPLOYMENT: DeploymentModel,
+            PlatformKind.DNS: DnsModel,
+            PlatformKind.ENVIRONMENT: EnvironmentModel,
+            PlatformKind.FIREWALL: FirewallModel,
+            PlatformKind.MODULE: ModuleModel,
+            PlatformKind.NAMESPACE: NamespaceModel,
+            PlatformKind.NETWORK: NetworkModel,
+            PlatformKind.PROVIDER: ProviderModel,
+            PlatformKind.RESOURCE: ResourceModel,
+            PlatformKind.TENANT: TenantModel,
+            PlatformKind.WORKSPACE: WorkspaceModel,
+        }
+
+        model_class = kind_to_model.get(kind)
+        if model_class is None:
+            return []
+
+        # Walk the path to find the nested model
+        current: Any = model_class
+        for part in path_parts:
+            if not hasattr(current, "model_fields"):
+                return []
+            fields = current.model_fields
+            if part not in fields:
+                # Try numeric index (list item) — skip to the item type
+                if part.isdigit():
+                    continue
+                return []
+            field_info = fields[part]
+            # Resolve the annotation to find a nested model
+            annotation = field_info.annotation
+            inner = self._unwrap_annotation(annotation)
+            if inner is not None and hasattr(inner, "model_fields"):
+                current = inner
+            else:
+                return []
+
+        if hasattr(current, "model_fields"):
+            return list(current.model_fields.keys())
+        return []
+
+    @staticmethod
+    def _unwrap_annotation(annotation: Any) -> Optional[type]:
+        """Unwrap Optional, List, Annotated to find the inner Pydantic model type."""
+        import typing
+
+        from pydantic import BaseModel as PydanticBaseModel
+
+        origin = getattr(annotation, "__origin__", None)
+
+        # Handle Optional[X] = Union[X, None]
+        if origin is typing.Union:
+            union_args = [a for a in annotation.__args__ if a is not type(None)]
+            if union_args:
+                return ValidateCommand._unwrap_annotation(union_args[0])
+            return None
+
+        # Handle List[X]
+        if origin is list:
+            list_args = getattr(annotation, "__args__", None)
+            if list_args:
+                return ValidateCommand._unwrap_annotation(list_args[0])
+            return None
+
+        # Handle Annotated[X, ...]
+        if origin is typing.Annotated or (
+            hasattr(typing, "Annotated") and origin is getattr(typing, "Annotated", None)
+        ):
+            ann_args = getattr(annotation, "__args__", None)
+            if ann_args:
+                return ValidateCommand._unwrap_annotation(ann_args[0])
+            return None
+
+        # Direct model class
+        if isinstance(annotation, type) and issubclass(annotation, PydanticBaseModel):
+            return annotation
+
+        return None
