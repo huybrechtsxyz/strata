@@ -17,7 +17,7 @@
 | 8 | `GuideController` extraction from `GuideCommand` | 2 | todo |
 | 9 | Rich rendering (panels, tables, progress bar) | 2 | todo |
 | 10 | `init` wizard inside the guide REPL | 3 | todo |
-| 11 | `flow` command — Mermaid dependency graph | 3 | todo |
+| 11 | `flow` command — Mermaid dependency graph (`strata validate graph`) | 3 | done |
 | 12 | `strata validate --path "**"` batch validation | 3 | todo |
 | 13 | `strata validate --explain` — plain-English file summary | 3 | TBD |
 | 14 | Validation error fix suggestions | 3 | TBD |
