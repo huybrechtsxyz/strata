@@ -11,7 +11,7 @@ Apply these rules whenever you create or edit a strata YAML configuration file.
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
-kind: <Kind>
+kind: <kind>
 meta:
   name: <name>
   annotations:
@@ -21,8 +21,9 @@ spec:
 ```
 
 - `apiVersion` is always `strata.huybrechts.xyz/v1` — do not change it.
-- `kind` must be one of: `Workspace`, `Configuration`, `Deployment`, `Namespace`, `Module`, `Environment`, `Provider`, `Resource`, `Firewall`.
+- `kind` must be one of: `workspace`, `configuration`, `deployment`, `namespace`, `module`, `environment`, `provider`, `resource`, `firewall`, `network`, `dns`, `tenant`.
 - `meta.name` must match `^[a-z0-9][a-z0-9_-]*$` — lowercase, no spaces, letters/numbers/hyphens/underscores only.
+- Models use `extra="forbid"` — any unknown field causes a validation error. Only use fields that exist in the schema.
 
 ## Cross-file references
 
@@ -50,14 +51,40 @@ environment:
     value: Europe/Brussels    # literal value — only for non-sensitive data
 ```
 
-## Module files (kind: Module)
+## Deployment stages
+
+Stages route to a provisioner or topology — never use a `type` field:
 
 ```yaml
-kind: Module
+spec:
+  stages:
+    - name: infrastructure
+      provisioner: platform_iac     # references a workspace provisioner by name
+      scope: all
+      on_failure: stop
+
+    - name: services
+      provisioner: platform_compose
+      scope: all
+      depends_on: [infrastructure]
+```
+
+**WRONG** (will fail validation — `type` is not a valid field):
+```yaml
+    - name: infrastructure
+      type: infrastructure    # ❌ does not exist
+      type: terraform         # ❌ does not exist
+```
+
+Use `provisioner: <name>` (explicit provisioner) or `topology: <name>` (derive provisioner from topology). These are mutually exclusive.
+
+## Module files (kind: module)
+
+```yaml
+kind: module
 spec:
   source:
     repository: my-repo       # optional, defaults to workspace repo
-  type: compose               # compose | helm | argocd | script
   services:
     - name: app
       image: "myapp:1.0"
@@ -70,38 +97,53 @@ spec:
       target: "conf.d/"       # trailing / = directory (required for globs)
 ```
 
-- `spec.type` is required for service deployment commands.
 - `spec.files` copies extra config files into the build output alongside `docker-compose.yml` / `values.yaml`.
 - Glob patterns in `source` require `target` to end with `/`.
 - Template substitution (`STRATA_*` variables) is applied to all copied text files.
 
-## Namespace files (kind: Namespace)
+## Namespace files (kind: namespace)
 
 ```yaml
-kind: Namespace
+kind: namespace
 spec:
   modules:
     - name: traefik
       file: "@my-repo/modules/traefik.yaml"
 ```
 
-## Deployment files (kind: Deployment)
+## Deployment files (kind: deployment)
 
 ```yaml
-kind: Deployment
+kind: deployment
 spec:
   workspace:
-    file: "@my-repo/workspace.yaml"
+    name: my_platform
+    file: "@my-repo/stack/ws-platform.yaml"
+  environments:
+    - "@my-repo/envs/env-prd.yaml"
   namespaces:
     - name: base
       file: "@my-repo/namespaces/base.yaml"
   stages:
     - name: infra
-      type: terraform
+      provisioner: platform_iac
     - name: services
-      type: compose
+      provisioner: platform_compose
       depends_on: [infra]
 ```
+
+## Tenant files (kind: tenant)
+
+```yaml
+kind: tenant
+spec:
+  tenant: acme
+  configuration:
+    tier: enterprise
+    region: eu-west
+```
+
+Note: The `customer` kind was renamed to `tenant` in v0.11.0.
 
 ## Validation
 
@@ -112,3 +154,5 @@ strata validate <file.yaml>
 ```
 
 Exit code 3 means validation failed — read the error list and fix the flagged fields before proceeding.
+
+Use `strata schema get <kind>` to inspect the full field reference for any kind.

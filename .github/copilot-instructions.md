@@ -25,6 +25,7 @@ utils/        ← Pure utilities (no business logic, no service imports)
 - Always use `PlatformKind` enum for `kind` fields.
 - Always use `PlatformVersion` enum for `apiVersion` fields.
 - All models extend `pydantic.BaseModel`. Use Pydantic v2 APIs only — no v1 shims.
+- All models use `model_config = ConfigDict(extra="forbid")` via `PlatformBaseModel` — unknown fields cause validation errors.
 - Use `Annotated` + `StringConstraints` for constrained string types.
 - Use `model_validator(mode="after")` for cross-field validation.
 - Use `field_validator` with `@classmethod` for single-field validation.
@@ -66,8 +67,9 @@ utils/        ← Pure utilities (no business logic, no service imports)
 
 - All top-level commands are flat: `strata <group> <command>`.
 - Every command module lives in `commands/` and registers to the `main` Click group in `cli.py`.
-- Registered command groups: `sln`, `config`, `log`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`, `new`, `schema`, `build`, `deploy`, `diff`, `vars`, `tools`.
+- Registered command groups: `sln`, `config`, `log`, `repo`, `profile`, `ref`, `values`, `validate`, `version`, `help`, `new`, `schema`, `build`, `deploy`, `diff`, `vars`, `tools`, `guide`.
 - The `sln` group manages solution lifecycle: `sln init`, `sln clean`, `sln status`, `sln export`.
+- The `guide` group provides onboarding: `guide show` — an 8-phase workspace readiness checklist.
 - The `main` Click group loads workspace defaults from `.strata/cli.yaml` into `ctx.default_map` at startup. Always use `@click.pass_context` and read `work_path` from `ctx.obj`.
 - **Never** use `sys.exit()` — always raise `click.exceptions.Exit(code)`.
 - Use `handle_command_exit(command, success)` from `cli_common.py` to map to exit codes.
@@ -131,7 +133,7 @@ All YAML config files follow Kubernetes-style structure:
 
 ```yaml
 apiVersion: strata.huybrechts.xyz/v1
-kind: <kind>          # deployment | workspace | configuration | environment | ...
+kind: <kind>          # deployment | workspace | configuration | environment | namespace | module | resource | provider | firewall | network | dns | tenant
 meta:
   name: <name>        # PlatformName: lowercase, letters/numbers/underscores/hyphens
   annotations:
@@ -143,6 +145,23 @@ spec:
 ```
 
 Cross-repo file references use `@repo_name/relative/path.yaml` notation.
+
+### Deployment Stages
+
+Stages route to a provisioner or topology — never a `type` field:
+
+```yaml
+stages:
+  - name: infrastructure
+    provisioner: platform_iac       # explicit provisioner name from workspace
+    scope: all
+    on_failure: stop
+  - name: services
+    topology: core_services         # OR derive provisioner from topology
+    depends_on: [infrastructure]
+```
+
+`provisioner` and `topology` are mutually exclusive. Do not add a `type` field — it will fail `extra="forbid"` validation.
 
 ---
 

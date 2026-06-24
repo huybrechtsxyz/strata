@@ -36,21 +36,23 @@ Commands follow a flat `strata <group> <command>` pattern:
 
 | Group | Key Commands | Purpose |
 |-------|-------------|---------|
-| `init` | — | Initialize workspace (creates `.strata/`) |
-| `config` | `set` `unset` `list` | Manage workspace defaults |
+| `sln` | `init` `clean` `status` `export` | Solution lifecycle |
+| `config` | `set` `unset` `list` | Manage workspace defaults (`.strata/cli.yaml`) |
 | `validate` | — | Validate a YAML file against schema |
 | `build` | `run` `plan` `clean` `sbom` | Build platform & Terraform artifacts; generate SBOM |
 | `deploy` | `run` `destroy` `status` `history` `health` | Deploy infrastructure |
-| `audit` | `list` | View execution logs |
 | `repo` | `add` `remove` `list` `sync` `status` | Manage solution repositories |
-| `profile` | `add` `remove` `list` `activate` `show` | Manage environment profiles |
+| `profile` | `create` `remove` `list` `activate` `show` | Manage environment profiles |
 | `ref` | `env` `config` `data` `secret` | Manage file references in profiles |
 | `values` | `list` `get` | Inspect resolved deployment values |
-| `guide` | — | Step-by-step workspace setup checklist |
+| `guide` | `show` | Step-by-step workspace readiness checklist |
 | `schema` | `list` `get` | Inspect YAML schemas |
 | `tools` | `status` `check` | Verify external tool availability |
-| `status` | — | Show workspace health |
+| `diff` | `show` | Show changes since last build |
+| `vars` | — | Variable resolution |
+| `new` | `<kind>` | Scaffold a new YAML file from templates |
 | `version` | — | Show CLI version |
+| `help` | — | Show help text |
 
 ---
 
@@ -265,7 +267,7 @@ spec:
   ...
 ```
 
-Valid kinds: `deployment`, `workspace`, `configuration`, `environment`, `namespace`, `module`, `resource`, `provider`, `firewall`, `datacenter`.
+Valid kinds: `deployment`, `workspace`, `configuration`, `environment`, `namespace`, `module`, `resource`, `provider`, `firewall`, `network`, `dns`, `tenant`.
 
 ---
 

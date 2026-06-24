@@ -85,6 +85,7 @@ strata
    decisions/0011-promotion-strategies-for-version-progression
    decisions/0012-rename-customer-to-tenant
    decisions/0013-auto-generated-secrets
+   decisions/0014-onboarding-experience
 
 .. toctree::
    :maxdepth: 2

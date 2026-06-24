@@ -1,7 +1,35 @@
 # Guided onboarding and cold-start experience
 
-- Status: brainstorm
+- Status: accepted
 - Date: 2026-06-24
+
+## Summary
+
+| # | Item | Phase | Status |
+|---|------|-------|--------|
+| 1 | `strata sln init --list` — discover available templates | 1 | todo |
+| 2 | `strata new --list` shows bundles + descriptions | 1 | todo |
+| 3 | Fix template bundles (`type:` → `provisioner:`) | 1 | todo |
+| 4 | CI template validation test | 1 | todo |
+| 5 | Formalize `config/` as reference example workspace | 1 | todo |
+| 6 | `strata guide` → interactive REPL (prompt_toolkit) | 2 | todo |
+| 7 | REPL commands: status, check, next, do, new, validate, flow, tools | 2 | todo |
+| 8 | `GuideController` extraction from `GuideCommand` | 2 | todo |
+| 9 | Rich rendering (panels, tables, progress bar) | 2 | todo |
+| 10 | `init` wizard inside the guide REPL | 3 | todo |
+| 11 | `flow` command — Mermaid dependency graph | 3 | todo |
+| 12 | `strata validate --path "**"` batch validation | 3 | todo |
+| 13 | `strata validate --explain` — plain-English file summary | 3 | TBD |
+| 14 | Validation error fix suggestions | 3 | TBD |
+| 15 | Interactive `strata new` inside the guide REPL | 3 | todo |
+| 16 | Session progress persistence (`.strata/guide-progress.json`) | 3 | todo |
+| 17 | `strata env doctor` — non-interactive health check | 3 | issue |
+| 18 | Standalone LLM skill file (`strata-onboarding`) | 4 | todo |
+| 19 | Progressive dependency scaffolding | 5 | future |
+| 20 | Auto-refresh mode (`strata guide --auto`) | 5 | future |
+| 21 | Template marketplace / community templates | 5 | future |
+
+---
 
 ## Context and Problem Statement
 
