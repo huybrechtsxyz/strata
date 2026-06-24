@@ -65,6 +65,17 @@ strata
 
 .. toctree::
    :maxdepth: 2
+   :caption: Platform Examples:
+
+   examples/readme
+   examples/azure-aks
+   examples/aws-eks
+   examples/gcp-gke
+   examples/hetzner-compose
+   examples/kamatera-swarm
+
+.. toctree::
+   :maxdepth: 2
    :caption: CLI Reference:
 
 .. toctree::
@@ -85,6 +96,10 @@ strata
    decisions/0011-promotion-strategies-for-version-progression
    decisions/0012-rename-customer-to-tenant
    decisions/0013-auto-generated-secrets
+   decisions/0014-onboarding-experience
+   decisions/0015-flow-command-dependency-graph
+   decisions/0016-console-interactive-repl
+   decisions/0017-jinja2-template-engine
 
 .. toctree::
    :maxdepth: 2
@@ -102,6 +117,12 @@ strata
    guides/setup-azure-oidc
    guides/deployment-manifests
    guides/at-scale
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Skills:
+
+   skills/strata-onboarding
 
 .. :orphan:
 

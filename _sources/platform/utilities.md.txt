@@ -72,7 +72,7 @@ Used internally by `BaseService.load()`. Call `clear_cache()` between tests.
 
 ## `templater.py`
 
-File template processor: expands `*.template.*` files using environment variable substitution (`$VAR` / `${VAR}`), then optionally deletes the template source.
+File template processor: expands `*.template.*` files using Jinja2 (`{{ VAR }}`), then optionally deletes the template source.
 
 ```python
 from strata.utils.templater import TemplateProcessor

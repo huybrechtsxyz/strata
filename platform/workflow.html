@@ -191,6 +191,11 @@
 <li class="toctree-l3"><a class="reference internal" href="commands.html#project-customisation">Project customisation</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="commands.html#console"><code class="docutils literal notranslate"><span class="pre">console</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#repl-commands">REPL Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="commands.html#features">Features</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="commands.html#schema"><code class="docutils literal notranslate"><span class="pre">schema</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#schema-list"><code class="docutils literal notranslate"><span class="pre">schema</span> <span class="pre">list</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="commands.html#schema-get-kind"><code class="docutils literal notranslate"><span class="pre">schema</span> <span class="pre">get</span> <span class="pre">KIND</span></code></a></li>
@@ -1005,7 +1010,12 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../config/dns.html#linking-to-a-workspace">Linking to a Workspace</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../config/dns.html#build-output">Build Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/dns.html#build-output">Build Output</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/dns.html#terraform-dns-auto-tfvars-json">Terraform — <code class="docutils literal notranslate"><span class="pre">dns.auto.tfvars.json</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/dns.html#terraform-dns-secret-records-auto-tfvars-json">Terraform — <code class="docutils literal notranslate"><span class="pre">dns_secret_records.auto.tfvars.json</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/dns.html#ansible-strata-dns-yml">Ansible — <code class="docutils literal notranslate"><span class="pre">strata_dns.yml</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../config/dns.html#validation-rules">Validation Rules</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/dns.html#best-practices">Best Practices</a></li>
 </ul>
@@ -1061,6 +1071,121 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../config/manifest.html#troubleshooting">Troubleshooting</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/manifest.html#integration-with-deployment-configuration">Integration with Deployment Configuration</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Platform Examples:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../examples/readme.html">Platform Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../examples/readme.html#available-examples">Available Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/readme.html#how-these-examples-are-structured">How These Examples Are Structured</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/azure-aks.html">Azure AKS</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#architecture-overview">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#workspace">Workspace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#provider">Provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#network">Network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#resources">Resources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/azure-aks.html#aks-cluster">AKS Cluster</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/azure-aks.html#postgresql-flexible-server">PostgreSQL Flexible Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/azure-aks.html#azure-container-registry">Azure Container Registry</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/azure-aks.html#key-vault">Key Vault</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#namespace">Namespace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#module">Module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/azure-aks.html#traefik-ingress-controller">Traefik Ingress Controller</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#environment">Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/azure-aks.html#deployment">Deployment</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/aws-eks.html">AWS EKS</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#architecture-overview">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#workspace">Workspace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#provider">Provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#network">Network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#resources">Resources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/aws-eks.html#eks-cluster">EKS Cluster</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/aws-eks.html#rds-postgresql">RDS PostgreSQL</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/aws-eks.html#elastic-container-registry">Elastic Container Registry</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/aws-eks.html#s3-artifacts-bucket">S3 Artifacts Bucket</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#namespace">Namespace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#module">Module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/aws-eks.html#aws-load-balancer-controller">AWS Load Balancer Controller</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#environment">Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/aws-eks.html#deployment">Deployment</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/gcp-gke.html">GCP GKE</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#architecture-overview">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#workspace">Workspace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#provider">Provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#network">Network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#resources">Resources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/gcp-gke.html#gke-autopilot-cluster">GKE Autopilot Cluster</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/gcp-gke.html#cloud-sql-for-postgresql">Cloud SQL for PostgreSQL</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/gcp-gke.html#artifact-registry">Artifact Registry</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/gcp-gke.html#cloud-storage-bucket">Cloud Storage Bucket</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#namespace">Namespace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#module">Module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/gcp-gke.html#nginx-ingress-controller">NGINX Ingress Controller</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#environment">Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/gcp-gke.html#deployment">Deployment</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/hetzner-compose.html">Hetzner Compose</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#architecture-overview">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#workspace">Workspace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#provider">Provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#resource">Resource</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/hetzner-compose.html#application-server">Application Server</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#dns">DNS</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#namespace">Namespace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#modules">Modules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/hetzner-compose.html#traefik-reverse-proxy">Traefik Reverse Proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/hetzner-compose.html#application-stack">Application Stack</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#environment">Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/hetzner-compose.html#deployment">Deployment</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/kamatera-swarm.html">Kamatera Swarm</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#architecture-overview">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#workspace">Workspace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#provider">Provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#firewall">Firewall</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#resources">Resources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/kamatera-swarm.html#swarm-manager">Swarm Manager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/kamatera-swarm.html#infrastructure-workers">Infrastructure Workers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../examples/kamatera-swarm.html#application-workers">Application Workers</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#namespace">Namespace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#module">Module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../examples/kamatera-swarm.html#traefik-ingress">Traefik Ingress</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#environment">Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../examples/kamatera-swarm.html#deployment">Deployment</a></li>
 </ul>
 </li>
 </ul>
@@ -1563,6 +1688,188 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0014-onboarding-experience.html">Guided onboarding and cold-start experience</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#what-exists-today">What exists today</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#brainstorm-candidate-approaches">Brainstorm — Candidate Approaches</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#approach-a-guided-interactive-init-strata-sln-init-guided">Approach A: Guided interactive init (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span> <span class="pre">--guided</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#approach-b-strata-doctor-workspace-readiness-checker">Approach B: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">doctor</span></code> — workspace readiness checker</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#approach-c-progressive-template-bundles-with-dependency-resolution">Approach C: Progressive template bundles with dependency resolution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#approach-d-strata-init-quick-start-presets-non-interactive">Approach D: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">init</span></code> quick-start presets (non-interactive)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#approach-e-post-init-next-steps-engine">Approach E: Post-init “next steps” engine</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#observations">Observations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#phase-1-quick-wins-discovery-hygiene">Phase 1 — Quick wins (discovery + hygiene)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#phase-2-rework-strata-guide-into-an-interactive-repl">Phase 2 — Rework <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">guide</span></code> into an interactive REPL</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#phase-3-guided-init-and-workspace-graph">Phase 3 — Guided init and workspace graph</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#phase-4-llm-skill-file">Phase 4 — LLM skill file</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#phase-5-future-consideration">Phase 5 — Future consideration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#reference-sterling-watch-flow-patterns">Reference: sterling <code class="docutils literal notranslate"><span class="pre">watch</span></code> + <code class="docutils literal notranslate"><span class="pre">flow</span></code> patterns</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#decision-outcome">Decision Outcome</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">graph</span></code> — Workspace Dependency Graph</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#context">Context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#command-placement">Command Placement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#impact-of-group-conversion">Impact of Group Conversion</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#node-identity-file-path-vs-meta-name">Node Identity: File Path vs <code class="docutils literal notranslate"><span class="pre">meta.name</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#file-graph-mode-files">File Graph (<code class="docutils literal notranslate"><span class="pre">--mode</span> <span class="pre">files</span></code>)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#nodes">Nodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#node-status-color">Node Status (Color)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#edges">Edges</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#edge-discovery-algorithm">Edge Discovery Algorithm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#mermaid-node-id-generation">Mermaid Node ID Generation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#resource-graph-mode-resources">Resource Graph (<code class="docutils literal notranslate"><span class="pre">--mode</span> <span class="pre">resources</span></code>)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#data-source">Data Source</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#resources-not-assigned-to-any-topology">Resources Not Assigned to Any Topology</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#id1">Nodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#id2">Node Status (Color)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#id3">Edges</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#topology-subgraphs">Topology Subgraphs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#example-azure-aks-resource-graph">Example: Azure AKS Resource Graph</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#console-output-resource-mode">Console Output (Resource Mode)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#json-output-resource-mode">JSON Output (Resource Mode)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#deployment-order-bonus-insight">Deployment Order (bonus insight)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#output-modes">Output Modes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#mermaid-markdown-file-save-default">1. Mermaid markdown file (<code class="docutils literal notranslate"><span class="pre">--save</span></code> / default)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#console-output-output-console">2. Console output (<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">console</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#json-output-output-json">3. JSON output (<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code>)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#cli-interface">CLI Interface</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#implementation-architecture">Implementation Architecture</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#graphcontroller"><code class="docutils literal notranslate"><span class="pre">GraphController</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#utils-graph-py"><code class="docutils literal notranslate"><span class="pre">utils/graph.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#exit-codes">Exit Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#edge-cases">Edge Cases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#example-azure-aks-reference-workspace">Example: Azure AKS Reference Workspace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#phase-2-repl-integration">Phase 2 REPL Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#resolved-design-questions">Resolved Design Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#acceptance-criteria">Acceptance Criteria</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#id4">File Graph (<code class="docutils literal notranslate"><span class="pre">--mode</span> <span class="pre">files</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html#id5">Resource Graph (<code class="docutils literal notranslate"><span class="pre">--mode</span> <span class="pre">resources</span></code>)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">console</span></code> — Interactive Workspace Console</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#context">Context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#what-exists-today">What Exists Today</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#command-naming-decision">Command Naming Decision</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#design">Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#command-structure">Command Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#architecture">Architecture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#workflow-definition">Workflow Definition</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#default-workflow-file-strata-workflow-yaml">Default Workflow File (<code class="docutils literal notranslate"><span class="pre">.strata/workflow.yaml</span></code>)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#workflow-schema">Workflow Schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#check-functions-registry">Check Functions Registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#how-next-and-do-use-the-workflow">How <code class="docutils literal notranslate"><span class="pre">next</span></code> and <code class="docutils literal notranslate"><span class="pre">do</span></code> Use the Workflow</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#extensibility-examples">Extensibility Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#guidecontroller"><code class="docutils literal notranslate"><span class="pre">GuideController</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#repl-commands">REPL Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#repl-input-handling">REPL Input Handling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#rendering">Rendering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#auto-refresh-after-actions">Auto-Refresh After Actions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#session-lifecycle">Session Lifecycle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#error-handling">Error Handling</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#step-1-add-prompt-toolkit-dependency">Step 1: Add <code class="docutils literal notranslate"><span class="pre">prompt_toolkit</span></code> dependency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#step-2-extract-guidecontroller">Step 2: Extract <code class="docutils literal notranslate"><span class="pre">GuideController</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#step-3-create-strata-console-command">Step 3: Create <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">console</span></code> command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#step-4-implement-console-repl-console-run-console-command-py">Step 4: Implement console REPL (<code class="docutils literal notranslate"><span class="pre">console/run_console_command.py</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#step-5-rich-rendering-for-repl">Step 5: Rich rendering for REPL</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#step-6-auto-refresh-session-history">Step 6: Auto-refresh + session history</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#exit-codes">Exit Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#edge-cases">Edge Cases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#dependencies">Dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#testing-strategy">Testing Strategy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#relationship-to-other-commands">Relationship to Other Commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#phase-2-interactive-file-creation-wizards">Phase 2: Interactive File Creation (Wizards)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#motivation">Motivation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#ux-pattern">UX Pattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#design-principles">Design Principles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#wizard-registry">Wizard Registry</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#implementation-sketch">Implementation Sketch</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#console-commands-phase-2-additions">Console Commands (Phase 2 additions)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#dependencies-on-phase-1">Dependencies on Phase 1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#scope-boundary">Scope Boundary</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#open-questions">Open Questions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#phase-1">Phase 1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0016-console-interactive-repl.html#phase-2">Phase 2</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html">Consolidate Templating on Jinja2</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#context">Context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#decision">Decision</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#template-syntax">Template Syntax</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#migration-scope">Migration Scope</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#new-templateprocessor-api">New <code class="docutils literal notranslate"><span class="pre">TemplateProcessor</span></code> API</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#environment-variable-templates">Environment Variable Templates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#export-template-reverse-direction">Export Template (Reverse Direction)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#jinja2-environment-configuration">Jinja2 Environment Configuration</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#dependencies">Dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#testing-strategy">Testing Strategy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#step-1-add-jinja2-dependency">Step 1: Add Jinja2 dependency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#step-2-rewrite-templateprocessor">Step 2: Rewrite <code class="docutils literal notranslate"><span class="pre">TemplateProcessor</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#step-3-convert-template-data-files">Step 3: Convert template data files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#step-4-update-solution-controller-py">Step 4: Update <code class="docutils literal notranslate"><span class="pre">solution_controller.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#step-5-update-export-template-command-py">Step 5: Update <code class="docutils literal notranslate"><span class="pre">export_template_command.py</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#step-6-update-docstrings-and-documentation">Step 6: Update docstrings and documentation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#step-7-run-full-test-suite">Step 7: Run full test suite</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#no-backward-compatibility">No Backward Compatibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#relationship-to-other-adrs">Relationship to Other ADRs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#design-remarks">Design Remarks</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#two-distinct-usage-patterns">1. Two Distinct Usage Patterns</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#dual-undefined-modes">2. Dual Undefined Modes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#vs-code-input-cliargs-collision-disappears">3. VS Code <code class="docutils literal notranslate"><span class="pre">${input:cliArgs}</span></code> Collision Disappears</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#private-method-called-externally">4. Private Method Called Externally</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#path-segment-rendering">5. Path Segment Rendering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#variable-naming-inconsistency">6. Variable Naming Inconsistency</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#render-stays-static-but-needs-an-environment">7. <code class="docutils literal notranslate"><span class="pre">render()</span></code> Stays Static — But Needs an Environment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#implementation-order-refinement">8. Implementation Order Refinement</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-jinja2-template-engine.html#scope-check-what-s-not-changing">9. Scope Check: What’s NOT Changing</a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Guides:</span></p>
 <ul>
@@ -1912,6 +2219,29 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#open-questions">Open Questions</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Skills:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../skills/strata-onboarding.html">Strata Onboarding — AI Skill File</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#what-is-strata">What is strata?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#the-dependency-chain-key-mental-model">The Dependency Chain (Key Mental Model)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#yaml-document-envelope-required-on-every-file">YAML Document Envelope (Required on Every File)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#onboarding-command-sequence">Onboarding Command Sequence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#cross-file-references">Cross-File References</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#deployment-stages">Deployment Stages</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#secret-and-variable-references">Secret and Variable References</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#common-patterns">Common Patterns</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../skills/strata-onboarding.html#workspace-with-resources-and-modules">Workspace with resources and modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../skills/strata-onboarding.html#deployment-referencing-workspace-environments">Deployment referencing workspace + environments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../skills/strata-onboarding.html#module-with-services">Module with services</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#anti-patterns-to-avoid">Anti-Patterns to Avoid</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#validation-and-fix-suggestions">Validation and Fix Suggestions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#console-repl-interactive-onboarding">Console REPL (Interactive Onboarding)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../skills/strata-onboarding.html#reference-examples">Reference Examples</a></li>
 </ul>
 </li>
 </ul>
@@ -2278,7 +2608,7 @@ an existing file.</p>
 <section id="bundle-templates-multi-file-scaffolding">
 <h3>Bundle templates (multi-file scaffolding)<a class="headerlink" href="#bundle-templates-multi-file-scaffolding" title="Link to this heading"></a></h3>
 <p>A template can also be a <strong>directory</strong> under <code class="docutils literal notranslate"><span class="pre">.strata/templates/</span></code>. The
-directory tree is the output structure — <code class="docutils literal notranslate"><span class="pre">${var}</span></code> substitution runs on both
+directory tree is the output structure — <code class="docutils literal notranslate"><span class="pre">{{</span> <span class="pre">var</span> <span class="pre">}}</span></code> substitution runs on both
 file content and path segments. This is how you scaffold multiple related files
 (deployments, environments, values stubs) in a single command without
 hardcoding anything in strata itself.</p>

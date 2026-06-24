@@ -227,20 +227,133 @@ Names must be unique across all `dns_zones` entries in the workspace.
 
 ## Build Output
 
-Running `strata build run` generates `dns.auto.tfvars.json` in the build directory:
+Running `strata build run` generates the following files in the build directory:
 
 ```
 .strata/build/<deployment>/
-  dns.auto.tfvars.json    ← consumed by your Terraform DNS module
-  firewalls.auto.tfvars.json
-  platform.json
-  ...
+  terraform/
+    dns.auto.tfvars.json              ← Terraform: dns_zones variable
+    dns_secret_records.auto.tfvars.json  ← Terraform: secret record stubs (only when secrets present)
+  ansible/
+    strata_dns.yml                    ← Ansible: strata_dns_zones variable
 ```
 
-The file serialises the full zone and record list as a JSON variable file. Your Terraform
-module reads it via a `variable "dns_zones" { ... }` declaration and a `*.auto.tfvars.json`
-auto-load. Pass the build directory to Terraform — strata places all generated
-`*.auto.tfvars.json` files there alongside the other artifacts.
+### Terraform — `dns.auto.tfvars.json`
+
+Contains one top-level variable `dns_zones` — a map keyed by the DNS config name. Your
+Terraform DNS module declares `variable "dns_zones" {}` and loads it automatically via the
+`*.auto.tfvars.json` convention.
+
+```json
+{
+  "dns_zones": {
+    "haven_zones": {
+      "description": "Haven DNS zones — managed via INWX",
+      "labels": {"owner": "vincent"},
+      "tags": [],
+      "provider": "inwx",
+      "zones": {
+        "huybrechts.xyz": {
+          "ttl": 3600,
+          "records": [
+            {"name": "@",    "type": "A",     "value": "1.2.3.4",          "ttl": null, "priority": null},
+            {"name": "www",  "type": "CNAME", "value": "huybrechts.xyz.",   "ttl": null, "priority": null},
+            {"name": "@",    "type": "MX",    "value": "mail.protonmail.ch.", "ttl": null, "priority": 10},
+            {"name": "@",    "type": "TXT",   "value": "v=spf1 include:...", "ttl": null, "priority": null},
+            {"name": "@",    "type": "TXT",   "value": null,                "ttl": null, "priority": null}
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+- `value:` records are written literally.
+- `var:` records are resolved from `environment.yaml` at build time and written as the resolved string.
+- `secret:` records are emitted with `"value": null` — the actual value is never written to disk.
+
+### Terraform — `dns_secret_records.auto.tfvars.json`
+
+Only written when at least one record uses `secret:`. Contains record stubs keyed by
+`{record_name}_{record_type}` so your Terraform module can look up the secret value at apply
+time via `TF_VAR_<secret_key>`.
+
+```json
+{
+  "dns_secret_records": {
+    "haven_zones": {
+      "huybrechts.xyz": {
+        "@_TXT": {
+          "name": "@",
+          "type": "TXT",
+          "secret_key": "google_verify_token",
+          "ttl": null,
+          "priority": null
+        }
+      }
+    }
+  }
+}
+```
+
+Declare the matching variable in your Terraform module and mark it sensitive:
+
+```
+variable "dns_secret_records" {
+  type      = any
+  sensitive = true
+  default   = {}
+}
+```
+
+At deploy time, set `TF_VAR_google_verify_token=<value>` so Terraform can resolve it.
+
+### Ansible — `strata_dns.yml`
+
+Written only when DNS zones are present. Contains one top-level variable `strata_dns_zones`
+with the same map structure as Terraform. Load it with `vars_files` or place it in your
+`group_vars/` directory.
+
+```yaml
+strata_dns_zones:
+  haven_zones:
+    description: "Haven DNS zones — managed via INWX"
+    labels:
+      owner: vincent
+    tags: []
+    provider: inwx
+    zones:
+      huybrechts.xyz:
+        ttl: 3600
+        records:
+          - {name: "@",   type: A,     value: "1.2.3.4",            ttl: null, priority: null}
+          - {name: www,   type: CNAME, value: "huybrechts.xyz.",     ttl: null, priority: null}
+          - {name: "@",   type: MX,    value: "mail.protonmail.ch.", ttl: null, priority: 10}
+          - {name: "@",   type: TXT,   value: "v=spf1 include:...",  ttl: null, priority: null}
+```
+
+> **Note:** Only `value:` records are emitted in the Ansible output. Records that use `var:`
+> or `secret:` are **omitted** — Ansible does not perform secret injection. If you need
+> sensitive records via Ansible, source them from Vault or another secrets backend at playbook
+> runtime and merge them into the zone structure yourself.
+
+Reference the variable in a playbook task:
+
+```yaml
+- name: Ensure DNS records
+  community.general.inwx_record:
+    domain: "{{ item.0.key }}"
+    record: "{{ item.1.name }}"
+    type: "{{ item.1.type }}"
+    value: "{{ item.1.value }}"
+    ttl: "{{ item.1.ttl | default(3600) }}"
+  loop: >-
+    {{ strata_dns_zones[dns_config].zones | dict2items
+       | subelements('value.records') }}
+  vars:
+    dns_config: haven_zones
+```
 
 ## Validation Rules
 
