@@ -176,7 +176,7 @@ class HelmBuilder(BaseBuilder):
         deployment_build_path: Path,
         dry_run: bool,
         repo_map: Optional[Dict[str, str]] = None,
-        template_context: Optional[Dict[str, str]] = None,
+        template_context: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Build values.yaml and meta.yaml for all helm modules in one namespace.
 
@@ -351,7 +351,7 @@ class HelmBuilder(BaseBuilder):
         ns_service: Any,
         work_path: Path,
         deployment_build_path: Path,
-        template_context: Dict[str, str],
+        template_context: Dict[str, Any],
         dry_run: bool,
     ) -> bool:
         """Copy ``spec.files`` entries for all helm modules in one namespace.

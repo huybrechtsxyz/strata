@@ -1,11 +1,13 @@
 """Base class for deployment builders."""
 
+import os
 import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from strata.logger import get_logger
+from strata.models.store_models import FeatureStoreType, VariableStoreType
 from strata.services.deployment_service import DeploymentService
 from strata.utils.templater import TemplateProcessor
 
@@ -79,24 +81,33 @@ class BaseBuilder(ABC):
     # Template substitution helpers (available to all builders)
     # ------------------------------------------------------------------
 
-    def _build_template_context(self, deployment_service: DeploymentService) -> Dict[str, str]:
-        """Build STRATA_* substitution context from deployment, workspace, and provider data.
+    def _build_template_context(self, deployment_service: DeploymentService) -> Dict[str, Any]:
+        """Build substitution context from deployment, workspace, provider, variable, and feature data.
 
-        Keys follow the pattern ``STRATA_<SCOPE>_<NAME>_<FIELD>`` (uppercase).
-        Example: provider ``xyz_dc_eu_fr`` with ``engine = hetznercloud/hcloud`` becomes
-        ``STRATA_PROVIDER_XYZ_DC_EU_FR_ENGINE``.
+        The returned dict is passed directly to Jinja2 ``render()``.  It contains
+        two kinds of entries:
 
-        Available keys:
-          STRATA_DEPLOYMENT_NAME
-          STRATA_WORKSPACE_NAME
-          STRATA_PROVIDER_{NAME}_ENGINE
-          STRATA_PROVIDER_{NAME}_VERSION
-          STRATA_PROVIDER_{NAME}_ORGANIZATION
-          STRATA_PROVIDER_{NAME}_TYPE
-          STRATA_PROVIDER_{NAME}_REGION
-          STRATA_PROVIDER_{NAME}_LOCATION
+        **Flat STRATA_* keys** (backward-compatible, uppercase strings)::
+
+            STRATA_DEPLOYMENT_NAME
+            STRATA_WORKSPACE_NAME
+            STRATA_PROVIDER_{NAME}_ENGINE / _VERSION / _ORGANIZATION / _TYPE / _REGION / _LOCATION
+
+        **Nested namespaces** (accessible via ``{{ variables.KEY }}`` / ``{{ features.KEY }}``)::
+
+            variables   — Dict[str, Any]  resolved from constant + environment store entries.
+                          Integration-backed variables (azure-appconfig, consul, vault, etc.)
+                          are skipped at build time; their placeholders are left visible in
+                          rendered output by Jinja2's DebugUndefined.
+            features    — Dict[str, Any]  same resolution rules; boolean values are preserved
+                          as Python ``bool`` so ``{% if features.dark_mode %}`` works naturally.
+
+        **Secrets are intentionally excluded.**  Rendering secret values into build
+        artefacts (Terraform files, Helm values, compose configs) would write
+        plaintext secrets to disk and risk committing them to source control.
+        Secrets are injected at deploy time via environment variables only.
         """
-        ctx: Dict[str, str] = {}
+        ctx: Dict[str, Any] = {}
 
         if deployment_service.model:
             ctx["STRATA_DEPLOYMENT_NAME"] = str(deployment_service.model.meta.name)
@@ -117,14 +128,49 @@ class BaseBuilder(ABC):
                     if val is not None:
                         ctx[f"{prefix}_{field.upper()}"] = str(val)
 
+        # ------------------------------------------------------------------
+        # variables / features namespaces
+        # ------------------------------------------------------------------
+        env_svc = deployment_service.get_environment_service()
+        if env_svc:
+            variables: Dict[str, Any] = {}
+            for var in env_svc.get_variables():
+                if var.store == VariableStoreType.CONSTANT:
+                    variables[var.key] = var.value
+                elif var.store == VariableStoreType.ENVIRONMENT:
+                    env_val = os.environ.get(str(var.value))
+                    if env_val is not None:
+                        variables[var.key] = env_val
+            if variables:
+                ctx["variables"] = variables
+
+            features: Dict[str, Any] = {}
+            for feat in env_svc.get_features():
+                if feat.store == FeatureStoreType.CONSTANT:
+                    raw = feat.value
+                    if isinstance(raw, bool):
+                        features[feat.key] = raw
+                    elif isinstance(raw, str):
+                        features[feat.key] = raw.lower() not in ("false", "0", "no", "")
+                    else:
+                        features[feat.key] = bool(raw)
+                elif feat.store == FeatureStoreType.ENVIRONMENT:
+                    env_val = os.environ.get(str(feat.value))
+                    if env_val is not None:
+                        features[feat.key] = env_val.lower() not in ("false", "0", "no", "")
+            if features:
+                ctx["features"] = features
+
         self.logger.debug(
             "Built template context",
-            keys=sorted(ctx.keys()),
+            flat_keys=sorted(k for k in ctx if not isinstance(ctx[k], dict)),
+            variable_keys=sorted(ctx.get("variables", {}).keys()),
+            feature_keys=sorted(ctx.get("features", {}).keys()),
         )
         return ctx
 
-    def _apply_templates_to_dir(self, dest_dir: Path, context: Dict[str, str]) -> None:
-        """Apply STRATA_* template substitution to all text files under *dest_dir*.
+    def _apply_templates_to_dir(self, dest_dir: Path, context: Dict[str, Any]) -> None:
+        """Apply template substitution to all text files under *dest_dir*.
 
         Binary files and unreadable files are silently skipped.
         Only files whose content changes after rendering are written back.
@@ -156,8 +202,8 @@ class BaseBuilder(ABC):
                 directory=str(dest_dir),
             )
 
-    def _apply_template_to_file(self, path: Path, context: Dict[str, str]) -> None:
-        """Apply STRATA_* template substitution to a single text file.
+    def _apply_template_to_file(self, path: Path, context: Dict[str, Any]) -> None:
+        """Apply template substitution to a single text file.
 
         Binary files and unreadable files are silently skipped.
         """
@@ -177,7 +223,7 @@ class BaseBuilder(ABC):
         files: List[Any],
         work_path: Path,
         dest_dir: Path,
-        template_context: Dict[str, str],
+        template_context: Dict[str, Any],
         module_label: str,
         dry_run: bool = False,
     ) -> bool:

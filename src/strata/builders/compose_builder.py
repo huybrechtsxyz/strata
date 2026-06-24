@@ -353,7 +353,7 @@ class ComposeBuilder(BaseBuilder):
         ns_service: Any,
         work_path: Path,
         deployment_build_path: Path,
-        template_context: Dict[str, str],
+        template_context: Dict[str, Any],
         dry_run: bool,
     ) -> bool:
         """Copy ``spec.files`` entries for all compose modules in one namespace.
