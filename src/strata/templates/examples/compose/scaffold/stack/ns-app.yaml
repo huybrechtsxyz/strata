@@ -1,13 +1,13 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: namespace
 meta:
-  name: ${solution_name}_ns_app
+  name: {{ solution_name }}_ns_app
   annotations:
-    description: Application namespace for ${solution_name} services
+    description: Application namespace for {{ solution_name }} services
   labels:
     version: "1.0.0"
-  tags: [${solution_name}, namespace, app]
+  tags: [{{ solution_name }}, namespace, app]
 spec:
   modules:
     - name: api
-      file: "@${solution_name}/stack/mod-api.yaml"
+      file: "@{{ solution_name }}/stack/mod-api.yaml"

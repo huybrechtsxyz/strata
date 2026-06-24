@@ -212,7 +212,7 @@ class TestNewCommandBundle:
     def test_bundle_creates_flat_files(self, tmp_path):
         """A flat bundle directory produces files in --path root."""
         bundle = self._make_bundle(tmp_path, "widget")
-        (bundle / "${name}.yaml").write_text("kind: widget\nname: ${name}\n", encoding="utf-8")
+        (bundle / "{{ name }}.yaml").write_text("kind: widget\nname: {{ name }}\n", encoding="utf-8")
 
         out = tmp_path / "out"
         runner = CliRunner()
@@ -224,9 +224,9 @@ class TestNewCommandBundle:
         assert (out / "acme.yaml").exists()
 
     def test_bundle_content_substitution(self, tmp_path):
-        """${var} in file content is substituted from context + --set."""
+        """{{ var }} in file content is substituted from context + --set."""
         bundle = self._make_bundle(tmp_path, "widget")
-        (bundle / "file.yaml").write_text("zone: ${zone}\ntier: ${tier}\n", encoding="utf-8")
+        (bundle / "file.yaml").write_text("zone: {{ zone }}\ntier: {{ tier }}\n", encoding="utf-8")
 
         out = tmp_path / "out"
         runner = CliRunner()
@@ -251,11 +251,11 @@ class TestNewCommandBundle:
         assert "premium" in content
 
     def test_bundle_path_segment_substitution(self, tmp_path):
-        """${name} in directory names is substituted using the same engine."""
+        """{{ name }} in directory names is substituted using the same engine."""
         bundle = self._make_bundle(tmp_path, "widget")
-        subdir = bundle / "${name}"
+        subdir = bundle / "{{ name }}"
         subdir.mkdir()
-        (subdir / "deployment.yaml").write_text("name: ${name}\n", encoding="utf-8")
+        (subdir / "deployment.yaml").write_text("name: {{ name }}\n", encoding="utf-8")
 
         out = tmp_path / "out"
         runner = CliRunner()
@@ -268,11 +268,11 @@ class TestNewCommandBundle:
         assert "acme" in (out / "acme" / "deployment.yaml").read_text(encoding="utf-8")
 
     def test_bundle_nested_path_and_filename(self, tmp_path):
-        """${name} works in both directory and filename simultaneously."""
+        """{{ name }} works in both directory and filename simultaneously."""
         bundle = self._make_bundle(tmp_path, "widget")
-        subdir = bundle / "envs" / "${name}"
+        subdir = bundle / "envs" / "{{ name }}"
         subdir.mkdir(parents=True)
-        (subdir / "${name}-dev.yaml").write_text("env: dev\nname: ${name}\n", encoding="utf-8")
+        (subdir / "{{ name }}-dev.yaml").write_text("env: dev\nname: {{ name }}\n", encoding="utf-8")
 
         out = tmp_path / "out"
         runner = CliRunner()
@@ -323,7 +323,7 @@ class TestNewCommandBundle:
         # 'namespace' exists as a package single-file template.
         # A workspace bundle of the same name should win.
         bundle = self._make_bundle(tmp_path, "namespace")
-        (bundle / "${name}-custom.yaml").write_text("custom: true\nname: ${name}\n", encoding="utf-8")
+        (bundle / "{{ name }}-custom.yaml").write_text("custom: true\nname: {{ name }}\n", encoding="utf-8")
 
         out = tmp_path / "out"
         runner = CliRunner()

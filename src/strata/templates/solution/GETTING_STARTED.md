@@ -1,4 +1,4 @@
-# Getting Started — ${SOLUTION_NAME}
+# Getting Started — {{ SOLUTION_NAME }}
 
 This guide walks you through the full lifecycle of a Strata workspace: configure, validate, build, and deploy.
 
@@ -29,10 +29,10 @@ Strata resolves `@repo/path` references from named repositories. Register this d
 
 ```bash
 # Local directory (path relative to where you run strata)
-strata repo add ${SOLUTION_NAME} . --type local
+strata repo add {{ SOLUTION_NAME }} . --type local
 
 # — OR — a remote git repository (cloned into the workspace)
-strata repo add ${SOLUTION_NAME} <git-url> --branch main --clone
+strata repo add {{ SOLUTION_NAME }} <git-url> --branch main --clone
 ```
 
 ### 2. Create a profile and point it at your config files
@@ -41,10 +41,10 @@ A profile links an environment name to its config and environment files:
 
 ```bash
 strata profile add prd --activate
-strata ref config add ${SOLUTION_NAME}-config \
-    --path "@${SOLUTION_NAME}/config/${SOLUTION_NAME}-config.yaml"
-strata ref env add ${SOLUTION_NAME}-env \
-    --path "@${SOLUTION_NAME}/envs/env-prd.yaml"
+strata ref config add {{ SOLUTION_NAME }}-config \
+    --path "@{{ SOLUTION_NAME }}/config/{{ SOLUTION_NAME }}-config.yaml"
+strata ref env add {{ SOLUTION_NAME }}-env \
+    --path "@{{ SOLUTION_NAME }}/envs/env-prd.yaml"
 ```
 
 ### 3. Check workspace status
@@ -108,7 +108,7 @@ strata deploy destroy --file deploy/deploy-prd.yaml
 
 ## Next steps
 
-- Edit `config/${SOLUTION_NAME}-config.yaml` to add your provider credentials and repository settings.
+- Edit `config/{{ SOLUTION_NAME }}-config.yaml` to add your provider credentials and repository settings.
 - Edit `envs/env-prd.yaml` to declare variables, secrets, and feature flags for the `prd` environment.
 - Run `strata validate --file deploy/deploy-prd.yaml` to confirm everything is wired up correctly.
 - See the template-specific `README.md` for provisioner-specific prerequisites and notes.

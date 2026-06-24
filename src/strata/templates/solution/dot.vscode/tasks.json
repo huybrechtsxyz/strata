@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Run: ${SOLUTION_NAME}",
+      "label": "Run: {{ SOLUTION_NAME }}",
       "type": "shell",
       "command": "strata ${input:cliArgs}",
       "group": "build",

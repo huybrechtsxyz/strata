@@ -748,34 +748,24 @@ class SolutionController(BaseController):
             templates_vscode = get_pkg_templates_path() / "vscode"
             if templates_vscode.exists() and templates_vscode.is_dir():
                 # Render template files into the workspace .vscode directory.
-                processor = TemplateProcessor(templates_vscode, cleanup_templates=False)
-                # Temporarily expose solution name to the template processor
-                prev = os.environ.get("SOLUTION_NAME")
-                os.environ["SOLUTION_NAME"] = name
-                try:
-                    for tpl in templates_vscode.iterdir():
-                        if not tpl.is_file() or ".template." not in tpl.name:
-                            continue
-                        try:
-                            content = tpl.read_text(encoding="utf-8")
-                            processed = processor._substitute_environment_variables(content)
-                            out_name = tpl.name.replace(".template.", ".")
-                            out_path = vscode_dir / out_name
-                            if not out_path.exists():
-                                out_path.write_text(processed, encoding="utf-8")
-                                self._add_message(f"Created: {out_path.relative_to(self._work_path)}")
-                            else:
-                                self.logger.debug(".vscode template output exists — skipping", path=str(out_path))
-                        except Exception as e:
-                            self.logger.warning(
-                                "Failed to render vscode template", extra={"template": str(tpl), "error": str(e)}
-                            )
-                finally:
-                    # restore environment
-                    if prev is None:
-                        del os.environ["SOLUTION_NAME"]
-                    else:
-                        os.environ["SOLUTION_NAME"] = prev
+                context = {"SOLUTION_NAME": name}
+                for tpl in templates_vscode.iterdir():
+                    if not tpl.is_file() or ".template." not in tpl.name:
+                        continue
+                    try:
+                        content = tpl.read_text(encoding="utf-8")
+                        processed = TemplateProcessor.render(content, context)
+                        out_name = tpl.name.replace(".template.", ".")
+                        out_path = vscode_dir / out_name
+                        if not out_path.exists():
+                            out_path.write_text(processed, encoding="utf-8")
+                            self._add_message(f"Created: {out_path.relative_to(self._work_path)}")
+                        else:
+                            self.logger.debug(".vscode template output exists — skipping", path=str(out_path))
+                    except Exception as e:
+                        self.logger.warning(
+                            "Failed to render vscode template", extra={"template": str(tpl), "error": str(e)}
+                        )
             else:
                 # No templates available; fall back to inline scaffolding (non-destructive)
                 extensions = {
@@ -1067,7 +1057,7 @@ class SolutionController(BaseController):
         and ``dot.gitignore`` → ``.gitignore``.
 
         Token substitutions applied to every file:
-        - ``${SOLUTION_NAME}`` → solution name
+        - ``{{ SOLUTION_NAME }}`` → solution name
         - ``.strata/logs/application.json`` → resolved log file path
           (logging.yaml only)
         """
@@ -1091,7 +1081,7 @@ class SolutionController(BaseController):
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
                 content = src.read_text(encoding="utf-8")
-                content = content.replace("${SOLUTION_NAME}", solution_name)
+                content = TemplateProcessor.render(content, {"SOLUTION_NAME": solution_name})
                 if dest.name == SOLUTION_LOGGING_FILE:
                     log_file = (state_dir / "logs" / "application.json").as_posix()
                     content = content.replace(".strata/logs/application.json", log_file)
@@ -1175,7 +1165,7 @@ class SolutionController(BaseController):
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
                 content = src.read_text(encoding="utf-8")
-                content = content.replace("${SOLUTION_NAME}", solution_name)
+                content = TemplateProcessor.render(content, {"SOLUTION_NAME": solution_name})
                 if dest.name == SOLUTION_LOGGING_FILE:
                     log_file = (state_dir / "logs" / "application.json").as_posix()
                     content = content.replace(".strata/logs/application.json", log_file)

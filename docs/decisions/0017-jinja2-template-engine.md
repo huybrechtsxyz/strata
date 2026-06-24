@@ -1,6 +1,6 @@
 # Consolidate Templating on Jinja2
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-06-24
 - Parent: [0016-console-interactive-repl.md](0016-console-interactive-repl.md) (question #11)
 
@@ -53,7 +53,7 @@ meta:
 
 Jinja2 enables patterns that were previously impossible:
 
-```yaml
+```text
 spec:
   repositories:
 {% for repo in repositories %}
@@ -229,13 +229,16 @@ The current `TemplateProcessor` serves two different purposes:
 
 Both patterns must survive the migration. The ADR's proposed API already covers both — `process_single_template` for file-based env var templates, `render` for dict-based inline rendering.
 
-### 2. `StrictUndefined` Changes Failure Behavior
+### 2. Dual Undefined Modes
 
-Current behavior: unknown variables are silently kept as-is (`${MISSING}` → `${MISSING}`). With `StrictUndefined`, they raise `jinja2.UndefinedError`. This is intentional — fail fast on missing vars. But it affects:
+Two Jinja2 environments are needed, not one:
 
-- **`render()` callers** — `base_builder.py` and `run_new_command.py` currently rely on unknowns being left as-is. Verify their context dicts are complete.
-- **`process_single_template()` with `os.environ`** — any env var referenced in a template MUST exist. Currently, missing env vars produce placeholder text in the output. After migration, they crash. This is the RIGHT behavior for deployment templates (Terraform) — you don't want `tenant_id = ""` silently deployed.
-- **Tests** — `test_render_leaves_unknown_var` and `test_render_empty_context` assert the old keep-as-is behavior. These tests must be rewritten to expect `UndefinedError`.
+| Environment | `undefined` | Used by | Behavior on missing var |
+|-------------|-------------|---------|------------------------|
+| `_STRICT_ENV` | `StrictUndefined` | `process_single_template()` | Raises `UndefinedError` — correct for deployment templates where missing env vars = broken |
+| `_LENIENT_ENV` | `DebugUndefined` | `render()` | Renders as `{{ var }}` — leaves placeholder visible in output, matching old keep-as-is behavior |
+
+`StrictUndefined` everywhere would break `strata new` which legitimately supports partial context (e.g., `name` provided but `owner`/`version` unknown — the user edits those later). `DebugUndefined` preserves the old UX while using Jinja2 syntax.
 
 ### 3. VS Code `${input:cliArgs}` Collision Disappears
 

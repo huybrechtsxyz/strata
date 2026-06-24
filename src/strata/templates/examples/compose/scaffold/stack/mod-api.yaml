@@ -1,16 +1,16 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: module
 meta:
-  name: ${solution_name}_mod_api
+  name: {{ solution_name }}_mod_api
   annotations:
-    description: REST API and database services for ${solution_name}
+    description: REST API and database services for {{ solution_name }}
   labels:
     version: "1.0.0"
-  tags: [${solution_name}, module, api, compose]
+  tags: [{{ solution_name }}, module, api, compose]
 spec:
   type: compose
   source:
-    repository: ${solution_name}
+    repository: {{ solution_name }}
     source_path: stack
   references:
     variables:
@@ -22,7 +22,7 @@ spec:
       - ENABLE_DEBUG
   services:
     - name: api
-      image: "${solution_name}-api:latest"
+      image: "{{ solution_name }}-api:latest"
       restart: unless-stopped
       ports:
         - "8080:8080"

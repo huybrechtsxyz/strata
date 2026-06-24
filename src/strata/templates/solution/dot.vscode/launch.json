@@ -2,24 +2,24 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run: ${SOLUTION_NAME}",
+      "name": "Run: {{ SOLUTION_NAME }}",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/src/STRATA_platform/__main__.py",
+      "program": "{{ workspaceFolder }}/src/STRATA_platform/__main__.py",
       "args": "${input:cliArgs}",
-      "cwd": "${workspaceFolder}",
-      "env": { "PYTHONPATH": "${workspaceFolder}/src" },
+      "cwd": "{{ workspaceFolder }}",
+      "env": { "PYTHONPATH": "{{ workspaceFolder }}/src" },
       "console": "integratedTerminal",
       "justMyCode": true
     },
     {
-      "name": "Debug: ${SOLUTION_NAME}",
+      "name": "Debug: {{ SOLUTION_NAME }}",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/src/STRATA_platform/__main__.py",
+      "program": "{{ workspaceFolder }}/src/STRATA_platform/__main__.py",
       "args": "${input:cliArgs}",
-      "cwd": "${workspaceFolder}",
-      "env": { "PYTHONPATH": "${workspaceFolder}/src" },
+      "cwd": "{{ workspaceFolder }}",
+      "env": { "PYTHONPATH": "{{ workspaceFolder }}/src" },
       "console": "integratedTerminal",
       "justMyCode": false
     }

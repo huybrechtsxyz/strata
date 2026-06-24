@@ -6,12 +6,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: dns
 meta:
-  name: ${name}
+  name: {{ name }}
   annotations:
     description: "DNS zone configuration"
-    owner: ${owner}
+    owner: {{ owner }}
   labels:
-    version: ${version}
+    version: {{ version }}
   tags: ["template", "dns", "networking"]
 spec:
   # DNS provider: inwx, cloudflare, route53, azure-dns, etc.

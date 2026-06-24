@@ -31,7 +31,7 @@ class ScaffoldTemplateModel(PlatformBaseModel):
 
     All files under ``scaffold/`` are copied into the workspace with
     ``${variable_name}`` placeholders replaced by their resolved values.
-    ``${solution_name}`` is always available from the ``--name`` flag.
+    ``{{ solution_name }}`` is always available from the ``--name`` flag.
     """
 
     name: str = Field(..., description="Template name (matches the folder name for built-ins)")

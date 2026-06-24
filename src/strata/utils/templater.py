@@ -1,45 +1,60 @@
-"""Template processing for files with placeholders."""
+"""Template processing for files with placeholders using Jinja2."""
 
 import os
-import re
 from pathlib import Path
+
+from jinja2 import BaseLoader, DebugUndefined, Environment, StrictUndefined, UndefinedError
 
 from strata.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Strict env — used by process_single_template (env var files).
+# Missing variables raise UndefinedError.
+_STRICT_ENV = Environment(
+    loader=BaseLoader(),
+    undefined=StrictUndefined,
+    keep_trailing_newline=True,
+    autoescape=False,
+)
+
+# Lenient env — used by render() (scaffold templates, builders).
+# Missing variables stay visible as {{ var }} in output.
+_LENIENT_ENV = Environment(
+    loader=BaseLoader(),
+    undefined=DebugUndefined,
+    keep_trailing_newline=True,
+    autoescape=False,
+)
+
 
 class TemplateProcessor:
-    """
-    Handles processing of template files with variable substitution.
+    """Jinja2-based template processing for files with placeholders.
 
     This class provides functionality to:
-    - Process *.template.* files of given path with environment variable substitution
-    - Support custom variable substitution
+    - Process ``*.template.*`` files with environment variable substitution
+    - Support custom variable substitution via ``render()``
     - Clean up template files after processing
 
-    Template Processing:
-    - Automatically processes *.template.* files
-    - Substitutes environment variables with pattern like $VAR or ${VAR}
-    - Can process templates with custom variables
+    All templates use Jinja2 syntax: ``{{ var }}``, ``{% if %}``, ``{% for %}``.
+    Missing variables raise ``jinja2.UndefinedError`` (StrictUndefined).
 
-    Example:
+    Example::
+
         # main.template.tf contains:
-        # organization = "$organization"
+        # organization = "{{ organization }}"
         #
-        # After processing with organization="my-org":
+        # After processing with organization="my-org" in env:
         # main.tf contains:
         # organization = "my-org"
     """
 
     def __init__(self, template_dir: Path, cleanup_templates: bool = True):
-        """
-        Initialize the template processor.
+        """Initialize the template processor.
 
         Args:
-            template_dir: Directory containing template files
-            cleanup_templates: Whether to remove template files after processing
-            use_terraformignore: Whether to manage .terraformignore file
+            template_dir: Directory containing template files.
+            cleanup_templates: Whether to remove template files after processing.
         """
         self.template_dir = template_dir
         self.cleanup_templates = cleanup_templates
@@ -52,7 +67,6 @@ class TemplateProcessor:
                 template_dir=str(self.template_dir),
             )
 
-            # Look for .template.* files in the terraform directory
             template_files = list(self.template_dir.glob("*.template.*"))
 
             if not template_files:
@@ -88,7 +102,7 @@ class TemplateProcessor:
             return False
 
     def process_single_template(self, template_path: Path) -> bool:
-        """Process a single template file."""
+        """Process a single template file using environment variables as context."""
         try:
             if not template_path.exists():
                 logger.error(
@@ -102,22 +116,17 @@ class TemplateProcessor:
                 template_file=template_path.name,
             )
 
-            # Read template content
-            with open(template_path, "r", encoding="utf-8") as f:
-                content = f.read()
+            content = template_path.read_text(encoding="utf-8")
 
-            # Replace environment variables
-            processed_content = self._substitute_environment_variables(content)
+            # Use environment variables as context
+            processed_content = _STRICT_ENV.from_string(content).render(dict(os.environ))
 
             # Determine output path
             output_filename = template_path.name.replace(".template.", ".")
             output_path = template_path.parent / output_filename
 
-            # Write processed content
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(processed_content)
+            output_path.write_text(processed_content, encoding="utf-8")
 
-            # Optionally cleanup template files to avoid confusion
             if self.cleanup_templates:
                 self.cleanup_template_file(template_path)
 
@@ -128,6 +137,13 @@ class TemplateProcessor:
             )
             return True
 
+        except UndefinedError as e:
+            logger.error(
+                "Missing template variable",
+                template_path=str(template_path),
+                error=str(e),
+            )
+            return False
         except Exception as e:
             logger.error(
                 "Failed to process template",
@@ -138,7 +154,7 @@ class TemplateProcessor:
             return False
 
     def cleanup_template_file(self, template_path: Path) -> bool:
-        """Remove template files after processing to avoid Terraform conflicts."""
+        """Remove template files after processing."""
         try:
             logger.debug(
                 "Cleaning up template file",
@@ -156,56 +172,22 @@ class TemplateProcessor:
             )
             return False
 
-    def _substitute_environment_variables(self, content: str) -> str:
-        """Substitute environment variables in template content."""
-
-        def replace_var(match):
-            var_name = match.group(1)
-            env_value = os.environ.get(var_name)
-
-            if env_value is None:
-                logger.debug(
-                    "Environment variable not found, keeping placeholder",
-                    variable_name=var_name,
-                )
-                return match.group(0)  # Return original placeholder
-
-            logger.debug(
-                "Substituted environment variable",
-                variable_name=var_name,
-            )
-            return env_value
-
-        # Pattern to match $variablename or ${variablename} - supports all environment variables
-        pattern = r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
-
-        return re.sub(pattern, replace_var, content)
-
     @staticmethod
     def render(content: str, context: dict) -> str:
-        """Render template content by substituting variables from *context*.
+        """Render a Jinja2 template string with the given context dict.
 
-        Uses the same ``$VAR`` / ``${VAR}`` pattern as
-        :meth:`_substitute_environment_variables` but looks up values from the
-        provided *context* dictionary instead of ``os.environ``.  Variables
-        that are not present in *context* are left as-is.
+        Uses lenient undefined handling — variables not in *context* are
+        left visible in the output as ``{{ var }}``.  This is appropriate
+        for scaffold templates where partial context is expected.
 
         Args:
-            content: Template string that may contain ``$VAR`` or ``${VAR}``
-                     placeholders.
+            content: Template string using Jinja2 syntax (``{{ var }}``).
             context: Mapping of variable names to replacement values.
 
         Returns:
-            The rendered string with all known variables substituted.
+            The rendered string.
         """
-
-        def replace_var(match):
-            var_name = match.group(1)
-            if var_name in context:
-                logger.debug("Substituted template variable", variable_name=var_name)
-                return str(context[var_name])
-            logger.debug("Template variable not in context — keeping placeholder", variable_name=var_name)
-            return match.group(0)
-
-        pattern = r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
-        return re.sub(pattern, replace_var, content)
+        if not content:
+            return content
+        template = _LENIENT_ENV.from_string(content)
+        return template.render(context)

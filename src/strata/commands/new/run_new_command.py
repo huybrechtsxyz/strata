@@ -386,7 +386,7 @@ class NewCommand(BaseCommand):
         Walks *bundle_dir* recursively. For every file:
 
         - Each path segment is rendered through ``TemplateProcessor.render()``
-          (same ``${var}`` substitution as file content).
+          (same ``{{ var }}`` substitution as file content).
         - The file content is rendered the same way.
         - The rendered relative path is joined onto the output root (``--path``
           or CWD) to produce the final destination.
@@ -401,7 +401,7 @@ class NewCommand(BaseCommand):
         created: list[str] = []
 
         for src_file in bundle_files:
-            # Render ${var} in every path segment
+            # Render {{ var }} in every path segment
             rel = src_file.relative_to(bundle_dir)
             rendered_parts = [TemplateProcessor.render(part, context) for part in rel.parts]
             output_path = output_root.joinpath(*rendered_parts)

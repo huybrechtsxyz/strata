@@ -1,12 +1,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: deployment
 meta:
-  name: ${solution_name}_deploy_prd
+  name: {{ solution_name }}_deploy_prd
   annotations:
-    description: Production deployment for ${solution_name} Compose services
+    description: Production deployment for {{ solution_name }} Compose services
   labels:
     version: "1.0.0"
-  tags: [${solution_name}, production, deployment, compose]
+  tags: [{{ solution_name }}, production, deployment, compose]
 spec:
   layers:
     environment: prd
@@ -15,12 +15,12 @@ spec:
     environment: prd
 
   workspace:
-    name: ${solution_name}_services
-    description: ${solution_name} Services Workspace
-    file: "@${solution_name}/stack/ws-services.yaml"
+    name: {{ solution_name }}_services
+    description: {{ solution_name }} Services Workspace
+    file: "@{{ solution_name }}/stack/ws-services.yaml"
 
   environments:
-    - "@${solution_name}/envs/env-prd.yaml"
+    - "@{{ solution_name }}/envs/env-prd.yaml"
 
   stages:
     - name: services

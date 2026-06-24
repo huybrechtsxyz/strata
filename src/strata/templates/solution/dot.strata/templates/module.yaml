@@ -6,12 +6,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: module
 meta:
-  name: ${name}
+  name: {{ name }}
   annotations:
     description: "Application module template"
-    owner: ${owner}
+    owner: {{ owner }}
   labels:
-    version: ${version}
+    version: {{ version }}
     category: "application"
   tags: ["template", "module"]
 spec:
@@ -33,16 +33,16 @@ spec:
     mounts:
       - name: "configuration_files"
         type: config
-        target_path: "${APP_CONFIG_PATH}"
+        target_path: "{{ APP_CONFIG_PATH }}"
         source_path: "config"
         description: "Application configuration"
       - name: "data"
         type: data
-        target_path: "${APP_DATA_PATH}"
+        target_path: "{{ APP_DATA_PATH }}"
         description: "Application data"
       - name: "logs"
         type: logs
-        target_path: "${APP_LOGS_PATH}"
+        target_path: "{{ APP_LOGS_PATH }}"
         description: "Application logs"
 
     # Health checks

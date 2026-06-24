@@ -22,7 +22,7 @@ def _make_template_folder(base: Path, name: str = "mytpl", with_manifest: bool =
     folder = base / name
     scaffold = folder / "scaffold"
     scaffold.mkdir(parents=True)
-    (scaffold / "README.md").write_text("# ${solution_name}\n", encoding="utf-8")
+    (scaffold / "README.md").write_text("# {{ solution_name }}\n", encoding="utf-8")
     if with_manifest:
         (folder / "template.yaml").write_text(
             textwrap.dedent("""\

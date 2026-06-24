@@ -6,12 +6,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: namespace
 meta:
-  name: ${name}
+  name: {{ name }}
   annotations:
     description: "Application namespace template"
-    owner: ${owner}
+    owner: {{ owner }}
   labels:
-    version: ${version}
+    version: {{ version }}
   tags: [ "template", "namespace" ]
 spec:
   # Modules deployed in this namespace

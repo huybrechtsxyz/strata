@@ -1,12 +1,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: resource
 meta:
-  name: ${solution_name}_docker_host
+  name: {{ solution_name }}_docker_host
   annotations:
-    description: Docker Swarm manager node for ${solution_name}
+    description: Docker Swarm manager node for {{ solution_name }}
   labels:
     version: "1.0.0"
-  tags: [${solution_name}, resource, docker, swarm]
+  tags: [{{ solution_name }}, resource, docker, swarm]
 spec:
   properties:
     provider_type: docker

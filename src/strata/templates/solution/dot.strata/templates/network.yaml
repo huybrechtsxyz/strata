@@ -6,12 +6,12 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: network
 meta:
-  name: ${name}
+  name: {{ name }}
   annotations:
     description: "Network topology configuration"
-    owner: ${owner}
+    owner: {{ owner }}
   labels:
-    version: ${version}
+    version: {{ version }}
   tags: ["template", "network", "infrastructure"]
 spec:
   networks:
