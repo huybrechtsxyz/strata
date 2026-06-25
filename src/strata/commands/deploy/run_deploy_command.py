@@ -1,5 +1,6 @@
 import os
 import socket
+import uuid
 from datetime import datetime as _dt
 from datetime import timezone as _tz
 from typing import Callable, List, Optional
@@ -60,6 +61,17 @@ class RunDeployCommand(BaseDeployCommand):
         self._force = force
         self._dry_run = dry_run
         self._resolved_values: Optional[ResolvedValues] = None
+        self._execution_id: str = str(uuid.uuid4())
+
+    # -------------------------------------------------------------------------
+    # Finalize override — writes deploy-log before standard finalization
+    # -------------------------------------------------------------------------
+
+    def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
+        """Write deploy-log audit evidence, then delegate to parent finalize."""
+        if self._deploy_started_at and not self._dry_run:
+            self._write_deploy_log(success)
+        return super()._finalize(success=success, show_footer=show_footer)
 
     # -------------------------------------------------------------------------
     # Public entry point
@@ -163,6 +175,119 @@ class RunDeployCommand(BaseDeployCommand):
     # -------------------------------------------------------------------------
     # Internal pipeline steps
     # -------------------------------------------------------------------------
+
+    def _write_deploy_log(self, success: bool) -> None:
+        """Assemble and write deploy-log via AuditController.
+
+        This is best-effort — failures are logged as WARNING and never
+        affect the deployment exit code (ADR 0018, decision #2).
+        """
+        try:
+            from strata.controllers.audit_controller import AuditController
+            from strata.models.deploy_log_model import (
+                DeployLogModel,
+                DeployLogStageModel,
+                DeployLogStepModel,
+            )
+            from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+
+            # Assemble per-stage data from manifest stage results
+            stages: List[DeployLogStageModel] = []
+            for sr in self._stage_results:
+                stage_steps: List[DeployLogStepModel] = []
+                if sr.steps:
+                    for step_name in sr.steps:
+                        stage_steps.append(DeployLogStepModel(step=step_name, success=True, duration_seconds=0.0))
+
+                stages.append(
+                    DeployLogStageModel(
+                        name=sr.name,
+                        provisioner=sr.provisioner,
+                        topology=sr.topology,
+                        success=(sr.status == "success"),
+                        started_at=sr.started_at or self._deploy_started_at or "",
+                        completed_at=sr.completed_at or _dt.now(_tz.utc).isoformat(),
+                        duration_seconds=float(sr.duration_seconds or 0),
+                        steps=stage_steps,
+                        errors=[sr.error] if sr.error else [],
+                    )
+                )
+
+            # Calculate total duration
+            completed_at = _dt.now(_tz.utc).isoformat()
+            try:
+                duration = (
+                    _dt.fromisoformat(completed_at) - _dt.fromisoformat(self._deploy_started_at or completed_at)
+                ).total_seconds()
+            except (ValueError, TypeError):
+                duration = 0.0
+
+            # Get git context (best-effort)
+            commit_sha = self._get_git_field("rev-parse", "HEAD")
+            commit_message = self._get_git_field("log", "--format=%s", "-1")
+            commit_author = self._get_git_field("log", "--format=%ae", "-1")
+
+            # Get version
+            from strata import __version__
+
+            # Resolve deployment metadata
+            deployment_name = ""
+            workspace_name = None
+            environment = None
+            if self._deployment_service and self._deployment_service.model:
+                deployment_name = self._deployment_service.model.meta.name
+                spec = self._deployment_service.model.spec
+                if spec:
+                    workspace_name = spec.workspace.name if spec.workspace else None
+                    layers = spec.layers
+                    environment = layers.get("environment") if layers else None
+
+            payload = DeployLogModel(
+                execution_id=self._execution_id,
+                timestamp=self._deploy_started_at or completed_at,
+                version=__version__,
+                commit_sha=commit_sha,
+                commit_message=commit_message,
+                commit_author=commit_author,
+                deployment=deployment_name or "unknown",
+                workspace=workspace_name,
+                environment=environment,
+                file=str(self._file_path or ""),
+                force=self._force,
+                dry_run=False,
+                success=success,
+                duration_seconds=duration,
+                stages=stages,
+                errors=list(self._errors),
+                messages=list(self._messages),
+            )
+
+            # Write via AuditController
+            base_path = self._work_path / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+            controller = AuditController(work_path=self._work_path)
+            ok, path = controller.write_deploy_log(
+                payload=payload,
+                base_path=base_path,
+                structure="by-execution",
+            )
+
+            if ok and path and self._is_console_output():
+                click.echo(f"  📝  Deploy-log: {path.relative_to(self._work_path)}")
+
+        except Exception as exc:
+            self.logger.warning("deploy_log_write_failed", error=str(exc))
+
+    def _get_git_field(self, *args: str) -> Optional[str]:
+        """Run a git command and return stdout, or None on failure."""
+        try:
+            from strata.utils.system import run_command
+
+            result = run_command(["git"] + list(args), cwd=str(self._work_path), timeout=10)
+            if result.returncode == 0 and result.stdout:
+                return result.stdout.strip()
+        except Exception:
+            pass
+        return None
 
     def _load_related_services(self) -> bool:
         """Services are already loaded by BaseDeployCommand._before_execute."""

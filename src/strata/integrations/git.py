@@ -477,6 +477,121 @@ class GitIntegration(BaseIntegration):
             )
             return None
 
+    # ------------------------------------------------------------------
+    # Write operations (used by AuditController for deploy-log push)
+    # ------------------------------------------------------------------
+
+    def add(self, working_dir: str, paths: List[str], timeout: int = 30) -> CommandResult:
+        """Stage files for commit.
+
+        Args:
+            working_dir: Git repository directory.
+            paths: List of file paths (relative to working_dir) to stage.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            Command result.
+        """
+        available, error = self.ensure_available()
+        if not available:
+            return CommandResult(returncode=1, stdout="", stderr=error, command="git add", duration_ms=0.0)
+
+        args = ["add", "--"] + paths
+        return self._run_integration(args, cwd=working_dir, timeout=timeout)
+
+    def commit(self, working_dir: str, message: str, timeout: int = 30) -> CommandResult:
+        """Create a commit with the given message.
+
+        Args:
+            working_dir: Git repository directory.
+            message: Commit message.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            Command result.
+        """
+        available, error = self.ensure_available()
+        if not available:
+            return CommandResult(returncode=1, stdout="", stderr=error, command="git commit", duration_ms=0.0)
+
+        args = ["commit", "-m", message]
+        return self._run_integration(args, cwd=working_dir, timeout=timeout)
+
+    def push(
+        self,
+        working_dir: str,
+        remote: str = "origin",
+        branch: Optional[str] = None,
+        timeout: int = 60,
+    ) -> CommandResult:
+        """Push to remote.
+
+        Args:
+            working_dir: Git repository directory.
+            remote: Remote name.
+            branch: Branch to push (None pushes current branch).
+            timeout: Command timeout in seconds.
+
+        Returns:
+            Command result.
+        """
+        available, error = self.ensure_available()
+        if not available:
+            return CommandResult(returncode=1, stdout="", stderr=error, command="git push", duration_ms=0.0)
+
+        args = ["push", remote]
+        if branch:
+            args.append(branch)
+        return self._run_integration(args, cwd=working_dir, timeout=timeout)
+
+    def pull_rebase(
+        self,
+        working_dir: str,
+        remote: str = "origin",
+        timeout: int = 60,
+    ) -> CommandResult:
+        """Pull with rebase — used for retry on ref conflicts.
+
+        Args:
+            working_dir: Git repository directory.
+            remote: Remote name.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            Command result.
+        """
+        available, error = self.ensure_available()
+        if not available:
+            return CommandResult(returncode=1, stdout="", stderr=error, command="git pull", duration_ms=0.0)
+
+        args = ["pull", "--rebase", remote]
+        return self._run_integration(args, cwd=working_dir, timeout=timeout)
+
+    def log(
+        self,
+        working_dir: str,
+        format: str = "%H",
+        count: int = 1,
+        timeout: int = 30,
+    ) -> CommandResult:
+        """Get git log entries.
+
+        Args:
+            working_dir: Git repository directory.
+            format: Git log format string.
+            count: Number of entries to retrieve.
+            timeout: Command timeout in seconds.
+
+        Returns:
+            Command result.
+        """
+        available, error = self.ensure_available()
+        if not available:
+            return CommandResult(returncode=1, stdout="", stderr=error, command="git log", duration_ms=0.0)
+
+        args = ["log", f"--format={format}", f"-{count}"]
+        return self._run_integration(args, cwd=working_dir, timeout=timeout)
+
 
 # ---------------------------------------------------------------------------
 # Supporting data types
