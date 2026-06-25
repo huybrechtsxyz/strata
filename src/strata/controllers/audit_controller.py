@@ -199,28 +199,200 @@ class AuditController(BaseController):
         return results
 
     # ------------------------------------------------------------------
-    # Stubs — activated in later implementation steps
+    # Layer 4 — Remote push, PR enrichment, SIEM forwarding
     # ------------------------------------------------------------------
 
+    def push_to_remote(self, paths: List[Path], remote_name: str = "origin") -> bool:
+        """Stage, commit, and push deploy-log files to a git remote.
+
+        Args:
+            paths: List of deploy-log file paths to commit.
+            remote_name: Git remote name to push to.
+
+        Returns:
+            True if push succeeded, False otherwise.
+        """
+        if not paths:
+            return False
+
+        from strata.integrations.factory import IntegrationFactory
+
+        git: GitIntegration = IntegrationFactory.create_by_type("git")  # type: ignore[assignment]
+        available, _ = git.ensure_available()
+        if not available:
+            self.logger.warning("push_to_remote_git_unavailable")
+            return False
+
+        working_dir = str(self._work_path)
+
+        # Stage the files
+        relative_paths = []
+        for p in paths:
+            try:
+                relative_paths.append(str(p.relative_to(self._work_path)))
+            except ValueError:
+                relative_paths.append(str(p))
+
+        result = git.add(working_dir, relative_paths)
+        if result.returncode != 0:
+            self.logger.warning("push_to_remote_add_failed", stderr=result.stderr)
+            return False
+
+        # Commit
+        result = git.commit(working_dir, "chore(audit): deploy-log update [skip ci]")
+        if result.returncode != 0:
+            # Nothing to commit is acceptable (returncode 1 with "nothing to commit")
+            if "nothing to commit" in (result.stdout or "") + (result.stderr or ""):
+                self.logger.debug("push_to_remote_nothing_to_commit")
+                return True
+            self.logger.warning("push_to_remote_commit_failed", stderr=result.stderr)
+            return False
+
+        # Push
+        result = git.push(working_dir, remote=remote_name)
+        if result.returncode != 0:
+            self.logger.warning("push_to_remote_push_failed", stderr=result.stderr)
+            return False
+
+        return True
+
     def enrich_with_pr_data(self, payload: DeployLogModel) -> DeployLogModel:
-        """Best-effort PR lookup — stub, activated in Step 11."""
+        """Best-effort PR enrichment via GitHub CLI.
+
+        Looks up the merged PR that contains payload.commit_sha using `gh`.
+        On any failure, returns payload unchanged (best-effort).
+        """
+        if not payload.commit_sha:
+            return payload
+
+        try:
+            from strata.models.deploy_log_model import DeployLogPullRequestModel
+            from strata.utils.system import run_command
+
+            # Find PR associated with the commit
+            result = run_command(
+                [
+                    "gh",
+                    "pr",
+                    "list",
+                    "--state",
+                    "merged",
+                    "--search",
+                    payload.commit_sha,
+                    "--json",
+                    "number,title,url,author,mergedBy,mergedAt,labels,files",
+                    "--limit",
+                    "1",
+                ],
+                cwd=str(self._work_path),
+                timeout=15,
+            )
+            if result.returncode != 0 or not result.stdout:
+                return payload
+
+            import json as _json
+
+            prs = _json.loads(result.stdout)
+            if not prs:
+                return payload
+
+            pr = prs[0]
+            payload.pull_request = DeployLogPullRequestModel(
+                number=pr.get("number", 0),
+                title=pr.get("title", ""),
+                url=pr.get("url", ""),
+                author=pr.get("author", {}).get("login") if isinstance(pr.get("author"), dict) else None,
+                merged_by=pr.get("mergedBy", {}).get("login") if isinstance(pr.get("mergedBy"), dict) else None,
+                merged_at=pr.get("mergedAt"),
+                labels=[l.get("name", "") for l in pr.get("labels", []) if isinstance(l, dict)],
+                files_changed=[f.get("path", "") for f in pr.get("files", []) if isinstance(f, dict)],
+            )
+        except Exception as exc:
+            self.logger.debug("enrich_pr_data_failed", error=str(exc))
+
         return payload
 
-    def forward_to_siem(self, payload: DeployLogModel) -> None:
-        """Fire-and-forget SIEM forwarding — stub, activated in Step 15."""
-        pass
+    def forward_to_siem(
+        self,
+        payload: DeployLogModel,
+        audit_config: Optional[AuditConfigModel] = None,
+    ) -> None:
+        """Forward a deploy-log entry to configured sinks (webhook/syslog/stdout/ndjson).
 
-    def push_to_remote(self, paths: List[Path], remote_name: str) -> bool:
-        """Commit + push to remote — stub, activated in Step 12."""
-        return False
+        Best-effort: failures are logged but never raised.
+        """
+        if not audit_config or not audit_config.sinks:
+            return
+
+        data = payload.model_dump(exclude_none=True)
+
+        for sink in audit_config.sinks:
+            if not sink.enabled:
+                continue
+
+            # Event filter
+            if sink.events and "deploy_audit" not in sink.events:
+                continue
+
+            try:
+                match sink.type:
+                    case "stdout":
+                        import sys
+
+                        sys.stdout.write(json.dumps(data, default=str) + "\n")
+                        sys.stdout.flush()
+                    case "ndjson":
+                        if sink.path:
+                            ndjson_path = Path(sink.path)
+                            ndjson_path.parent.mkdir(parents=True, exist_ok=True)
+                            with open(ndjson_path, "a", encoding="utf-8") as f:
+                                f.write(json.dumps(data, default=str) + "\n")
+                    case "syslog":
+                        if sink.address:
+                            self._send_syslog(data, sink.address)
+                    case "webhook":
+                        if sink.url:
+                            self._send_webhook(data, sink.url, sink.headers)
+            except Exception as exc:
+                self.logger.debug("forward_to_siem_sink_failed", sink=sink.name, error=str(exc))
+
+    def _send_webhook(self, data: dict, url: str, headers: Optional[Dict[str, str]] = None) -> None:
+        """Send payload to a webhook URL via urllib (no external dependencies)."""
+        import urllib.request
+
+        req_headers = {"Content-Type": "application/json"}
+        if headers:
+            req_headers.update(headers)
+
+        body = json.dumps(data, default=str).encode("utf-8")
+        req = urllib.request.Request(url, data=body, headers=req_headers, method="POST")
+        with urllib.request.urlopen(req, timeout=10):  # noqa: S310 — URL comes from user config
+            pass
+
+    def _send_syslog(self, data: dict, address: str) -> None:
+        """Send payload to a syslog server via UDP."""
+        import socket
+
+        host, _, port_str = address.rpartition(":")
+        port = int(port_str) if port_str else 514
+        if not host:
+            host = address
+
+        message = f"<14>strata audit: {json.dumps(data, default=str)}"
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.sendto(message.encode("utf-8")[:65000], (host, port))
+        finally:
+            sock.close()
 
     def resend(
         self,
         base_path: Path,
+        audit_config: Optional[AuditConfigModel] = None,
         since: Optional[str] = None,
         last: Optional[int] = None,
     ) -> Tuple[int, int]:
-        """Re-forward local records to SIEM — stub until Step 15.
+        """Re-forward local deploy-log records to configured sinks.
 
         Returns (sent_count, failed_count).
         """
@@ -228,6 +400,9 @@ class AuditController(BaseController):
         sent = 0
         failed = 0
         for record in records:
-            self.forward_to_siem(record)
-            sent += 1
+            try:
+                self.forward_to_siem(record, audit_config=audit_config)
+                sent += 1
+            except Exception:
+                failed += 1
         return sent, failed

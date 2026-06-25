@@ -108,3 +108,78 @@ def audit_changes(
             click.echo(f"\n{len(entries)} entries shown.")
 
     handle_command_exit("audit changes", success=True)
+
+
+# ==============================================================================
+# strata audit resend
+# ==============================================================================
+
+
+@audit_group.command(name="resend", help="Re-forward deploy-log entries to configured audit sinks.")
+@click.option(
+    "--last",
+    default=None,
+    type=int,
+    help="Resend only the last N entries.",
+)
+@click.option(
+    "--since",
+    default=None,
+    type=str,
+    help="Resend only entries since ISO 8601 timestamp.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+@click.pass_context
+def audit_resend(
+    ctx: click.Context,
+    last: Optional[int],
+    since: Optional[str],
+    work_path: str,
+    output: Optional[str],
+    verbose: bool,
+    quiet: bool,
+) -> None:
+    """Re-forward local deploy-log records to configured audit sinks."""
+    from pathlib import Path
+
+    from strata.controllers.audit_controller import AuditController
+    from strata.models.audit_config_model import AuditConfigModel
+    from strata.services.configuration_service import ConfigurationService
+    from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+
+    wp = Path(work_path)
+    base_path = wp / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+
+    # Try to load audit config from configuration
+    audit_config: Optional[AuditConfigModel] = None
+    try:
+        config_service = ConfigurationService.load(str(wp / SOLUTION_DIR / "configuration.yaml"), validate=False)
+        if config_service.model and config_service.model.spec and config_service.model.spec.audit:
+            audit_config = config_service.model.spec.audit
+    except Exception:
+        pass
+
+    if not audit_config or not audit_config.sinks:
+        if not quiet:
+            click.echo("No audit sinks configured. Add spec.audit.sinks to configuration.yaml.")
+        ctx.exit(1)
+        return
+
+    controller = AuditController(work_path=wp)
+    sent, failed = controller.resend(
+        base_path=base_path,
+        audit_config=audit_config,
+        since=since,
+        last=last,
+    )
+
+    if output == "json":
+        click.echo(json.dumps({"sent": sent, "failed": failed}))
+    else:
+        if not quiet:
+            click.echo(f"Resend complete: {sent} sent, {failed} failed.")
+
+    handle_command_exit("audit resend", success=(failed == 0))
