@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import Field, field_validator, model_validator
 
+from strata.models.audit_config_model import AuditConfigModel
 from strata.models.common_models import (
     CommonLifecycleModel,
     PlatformBaseModel,
@@ -435,6 +436,10 @@ class ConfigurationSpecModel(PlatformBaseModel):
     policies: Optional[List[PolicyModel]] = Field(
         default_factory=list,
         description="Policy rules evaluated at validate, build, plan, and deploy phases",
+    )
+    audit: Optional[AuditConfigModel] = Field(
+        None,
+        description="Audit and deploy-log configuration (structure, sinks, retention)",
     )
 
     @model_validator(mode="after")

@@ -95,3 +95,11 @@ class AuditConfigModel(PlatformBaseModel):
 
     policy: AuditPolicyModel = Field(default_factory=AuditPolicyModel, description="Event type policy")
     sinks: List[AuditSinkModel] = Field(default_factory=list, description="Configured sinks")
+    structure: Optional[str] = Field(
+        default=None,
+        description="Deploy-log directory structure (flat, by-stage, by-execution, by-tenant, full). Defaults to by-execution.",
+    )
+    deploy_log_path: Optional[str] = Field(
+        default=None,
+        description="Custom deploy-log base path relative to workspace root (defaults to .strata/deploy-log)",
+    )

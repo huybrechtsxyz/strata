@@ -25,6 +25,7 @@ from pathlib import Path
 import click
 import yaml
 
+from strata.commands.cli_audit import audit_group
 from strata.commands.cli_builders import build as build_group
 from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
@@ -278,6 +279,7 @@ main.add_command(values_group, name="values")
 main.add_command(tools_group, name="tools")
 main.add_command(secret_group, name="secret")
 main.add_command(service_group, name="service")
+main.add_command(audit_group, name="audit")
 # ENTRY POINT
 #
 

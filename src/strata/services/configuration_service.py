@@ -521,15 +521,18 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
         """Get the deploy-log output path.
 
         Resolution order:
-        1. ``spec.deployment.audit.path`` (from configuration YAML — when the audit
-           config model is implemented this field will be read here)
+        1. ``spec.audit.deploy_log_path`` (from configuration YAML)
         2. ``config.SOLUTION_DIR / config.SOLUTION_DEPLOY_LOG_DIR`` (constant fallback)
 
         Args:
             work_path:   Workspace root path.
             create_path: When True, create the directory if it does not exist.
         """
-        deploy_log_path = f"{config.SOLUTION_DIR}/{config.SOLUTION_DEPLOY_LOG_DIR}"
+        custom_path = None
+        if self.model and self.model.spec and self.model.spec.audit:
+            custom_path = self.model.spec.audit.deploy_log_path
+
+        deploy_log_path = custom_path or f"{config.SOLUTION_DIR}/{config.SOLUTION_DEPLOY_LOG_DIR}"
 
         target_path = resolve_path(str(work_path), deploy_log_path)
         if create_path and not target_path.exists():

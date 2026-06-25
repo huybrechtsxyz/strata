@@ -262,13 +262,21 @@ class RunDeployCommand(BaseDeployCommand):
                 messages=list(self._messages),
             )
 
-            # Write via AuditController
+            # Resolve audit config (structure + base path)
+            structure = "by-execution"
             base_path = self._work_path / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+            if self._configuration_service:
+                audit_cfg = getattr(getattr(self._configuration_service.model, "spec", None), "audit", None)
+                if audit_cfg:
+                    structure = audit_cfg.structure or structure
+                base_path = self._configuration_service.get_deploy_log_path(self._work_path, create_path=True)
+
+            # Write via AuditController
             controller = AuditController(work_path=self._work_path)
             ok, path = controller.write_deploy_log(
                 payload=payload,
                 base_path=base_path,
-                structure="by-execution",
+                structure=structure,
             )
 
             if ok and path and self._is_console_output():
