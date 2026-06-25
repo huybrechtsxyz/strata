@@ -57,6 +57,7 @@ class BaseDeployCommand(BaseCommand):
         self._stage_results: List[ManifestStageModel] = []
         self._policy_results: List[ManifestPolicyResultModel] = []
         self._lock_ref: Optional[ManifestLockReferenceModel] = None
+        self._audit_log_path: Optional[str] = None
 
     @abstractmethod
     def execute(self) -> bool:
@@ -348,6 +349,7 @@ class BaseDeployCommand(BaseCommand):
                     stages=self._stage_results if self._stage_results else None,
                     policy_results=self._policy_results if self._policy_results else None,
                     lock=self._lock_ref,
+                    audit_log=self._audit_log_path,
                 ),
             )
 

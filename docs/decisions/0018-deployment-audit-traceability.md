@@ -1,6 +1,6 @@
 # Deployment audit and traceability for compliance (ISO 27001 / ISAE 3402)
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-06-24
 
 ## Context and Problem Statement
@@ -2639,4 +2639,27 @@ spec:
 - Try/except wrapper (can't break deploy)
 - Falls back to existing `DeploymentManifestService.save_with_config()` if no manifest config present
 - New path resolution only activates when `spec.deployment.manifest` is configured
+
+---
+
+## Implementation Status
+
+**Status:** Implemented (Steps 1–17 of 18). ADR accepted.
+
+**Implemented components:**
+
+| Layer       | Component                                                         | Location                                         |
+| ----------- | ----------------------------------------------------------------- | ------------------------------------------------ |
+| Model       | `DeployLogModel`                                                  | `src/strata/models/deploy_log_model.py`          |
+| Model       | `AuditConfigModel`                                                | `src/strata/models/audit_config_model.py`        |
+| Integration | Git write methods (`add`, `commit`, `push`, `pull_rebase`, `log`) | `src/strata/integrations/git.py`                 |
+| Controller  | `AuditController` (write, query, push, enrich, forward, resend)   | `src/strata/controllers/audit_controller.py`     |
+| CLI         | `strata audit changes`                                            | `src/strata/commands/cli_audit.py`               |
+| CLI         | `strata audit resend`                                             | `src/strata/commands/cli_audit.py`               |
+| CLI         | `strata audit export`                                             | `src/strata/commands/cli_audit.py`               |
+| Config      | `audit` field on `ConfigurationSpecModel`                         | `src/strata/models/configuration_model.py`       |
+| Config      | `audit` field on `EnvironmentSpecModel`                           | `src/strata/models/environment_model.py`         |
+| Manifest    | `audit_log` field in `DeploymentManifestSpecModel`                | `src/strata/models/deployment_manifest_model.py` |
+
+**Test coverage:** 183 tests covering models, integrations, controllers, and CLI commands.
 

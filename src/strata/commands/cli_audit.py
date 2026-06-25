@@ -183,3 +183,82 @@ def audit_resend(
             click.echo(f"Resend complete: {sent} sent, {failed} failed.")
 
     handle_command_exit("audit resend", success=(failed == 0))
+
+
+# ==============================================================================
+# strata audit export
+# ==============================================================================
+
+
+@audit_group.command(name="export", help="Export deploy-log entries to a file.")
+@click.option(
+    "--last",
+    default=None,
+    type=int,
+    help="Export only the last N entries.",
+)
+@click.option(
+    "--since",
+    default=None,
+    type=str,
+    help="Export only entries since ISO 8601 timestamp.",
+)
+@click.option(
+    "--format",
+    "export_format",
+    default="json",
+    type=click.Choice(["json", "ndjson"], case_sensitive=False),
+    help="Export format.",
+)
+@click.option(
+    "--out",
+    "out_file",
+    default=None,
+    type=click.Path(),
+    help="Output file path (defaults to stdout).",
+)
+@click_work_path
+@click_output_quiet
+@click.pass_context
+def audit_export(
+    ctx: click.Context,
+    last: Optional[int],
+    since: Optional[str],
+    export_format: str,
+    out_file: Optional[str],
+    work_path: str,
+    quiet: bool,
+) -> None:
+    """Export deploy-log entries to JSON or NDJSON."""
+    from pathlib import Path
+
+    from strata.controllers.audit_controller import AuditController
+    from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+
+    wp = Path(work_path)
+    base_path = wp / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+
+    controller = AuditController(work_path=wp)
+    entries = controller.query_deploy_logs(
+        base_path=base_path,
+        since=since,
+        last=last,
+    )
+
+    if export_format == "ndjson":
+        lines = [json.dumps(e.model_dump(exclude_none=True), default=str) for e in entries]
+        content = "\n".join(lines) + ("\n" if lines else "")
+    else:
+        data = [e.model_dump(exclude_none=True) for e in entries]
+        content = json.dumps(data, indent=2, default=str) + "\n"
+
+    if out_file:
+        out_path = Path(out_file)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content, encoding="utf-8")
+        if not quiet:
+            click.echo(f"Exported {len(entries)} entries to {out_path}")
+    else:
+        click.echo(content, nl=False)
+
+    handle_command_exit("audit export", success=True)

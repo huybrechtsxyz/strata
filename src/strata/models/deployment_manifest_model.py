@@ -260,6 +260,9 @@ class DeploymentManifestSpecModel(PlatformBaseModel):
     lock: Optional[ManifestLockReferenceModel] = Field(
         None, description="State lock audit trail — populated when spec.locking.enabled: true"
     )
+    audit_log: Optional[str] = Field(
+        None, description="Relative path to the deploy-log _execution.json for this execution"
+    )
 
 
 # ---------------------------------------------------------------------------

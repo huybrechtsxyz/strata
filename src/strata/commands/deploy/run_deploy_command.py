@@ -154,6 +154,8 @@ class RunDeployCommand(BaseDeployCommand):
                 }
             )
 
+            self._finalize(success=True)
+
             manifest_path = self._write_deployment_manifest(
                 action="deploy",
                 status="success",
@@ -162,14 +164,13 @@ class RunDeployCommand(BaseDeployCommand):
             if manifest_path and self._is_console_output():
                 click.echo(f"\n📋  Deployment manifest: {manifest_path}")
 
-            self._finalize(success=True)
             return True
 
         except Exception as exc:
             self._errors.append(f"Failed to execute deploy_run: {exc}")
             self.logger.exception("deploy_run failed")
-            self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
             self._finalize(success=False)
+            self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
             return False
 
     # -------------------------------------------------------------------------
@@ -280,7 +281,10 @@ class RunDeployCommand(BaseDeployCommand):
             )
 
             if ok and path and self._is_console_output():
-                click.echo(f"  📝  Deploy-log: {path.relative_to(self._work_path)}")
+                self._audit_log_path = str(path.relative_to(self._work_path))
+                click.echo(f"  📝  Deploy-log: {self._audit_log_path}")
+            elif ok and path:
+                self._audit_log_path = str(path.relative_to(self._work_path))
 
         except Exception as exc:
             self.logger.warning("deploy_log_write_failed", error=str(exc))

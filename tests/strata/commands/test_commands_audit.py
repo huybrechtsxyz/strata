@@ -144,3 +144,62 @@ class TestAuditChanges:
         result = runner.invoke(main, ["audit", "changes", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
         assert "✗" in result.output
+
+
+class TestAuditExport:
+    """Tests for strata audit export command."""
+
+    def test_export_json_to_stdout(self, tmp_path: Path) -> None:
+        """Export JSON to stdout."""
+        log_dir = tmp_path / ".strata" / "deploy-log"
+        _write_execution_json(log_dir, "exec1", _sample_entry())
+        runner = CliRunner()
+        result = runner.invoke(main, ["audit", "export", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 1
+        assert data[0]["deployment"] == "test_deploy"
+
+    def test_export_ndjson_to_stdout(self, tmp_path: Path) -> None:
+        """Export NDJSON to stdout."""
+        log_dir = tmp_path / ".strata" / "deploy-log"
+        _write_execution_json(log_dir, "exec1", _sample_entry())
+        runner = CliRunner()
+        result = runner.invoke(main, ["audit", "export", "--work-path", str(tmp_path), "--format", "ndjson"])
+        assert result.exit_code == 0
+        lines = [l for l in result.output.strip().split("\n") if l]
+        assert len(lines) == 1
+        data = json.loads(lines[0])
+        assert data["deployment"] == "test_deploy"
+
+    def test_export_to_file(self, tmp_path: Path) -> None:
+        """Export to a file."""
+        log_dir = tmp_path / ".strata" / "deploy-log"
+        _write_execution_json(log_dir, "exec1", _sample_entry())
+        out_file = tmp_path / "export.json"
+        runner = CliRunner()
+        result = runner.invoke(main, ["audit", "export", "--work-path", str(tmp_path), "--out", str(out_file)])
+        assert result.exit_code == 0
+        assert out_file.exists()
+        data = json.loads(out_file.read_text())
+        assert len(data) == 1
+
+    def test_export_empty(self, tmp_path: Path) -> None:
+        """Export with no entries produces empty array."""
+        (tmp_path / ".strata").mkdir()
+        runner = CliRunner()
+        result = runner.invoke(main, ["audit", "export", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data == []
+
+    def test_export_last_limits(self, tmp_path: Path) -> None:
+        """--last limits exported entries."""
+        log_dir = tmp_path / ".strata" / "deploy-log"
+        _write_execution_json(log_dir, "e1", _sample_entry(execution_id="1", timestamp="2024-01-15T10:00:00+00:00"))
+        _write_execution_json(log_dir, "e2", _sample_entry(execution_id="2", timestamp="2024-01-16T10:00:00+00:00"))
+        runner = CliRunner()
+        result = runner.invoke(main, ["audit", "export", "--work-path", str(tmp_path), "--last", "1"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 1
