@@ -16,6 +16,7 @@ from strata.models.configuration_model import (
 )
 from strata.models.deployment_manifest_model import DeploymentManifestModel
 from strata.services.base_service import BaseService
+from strata.utils.output_writer import OutputWriter
 
 
 class DeploymentManifestService(BaseService["DeploymentManifestModel"]):
@@ -77,11 +78,11 @@ class DeploymentManifestService(BaseService["DeploymentManifestModel"]):
         if not base.is_absolute():
             base = work_path / base
 
-        output_dir = base / deployment_name
-        if version:
-            output_dir = output_dir / version
-
-        return output_dir
+        return OutputWriter.resolve_versioned_output_dir(
+            base_path=base,
+            deployment_name=deployment_name,
+            version=version,
+        )
 
     # ------------------------------------------------------------------
     # Save

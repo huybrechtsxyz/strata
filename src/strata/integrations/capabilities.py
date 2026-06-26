@@ -11,6 +11,7 @@ __all__ = [
     "IRepositoryTool",
     "IInfrastructureTool",
     "IContainerTool",
+    "ISiemSink",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -203,7 +204,46 @@ class IContainerTool(Protocol):
         ...
 
 
+@runtime_checkable
+class ISiemSink(Protocol):
+    """
+    Capability: Integration supports forwarding structured events to an immutable audit store.
+
+    Integrations implementing this interface can receive structured audit events
+    and forward them to external immutable storage (e.g. Azure Sentinel, ELK, OTel).
+
+    Used by: AuditController (deploy logs), application audit logger (CLI actions),
+    PolicyController (violations), ValueController (secret access), and future producers.
+
+    Examples: Azure Sentinel, ELK/Logstash, OpenTelemetry collector
+    """
+
+    def send_event(self, log_type: str, payload: dict, **kwargs) -> bool:
+        """Send a single structured event to the sink.
+
+        Args:
+            log_type: Event category (deploy_audit, cli_action, policy_violation, etc.)
+            payload:  Structured JSON-serialisable dict for the event.
+
+        Returns:
+            True if the event was delivered, False otherwise.
+        """
+        ...
+
+    def send_batch(self, log_type: str, payloads: List[dict], **kwargs) -> bool:
+        """Send a batch of structured events to the sink.
+
+        Returns:
+            True if all events were delivered, False otherwise.
+        """
+        ...
+
+
 # Capability registry for metadata
+# NOTE: ISiemSink is intentionally absent from CAPABILITY_REGISTRY — it is a
+# platform-wide forwarding protocol, not a data-store capability.  Sinks are
+# resolved by the AuditController at runtime from the environment audit config,
+# not through the standard integration factory capability lookup.
 CAPABILITY_REGISTRY = {
     "IVariableStore": {
         "description": "Configuration variable storage operations",
@@ -252,6 +292,7 @@ CAPABILITY_MAP = {
     "repository": IRepositoryTool,
     "infrastructure": IInfrastructureTool,
     "container": IContainerTool,
+    "audit": ISiemSink,
 }
 
 
@@ -271,6 +312,7 @@ CUSTOM_INTEGRATION_TYPES = frozenset(
         "custominfrastructure",  # Generic IaC tool wrapper
         "customcontainer",  # Generic container tool wrapper
         "customapi",  # Generic REST API wrapper
+        "customaudit",  # Generic SIEM/audit sink wrapper
     ]
 )
 
@@ -285,6 +327,7 @@ CUSTOM_TYPE_CAPABILITY_MAP = {
     "custominfrastructure": "infrastructure",
     "customcontainer": "container",
     "customapi": None,  # Can have any capability
+    "customaudit": "audit",
 }
 
 

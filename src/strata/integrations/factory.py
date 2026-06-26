@@ -46,6 +46,10 @@ class IntegrationFactory:
         "helm": ("strata.integrations.helm", "HelmIntegration"),
         "opentofu": ("strata.integrations.opentofu", "OpenTofuIntegration"),
         "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
+        # SIEM / audit sinks
+        "sentinel": ("strata.integrations.siem.sentinel_integration", "SentinelIntegration"),
+        "elk": ("strata.integrations.siem.elk_siem_integration", "ElkSiemIntegration"),
+        "otel": ("strata.integrations.siem.otel_siem_integration", "OtelSiemIntegration"),
     }
 
     @classmethod

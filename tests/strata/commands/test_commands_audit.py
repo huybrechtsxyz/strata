@@ -167,7 +167,7 @@ class TestAuditExport:
         runner = CliRunner()
         result = runner.invoke(main, ["audit", "export", "--work-path", str(tmp_path), "--format", "ndjson"])
         assert result.exit_code == 0
-        lines = [l for l in result.output.strip().split("\n") if l]
+        lines = [line for line in result.output.strip().split("\n") if line]
         assert len(lines) == 1
         data = json.loads(lines[0])
         assert data["deployment"] == "test_deploy"

@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from strata.exceptions import ModelValidationError, PlatformError
 from strata.logger import get_logger
 from strata.models.scaffold_template_model import ScaffoldTemplateModel
+from strata.utils.config import SOLUTION_DIR, SOLUTION_TEMPLATES_DIR
 from strata.utils.system import get_pkg_templates_path
 
 logger = get_logger(__name__)

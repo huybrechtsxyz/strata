@@ -5,7 +5,7 @@ Integrations define external tools and services the platform uses to
 extend its capabilities (e.g. git, terraform, bitwarden, vault).
 """
 
-from typing import Optional, Set
+from typing import Any, Dict, Optional, Set
 
 from pydantic import Field, field_validator, model_validator
 
@@ -89,6 +89,14 @@ class IntegrationModel(PlatformBaseModel):
     )
     lifecycle: Optional[CommonLifecycleModel] = Field(
         None, description="Lifecycle hook specification for API integrations"
+    )
+    properties: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Integration-specific properties (e.g. data_collection_rule_id for Sentinel, "
+            "index_pattern for ELK, resource_attributes for OTel). "
+            "Keys and values are free-form and interpreted by the integration class."
+        ),
     )
 
     @field_validator("capabilities")

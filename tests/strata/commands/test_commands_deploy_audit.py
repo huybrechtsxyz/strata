@@ -18,7 +18,7 @@ from strata.models.deployment_manifest_model import ManifestStageModel
 def _make_command(
     work_path: Path,
     dry_run: bool = False,
-    deploy_started_at: str = "2024-01-15T10:00:00+00:00",
+    deploy_started_at: str | None = "2024-01-15T10:00:00+00:00",
 ) -> RunDeployCommand:
     """Create a RunDeployCommand with mocked context for testing."""
     cmd = RunDeployCommand.__new__(RunDeployCommand)
@@ -199,8 +199,8 @@ class TestDeployLogWrite:
         with patch("strata.controllers.audit_controller.AuditController.write_deploy_log", mock_write_log):
             cmd._write_deploy_log(success=True)
 
-        cmd.logger.warning.assert_called_once()
-        assert "deploy_log_write_failed" in str(cmd.logger.warning.call_args)
+        cmd.logger.warning.assert_called_once()  # type: ignore[attr-defined]
+        assert "deploy_log_write_failed" in str(cmd.logger.warning.call_args)  # type: ignore[attr-defined]
 
     @patch("strata.commands.deploy.run_deploy_command.RunDeployCommand._get_git_field")
     def test_deploy_log_uses_correct_base_path(
@@ -239,6 +239,125 @@ class TestDeployLogWrite:
 
         structure = mock_write_log.call_args[1]["structure"]
         assert structure == "by-execution"
+
+
+class TestManifestPushToRemote:
+    """Tests for push_manifest flag in ConfigurationManifestModel."""
+
+    def test_push_manifest_calls_push_to_remote(self, tmp_path: Path) -> None:
+        """When push_manifest=True, push_to_remote is called after writing the manifest."""
+        from unittest.mock import MagicMock, patch
+
+        from strata.models.configuration_model import ConfigurationManifestModel, ManifestStoreType
+
+        manifest_config = ConfigurationManifestModel(
+            type=ManifestStoreType.LOCAL,
+            path=str(tmp_path / "manifests"),
+            push_manifest=True,
+        )
+
+        cmd = RunDeployCommand.__new__(RunDeployCommand)
+        cmd._work_path = tmp_path
+        cmd._dry_run = False
+        cmd._deploy_started_at = "2024-01-15T10:00:00+00:00"
+        cmd._stage_results = []
+        cmd._policy_results = []
+        cmd._lock_ref = None
+        cmd._audit_log_path = None
+        cmd.logger = MagicMock()
+
+        mock_deployment_service = MagicMock()
+        mock_deployment_service.model.meta.name = PlatformName("test_deploy")
+        mock_deployment_service.model.meta.annotations = None
+        mock_deployment_service.model.meta.labels = {}
+        mock_deployment_service.model.meta.tags = None
+        mock_deployment_service.get_workspace_service.return_value = None
+        cmd._deployment_service = mock_deployment_service
+        cmd._configuration_service = None
+
+        written_path = tmp_path / "manifests" / "test.json"
+        written_path.parent.mkdir(parents=True, exist_ok=True)
+        written_path.touch()
+
+        from strata.models.deployment_manifest_model import ManifestArtifactsModel, ManifestPlatformModel
+
+        mock_artifacts = ManifestArtifactsModel(platform=ManifestPlatformModel(hash="sha256:abc123"))
+        mock_save = MagicMock(return_value=written_path)
+        mock_push = MagicMock(return_value=True)
+
+        with (
+            patch(
+                "strata.commands.deploy.base_deploy_command.BaseDeployCommand._get_manifest_config",
+                return_value=manifest_config,
+            ),
+            patch("strata.commands.deploy.base_deploy_command.DeploymentManifestService") as mock_svc_cls,
+            patch(
+                "strata.commands.deploy.base_deploy_command.BaseDeployCommand._collect_artifacts",
+                return_value=mock_artifacts,
+            ),
+            patch("strata.controllers.manifest_controller.ManifestController.push_to_remote", mock_push),
+        ):
+            mock_svc_cls.return_value.save_with_config = mock_save
+            cmd._write_deployment_manifest(action="deploy", status="success")
+
+        mock_push.assert_called_once_with([written_path])
+
+    def test_push_manifest_false_does_not_push(self, tmp_path: Path) -> None:
+        """When push_manifest=False (default), push_to_remote is not called."""
+        from unittest.mock import MagicMock, patch
+
+        from strata.models.configuration_model import ConfigurationManifestModel, ManifestStoreType
+
+        manifest_config = ConfigurationManifestModel(
+            type=ManifestStoreType.LOCAL,
+            path=str(tmp_path / "manifests"),
+            push_manifest=False,
+        )
+
+        cmd = RunDeployCommand.__new__(RunDeployCommand)
+        cmd._work_path = tmp_path
+        cmd._dry_run = False
+        cmd._deploy_started_at = "2024-01-15T10:00:00+00:00"
+        cmd._stage_results = []
+        cmd._policy_results = []
+        cmd._lock_ref = None
+        cmd._audit_log_path = None
+        cmd.logger = MagicMock()
+
+        mock_deployment_service = MagicMock()
+        mock_deployment_service.model.meta.name = PlatformName("test_deploy")
+        mock_deployment_service.model.meta.annotations = None
+        mock_deployment_service.model.meta.labels = {}
+        mock_deployment_service.model.meta.tags = None
+        mock_deployment_service.get_workspace_service.return_value = None
+        cmd._deployment_service = mock_deployment_service
+        cmd._configuration_service = None
+
+        written_path = tmp_path / "manifests" / "test.json"
+        written_path.parent.mkdir(parents=True, exist_ok=True)
+        written_path.touch()
+
+        from strata.models.deployment_manifest_model import ManifestArtifactsModel, ManifestPlatformModel
+
+        mock_artifacts = ManifestArtifactsModel(platform=ManifestPlatformModel(hash="sha256:abc123"))
+        mock_push = MagicMock()
+
+        with (
+            patch(
+                "strata.commands.deploy.base_deploy_command.BaseDeployCommand._get_manifest_config",
+                return_value=manifest_config,
+            ),
+            patch("strata.commands.deploy.base_deploy_command.DeploymentManifestService") as mock_svc_cls,
+            patch(
+                "strata.commands.deploy.base_deploy_command.BaseDeployCommand._collect_artifacts",
+                return_value=mock_artifacts,
+            ),
+            patch("strata.controllers.manifest_controller.ManifestController.push_to_remote", mock_push),
+        ):
+            mock_svc_cls.return_value.save_with_config = MagicMock(return_value=written_path)
+            cmd._write_deployment_manifest(action="deploy", status="success")
+
+        mock_push.assert_not_called()
 
 
 class TestDeployLogExecutionId:

@@ -268,6 +268,10 @@ class ConfigurationManifestModel(PlatformBaseModel):
         default=True,
         description="Create a git tag '{deployment_name}/{version}' after writing (gitops only)",
     )
+    push_manifest: bool = Field(
+        default=False,
+        description="Commit and push the written manifest file to the git remote after writing.",
+    )
 
     @model_validator(mode="after")
     def validate_gitops_fields(self) -> "ConfigurationManifestModel":

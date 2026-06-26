@@ -976,7 +976,7 @@ meta:
 spec:
   audit:
     policy:
-      >> allow for extra policies (like customer ones in the )
+      # (additional policies can be layered per environment, e.g. customer-specific ones)
     events:
       deploy_audit: true         # default: true  — deployment evidence (P0)
       cli_action: true           # default: true  — who ran what (P0)

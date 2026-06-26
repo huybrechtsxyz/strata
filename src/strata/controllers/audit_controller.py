@@ -20,10 +20,11 @@ from strata.models.deploy_log_model import (
     DeployLogModel,
     DeployLogStageFileModel,
 )
-from strata.utils.templater import TemplateProcessor
+from strata.utils.output_writer import OutputWriter
 
 if TYPE_CHECKING:
     from strata.integrations.git import GitIntegration
+    from strata.integrations.siem.base_siem_integration import SiemBaseIntegration
 
 # Built-in path definitions — used when spec.deployment.paths is absent
 BUILTIN_PATH_DEFINITIONS: Dict[str, str] = {
@@ -42,11 +43,13 @@ class AuditController(BaseController):
         self,
         work_path: Path,
         audit_config: Optional[AuditConfigModel] = None,
+        siem_sinks: Optional[List["SiemBaseIntegration"]] = None,
         git_integration: Optional["GitIntegration"] = None,
     ) -> None:
         super().__init__()
         self._work_path = work_path
         self._audit_config = audit_config or AuditConfigModel()
+        self._siem_sinks: List["SiemBaseIntegration"] = siem_sinks or []
         self._git = git_integration
 
     @staticmethod
@@ -104,12 +107,6 @@ class AuditController(BaseController):
         payload: DeployLogModel,
     ) -> Path:
         """Resolve deploy-log directory from named path or inline Jinja2 template."""
-        # Resolve named path → Jinja2 template string
-        template = path_definitions.get(
-            structure,
-            BUILTIN_PATH_DEFINITIONS.get(structure, structure),
-        )
-
         # Sanitize timestamp for filesystem (replace : with -)
         fs_timestamp = payload.timestamp.replace(":", "-") if payload.timestamp else ""
 
@@ -124,14 +121,13 @@ class AuditController(BaseController):
             "tenant": "",  # resolved from deployment labels/properties in future
         }
 
-        # Render via Jinja2
-        rendered = TemplateProcessor.render(template, context)
-
-        # Strip empty segments (from missing optional tokens)
-        segments = [s for s in rendered.split("/") if s.strip()]
-        if segments:
-            return base_path / Path(*segments)
-        return base_path
+        return OutputWriter.resolve_structured_output_dir(
+            base_path=base_path,
+            structure=structure,
+            path_definitions=path_definitions,
+            builtin_path_definitions=BUILTIN_PATH_DEFINITIONS,
+            context=context,
+        )
 
     def _write_execution_json(self, payload: DeployLogModel, output_dir: Path) -> Path:
         """Write _execution.json — always written (decision #5)."""
@@ -304,7 +300,7 @@ class AuditController(BaseController):
                 author=pr.get("author", {}).get("login") if isinstance(pr.get("author"), dict) else None,
                 merged_by=pr.get("mergedBy", {}).get("login") if isinstance(pr.get("mergedBy"), dict) else None,
                 merged_at=pr.get("mergedAt"),
-                labels=[l.get("name", "") for l in pr.get("labels", []) if isinstance(l, dict)],
+                labels=[lbl.get("name", "") for lbl in pr.get("labels", []) if isinstance(lbl, dict)],
                 files_changed=[f.get("path", "") for f in pr.get("files", []) if isinstance(f, dict)],
             )
         except Exception as exc:
@@ -317,44 +313,56 @@ class AuditController(BaseController):
         payload: DeployLogModel,
         audit_config: Optional[AuditConfigModel] = None,
     ) -> None:
-        """Forward a deploy-log entry to configured sinks (webhook/syslog/stdout/ndjson).
+        """Forward a deploy-log entry to configured sinks (webhook/syslog/stdout/ndjson/integration).
 
         Best-effort: failures are logged but never raised.
         """
-        if not audit_config or not audit_config.sinks:
-            return
-
+        cfg = audit_config or self._audit_config
         data = payload.model_dump(exclude_none=True)
 
-        for sink in audit_config.sinks:
-            if not sink.enabled:
-                continue
+        # --- Built-in sink types ---
+        if cfg and cfg.sinks:
+            for sink in cfg.sinks:
+                if not sink.enabled:
+                    continue
+                # Event filter
+                if sink.events and "deploy_audit" not in sink.events:
+                    continue
+                # Integration-backed sinks are handled below
+                if sink.integration:
+                    continue
+                try:
+                    match sink.type:
+                        case "stdout":
+                            import sys
 
-            # Event filter
-            if sink.events and "deploy_audit" not in sink.events:
-                continue
+                            sys.stdout.write(json.dumps(data, default=str) + "\n")
+                            sys.stdout.flush()
+                        case "ndjson":
+                            if sink.path:
+                                ndjson_path = Path(sink.path)
+                                ndjson_path.parent.mkdir(parents=True, exist_ok=True)
+                                with open(ndjson_path, "a", encoding="utf-8") as f:
+                                    f.write(json.dumps(data, default=str) + "\n")
+                        case "syslog":
+                            if sink.address:
+                                self._send_syslog(data, sink.address)
+                        case "webhook":
+                            if sink.url:
+                                self._send_webhook(data, sink.url, sink.headers)
+                except Exception as exc:
+                    self.logger.debug("forward_to_siem_sink_failed", sink=sink.name, error=str(exc))
 
+        # --- Integration-backed sinks (ISiemSink instances injected at construction) ---
+        for integration_sink in self._siem_sinks:
             try:
-                match sink.type:
-                    case "stdout":
-                        import sys
-
-                        sys.stdout.write(json.dumps(data, default=str) + "\n")
-                        sys.stdout.flush()
-                    case "ndjson":
-                        if sink.path:
-                            ndjson_path = Path(sink.path)
-                            ndjson_path.parent.mkdir(parents=True, exist_ok=True)
-                            with open(ndjson_path, "a", encoding="utf-8") as f:
-                                f.write(json.dumps(data, default=str) + "\n")
-                    case "syslog":
-                        if sink.address:
-                            self._send_syslog(data, sink.address)
-                    case "webhook":
-                        if sink.url:
-                            self._send_webhook(data, sink.url, sink.headers)
+                integration_sink.send_event("deploy_audit", data)
             except Exception as exc:
-                self.logger.debug("forward_to_siem_sink_failed", sink=sink.name, error=str(exc))
+                self.logger.debug(
+                    "forward_to_siem_integration_failed",
+                    sink=getattr(integration_sink, "integration_name", "?"),
+                    error=str(exc),
+                )
 
     def _send_webhook(self, data: dict, url: str, headers: Optional[Dict[str, str]] = None) -> None:
         """Send payload to a webhook URL via urllib (no external dependencies)."""
