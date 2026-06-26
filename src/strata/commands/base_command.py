@@ -12,7 +12,7 @@ import click
 
 from strata.controllers.integration_controller import IntegrationController
 from strata.controllers.solution_controller import SolutionController
-from strata.logger import audit, configure_audit_log, get_logger, shutdown_audit
+from strata.logger import audit, configure_audit_log, get_logger, is_audit_configured, shutdown_audit
 from strata.logger.context import set_context
 from strata.logger.logger import reconfigure_logging
 from strata.utils.config import DEFAULT_BUILD_PATH, DOCS_URL, SOLUTION_DIR, SUPPORT_URL
@@ -208,9 +208,11 @@ class BaseCommand(ABC):
 
             set_context({"solution_id": solution_id, "execution_id": self._execution_id})
 
-            # Configure audit log (separate from application logs)
-            audit_path = self._work_path / SOLUTION_DIR / "audit.log"
-            configure_audit_log(log_path=str(audit_path))
+            # Configure audit log (separate from application logs).
+            # Skip if already configured by the audit: section in logging.yaml.
+            if not is_audit_configured():
+                audit_path = self._work_path / SOLUTION_DIR / "audit.log"
+                configure_audit_log(log_path=str(audit_path))
 
             # Start session operation if specified
             self._start_session_operation()

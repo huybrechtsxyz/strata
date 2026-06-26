@@ -54,3 +54,17 @@ root:
 # Azure Application Insights — disabled in development
 azure:
   enabled: false
+
+# ===============================================================================
+# Audit Log Configuration
+# ===============================================================================
+# Configures the dedicated NDJSON audit log (user actions + outcomes).
+# Omit this section to use the default: .strata/audit.log with size-based rotation.
+# For production servers, set an absolute path and switch to daily rotation.
+# ===============================================================================
+# audit:
+#   path: .strata/audit.log       # Override to an absolute path for production
+#   rotation: size                 # size | daily
+#   max_bytes: 5242880             # 5 MB — used when rotation: size
+#   backup_count: 3                # rotated files to keep
+#   date_suffix: "%Y%m%d"          # used when rotation: daily (e.g. audit.log.20260524)

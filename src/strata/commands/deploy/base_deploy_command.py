@@ -57,6 +57,7 @@ class BaseDeployCommand(BaseCommand):
         self._stage_results: List[ManifestStageModel] = []
         self._policy_results: List[ManifestPolicyResultModel] = []
         self._lock_ref: Optional[ManifestLockReferenceModel] = None
+        self._audit_log_path: Optional[str] = None
 
     @abstractmethod
     def execute(self) -> bool:
@@ -348,6 +349,7 @@ class BaseDeployCommand(BaseCommand):
                     stages=self._stage_results if self._stage_results else None,
                     policy_results=self._policy_results if self._policy_results else None,
                     lock=self._lock_ref,
+                    audit_log=self._audit_log_path,
                 ),
             )
 
@@ -359,6 +361,17 @@ class BaseDeployCommand(BaseCommand):
                 version=version,
             )
             self.logger.info("Deployment manifest written", path=str(path))
+
+            if manifest_config.push_manifest and path:
+                from strata.controllers.manifest_controller import ManifestController
+
+                manifest_ctrl = ManifestController(work_path=self._work_path)
+                pushed = manifest_ctrl.push_to_remote([path])
+                if pushed:
+                    self.logger.info("Deployment manifest pushed to remote", path=str(path))
+                else:
+                    self.logger.warning("Deployment manifest push failed — continuing", path=str(path))
+
             return path
 
         except Exception as exc:

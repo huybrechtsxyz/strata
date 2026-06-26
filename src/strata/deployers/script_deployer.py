@@ -25,7 +25,6 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from strata.controllers.value_controller import ResolvedValues
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -40,6 +39,7 @@ from strata.deployers.base_deployer import (
 from strata.models.deployment_model import DeploymentStageModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
+from strata.utils.resolved_values import ResolvedValues
 
 # Lifecycle phase names that correspond to each deployer step.
 _STEP_TO_PHASE: Dict[str, str] = {

@@ -19,6 +19,7 @@ from strata.integrations.lock.base_lock_backend import (
     LockTimeoutError,
 )
 from strata.logger import get_logger
+from strata.utils.config import SOLUTION_DIR, SOLUTION_LOCKS_DIR
 
 logger = get_logger(__name__)
 
@@ -60,7 +61,7 @@ class LocalLockBackend(BaseLockBackend):
     BACKEND_TYPE = "local"
 
     def __init__(self, work_path: Path) -> None:
-        self._locks_dir = work_path / ".strata" / "locks"
+        self._locks_dir = work_path / SOLUTION_DIR / SOLUTION_LOCKS_DIR
 
     # ------------------------------------------------------------------
     # Internal helpers

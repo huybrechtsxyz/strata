@@ -12,10 +12,11 @@ from strata.builders.sbom.lockfile_parsers import DEFAULT_REGISTRY, LockfilePars
 from strata.logger import get_logger
 from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.models.sbom_model import SbomComponentModel
+from strata.utils.config import SOLUTION_DIR, SOLUTION_SBOM_IGNORE_FILE
 
 logger = get_logger(__name__)
 
-_SBOM_IGNORE_CONFIG = ".strata/sbom-ignore.yaml"
+_SBOM_IGNORE_CONFIG = f"{SOLUTION_DIR}/{SOLUTION_SBOM_IGNORE_FILE}"
 
 # Default ignore path globs — always applied before sbom-ignore.yaml additions.
 _DEFAULT_IGNORE_PATHS = (

@@ -22,6 +22,7 @@ from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
 from strata.models.tenant_model import TenantModel
 from strata.models.workspace_model import WorkspaceModel
+from strata.utils.config import SOLUTION_DIR, SOLUTION_SCHEMAS_DIR
 
 # Maps every PlatformKind to its top-level Pydantic model class.
 _KIND_TO_MODEL = {
@@ -121,7 +122,7 @@ def schema_get(kind: str, output: Optional[str] = None) -> None:
 @schema_group.command(name="export", help="Export JSON Schemas for all document kinds to files.")
 @click.option(
     "--output-dir",
-    default=".strata/schemas",
+    default=f"{SOLUTION_DIR}/{SOLUTION_SCHEMAS_DIR}",
     show_default=True,
     help="Directory to write schema files. Created if it does not exist.",
 )

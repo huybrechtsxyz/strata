@@ -48,3 +48,16 @@ azure:
   enabled: false
   # connection_string: "InstrumentationKey=xxx;IngestionEndpoint=https://..."
   # Or use environment variable: APPLICATIONINSIGHTS_CONNECTION_STRING
+
+# ===============================================================================
+# Audit Log Configuration
+# ===============================================================================
+# Configures the dedicated NDJSON audit log (user actions + outcomes).
+# Omit this section to use the default: .strata/audit.log with size-based rotation.
+# ===============================================================================
+# audit:
+#   path: .strata/audit.log       # Override to an absolute path for production
+#   rotation: size                 # size | daily
+#   max_bytes: 5242880             # 5 MB — used when rotation: size
+#   backup_count: 3                # rotated files to keep
+#   date_suffix: "%Y%m%d"          # used when rotation: daily (e.g. audit.log.20260524)

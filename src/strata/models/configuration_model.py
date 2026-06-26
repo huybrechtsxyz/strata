@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import Field, field_validator, model_validator
 
+from strata.models.audit_config_model import AuditConfigModel
 from strata.models.common_models import (
     CommonLifecycleModel,
     PlatformBaseModel,
@@ -16,6 +17,7 @@ from strata.models.common_models import (
 from strata.models.integration_model import IntegrationModel
 from strata.models.policy_model import PolicyModel
 from strata.models.repository_model import RemoteModel
+from strata.utils.config import SOLUTION_DEPLOYMENTS_DIR, SOLUTION_DIR, SOLUTION_OUTPUTS_DIR
 
 
 class ConfigurationSecurityModel(PlatformBaseModel):
@@ -251,7 +253,7 @@ class ConfigurationManifestModel(PlatformBaseModel):
 
     type: ManifestStoreType = Field(description="Storage backend: 'local' (filesystem) or 'gitops' (git repository)")
     path: str = Field(
-        default=".strata/deployments",
+        default=f"{SOLUTION_DIR}/{SOLUTION_DEPLOYMENTS_DIR}",
         description="Base path for manifests. Service appends /{deployment_name}/{version}/{timestamp}.json",
     )
     repository: Optional[str] = Field(
@@ -265,6 +267,10 @@ class ConfigurationManifestModel(PlatformBaseModel):
     tag: bool = Field(
         default=True,
         description="Create a git tag '{deployment_name}/{version}' after writing (gitops only)",
+    )
+    push_manifest: bool = Field(
+        default=False,
+        description="Commit and push the written manifest file to the git remote after writing.",
     )
 
     @model_validator(mode="after")
@@ -312,7 +318,7 @@ class ConfigurationOutputsModel(PlatformBaseModel):
         description="Write output artifacts after a successful deploy. Set to false to disable.",
     )
     path: str = Field(
-        default=".strata/outputs",
+        default=f"{SOLUTION_DIR}/{SOLUTION_OUTPUTS_DIR}",
         description=("Base path for output artifacts. The deployer appends /{deployment_name}/{version}/{stage}.json"),
     )
     sensitive: SensitiveOutputHandling = Field(
@@ -434,6 +440,10 @@ class ConfigurationSpecModel(PlatformBaseModel):
     policies: Optional[List[PolicyModel]] = Field(
         default_factory=list,
         description="Policy rules evaluated at validate, build, plan, and deploy phases",
+    )
+    audit: Optional[AuditConfigModel] = Field(
+        None,
+        description="Audit and deploy-log configuration (structure, sinks, retention)",
     )
 
     @model_validator(mode="after")

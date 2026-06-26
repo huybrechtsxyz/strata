@@ -517,6 +517,29 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
 
         return target_path
 
+    def get_deploy_log_path(self, work_path: Path, create_path: bool = True) -> Path:
+        """Get the deploy-log output path.
+
+        Resolution order:
+        1. ``spec.audit.deploy_log_path`` (from configuration YAML)
+        2. ``config.SOLUTION_DIR / config.SOLUTION_DEPLOY_LOG_DIR`` (constant fallback)
+
+        Args:
+            work_path:   Workspace root path.
+            create_path: When True, create the directory if it does not exist.
+        """
+        custom_path = None
+        if self.model and self.model.spec and self.model.spec.audit:
+            custom_path = self.model.spec.audit.deploy_log_path
+
+        deploy_log_path = custom_path or f"{config.SOLUTION_DIR}/{config.SOLUTION_DEPLOY_LOG_DIR}"
+
+        target_path = resolve_path(str(work_path), deploy_log_path)
+        if create_path and not target_path.exists():
+            target_path.mkdir(parents=True, exist_ok=True)
+
+        return target_path
+
     def get_temp_path(self, work_path: Path, create_path: bool) -> Path:
         """Get a temporary path for intermediate files."""
         temp_dir = self.get_default_state_path(work_path=work_path, create_path=False)

@@ -10,9 +10,10 @@ from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.common_models import ProvisionerType
 from strata.models.deployment_model import DeploymentStageModel
+from strata.utils.config import SOLUTION_DIR, SOLUTION_OUTPUTS_DIR
 
 _CACHE_SUFFIX = ".tf-outputs.json"
-_DEFAULT_OUTPUTS_PATH = ".strata/outputs"
+_DEFAULT_OUTPUTS_PATH = f"{SOLUTION_DIR}/{SOLUTION_OUTPUTS_DIR}"
 
 
 class OutputDeployCommand(BaseDeployCommand):

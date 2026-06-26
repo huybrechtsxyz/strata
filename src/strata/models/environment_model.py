@@ -11,6 +11,7 @@ from pydantic import (
     model_validator,
 )
 
+from strata.models.audit_config_model import AuditConfigModel
 from strata.models.common_models import (
     CommonLifecycleModel,
     PlatformBaseModel,
@@ -332,6 +333,10 @@ class EnvironmentSpecModel(PlatformBaseModel):
     features: Optional[List[FeatureStoreModel]] = Field(
         None,
         description="Feature flag declarations - single source of truth for all platform component feature references",
+    )
+    audit: Optional[AuditConfigModel] = Field(
+        None,
+        description="Environment-level audit overrides (structure, sinks, retention)",
     )
 
     @model_validator(mode="after")

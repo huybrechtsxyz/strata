@@ -27,7 +27,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
 
-from strata.controllers.value_controller import ResolvedValues, inject_compose_env
 from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
@@ -46,6 +45,7 @@ from strata.models.workspace_model import WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 from strata.utils.ansible_utils import find_ansible_requirements_file
+from strata.utils.resolved_values import ResolvedValues, inject_compose_env
 
 # Prefix used by AnsibleBuilder for generated variable files.
 STRATA_VARS_PREFIX = "strata_"

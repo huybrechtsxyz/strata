@@ -21,17 +21,22 @@ Auditable actions include:
 import json
 import logging
 import logging.handlers
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+from strata.utils.config import SOLUTION_AUDIT_LOG_FILE, SOLUTION_DIR
 
 _audit_logger: Optional[logging.Logger] = None
 
 
 def configure_audit_log(
-    log_path: str = ".strata/audit.log",
+    log_path: str = f"{SOLUTION_DIR}/{SOLUTION_AUDIT_LOG_FILE}",
+    rotation: str = "size",
     max_bytes: int = 5 * 1024 * 1024,
     backup_count: int = 3,
+    date_suffix: str = "%Y%m%d",
 ) -> None:
     """
     Configure the dedicated audit log sink.
@@ -42,8 +47,13 @@ def configure_audit_log(
 
     Args:
         log_path: Path to the audit log file (relative to work_path or absolute).
+        rotation: Rotation strategy — ``"size"`` (RotatingFileHandler) or
+            ``"daily"`` (TimedRotatingFileHandler, rotates at midnight UTC).
         max_bytes: Maximum file size before rotation (default 5 MB).
+            Only used when ``rotation="size"``.
         backup_count: Number of rotated backups to keep (default 3).
+        date_suffix: strftime pattern for daily-rotated backup filenames
+            (default ``"%Y%m%d"``).  Only used when ``rotation="daily"``.
     """
     global _audit_logger
     _audit_logger = logging.getLogger("strata.audit")
@@ -56,11 +66,25 @@ def configure_audit_log(
         _audit_logger.removeHandler(handler)
 
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
-    handler = logging.handlers.RotatingFileHandler(
-        log_path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
-    )
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    _audit_logger.addHandler(handler)
+
+    file_handler: logging.Handler
+    if rotation == "daily":
+        timed = logging.handlers.TimedRotatingFileHandler(
+            log_path, when="midnight", backupCount=backup_count, encoding="utf-8", utc=True
+        )
+        # Override suffix to compact yyyymmdd format (stdlib default is %Y-%m-%d)
+        timed.suffix = date_suffix  # type: ignore[attr-defined]
+        # Update extMatch so getFilesToDelete() recognises the new suffix pattern
+        safe_pattern = re.sub(r"%[YmdHMS]", r"\\d+", re.escape(date_suffix))
+        timed.extMatch = re.compile(r"\." + safe_pattern + r"$", re.ASCII)  # type: ignore[attr-defined]
+        file_handler = timed
+    else:
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
+        )
+
+    file_handler.setFormatter(logging.Formatter("%(message)s"))
+    _audit_logger.addHandler(file_handler)
 
 
 def audit(

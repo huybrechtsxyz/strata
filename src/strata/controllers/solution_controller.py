@@ -20,10 +20,28 @@ from strata.models.solution_model import (
 )
 from strata.services.solution_service import SolutionService
 from strata.utils.config import (
+    SOLUTION_AUDIT_LOG_FILE,
+    SOLUTION_BUILD_DIR,
+    SOLUTION_COLLECTORS_FILE,
+    SOLUTION_CONFIG_FILE,
     SOLUTION_CONFIGURATION_FILE,
+    SOLUTION_DEPLOY_LOG_DIR,
+    SOLUTION_DEPLOYMENTS_DIR,
     SOLUTION_DIR,
     SOLUTION_FILE,
+    SOLUTION_GITIGNORE_FILE,
+    SOLUTION_GUIDE_FILE,
+    SOLUTION_INTEGRATIONS_DIR,
+    SOLUTION_LOCKFILE_PARSERS_DIR,
+    SOLUTION_LOCKS_DIR,
     SOLUTION_LOGGING_FILE,
+    SOLUTION_LOGS_DIR,
+    SOLUTION_OUTPUTS_DIR,
+    SOLUTION_PLUGINS_DIR,
+    SOLUTION_POLICIES_DIR,
+    SOLUTION_SBOM_IGNORE_FILE,
+    SOLUTION_SCHEMAS_DIR,
+    SOLUTION_TEMPLATES_DIR,
     SOLUTION_WORKSPACE_SUFFIX,
 )
 from strata.utils.system import generate_uuid, get_pkg_templates_path
@@ -256,7 +274,7 @@ class SolutionController(BaseController):
             }
 
             # Logs are stored in the solution state directory (`.strata/logs`)
-            logs_folder = SolutionController.get_state_dir(work_path) / "logs"
+            logs_folder = SolutionController.get_logs_dir(work_path)
             stats["logs_folder"] = str(logs_folder)
             if logs_folder.exists():
                 deleted = 0
@@ -1041,8 +1059,88 @@ class SolutionController(BaseController):
 
     @staticmethod
     def get_state_dir(work_path: Path) -> Path:
-        """Return the path to the solution state directory."""
+        """Return the path to the .strata/ state directory."""
         return work_path / SOLUTION_DIR
+
+    @staticmethod
+    def get_logs_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/logs/ directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_LOGS_DIR
+
+    @staticmethod
+    def get_schemas_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/schemas/ directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_SCHEMAS_DIR
+
+    @staticmethod
+    def get_integrations_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/integrations/ drop-in directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_INTEGRATIONS_DIR
+
+    @staticmethod
+    def get_policies_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/policies/ drop-in directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_POLICIES_DIR
+
+    @staticmethod
+    def get_templates_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/templates/ scaffold directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_TEMPLATES_DIR
+
+    @staticmethod
+    def get_plugins_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/plugins/ directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_PLUGINS_DIR
+
+    @staticmethod
+    def get_lockfile_parsers_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/lockfile_parsers/ directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_LOCKFILE_PARSERS_DIR
+
+    @staticmethod
+    def get_locks_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/locks/ directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_LOCKS_DIR
+
+    @staticmethod
+    def get_deployments_dir(work_path: Path) -> Path:
+        """Return the default path to the .strata/deployments/ directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_DEPLOYMENTS_DIR
+
+    @staticmethod
+    def get_outputs_dir(work_path: Path) -> Path:
+        """Return the default path to the .strata/outputs/ directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_OUTPUTS_DIR
+
+    @staticmethod
+    def get_build_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/build/ directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_BUILD_DIR
+
+    @staticmethod
+    def get_deploy_log_dir(work_path: Path) -> Path:
+        """Return the path to the .strata/deploy-log/ directory."""
+        return work_path / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+
+    @staticmethod
+    def get_audit_log_path(work_path: Path) -> Path:
+        """Return the path to the .strata/audit.log file."""
+        return work_path / SOLUTION_DIR / SOLUTION_AUDIT_LOG_FILE
+
+    @staticmethod
+    def get_collectors_path(work_path: Path) -> Path:
+        """Return the path to the .strata/collectors.yaml file."""
+        return work_path / SOLUTION_DIR / SOLUTION_COLLECTORS_FILE
+
+    @staticmethod
+    def get_sbom_ignore_path(work_path: Path) -> Path:
+        """Return the path to the .strata/sbom-ignore.yaml file."""
+        return work_path / SOLUTION_DIR / SOLUTION_SBOM_IGNORE_FILE
+
+    @staticmethod
+    def get_guide_path(work_path: Path) -> Path:
+        """Return the path to the .strata/guide.yaml override file."""
+        return work_path / SOLUTION_DIR / SOLUTION_GUIDE_FILE
 
     # ------------------------------------------------------------------
     # Scaffold
@@ -1083,8 +1181,8 @@ class SolutionController(BaseController):
                 content = src.read_text(encoding="utf-8")
                 content = TemplateProcessor.render(content, {"SOLUTION_NAME": solution_name})
                 if dest.name == SOLUTION_LOGGING_FILE:
-                    log_file = (state_dir / "logs" / "application.json").as_posix()
-                    content = content.replace(".strata/logs/application.json", log_file)
+                    log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
+                    content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)
                 dest.write_text(content, encoding="utf-8")
                 self.logger.info("Scaffold file written", path=str(dest))
                 self._add_message(f"Created: {dest.relative_to(self._work_path)}")
@@ -1094,7 +1192,7 @@ class SolutionController(BaseController):
                 return False, self.get_errors()
 
         # Ensure .strata/logs/ exists (not a template file — just a directory)
-        (state_dir / "logs").mkdir(parents=True, exist_ok=True)
+        (state_dir / SOLUTION_LOGS_DIR).mkdir(parents=True, exist_ok=True)
 
         # Generate JSON Schemas
         ok, errors = self._generate_schemas()
@@ -1111,10 +1209,10 @@ class SolutionController(BaseController):
     # package and safe to overwrite on ``sln update``.  User-owned files are
     # everything else from the scaffold — they are only written on first init.
     _PACKAGE_OWNED_PREFIXES: Tuple[str, ...] = (
-        ".strata/README.md",
-        ".strata/.gitignore",
-        ".strata/integrations/",
-        ".strata/templates/",
+        f"{SOLUTION_DIR}/README.md",
+        f"{SOLUTION_DIR}/{SOLUTION_GITIGNORE_FILE}",
+        f"{SOLUTION_DIR}/{SOLUTION_INTEGRATIONS_DIR}/",
+        f"{SOLUTION_DIR}/{SOLUTION_TEMPLATES_DIR}/",
         ".devcontainer/",
         ".github/",
         ".gitignore",
@@ -1122,8 +1220,8 @@ class SolutionController(BaseController):
 
     # Paths that are explicitly user-owned and must never be overwritten.
     _USER_OWNED_PREFIXES: Tuple[str, ...] = (
-        ".strata/cli.yaml",
-        ".strata/logging.yaml",
+        f"{SOLUTION_DIR}/{SOLUTION_CONFIG_FILE}",
+        f"{SOLUTION_DIR}/{SOLUTION_LOGGING_FILE}",
         ".vscode/",
         "README.md",
     )
@@ -1167,8 +1265,8 @@ class SolutionController(BaseController):
                 content = src.read_text(encoding="utf-8")
                 content = TemplateProcessor.render(content, {"SOLUTION_NAME": solution_name})
                 if dest.name == SOLUTION_LOGGING_FILE:
-                    log_file = (state_dir / "logs" / "application.json").as_posix()
-                    content = content.replace(".strata/logs/application.json", log_file)
+                    log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
+                    content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)
                 dest.write_text(content, encoding="utf-8")
                 self.logger.info("Package file updated", path=rel_path)
                 self._add_message(f"Updated: {rel_path}")
@@ -1209,7 +1307,7 @@ class SolutionController(BaseController):
                 "resource": ResourceModel,
                 "workspace": WorkspaceModel,
             }
-            schemas_dir = state_dir / "schemas"
+            schemas_dir = state_dir / SOLUTION_SCHEMAS_DIR
             schemas_dir.mkdir(exist_ok=True)
             for kind_name, model_cls in _schema_map.items():
                 schema_file = schemas_dir / f"{kind_name}.json"
@@ -1218,7 +1316,7 @@ class SolutionController(BaseController):
                     self.logger.debug("Schema written", kind=kind_name)
                 except Exception as schema_exc:
                     self.logger.warning("Failed to write schema", kind=kind_name, error=str(schema_exc))
-            self._add_message("Updated: .strata/schemas/ (JSON Schemas for all kinds)")
+            self._add_message(f"Updated: {SOLUTION_DIR}/{SOLUTION_SCHEMAS_DIR}/ (JSON Schemas for all kinds)")
         except Exception as e:
             self.logger.warning("Schema generation skipped", error=str(e))
 

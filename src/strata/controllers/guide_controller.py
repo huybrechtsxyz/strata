@@ -178,7 +178,7 @@ class GuideController(BaseController):
         with open(hints_path, "r", encoding="utf-8") as fh:
             hints: Dict[str, Any] = yaml.safe_load(fh) or {}
 
-        override_path = self._work_path / ".strata" / "guide.yaml"
+        override_path = SolutionController.get_guide_path(self._work_path)
         if not override_path.exists():
             return hints
 

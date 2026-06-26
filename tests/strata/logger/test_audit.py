@@ -2,6 +2,7 @@
 
 import importlib
 import json
+import logging.handlers
 
 import pytest
 
@@ -152,3 +153,50 @@ class TestShutdownAudit:
     def test_shutdown_noop_when_not_configured(self):
         # Should not raise
         shutdown_audit()
+
+
+class TestConfigureAuditLogRotation:
+    def test_size_rotation_is_default(self, tmp_path):
+        log_path = tmp_path / "audit.log"
+        configure_audit_log(log_path=str(log_path))
+        handler = _audit_mod._audit_logger.handlers[0]
+        assert isinstance(handler, logging.handlers.RotatingFileHandler)
+
+    def test_explicit_size_rotation(self, tmp_path):
+        log_path = tmp_path / "audit.log"
+        configure_audit_log(log_path=str(log_path), rotation="size", max_bytes=1024, backup_count=5)
+        handler = _audit_mod._audit_logger.handlers[0]
+        assert isinstance(handler, logging.handlers.RotatingFileHandler)
+        assert handler.maxBytes == 1024
+        assert handler.backupCount == 5
+
+    def test_daily_rotation_uses_timed_handler(self, tmp_path):
+        log_path = tmp_path / "audit.log"
+        configure_audit_log(log_path=str(log_path), rotation="daily", backup_count=30)
+        handler = _audit_mod._audit_logger.handlers[0]
+        assert isinstance(handler, logging.handlers.TimedRotatingFileHandler)
+        assert handler.backupCount == 30
+
+    def test_daily_rotation_applies_date_suffix(self, tmp_path):
+        log_path = tmp_path / "audit.log"
+        configure_audit_log(log_path=str(log_path), rotation="daily", date_suffix="%Y%m%d")
+        handler = _audit_mod._audit_logger.handlers[0]
+        assert isinstance(handler, logging.handlers.TimedRotatingFileHandler)
+        assert handler.suffix == "%Y%m%d"
+
+    def test_daily_rotation_writes_entries(self, tmp_path):
+        log_path = tmp_path / "audit.log"
+        configure_audit_log(log_path=str(log_path), rotation="daily")
+        audit("test.daily", target="test-target")
+        shutdown_audit()
+        entry = json.loads(log_path.read_text(encoding="utf-8").strip())
+        assert entry["action"] == "test.daily"
+        assert entry["target"] == "test-target"
+
+    def test_reconfigure_replaces_handler(self, tmp_path):
+        log_path = tmp_path / "audit.log"
+        configure_audit_log(log_path=str(log_path), rotation="size")
+        configure_audit_log(log_path=str(log_path), rotation="daily")
+        # Only one handler should remain after reconfigure
+        assert len(_audit_mod._audit_logger.handlers) == 1
+        assert isinstance(_audit_mod._audit_logger.handlers[0], logging.handlers.TimedRotatingFileHandler)
