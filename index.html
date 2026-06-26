@@ -1869,6 +1869,110 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html">Deployment audit and traceability for compliance (ISO 27001 / ISAE 3402)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#architecture-auditcontroller">Architecture: AuditController</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#layer-1-process-pr-data-extraction-configuration-repo">Layer 1: Process + PR Data Extraction (configuration repo)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#layer-2-deployment-manifest-written-by-xyz-deploy-run">Layer 2: Deployment Manifest (written by <code class="docutils literal notranslate"><span class="pre">xyz</span> <span class="pre">deploy</span> <span class="pre">run</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#layer-3-audit-reporting-strata-audit-changes-cli-command">Layer 3: Audit Reporting (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">changes</span></code> CLI command)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#layer-4-siem-integration-remote-persistence-azure-sentinel">Layer 4: SIEM Integration + Remote Persistence (Azure Sentinel)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#platform-event-source-matrix">Platform Event Source Matrix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#path-template-configuration">Path Template Configuration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#available-tokens">Available Tokens</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#path-definitions-spec-deployment-paths">Path Definitions (<code class="docutils literal notranslate"><span class="pre">spec.deployment.paths</span></code>)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#file-layout-within-execution">File Layout Within Execution</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#examples-by-preset">Examples by Preset</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#path-construction-logic">Path Construction Logic</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#configuration-in-spec-deployment">Configuration in <code class="docutils literal notranslate"><span class="pre">spec.deployment</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#audit-policy-sink-configuration">Audit Policy &amp; Sink Configuration</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#base-environment-pattern">Base Environment Pattern</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#policy-what-gets-logged">Policy: What Gets Logged</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#sinks-where-events-are-sent">Sinks: Where Events Are Sent</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#routing-which-events-go-where">Routing: Which Events Go Where</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#merge-semantics">Merge Semantics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#model">Model</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#consequences">Consequences</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#good">Good</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#bad">Bad</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#design-notes">Design Notes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#implementation-decisions">Implementation Decisions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#implementation-plan">Implementation Plan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#more-information">More Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#questions-for-review">Questions for Review</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#implementation-design">Implementation Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#new-files-to-create">New Files to Create</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#existing-files-to-modify">Existing Files to Modify</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#model-definitions">Model Definitions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#src-strata-models-deploy-log-model-py"><code class="docutils literal notranslate"><span class="pre">src/strata/models/deploy_log_model.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#src-strata-models-audit-config-model-py"><code class="docutils literal notranslate"><span class="pre">src/strata/models/audit_config_model.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#controller-design">Controller Design</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#src-strata-controllers-audit-controller-py"><code class="docutils literal notranslate"><span class="pre">src/strata/controllers/audit_controller.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#integration-points">Integration Points</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#modification-to-rundeploycommand-finalize">Modification to <code class="docutils literal notranslate"><span class="pre">RunDeployCommand._finalize()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#new-git-methods-src-strata-integrations-git-git-py">New Git Methods — <code class="docutils literal notranslate"><span class="pre">src/strata/integrations/git/git.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#new-capability-protocol-src-strata-integrations-capabilities-py">New Capability Protocol — <code class="docutils literal notranslate"><span class="pre">src/strata/integrations/capabilities.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#cli-commands">CLI Commands</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#src-strata-commands-cli-audit-py"><code class="docutils literal notranslate"><span class="pre">src/strata/commands/cli_audit.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#data-flow-strata-deploy-run-with-audit">Data Flow — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code> with Audit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#data-flow-strata-audit-changes">Data Flow — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">changes</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#data-flow-strata-audit-resend">Data Flow — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">resend</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#siem-base-integration">SIEM Base Integration</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#src-strata-integrations-siem-base-siem-integration-py"><code class="docutils literal notranslate"><span class="pre">src/strata/integrations/siem/base_siem_integration.py</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#environment-model-integration">Environment Model Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#configuration-model-integration">Configuration Model Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#path-resolution-builtin-path-definitions">Path Resolution — BUILTIN_PATH_DEFINITIONS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#push-to-remote-retry-logic">Push-to-Remote Retry Logic</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#pr-enrichment-via-github-api">PR Enrichment via GitHub API</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#testing-strategy">Testing Strategy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#implementation-order-dependency-chain">Implementation Order (Dependency Chain)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#incremental-implementation-guide">Incremental Implementation Guide</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-1-deploy-log-model-pure-addition-no-integration">Step 1 — Deploy-Log Model (pure addition, no integration)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-2-audit-config-model-pure-addition-no-integration">Step 2 — Audit Config Model (pure addition, no integration)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-3-git-write-methods-additive-to-existing-integration">Step 3 — Git write methods (additive to existing integration)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-4-auditcontroller-local-write-only-no-siem-no-remote-push">Step 4 — AuditController: local write only (no SIEM, no remote push)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-5-wire-auditcontroller-into-deploy-command">Step 5 — Wire AuditController into deploy command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-6-configuration-model-add-audit-paths-fields">Step 6 — Configuration model: add <code class="docutils literal notranslate"><span class="pre">audit</span></code> + <code class="docutils literal notranslate"><span class="pre">paths</span></code> fields</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-7-environment-model-add-audit-field">Step 7 — Environment model: add <code class="docutils literal notranslate"><span class="pre">audit</span></code> field</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-8-update-configurationservice-get-deploy-log-path">Step 8 — Update <code class="docutils literal notranslate"><span class="pre">ConfigurationService.get_deploy_log_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-9-strata-audit-changes-command">Step 9 — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">changes</span></code> command</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-10-strata-audit-resend-command-stub-forwards-to-local-stdout-only">Step 10 — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">resend</span></code> command (stub — forwards to local stdout only)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-11-pr-enrichment-activate-stub">Step 11 — PR enrichment (activate stub)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-12-push-to-remote-activate-stub">Step 12 — Push to remote (activate stub)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-13-isiemsink-capability-protocol">Step 13 — ISiemSink capability protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-14-siembaseintegration">Step 14 — SiemBaseIntegration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-15-wire-siem-forwarding-into-auditcontroller">Step 15 — Wire SIEM forwarding into AuditController</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-16-sentinelintegration-first-concrete-sink">Step 16 — SentinelIntegration (first concrete sink)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-17-elk-otel-integrations">Step 17 — ELK + OTel integrations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#checkpoint-summary">Checkpoint Summary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#step-18-deployment-manifest-output-reuse-path-infrastructure">Step 18 — Deployment Manifest Output (reuse path infrastructure)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html#implementation-status">Implementation Status</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Guides:</span></p>
 <ul>
@@ -2842,6 +2946,7 @@
 <li class="toctree-l1"><a class="reference internal" href="decisions/0015-flow-command-dependency-graph.html"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">graph</span></code> — Workspace Dependency Graph</a></li>
 <li class="toctree-l1"><a class="reference internal" href="decisions/0016-console-interactive-repl.html"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">console</span></code> — Interactive Workspace Console</a></li>
 <li class="toctree-l1"><a class="reference internal" href="decisions/0017-jinja2-template-engine.html">Consolidate Templating on Jinja2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="decisions/0018-deployment-audit-traceability.html">Deployment audit and traceability for compliance (ISO 27001 / ISAE 3402)</a></li>
 </ul>
 </div>
 <div class="toctree-wrapper compound">
