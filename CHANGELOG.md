@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-06-26
+
+### Added
+
+- **Deployment Audit and Traceability (ADR 0018)**
+  - Audit policy/sink configuration model for environment and configuration YAML (`AuditConfigModel`)
+  - SIEM capability protocol (`ISiemSink`) and audit capability wiring in integration capabilities map
+  - SIEM integrations:
+    - `SentinelIntegration` (Azure Logs Ingestion API)
+    - `ElkSiemIntegration` (TCP JSON and HTTP bulk)
+    - `OtelSiemIntegration` (OTLP/HTTP logs)
+  - Shared output directory resolver utility (`OutputWriter`) for structured and versioned outputs
+  - `ManifestController` to handle deployment manifest push-to-remote workflow
+  - Comprehensive SIEM integration test suite for base behavior and sink-specific behavior
+
+### Changed
+
+- `RunDeployCommand` now resolves and injects integration-backed SIEM sinks for deploy-log forwarding
+- `AuditController.forward_to_siem()` now supports both built-in sinks and integration-backed sinks
+- Deployment manifest push path now uses `ManifestController` from deploy command flow
+- Output path resolution was consolidated through `OutputWriter` across audit/deploy-manifest flows
+- Integration model now supports sink-specific `properties` payloads for extensible SIEM configuration
+
+### Fixed
+
+- Fixed deploy-manifest push test expectations and mocking path for manifest remote push
+- Restored missing imports/constants that caused broad command/service test failures
+- Resolved lint and type issues found during full validation (including variable naming and union-attr checks)
+- Corrected docs content that caused Sphinx lexer/parsing failures in ADR documentation
+
+### Documentation
+
+- Added ADR 0018: Deployment Audit and Traceability
+- Updated related docs content to keep Sphinx build clean
+
+### Testing
+
+- Full test suite passing: 3382 passed, 3 skipped, 0 failed
+- All checks passing via `scripts/Check.ps1`:
+  - ruff lint
+  - ruff format
+  - mypy
+  - smoke checks
+  - docs index coverage
+  - sphinx build
+
 ## [0.13.0] — 2026-06-24
 
 ### Added
