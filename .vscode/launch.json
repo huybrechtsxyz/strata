@@ -28,6 +28,32 @@
       },
       "console": "integratedTerminal",
       "justMyCode": false
+    },
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/src/vscode"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/src/vscode/out/**/*.js"
+      ],
+      "preLaunchTask": "VS Code Extension: watch"
+    },
+    {
+      "name": "Extension Tests",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/src/vscode",
+        "--extensionTestsPath=${workspaceFolder}/tests/vscode/suite/index.js"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/src/vscode/out/**/*.js",
+        "${workspaceFolder}/tests/vscode/out/**/*.js"
+      ],
+      "preLaunchTask": "VS Code Extension: watch"
     }
   ],
   "inputs": [
