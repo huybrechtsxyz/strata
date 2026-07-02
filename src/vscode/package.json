@@ -112,6 +112,21 @@
         "icon": "$(heart)"
       },
       {
+        "command": "strata.auditChanges",
+        "title": "Strata: Show Audit Trail",
+        "icon": "$(history)"
+      },
+      {
+        "command": "strata.auditResend",
+        "title": "Strata: Resend to Audit Sinks",
+        "icon": "$(broadcast)"
+      },
+      {
+        "command": "strata.auditExport",
+        "title": "Strata: Export Audit Trail",
+        "icon": "$(export)"
+      },
+      {
         "command": "strata.showGuide",
         "title": "Strata: Show Guide",
         "icon": "$(list-ordered)"
@@ -182,6 +197,11 @@
           "id": "strataEnvironment",
           "name": "Environments",
           "contextualTitle": "Strata Environments"
+        },
+        {
+          "id": "strataAudit",
+          "name": "Audit Trail",
+          "contextualTitle": "Strata Audit Trail"
         }
       ]
     },
@@ -189,12 +209,17 @@
       "view/title": [
         {
           "command": "strata.refreshTreeView",
-          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools || view == strataEnvironment",
+          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools || view == strataEnvironment || view == strataAudit",
           "group": "navigation"
         },
         {
           "command": "strata.envDoctor",
           "when": "view == strataEnvironment",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.auditExport",
+          "when": "view == strataAudit",
           "group": "navigation"
         },
         {
@@ -223,6 +248,11 @@
           "command": "strata.envDrift",
           "when": "view == strataEnvironment && viewItem == deployment",
           "group": "strata@2"
+        },
+        {
+          "command": "strata.auditResend",
+          "when": "view == strataAudit && viewItem == entry",
+          "group": "strata@1"
         }
       ],
       "editor/title": [
@@ -247,6 +277,11 @@
           "command": "strata.validateCurrentFile",
           "when": "resourceExtname == .yaml && strata.workspaceActive",
           "group": "strata@3"
+        },
+        {
+          "command": "strata.auditChanges",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@4"
         }
       ]
     },

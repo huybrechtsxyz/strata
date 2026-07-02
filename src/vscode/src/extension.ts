@@ -25,6 +25,7 @@ import { StrataTaskProvider } from './providers/strataTaskProvider';
 import { FileDecorationProvider } from './providers/fileDecorationProvider';
 import { StrataChatParticipant } from './providers/strataChatParticipant';
 import { EnvViewProvider } from './providers/envViewProvider';
+import { AuditViewProvider } from './providers/auditViewProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -46,6 +47,7 @@ let _taskProvider: StrataTaskProvider | undefined;
 let _fileDecorations: FileDecorationProvider | undefined;
 let _chatParticipant: StrataChatParticipant | undefined;
 let _envView: EnvViewProvider | undefined;
+let _auditView: AuditViewProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 
 // ---------------------------------------------------------------------------
@@ -62,6 +64,7 @@ async function _refreshAll(): Promise<void> {
     _reposView?.setLoading();
     _toolsView?.setLoading();
     _envView?.setLoading();
+    _auditView?.setLoading();
 
     try {
         const status = await _client.getStatus();
@@ -77,6 +80,7 @@ async function _refreshAll(): Promise<void> {
         _chatParticipant?.update(status);
         void _depGraph?.update(status);
         _envView?.refresh();
+        _auditView?.refresh();
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         _workspaceView?.setError(message);
@@ -85,6 +89,7 @@ async function _refreshAll(): Promise<void> {
         _toolsView?.setError(message);
         _statusBar?.setError(err);
         _envView?.setError(message);
+        _auditView?.setError(message);
         if (err instanceof StrataCLINotFoundError) {
             void vscode.window.showErrorMessage(err.message);
         }
@@ -131,6 +136,8 @@ export function activate(context: vscode.ExtensionContext): void {
     _chatParticipant = new StrataChatParticipant();
     _envView = new EnvViewProvider();
     _envView.setClient(_client);
+    _auditView = new AuditViewProvider();
+    _auditView.setClient(_client);
 
     // ── Register the 4 tree views ──────────────────────────────────────────────
 
@@ -154,6 +161,10 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.createTreeView('strataEnvironment', {
             treeDataProvider: _envView!,
             showCollapseAll: false,
+        }),
+        vscode.window.createTreeView('strataAudit', {
+            treeDataProvider: _auditView!,
+            showCollapseAll: true,
         }),
     );
 
@@ -329,6 +340,40 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         }),
 
+        // ── Audit commands ──────────────────────────────────────────────────────
+
+        vscode.commands.registerCommand('strata.auditChanges', (filePath?: string) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target) {
+                // No file context — show all changes
+                _client?.runInTerminal(['audit', 'changes'], 'strata audit changes');
+                return;
+            }
+            _client?.runInTerminal(['audit', 'changes'], 'strata audit changes');
+        }),
+
+        vscode.commands.registerCommand('strata.auditResend', () => {
+            _client?.runInTerminal(['audit', 'resend'], 'strata audit resend');
+        }),
+
+        vscode.commands.registerCommand('strata.auditExport', async () => {
+            const uri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file('audit-export.json'),
+                filters: {
+                    'JSON': ['json'],
+                    'NDJSON': ['ndjson'],
+                },
+                title: 'Export Audit Trail',
+            });
+            if (!uri) return;
+            const isNdjson = uri.fsPath.endsWith('.ndjson');
+            const formatArgs = isNdjson ? ['--format', 'ndjson'] : ['--format', 'json'];
+            _client?.runInTerminal(
+                ['audit', 'export', ...formatArgs, '--out', uri.fsPath],
+                'strata audit export',
+            );
+        }),
+
         vscode.commands.registerCommand('strata.showGuide', () => {
             _guideView?.show(_lastStatus);
         }),
@@ -451,6 +496,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 _statusBar?.setClient(_client);
                 _diagnostics?.setClient(_client);
                 _envView?.setClient(_client);
+                _auditView?.setClient(_client);
                 void _refreshAll();
             }
         }),

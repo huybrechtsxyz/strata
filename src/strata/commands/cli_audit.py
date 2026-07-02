@@ -1,7 +1,8 @@
 """Click CLI wiring for the audit command group."""
 
 import json
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 import click
 
@@ -12,6 +13,22 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
+from strata.utils.system import generate_uuid
+
+
+def _make_envelope(
+    command: str, success: bool, data: Any, messages: Optional[List[str]] = None, errors: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """Build the standard JSON response envelope used by all strata commands."""
+    return {
+        "success": success,
+        "command": command,
+        "execution_id": generate_uuid(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "data": data,
+        "messages": messages or [],
+        "errors": errors or [],
+    }
 
 
 @click.group(
@@ -81,8 +98,9 @@ def audit_changes(
     )
 
     if output == "json":
-        data = [e.model_dump(exclude_none=True) for e in entries]
-        click.echo(json.dumps(data, indent=2, default=str))
+        entries_data = [e.model_dump(exclude_none=True) for e in entries]
+        envelope = _make_envelope("audit_changes", True, {"entries": entries_data, "count": len(entries_data)})
+        click.echo(json.dumps(envelope, indent=2, default=str))
     elif output == "ndjson":
         for entry in entries:
             click.echo(json.dumps(entry.model_dump(exclude_none=True), default=str))
@@ -177,7 +195,8 @@ def audit_resend(
     )
 
     if output == "json":
-        click.echo(json.dumps({"sent": sent, "failed": failed}))
+        envelope = _make_envelope("audit_resend", failed == 0, {"sent": sent, "failed": failed})
+        click.echo(json.dumps(envelope, indent=2, default=str))
     else:
         if not quiet:
             click.echo(f"Resend complete: {sent} sent, {failed} failed.")

@@ -129,6 +129,59 @@ export interface EnvDoctorData {
     categories: EnvDoctorCategory[];
 }
 
+// ---------------------------------------------------------------------------
+// Audit types
+// ---------------------------------------------------------------------------
+
+/** Matches DeployLogStepModel — step within a stage */
+export interface AuditStep {
+    step: string;
+    success: boolean;
+    duration_seconds: number;
+}
+
+/** Matches DeployLogStageModel — per-stage result */
+export interface AuditStage {
+    name: string;
+    provisioner: string | null;
+    success: boolean;
+    started_at: string;
+    completed_at: string;
+    duration_seconds: number;
+    steps: AuditStep[];
+}
+
+/** Matches DeployLogPullRequestModel — optional PR enrichment */
+export interface AuditPullRequest {
+    number: number;
+    title: string;
+    url: string;
+    author: string | null;
+    merged_by: string | null;
+}
+
+/** Matches DeployLogModel — one deploy-log entry */
+export interface AuditEntry {
+    execution_id: string;
+    timestamp: string;
+    version: string;
+    deployment: string;
+    workspace: string | null;
+    environment: string | null;
+    file: string;
+    success: boolean;
+    duration_seconds: number;
+    commit_sha: string | null;
+    stages: AuditStage[];
+    pull_request: AuditPullRequest | null;
+}
+
+/** Matches `data` field of `audit changes --output json` response */
+export interface AuditChangesData {
+    entries: AuditEntry[];
+    count: number;
+}
+
 /** Matches status_env_command._output_data stage entry (multi-deployment mode) */
 export interface EnvStageStatus {
     name: string;
@@ -276,6 +329,19 @@ export class StrataClient {
             'env', 'status', '--all', '--output', 'json',
         ]);
         return resp.data;
+    }
+
+    // ── Audit ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Run `strata audit changes --last N --output json` and return deploy-log
+     * entries.  Fast — reads local JSON files only.
+     */
+    async getAuditChanges(last: number = 20): Promise<AuditEntry[]> {
+        const resp = await this._run<AuditChangesData>([
+            'audit', 'changes', '--last', String(last), '--output', 'json',
+        ]);
+        return resp.data.entries;
     }
 
     // ── Build / Deploy — run in terminal so user sees streaming output ─────────

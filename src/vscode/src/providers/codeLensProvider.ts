@@ -117,6 +117,12 @@ export class CodeLensProvider
                 tooltip: 'Run terraform plan to detect configuration drift',
                 arguments: [document.uri.fsPath],
             }));
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(history) Audit',
+                command: 'strata.auditChanges',
+                tooltip: 'Show recent deploy-log entries for this deployment',
+                arguments: [document.uri.fsPath],
+            }));
         }
 
         // Guide — always

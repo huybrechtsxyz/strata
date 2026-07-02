@@ -65,15 +65,21 @@ class TestAuditChanges:
         assert "1 entries shown" in result.output
 
     def test_shows_entries_json(self, tmp_path: Path) -> None:
-        """Shows entries as JSON array."""
+        """Shows entries wrapped in the standard JSON envelope."""
         log_dir = tmp_path / ".strata" / "deploy-log"
         _write_execution_json(log_dir, "exec1", _sample_entry())
         runner = CliRunner()
         result = runner.invoke(main, ["audit", "changes", "--work-path", str(tmp_path), "--output", "json"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert len(data) == 1
-        assert data[0]["deployment"] == "test_deploy"
+        envelope = json.loads(result.output)
+        assert envelope["success"] is True
+        assert envelope["command"] == "audit_changes"
+        assert "execution_id" in envelope
+        assert "timestamp" in envelope
+        entries = envelope["data"]["entries"]
+        assert len(entries) == 1
+        assert entries[0]["deployment"] == "test_deploy"
+        assert envelope["data"]["count"] == 1
 
     def test_last_limits_results(self, tmp_path: Path) -> None:
         """--last limits the number of results."""
@@ -86,8 +92,8 @@ class TestAuditChanges:
             main, ["audit", "changes", "--work-path", str(tmp_path), "--last", "2", "--output", "json"]
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert len(data) == 2
+        envelope = json.loads(result.output)
+        assert len(envelope["data"]["entries"]) == 2
 
     def test_since_filters_results(self, tmp_path: Path) -> None:
         """--since filters by timestamp."""
@@ -109,9 +115,10 @@ class TestAuditChanges:
             ],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert len(data) == 1
-        assert data[0]["execution_id"] == "2"
+        envelope = json.loads(result.output)
+        entries = envelope["data"]["entries"]
+        assert len(entries) == 1
+        assert entries[0]["execution_id"] == "2"
 
     def test_stage_filters_results(self, tmp_path: Path) -> None:
         """--stage filters to entries containing that stage."""
@@ -124,8 +131,8 @@ class TestAuditChanges:
             ["audit", "changes", "--work-path", str(tmp_path), "--stage", "infrastructure", "--output", "json"],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert len(data) == 1
+        envelope = json.loads(result.output)
+        assert len(envelope["data"]["entries"]) == 1
 
         # Filter by non-existing stage
         result = runner.invoke(
@@ -133,8 +140,8 @@ class TestAuditChanges:
             ["audit", "changes", "--work-path", str(tmp_path), "--stage", "nonexistent", "--output", "json"],
         )
         assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert len(data) == 0
+        envelope = json.loads(result.output)
+        assert len(envelope["data"]["entries"]) == 0
 
     def test_failed_entry_shows_cross(self, tmp_path: Path) -> None:
         """Failed deployments show ✗ in console."""
