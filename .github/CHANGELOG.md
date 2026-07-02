@@ -7,6 +7,104 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **`strata env status`** — renamed from `strata env state` for naming consistency; added `--all` and `--path DIR` flags to scan all deployment manifests in the workspace without requiring a single `-f FILE`
+- **`strata audit changes/resend --output json`** — now emits the standard CLI JSON envelope (`{ success, command, execution_id, timestamp, data, messages, errors }`) instead of a raw array, consistent with every other command
+- **Audit Trail documentation** — new `## audit` section in `docs/platform/commands.md` covering `audit changes`, `audit resend`, `audit export`, audit path template configuration, and SIEM sink YAML examples for Sentinel, ELK, and OTel
+- **VS Code extension — Environments panel** (`strataEnvironment` tree view): shows all deployment manifests with cached build-output status; per-stage drill-down with last-cached timestamp and output count; click to open manifest file
+- **VS Code extension — Audit Trail panel** (`strataAudit` tree view): shows the last 20 deploy-log entries with success/failure icons, timestamps, duration, and environment; expands to per-stage results (provisioner, duration, step-level detail), PR enrichment (clickable link), and commit SHA
+- **VS Code extension — env commands**: `strata.envStatus` (cached, offline), `strata.envDrift` (terraform plan), `strata.envDoctor` (inline notification with pass/warn/fail counts)
+- **VS Code extension — audit commands**: `strata.auditChanges` (terminal), `strata.auditResend` (terminal), `strata.auditExport` (save dialog → JSON or NDJSON file)
+- **VS Code extension — code lens** on deployment files: `$(pulse) Status`, `$(diff) Drift`, `$(history) Audit` lenses added after Deploy (Dry Run)
+- **26 new tests** for `env status` CLI wiring, multi-deployment scanning, and cache detection (`tests/strata/commands/test_commands_env.py`)
+
+### Changed
+
+- `strata env state` → `strata env status` (command renamed; old name removed)
+- `strata audit changes --output json` data shape changed from raw array to `data: { entries: [...], count: N }`
+- `strata audit resend --output json` data shape changed from `{"sent": N, "failed": N}` to standard envelope with same payload in `data`
+
+---
+
+## [0.14.0] — 2026-06-26
+
+### Added
+
+- **Deployment Audit and Traceability (ADR 0018)**
+  - Audit policy/sink configuration model for environment and configuration YAML (`AuditConfigModel`)
+  - SIEM capability protocol (`ISiemSink`) and audit capability wiring in integration capabilities map
+  - SIEM integrations:
+    - `SentinelIntegration` (Azure Logs Ingestion API)
+    - `ElkSiemIntegration` (TCP JSON and HTTP bulk)
+    - `OtelSiemIntegration` (OTLP/HTTP logs)
+  - Shared output directory resolver utility (`OutputWriter`) for structured and versioned outputs
+  - `ManifestController` to handle deployment manifest push-to-remote workflow
+  - Comprehensive SIEM integration test suite for base behavior and sink-specific behavior
+
+### Changed
+
+- `RunDeployCommand` now resolves and injects integration-backed SIEM sinks for deploy-log forwarding
+- `AuditController.forward_to_siem()` now supports both built-in sinks and integration-backed sinks
+- Deployment manifest push path now uses `ManifestController` from deploy command flow
+- Output path resolution was consolidated through `OutputWriter` across audit/deploy-manifest flows
+- Integration model now supports sink-specific `properties` payloads for extensible SIEM configuration
+
+### Fixed
+
+- Fixed deploy-manifest push test expectations and mocking path for manifest remote push
+- Restored missing imports/constants that caused broad command/service test failures
+- Resolved lint and type issues found during full validation (including variable naming and union-attr checks)
+- Corrected docs content that caused Sphinx lexer/parsing failures in ADR documentation
+
+### Documentation
+
+- Added ADR 0018: Deployment Audit and Traceability
+- Updated related docs content to keep Sphinx build clean
+
+### Testing
+
+- Full test suite passing: 3382 passed, 3 skipped, 0 failed
+- All checks passing via `scripts/Check.ps1`:
+  - ruff lint
+  - ruff format
+  - mypy
+  - smoke checks
+  - docs index coverage
+  - sphinx build
+
+## [0.13.0] — 2026-06-24
+
+### Added
+
+- **Guided Onboarding Experience (ADR 0014)**
+  - `strata console` — interactive REPL session with prompt_toolkit (status, check, next, do, new, validate, graph, tools, open, reload, templates, help)
+  - `GuideController` extracted from `GuideCommand` for stateful workspace analysis
+  - `strata validate graph` — Mermaid dependency graph visualization with live validation status
+  - `strata validate --explain` — plain-English summary of what a validated file does
+  - Validation error fix suggestions with "did you mean?" for misspelled fields
+  - `strata validate --path "**"` — batch validation of all workspace YAML
+  - `strata sln init --list` — discover available init templates
+  - `strata new --list` — shows bundles with descriptions
+  - Rich rendering (panels, tables, progress indicators) in guide REPL
+  - Standalone LLM skill file (`docs/skills/strata-onboarding.md`) bundled into init scaffold at `.github/skills/`
+  - CI template validation test — all built-in templates validated on every run
+  - `config/` formalized as reference example workspace with README annotations and CI validation
+  - Contributing guide section for adding community example workspaces
+
+### Fixed
+
+- Template bundles: replaced invalid `type:` fields on stages with `provisioner:` (Pydantic `extra="forbid"` compliance)
+- Validation error messages: `extra_forbidden` now names the offending field
+- Template scaffold: `deploy.yml` wrapped in `{% raw %}` to prevent Jinja2 conflicts with GitHub Actions `${{ }}` expressions
+- Template scaffold: `_substitute()` now handles both `${key}` and `{{ key }}` placeholder syntax
+- Model tests: updated references from deleted `config/xyz-configuration/` to new cloud-provider examples
+
+### Documentation
+
+- Added ADR 0014 (Guided Onboarding and Cold-Start Experience)
+- Updated CONTRIBUTING.md with example workspace contribution guidelines
+
 ---
 
 ## [0.12.0] — 2026-06-23
@@ -325,7 +423,7 @@ mv customers/ tenants/
 
 ### Added
 
-- **`strata env state`** — show live infrastructure state per deployment stage (resources, serial, outputs from `terraform show -json`). Supports `--offline` for cached-only mode.
+- **`strata env status`** — show live infrastructure status per deployment stage (resources, serial, outputs from `terraform show -json`). Supports `--offline` for cached-only mode. `--all` / `--path DIR` scan multiple deployment manifests and show a one-line summary per deployment (offline/cache-based).
 - **`strata env drift`** — detect drift between desired config and live infrastructure using `terraform plan -detailed-exitcode`. Reports create/update/delete/replace counts per stage.
 - **`strata values set`** — write a value to its configured store backend. Dispatches to constant (print location), environment (export instruction), github (`gh secret set`), or integration backends. Supports `--value`, `--from-file`, and `--stdin` for multiline input.
 - **`strata values resolve`** — diagnose value resolution paths without revealing actual values. Walks the resolution chain with checkpoints per store type. `--probe` flag attempts actual backend resolution (pass/fail only).
@@ -429,3 +527,14 @@ To release a new version:
 - Update VERSION.txt to match.
 - Tag: git tag vx.y.z && git push origin vx.y.z
 -->
+
+## Legend
+
+- **Added** for new features
+- **Changed** for changes in existing functionality
+- **Deprecated** for soon-to-be removed features
+- **Removed** for now removed features
+- **Fixed** for any bug fixes
+- **Security** in case of vulnerabilities
+- **Infrastructure** for CI/CD and build changes
+- **Documentation** for doc-only changes

@@ -105,6 +105,24 @@ export class CodeLensProvider
                 tooltip: 'Run strata deploy run --dry-run for this deployment',
                 arguments: [document.uri.fsPath],
             }));
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(pulse) Status',
+                command: 'strata.envStatus',
+                tooltip: 'Show cached environment status for this deployment',
+                arguments: [document.uri.fsPath],
+            }));
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(diff) Drift',
+                command: 'strata.envDrift',
+                tooltip: 'Run terraform plan to detect configuration drift',
+                arguments: [document.uri.fsPath],
+            }));
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(history) Audit',
+                command: 'strata.auditChanges',
+                tooltip: 'Show recent deploy-log entries for this deployment',
+                arguments: [document.uri.fsPath],
+            }));
         }
 
         // Guide — always

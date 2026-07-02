@@ -438,14 +438,14 @@ function Test-DeployCommands {
 
     Test-Cmd "deploy: -h" `
         -Args @('deploy', '-h') `
-        -Contains @('run', 'status', 'history', 'destroy', 'health')
+        -Contains @('run', 'plan', 'history', 'destroy', 'health')
 
     Test-Cmd "deploy run: -h" `
         -Args @('deploy', 'run', '-h') `
         -Contains @('file', 'stage', 'force', 'dry-run')
 
-    Test-Cmd "deploy status: -h" `
-        -Args @('deploy', 'status', '-h') `
+    Test-Cmd "deploy plan: -h" `
+        -Args @('deploy', 'plan', '-h') `
         -Contains @('file')
 
     Test-Cmd "deploy history: -h" `

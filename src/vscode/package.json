@@ -97,6 +97,36 @@
         "icon": "$(cloud-upload)"
       },
       {
+        "command": "strata.envStatus",
+        "title": "Strata: Show Environment Status",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "strata.envDrift",
+        "title": "Strata: Detect Drift",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "strata.envDoctor",
+        "title": "Strata: Run Doctor",
+        "icon": "$(heart)"
+      },
+      {
+        "command": "strata.auditChanges",
+        "title": "Strata: Show Audit Trail",
+        "icon": "$(history)"
+      },
+      {
+        "command": "strata.auditResend",
+        "title": "Strata: Resend to Audit Sinks",
+        "icon": "$(broadcast)"
+      },
+      {
+        "command": "strata.auditExport",
+        "title": "Strata: Export Audit Trail",
+        "icon": "$(export)"
+      },
+      {
         "command": "strata.showGuide",
         "title": "Strata: Show Guide",
         "icon": "$(list-ordered)"
@@ -162,6 +192,16 @@
           "id": "strataTools",
           "name": "Tools",
           "contextualTitle": "Strata Tools"
+        },
+        {
+          "id": "strataEnvironment",
+          "name": "Environments",
+          "contextualTitle": "Strata Environments"
+        },
+        {
+          "id": "strataAudit",
+          "name": "Audit Trail",
+          "contextualTitle": "Strata Audit Trail"
         }
       ]
     },
@@ -169,7 +209,17 @@
       "view/title": [
         {
           "command": "strata.refreshTreeView",
-          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools",
+          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools || view == strataEnvironment || view == strataAudit",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.envDoctor",
+          "when": "view == strataEnvironment",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.auditExport",
+          "when": "view == strataAudit",
           "group": "navigation"
         },
         {
@@ -188,6 +238,21 @@
           "command": "strata.openFile",
           "when": "view == strataFiles && viewItem == document",
           "group": "strata@0"
+        },
+        {
+          "command": "strata.envStatus",
+          "when": "view == strataEnvironment && viewItem == deployment",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.envDrift",
+          "when": "view == strataEnvironment && viewItem == deployment",
+          "group": "strata@2"
+        },
+        {
+          "command": "strata.auditResend",
+          "when": "view == strataAudit && viewItem == entry",
+          "group": "strata@1"
         }
       ],
       "editor/title": [
@@ -195,6 +260,28 @@
           "command": "strata.validateCurrentFile",
           "when": "resourceExtname == .yaml && strata.workspaceActive",
           "group": "strata"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "strata.envStatus",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.envDrift",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@2"
+        },
+        {
+          "command": "strata.validateCurrentFile",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@3"
+        },
+        {
+          "command": "strata.auditChanges",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@4"
         }
       ]
     },

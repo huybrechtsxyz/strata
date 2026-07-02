@@ -200,7 +200,7 @@ strata deploy run -f deploy/deploy-prd.yaml --force --output json
 strata deploy run -f deploy/deploy-prd.yaml --stage networking --force --output json
 
 # Check current state
-strata deploy status -f deploy/deploy-prd.yaml --output json
+strata env output -f deploy/deploy-prd.yaml --output json
 
 # View deployment history
 strata deploy history -f deploy/deploy-prd.yaml --output json
@@ -430,6 +430,6 @@ strata guide -f deploy/deploy-prd.yaml
 ### Troubleshooting a Failed Deploy
 ```bash
 strata audit list --last --level ERROR --output json
-strata deploy status -f deploy/deploy-prd.yaml --output json
+strata env output -f deploy/deploy-prd.yaml --output json
 strata tools status --output json
 ```

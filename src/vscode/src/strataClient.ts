@@ -109,6 +109,102 @@ export interface ValidationResult {
     suggestions?: string[];
 }
 
+/** Matches doctor_env_command._output_data check entry */
+export interface EnvDoctorCheck {
+    name: string;
+    status: 'ok' | 'warn' | 'fail';
+    value: string | null;
+    fix_hint: string | null;
+}
+
+/** Matches doctor_env_command._output_data category entry */
+export interface EnvDoctorCategory {
+    name: string;
+    checks: EnvDoctorCheck[];
+}
+
+/** Matches doctor_env_command._output_data */
+export interface EnvDoctorData {
+    summary: { passed: number; warnings: number; failed: number };
+    categories: EnvDoctorCategory[];
+}
+
+// ---------------------------------------------------------------------------
+// Audit types
+// ---------------------------------------------------------------------------
+
+/** Matches DeployLogStepModel — step within a stage */
+export interface AuditStep {
+    step: string;
+    success: boolean;
+    duration_seconds: number;
+}
+
+/** Matches DeployLogStageModel — per-stage result */
+export interface AuditStage {
+    name: string;
+    provisioner: string | null;
+    success: boolean;
+    started_at: string;
+    completed_at: string;
+    duration_seconds: number;
+    steps: AuditStep[];
+}
+
+/** Matches DeployLogPullRequestModel — optional PR enrichment */
+export interface AuditPullRequest {
+    number: number;
+    title: string;
+    url: string;
+    author: string | null;
+    merged_by: string | null;
+}
+
+/** Matches DeployLogModel — one deploy-log entry */
+export interface AuditEntry {
+    execution_id: string;
+    timestamp: string;
+    version: string;
+    deployment: string;
+    workspace: string | null;
+    environment: string | null;
+    file: string;
+    success: boolean;
+    duration_seconds: number;
+    commit_sha: string | null;
+    stages: AuditStage[];
+    pull_request: AuditPullRequest | null;
+}
+
+/** Matches `data` field of `audit changes --output json` response */
+export interface AuditChangesData {
+    entries: AuditEntry[];
+    count: number;
+}
+
+/** Matches status_env_command._output_data stage entry (multi-deployment mode) */
+export interface EnvStageStatus {
+    name: string;
+    provisioner: string;
+    cached: boolean;
+    cache: { refreshed_at: string | null; output_count: number } | null;
+}
+
+/** Matches status_env_command._output_data deployment entry (multi-deployment mode) */
+export interface EnvDeploymentStatus {
+    file: string;
+    name: string;
+    stages: EnvStageStatus[];
+    stage_count: number;
+    cached_count: number;
+}
+
+/** Matches status_env_command._output_data (multi-deployment mode) */
+export interface EnvStatusData {
+    scan_path: string;
+    deployments: EnvDeploymentStatus[];
+}
+
 // ---------------------------------------------------------------------------
 // CLI response envelope
 // ---------------------------------------------------------------------------
@@ -197,6 +293,55 @@ export class StrataClient {
         await this._run<Record<string, unknown>>([
             'profile', 'activate', name, '--output', 'json',
         ]);
+    }
+
+    // ── Env ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Run `strata env doctor --output json` and return the doctor result.
+     * Pass a `filePath` to limit tool checks to those referenced by that deployment.
+     * Exit code 3 (some checks failed) is handled — the envelope is still returned.
+     */
+    async runEnvDoctor(filePath?: string): Promise<EnvDoctorData> {
+        const args: string[] = ['env', 'doctor', '--output', 'json'];
+        if (filePath) {
+            args.push('-f', filePath);
+        }
+        try {
+            const resp = await this._run<EnvDoctorData>(args);
+            return resp.data;
+        } catch (err: unknown) {
+            // Exit 3 surfaces as StrataCLIError but stdout is parseable
+            const cliErr = err as { response?: CliResponse<EnvDoctorData> };
+            if (cliErr?.response?.data) {
+                return cliErr.response.data;
+            }
+            throw err;
+        }
+    }
+
+    /**
+     * Run `strata env status --all --output json` and return per-deployment
+     * cache status.  Fast and offline — reads build cache files only.
+     */
+    async getEnvStatus(): Promise<EnvStatusData> {
+        const resp = await this._run<EnvStatusData>([
+            'env', 'status', '--all', '--output', 'json',
+        ]);
+        return resp.data;
+    }
+
+    // ── Audit ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Run `strata audit changes --last N --output json` and return deploy-log
+     * entries.  Fast — reads local JSON files only.
+     */
+    async getAuditChanges(last: number = 20): Promise<AuditEntry[]> {
+        const resp = await this._run<AuditChangesData>([
+            'audit', 'changes', '--last', String(last), '--output', 'json',
+        ]);
+        return resp.data.entries;
     }
 
     // ── Build / Deploy — run in terminal so user sees streaming output ─────────

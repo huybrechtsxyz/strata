@@ -1,12 +1,82 @@
 {
     "image": "omhqproget.domain.ompartners.com/coder-docker/python-development:5cbfbe6",
+    "name": "strata",
+    "containerUser": "coder",
     "features": {
-        // Extra features can be installed in this section. For a list of features please consult https://containers.dev/features.
-        // Note that these could be maintained by third parties, so only install features you trust or looked into.
-        // The following shows an example on how to add features to the devcontainer. In this case it would add the mssql odbc driver.
-        // Note that 'ghcr.io' is the default artifact repository for features,
-        // but was replaced with our own internal mirror 'omhqproget.domain.ompartners.com/external-images'
-        // "omhqproget.domain.ompartners.com/external-images/jlaundry/devcontainer-features/mssql-odbc-driver:1": {}
+        "omhqproget.domain.ompartners.com/external-images/devcontainers/features/node:20": {
+            "version": "20"
+        },
+        "omhqproget.domain.ompartners.com/external-images/devcontainers/features/git:latest": {}
     },
-    "containerUser": "coder"
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.debugpy",
+                "charliermarsh.ruff",
+                "ms-vscode.makefile-tools",
+                "ms-typescript.typescript-vue-plugin",
+                "dbaeumer.vscode-eslint",
+                "esbenp.prettier-vscode",
+                "ms-vscode.vscode-typescript-next",
+                "redhat.vscode-yaml",
+                "GitHub.copilot",
+                "GitHub.copilot-chat"
+            ],
+            "settings": {
+                "python.defaultInterpreterPath": "/home/coder/.venv/bin/python",
+                "python.linting.enabled": true,
+                "python.linting.ruffEnabled": true,
+                "[python]": {
+                    "editor.defaultFormatter": "charliermarsh.ruff",
+                    "editor.formatOnSave": true,
+                    "editor.codeActionsOnSave": {
+                        "source.fixAll": true,
+                        "source.organizeImports": true
+                    }
+                },
+                "[typescript]": {
+                    "editor.defaultFormatter": "esbenp.prettier-vscode",
+                    "editor.formatOnSave": true
+                },
+                "[json]": {
+                    "editor.defaultFormatter": "esbenp.prettier-vscode",
+                    "editor.formatOnSave": true
+                },
+                "files.watcherExclude": {
+                    "**/.venv/**": true,
+                    "**/node_modules/**": true,
+                    "**/.git/**": true,
+                    "**/dist/**": true,
+                    "**/.pytest_cache/**": true,
+                    "**/.mypy_cache/**": true,
+                    "**/.ruff_cache/**": true
+                }
+            }
+        }
+    },
+    "forwardPorts": [
+        8000,
+        5000,
+        3000
+    ],
+    "portsAttributes": {
+        "8000": {
+            "label": "strata API",
+            "onAutoForward": "notify"
+        },
+        "5000": {
+            "label": "Flask/Debug",
+            "onAutoForward": "notify"
+        },
+        "3000": {
+            "label": "Extension Dev",
+            "onAutoForward": "notify"
+        }
+    },
+    "mounts": [],
+    "postCreateCommand": "/bin/bash .devcontainer/post-create.sh",
+    "updateContentCommand": "uv sync --all-extras && cd src/vscode && npm install",
+    "remoteUser": "coder"
 }
