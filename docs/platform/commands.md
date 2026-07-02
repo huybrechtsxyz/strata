@@ -1428,6 +1428,111 @@ strata env output -f xyz-deploy-prd.yaml --json
 
 **JSON output keys:** `file`, `stages{}` — each stage: `provisioner`, `outputs{}`, `ok`, `error`.
 
+### `env show`
+
+```
+strata env show -f FILE [--stage NAME] [standard options]
+```
+
+Show the full resolved environment for a deployment: meta, properties, variables, secrets (masked), feature flags, overrides, and stages. Uses cached resolution — no subprocess calls.
+
+| Option         | Description                                                              |
+| -------------- | ------------------------------------------------------------------------ |
+| `--stage NAME` | Filter secrets visibility to a specific stage's allowlist (default: all) |
+
+```bash
+strata env show -f xyz-deploy-prd.yaml
+strata env show -f xyz-deploy-prd.yaml --stage production
+strata env show -f xyz-deploy-prd.yaml --output json
+```
+
+**JSON output keys:** `file`, `deployment`, `meta{}`, `properties{}`, `variables[]`, `secrets[]`, `features[]`, `overrides{}`, `stages[]`.
+
+### `env status`
+
+```
+strata env status [-f FILE | --path DIR | --all] [--stage NAME] [--offline] [standard options]
+```
+
+Show infrastructure status. Supports three modes:
+
+| Mode             | Flags                   | Description                                                                               |
+| ---------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| Single (live)    | `-f FILE`               | Per-stage detail via `terraform show -json` — resources, outputs, serial, cache freshness |
+| Single (offline) | `-f FILE --offline`     | Per-stage detail from build cache only — no backend contact                               |
+| Multi            | `--all` or `--path DIR` | One-line summary per deployment found — always offline (reads build cache)                |
+
+| Option         | Description                                                                     |
+| -------------- | ------------------------------------------------------------------------------- |
+| `--stage NAME` | Query only a single stage. Single-deployment mode only.                         |
+| `--offline`    | Use cached data only — no remote backend contact. Single-deployment mode only.  |
+| `--path DIR`   | Scan a directory for deployment manifests and show a summary for each.          |
+| `--all`        | Scan the entire workspace for deployment manifests and show a summary for each. |
+
+```bash
+strata env status -f xyz-deploy-prd.yaml
+strata env status -f xyz-deploy-prd.yaml --offline
+strata env status -f xyz-deploy-prd.yaml --stage production
+strata env status --all
+strata env status --path deploy/
+strata env status --all --output json
+```
+
+**JSON output keys (single):** `file`, `deployment`, `mode`, `stages[]` — each stage: `name`, `provisioner`, `reachable`, `resources`, `outputs`, `serial`, `cache{}`.
+
+**JSON output keys (multi):** `scan_path`, `deployments[]` — each: `file`, `name`, `stage_count`, `cached_count`, `stages[]`.
+
+### `env drift`
+
+```
+strata env drift -f FILE [--stage NAME] [standard options]
+```
+
+Detect configuration drift by running `terraform plan -detailed-exitcode` against the live backend. Reports create/update/delete/replace counts per stage. Exit code 3 if drift is detected.
+
+| Option         | Description                              |
+| -------------- | ---------------------------------------- |
+| `--stage NAME` | Check only a single stage (default: all) |
+
+```bash
+strata env drift -f xyz-deploy-prd.yaml
+strata env drift -f xyz-deploy-prd.yaml --stage production
+strata env drift -f xyz-deploy-prd.yaml --output json
+```
+
+**JSON output keys:** `file`, `deployment`, `stages[]` — each stage: `name`, `provisioner`, `drift_detected`, `to_add`, `to_change`, `to_destroy`, `to_replace`, `plan_output`.
+
+### `env doctor`
+
+```
+strata env doctor [-f FILE] [--category CATEGORY] [--deep] [standard options]
+```
+
+Run a workspace health check across five categories. Exit code 3 if any check fails.
+
+| Category    | What is checked                                                       |
+| ----------- | --------------------------------------------------------------------- |
+| `runtime`   | Python version, OS, available memory and disk                         |
+| `workspace` | `.strata/` directory, `solution.json`, active profile                 |
+| `tools`     | External tool availability (terraform, helm, docker, ansible, git, …) |
+| `config`    | Deployment file validity, stage configuration, provisioner references |
+| `auth`      | Backend authentication and secret store reachability                  |
+
+| Option            | Description                                                               |
+| ----------------- | ------------------------------------------------------------------------- |
+| `-f FILE`         | Check only the tools referenced by this deployment file                   |
+| `--category NAME` | Run only one category (`runtime`, `workspace`, `tools`, `config`, `auth`) |
+| `--deep`          | Enable deeper checks (requires an active profile)                         |
+
+```bash
+strata env doctor
+strata env doctor -f xyz-deploy-prd.yaml
+strata env doctor --category tools
+strata env doctor --deep --output json
+```
+
+**JSON output keys:** `categories[]` — each: `name`, `status`, `checks[]` — each check: `name`, `ok`, `message`.
+
 ---
 
 ## `values`

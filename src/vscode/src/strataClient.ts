@@ -109,6 +109,26 @@ export interface ValidationResult {
     suggestions?: string[];
 }
 
+/** Matches doctor_env_command._output_data check entry */
+export interface EnvDoctorCheck {
+    name: string;
+    status: 'ok' | 'warn' | 'fail';
+    value: string | null;
+    fix_hint: string | null;
+}
+
+/** Matches doctor_env_command._output_data category entry */
+export interface EnvDoctorCategory {
+    name: string;
+    checks: EnvDoctorCheck[];
+}
+
+/** Matches doctor_env_command._output_data */
+export interface EnvDoctorData {
+    summary: { passed: number; warnings: number; failed: number };
+    categories: EnvDoctorCategory[];
+}
+
 // ---------------------------------------------------------------------------
 // CLI response envelope
 // ---------------------------------------------------------------------------
@@ -197,6 +217,31 @@ export class StrataClient {
         await this._run<Record<string, unknown>>([
             'profile', 'activate', name, '--output', 'json',
         ]);
+    }
+
+    // ── Env ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Run `strata env doctor --output json` and return the doctor result.
+     * Pass a `filePath` to limit tool checks to those referenced by that deployment.
+     * Exit code 3 (some checks failed) is handled — the envelope is still returned.
+     */
+    async runEnvDoctor(filePath?: string): Promise<EnvDoctorData> {
+        const args: string[] = ['env', 'doctor', '--output', 'json'];
+        if (filePath) {
+            args.push('-f', filePath);
+        }
+        try {
+            const resp = await this._run<EnvDoctorData>(args);
+            return resp.data;
+        } catch (err: unknown) {
+            // Exit 3 surfaces as StrataCLIError but stdout is parseable
+            const cliErr = err as { response?: CliResponse<EnvDoctorData> };
+            if (cliErr?.response?.data) {
+                return cliErr.response.data;
+            }
+            throw err;
+        }
     }
 
     // ── Build / Deploy — run in terminal so user sees streaming output ─────────

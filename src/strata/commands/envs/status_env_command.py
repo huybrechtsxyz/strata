@@ -152,12 +152,14 @@ class StatusEnvCommand(BaseDeployCommand):
             stage_name = stage.get("name") or ""
             provisioner = stage.get("provisioner") or "terraform"
             cache_info = self._read_output_cache_by_name(str(stage_name))
-            stage_summaries.append({
-                "name": str(stage_name),
-                "provisioner": str(provisioner),
-                "cached": cache_info is not None,
-                "cache": cache_info,
-            })
+            stage_summaries.append(
+                {
+                    "name": str(stage_name),
+                    "provisioner": str(provisioner),
+                    "cached": cache_info is not None,
+                    "cache": cache_info,
+                }
+            )
 
         cached_count = sum(1 for s in stage_summaries if s["cached"])
         return {
