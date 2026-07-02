@@ -48,6 +48,12 @@ class StateEnvCommand(BaseDeployCommand):
         self._stage = stage
         self._offline = offline
 
+    def get_required_integrations(self) -> dict:
+        # Offline mode only reads the build cache — no terraform call needed.
+        if self._offline:
+            return {}
+        return {"terraform": "querying live infrastructure state"}
+
     def execute(self) -> bool:
         try:
             if not self._initialize():
