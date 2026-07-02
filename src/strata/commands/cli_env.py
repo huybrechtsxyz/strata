@@ -13,13 +13,43 @@ from strata.commands.cli_common import (
     handle_command_exit,
 )
 from strata.commands.envs.drift_env_command import DriftEnvCommand
+from strata.commands.envs.info_env_command import InfoEnvCommand
 from strata.commands.envs.show_env_command import ShowEnvCommand
 from strata.commands.envs.state_env_command import StateEnvCommand
 
 
-@click.group(name="env", help="Inspect environment configuration and state.")
-def env_group() -> None:
-    """Env command group."""
+@click.group(
+    name="env",
+    help="Inspect environment configuration and state.",
+    invoke_without_command=True,
+)
+@click.pass_context
+def env_group(ctx: click.Context) -> None:
+    """Env command group. Defaults to 'info' when no subcommand is given."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(env_info)
+
+
+@env_group.command(name="info", help="Show workspace context: solution, profile, version, work path.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def env_info(
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+) -> None:
+    """Show workspace context: solution identity, active profile, strata version, work path."""
+    command = InfoEnvCommand(
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
 
 
 @env_group.command(name="show", help="Show the full resolved environment for a deployment.")
