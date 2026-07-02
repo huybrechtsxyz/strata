@@ -76,6 +76,9 @@ dev = [
     "types-PyYAML",
 ]
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.0"]
+
 doc = [
     "sphinx",
     "sphinx-autoapi",

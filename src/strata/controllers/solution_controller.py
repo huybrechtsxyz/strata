@@ -1287,25 +1287,31 @@ class SolutionController(BaseController):
         try:
             from strata.models.configuration_model import ConfigurationModel
             from strata.models.deployment_model import DeploymentModel
+            from strata.models.dns_model import DnsModel
             from strata.models.environment_model import EnvironmentModel
             from strata.models.firewall_model import FirewallModel
             from strata.models.module_model import ModuleModel
             from strata.models.namespace_model import NamespaceModel
+            from strata.models.network_model import NetworkModel
             from strata.models.platform_artifact_model import PlatformArtifactModel
             from strata.models.provider_model import ProviderModel
             from strata.models.resource_model import ResourceModel
+            from strata.models.tenant_model import TenantModel
             from strata.models.workspace_model import WorkspaceModel
 
             _schema_map = {
                 "configuration": ConfigurationModel,
                 "deployment": DeploymentModel,
+                "dns": DnsModel,
                 "environment": EnvironmentModel,
                 "firewall": FirewallModel,
                 "module": ModuleModel,
                 "namespace": NamespaceModel,
+                "network": NetworkModel,
                 "platform": PlatformArtifactModel,
                 "provider": ProviderModel,
                 "resource": ResourceModel,
+                "tenant": TenantModel,
                 "workspace": WorkspaceModel,
             }
             schemas_dir = state_dir / SOLUTION_SCHEMAS_DIR

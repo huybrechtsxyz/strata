@@ -150,3 +150,106 @@ def schema_export(output_dir: str) -> None:
             click.echo(f"  ERROR: {e}", err=True)
     click.echo(f"\n  {len(written)} schema(s) exported to {output_path}")
     click.echo("")
+
+
+# Maps each user-authored kind to glob patterns that match its files in a standard workspace layout.
+# Internal artifact kinds (platform_model, deployment-manifest) are excluded — not user-authored.
+_KIND_TO_GLOBS: dict = {
+    PlatformKind.CONFIGURATION: ["config/**/*.yaml"],
+    PlatformKind.DEPLOYMENT: ["deploy/**/*.yaml"],
+    PlatformKind.DNS: ["dns/**/*.yaml"],
+    PlatformKind.ENVIRONMENT: ["envs/**/*.yaml", "environments/**/*.yaml"],
+    PlatformKind.FIREWALL: ["firewalls/**/*.yaml"],
+    PlatformKind.MODULE: ["modules/**/*.yaml"],
+    PlatformKind.NAMESPACE: ["namespaces/**/*.yaml"],
+    PlatformKind.NETWORK: ["networks/**/*.yaml"],
+    PlatformKind.PROVIDER: ["providers/**/*.yaml"],
+    PlatformKind.RESOURCE: ["resources/**/*.yaml"],
+    PlatformKind.TENANT: ["tenants/**/*.yaml"],
+    PlatformKind.WORKSPACE: ["stack/**/*.yaml"],
+}
+
+
+@schema_group.command(name="wire", help="Wire JSON Schemas into .vscode/settings.json for YAML autocomplete.")
+@click.option(
+    "--work-path",
+    default=None,
+    type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
+    help="Workspace root. Defaults to current directory.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Show what would be written without making changes.",
+)
+def schema_wire(work_path: Optional[str], dry_run: bool) -> None:
+    """Merge yaml.schemas into .vscode/settings.json and export schemas.
+
+    Reads the existing .vscode/settings.json (if any), merges in the
+    yaml.schemas mapping for all user-authored kinds, and writes it back.
+    All other settings are preserved.  Also exports the JSON Schema files
+    to .strata/schemas/ so the paths exist.
+    """
+    root = Path(work_path) if work_path else Path.cwd()
+    schemas_dir = root / SOLUTION_DIR / SOLUTION_SCHEMAS_DIR
+    vscode_dir = root / ".vscode"
+    settings_file = vscode_dir / "settings.json"
+
+    # --- Build the yaml.schemas mapping -------------------------------------------
+    schemas_prefix = "${workspaceFolder}/" + SOLUTION_DIR + "/" + SOLUTION_SCHEMAS_DIR
+    yaml_schemas: dict = {}
+    for kind, globs in _KIND_TO_GLOBS.items():
+        schema_key = f"{schemas_prefix}/{kind.value}.json"
+        yaml_schemas[schema_key] = globs if len(globs) > 1 else globs[0]
+
+    # --- Read existing settings.json or start fresh --------------------------------
+    existing: dict = {}
+    if settings_file.exists():
+        try:
+            existing = json.loads(settings_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(f".vscode/settings.json is not valid JSON: {exc}") from exc
+
+    merged = dict(existing)
+    merged["yaml.schemas"] = yaml_schemas
+
+    merged_text = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
+
+    # --- Dry-run mode: just show the diff -----------------------------------------
+    if dry_run:
+        click.echo("")
+        click.echo(f"  Would write: {settings_file}")
+        click.echo(f"  yaml.schemas entries: {len(yaml_schemas)}")
+        click.echo("")
+        click.echo(json.dumps({"yaml.schemas": yaml_schemas}, indent=2))
+        click.echo("")
+        return
+
+    # --- Export schemas -----------------------------------------------------------
+    schemas_dir.mkdir(parents=True, exist_ok=True)
+    export_errors = []
+    for kind, model_cls in _KIND_TO_MODEL.items():
+        if kind not in _KIND_TO_GLOBS:
+            continue  # skip internal artifact kinds
+        schema_file = schemas_dir / f"{kind.value}.json"
+        try:
+            schema_file.write_text(json.dumps(model_cls.model_json_schema(), indent=2), encoding="utf-8")  # type: ignore[attr-defined]
+        except Exception as exc:
+            export_errors.append(f"  {kind.value}: {exc}")
+
+    # --- Write settings.json ------------------------------------------------------
+    vscode_dir.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(merged_text, encoding="utf-8")
+
+    click.echo("")
+    click.echo(f"  Schemas exported  → {schemas_dir}")
+    click.echo(f"  Settings updated  → {settings_file}")
+    click.echo(f"  yaml.schemas entries: {len(yaml_schemas)}")
+    if export_errors:
+        click.echo("")
+        for e in export_errors:
+            click.echo(f"  WARNING: {e}", err=True)
+    click.echo("")
+    click.echo("  Reload VS Code (Ctrl+Shift+P → 'Reload Window') for changes to take effect.")
+    click.echo("")
