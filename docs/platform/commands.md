@@ -44,6 +44,7 @@ These options are accepted by every command and subcommand:
 | `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
 | `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
 | `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
+| `audit` †    | `changes` `resend` `export`                                                  | Query deploy-log evidence and forward to audit sinks      |
 | `deploy` †   | `run` `destroy` `show` `status` `history` `health` `output` `outputs` `lock` | Deploy platform using provisioners                        |
 | `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
 | `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
@@ -1532,6 +1533,217 @@ strata env doctor --deep --output json
 ```
 
 **JSON output keys:** `categories[]` — each: `name`, `status`, `checks[]` — each check: `name`, `ok`, `message`.
+
+---
+
+## `audit`
+
+> **Note:** Requires an initialized workspace. Audit records are written automatically by `strata deploy run` to `.strata/deploy-log/` — no extra configuration required to start collecting evidence. Configure `spec.deployment.audit` in the configuration YAML to enable remote push, structured path layout, and SIEM forwarding.
+
+Query deployment audit logs and manage compliance evidence (ISO 27001 / ISAE 3402 layer 2 audit trail).
+
+Every `strata deploy run` execution writes a structured JSON audit record to the local deploy-log directory. These records capture who ran the deployment, from which commit, which stages ran, whether they succeeded, step timings, and any PR metadata linked to the commit.
+
+All `audit` subcommands accept standard options (`--work-path`, `--output`, `--verbose`, `--quiet`).
+
+### `audit changes`
+
+```
+strata audit changes [--last N] [--since TIMESTAMP] [--stage NAME] [standard options]
+```
+
+List recent deployment executions from the local deploy-log. Results are sorted by timestamp descending (most recent first).
+
+| Option             | Default | Description                                                                  |
+| ------------------ | ------- | ---------------------------------------------------------------------------- |
+| `--last N`         | `10`    | Maximum number of entries to show                                            |
+| `--since TIMESTAMP`| —       | Show only entries on or after an ISO 8601 timestamp (e.g. `2026-01-15T00:00:00Z`) |
+| `--stage NAME`     | —       | Show only entries that include a stage with this exact name                  |
+
+```bash
+# Show the 10 most recent deployments
+strata audit changes
+
+# Show all deployments in the last 7 days
+strata audit changes --since 2026-06-25T00:00:00Z
+
+# Show deployments that ran the 'infrastructure' stage
+strata audit changes --stage infrastructure
+
+# Machine-readable output for CI / compliance tooling
+strata audit changes --last 50 --output json
+```
+
+**Console output columns:** `timestamp`, `deployment`, `environment`, `success`, `duration`, `stages` (count), `commit` (short SHA).
+
+**JSON output keys** (per entry): `execution_id`, `timestamp`, `version`, `deployment`, `workspace`, `environment`, `file`, `success`, `duration_seconds`, `commit_sha`, `stages[]`, `pull_request{}`.
+
+### `audit resend`
+
+```
+strata audit resend [--last N] [--since TIMESTAMP] [standard options]
+```
+
+Re-forward local deploy-log entries to all configured audit sinks (webhook, ndjson, syslog, SIEM integrations). Useful after adding a new sink or recovering from a delivery failure.
+
+| Option              | Default | Description                                  |
+| ------------------- | ------- | -------------------------------------------- |
+| `--last N`          | —       | Resend only the last N entries               |
+| `--since TIMESTAMP` | —       | Resend only entries since an ISO 8601 timestamp |
+
+```bash
+# Resend all local records to currently configured sinks
+strata audit resend
+
+# Resend only the most recent 5 entries
+strata audit resend --last 5
+
+# Resend entries from the last 24 hours (machine-readable result)
+strata audit resend --since 2026-07-01T00:00:00Z --output json
+```
+
+**JSON output keys:** `sent` (int), `failed` (int).
+
+### `audit export`
+
+```
+strata audit export [--last N] [--since TIMESTAMP] [--format json|ndjson] [--out PATH] [standard options]
+```
+
+Export deploy-log entries to a file or stdout. Useful for offline compliance reviews and feeding records into external tooling.
+
+| Option              | Default  | Description                                           |
+| ------------------- | -------- | ----------------------------------------------------- |
+| `--last N`          | —        | Export only the last N entries                        |
+| `--since TIMESTAMP` | —        | Export only entries since an ISO 8601 timestamp       |
+| `--format`          | `json`   | Output format: `json` (array) or `ndjson` (one per line) |
+| `--out PATH`        | stdout   | Write to a file instead of stdout                     |
+
+```bash
+# Export all records as JSON array to stdout
+strata audit export
+
+# Export as NDJSON (one JSON object per line — preferred for log pipelines)
+strata audit export --format ndjson --out audit-$(date +%Y%m).ndjson
+
+# Export the last 30 days and pipe into jq
+strata audit export --since 2026-06-01T00:00:00Z --format ndjson | jq 'select(.success == false)'
+```
+
+### Audit configuration
+
+Configure audit output in the `spec.deployment.audit` block of your **configuration** YAML (`kind: configuration`):
+
+```yaml
+spec:
+  deployment:
+    paths:
+      by-execution: "{{ deployment }}/{{ timestamp }}"
+      by-tenant:    "{{ tenant }}/{{ deployment }}/{{ timestamp }}"
+
+    audit:
+      path: .strata/deploy-log         # base directory (relative to workspace root)
+      structure: by-execution          # named path from spec.deployment.paths, or inline Jinja2
+      file_per_stage: true             # true: one JSON per stage; false: single execution.json
+      remote: xyz-configuration        # gitops remote to push audit records to (optional)
+      include_in_manifest: true        # cross-reference audit path in deployment manifest (optional)
+```
+
+**Path templates** — `structure` accepts a named path from `spec.deployment.paths` or an inline [Jinja2](https://jinja.palletsprojects.com/) template. Available tokens:
+
+| Token                 | Example                   | Always available |
+| --------------------- | ------------------------- | ---------------- |
+| `{{ deployment }}`    | `xyz_platform_prd`        | Yes              |
+| `{{ workspace }}`     | `xyz_platform`            | Yes              |
+| `{{ environment }}`   | `prd`                     | Yes              |
+| `{{ timestamp }}`     | `2026-06-24T14-32-00Z`    | Yes              |
+| `{{ date }}`          | `2026-06-24`              | Yes              |
+| `{{ tenant }}`        | `example-xyz`             | No (if labelled) |
+| `{{ version }}`       | `1.0.0`                   | No (if labelled) |
+| `{{ stage }}`         | `infrastructure`          | Per-stage only   |
+
+### SIEM sink configuration
+
+Configure structured event forwarding to external immutable stores in the `spec.audit.sinks[]` block of your **configuration** YAML. Each sink forwards every `deploy_audit` event to an external receiver.
+
+**Built-in sink types** (no integration credentials required):
+
+```yaml
+spec:
+  audit:
+    sinks:
+      - name: local-ndjson
+        type: ndjson
+        enabled: true
+        path: .strata/audit-events.ndjson   # appended on every deployment
+
+      - name: ops-webhook
+        type: webhook
+        enabled: true
+        url: https://hooks.example.com/audit
+        headers:
+          X-API-Key: "${WEBHOOK_SECRET}"
+
+      - name: syslog-server
+        type: syslog
+        enabled: true
+        address: "syslog.internal:514"      # UDP
+```
+
+**Integration-backed sinks** (`sentinel`, `elk`, `otel`) — reference an integration declared in `spec.integrations[]`:
+
+```yaml
+spec:
+  integrations:
+    # Azure Sentinel — DCR Logs Ingestion API
+    - name: sentinel-audit
+      type: sentinel
+      enabled: true
+      endpoints:
+        address: https://my-dce.eastus-1.ingest.monitor.azure.com
+      properties:
+        data_collection_rule_id: dcr-abc123abc456abc789
+        stream_name: Custom-DeployAudit_CL
+      # Authentication: DefaultAzureCredential — managed identity, service principal, or az CLI
+
+    # ELK — TCP (Logstash JSON codec input)
+    - name: elk-audit
+      type: elk
+      enabled: true
+      endpoints:
+        address: "logstash.internal:5000"   # host:port for TCP
+      properties:
+        protocol: tcp                        # or "http" for Elasticsearch Bulk API
+
+    # OpenTelemetry — OTLP/HTTP to any OTel-compatible backend
+    - name: otel-audit
+      type: otel
+      enabled: true
+      endpoints:
+        address: https://otel-collector.internal:4318
+      properties:
+        resource_attributes:
+          environment: production
+          team: platform
+
+  audit:
+    sinks:
+      - name: sentinel
+        type: integration
+        integration: sentinel-audit
+        enabled: true
+        events: [deploy_audit]
+      - name: elk
+        type: integration
+        integration: elk-audit
+        enabled: true
+      - name: otel
+        type: integration
+        integration: otel-audit
+        enabled: true
+```
+
+**Non-blocking design:** SIEM delivery failures are always logged at `WARNING` level but never fail a deployment. The deploy-log JSON on disk is the primary source of truth; SIEM sinks are best-effort secondary delivery.
 
 ---
 
