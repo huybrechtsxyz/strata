@@ -39,7 +39,7 @@ Write-Host ""
 
 # Build wheel
 Write-Host "[*] Building wheel..." -ForegroundColor Blue
-uv build --wheel
+uv build --wheel --index-strategy unsafe-best-match
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] uv build failed." -ForegroundColor Red
     exit 1
@@ -59,7 +59,7 @@ Write-Host ""
 
 # Install as global tool from the wheel (bypasses uv's source-path cache)
 Write-Host "[*] Installing strata as global tool..." -ForegroundColor Blue
-uv tool install $wheel.FullName --force
+uv tool install $wheel.FullName --force --index-strategy unsafe-best-match
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] uv tool install failed." -ForegroundColor Red
     exit 1
@@ -117,7 +117,7 @@ Write-Host ""
 # Package extension — vsce writes <name>-<version>.vsix into dist/
 # --allow-missing-license: the project LICENSE lives at the repo root, not in src/vscode/
 Write-Host "[*] Packaging extension with vsce..." -ForegroundColor Blue
-npx @vscode/vsce package --no-dependencies --allow-missing-license --out "$projectRoot\dist"
+npx @vscode/vsce package --no-dependencies --skip-license --out "$projectRoot\dist"
 if ($LASTEXITCODE -ne 0) {
     Pop-Location
     Write-Host "[!] vsce package failed." -ForegroundColor Red

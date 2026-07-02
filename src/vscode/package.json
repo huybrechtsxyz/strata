@@ -90,13 +90,36 @@
         "icon": "$(go-to-file)"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "strata-explorer",
+          "title": "Strata",
+          "icon": "resources/strata.svg"
+        }
+      ]
+    },
     "views": {
-      "explorer": [
+      "strata-explorer": [
         {
           "id": "strataWorkspace",
-          "name": "Strata Workspace",
-          "icon": "$(cloud)",
-          "contextualTitle": "Strata"
+          "name": "Workspace",
+          "contextualTitle": "Strata Workspace"
+        },
+        {
+          "id": "strataFiles",
+          "name": "Files",
+          "contextualTitle": "Strata Files"
+        },
+        {
+          "id": "strataRepositories",
+          "name": "Repositories",
+          "contextualTitle": "Strata Repositories"
+        },
+        {
+          "id": "strataTools",
+          "name": "Tools",
+          "contextualTitle": "Strata Tools"
         }
       ]
     },
@@ -104,7 +127,7 @@
       "view/title": [
         {
           "command": "strata.refreshTreeView",
-          "when": "view == strataWorkspace",
+          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools",
           "group": "navigation"
         },
         {
@@ -116,12 +139,12 @@
       "view/item/context": [
         {
           "command": "strata.validateCurrentFile",
-          "when": "view == strataWorkspace && viewItem == document",
+          "when": "view == strataFiles && viewItem == document",
           "group": "strata@1"
         },
         {
           "command": "strata.openFile",
-          "when": "view == strataWorkspace && viewItem == document",
+          "when": "view == strataFiles && viewItem == document",
           "group": "strata@0"
         }
       ],
