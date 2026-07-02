@@ -60,6 +60,11 @@
         "icon": "$(rocket)"
       },
       {
+        "command": "strata.deployRun",
+        "title": "Strata: Deploy",
+        "icon": "$(cloud-upload)"
+      },
+      {
         "command": "strata.showGuide",
         "title": "Strata: Show Guide",
         "icon": "$(list-ordered)"
@@ -78,6 +83,11 @@
         "command": "strata.openConsole",
         "title": "Strata: Open Console",
         "icon": "$(terminal)"
+      },
+      {
+        "command": "strata.showDependencyGraph",
+        "title": "Strata: Show Dependency Graph",
+        "icon": "$(type-hierarchy)"
       },
       {
         "command": "strata.refreshTreeView",
@@ -169,6 +179,11 @@
           "default": true,
           "description": "Validate strata YAML files automatically when saved."
         },
+        "strata.validateOnType": {
+          "type": "boolean",
+          "default": false,
+          "description": "Validate strata YAML files as you type (debounced, 1.5 s delay). More responsive but heavier on CPU."
+        },
         "strata.showCodeLens": {
           "type": "boolean",
           "default": true,
@@ -183,9 +198,46 @@
           "type": "boolean",
           "default": false,
           "description": "Auto-export and wire JSON schemas when a workspace is opened."
+        },
+        "strata.defaultProfile": {
+          "type": "string",
+          "default": "",
+          "description": "Profile to activate automatically when the workspace opens. Leave empty to use the last active profile."
         }
       }
     },
+    "taskDefinitions": [
+      {
+        "type": "strata",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "validate",
+              "build",
+              "deploy"
+            ],
+            "description": "Strata operation to run."
+          },
+          "file": {
+            "type": "string",
+            "description": "YAML file path relative to the workspace root."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": false,
+            "description": "Run in dry-run mode (no changes applied)."
+          },
+          "stage": {
+            "type": "string",
+            "description": "Target a specific deployment stage."
+          }
+        }
+      }
+    ],
     "walkthroughs": [
       {
         "id": "strata.gettingStarted",

@@ -317,7 +317,6 @@ meta:
 
 - **Validate** — runs `strata validate <file>`, shows results in Problems panel
 - **Build** — runs `strata build run -f <file>` in terminal
-- **Deploy** — runs `strata deploy run -f <file>` with confirmation dialog
 - **Schema** — opens the JSON schema for this kind in a side panel
 - **Explain** — shows a hover panel with what this file does, what depends on it
 
@@ -453,6 +452,10 @@ Users can bind keyboard shortcuts or add to `.vscode/tasks.json`.
 }
 ```
 
+#### Chat participation
+
+- The extension can participate in Copilot Chat or Claude chat sessions
+
 ---
 
 ## Implementation Priority
@@ -477,6 +480,25 @@ Phase 3 (later):   VS Code extension consuming MCP
 ```
 
 The extension should consume the MCP server — not call the CLI directly. This way the MCP server is useful for any AI tool (Cursor, Windsurf, terminal agents), and the extension gets structured data for free.
+
+### Why not an HTTP server?
+
+A dedicated HTTP server (`strata serve`) was considered and rejected. The two existing surfaces already cover every consumer:
+
+| Surface             | Transport           | Consumer                            | Persistent?        |
+| ------------------- | ------------------- | ----------------------------------- | ------------------ |
+| CLI + JSON envelope | subprocess / stdout | VS Code extension, scripts, CI      | No (cold per call) |
+| MCP server          | stdio / SSE         | AI agents (Copilot, Claude, Cursor) | Yes                |
+
+An HTTP server would be a third integration surface that overlaps with both:
+
+- **For AI tools** — MCP already provides structured tool access. HTTP would require additional auth, CORS, port discovery, and process lifecycle management — all solved problems in MCP.
+- **For the extension** — subprocess calls work fine. Switching to HTTP means managing port allocation, startup ordering (server must be up before extension calls it), and health checks. The current `execFile` approach is simpler and self-contained.
+- **For CI/scripts** — CLI is the natural interface. Nobody wants to spin up a server to run `strata validate`.
+
+The one scenario where HTTP would genuinely help is a **browser-based web UI** (e.g., a deployment dashboard at `localhost:9000`). That's a separate product decision, not something the extension or MCP layer needs.
+
+If subprocess cold-start ever becomes a bottleneck, the extension can switch to consuming the MCP server directly — persistent process, structured data, no new surface.
 
 ---
 

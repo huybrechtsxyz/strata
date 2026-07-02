@@ -1,7 +1,7 @@
 /**
  * StrataClient — thin wrapper around the strata CLI.
  *
- * Every method spawns `strata <cmd> --output json --quiet` and parses the
+ * Every method spawns `strata <cmd> --output json` and parses the
  * structured JSON envelope that the CLI emits on stdout.
  *
  * JSON envelope shape (every command):
@@ -162,21 +162,21 @@ export class StrataClient {
 
     // ── Workspace ─────────────────────────────────────────────────────────────
 
-    /** Run `strata sln status --output json --quiet` and return workspace state. */
+    /** Run `strata sln status --output json` and return workspace state. */
     async getStatus(): Promise<WorkspaceStatus> {
         const resp = await this._run<WorkspaceStatus>([
-            'sln', 'status', '--output', 'json', '--quiet',
+            'sln', 'status', '--output', 'json',
         ]);
         return resp.data;
     }
 
     // ── Validation ────────────────────────────────────────────────────────────
 
-    /** Run `strata validate -f <filePath> --output json --quiet`. */
+    /** Run `strata validate -f <filePath> --output json`. */
     async validateFile(filePath: string): Promise<ValidationResult> {
         // Exit code 3 = validation failure — _run() handles it, returns envelope
         const resp = await this._run<ValidationResult>([
-            'validate', '-f', filePath, '--output', 'json', '--quiet',
+            'validate', '-f', filePath, '--output', 'json',
         ]);
         return resp.data;
     }
@@ -186,7 +186,16 @@ export class StrataClient {
     /** Run `strata schema wire` to export schemas and patch .vscode/settings.json. */
     async wireSchemas(): Promise<void> {
         await this._run<Record<string, unknown>>([
-            'schema', 'wire', '--output', 'json', '--quiet',
+            'schema', 'wire', '--output', 'json',
+        ]);
+    }
+
+    // ── Profiles ──────────────────────────────────────────────────────────────
+
+    /** Run `strata profile activate <name> --output json`. */
+    async activateProfile(name: string): Promise<void> {
+        await this._run<Record<string, unknown>>([
+            'profile', 'activate', name, '--output', 'json',
         ]);
     }
 

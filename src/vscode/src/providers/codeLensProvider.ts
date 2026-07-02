@@ -1,14 +1,13 @@
 /**
  * CodeLensProvider — shows inline action buttons above strata YAML documents.
  *
- * Renders at the first line of a strata document:
- *   [Validate] [Build] [Deploy (Dry Run)] [Schema] [Guide]
+ * Lens order per document kind:
  *
- * Only active for files that contain a strata apiVersion header.
+ *   All strata docs:   [Validate] [Schema] [Guide]
+ *   deployment only:   [Validate] [Schema] [Build (Dry Run)] [Deploy (Dry Run)] [Guide]
  *
- * TODO: implement provideCodeLenses() to detect the document kind from the
- *   YAML content and show context-appropriate lenses (e.g. only show Build
- *   for deployment files).
+ * Full build/deploy are intentionally omitted — they execute provisioners and
+ * must remain explicit CLI operations.
  */
 
 import * as vscode from 'vscode';
@@ -19,7 +18,7 @@ const STRATA_API_VERSIONS = [
     'strata.huybrechts.xyz/v1',
 ];
 
-/** Kinds that support the Build action. */
+/** Kinds that support Build / Deploy Dry Run lenses. */
 const BUILDABLE_KINDS = ['deployment'];
 
 export class CodeLensProvider
@@ -56,8 +55,7 @@ export class CodeLensProvider
 
     /**
      * Return CodeLens items for the document.
-     * TODO: parse the YAML to detect apiVersion and kind, then build lenses
-     *   based on the kind (e.g. deployment gets Build + Deploy Dry Run).
+     * Detects apiVersion and kind via a fast line scan of the first 20 lines.
      */
     provideCodeLenses(
         document: vscode.TextDocument,
@@ -73,18 +71,27 @@ export class CodeLensProvider
 
         // All actions anchor to line 0 of the document
         const topRange = new vscode.Range(0, 0, 0, 0);
-
         const kind = this._detectKind(document);
         const lenses: vscode.CodeLens[] = [];
 
-        // Validate — always shown for strata documents
+        // Validate — always
         lenses.push(new vscode.CodeLens(topRange, {
             title: '$(check) Validate',
             command: 'strata.validateCurrentFile',
             tooltip: 'Run strata validate on this file',
         }));
 
-        // Build — only for deployment files
+        // Schema — always (when kind is known)
+        if (kind) {
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(file-code) Schema',
+                command: 'strata.openSchema',
+                tooltip: `Open JSON schema for kind "${kind}"`,
+                arguments: [{ kind, filePath: document.uri.fsPath }],
+            }));
+        }
+
+        // Build / Deploy dry-run — deployments only
         if (kind && BUILDABLE_KINDS.includes(kind)) {
             lenses.push(new vscode.CodeLens(topRange, {
                 title: '$(play) Build (Dry Run)',
@@ -100,7 +107,7 @@ export class CodeLensProvider
             }));
         }
 
-        // Guide — always shown
+        // Guide — always
         lenses.push(new vscode.CodeLens(topRange, {
             title: '$(list-ordered) Guide',
             command: 'strata.showGuide',
@@ -120,7 +127,6 @@ export class CodeLensProvider
     /**
      * Return true if the document appears to be a strata YAML file.
      * Detection: any line starts with `apiVersion: strata.`
-     * TODO: improve with a proper YAML parse for accuracy.
      */
     private _isStrataDocument(document: vscode.TextDocument): boolean {
         if (document.languageId !== 'yaml') {
@@ -135,10 +141,7 @@ export class CodeLensProvider
         return false;
     }
 
-    /**
-     * Extract the `kind:` value from the document.
-     * TODO: use a proper YAML parser instead of regex.
-     */
+    /** Extract the `kind:` value from the document header. */
     private _detectKind(document: vscode.TextDocument): string | null {
         for (let i = 0; i < Math.min(document.lineCount, 20); i++) {
             const line = document.lineAt(i).text.trim();
