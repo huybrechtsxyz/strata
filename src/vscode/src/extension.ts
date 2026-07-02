@@ -24,6 +24,7 @@ import { DependencyGraphProvider } from './providers/dependencyGraphProvider';
 import { StrataTaskProvider } from './providers/strataTaskProvider';
 import { FileDecorationProvider } from './providers/fileDecorationProvider';
 import { StrataChatParticipant } from './providers/strataChatParticipant';
+import { EnvViewProvider } from './providers/envViewProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -44,6 +45,7 @@ let _depGraph: DependencyGraphProvider | undefined;
 let _taskProvider: StrataTaskProvider | undefined;
 let _fileDecorations: FileDecorationProvider | undefined;
 let _chatParticipant: StrataChatParticipant | undefined;
+let _envView: EnvViewProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,7 @@ async function _refreshAll(): Promise<void> {
     _filesView?.setLoading();
     _reposView?.setLoading();
     _toolsView?.setLoading();
+    _envView?.setLoading();
 
     try {
         const status = await _client.getStatus();
@@ -73,6 +76,7 @@ async function _refreshAll(): Promise<void> {
         _fileDecorations?.update(status);
         _chatParticipant?.update(status);
         void _depGraph?.update(status);
+        _envView?.refresh();
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         _workspaceView?.setError(message);
@@ -80,6 +84,7 @@ async function _refreshAll(): Promise<void> {
         _reposView?.setError(message);
         _toolsView?.setError(message);
         _statusBar?.setError(err);
+        _envView?.setError(message);
         if (err instanceof StrataCLINotFoundError) {
             void vscode.window.showErrorMessage(err.message);
         }
@@ -124,6 +129,8 @@ export function activate(context: vscode.ExtensionContext): void {
     _taskProvider = new StrataTaskProvider(getCliPath(), workPath);
     _fileDecorations = new FileDecorationProvider();
     _chatParticipant = new StrataChatParticipant();
+    _envView = new EnvViewProvider();
+    _envView.setClient(_client);
 
     // ── Register the 4 tree views ──────────────────────────────────────────────
 
@@ -142,6 +149,10 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
         vscode.window.createTreeView('strataTools', {
             treeDataProvider: _toolsView,
+            showCollapseAll: false,
+        }),
+        vscode.window.createTreeView('strataEnvironment', {
+            treeDataProvider: _envView!,
             showCollapseAll: false,
         }),
     );
@@ -273,6 +284,51 @@ export function activate(context: vscode.ExtensionContext): void {
             _client?.runInTerminal(['deploy', 'run', '-f', target, '--force'], 'strata deploy');
         }),
 
+        // ── Env commands ────────────────────────────────────────────────────────
+
+        vscode.commands.registerCommand('strata.envStatus', (filePath?: string) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            // --offline: reads build cache only, no terraform call — instant feedback
+            _client?.runInTerminal(['env', 'status', '-f', target, '--offline'], 'strata env status');
+        }),
+
+        vscode.commands.registerCommand('strata.envDrift', (filePath?: string) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            _client?.runInTerminal(['env', 'drift', '-f', target], 'strata env drift');
+        }),
+
+        vscode.commands.registerCommand('strata.envDoctor', async () => {
+            if (!_client) return;
+            try {
+                const result = await _client.runEnvDoctor();
+                const { passed, warnings, failed } = result.summary;
+                const total = passed + warnings + failed;
+                if (failed === 0 && warnings === 0) {
+                    void vscode.window.showInformationMessage(
+                        `Strata Doctor: all ${total} check${total !== 1 ? 's' : ''} passed ✅`,
+                    );
+                } else {
+                    const parts: string[] = [];
+                    if (passed > 0) parts.push(`${passed} passed`);
+                    if (warnings > 0) parts.push(`${warnings} warning${warnings !== 1 ? 's' : ''}`);
+                    if (failed > 0) parts.push(`${failed} failed`);
+                    const actions: string[] = failed > 0 ? ['Show Details'] : [];
+                    void vscode.window.showWarningMessage(
+                        `Strata Doctor: ${parts.join(' · ')}`,
+                        ...actions,
+                    ).then((v) => {
+                        if (v === 'Show Details') {
+                            _client?.runInTerminal(['env', 'doctor'], 'strata env doctor');
+                        }
+                    });
+                }
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Strata Doctor failed: ${String(err)}`);
+            }
+        }),
+
         vscode.commands.registerCommand('strata.showGuide', () => {
             _guideView?.show(_lastStatus);
         }),
@@ -394,6 +450,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 _client = new StrataClient(getCliPath(), workPath);
                 _statusBar?.setClient(_client);
                 _diagnostics?.setClient(_client);
+                _envView?.setClient(_client);
                 void _refreshAll();
             }
         }),
@@ -445,6 +502,14 @@ export function activate(context: vscode.ExtensionContext): void {
                 }
                 // Refresh regardless so views reflect new state
                 void _refreshAll();
+            }
+            if (name === 'strata env drift') {
+                const exitCode = terminal.exitStatus?.code;
+                if (exitCode === 0) {
+                    void vscode.window.showInformationMessage('Strata: no drift detected ✅');
+                } else if (exitCode === 3) {
+                    void vscode.window.showWarningMessage('Strata: drift detected — review the plan above.');
+                }
             }
         }),
     );

@@ -129,6 +129,29 @@ export interface EnvDoctorData {
     categories: EnvDoctorCategory[];
 }
 
+/** Matches status_env_command._output_data stage entry (multi-deployment mode) */
+export interface EnvStageStatus {
+    name: string;
+    provisioner: string;
+    cached: boolean;
+    cache: { refreshed_at: string | null; output_count: number } | null;
+}
+
+/** Matches status_env_command._output_data deployment entry (multi-deployment mode) */
+export interface EnvDeploymentStatus {
+    file: string;
+    name: string;
+    stages: EnvStageStatus[];
+    stage_count: number;
+    cached_count: number;
+}
+
+/** Matches status_env_command._output_data (multi-deployment mode) */
+export interface EnvStatusData {
+    scan_path: string;
+    deployments: EnvDeploymentStatus[];
+}
+
 // ---------------------------------------------------------------------------
 // CLI response envelope
 // ---------------------------------------------------------------------------
@@ -242,6 +265,17 @@ export class StrataClient {
             }
             throw err;
         }
+    }
+
+    /**
+     * Run `strata env status --all --output json` and return per-deployment
+     * cache status.  Fast and offline — reads build cache files only.
+     */
+    async getEnvStatus(): Promise<EnvStatusData> {
+        const resp = await this._run<EnvStatusData>([
+            'env', 'status', '--all', '--output', 'json',
+        ]);
+        return resp.data;
     }
 
     // ── Build / Deploy — run in terminal so user sees streaming output ─────────
