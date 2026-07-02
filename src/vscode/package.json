@@ -28,6 +28,37 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "strata.chat",
+        "fullName": "Strata",
+        "name": "strata",
+        "description": "Ask questions about your strata infrastructure workspace.",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "status",
+            "description": "Show workspace health, profile, and readiness"
+          },
+          {
+            "name": "validate",
+            "description": "Validate the current file or a named file"
+          },
+          {
+            "name": "guide",
+            "description": "Show the 8-phase readiness checklist"
+          },
+          {
+            "name": "build",
+            "description": "Show how to build your deployment"
+          },
+          {
+            "name": "deploy",
+            "description": "Show how to deploy your deployment"
+          }
+        ]
+      }
+    ],
     "commands": [
       {
         "command": "strata.initWorkspace",

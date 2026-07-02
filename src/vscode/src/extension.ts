@@ -23,6 +23,7 @@ import { SnippetProvider } from './providers/snippetProvider';
 import { DependencyGraphProvider } from './providers/dependencyGraphProvider';
 import { StrataTaskProvider } from './providers/strataTaskProvider';
 import { FileDecorationProvider } from './providers/fileDecorationProvider';
+import { StrataChatParticipant } from './providers/strataChatParticipant';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -42,6 +43,7 @@ let _snippets: SnippetProvider | undefined;
 let _depGraph: DependencyGraphProvider | undefined;
 let _taskProvider: StrataTaskProvider | undefined;
 let _fileDecorations: FileDecorationProvider | undefined;
+let _chatParticipant: StrataChatParticipant | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 
 // ---------------------------------------------------------------------------
@@ -69,6 +71,7 @@ async function _refreshAll(): Promise<void> {
         _guideView?.update(status);
         _crossRef?.update(status.repositories ?? []);
         _fileDecorations?.update(status);
+        _chatParticipant?.update(status);
         void _depGraph?.update(status);
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -120,6 +123,7 @@ export function activate(context: vscode.ExtensionContext): void {
     _depGraph = new DependencyGraphProvider();
     _taskProvider = new StrataTaskProvider(getCliPath(), workPath);
     _fileDecorations = new FileDecorationProvider();
+    _chatParticipant = new StrataChatParticipant();
 
     // ── Register the 4 tree views ──────────────────────────────────────────────
 
@@ -150,6 +154,8 @@ export function activate(context: vscode.ExtensionContext): void {
     _snippets.register(context);
     _taskProvider.register(context);
     _fileDecorations.register();
+    _chatParticipant.setClient(_client);
+    _chatParticipant.register(context);
     _statusBar.show();
 
     // ── Register commands ──────────────────────────────────────────────────────
@@ -455,7 +461,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         _statusBar, _workspaceView, _filesView, _reposView, _toolsView,
         _diagnostics, _codeLens, _guideView, _crossRef, _snippets, _depGraph,
-        _taskProvider, _fileDecorations, solutionWatcher,
+        _taskProvider, _fileDecorations, _chatParticipant, solutionWatcher,
     );
 
     // ── Set context key so menus can use it ────────────────────────────────────
