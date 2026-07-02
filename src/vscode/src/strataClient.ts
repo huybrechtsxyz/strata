@@ -1,18 +1,27 @@
 /**
  * StrataClient — thin wrapper around the strata CLI.
  *
- * Every method spawns `strata <cmd> --output json --quiet` and parses
- * the structured JSON response.  No logic is implemented yet — all methods
- * throw a "not implemented" error as placeholders.
+ * Every method spawns `strata <cmd> --output json --quiet` and parses the
+ * structured JSON envelope that the CLI emits on stdout.
  *
- * TODO: implement each method by spawning a child process via Node's
- *   `child_process.execFile` and parsing stdout as JSON.
+ * JSON envelope shape (every command):
+ *   { success, command, execution_id, timestamp, data: T, messages, errors }
+ *
+ * Exit codes:
+ *   0  — success
+ *   1  — system / execution failure
+ *   2  — usage error (bad CLI args — should not happen from the extension)
+ *   3  — validation failure — stdout still contains the valid JSON envelope
  */
 
 import * as vscode from 'vscode';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 // ---------------------------------------------------------------------------
-// Response types — mirror the JSON shapes returned by the strata CLI
+// JSON shapes returned inside the CLI envelope's `data` field
 // ---------------------------------------------------------------------------
 
 export interface ChecklistItem {
@@ -80,30 +89,65 @@ export interface WorkspaceStatus {
     integrations: Record<string, IntegrationInfo>;
 }
 
+/** Matches ValidationError.to_dict() in strata/models/validation_error.py */
 export interface ValidationError {
-    field: string | null;
+    code: string;
     message: string;
-    severity: 'error' | 'warning';
+    phase: number;
+    field?: string;
+    value?: string;
+    context?: Record<string, unknown>;
 }
 
+/** Matches run_validate_command._output_data */
 export interface ValidationResult {
-    valid: boolean;
-    kind: string | null;
-    name: string | null;
     file: string;
+    kind: string | null;
+    deep: boolean;
+    validation_passed: boolean;
     errors: ValidationError[];
+    suggestions?: string[];
 }
 
 // ---------------------------------------------------------------------------
-// CLI response envelope — wraps every command's data
+// CLI response envelope
 // ---------------------------------------------------------------------------
 
 export interface CliResponse<T> {
     success: boolean;
     command: string;
+    execution_id: string;
+    timestamp: string;
     data: T;
     messages: string[];
     errors: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+/** Thrown when the CLI executable is not found (ENOENT). */
+export class StrataCLINotFoundError extends Error {
+    constructor(cliPath: string) {
+        super(
+            `Strata CLI not found: "${cliPath}". ` +
+            `Check the strata.cliPath setting (e.g. "uv run strata" for uv projects).`,
+        );
+        this.name = 'StrataCLINotFoundError';
+    }
+}
+
+/** Thrown when the CLI returns success:false (exit 1) and no parseable output. */
+export class StrataCLIError extends Error {
+    constructor(
+        public readonly response: CliResponse<unknown> | null,
+        public readonly stderr: string,
+    ) {
+        const detail = response?.errors?.join('; ') ?? stderr;
+        super(`Strata CLI error: ${detail}`);
+        this.name = 'StrataCLIError';
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -118,87 +162,133 @@ export class StrataClient {
 
     // ── Workspace ─────────────────────────────────────────────────────────────
 
-    /**
-     * Run `strata sln status --output json` and return parsed workspace state.
-     * TODO: implement — spawn CLI, parse stdout
-     */
+    /** Run `strata sln status --output json --quiet` and return workspace state. */
     async getStatus(): Promise<WorkspaceStatus> {
-        throw new Error('StrataClient.getStatus — not implemented');
+        const resp = await this._run<WorkspaceStatus>([
+            'sln', 'status', '--output', 'json', '--quiet',
+        ]);
+        return resp.data;
     }
 
     // ── Validation ────────────────────────────────────────────────────────────
 
-    /**
-     * Run `strata validate -f <filePath> --output json` and return parse result.
-     * TODO: implement — spawn CLI, parse stdout
-     */
+    /** Run `strata validate -f <filePath> --output json --quiet`. */
     async validateFile(filePath: string): Promise<ValidationResult> {
-        throw new Error('StrataClient.validateFile — not implemented');
+        // Exit code 3 = validation failure — _run() handles it, returns envelope
+        const resp = await this._run<ValidationResult>([
+            'validate', '-f', filePath, '--output', 'json', '--quiet',
+        ]);
+        return resp.data;
     }
 
     // ── Schema ────────────────────────────────────────────────────────────────
 
-    /**
-     * Run `strata schema wire --work-path <workPath>` to export schemas and
-     * write yaml.schemas into .vscode/settings.json.
-     * TODO: implement — spawn CLI, handle exit code
-     */
+    /** Run `strata schema wire` to export schemas and patch .vscode/settings.json. */
     async wireSchemas(): Promise<void> {
-        throw new Error('StrataClient.wireSchemas — not implemented');
+        await this._run<Record<string, unknown>>([
+            'schema', 'wire', '--output', 'json', '--quiet',
+        ]);
     }
 
-    // ── Build ─────────────────────────────────────────────────────────────────
+    // ── Build / Deploy — run in terminal so user sees streaming output ─────────
 
     /**
-     * Run `strata build run -f <deploymentFile> [--dry-run] --output json`.
-     * TODO: implement — spawn CLI in terminal so user sees progress
+     * Open a VS Code terminal and run a build or deploy command there.
+     * Streaming CLI output is visible to the user in real time.
      */
-    async buildRun(deploymentFile: string, dryRun: boolean): Promise<void> {
-        throw new Error('StrataClient.buildRun — not implemented');
+    runInTerminal(args: string[], terminalName: string): void {
+        const parts = this.cliPath.trim().split(/\s+/);
+        const fullCmd = [...parts, ...args, '--work-path', this.workPath].join(' ');
+        const terminal = vscode.window.createTerminal({ name: terminalName, cwd: this.workPath });
+        terminal.show();
+        terminal.sendText(fullCmd);
     }
 
-    // ── Deploy ────────────────────────────────────────────────────────────────
+    // ── Internal ──────────────────────────────────────────────────────────────
 
     /**
-     * Run `strata deploy run -f <deploymentFile> --dry-run --output json`.
-     * TODO: implement — spawn CLI in terminal, never run real deploy via extension
-     */
-    async deployDryRun(deploymentFile: string): Promise<void> {
-        throw new Error('StrataClient.deployDryRun — not implemented');
-    }
-
-    // ── Internal helpers ──────────────────────────────────────────────────────
-
-    /**
-     * TODO: implement — use child_process.execFile to run the CLI and return
-     * parsed JSON. Handle exit code 3 (validation failure) without throwing.
+     * Spawn the CLI, parse JSON from stdout, and return the envelope.
+     *
+     * - Always appends `--work-path <workPath>` so the CLI targets the correct workspace.
+     * - Exit code 3 (validation failure) is treated as a successful call — stdout
+     *   contains the valid envelope with validation_passed:false in data.
+     * - Exit code 'ENOENT' means the CLI binary is not installed.
      */
     private async _run<T>(args: string[]): Promise<CliResponse<T>> {
-        throw new Error('StrataClient._run — not implemented');
-    }
+        // Support compound CLI paths like "uv run strata"
+        const parts = this.cliPath.trim().split(/\s+/);
+        const executable = parts[0];
+        const prefixArgs = parts.slice(1);
 
-    /**
-     * TODO: implement — open a VS Code terminal and run the command there so
-     * the user can see streaming output (for build/deploy operations).
-     */
-    private _runInTerminal(args: string[], terminalName: string): void {
-        const terminal = vscode.window.createTerminal(terminalName);
-        terminal.show();
-        terminal.sendText(`${this.cliPath} ${args.join(' ')}`);
+        const fullArgs = [
+            ...prefixArgs,
+            ...args,
+            '--work-path', this.workPath,
+        ];
+
+        let stdout = '';
+        let stderr = '';
+
+        try {
+            const result = await execFileAsync(executable, fullArgs, {
+                timeout: 30_000,
+                maxBuffer: 10 * 1024 * 1024, // 10 MB
+                windowsHide: true,
+            });
+            stdout = result.stdout;
+            stderr = result.stderr;
+        } catch (err: unknown) {
+            const execErr = err as NodeJS.ErrnoException & {
+                stdout?: string;
+                stderr?: string;
+                code?: number | string;
+            };
+
+            stdout = execErr.stdout ?? '';
+            stderr = execErr.stderr ?? '';
+
+            // CLI not installed
+            if (execErr.code === 'ENOENT') {
+                throw new StrataCLINotFoundError(this.cliPath);
+            }
+
+            // Exit code 3 = validation failure — stdout has valid JSON
+            if (typeof execErr.code === 'number' && execErr.code === 3 && stdout) {
+                // Fall through to parse below
+            } else if (!stdout) {
+                // Exit 1 with no parseable output — surface the error
+                throw new StrataCLIError(null, stderr);
+            }
+        }
+
+        let envelope: CliResponse<T>;
+        try {
+            envelope = JSON.parse(stdout) as CliResponse<T>;
+        } catch {
+            throw new StrataCLIError(null, `Could not parse CLI output: ${stdout.slice(0, 200)}`);
+        }
+
+        // success:false with exit 1 — propagate as error so callers don't have to check
+        if (!envelope.success && envelope.errors?.length) {
+            throw new StrataCLIError(envelope as CliResponse<unknown>, stderr);
+        }
+
+        return envelope;
     }
 }
 
-/**
- * Read the CLI path from VS Code settings.
- */
+// ---------------------------------------------------------------------------
+// Helpers read by extension.ts
+// ---------------------------------------------------------------------------
+
+/** Read the CLI path from VS Code settings. */
 export function getCliPath(): string {
     const config = vscode.workspace.getConfiguration('strata');
     return config.get<string>('cliPath', 'strata');
 }
 
-/**
- * Read the workspace root from the first opened workspace folder.
- */
+/** Return the first open workspace folder's fs path, or undefined. */
 export function getWorkPath(): string | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
+
