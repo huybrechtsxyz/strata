@@ -325,7 +325,7 @@ mv customers/ tenants/
 
 ### Added
 
-- **`strata env state`** — show live infrastructure state per deployment stage (resources, serial, outputs from `terraform show -json`). Supports `--offline` for cached-only mode.
+- **`strata env status`** — show live infrastructure status per deployment stage (resources, serial, outputs from `terraform show -json`). Supports `--offline` for cached-only mode. `--all` / `--path DIR` scan multiple deployment manifests and show a one-line summary per deployment (offline/cache-based).
 - **`strata env drift`** — detect drift between desired config and live infrastructure using `terraform plan -detailed-exitcode`. Reports create/update/delete/replace counts per stage.
 - **`strata values set`** — write a value to its configured store backend. Dispatches to constant (print location), environment (export instruction), github (`gh secret set`), or integration backends. Supports `--value`, `--from-file`, and `--stdin` for multiline input.
 - **`strata values resolve`** — diagnose value resolution paths without revealing actual values. Walks the resolution chain with checkpoints per store type. `--probe` flag attempts actual backend resolution (pass/fail only).

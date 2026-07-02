@@ -1,11 +1,13 @@
-"""Command to show the live state of a deployed environment."""
+"""Command to show the live status of a deployed environment."""
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import click
+import yaml
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.deployers.terraform_deployer import TerraformDeployer
@@ -13,20 +15,24 @@ from strata.models.common_models import ProvisionerType
 from strata.models.deployment_model import DeploymentStageModel
 
 
-class StateEnvCommand(BaseDeployCommand):
-    """Show the live state of a deployed environment.
+class StatusEnvCommand(BaseDeployCommand):
+    """Show the live status of a deployed environment.
 
-    Per stage, queries the remote backend and reports:
-      - Resource count (from terraform state)
+    Single deployment (-f): per-stage detail — resources, outputs, serial, cache.
+    Multi deployment (--all / --path DIR): one-line summary per deployment found.
+    Multi-deployment mode is always offline (reads build cache only).
+
+    Per stage (single-deployment live mode), queries the remote backend and reports:
+      - Resource count (from ``terraform show -json``)
       - Output count and keys
       - Last apply serial number
-      - Cached output freshness (from .tf-outputs.json)
+      - Cached output freshness (from ``.tf-outputs.json``)
       - Overall reachability (can we talk to the backend?)
 
     Non-terraform stages report limited info (provisioner type, reachability).
     """
 
-    OPERATION = "env_state"
+    OPERATION = "env_status"
 
     def __init__(
         self,
@@ -34,6 +40,8 @@ class StateEnvCommand(BaseDeployCommand):
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
         offline: bool = False,
+        path: Optional[str] = None,
+        all_deployments: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -47,10 +55,12 @@ class StateEnvCommand(BaseDeployCommand):
         )
         self._stage = stage
         self._offline = offline
+        self._path = path
+        self._all = all_deployments
 
     def get_required_integrations(self) -> dict:
-        # Offline mode only reads the build cache — no terraform call needed.
-        if self._offline:
+        # Multi-deployment and offline modes only read the build cache — no terraform call needed.
+        if self._offline or self._all or self._path:
             return {}
         return {"terraform": "querying live infrastructure state"}
 
@@ -62,28 +72,136 @@ class StateEnvCommand(BaseDeployCommand):
                 self._finalize(success=False)
                 return False
 
+            # Multi-deployment mode: bypass _before_execute() (no single file required)
+            if self._all or self._path:
+                ok = self._run_multi()
+                self._finalize(success=ok)
+                return ok
+
+            # Single-deployment mode: standard BaseDeployCommand path
             if not self._before_execute():
                 if self._is_console_output():
                     click.echo("\n❌  Pre-execution validation failed")
                 self._finalize(success=False)
                 return False
 
-            ok = self._run()
+            ok = self._run_single()
             self._after_execute()
             self._finalize(success=ok)
             return ok
 
         except Exception as exc:
-            self._errors.append(f"Failed to execute env_state: {exc}")
-            self.logger.exception("env_state failed")
+            self._errors.append(f"Failed to execute env_status: {exc}")
+            self.logger.exception("env_status failed")
             self._finalize(success=False)
             return False
 
     # ------------------------------------------------------------------
-    # Core logic
+    # Multi-deployment mode
     # ------------------------------------------------------------------
 
     def _run(self) -> bool:
+        return self._run_single()
+
+    def _run_multi(self) -> bool:
+        """Scan for deployment YAML files and show a one-line status per deployment."""
+        scan_root = Path(self._path).resolve() if self._path else self._work_path
+        if not scan_root.exists() or not scan_root.is_dir():
+            self._errors.append(f"Path does not exist or is not a directory: {scan_root}")
+            return False
+
+        entries: List[Dict[str, Any]] = []
+        for yaml_file in sorted(scan_root.rglob("*.yaml")):
+            entry = self._extract_deployment_status(yaml_file)
+            if entry is not None:
+                entries.append(entry)
+
+        if self._is_console_output():
+            if not entries:
+                click.echo(f"\n  (no deployment manifests found under {scan_root})\n")
+            else:
+                mode_label = f"--path {scan_root}" if self._path else "--all"
+                click.echo(f"\n📊  Deployment Status — {len(entries)} deployment(s) [{mode_label}]\n")
+                for entry in entries:
+                    self._print_deployment_summary(entry)
+
+        self._output_data = {
+            "scan_path": str(scan_root),
+            "deployments": entries,
+        }
+        return True
+
+    def _extract_deployment_status(self, yaml_path: Path) -> Optional[Dict[str, Any]]:
+        """Parse a YAML file and return a status summary if it is a deployment manifest."""
+        try:
+            raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+        if not isinstance(raw, dict):
+            return None
+        if raw.get("kind") != "deployment":
+            return None
+
+        meta = raw.get("meta") or {}
+        spec = raw.get("spec") or {}
+        stages = spec.get("stages") or []
+
+        stage_summaries: List[Dict[str, Any]] = []
+        for stage in stages:
+            stage_name = stage.get("name") or ""
+            provisioner = stage.get("provisioner") or "terraform"
+            cache_info = self._read_output_cache_by_name(str(stage_name))
+            stage_summaries.append({
+                "name": str(stage_name),
+                "provisioner": str(provisioner),
+                "cached": cache_info is not None,
+                "cache": cache_info,
+            })
+
+        cached_count = sum(1 for s in stage_summaries if s["cached"])
+        return {
+            "file": str(yaml_path.resolve()),
+            "name": meta.get("name") or "",
+            "stages": stage_summaries,
+            "stage_count": len(stage_summaries),
+            "cached_count": cached_count,
+        }
+
+    def _print_deployment_summary(self, entry: Dict[str, Any]) -> None:
+        name = entry["name"] or entry["file"]
+        stage_count = entry["stage_count"]
+        cached_count = entry["cached_count"]
+        stages = entry["stages"]
+
+        if stage_count == 0:
+            status_icon = "⬜"
+        elif cached_count == stage_count:
+            status_icon = "✅"
+        elif cached_count > 0:
+            status_icon = "⚠️ "
+        else:
+            status_icon = "⬜"
+
+        click.echo(f"  {status_icon} {name}  ({cached_count}/{stage_count} stages cached)")
+
+        for stage in stages:
+            stage_icon = "✓" if stage["cached"] else "○"
+            cache = stage.get("cache")
+            cache_detail = ""
+            if cache:
+                refreshed = cache.get("refreshed_at", "unknown")
+                out_count = cache.get("output_count", 0)
+                cache_detail = f"  {refreshed}  {out_count} output(s)"
+            click.echo(f"      {stage_icon} {stage['name']}{cache_detail}")
+
+        click.echo()
+
+    # ------------------------------------------------------------------
+    # Single-deployment mode
+    # ------------------------------------------------------------------
+
+    def _run_single(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False
@@ -103,17 +221,14 @@ class StateEnvCommand(BaseDeployCommand):
 
         if self._is_console_output():
             mode = "offline (cached)" if self._offline else "live"
-            click.echo(f"\n📊  Environment state ({mode}) — {deployment_model.meta.name}")
+            click.echo(f"\n📊  Environment status ({mode}) — {deployment_model.meta.name}")
             click.echo(f"    {len(stages)} stage(s)\n")
 
         stage_results: List[Dict[str, Any]] = []
-        any_failed = False
 
         for stage in stages:
             result = self._query_stage_state(stage)
             stage_results.append(result)
-            if not result["reachable"]:
-                any_failed = True
             if self._is_console_output():
                 self._print_stage_state(result)
 
@@ -124,7 +239,7 @@ class StateEnvCommand(BaseDeployCommand):
             "stages": stage_results,
         }
 
-        return True  # state query is best-effort; unreachable stages don't fail the command
+        return True  # status query is best-effort; unreachable stages don't fail the command
 
     # ------------------------------------------------------------------
     # Per-stage state query
@@ -158,7 +273,7 @@ class StateEnvCommand(BaseDeployCommand):
         # Resolve provisioner type
         provisioner_type = self._resolve_provisioner_type(stage)
         if provisioner_type != "terraform":
-            # Non-terraform: limited state (just reachability check via cache)
+            # Non-terraform: limited info (reachability via cache)
             result["reachable"] = cache_info is not None
             return result
 
@@ -185,14 +300,12 @@ class StateEnvCommand(BaseDeployCommand):
         if state_data:
             result["reachable"] = True
             resources = state_data.get("values", {}).get("root_module", {}).get("resources", [])
-            # Include child module resources
             child_modules = state_data.get("values", {}).get("root_module", {}).get("child_modules", [])
             for child in child_modules:
                 resources.extend(child.get("resources", []))
             result["resources"] = len(resources)
             result["serial"] = state_data.get("serial")
 
-            # Also fetch outputs
             ok, outputs, _ = deployer.output()
             if ok:
                 result["outputs"] = len(outputs)
@@ -201,7 +314,7 @@ class StateEnvCommand(BaseDeployCommand):
         return result
 
     def _fetch_terraform_state(self, deployer: TerraformDeployer) -> Optional[Dict[str, Any]]:
-        """Run terraform show -json (current state) and return parsed data."""
+        """Run ``terraform show -json`` (current state) and return parsed data."""
         try:
             assert deployer._working_dir is not None
             assert deployer._tf is not None
@@ -217,8 +330,12 @@ class StateEnvCommand(BaseDeployCommand):
             return None
 
     def _read_output_cache(self, stage: DeploymentStageModel) -> Optional[Dict[str, Any]]:
-        """Read the cached .tf-outputs.json for a stage."""
-        cache_file = self._build_path / f"{stage.name}.tf-outputs.json"
+        """Read the cached ``.tf-outputs.json`` for a stage model."""
+        return self._read_output_cache_by_name(str(stage.name))
+
+    def _read_output_cache_by_name(self, stage_name: str) -> Optional[Dict[str, Any]]:
+        """Read the cached ``.tf-outputs.json`` for a stage given by name."""
+        cache_file = self._build_path / f"{stage_name}.tf-outputs.json"
         if not cache_file.exists():
             return None
         try:
@@ -257,7 +374,7 @@ class StateEnvCommand(BaseDeployCommand):
         return "unknown"
 
     # ------------------------------------------------------------------
-    # Deployer factory (reused from StatusDeployCommand pattern)
+    # Deployer factory
     # ------------------------------------------------------------------
 
     def _create_deployer(self, stage: DeploymentStageModel) -> Optional[TerraformDeployer]:

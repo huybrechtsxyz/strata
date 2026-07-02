@@ -17,7 +17,7 @@ from strata.commands.envs.drift_env_command import DriftEnvCommand
 from strata.commands.envs.info_env_command import InfoEnvCommand
 from strata.commands.envs.output_env_command import OutputEnvCommand
 from strata.commands.envs.show_env_command import ShowEnvCommand
-from strata.commands.envs.state_env_command import StateEnvCommand
+from strata.commands.envs.status_env_command import StatusEnvCommand
 
 
 @click.group(
@@ -145,39 +145,56 @@ def env_show(
     handle_command_exit(command, success)
 
 
-@env_group.command(name="state", help="Show the live infrastructure state for a deployment.")
+@env_group.command(name="status", help="Show the live infrastructure status for a deployment.")
 @click_file
 @click_work_path
 @click.option(
     "--stage",
     default=None,
     metavar="NAME",
-    help="Query only a single stage (default: all).",
+    help="Query only a single stage (default: all). Single-deployment mode only.",
 )
 @click.option(
     "--offline",
     is_flag=True,
     default=False,
-    help="Use cached data only — do not contact remote backends.",
+    help="Use cached data only — do not contact remote backends. Single-deployment mode only.",
+)
+@click.option(
+    "--path",
+    default=None,
+    metavar="DIR",
+    help="Scan a directory for deployment manifests and show a summary for each.",
+)
+@click.option(
+    "--all",
+    "all_deployments",
+    is_flag=True,
+    default=False,
+    help="Scan the entire workspace for deployment manifests and show a summary for each.",
 )
 @click_output_format
 @click_output_verbose
 @click_output_quiet
-def env_state(
+def env_status(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
     offline: bool = False,
+    path: Optional[str] = None,
+    all_deployments: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
 ) -> None:
-    """Show live infrastructure state: resources, outputs, serial, cache freshness."""
-    command = StateEnvCommand(
+    """Show infrastructure status: per-stage resources, outputs, serial, and cache freshness."""
+    command = StatusEnvCommand(
         file=file,
         work_path=work_path,
         stage=stage,
         offline=offline,
+        path=path,
+        all_deployments=all_deployments,
         output=output,
         verbose=verbose,
         quiet=quiet,
