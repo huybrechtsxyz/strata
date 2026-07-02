@@ -12,6 +12,7 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
+from strata.commands.envs.doctor_env_command import DoctorEnvCommand
 from strata.commands.envs.drift_env_command import DriftEnvCommand
 from strata.commands.envs.info_env_command import InfoEnvCommand
 from strata.commands.envs.output_env_command import OutputEnvCommand
@@ -210,6 +211,55 @@ def env_drift(
         file=file,
         work_path=work_path,
         stage=stage,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@env_group.command(name="doctor", help="Run a workspace health check: runtime, tools, config, and auth.")
+@click.option(
+    "--file",
+    "-f",
+    default=None,
+    envvar="STRATA_FILE",
+    metavar="PATH",
+    help="Deployment file — enables requirement-level derivation for tools. [env: STRATA_FILE]",
+)
+@click_work_path
+@click.option(
+    "--category",
+    default=None,
+    type=click.Choice(["runtime", "workspace", "tools", "config", "auth"], case_sensitive=False),
+    metavar="NAME",
+    help="Run only a specific check category.",
+)
+@click.option(
+    "--deep",
+    is_flag=True,
+    default=False,
+    help="Run slow checks: backend reachability and auth validation.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def env_doctor(
+    file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    category: Optional[str] = None,
+    deep: bool = False,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+) -> None:
+    """Run a workspace health check across runtime, workspace, tools, config, and auth."""
+    command = DoctorEnvCommand(
+        file=file,
+        work_path=work_path,
+        category=category,
+        deep=deep,
         output=output,
         verbose=verbose,
         quiet=quiet,
