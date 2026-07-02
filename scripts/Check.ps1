@@ -59,6 +59,11 @@ if (-not $env:VIRTUAL_ENV) {
     & "$projectRoot\.venv\Scripts\Activate.ps1"
 }
 
+# The corporate PyPI index uses first-index strategy by default, which prevents
+# finding setuptools>=70.3.0 in the secondary index. Override for this script.
+$prevIndexStrategy = $env:UV_INDEX_STRATEGY
+$env:UV_INDEX_STRATEGY = "unsafe-best-match"
+
 # Track overall result
 $failed = @()
 
@@ -152,7 +157,7 @@ if ($SkipDocsBuild) {
 }
 else {
     Write-Host "[*] Sphinx docs build..." -ForegroundColor Blue
-    uv sync --group doc 2>&1 | Out-Null
+    uv sync --extra doc 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "    [!] Failed to install doc group dependencies" -ForegroundColor Red
         $failed += "sphinx docs build"
@@ -172,6 +177,9 @@ else {
 }
 Write-Host ""
 # ── Summary ─────────────────────────────────────────────────────────────────
+# Restore the original index strategy
+$env:UV_INDEX_STRATEGY = $prevIndexStrategy
+
 if ($failed.Count -eq 0) {
     Write-Host "[+] ================================================" -ForegroundColor Cyan
     Write-Host "[+] All checks passed!" -ForegroundColor Green

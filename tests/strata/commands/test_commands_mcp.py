@@ -92,9 +92,9 @@ def _make_fake_mcp_module() -> ModuleType:
         def run(self, transport: str = "stdio") -> None:
             pass
 
-    fake_fastmcp_mod.FastMCP = _FakeFastMCP
-    fake_mcp.server = fake_server
-    fake_server.fastmcp = fake_fastmcp_mod
+    fake_fastmcp_mod.FastMCP = _FakeFastMCP  # type: ignore[attr-defined]
+    fake_mcp.server = fake_server  # type: ignore[attr-defined]
+    fake_server.fastmcp = fake_fastmcp_mod  # type: ignore[attr-defined]
     return fake_mcp
 
 

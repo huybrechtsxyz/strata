@@ -48,6 +48,9 @@ dynamic = ["version"]
 [tool.setuptools.dynamic]
 version = { file = "VERSION.txt" }
 
+[tool.uv]
+index-strategy = "unsafe-best-match"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

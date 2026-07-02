@@ -1,6 +1,4 @@
-############
-VS Code Extension
-############
+# VS Code Extension
 
 The Strata VS Code extension brings the full power of the strata CLI into your editor. It provides:
 
