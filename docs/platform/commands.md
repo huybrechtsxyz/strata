@@ -1554,11 +1554,11 @@ strata audit changes [--last N] [--since TIMESTAMP] [--stage NAME] [standard opt
 
 List recent deployment executions from the local deploy-log. Results are sorted by timestamp descending (most recent first).
 
-| Option             | Default | Description                                                                  |
-| ------------------ | ------- | ---------------------------------------------------------------------------- |
-| `--last N`         | `10`    | Maximum number of entries to show                                            |
-| `--since TIMESTAMP`| —       | Show only entries on or after an ISO 8601 timestamp (e.g. `2026-01-15T00:00:00Z`) |
-| `--stage NAME`     | —       | Show only entries that include a stage with this exact name                  |
+| Option              | Default | Description                                                                       |
+| ------------------- | ------- | --------------------------------------------------------------------------------- |
+| `--last N`          | `10`    | Maximum number of entries to show                                                 |
+| `--since TIMESTAMP` | —       | Show only entries on or after an ISO 8601 timestamp (e.g. `2026-01-15T00:00:00Z`) |
+| `--stage NAME`      | —       | Show only entries that include a stage with this exact name                       |
 
 ```bash
 # Show the 10 most recent deployments
@@ -1586,9 +1586,9 @@ strata audit resend [--last N] [--since TIMESTAMP] [standard options]
 
 Re-forward local deploy-log entries to all configured audit sinks (webhook, ndjson, syslog, SIEM integrations). Useful after adding a new sink or recovering from a delivery failure.
 
-| Option              | Default | Description                                  |
-| ------------------- | ------- | -------------------------------------------- |
-| `--last N`          | —       | Resend only the last N entries               |
+| Option              | Default | Description                                     |
+| ------------------- | ------- | ----------------------------------------------- |
+| `--last N`          | —       | Resend only the last N entries                  |
 | `--since TIMESTAMP` | —       | Resend only entries since an ISO 8601 timestamp |
 
 ```bash
@@ -1612,12 +1612,12 @@ strata audit export [--last N] [--since TIMESTAMP] [--format json|ndjson] [--out
 
 Export deploy-log entries to a file or stdout. Useful for offline compliance reviews and feeding records into external tooling.
 
-| Option              | Default  | Description                                           |
-| ------------------- | -------- | ----------------------------------------------------- |
-| `--last N`          | —        | Export only the last N entries                        |
-| `--since TIMESTAMP` | —        | Export only entries since an ISO 8601 timestamp       |
-| `--format`          | `json`   | Output format: `json` (array) or `ndjson` (one per line) |
-| `--out PATH`        | stdout   | Write to a file instead of stdout                     |
+| Option              | Default | Description                                              |
+| ------------------- | ------- | -------------------------------------------------------- |
+| `--last N`          | —       | Export only the last N entries                           |
+| `--since TIMESTAMP` | —       | Export only entries since an ISO 8601 timestamp          |
+| `--format`          | `json`  | Output format: `json` (array) or `ndjson` (one per line) |
+| `--out PATH`        | stdout  | Write to a file instead of stdout                        |
 
 ```bash
 # Export all records as JSON array to stdout
@@ -1651,16 +1651,16 @@ spec:
 
 **Path templates** — `structure` accepts a named path from `spec.deployment.paths` or an inline [Jinja2](https://jinja.palletsprojects.com/) template. Available tokens:
 
-| Token                 | Example                   | Always available |
-| --------------------- | ------------------------- | ---------------- |
-| `{{ deployment }}`    | `xyz_platform_prd`        | Yes              |
-| `{{ workspace }}`     | `xyz_platform`            | Yes              |
-| `{{ environment }}`   | `prd`                     | Yes              |
-| `{{ timestamp }}`     | `2026-06-24T14-32-00Z`    | Yes              |
-| `{{ date }}`          | `2026-06-24`              | Yes              |
-| `{{ tenant }}`        | `example-xyz`             | No (if labelled) |
-| `{{ version }}`       | `1.0.0`                   | No (if labelled) |
-| `{{ stage }}`         | `infrastructure`          | Per-stage only   |
+| Token               | Example                | Always available |
+| ------------------- | ---------------------- | ---------------- |
+| `{{ deployment }}`  | `xyz_platform_prd`     | Yes              |
+| `{{ workspace }}`   | `xyz_platform`         | Yes              |
+| `{{ environment }}` | `prd`                  | Yes              |
+| `{{ timestamp }}`   | `2026-06-24T14-32-00Z` | Yes              |
+| `{{ date }}`        | `2026-06-24`           | Yes              |
+| `{{ tenant }}`      | `example-xyz`          | No (if labelled) |
+| `{{ version }}`     | `1.0.0`                | No (if labelled) |
+| `{{ stage }}`       | `infrastructure`       | Per-stage only   |
 
 ### SIEM sink configuration
 
