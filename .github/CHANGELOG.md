@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+---
+
+## [0.15.0] — 2026-07-02
+
 ### Added
 
 - **`strata env status`** — renamed from `strata env state` for naming consistency; added `--all` and `--path DIR` flags to scan all deployment manifests in the workspace without requiring a single `-f FILE`
