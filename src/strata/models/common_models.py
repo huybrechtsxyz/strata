@@ -66,6 +66,7 @@ class PlatformVersion(str, Enum):
     """Enumeration of supported platform versions."""
 
     v1 = "strata.huybrechts.xyz/v1"
+    v1_omp = "strata.omp.com/v1"
 
 
 # Enumeration of supported provisioner names.

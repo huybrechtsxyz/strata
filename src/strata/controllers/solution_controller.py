@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 from strata.controllers.base_controller import BaseController
 from strata.logger.logger import get_active_log_file
+from strata.models.common_models import PlatformVersion
 from strata.models.solution_model import (
     SolutionModel,
     SolutionSpecProfileConfigModel,
@@ -190,7 +191,7 @@ class SolutionController(BaseController):
                 self._solution.meta.name = name  # type: ignore[assignment]
         else:
             self._solution = SolutionModel(
-                apiVersion="strata.huybrechts.xyz/v1",
+                apiVersion=PlatformVersion.v1,
                 kind="solution",
                 meta={"name": name},  # type: ignore[arg-type]
                 spec={"solution_id": generate_uuid()},  # type: ignore[arg-type]
