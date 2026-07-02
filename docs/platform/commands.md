@@ -73,7 +73,7 @@ strata sln init --name NAME [--template NAME-OR-PATH] [--list] [standard options
 | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `--name NAME`             | ✅        | Name of the solution workspace                                                                                                            |
 | `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`, `compose`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
-| `--list`                  | —        | List available scaffold templates and exit. Does not require `--name`.                                                                     |
+| `--list`                  | —        | List available scaffold templates and exit. Does not require `--name`.                                                                    |
 
 **Discovering templates:**
 
@@ -194,10 +194,10 @@ strata sln export --name NAME [--force] [--dry-run] [standard options]
 
 **Output structure:**
 
-| Path                                     | Description                                           |
-| ---------------------------------------- | ----------------------------------------------------- |
+| Path                                     | Description                                              |
+| ---------------------------------------- | -------------------------------------------------------- |
 | `.strata/templates/<name>/scaffold/`     | Workspace files with `{{ solution_name }}` substitutions |
-| `.strata/templates/<name>/template.yaml` | Template manifest (name, description, variables)      |
+| `.strata/templates/<name>/template.yaml` | Template manifest (name, description, variables)         |
 
 **Excluded from export:** `.git/`, `repos/`, `.venv/`, `node_modules/`, `.strata/logs/`, `__pycache__/`, `*.pyc`, `*.log`
 
@@ -276,14 +276,14 @@ strata new TEMPLATE NAME [--path PATH] [--overwrite] [--set KEY=VALUE ...] [stan
 strata new --list
 ```
 
-| Option / Argument | Description                                                       |
-| ----------------- | ----------------------------------------------------------------- |
-| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `tenant`)            |
+| Option / Argument | Description                                                          |
+| ----------------- | -------------------------------------------------------------------- |
+| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `tenant`)               |
 | `NAME`            | Injected as `{{ name }}`; used in output filenames and path segments |
-| `--path PATH`     | Output directory (default: current directory)                     |
-| `--overwrite`     | Overwrite output file(s) if they already exist                    |
-| `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)           |
-| `--list`          | List available templates and bundles, then exit                   |
+| `--path PATH`     | Output directory (default: current directory)                        |
+| `--overwrite`     | Overwrite output file(s) if they already exist                       |
+| `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)              |
+| `--list`          | List available templates and bundles, then exit                      |
 
 **Template discovery** — `strata new --list` shows all templates grouped by type:
 
@@ -868,10 +868,10 @@ Interactive workspace session with guided onboarding. Launches a persistent REPL
 strata console [OPTIONS]
 ```
 
-| Option             | Type | Default       | Description                                                                 |
-| ------------------ | ---- | ------------- | --------------------------------------------------------------------------- |
-| `--work-path PATH` | path | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH`, then CWD walk.  |
-| `--no-color`       | flag | off           | Disable color output.                                                       |
+| Option             | Type | Default       | Description                                                                |
+| ------------------ | ---- | ------------- | -------------------------------------------------------------------------- |
+| `--work-path PATH` | path | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH`, then CWD walk. |
+| `--no-color`       | flag | off           | Disable color output.                                                      |
 
 **Exit code:** `0` on normal exit · `1` on crash.
 
@@ -1256,17 +1256,22 @@ jobs:
       - run: strata deploy run --file "${{ matrix.deployment.file }}"
 ```
 
-### `deploy status`
+### `deploy plan`
 
 ```
-strata deploy status [-f FILE] [--stage NAME] [--plan] [standard options]
+strata deploy plan -f FILE [--stage NAME] [standard options]
 ```
 
-Show live Terraform outputs or saved plan details. `--plan` reads the last saved `.tfplan` file without backend calls.
+Show the resource change summary from the last saved `.tfplan` file produced by `deploy run --dry-run`. Runs `terraform show -json` locally — no backend calls.
+
+| Option         | Description                        |
+| -------------- | ---------------------------------- |
+| `--stage NAME` | Limit to a single deployment stage |
 
 ```bash
-strata deploy status -f xyz-deploy-prd.yaml
-strata deploy status --stage production --plan
+strata deploy plan -f xyz-deploy-prd.yaml
+strata deploy plan -f xyz-deploy-prd.yaml --stage production
+strata deploy plan -f xyz-deploy-prd.yaml --output json
 ```
 
 ### `deploy history`
@@ -1313,35 +1318,8 @@ Show Terraform outputs from the local cache (`.tf-outputs.json`) or fetch live f
 strata deploy output -f xyz-deploy-prd.yaml
 strata deploy output -f xyz-deploy-prd.yaml --stage production --key endpoint
 strata deploy output -f xyz-deploy-prd.yaml --refresh
-```
-
-### `deploy outputs`
-
-```
-strata deploy outputs -f FILE [--stage NAME] [--key NAME] [--version VERSION] [--all-versions] [standard options]
-```
-
-Show **stored output artifacts** written by `deploy run` to the configured outputs path (default: `.strata/outputs`). These files persist across runs and are not affected by Terraform state changes.
-
-Distinct from `deploy output`: `deploy output` reads the Terraform cache / hits the backend live; `deploy outputs` reads the durable per-stage JSON artifact files.
-
-| Option              | Description                                                                      |
-| ------------------- | -------------------------------------------------------------------------------- |
-| `--stage NAME`      | Limit display to a single stage                                                  |
-| `--key NAME`        | Show only a single output key                                                    |
-| `--version VERSION` | Show artifacts for a specific version tag (default: current version from labels) |
-| `--all-versions`    | Show artifacts for every version directory found in the outputs path             |
-
-Artifacts are grouped by version in console output. Sensitive values are shown as `(sensitive)` or omitted, depending on `spec.deployment.outputs.sensitive` in the configuration.
-
-**Output keys (`--output json`):** `deployment`, `artifacts[]` (each with `deployment`, `version`, `stage`, `written_at`, `outputs{}`).
-
-```bash
-strata deploy outputs -f xyz-deploy-prd.yaml
-strata deploy outputs -f xyz-deploy-prd.yaml --stage production
-strata deploy outputs -f xyz-deploy-prd.yaml --key endpoint
-strata deploy outputs -f xyz-deploy-prd.yaml --all-versions
-strata deploy outputs -f xyz-deploy-prd.yaml --version 2.0.0 --output json
+strata deploy output -f xyz-deploy-prd.yaml --version 2.0.0
+strata deploy output -f xyz-deploy-prd.yaml --all-versions --output json
 ```
 
 ### `deploy lock`
@@ -1403,6 +1381,52 @@ strata deploy lock history -f xyz-deploy-prd.yaml --output json
 ```
 
 **JSON output keys:** `deployment`, `entries[]` — each entry: `lock_id`, `holder`, `hostname`, `pid`, `acquired_at`, `expires_at`, `reason`, `stage`.
+
+---
+
+## `env`
+
+Inspect environment configuration and live infrastructure state.
+
+### `env info`
+
+```
+strata env info [standard options]
+```
+
+Show instant workspace context — solution name, active profile, strata version, and work path. No subprocess calls.
+
+```bash
+strata env info
+strata env info --output json
+```
+
+**JSON output keys:** `solution_id`, `active_profile`, `version`, `work_path`.
+
+### `env output`
+
+```
+strata env output -f FILE [--name NAME] [--provisioner NAME] [--raw] [--json] [standard options]
+```
+
+Show live Terraform outputs per stage by running `terraform output -json` against the backend. Results are grouped by provisioner in a table.
+
+| Option               | Description                                                                                   |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `--name NAME`        | Show only a single output key across all stages                                               |
+| `--provisioner NAME` | Limit to stages referencing a specific provisioner                                            |
+| `--raw`              | Print the bare value only — requires `--name`. Suppresses all chrome; ideal for shell scripts |
+| `--json`             | Emit the raw outputs dict as JSON — bypasses the strata envelope                              |
+
+```bash
+strata env output -f xyz-deploy-prd.yaml
+strata env output -f xyz-deploy-prd.yaml --name endpoint
+strata env output -f xyz-deploy-prd.yaml --provisioner platform_iac
+IP=$(strata env output -f deploy.yaml --name hearth_ip --raw)
+strata env output -f xyz-deploy-prd.yaml --json
+```
+
+**JSON output keys:** `file`, `stages{}` — each stage: `provisioner`, `outputs{}`, `ok`, `error`.
 
 ---
 

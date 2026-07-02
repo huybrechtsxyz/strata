@@ -77,23 +77,23 @@ class TestDeployDestroy:
         assert result.exit_code != 0
 
 
-class TestDeployStatus:
-    def test_status_basic(self, tmp_path):
+class TestDeployPlan:
+    def test_plan_basic(self, tmp_path):
         runner = CliRunner()
-        with patch("strata.commands.deploy.status_deploy_command.StatusDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["status", "--work-path", str(tmp_path)])
+        with patch("strata.commands.deploy.plan_deploy_command.PlanDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["plan", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
-    def test_status_show_plan_flag(self, tmp_path):
+    def test_plan_with_file(self, tmp_path):
         runner = CliRunner()
-        with patch("strata.commands.deploy.status_deploy_command.StatusDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["status", "--plan", "--work-path", str(tmp_path)])
+        with patch("strata.commands.deploy.plan_deploy_command.PlanDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["plan", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
-    def test_status_stage_option(self, tmp_path):
+    def test_plan_stage_option(self, tmp_path):
         runner = CliRunner()
-        with patch("strata.commands.deploy.status_deploy_command.StatusDeployCommand.execute", return_value=True):
-            result = runner.invoke(deploy, ["status", "--stage", "production", "--work-path", str(tmp_path)])
+        with patch("strata.commands.deploy.plan_deploy_command.PlanDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["plan", "--stage", "production", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
 
 

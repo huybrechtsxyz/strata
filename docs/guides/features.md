@@ -167,11 +167,11 @@ Orchestrates stages in dependency order. Each stage calls the provisioner via su
 ### Other deploy subcommands
 
 ```bash
-strata deploy show     --file deploy/deploy-prd.yaml   # inspect the last plan
-strata deploy status   --file deploy/deploy-prd.yaml   # current state summary
+strata deploy show     --file deploy/deploy-prd.yaml   # inspect resolved configuration
+strata env output      --file deploy/deploy-prd.yaml   # live infrastructure outputs
 strata deploy history  --file deploy/deploy-prd.yaml   # deployment history
 strata deploy health   --file deploy/deploy-prd.yaml   # run health checks
-strata deploy output   --file deploy/deploy-prd.yaml   # print infrastructure outputs
+strata deploy output   --file deploy/deploy-prd.yaml   # print infrastructure outputs (cached)
 strata deploy destroy  --file deploy/deploy-prd.yaml   # tear down (with confirmation)
 strata deploy lock     --file deploy/deploy-prd.yaml   # acquire deployment lock
 ```
@@ -463,14 +463,14 @@ integrations:
 Declare **capability protocols** to signal what your integration can do — the same interfaces the
 built-in integrations use:
 
-| Protocol            | What it enables                                   |
-| ------------------- | ------------------------------------------------- |
-| `ISecretStore`      | Read secrets by key (plugs into secret resolution)|
-| `IVariableStore`    | Read key/value config (plugs into variable resolution)|
-| `IFeatureFlagStore` | Read feature flags                                |
-| `IRepositoryTool`   | Clone / fetch / push (git-style)                  |
-| `IInfrastructureTool` | Plan / apply (Terraform-style)                  |
-| `IContainerTool`    | Build / run (Docker-style)                        |
+| Protocol              | What it enables                                        |
+| --------------------- | ------------------------------------------------------ |
+| `ISecretStore`        | Read secrets by key (plugs into secret resolution)     |
+| `IVariableStore`      | Read key/value config (plugs into variable resolution) |
+| `IFeatureFlagStore`   | Read feature flags                                     |
+| `IRepositoryTool`     | Clone / fetch / push (git-style)                       |
+| `IInfrastructureTool` | Plan / apply (Terraform-style)                         |
+| `IContainerTool`      | Build / run (Docker-style)                             |
 
 A starter template is scaffolded at `.strata/integrations/my_integration.py` by `strata sln init`.
 

@@ -513,25 +513,28 @@ strata deploy destroy -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yam
 - `--force` is required for the real destroy (enables `-auto-approve`).
 - Without `--force` and without `--dry-run`, the command exits with an error.
 
-### 7.6 Status (outputs, plan details, history)
+### 7.6 Outputs, plan details, and history
 
 ```bash
 # Live infrastructure outputs per stage (queries the Terraform backend)
-strata deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
+strata env output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Single stage only
-strata deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --stage xyz-dc-eu-fr
+strata env output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --provisioner xyz-dc-eu-fr
+
+# Single output value — bare, for shell scripting
+IP=$(strata env output -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --name endpoint --raw)
 
 # Decode the last saved .tfplan — no backend call, instant
-strata deploy status -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml --plan
+strata deploy plan -f repos/xyz-infrastructure/deployments/xyz-deploy-prd.yaml
 
 # Show execution history from workspace logs
-strata deploy status --history
-strata deploy status --history --lines 20
+strata deploy history
+strata deploy history --lines 20
 ```
 
-- Default (no flags): runs `terraform output -json` per stage — shows live endpoint URLs, resource IDs, etc.
-- `--plan`: reads the `.tfplan` written by the last `deploy run --dry-run`. Shows resource add/change/destroy counts. No network required.
+- `env output`: runs `terraform output -json` per stage — shows live endpoint URLs, resource IDs, etc.
+- `deploy plan`: reads the `.tfplan` written by the last `deploy run --dry-run`. Shows resource add/change/destroy counts. No network required.
 
 For execution history use `strata deploy history`.
 
@@ -840,7 +843,8 @@ All `ref` subgroups (`env`, `config`, `data`, `secret`) share:
 | ----------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `strata deploy run -f FILE [--stage S] [--force] [--dry-run]`     | Execute the deploy pipeline                                          |
 | `strata deploy destroy -f FILE [--stage S] [--force] [--dry-run]` | Tear down infrastructure; `--dry-run` plans, `--force` auto-approves |
-| `strata deploy status -f FILE [--stage S] [--plan]`               | Live Terraform outputs or saved plan details                         |
+| `strata deploy plan -f FILE [--stage S]`                          | Saved `.tfplan` change summary (offline, no backend)                 |
+| `strata env output -f FILE [--name N] [--raw]`                    | Live Terraform outputs per stage                                     |
 | `strata deploy history [--lines N] [--operation run\|destroy]`    | Execution history from workspace logs                                |
 | `strata deploy health -f FILE [--stage S]`                        | Run `health_checks` defined in the deployment YAML                   |
 

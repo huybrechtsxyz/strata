@@ -1,4 +1,4 @@
-"""Command to report live Terraform outputs and saved plan details for a deployment."""
+"""Show the resource change summary from the last saved Terraform plan."""
 
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -10,31 +10,24 @@ from strata.models.common_models import ProvisionerType
 from strata.models.deployment_model import DeploymentStageModel
 
 
-class StatusDeployCommand(BaseDeployCommand):
-    """Report deployment status for a deployment definition.
+class PlanDeployCommand(BaseDeployCommand):
+    """Show the resource change summary from the last saved ``.tfplan`` file.
 
-    Two modes (select with flags; default = live outputs):
+    Reads the plan file produced by ``deploy run --dry-run`` and prints a
+    human-readable change summary (``terraform show -json <plan>``).
+    No backend calls — entirely offline.
 
-    Default (no flags)
-        For each stage: runs ``terraform output -json`` → prints live
-        infrastructure outputs from the remote backend.
-
-    ``--plan``
-        Reads the last saved ``.tfplan`` file produced by
-        ``deploy run --dry-run`` and shows a human-readable change summary
-        (``terraform show -json <plan>``).  No network calls to the backend.
-
-    For execution history use ``strata deploy history``.
+    ``--stage NAME``
+        Limit display to a single deployment stage.
     """
 
-    OPERATION = "deploy_status"
+    OPERATION = "deploy_plan"
 
     def __init__(
         self,
         file: Optional[str] = None,
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
-        show_plan: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -47,7 +40,6 @@ class StatusDeployCommand(BaseDeployCommand):
             quiet=quiet,
         )
         self._stage = stage
-        self._show_plan = show_plan
 
     # -------------------------------------------------------------------------
     # Entry point
@@ -56,126 +48,32 @@ class StatusDeployCommand(BaseDeployCommand):
     def execute(self) -> bool:
         try:
             if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
                 self._finalize(success=False)
                 return False
 
             if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
                 self._finalize(success=False)
                 return False
 
-            if self._show_plan:
-                click.echo(
-                    "⚠  DEPRECATED: 'strata deploy status --plan' is deprecated. "
-                    "Use 'strata deploy plan -f FILE' instead.",
-                    err=True,
-                )
-            ok = self._run_plan_status() if self._show_plan else self._run_live_outputs()
-
-            if not self._after_execute():
-                self._finalize(success=False)
-                return False
-
+            ok = self._run()
             self._finalize(success=ok)
             return ok
 
         except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_status: {exc}")
-            self.logger.exception("deploy_status failed")
+            self._errors.append(f"Failed to execute deploy_plan: {exc}")
+            self.logger.exception("deploy_plan failed")
             self._finalize(success=False)
             return False
 
     # -------------------------------------------------------------------------
-    # Mode: live outputs
+    # Core logic
     # -------------------------------------------------------------------------
 
-    def _run_live_outputs(self) -> bool:
-        click.echo(
-            "⚠  DEPRECATED: 'strata deploy status' (live outputs) is deprecated. "
-            "Use 'strata env output -f FILE' instead.",
-            err=True,
-        )
+    def _run(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False
-        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
-        all_stages: List[DeploymentStageModel] = spec.stages or []
 
-        stages = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
-        if self._stage and not stages:
-            self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
-            return False
-
-        if self._is_console_output():
-            click.echo(f"\n📡  Live outputs for {len(stages)} stage(s)…\n")
-
-        all_outputs: Dict[str, Any] = {}
-        any_failed = False
-
-        for stage in stages:
-            ok, outputs, msgs = self._fetch_stage_outputs(stage)
-            self._messages.extend(msgs)
-            all_outputs[str(stage.name)] = outputs if ok else {"error": "output fetch failed"}
-            if not ok:
-                any_failed = True
-            if self._is_console_output():
-                self._print_stage_outputs(str(stage.name), ok, outputs, msgs)
-
-        self._output_data = {
-            "file": str(self._file_path),
-            "mode": "live_outputs",
-            "stages": all_outputs,
-        }
-        return not any_failed
-
-    def _fetch_stage_outputs(self, stage: DeploymentStageModel) -> Tuple[bool, Dict[str, Any], List[str]]:
-        deployer = self._create_deployer(stage)
-        if deployer is None:
-            return False, {}, [f"Stage '{stage.name}': unsupported provisioner type."]
-
-        for validate_fn in (deployer.validate_workspace, deployer.validate_environment):
-            ok, msgs = validate_fn()
-            if not ok:
-                return False, {}, msgs
-
-        # setup (init) so output can reach the backend
-        ok, msgs = deployer.setup()
-        if not ok:
-            return False, {}, msgs
-
-        ok, outputs, msgs = deployer.output()
-        return ok, outputs, msgs
-
-    def _print_stage_outputs(
-        self,
-        stage_name: str,
-        ok: bool,
-        outputs: Dict[str, Any],
-        msgs: List[str],
-    ) -> None:
-        icon = "✅" if ok else "❌"
-        click.echo(f"  {icon}  Stage: {stage_name}")
-        if not ok:
-            for m in msgs:
-                click.echo(f"       ⚠  {m}")
-        elif outputs:
-            for k, v in outputs.items():
-                click.echo(f"       • {k}: {v}")
-        else:
-            click.echo("       (no outputs defined)")
-        click.echo()
-
-    # -------------------------------------------------------------------------
-    # Mode: plan details
-    # -------------------------------------------------------------------------
-
-    def _run_plan_status(self) -> bool:
-        if self._deployment_service is None:
-            self._errors.append("Deployment service not loaded")
-            return False
         spec = self._deployment_service.model.spec  # type: ignore[union-attr]
         all_stages: List[DeploymentStageModel] = spec.stages or []
 
@@ -201,10 +99,13 @@ class StatusDeployCommand(BaseDeployCommand):
 
         self._output_data = {
             "file": str(self._file_path),
-            "mode": "plan",
             "stages": all_plans,
         }
         return not any_failed
+
+    # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
 
     def _fetch_stage_plan(self, stage: DeploymentStageModel) -> Tuple[bool, Dict[str, Any], List[str]]:
         deployer = self._create_deployer(stage)
@@ -237,7 +138,6 @@ class StatusDeployCommand(BaseDeployCommand):
             click.echo()
             return
 
-        # Summarise resource changes from the plan
         changes = plan_data.get("resource_changes", [])
         if not changes:
             click.echo("       (no resource changes in saved plan)")
@@ -262,16 +162,10 @@ class StatusDeployCommand(BaseDeployCommand):
         click.echo()
 
     # -------------------------------------------------------------------------
-    # Deployer factory (identical to RunDeployCommand)
+    # Deployer factory
     # -------------------------------------------------------------------------
 
     def _create_deployer(self, stage: DeploymentStageModel):
-        """Instantiate and return the deployer for *stage*, or None.
-
-        Resolution: stage.provisioner → workspace provisioners list → deployer type.
-        'provisioner' is required on every stage; convention-based fallback is not
-        supported. An error is appended to self._errors when resolution fails.
-        """
         resolved_type: Optional[str] = None
         _iac = None
         _available: List[str] = []

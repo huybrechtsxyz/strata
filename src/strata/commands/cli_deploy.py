@@ -18,9 +18,9 @@ from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
 from strata.commands.deploy.list_deploy_command import ListDeployCommand
 from strata.commands.deploy.lock_deploy_command import LockHistoryCommand, LockReleaseCommand, LockStatusCommand
 from strata.commands.deploy.output_deploy_command import OutputDeployCommand
+from strata.commands.deploy.plan_deploy_command import PlanDeployCommand
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
 from strata.commands.deploy.show_deploy_command import ShowDeployCommand
-from strata.commands.deploy.status_deploy_command import StatusDeployCommand
 
 
 @click.group(name="deploy", help="Deploy platform using provisioners.")
@@ -170,40 +170,31 @@ def deploy_show(
     handle_command_exit(command, success)
 
 
-@deploy.command(name="status", help="Show deployment status: live Terraform outputs or saved plan details.")
+@deploy.command(name="plan", help="Show the resource change summary from the last saved .tfplan file.")
 @click_file
 @click_work_path
 @click.option(
     "--stage",
     default=None,
     metavar="NAME",
-    help="Limit output to a specific deployment stage.",
-)
-@click.option(
-    "--plan",
-    "show_plan",
-    is_flag=True,
-    default=False,
-    help="Show the last saved .tfplan (terraform show -json). No backend calls.",
+    help="Limit display to a specific deployment stage.",
 )
 @click_output_format
 @click_output_verbose
 @click_output_quiet
-def deploy_status(
+def deploy_plan(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
-    show_plan: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
 ):
-    """Show live Terraform outputs or saved plan details."""
-    command = StatusDeployCommand(
+    """Show resource change summary from the last saved .tfplan (terraform show -json). No backend calls."""
+    command = PlanDeployCommand(
         file=file,
         work_path=work_path,
         stage=stage,
-        show_plan=show_plan,
         output=output,
         verbose=verbose,
         quiet=quiet,
