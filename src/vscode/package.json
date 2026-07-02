@@ -1,5 +1,5 @@
 {
-  "name": "strata",
+  "name": "xyz-strata",
   "displayName": "Strata",
   "description": "Strata infrastructure workspace integration — validate YAML, explore workspace, build and deploy.",
   "version": "0.1.0",
