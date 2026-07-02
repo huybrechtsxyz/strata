@@ -1,6 +1,6 @@
 # Publishing
 
-The Strata VS Code extension is published to the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=huybrechtsxyz.xyz-strata) as part of the automated release pipeline.
+The Strata VS Code extension is published to the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=huybrechts-xyz.xyz-strata) as part of the automated release pipeline.
 
 ## Automated publishing (CI)
 
@@ -13,7 +13,7 @@ The only secret required is `VSCE_PAT` — a Personal Access Token scoped to **M
 
 ### Adding the VSCE_PAT secret
 
-1. Go to [https://marketplace.visualstudio.com/manage](https://marketplace.visualstudio.com/manage) and sign in with the publisher account (`huybrechtsxyz`).
+   Go to [https://marketplace.visualstudio.com/manage](https://marketplace.visualstudio.com/manage) and sign in with the publisher account (`huybrechts-xyz`).
 2. Click your account icon → **Personal access tokens** → **New Token**.
 3. Set:
    - **Name:** `VSCE_PAT`
@@ -61,7 +61,7 @@ This updates `version` in `package.json` and creates a local git commit. Include
 After the pipeline completes, confirm the new version is live:
 
 ```bash
-npx @vscode/vsce show huybrechtsxyz.xyz-strata
+npx @vscode/vsce show huybrechts-xyz.xyz-strata
 ```
 
-Or visit [https://marketplace.visualstudio.com/items?itemName=huybrechtsxyz.xyz-strata](https://marketplace.visualstudio.com/items?itemName=huybrechtsxyz.xyz-strata).
+Or visit [https://marketplace.visualstudio.com/items?itemName=huybrechts-xyz.xyz-strata](https://marketplace.visualstudio.com/items?itemName=huybrechts-xyz.xyz-strata).

@@ -3,7 +3,8 @@
   "displayName": "Strata",
   "description": "Strata infrastructure workspace integration — validate YAML, explore workspace, build and deploy.",
   "version": "0.14.0",
-  "publisher": "huybrechtsxyz",
+  "publisher": "huybrechts-xyz",
+  "icon": "resources/strata.svg",
   "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
