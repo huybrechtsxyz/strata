@@ -20,7 +20,7 @@ COPY pyproject.toml VERSION.txt ./
 COPY src/ src/
 
 # Install package with doc dependencies (sphinx, autoapi, myst-parser, etc.)
-RUN uv sync --no-dev --group doc
+RUN uv sync --no-dev --extra doc
 
 # Copy docs source and README
 COPY README.md .
