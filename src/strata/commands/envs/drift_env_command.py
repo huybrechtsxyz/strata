@@ -44,6 +44,9 @@ class DriftEnvCommand(BaseDeployCommand):
         )
         self._stage = stage
 
+    def get_required_integrations(self) -> Dict[str, str]:
+        return {"terraform": "running terraform plan for drift detection"}
+
     def execute(self) -> bool:
         try:
             if not self._initialize():
