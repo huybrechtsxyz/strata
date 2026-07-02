@@ -22,6 +22,7 @@ import { CrossReferenceProvider } from './providers/crossReferenceProvider';
 import { SnippetProvider } from './providers/snippetProvider';
 import { DependencyGraphProvider } from './providers/dependencyGraphProvider';
 import { StrataTaskProvider } from './providers/strataTaskProvider';
+import { FileDecorationProvider } from './providers/fileDecorationProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -40,6 +41,7 @@ let _crossRef: CrossReferenceProvider | undefined;
 let _snippets: SnippetProvider | undefined;
 let _depGraph: DependencyGraphProvider | undefined;
 let _taskProvider: StrataTaskProvider | undefined;
+let _fileDecorations: FileDecorationProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 
 // ---------------------------------------------------------------------------
@@ -50,7 +52,7 @@ async function _refreshAll(): Promise<void> {
     if (!_client) return;
 
     // Signal loading state to all panes and status bar
-    _statusBar?.refresh(); // starts spinner internally
+    _statusBar?.setLoading();
     _workspaceView?.setLoading();
     _filesView?.setLoading();
     _reposView?.setLoading();
@@ -58,7 +60,7 @@ async function _refreshAll(): Promise<void> {
 
     try {
         const status = await _client.getStatus();
-        _statusBar?.refresh(); // will call getStatus() again internally — acceptable
+        _statusBar?.update(status);
         _lastStatus = status;
         _workspaceView?.update(status);
         _filesView?.update(status);
@@ -66,6 +68,7 @@ async function _refreshAll(): Promise<void> {
         _toolsView?.update(status);
         _guideView?.update(status);
         _crossRef?.update(status.repositories ?? []);
+        _fileDecorations?.update(status);
         void _depGraph?.update(status);
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -73,6 +76,7 @@ async function _refreshAll(): Promise<void> {
         _filesView?.setError(message);
         _reposView?.setError(message);
         _toolsView?.setError(message);
+        _statusBar?.setError(err);
         if (err instanceof StrataCLINotFoundError) {
             void vscode.window.showErrorMessage(err.message);
         }
@@ -115,6 +119,7 @@ export function activate(context: vscode.ExtensionContext): void {
     _snippets = new SnippetProvider();
     _depGraph = new DependencyGraphProvider();
     _taskProvider = new StrataTaskProvider(getCliPath(), workPath);
+    _fileDecorations = new FileDecorationProvider();
 
     // ── Register the 4 tree views ──────────────────────────────────────────────
 
@@ -144,6 +149,7 @@ export function activate(context: vscode.ExtensionContext): void {
     _crossRef.register(context);
     _snippets.register(context);
     _taskProvider.register(context);
+    _fileDecorations.register();
     _statusBar.show();
 
     // ── Register commands ──────────────────────────────────────────────────────
@@ -437,12 +443,19 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
     );
 
+    // ── File watcher: auto-refresh when solution.json changes externally ───────
+
+    const solutionWatcher = vscode.workspace.createFileSystemWatcher('**/.strata/solution.json');
+    solutionWatcher.onDidChange(() => void _refreshAll());
+    solutionWatcher.onDidCreate(() => void _refreshAll());
+    solutionWatcher.onDidDelete(() => void _refreshAll());
+
     // ── Cleanups ───────────────────────────────────────────────────────────────
 
     context.subscriptions.push(
         _statusBar, _workspaceView, _filesView, _reposView, _toolsView,
         _diagnostics, _codeLens, _guideView, _crossRef, _snippets, _depGraph,
-        _taskProvider,
+        _taskProvider, _fileDecorations, solutionWatcher,
     );
 
     // ── Set context key so menus can use it ────────────────────────────────────

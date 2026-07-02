@@ -58,6 +58,21 @@ export class StatusBarProvider implements vscode.Disposable {
         }
     }
 
+    /** Update the status bar from an already-fetched status object. */
+    update(status: WorkspaceStatus): void {
+        this._render(status);
+    }
+
+    /** Show the loading spinner. */
+    setLoading(): void {
+        this._setLoading();
+    }
+
+    /** Show an error state from an already-caught error. */
+    setError(err: unknown): void {
+        this._setError(err);
+    }
+
     dispose(): void {
         this._item.dispose();
     }

@@ -199,6 +199,11 @@
           "default": false,
           "description": "Auto-export and wire JSON schemas when a workspace is opened."
         },
+        "strata.showFileDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show validation status badges (✓/⚠️/❌) on strata files in the Explorer."
+        },
         "strata.defaultProfile": {
           "type": "string",
           "default": "",
