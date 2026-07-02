@@ -1,0 +1,2219 @@
+{
+  "$defs": {
+    "APIKeyAuthenticationModel": {
+      "additionalProperties": false,
+      "description": "API key authentication.\n\nUsed by: Generic REST APIs, some cloud services.\nAll fields are key references resolved from environment declarations.",
+      "properties": {
+        "api_key": {
+          "description": "Key reference for API key value",
+          "title": "Api Key",
+          "type": "string"
+        },
+        "api_secret": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for API secret (used alongside the API key)",
+          "title": "Api Secret"
+        },
+        "endpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for API endpoint URL",
+          "title": "Endpoint"
+        },
+        "header_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for HTTP header name (default: 'X-API-Key')",
+          "title": "Header Name"
+        }
+      },
+      "required": [
+        "api_key"
+      ],
+      "title": "APIKeyAuthenticationModel",
+      "type": "object"
+    },
+    "AWSAuthenticationModel": {
+      "additionalProperties": false,
+      "description": "AWS access key authentication.\n\nAll fields are key references resolved from environment declarations.",
+      "properties": {
+        "access_key_id": {
+          "description": "Key reference for AWS access key ID",
+          "title": "Access Key Id",
+          "type": "string"
+        },
+        "secret_access_key": {
+          "description": "Key reference for AWS secret access key",
+          "title": "Secret Access Key",
+          "type": "string"
+        },
+        "session_token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for AWS session token (temporary credentials)",
+          "title": "Session Token"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for AWS region",
+          "title": "Region"
+        },
+        "role_arn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for AWS IAM role ARN for AssumeRole",
+          "title": "Role Arn"
+        }
+      },
+      "required": [
+        "access_key_id",
+        "secret_access_key"
+      ],
+      "title": "AWSAuthenticationModel",
+      "type": "object"
+    },
+    "AuditConfigModel": {
+      "additionalProperties": false,
+      "description": "Top-level audit configuration under spec.audit in environment YAML.",
+      "properties": {
+        "policy": {
+          "$ref": "#/$defs/AuditPolicyModel",
+          "description": "Event type policy"
+        },
+        "sinks": {
+          "description": "Configured sinks",
+          "items": {
+            "$ref": "#/$defs/AuditSinkModel"
+          },
+          "title": "Sinks",
+          "type": "array"
+        },
+        "structure": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deploy-log directory structure (flat, by-stage, by-execution, by-tenant, full). Defaults to by-execution.",
+          "title": "Structure"
+        },
+        "deploy_log_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Custom deploy-log base path relative to workspace root (defaults to .strata/deploy-log)",
+          "title": "Deploy Log Path"
+        }
+      },
+      "title": "AuditConfigModel",
+      "type": "object"
+    },
+    "AuditPolicyModel": {
+      "additionalProperties": false,
+      "description": "Which event types are active. Configured in environment YAML under spec.audit.policy.",
+      "properties": {
+        "events": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "description": "Map of event type \u2192 enabled flag",
+          "title": "Events",
+          "type": "object"
+        }
+      },
+      "title": "AuditPolicyModel",
+      "type": "object"
+    },
+    "AuditSinkModel": {
+      "additionalProperties": false,
+      "description": "A configured audit event sink \u2014 forwards events to a built-in type or integration.",
+      "properties": {
+        "name": {
+          "description": "Unique sink name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Built-in sink type: stdout, ndjson, syslog, webhook",
+          "title": "Type"
+        },
+        "integration": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "References configuration.spec.integrations[].name",
+          "title": "Integration"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this sink is active",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "events": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Event filter (None = all enabled events)",
+          "title": "Events"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Output path (ndjson only)",
+          "title": "Path"
+        },
+        "address": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target address (syslog only)",
+          "title": "Address"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target URL (webhook only)",
+          "title": "Url"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "HTTP headers (webhook only)",
+          "title": "Headers"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "AuditSinkModel",
+      "type": "object"
+    },
+    "AuthenticationModel": {
+      "additionalProperties": false,
+      "description": "Authentication configuration for cloud provider or integration access.\n\nSpecifies authentication method and corresponding credentials as key references.\nKeys are resolved at runtime from centralized environment declarations.",
+      "properties": {
+        "method": {
+          "description": "Authentication method to use",
+          "enum": [
+            "oauth2",
+            "aws",
+            "gcp",
+            "api_key",
+            "certificate",
+            "saml",
+            "cli",
+            "managed_identity"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "oauth2": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OAuth2AuthenticationModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OAuth2/Service Principal authentication"
+        },
+        "aws": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AWSAuthenticationModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "AWS access key authentication"
+        },
+        "gcp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GCPAuthenticationModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GCP service account authentication"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/APIKeyAuthenticationModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "API key authentication"
+        },
+        "certificate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CertificateAuthenticationModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Certificate-based authentication (mTLS)"
+        },
+        "saml": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SAMLAuthenticationModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SAML 2.0 authentication"
+        },
+        "cli": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CLIAuthenticationModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CLI-based authentication"
+        },
+        "managed_identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ManagedIdentityAuthenticationModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Managed/Workload Identity authentication"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description of this authentication configuration and setup instructions",
+          "title": "Description"
+        },
+        "env_vars": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of environment variable names that must be set for this authentication method",
+          "title": "Env Vars"
+        },
+        "env_var": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Single environment variable name required for this authentication method",
+          "title": "Env Var"
+        }
+      },
+      "required": [
+        "method"
+      ],
+      "title": "AuthenticationModel",
+      "type": "object"
+    },
+    "CLIAuthenticationModel": {
+      "additionalProperties": false,
+      "description": "CLI-based authentication using local credentials.\n\nUses existing CLI authentication: az login, gcloud auth, aws configure.\nNo credential references needed - uses ambient credentials.",
+      "properties": {
+        "use_cli": {
+          "default": true,
+          "description": "Use local CLI authentication (az, gcloud, aws)",
+          "title": "Use Cli",
+          "type": "boolean"
+        }
+      },
+      "title": "CLIAuthenticationModel",
+      "type": "object"
+    },
+    "CertificateAuthenticationModel": {
+      "additionalProperties": false,
+      "description": "Certificate-based authentication (mTLS).\n\nAll fields are key references resolved from environment declarations.",
+      "properties": {
+        "certificate_path": {
+          "description": "Key reference for client certificate file path",
+          "title": "Certificate Path",
+          "type": "string"
+        },
+        "private_key_path": {
+          "description": "Key reference for private key file path",
+          "title": "Private Key Path",
+          "type": "string"
+        },
+        "ca_bundle_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for CA bundle file path",
+          "title": "Ca Bundle Path"
+        },
+        "certificate_password": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for certificate password (if encrypted)",
+          "title": "Certificate Password"
+        }
+      },
+      "required": [
+        "certificate_path",
+        "private_key_path"
+      ],
+      "title": "CertificateAuthenticationModel",
+      "type": "object"
+    },
+    "CommonLifecycleModel": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CommonLifecyclePhaseModel"
+      },
+      "default": {},
+      "description": "Lifecycle phases for common models.\nMaps phase names to phase configurations.\nPhase names follow pattern: {command}_{action}_{suffix}\nExamples: config_clear, config_fetch, deploy_plan_before, deploy_apply_after",
+      "title": "CommonLifecycleModel",
+      "type": "object"
+    },
+    "CommonLifecyclePhaseModel": {
+      "additionalProperties": false,
+      "description": "Model for common lifecycle phase with script validation.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        },
+        "scripts": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ScriptPathModel"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scripts"
+        }
+      },
+      "title": "CommonLifecyclePhaseModel",
+      "type": "object"
+    },
+    "ConfigurationComponentModel": {
+      "additionalProperties": false,
+      "description": "Model for a topology component configuration.",
+      "properties": {
+        "role": {
+          "description": "Unique role for the topology component.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Role",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Description of the topology component.",
+          "title": "Description"
+        },
+        "uses_module": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "description": "Indicates if the component requires a module.",
+          "title": "Uses Module"
+        },
+        "is_control": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "description": "Indicates if the component is a control or manager element.",
+          "title": "Is Control"
+        },
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": true,
+          "description": "Indicates if the component is required in the topology.",
+          "title": "Required"
+        },
+        "min_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0,
+          "description": "Minimum number of instances for the component.",
+          "title": "Min Count"
+        },
+        "max_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0,
+          "description": "Maximum number of instances for the component (0 = unlimited).",
+          "title": "Max Count"
+        }
+      },
+      "required": [
+        "role"
+      ],
+      "title": "ConfigurationComponentModel",
+      "type": "object"
+    },
+    "ConfigurationDeploymentModel": {
+      "additionalProperties": false,
+      "description": "Model for deployment configuration and schema definition.\n\nDefines required and optional properties that deployments must provide,\nsimilar to how ConfigurationProviderResourceModel defines resource configuration schemas.\n\nExample:\n    deployment:\n      properties:\n        additional_properties: false\n        properties:\n          environment:\n            pattern: \"^(dev|test|staging|prod)$\"\n            required: true\n            description: \"Deployment environment\"\n          tenant:\n            pattern: \"^[a-z][a-z0-9-]*$\"\n            required: true\n            description: \"tenant identifier\"\n          region:\n            pattern: \"^[a-z]{2}-[a-z]+(-[0-9]+)?$\"\n            required: false\n            description: \"Deployment region\"\n      manifest:\n        type: local\n        path: \".strata/deployments\"\n      outputs:\n        enabled: true\n        path: \".strata/outputs\"\n        sensitive: redact",
+      "properties": {
+        "additional_properties": {
+          "default": false,
+          "description": "Allow properties not listed in the schema for deployments",
+          "title": "Additional Properties",
+          "type": "boolean"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ConfigurationSchemaField"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deployment properties schema (pattern string or structured field with validation)",
+          "title": "Properties"
+        },
+        "manifest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigurationManifestModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Manifest storage configuration. When absent, manifests are not written."
+        },
+        "outputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigurationOutputsModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Terraform output artifact storage. When absent, outputs are not written to a durable store (they are still available within the current deploy run for downstream stages)."
+        }
+      },
+      "title": "ConfigurationDeploymentModel",
+      "type": "object"
+    },
+    "ConfigurationLayerModel": {
+      "additionalProperties": false,
+      "description": "Definition of a single layer in the deployment hierarchy.",
+      "properties": {
+        "name": {
+          "description": "Layer name (must be valid identifier: lowercase, alphanumeric, hyphens)",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description of this layer's purpose",
+          "title": "Description"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Regex pattern for validating layer values (e.g., '^[a-z][a-z0-9\\-]*$')",
+          "title": "Pattern"
+        },
+        "required": {
+          "default": false,
+          "description": "Whether this layer must be provided in deployment files",
+          "title": "Required",
+          "type": "boolean"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default value if not provided in deployment (only used if required=False)",
+          "title": "Default"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ConfigurationLayerModel",
+      "type": "object"
+    },
+    "ConfigurationLoggingModel": {
+      "additionalProperties": false,
+      "description": "Model for logging configuration.",
+      "properties": {
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to logging configuration YAML file (relative to workspace root or absolute)",
+          "title": "File"
+        }
+      },
+      "title": "ConfigurationLoggingModel",
+      "type": "object"
+    },
+    "ConfigurationManifestModel": {
+      "additionalProperties": false,
+      "description": "Configuration for deployment manifest storage.\n\nControls where and how deployment manifests are persisted after each\ndeploy run.  When omitted from the configuration, manifests are not\nwritten and a log message is emitted.\n\nPath structure (auto-appended by the service)::\n\n    {path}/{deployment_name}/{version}/{timestamp}.json\n\nExample (local):\n    manifest:\n      type: local\n      path: \".strata/deployments\"\n\nExample (gitops):\n    manifest:\n      type: gitops\n      repository: \"state-repo\"\n      branch: \"manifests\"\n      tag: true\n      path: \"deployments\"",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/ManifestStoreType",
+          "description": "Storage backend: 'local' (filesystem) or 'gitops' (git repository)"
+        },
+        "path": {
+          "default": ".strata/deployments",
+          "description": "Base path for manifests. Service appends /{deployment_name}/{version}/{timestamp}.json",
+          "title": "Path",
+          "type": "string"
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Remote name from spec.remotes (required when type=gitops)",
+          "title": "Repository"
+        },
+        "branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target branch for manifest commits (required when type=gitops)",
+          "title": "Branch"
+        },
+        "tag": {
+          "default": true,
+          "description": "Create a git tag '{deployment_name}/{version}' after writing (gitops only)",
+          "title": "Tag",
+          "type": "boolean"
+        },
+        "push_manifest": {
+          "default": false,
+          "description": "Commit and push the written manifest file to the git remote after writing.",
+          "title": "Push Manifest",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ConfigurationManifestModel",
+      "type": "object"
+    },
+    "ConfigurationMetaModel": {
+      "additionalProperties": false,
+      "description": "Metadata for the configuration model.",
+      "properties": {
+        "name": {
+          "description": "Unique name for the configuration resource.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional annotations (key-value pairs for documentation)",
+          "title": "Annotations"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Labels for categorization and filtering.",
+          "title": "Labels"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional list of tags.",
+          "title": "Tags"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ConfigurationMetaModel",
+      "type": "object"
+    },
+    "ConfigurationOutputsModel": {
+      "additionalProperties": false,
+      "description": "Configuration for Terraform output artifact storage.\n\nControls whether and how Terraform output values are persisted after a\nsuccessful deploy.  Stored outputs never include sensitive values as\nplain text; the ``sensitive`` field controls whether sensitive keys are\nredacted (value replaced with ``\"(sensitive)\"``) or omitted entirely.\n\nPath structure (auto-appended by the deployer)::\n\n    {path}/{deployment_name}/{version}/{stage}.json\n\nExample:\n    outputs:\n      enabled: true\n      path: \".strata/outputs\"\n      sensitive: redact",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Write output artifacts after a successful deploy. Set to false to disable.",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "path": {
+          "default": ".strata/outputs",
+          "description": "Base path for output artifacts. The deployer appends /{deployment_name}/{version}/{stage}.json",
+          "title": "Path",
+          "type": "string"
+        },
+        "sensitive": {
+          "$ref": "#/$defs/SensitiveOutputHandling",
+          "default": "redact",
+          "description": "How to handle outputs marked sensitive=true in Terraform: 'redact' (store key with value '(sensitive)') or 'omit' (drop the key entirely)."
+        }
+      },
+      "title": "ConfigurationOutputsModel",
+      "type": "object"
+    },
+    "ConfigurationProviderModel": {
+      "additionalProperties": false,
+      "description": "Model for a provider configuration.",
+      "properties": {
+        "name": {
+          "description": "Provider name (e.g., kamatera, azure)",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description of the provider",
+          "title": "Description",
+          "type": "string"
+        },
+        "engine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provider engine/driver (e.g., azurerm, aws, gcp)",
+          "title": "Engine"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provider version constraint (e.g., ~>3.0, >=1.0)",
+          "title": "Version"
+        },
+        "additional_regions": {
+          "default": false,
+          "description": "Allow regions not listed in the configuration for this provider",
+          "title": "Additional Regions",
+          "type": "boolean"
+        },
+        "regions": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of supported regions for this provider",
+          "title": "Regions"
+        },
+        "additional_resources": {
+          "default": false,
+          "description": "Allow resource types not listed in the configuration for this provider",
+          "title": "Additional Resources",
+          "type": "boolean"
+        },
+        "resources": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ConfigurationProviderResourceModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of supported resource types for this provider",
+          "title": "Resources"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "ConfigurationProviderModel",
+      "type": "object"
+    },
+    "ConfigurationProviderResourceModel": {
+      "additionalProperties": false,
+      "description": "Model for a provider resource configuration.",
+      "properties": {
+        "name": {
+          "description": "Unique name for the configuration resource.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resource category (e.g., compute, storage, networking)",
+          "title": "Category"
+        },
+        "subcategory": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resource subcategory (e.g., virtualmachine, blob, api_gateway)",
+          "title": "Subcategory"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Description of the resource type",
+          "title": "Description"
+        },
+        "additional_configurations": {
+          "default": false,
+          "description": "Allow configuration fields not listed in the schema for this resource",
+          "title": "Additional Configurations",
+          "type": "boolean"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ConfigurationSchemaField"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resource-specific configuration schema (pattern string or structured field)",
+          "title": "Configuration"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ConfigurationProviderResourceModel",
+      "type": "object"
+    },
+    "ConfigurationSchemaField": {
+      "additionalProperties": false,
+      "description": "Model for a configuration schema field with pattern and required flag.\n\nAll field values are validated as strings against the ``pattern`` regex.\nThere is no native boolean type \u2014 use ``pattern: \"^(true|false)$\"`` and\npass ``\"true\"`` or ``\"false\"`` as the value in resource configuration.",
+      "properties": {
+        "pattern": {
+          "description": "Regex pattern that field values must match",
+          "title": "Pattern",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "description": "Whether this field is required in resource configuration",
+          "title": "Required",
+          "type": "boolean"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Description of what this field represents",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "pattern"
+      ],
+      "title": "ConfigurationSchemaField",
+      "type": "object"
+    },
+    "ConfigurationSecurityModel": {
+      "additionalProperties": false,
+      "description": "Model for security policies and constraints.",
+      "properties": {
+        "allowed_secret_stores": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Allowed secret store types. If None, all stores are allowed (dev mode). Valid values: constant, environment, github, azure-keyvault, bitwarden, vault, infisical. For production, restrict to secure stores only. 'github' and 'environment' are pipeline-trust stores (resolved from environment variables) \u2014 add them explicitly to permit use.",
+          "title": "Allowed Secret Stores"
+        },
+        "allowed_variable_stores": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Allowed variable store types. If None, all stores are allowed.",
+          "title": "Allowed Variable Stores"
+        },
+        "allowed_feature_stores": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Allowed feature store types. If None, all stores are allowed.",
+          "title": "Allowed Feature Stores"
+        }
+      },
+      "title": "ConfigurationSecurityModel",
+      "type": "object"
+    },
+    "ConfigurationSpecModel": {
+      "additionalProperties": false,
+      "description": "Specification for the configuration model.",
+      "properties": {
+        "logging": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigurationLoggingModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Logging configuration for the platform"
+        },
+        "layering": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ConfigurationLayerModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deployment hierarchy layers (defines artifact path structure and ordering)",
+          "title": "Layering"
+        },
+        "integrations": {
+          "description": "External integrations that extend platform capabilities",
+          "items": {
+            "$ref": "#/$defs/IntegrationModel"
+          },
+          "title": "Integrations",
+          "type": "array"
+        },
+        "remotes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/RemoteModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Named remote endpoints (artifact sources and deployment targets)",
+          "title": "Remotes"
+        },
+        "lifecycle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommonLifecycleModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Configuration lifecycle phases"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of configuration defaults",
+          "title": "Configuration"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of configuration properties",
+          "title": "Properties"
+        },
+        "deployment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigurationDeploymentModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deployment configuration and schema for deployment.spec.properties validation"
+        },
+        "providers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ConfigurationProviderModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of supported providers",
+          "title": "Providers"
+        },
+        "additional_topologies": {
+          "default": false,
+          "description": "Allow topology types not listed in the configuration",
+          "title": "Additional Topologies",
+          "type": "boolean"
+        },
+        "topologies": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ConfigurationTopologyModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of supported topologies",
+          "title": "Topologies"
+        },
+        "security": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigurationSecurityModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Security policies for store types and other security constraints"
+        },
+        "zones": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ConfigurationZoneModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Logical zones grouping provider regions for data residency enforcement",
+          "title": "Zones"
+        },
+        "policies": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/PolicyModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Policy rules evaluated at validate, build, plan, and deploy phases",
+          "title": "Policies"
+        },
+        "audit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuditConfigModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Audit and deploy-log configuration (structure, sinks, retention)"
+        }
+      },
+      "title": "ConfigurationSpecModel",
+      "type": "object"
+    },
+    "ConfigurationTopologyModel": {
+      "additionalProperties": false,
+      "description": "Model for a provider topology configuration.",
+      "properties": {
+        "type": {
+          "description": "Unique type definition for the topology configuration.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Type",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Description of the topology configuration.",
+          "title": "Description"
+        },
+        "additional_components": {
+          "default": false,
+          "description": "Allow components not listed in the configuration for this topology",
+          "title": "Additional Components",
+          "type": "boolean"
+        },
+        "components": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ConfigurationComponentModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Topology-specific component configurations.",
+          "title": "Components"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ConfigurationTopologyModel",
+      "type": "object"
+    },
+    "ConfigurationZoneModel": {
+      "additionalProperties": false,
+      "description": "A logical zone grouping one or more provider regions.\n\nZones are used to enforce data residency constraints \u2014 a tenant\nrestricted to zone 'eu' may only be deployed to providers whose\nregion is in that zone's regions list.",
+      "properties": {
+        "name": {
+          "description": "Unique zone name (e.g., 'eu', 'us', 'apac')",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description of this zone",
+          "title": "Description"
+        },
+        "regions": {
+          "description": "Provider regions belonging to this zone (e.g., 'westeurope', 'northeurope')",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Regions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "regions"
+      ],
+      "title": "ConfigurationZoneModel",
+      "type": "object"
+    },
+    "GCPAuthenticationModel": {
+      "additionalProperties": false,
+      "description": "Google Cloud Platform service account authentication.\n\nAll fields are key references resolved from environment declarations.",
+      "properties": {
+        "project_id": {
+          "description": "Key reference for GCP project ID",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "credentials_json": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for GCP service account JSON credentials (as string content)",
+          "title": "Credentials Json"
+        },
+        "credentials_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for path to GCP service account JSON file",
+          "title": "Credentials File"
+        },
+        "service_account_email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for GCP service account email",
+          "title": "Service Account Email"
+        }
+      },
+      "required": [
+        "project_id"
+      ],
+      "title": "GCPAuthenticationModel",
+      "type": "object"
+    },
+    "IntegrationEndpointsSpecModel": {
+      "additionalProperties": false,
+      "description": "Endpoint specification for remote integrations.",
+      "properties": {
+        "address": {
+          "description": "Service endpoint URL (supports env var substitution: ${VAR_NAME:default})",
+          "title": "Address",
+          "type": "string"
+        }
+      },
+      "required": [
+        "address"
+      ],
+      "title": "IntegrationEndpointsSpecModel",
+      "type": "object"
+    },
+    "IntegrationModel": {
+      "additionalProperties": false,
+      "description": "Model for external integration configuration.\n\nIntegrations extend platform capabilities by connecting to external\ntools (CLI), services (APIs), or cloud resources (SDKs).\n\nExamples:\n    - name: git\n      type: git\n      capabilities: [repository]\n      required: true\n\n    - name: bitwarden\n      type: bitwarden\n      capabilities: [secrets]\n      required: false\n      endpoints:\n        address: https://bitwarden.com/api",
+      "properties": {
+        "name": {
+          "description": "Unique integration name (used for registry lookup)",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "description": "Integration type (maps to integration class: git, terraform, bitwarden, vault, etc.)",
+          "title": "Type",
+          "type": "string"
+        },
+        "capabilities": {
+          "description": "Set of capabilities this integration provides. Valid values: api, container, features, infrastructure, keyvalue, repository, secrets, variables. Use 'infrastructure' for IaC and configuration-management tools (Terraform, Ansible, OpenTofu). Use 'container' for container runtimes and container-native deployment tools (Docker, Helm, Podman).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description of the integration",
+          "title": "Description"
+        },
+        "required": {
+          "default": false,
+          "description": "Whether this integration is required for platform operation",
+          "title": "Required",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this integration is enabled (for optional integrations)",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "validation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IntegrationValidationSpecModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Validation specification for checking integration availability"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuthenticationModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Authentication configuration for accessing the integration"
+        },
+        "endpoints": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IntegrationEndpointsSpecModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Endpoint specification for remote integrations"
+        },
+        "lifecycle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommonLifecycleModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lifecycle hook specification for API integrations"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Integration-specific properties (e.g. data_collection_rule_id for Sentinel, index_pattern for ELK, resource_attributes for OTel). Keys and values are free-form and interpreted by the integration class.",
+          "title": "Properties"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "IntegrationModel",
+      "type": "object"
+    },
+    "IntegrationValidationSpecModel": {
+      "additionalProperties": false,
+      "description": "Validation specification for integration availability checking.",
+      "properties": {
+        "command": {
+          "description": "Command to check integration availability (e.g., 'git --version')",
+          "title": "Command",
+          "type": "string"
+        },
+        "min_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Minimum required version (e.g., '2.30.0')",
+          "title": "Min Version"
+        },
+        "max_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Maximum supported version (e.g., '2.40.0')",
+          "title": "Max Version"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "IntegrationValidationSpecModel",
+      "type": "object"
+    },
+    "ManagedIdentityAuthenticationModel": {
+      "additionalProperties": false,
+      "description": "Managed/Workload Identity authentication.\n\nUses cloud provider managed identity (Azure MSI, GCP Workload Identity, AWS IAM Roles).\nNo credential references needed - uses ambient credentials.",
+      "properties": {
+        "use_managed_identity": {
+          "default": true,
+          "description": "Use cloud provider managed identity",
+          "title": "Use Managed Identity",
+          "type": "boolean"
+        },
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for user-assigned managed identity client ID (Azure only)",
+          "title": "Client Id"
+        }
+      },
+      "title": "ManagedIdentityAuthenticationModel",
+      "type": "object"
+    },
+    "ManifestStoreType": {
+      "description": "Supported manifest storage backends.",
+      "enum": [
+        "local",
+        "gitops"
+      ],
+      "title": "ManifestStoreType",
+      "type": "string"
+    },
+    "OAuth2AuthenticationModel": {
+      "additionalProperties": false,
+      "description": "OAuth2/OpenID Connect authentication.\n\nUsed by: Azure (Service Principal), generic OAuth2 providers.\nAll fields are key references resolved from environment declarations.",
+      "properties": {
+        "client_id": {
+          "description": "Key reference for OAuth2 client/application ID",
+          "title": "Client Id",
+          "type": "string"
+        },
+        "client_secret": {
+          "description": "Key reference for OAuth2 client secret",
+          "title": "Client Secret",
+          "type": "string"
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for tenant/directory ID (Azure AD, Okta, etc.)",
+          "title": "Tenant Id"
+        },
+        "token_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for OAuth2 token endpoint URL",
+          "title": "Token Url"
+        },
+        "authorization_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for OAuth2 authorization endpoint URL",
+          "title": "Authorization Url"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for OAuth2 scopes (space-separated)",
+          "title": "Scope"
+        }
+      },
+      "required": [
+        "client_id",
+        "client_secret"
+      ],
+      "title": "OAuth2AuthenticationModel",
+      "type": "object"
+    },
+    "PlatformKind": {
+      "description": "Enumeration of supported platform kinds.",
+      "enum": [
+        "configuration",
+        "tenant",
+        "deployment",
+        "dns",
+        "environment",
+        "firewall",
+        "module",
+        "network",
+        "namespace",
+        "platform_model",
+        "deployment-manifest",
+        "provider",
+        "resource",
+        "workspace"
+      ],
+      "title": "PlatformKind",
+      "type": "string"
+    },
+    "PlatformVersion": {
+      "description": "Enumeration of supported platform versions.",
+      "enum": [
+        "strata.huybrechts.xyz/v1",
+        "strata.omp.com/v1"
+      ],
+      "title": "PlatformVersion",
+      "type": "string"
+    },
+    "PolicyModel": {
+      "additionalProperties": false,
+      "description": "Declares a single policy evaluated at a given lifecycle phase.\n\nExample YAML::\n\n    policies:\n      - name: zone_enforcement\n        type: tenant_zone\n        phase: plan\n        enforcement: deny\n        description: \"Ensure all planned resources are in tenant-allowed zones\"",
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "description": "Policy type: tenant_zone | required_tags | naming_pattern | script",
+          "title": "Type",
+          "type": "string"
+        },
+        "phase": {
+          "description": "Evaluation phase: validate | build | plan | deploy",
+          "title": "Phase",
+          "type": "string"
+        },
+        "enforcement": {
+          "default": "deny",
+          "description": "Enforcement level: deny | warn | audit",
+          "title": "Enforcement",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Configuration"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "phase"
+      ],
+      "title": "PolicyModel",
+      "type": "object"
+    },
+    "RemoteModel": {
+      "additionalProperties": false,
+      "description": "Model for remote source configuration.\n\nSupports three remote types:\n\nBUNDLED:\n    - Platform-bundled modules available within the platform itself\n    - repository: Platform-relative path ('.' or relative path)\n    - reference: Version, tag, or branch identifier\n    - source_path: Path to the module from the platform root\n    - deploy_path: Optional path to deployment artifacts\n\nGITOPS:\n    - Module deployed via GitOps workflow from Git repository\n    - repository: Git repository URL (e.g., GitHub, GitLab)\n    - reference: Branch, tag, or commit hash\n    - source_path: Path to the module within the repository\n    - deploy_path: Optional path to deployment artifacts\n\nCONTAINER:\n    - Module deployed via container image\n    - repository: Container image repository (e.g., Docker Hub, ECR)\n    - reference: Image tag or digest\n    - source_path: Path to the module within the container image\n    - deploy_path: Optional path to deployment artifacts",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional name for the remote",
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable description of this remote",
+          "title": "Description"
+        },
+        "type": {
+          "$ref": "#/$defs/RemoteType",
+          "description": "Remote type: bundled (platform-bundled), gitops (Git repository), or container"
+        },
+        "repository": {
+          "description": "Source repository or image for the deployment",
+          "minLength": 1,
+          "title": "Repository",
+          "type": "string"
+        },
+        "reference": {
+          "description": "Version/tag/branch or image tag/digest for the deployment",
+          "minLength": 1,
+          "title": "Reference",
+          "type": "string"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to the module configuration or script (not applicable for container type)",
+          "title": "Source Path"
+        },
+        "deploy_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to deployment artifacts (if applicable)",
+          "title": "Deploy Path"
+        }
+      },
+      "required": [
+        "type",
+        "repository",
+        "reference"
+      ],
+      "title": "RemoteModel",
+      "type": "object"
+    },
+    "RemoteType": {
+      "description": "Enumeration of supported remote source types.\n\nBUNDLED: Platform-bundled modules (available within the platform)\nGITOPS: GitOps repository to clone from\nCONTAINER: Container image source",
+      "enum": [
+        "bundled",
+        "gitops",
+        "container"
+      ],
+      "title": "RemoteType",
+      "type": "string"
+    },
+    "SAMLAuthenticationModel": {
+      "additionalProperties": false,
+      "description": "SAML 2.0 authentication.\n\nAll fields are key references resolved from environment declarations.",
+      "properties": {
+        "idp_entity_id": {
+          "description": "Key reference for SAML Identity Provider entity ID",
+          "title": "Idp Entity Id",
+          "type": "string"
+        },
+        "sp_entity_id": {
+          "description": "Key reference for SAML Service Provider entity ID",
+          "title": "Sp Entity Id",
+          "type": "string"
+        },
+        "sso_url": {
+          "description": "Key reference for SAML Single Sign-On URL",
+          "title": "Sso Url",
+          "type": "string"
+        },
+        "certificate_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key reference for SAML certificate file path",
+          "title": "Certificate Path"
+        }
+      },
+      "required": [
+        "idp_entity_id",
+        "sp_entity_id",
+        "sso_url"
+      ],
+      "title": "SAMLAuthenticationModel",
+      "type": "object"
+    },
+    "ScriptPathModel": {
+      "additionalProperties": false,
+      "description": "Individual script with scope and execution metadata.",
+      "properties": {
+        "file": {
+          "description": "Path to script file",
+          "title": "File",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/PlatformKind",
+          "description": "Execution scope - determines how many times script runs (deployment, environment, workspace, provider, resource, module, namespace)"
+        },
+        "priority": {
+          "default": 100,
+          "description": "Execution order within scope (lower runs first)",
+          "maximum": 9999,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional target filter (e.g., 'vm-*', 'azure-*', 'production')",
+          "title": "Target"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "file",
+        "scope"
+      ],
+      "title": "ScriptPathModel",
+      "type": "object"
+    },
+    "SensitiveOutputHandling": {
+      "description": "How to handle Terraform outputs marked ``sensitive = true``.",
+      "enum": [
+        "redact",
+        "omit"
+      ],
+      "title": "SensitiveOutputHandling",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level model for a configuration file.",
+  "properties": {
+    "apiVersion": {
+      "$ref": "#/$defs/PlatformVersion",
+      "default": "strata.huybrechts.xyz/v1",
+      "description": "API version of the configuration model."
+    },
+    "kind": {
+      "$ref": "#/$defs/PlatformKind",
+      "default": "configuration",
+      "description": "Platform kind: always 'configuration'."
+    },
+    "meta": {
+      "$ref": "#/$defs/ConfigurationMetaModel"
+    },
+    "spec": {
+      "$ref": "#/$defs/ConfigurationSpecModel",
+      "description": "Specification for the configuration."
+    }
+  },
+  "required": [
+    "meta",
+    "spec"
+  ],
+  "title": "ConfigurationModel",
+  "type": "object"
+}

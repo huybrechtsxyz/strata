@@ -1,0 +1,82 @@
+# DNS Zone Template
+# Copy this file and customize for your DNS zone configuration
+#
+# Usage: cp .strata/templates/dns.yaml config/{platform}/dns/{name}-dns.yaml
+
+apiVersion: strata.huybrechts.xyz/v1
+kind: dns
+meta:
+  name: {{ name }}
+  annotations:
+    description: "DNS zone configuration"
+    owner: {{ owner }}
+  labels:
+    version: {{ version }}
+  tags: ["template", "dns", "networking"]
+spec:
+  # DNS provider: inwx, cloudflare, route53, azure-dns, etc.
+  provider: inwx
+
+  zones:
+    - name: example.com
+      # Default TTL for all records in this zone (seconds)
+      ttl: 3600
+      records:
+        # A record — maps domain to IPv4 address
+        - name: "@"
+          type: A
+          value: "1.2.3.4"
+
+        # AAAA record — maps domain to IPv6 address
+        - name: "@"
+          type: AAAA
+          value: "2001:db8::1"
+
+        # CNAME record — alias to another domain
+        - name: www
+          type: CNAME
+          value: example.com.
+
+        # MX record — mail server with priority
+        - name: "@"
+          type: MX
+          value: mail.example.com.
+          priority: 10
+
+        # MX record — fallback mail server
+        - name: "@"
+          type: MX
+          value: mail2.example.com.
+          priority: 20
+
+        # TXT record — SPF policy
+        - name: "@"
+          type: TXT
+          value: "v=spf1 include:_spf.example.com ~all"
+
+        # TXT record — DMARC policy
+        - name: _dmarc
+          type: TXT
+          value: "v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com"
+
+        # CAA record — restrict certificate issuance to Let's Encrypt
+        - name: "@"
+          type: CAA
+          value: '0 issue "letsencrypt.org"'
+
+        # CAA record — prohibit wildcard certificates
+        - name: "@"
+          type: CAA
+          value: '0 issuewild ";"'
+
+        # NS record — custom nameserver delegation for a subdomain
+        - name: sub
+          type: NS
+          value: ns1.example.com.
+
+        # SRV record — service discovery (e.g. SIP)
+        # - name: _sip._tcp
+        #   type: SRV
+        #   value: "0 5 5060 sip.example.com."
+        #   priority: 10
+        #   ttl: 600

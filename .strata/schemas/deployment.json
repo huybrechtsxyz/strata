@@ -1,0 +1,932 @@
+{
+  "$defs": {
+    "ApproverRef": {
+      "additionalProperties": false,
+      "description": "A single named approver entry.",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/ApproverType",
+          "description": "Approver identity type: github-team | ado-group | user"
+        },
+        "value": {
+          "description": "Approver identifier \u2014 team slug, group name, or user address",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "title": "ApproverRef",
+      "type": "object"
+    },
+    "ApproverType": {
+      "description": "Supported approver identity types.",
+      "enum": [
+        "github-team",
+        "ado-group",
+        "user"
+      ],
+      "title": "ApproverType",
+      "type": "string"
+    },
+    "CommonLifecycleModel": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CommonLifecyclePhaseModel"
+      },
+      "default": {},
+      "description": "Lifecycle phases for common models.\nMaps phase names to phase configurations.\nPhase names follow pattern: {command}_{action}_{suffix}\nExamples: config_clear, config_fetch, deploy_plan_before, deploy_apply_after",
+      "title": "CommonLifecycleModel",
+      "type": "object"
+    },
+    "CommonLifecyclePhaseModel": {
+      "additionalProperties": false,
+      "description": "Model for common lifecycle phase with script validation.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        },
+        "scripts": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ScriptPathModel"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scripts"
+        }
+      },
+      "title": "CommonLifecyclePhaseModel",
+      "type": "object"
+    },
+    "DeploymentApprovalModel": {
+      "additionalProperties": false,
+      "description": "Deployment-level approval metadata.\n\nPresence of this block signals that approvals are declared for this deployment.\nAn empty ``approvers`` dict is silently treated as no gate.\nThe CLI emits this metadata for audit; enforcement is done by the CI/CD system.",
+      "properties": {
+        "approvers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ApproverRef"
+          },
+          "description": "Named approver entries. Key is a short identifier used as a cross-reference from stage overrides.",
+          "title": "Approvers",
+          "type": "object"
+        }
+      },
+      "title": "DeploymentApprovalModel",
+      "type": "object"
+    },
+    "DeploymentConfigurationModel": {
+      "additionalProperties": false,
+      "description": "Model for a deployment configuration file reference.",
+      "properties": {
+        "name": {
+          "description": "Unique reference name",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "file": {
+          "description": "Path to the file (resolved and validated at load time)",
+          "title": "File",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description of the referenced file",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "name",
+        "file"
+      ],
+      "title": "DeploymentConfigurationModel",
+      "type": "object"
+    },
+    "DeploymentLockingModel": {
+      "additionalProperties": false,
+      "description": "Locking behaviour for spec.locking.\n\nConnection config is not declared here \u2014 it is derived automatically from\n``provisioner.backend`` on the workspace IaC provisioner used by each stage.\nThe lock backend type is inferred from ``provisioner.backend.type``\n(e.g. ``azurerm``, ``terraform_cloud``, ``s3``, ``consul``).",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Enable pipeline-level state locking",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "strategy": {
+          "default": "wrap",
+          "description": "wrap: strata acquires the lock before the first stage and holds it for the entire pipeline. delegate: strata does not lock \u2014 relies on the backend's native locking (TFC run queue, Terraform state lock). Only safe for pure-TFC remote execution pipelines.",
+          "enum": [
+            "wrap",
+            "delegate"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        },
+        "wait_timeout": {
+          "default": "30m",
+          "description": "How long to wait for a held lock before failing (e.g. 30m, 1h). Supports h/m/s suffixes.",
+          "title": "Wait Timeout",
+          "type": "string"
+        },
+        "force_unlock_after": {
+          "default": "8h",
+          "description": "Stale lock TTL \u2014 auto-release a lock held longer than this duration (e.g. 8h). Supports h/m/s suffixes.",
+          "title": "Force Unlock After",
+          "type": "string"
+        }
+      },
+      "title": "DeploymentLockingModel",
+      "type": "object"
+    },
+    "DeploymentMetaModel": {
+      "additionalProperties": false,
+      "description": "Model for deployment metadata (name, annotations, labels, tags).",
+      "properties": {
+        "name": {
+          "description": "Unique deployment name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional annotations (key-value pairs for documentation)",
+          "title": "Annotations"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional labels (key-value pairs for classification/filtering)",
+          "title": "Labels"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tags (list of values for categorization)",
+          "title": "Tags"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "DeploymentMetaModel",
+      "type": "object"
+    },
+    "DeploymentSpecModel": {
+      "additionalProperties": false,
+      "description": "Model for deployment specification (properties, workspace, stages).",
+      "properties": {
+        "configurations": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DeploymentConfigurationModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional configuration list",
+          "title": "Configurations"
+        },
+        "lifecycle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommonLifecycleModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deployment lifecycle phases"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deployment-specific properties and configurations. Validated against configuration.spec.deployment.properties schema if defined.",
+          "title": "Properties"
+        },
+        "custom": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deployment-specific custom properties and configurations",
+          "title": "Custom"
+        },
+        "layers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deployment layer values (keys must match configuration.spec.layering[].name). Defines the artifact path location for this deployment.",
+          "title": "Layers"
+        },
+        "tenant": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tenant code this deployment belongs to. Must match a tenant YAML file in tenants/<code>.yaml. Validated against the filesystem during Phase 2. Omit for shared/platform deployments that serve all tenants.",
+          "title": "Tenant"
+        },
+        "workspace": {
+          "$ref": "#/$defs/DeploymentWorkspaceModel",
+          "description": "Name of the associated workspace for this deployment"
+        },
+        "environments": {
+          "description": "List of environment file paths for this deployment (later files override earlier ones)",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Environments",
+          "type": "array"
+        },
+        "approvals": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeploymentApprovalModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Approval configuration for this deployment"
+        },
+        "locking": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeploymentLockingModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pipeline locking behaviour for concurrent deploy protection"
+        },
+        "stages": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DeploymentStageModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional deployment stages for multi-step execution (if not specified, single-step execution)",
+          "title": "Stages"
+        }
+      },
+      "required": [
+        "workspace",
+        "environments"
+      ],
+      "title": "DeploymentSpecModel",
+      "type": "object"
+    },
+    "DeploymentStageApprovalModel": {
+      "additionalProperties": false,
+      "description": "Per-stage approval override: restricts which spec-level approvers apply to this stage.",
+      "properties": {
+        "approvers": {
+          "description": "List of approver keys from spec.approvals.approvers that apply to this stage",
+          "items": {
+            "type": "string"
+          },
+          "title": "Approvers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "approvers"
+      ],
+      "title": "DeploymentStageApprovalModel",
+      "type": "object"
+    },
+    "DeploymentStageModel": {
+      "additionalProperties": false,
+      "description": "Model for a deployment stage (pipeline execution step).\n\nStages enable:\n- Sequential multi-step execution (e.g., provision \u2192 configure \u2192 verify)\n- Execution ordering and dependency management (DAG execution via depends_on)\n- Failure handling per stage\n\nProvisioner Selection (mutually exclusive \u2014 exactly one required at runtime):\n- 'provisioner': name of a workspace provisioner entry (explicit, no filtering)\n- 'topology':    name of a workspace topology entry; derives the provisioner\n                 type from the topology definition and filters to its resources\n\nStages do NOT define environments or approvals - those are deployment-level.\nStages do NOT affect artifact paths - use deployment.spec.deployment for layering.",
+      "properties": {
+        "name": {
+          "description": "Unique stage name - pipeline step identifier (e.g., 'provision', 'configure', 'verify')",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional human-readable description of what this stage does (informational only \u2014 does not affect routing)",
+          "title": "Description"
+        },
+        "provisioner": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Explicit provisioner name from workspace (required if multiple provisioners match type)",
+          "title": "Provisioner"
+        },
+        "topology": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Topology name from workspace (mutually exclusive with 'provisioner'). Derives the provisioner type from the topology definition and scopes execution to that topology's resources.",
+          "title": "Topology"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Free-form label for CLI-level stage filtering. Pass --scope <label> to strata deploy run to execute only stages whose scope matches the supplied value. Omit to run all stages.",
+          "title": "Scope"
+        },
+        "scripts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScriptsModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Additional scripts to execute for this stage (extends provisioner behavior)"
+        },
+        "depends_on": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of stage names this stage depends on (enables DAG execution)",
+          "title": "Depends On"
+        },
+        "on_failure": {
+          "default": "stop",
+          "description": "Action to take on stage failure: 'stop' halts pipeline, 'rollback' reverts, 'continue' proceeds",
+          "enum": [
+            "stop",
+            "rollback",
+            "continue"
+          ],
+          "title": "On Failure",
+          "type": "string"
+        },
+        "health_checks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/HealthCheckModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Health checks to run against this stage after provisioning.",
+          "title": "Health Checks"
+        },
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeploymentStageApprovalModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-stage approval override: list of approver keys from spec.approvals.approvers. Absent means no stage-level restriction \u2014 spec-level approvers apply as-is."
+        },
+        "timeouts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeploymentStageTimeoutsModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-operation subprocess timeouts. Overrides TerraformIntegration defaults (init=300s, validate=60s, plan=600s, apply=1800s, destroy=1800s)."
+        },
+        "secrets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Allowlist of secret keys this stage may access from STRATA_SENSITIVE. Only these keys are passed to the deployer. Omit or set to null for no secret access. Use ['*'] to grant access to all secrets (escape hatch).",
+          "title": "Secrets"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "DeploymentStageModel",
+      "type": "object"
+    },
+    "DeploymentStageTimeoutsModel": {
+      "additionalProperties": false,
+      "description": "Per-step subprocess timeouts for a deployment stage (all deployer types).\n\nField names match deployer step names so the same schema works for\nTerraform, Ansible, and script-based stages.  All fields are optional;\nomitting a field keeps the deployer's built-in default.\n\nExamples (YAML)::\n\n    stages:\n      - name: infrastructure\n        type: infrastructure\n        timeouts:\n          setup: 120   # fail fast if backend is unreachable\n          plan: 300\n          apply: 1200  # 20 min \u2014 tighter than the 30 min default",
+      "properties": {
+        "setup": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Timeout in seconds for the setup step (tf init / galaxy install / deploy_setup). Default varies by deployer.",
+          "title": "Setup"
+        },
+        "check": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Timeout in seconds for the check step (tf validate / syntax-check / deploy_check). Default varies by deployer.",
+          "title": "Check"
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Timeout in seconds for the plan step. Default varies by deployer.",
+          "title": "Plan"
+        },
+        "apply": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Timeout in seconds for the apply step. Default varies by deployer.",
+          "title": "Apply"
+        },
+        "destroy": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Timeout in seconds for the destroy step. Default varies by deployer.",
+          "title": "Destroy"
+        }
+      },
+      "title": "DeploymentStageTimeoutsModel",
+      "type": "object"
+    },
+    "DeploymentWorkspaceModel": {
+      "additionalProperties": false,
+      "description": "Model for deployment workspace file reference.",
+      "properties": {
+        "name": {
+          "description": "Unique reference name",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "file": {
+          "description": "Path to the file (resolved and validated at load time)",
+          "title": "File",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description of the referenced file",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "name",
+        "file"
+      ],
+      "title": "DeploymentWorkspaceModel",
+      "type": "object"
+    },
+    "HealthCheckModel": {
+      "additionalProperties": false,
+      "description": "A single health check applied to a deployment stage after provisioning.\n\nTwo check types:\n- ``http``  \u2014 HTTP(S) GET; passes if response code matches ``expect_status``.\n- ``tcp``   \u2014 TCP connect to ``host:port``; passes if connection succeeds.\n\nBoth types also support checking Terraform output values:\n- ``output_key`` \u2014 name of a Terraform output whose value should be used as\n  the URL (http) or ``host:port`` (tcp).  Takes precedence over ``url`` /\n  ``host`` + ``port`` when present.\n\nExamples (YAML)::\n\n    health_checks:\n      - name: api-endpoint\n        type: http\n        output_key: api_url\n        expect_status: 200\n        timeout: 10\n      - name: db-port\n        type: tcp\n        host: 10.0.0.5\n        port: 5432",
+      "properties": {
+        "name": {
+          "description": "Unique check name within the stage",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "description": "Check type: 'http' or 'tcp'",
+          "enum": [
+            "http",
+            "tcp"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "URL to GET (http type). Overridden by output_key.",
+          "title": "Url"
+        },
+        "expect_status": {
+          "default": 200,
+          "description": "Expected HTTP status code (http type).",
+          "title": "Expect Status",
+          "type": "integer"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hostname or IP (tcp type). Overridden by output_key.",
+          "title": "Host"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "TCP port (tcp type).",
+          "title": "Port"
+        },
+        "output_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Terraform output key whose value provides the URL or host:port target.",
+          "title": "Output Key"
+        },
+        "timeout": {
+          "default": 10,
+          "description": "Connection / request timeout in seconds.",
+          "title": "Timeout",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "HealthCheckModel",
+      "type": "object"
+    },
+    "PlatformKind": {
+      "description": "Enumeration of supported platform kinds.",
+      "enum": [
+        "configuration",
+        "tenant",
+        "deployment",
+        "dns",
+        "environment",
+        "firewall",
+        "module",
+        "network",
+        "namespace",
+        "platform_model",
+        "deployment-manifest",
+        "provider",
+        "resource",
+        "workspace"
+      ],
+      "title": "PlatformKind",
+      "type": "string"
+    },
+    "PlatformVersion": {
+      "description": "Enumeration of supported platform versions.",
+      "enum": [
+        "strata.huybrechts.xyz/v1",
+        "strata.omp.com/v1"
+      ],
+      "title": "PlatformVersion",
+      "type": "string"
+    },
+    "ScriptPathModel": {
+      "additionalProperties": false,
+      "description": "Individual script with scope and execution metadata.",
+      "properties": {
+        "file": {
+          "description": "Path to script file",
+          "title": "File",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/PlatformKind",
+          "description": "Execution scope - determines how many times script runs (deployment, environment, workspace, provider, resource, module, namespace)"
+        },
+        "priority": {
+          "default": 100,
+          "description": "Execution order within scope (lower runs first)",
+          "maximum": 9999,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional target filter (e.g., 'vm-*', 'azure-*', 'production')",
+          "title": "Target"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "file",
+        "scope"
+      ],
+      "title": "ScriptPathModel",
+      "type": "object"
+    },
+    "ScriptsModel": {
+      "additionalProperties": false,
+      "description": "Model for validating script paths with scope-aware execution.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        },
+        "scripts": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ScriptPathModel"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scripts"
+        }
+      },
+      "title": "ScriptsModel",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root model for a deployment configuration file.",
+  "properties": {
+    "apiVersion": {
+      "$ref": "#/$defs/PlatformVersion",
+      "default": "strata.huybrechts.xyz/v1",
+      "description": "API version for workspace configuration"
+    },
+    "kind": {
+      "$ref": "#/$defs/PlatformKind",
+      "default": "deployment",
+      "description": "Platform kind (always 'Deployment')"
+    },
+    "meta": {
+      "$ref": "#/$defs/DeploymentMetaModel",
+      "description": "Deployment metadata (name, annotations, labels, tags)"
+    },
+    "spec": {
+      "$ref": "#/$defs/DeploymentSpecModel",
+      "description": "Deployment specification (properties, workspace, environment)"
+    }
+  },
+  "required": [
+    "meta",
+    "spec"
+  ],
+  "title": "DeploymentModel",
+  "type": "object"
+}

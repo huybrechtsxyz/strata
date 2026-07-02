@@ -1,0 +1,662 @@
+{
+  "$defs": {
+    "CommonLifecycleModel": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CommonLifecyclePhaseModel"
+      },
+      "default": {},
+      "description": "Lifecycle phases for common models.\nMaps phase names to phase configurations.\nPhase names follow pattern: {command}_{action}_{suffix}\nExamples: config_clear, config_fetch, deploy_plan_before, deploy_apply_after",
+      "title": "CommonLifecycleModel",
+      "type": "object"
+    },
+    "CommonLifecyclePhaseModel": {
+      "additionalProperties": false,
+      "description": "Model for common lifecycle phase with script validation.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        },
+        "scripts": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ScriptPathModel"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scripts"
+        }
+      },
+      "title": "CommonLifecyclePhaseModel",
+      "type": "object"
+    },
+    "PlatformKind": {
+      "description": "Enumeration of supported platform kinds.",
+      "enum": [
+        "configuration",
+        "tenant",
+        "deployment",
+        "dns",
+        "environment",
+        "firewall",
+        "module",
+        "network",
+        "namespace",
+        "platform_model",
+        "deployment-manifest",
+        "provider",
+        "resource",
+        "workspace"
+      ],
+      "title": "PlatformKind",
+      "type": "string"
+    },
+    "PlatformVersion": {
+      "description": "Enumeration of supported platform versions.",
+      "enum": [
+        "strata.huybrechts.xyz/v1",
+        "strata.omp.com/v1"
+      ],
+      "title": "PlatformVersion",
+      "type": "string"
+    },
+    "ResourceDependencyModel": {
+      "additionalProperties": false,
+      "description": "Capability-based resource dependency model.\n\nResources declare what TYPE/CATEGORY of resource they need,\nallowing the workspace to resolve to specific resource instances.\nThis enables resource reusability across different workspaces and providers.\n\nExamples:\n    - category: \"networking\", subcategory: \"virtual_network\"\n      \u2192 Satisfied by Azure VNet, AWS VPC, or GCP VPC\n    - category: \"database\", subcategory: \"nosql\"\n      \u2192 Satisfied by Cosmos DB, DynamoDB, or Firestore\n    - category: \"networking\", subcategory: \"private_dns\"\n      \u2192 Satisfied by Azure Private DNS, Route53, or Cloud DNS",
+      "properties": {
+        "category": {
+          "description": "Resource category required (e.g., networking, compute, database, storage, security)",
+          "minLength": 1,
+          "title": "Category",
+          "type": "string"
+        },
+        "subcategory": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional subcategory for more specific requirements (e.g., virtual_network, private_dns, nosql, blob)",
+          "title": "Subcategory"
+        },
+        "resource_type": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional specific resource type for even more granular matching (e.g., cosmosdb_account, storage_account)",
+          "title": "Resource Type"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Human-readable explanation of why this dependency exists",
+          "title": "Description"
+        },
+        "optional": {
+          "default": false,
+          "description": "If True, workspace can deploy without this dependency",
+          "title": "Optional",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "category"
+      ],
+      "title": "ResourceDependencyModel",
+      "type": "object"
+    },
+    "ResourceDiskModel": {
+      "additionalProperties": false,
+      "description": "Model for defining resource disk configuration (size, label, mount).\nValidates label format and mount path.",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "size": {
+          "description": "Disk size must be greater than 0 GB",
+          "exclusiveMinimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "label": {
+          "description": "Disk label for identification",
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "mount": {
+          "description": "Mount path for the disk",
+          "minLength": 1,
+          "title": "Mount",
+          "type": "string"
+        }
+      },
+      "required": [
+        "size",
+        "label",
+        "mount"
+      ],
+      "title": "ResourceDiskModel",
+      "type": "object"
+    },
+    "ResourceMetaModel": {
+      "additionalProperties": false,
+      "description": "Model for resource metadata (name, annotations, labels, tags).",
+      "properties": {
+        "name": {
+          "description": "Unique resource name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional annotations (key-value pairs for documentation)",
+          "title": "Annotations"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional labels (key-value pairs for classification/filtering)",
+          "title": "Labels"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tags (list of values for categorization)",
+          "title": "Tags"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ResourceMetaModel",
+      "type": "object"
+    },
+    "ResourcePropertiesModel": {
+      "additionalProperties": false,
+      "description": "Model for resource properties (unit cost, installpoint, configuration).",
+      "properties": {
+        "provider_type": {
+          "description": "Cloud/infrastructure provider. Must be a known provider string matching PlatformName pattern.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Provider Type",
+          "type": "string"
+        },
+        "resource_type": {
+          "description": "Type of the resource",
+          "minLength": 1,
+          "title": "Resource Type",
+          "type": "string"
+        },
+        "unit_cost": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.0,
+          "description": "Unit cost for the resource",
+          "title": "Unit Cost"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resource category for organization (e.g., networking, compute, database, storage)",
+          "title": "Category"
+        },
+        "subcategory": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resource subcategory for finer classification (e.g., vnet, nosql, blob)",
+          "title": "Subcategory"
+        }
+      },
+      "required": [
+        "provider_type",
+        "resource_type"
+      ],
+      "title": "ResourcePropertiesModel",
+      "type": "object"
+    },
+    "ResourceReferencesModel": {
+      "additionalProperties": false,
+      "description": "References to variables, secrets, and features required by this resource.\n\nLists the keys that must be defined in the environment configuration.\nActual values and store backends are defined at environment/workspace level.",
+      "properties": {
+        "variables": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of variable keys this resource requires from environment",
+          "title": "Variables"
+        },
+        "secrets": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of secret keys this resource requires from environment",
+          "title": "Secrets"
+        },
+        "features": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of feature flag keys this resource requires from environment",
+          "title": "Features"
+        }
+      },
+      "title": "ResourceReferencesModel",
+      "type": "object"
+    },
+    "ResourceSpecModel": {
+      "additionalProperties": false,
+      "description": "Resource specification containing properties, references, and lifecycle configuration.",
+      "properties": {
+        "lifecycle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommonLifecycleModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IaC workflow lifecycle phases"
+        },
+        "references": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceReferencesModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Variable, and secret references"
+        },
+        "properties": {
+          "$ref": "#/$defs/ResourcePropertiesModel",
+          "description": "Configuration properties (provider, resources, disks, volumes)"
+        },
+        "dependencies": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ResourceDependencyModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of resource dependencies",
+          "title": "Dependencies"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceStorageModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Virtual machine specific configuration"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Additional configuration block for resource-specific settings",
+          "title": "Configuration"
+        },
+        "custom": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Custom user-defined data for scripts or extensions",
+          "title": "Custom"
+        }
+      },
+      "required": [
+        "properties"
+      ],
+      "title": "ResourceSpecModel",
+      "type": "object"
+    },
+    "ResourceStorageModel": {
+      "additionalProperties": false,
+      "description": "Generic storage configuration for resources that need persistent storage.\nApplies to VMs, containers, databases, etc.\n\nExamples:\n    - VM: OS disk + data disks + volume mounts\n    - Container: Persistent volumes + bind mounts\n    - Database: Data disk + backup disk + log disk\n    - Storage Account: Containers + file shares + queues",
+      "properties": {
+        "install_path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Installation directory inside the VM",
+          "title": "Install Path"
+        },
+        "disks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ResourceDiskModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of disk configurations",
+          "title": "Disks"
+        },
+        "volumes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ResourceVolumesModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of volume mounts",
+          "title": "Volumes"
+        },
+        "parameters": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional parameters (key-value pairs for scripting)",
+          "title": "Parameters"
+        }
+      },
+      "title": "ResourceStorageModel",
+      "type": "object"
+    },
+    "ResourceVolumesModel": {
+      "additionalProperties": false,
+      "description": "Model for defining resource volume mounts (name, path).",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Volume name",
+          "title": "Name"
+        },
+        "path": {
+          "description": "Mount path for the volume",
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "ResourceVolumesModel",
+      "type": "object"
+    },
+    "ScriptPathModel": {
+      "additionalProperties": false,
+      "description": "Individual script with scope and execution metadata.",
+      "properties": {
+        "file": {
+          "description": "Path to script file",
+          "title": "File",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/PlatformKind",
+          "description": "Execution scope - determines how many times script runs (deployment, environment, workspace, provider, resource, module, namespace)"
+        },
+        "priority": {
+          "default": 100,
+          "description": "Execution order within scope (lower runs first)",
+          "maximum": 9999,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional target filter (e.g., 'vm-*', 'azure-*', 'production')",
+          "title": "Target"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "file",
+        "scope"
+      ],
+      "title": "ScriptPathModel",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level model for a resource definition.\nIncludes metadata, specification, and validation for provider configuration requirements.",
+  "properties": {
+    "apiVersion": {
+      "$ref": "#/$defs/PlatformVersion",
+      "default": "strata.huybrechts.xyz/v1",
+      "description": "API version for resource configuration"
+    },
+    "kind": {
+      "$ref": "#/$defs/PlatformKind",
+      "default": "resource",
+      "description": "Platform kind (always 'Resource')"
+    },
+    "meta": {
+      "$ref": "#/$defs/ResourceMetaModel",
+      "description": "Resource metadata (name, annotations, labels, tags)"
+    },
+    "spec": {
+      "$ref": "#/$defs/ResourceSpecModel",
+      "description": "Resource specification (properties, lifecycle, ...)"
+    }
+  },
+  "required": [
+    "meta",
+    "spec"
+  ],
+  "title": "ResourceModel",
+  "type": "object"
+}

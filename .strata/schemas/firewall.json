@@ -1,0 +1,365 @@
+{
+  "$defs": {
+    "FirewallDefaultsModel": {
+      "additionalProperties": false,
+      "description": "Model for a default firewall rule (direction, permission, comment).\nUsed to set baseline allow/deny behavior for inbound/outbound traffic.",
+      "properties": {
+        "direction": {
+          "$ref": "#/$defs/FirewallDirection",
+          "description": "Direction of traffic for the default rule: 'in' or 'out'."
+        },
+        "permission": {
+          "$ref": "#/$defs/FirewallPermission",
+          "description": "Permission for the default rule: 'allow' or 'deny'."
+        },
+        "comment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional comment or documentation for the default rule.",
+          "title": "Comment"
+        }
+      },
+      "required": [
+        "direction",
+        "permission"
+      ],
+      "title": "FirewallDefaultsModel",
+      "type": "object"
+    },
+    "FirewallDirection": {
+      "description": "Firewall rule direction: inbound (in) or outbound (out).",
+      "enum": [
+        "in",
+        "out"
+      ],
+      "title": "FirewallDirection",
+      "type": "string"
+    },
+    "FirewallMetaModel": {
+      "additionalProperties": false,
+      "description": "Model for firewall resource metadata (name, annotations, labels, tags).",
+      "properties": {
+        "name": {
+          "description": "Unique name for the firewall resource.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional annotations (key-value pairs for documentation)",
+          "title": "Annotations"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Labels for categorization and filtering.",
+          "title": "Labels"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional list of tags for the firewall resource.",
+          "title": "Tags"
+        }
+      },
+      "required": [
+        "name",
+        "labels"
+      ],
+      "title": "FirewallMetaModel",
+      "type": "object"
+    },
+    "FirewallPermission": {
+      "description": "Firewall rule permission: allow or deny.",
+      "enum": [
+        "allow",
+        "deny"
+      ],
+      "title": "FirewallPermission",
+      "type": "string"
+    },
+    "FirewallProtocol": {
+      "description": "Firewall rule protocol: tcp, udp, or icmp.",
+      "enum": [
+        "tcp",
+        "udp",
+        "icmp"
+      ],
+      "title": "FirewallProtocol",
+      "type": "string"
+    },
+    "FirewallRuleModel": {
+      "additionalProperties": false,
+      "description": "Model for an individual firewall rule.\nSupports direction, protocol, port(s), interface, source/destination, and comments.\nValidates IP/CIDR, port formats, and interface names.",
+      "properties": {
+        "direction": {
+          "$ref": "#/$defs/FirewallDirection",
+          "description": "Direction of traffic: 'in' for inbound, 'out' for outbound."
+        },
+        "proto": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallProtocol"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Protocol for the rule: 'tcp', 'udp', or 'icmp'. Optional."
+        },
+        "port": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                }
+              ],
+              "description": "Single port (int), port range (str like '80:90'), or list of ports/ranges. Optional."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Port"
+        },
+        "interface": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Network interface name (e.g., 'eth0', 'lo'). Optional.",
+          "title": "Interface"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Source IP address or CIDR (for inbound rules). Optional.",
+          "title": "From"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Destination IP address or CIDR (for outbound rules). Optional.",
+          "title": "To"
+        },
+        "comment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional comment or documentation for the rule.",
+          "title": "Comment"
+        }
+      },
+      "required": [
+        "direction"
+      ],
+      "title": "FirewallRuleModel",
+      "type": "object"
+    },
+    "FirewallSpecModel": {
+      "additionalProperties": false,
+      "description": "Model for a firewall ruleset specification.\nIncludes default rules, allow/deny lists, and validation for uniqueness and conflicts.",
+      "properties": {
+        "reset": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "description": "If true, reset all existing firewall rules before applying these rules.",
+          "title": "Reset"
+        },
+        "defaults": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/FirewallDefaultsModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of default rules (baseline allow/deny for each direction).",
+          "title": "Defaults"
+        },
+        "deny": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/FirewallRuleModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of explicit deny rules.",
+          "title": "Deny"
+        },
+        "allow": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/FirewallRuleModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of explicit allow rules.",
+          "title": "Allow"
+        }
+      },
+      "title": "FirewallSpecModel",
+      "type": "object"
+    },
+    "PlatformKind": {
+      "description": "Enumeration of supported platform kinds.",
+      "enum": [
+        "configuration",
+        "tenant",
+        "deployment",
+        "dns",
+        "environment",
+        "firewall",
+        "module",
+        "network",
+        "namespace",
+        "platform_model",
+        "deployment-manifest",
+        "provider",
+        "resource",
+        "workspace"
+      ],
+      "title": "PlatformKind",
+      "type": "string"
+    },
+    "PlatformVersion": {
+      "description": "Enumeration of supported platform versions.",
+      "enum": [
+        "strata.huybrechts.xyz/v1",
+        "strata.omp.com/v1"
+      ],
+      "title": "PlatformVersion",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level model for a firewall ruleset resource.\nIncludes metadata and specification for validation and orchestration.",
+  "properties": {
+    "apiVersion": {
+      "$ref": "#/$defs/PlatformVersion",
+      "default": "strata.huybrechts.xyz/v1",
+      "description": "API version of the firewall resource model."
+    },
+    "kind": {
+      "$ref": "#/$defs/PlatformKind",
+      "default": "firewall",
+      "description": "Resource kind: always 'firewall'."
+    },
+    "meta": {
+      "$ref": "#/$defs/FirewallMetaModel",
+      "description": "Metadata for the firewall resource."
+    },
+    "spec": {
+      "$ref": "#/$defs/FirewallSpecModel",
+      "description": "Specification for the firewall ruleset."
+    }
+  },
+  "required": [
+    "meta",
+    "spec"
+  ],
+  "title": "FirewallModel",
+  "type": "object"
+}

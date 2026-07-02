@@ -1,0 +1,363 @@
+{
+  "$defs": {
+    "DnsMetaModel": {
+      "additionalProperties": false,
+      "description": "Model for DNS resource metadata (name, annotations, labels, tags).",
+      "properties": {
+        "name": {
+          "description": "Unique name for the DNS resource.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional annotations (key-value pairs for documentation)",
+          "title": "Annotations"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional labels (key-value pairs for classification/filtering)",
+          "title": "Labels"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional list of tags for the DNS resource.",
+          "title": "Tags"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "DnsMetaModel",
+      "type": "object"
+    },
+    "DnsRecordModel": {
+      "additionalProperties": false,
+      "description": "Model for a single DNS record within a zone.",
+      "properties": {
+        "name": {
+          "description": "Record name, e.g. '@', 'www', '_dmarc'",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/DnsRecordType",
+          "description": "Record type: A, AAAA, CNAME, MX, TXT, SRV, NS, PTR, CAA"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Literal record value",
+          "title": "Value"
+        },
+        "var": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Variable key from spec.references.variables \u2014 resolved at build time",
+          "title": "Var"
+        },
+        "secret": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Secret key from spec.references.secrets \u2014 resolved at deploy time via TF_VAR_*",
+          "title": "Secret"
+        },
+        "ttl": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Record-level TTL override in seconds (>=1 if set)",
+          "title": "Ttl"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Priority for MX/SRV records (1\u201365535 if set)",
+          "title": "Priority"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "DnsRecordModel",
+      "type": "object"
+    },
+    "DnsRecordType": {
+      "description": "DNS record type.",
+      "enum": [
+        "A",
+        "AAAA",
+        "CNAME",
+        "MX",
+        "TXT",
+        "SRV",
+        "NS",
+        "PTR",
+        "CAA"
+      ],
+      "title": "DnsRecordType",
+      "type": "string"
+    },
+    "DnsReferencesModel": {
+      "additionalProperties": false,
+      "description": "References to variables and secrets required by this DNS configuration.",
+      "properties": {
+        "variables": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Variable keys required from environment",
+          "title": "Variables"
+        },
+        "secrets": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Secret keys required from environment",
+          "title": "Secrets"
+        }
+      },
+      "title": "DnsReferencesModel",
+      "type": "object"
+    },
+    "DnsSpecModel": {
+      "additionalProperties": false,
+      "description": "Model for a DNS configuration specification.",
+      "properties": {
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "DNS provider name, e.g. 'inwx', 'cloudflare', 'route53'",
+          "title": "Provider"
+        },
+        "references": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DnsReferencesModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Variable and secret keys required by records in this DNS configuration"
+        },
+        "zones": {
+          "description": "List of DNS zones (at least one required)",
+          "items": {
+            "$ref": "#/$defs/DnsZoneModel"
+          },
+          "minItems": 1,
+          "title": "Zones",
+          "type": "array"
+        }
+      },
+      "required": [
+        "zones"
+      ],
+      "title": "DnsSpecModel",
+      "type": "object"
+    },
+    "DnsZoneModel": {
+      "additionalProperties": false,
+      "description": "Model for a DNS zone containing one or more records.",
+      "properties": {
+        "name": {
+          "description": "Domain name for this zone, e.g. 'huybrechts.xyz'",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "ttl": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 3600,
+          "description": "Default TTL in seconds for all records in this zone",
+          "title": "Ttl"
+        },
+        "records": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DnsRecordModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of DNS records in this zone",
+          "title": "Records"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "DnsZoneModel",
+      "type": "object"
+    },
+    "PlatformKind": {
+      "description": "Enumeration of supported platform kinds.",
+      "enum": [
+        "configuration",
+        "tenant",
+        "deployment",
+        "dns",
+        "environment",
+        "firewall",
+        "module",
+        "network",
+        "namespace",
+        "platform_model",
+        "deployment-manifest",
+        "provider",
+        "resource",
+        "workspace"
+      ],
+      "title": "PlatformKind",
+      "type": "string"
+    },
+    "PlatformVersion": {
+      "description": "Enumeration of supported platform versions.",
+      "enum": [
+        "strata.huybrechts.xyz/v1",
+        "strata.omp.com/v1"
+      ],
+      "title": "PlatformVersion",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level model for a DNS zone configuration resource.",
+  "properties": {
+    "apiVersion": {
+      "$ref": "#/$defs/PlatformVersion",
+      "default": "strata.huybrechts.xyz/v1",
+      "description": "API version of the DNS resource model."
+    },
+    "kind": {
+      "$ref": "#/$defs/PlatformKind",
+      "default": "dns",
+      "description": "Resource kind: always 'dns'."
+    },
+    "meta": {
+      "$ref": "#/$defs/DnsMetaModel",
+      "description": "Metadata for the DNS resource."
+    },
+    "spec": {
+      "$ref": "#/$defs/DnsSpecModel",
+      "description": "Specification for the DNS zone configuration."
+    }
+  },
+  "required": [
+    "meta",
+    "spec"
+  ],
+  "title": "DnsModel",
+  "type": "object"
+}
