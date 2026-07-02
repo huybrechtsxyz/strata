@@ -63,7 +63,32 @@
       "deploy/**/*.yaml"
     ],
     "{{ workspaceFolder }}/.strata/schemas/environment.json": [
-      "envs/**/*.yaml"
+      "envs/**/*.yaml",
+      "environments/**/*.yaml"
+    ],
+    "{{ workspaceFolder }}/.strata/schemas/module.json": [
+      "modules/**/*.yaml"
+    ],
+    "{{ workspaceFolder }}/.strata/schemas/namespace.json": [
+      "namespaces/**/*.yaml"
+    ],
+    "{{ workspaceFolder }}/.strata/schemas/provider.json": [
+      "providers/**/*.yaml"
+    ],
+    "{{ workspaceFolder }}/.strata/schemas/resource.json": [
+      "resources/**/*.yaml"
+    ],
+    "{{ workspaceFolder }}/.strata/schemas/firewall.json": [
+      "firewalls/**/*.yaml"
+    ],
+    "{{ workspaceFolder }}/.strata/schemas/network.json": [
+      "networks/**/*.yaml"
+    ],
+    "{{ workspaceFolder }}/.strata/schemas/dns.json": [
+      "dns/**/*.yaml"
+    ],
+    "{{ workspaceFolder }}/.strata/schemas/tenant.json": [
+      "tenants/**/*.yaml"
     ],
     "{{ workspaceFolder }}/.strata/schemas/workspace.json": [
       "stack/**/*.yaml"

@@ -24,7 +24,25 @@ strata profile activate <name>     # activate a profile for building
 strata guide show                  # interactive checklist of what's ready vs missing
 ```
 
-Use `strata guide show` at any time to see workspace readiness — it shows an 8-phase checklist from init through SBOM generation.
+## Understanding workspace state
+
+**Always start every session by running:**
+
+```bash
+strata sln status --output json
+```
+
+This returns a single JSON snapshot containing everything you need:
+- `solution` — is the workspace initialized, its name and ID
+- `readiness` — 8-phase checklist with `phases_complete`, `phases_total`, each phase's `status` (ok/warn/pending), and a `next_step` with the exact hint and command to run
+- `profiles` — all profiles, which is active, and all registered file paths
+- `repositories` — all repos with clone status
+- `integrations` — all external tools (terraform, docker, helm…) with version and availability
+- `health` — HEALTHY / DEGRADED / BROKEN with specific issue descriptions
+
+Parse the `readiness.next_step.hint` field to know exactly what the user needs to do next. If `readiness.complete` is true, the workspace is fully deployed.
+
+Use `strata guide show` for the human-readable version of the same information.
 
 ## Workspace layout
 
@@ -142,6 +160,35 @@ strata deploy run -f deploy/<deployment.yaml>
 
 When a command fails, run it again with `--verbose` to get more detail. For validation errors, show the user the exact error messages and which fields need fixing.
 
+## Prompts available in this workspace
+
+This workspace includes ready-made prompts in `.github/prompts/`. Use them for common tasks:
+
+| Prompt file | When to use it |
+|-------------|---------------|
+| `init-workspace.prompt.md` | Starting from scratch — walks through `sln init`, `repo add`, `profile create` |
+| `workspace-status.prompt.md` | Show readiness phase, active profile, and pending actions |
+| `new-file.prompt.md` | Scaffold any YAML kind with guided questions |
+| `new-deployment.prompt.md` | Scaffold a deployment YAML specifically |
+| `new-module.prompt.md` | Scaffold a module YAML specifically |
+| `deploy-pipeline.prompt.md` | Full deploy pipeline: validate → build → deploy with dry-runs |
+| `validate-workspace.prompt.md` | Run full validation across all files and fix errors |
+| `explain-file.prompt.md` | Explain what a YAML file does and show its relationships |
+| `diagnose.prompt.md` | Diagnose and fix build or deploy errors |
+
+## Intent mapping
+
+| User says | What to do |
+|-----------|------------|
+| "set up" / "initialize" / "get started" | Use `init-workspace.prompt.md` |
+| "what's the status" / "where am I" / "what's next" | Use `workspace-status.prompt.md` |
+| "create a" / "add a" / "new file" | Use `new-file.prompt.md` |
+| "create a deployment" / "new deployment" | Use `new-deployment.prompt.md` |
+| "deploy" / "deploy this" / "run a deployment" | Use `deploy-pipeline.prompt.md` |
+| "validate" / "check for errors" | Use `validate-workspace.prompt.md` |
+| "explain" / "what does this do" / "what is this file" | Use `explain-file.prompt.md` |
+| "something went wrong" / "error" / "failed" | Use `diagnose.prompt.md` |
+
 ## Rules
 
 - Never write resolved secret values into YAML files — use `secret:` refs.
@@ -151,3 +198,4 @@ When a command fails, run it again with `--verbose` to get more detail. For vali
 - Use `strata schema get <kind>` to inspect the full field reference for any kind.
 - Deployment stages use `provisioner:` or `topology:` — never `type:`.
 - All `kind` values are lowercase in the YAML (`deployment`, not `Deployment`).
+- Valid `apiVersion` values: `strata.omp.com/v1` or `strata.huybrechts.xyz/v1`.

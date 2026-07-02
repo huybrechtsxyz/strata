@@ -1,0 +1,328 @@
+{
+  "name": "xyz-strata",
+  "displayName": "Strata",
+  "description": "Strata infrastructure workspace integration — validate YAML, explore workspace, build and deploy.",
+  "version": "0.14.0",
+  "publisher": "huybrechts-xyz",
+  "icon": "resources/icon.png",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/huybrechtsxyz/strata"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Linters"
+  ],
+  "keywords": [
+    "strata",
+    "infrastructure",
+    "deployment",
+    "yaml",
+    "platform"
+  ],
+  "activationEvents": [
+    "workspaceContains:.strata/solution.json"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "strata.chat",
+        "fullName": "Strata",
+        "name": "strata",
+        "description": "Ask questions about your strata infrastructure workspace.",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "status",
+            "description": "Show workspace health, profile, and readiness"
+          },
+          {
+            "name": "validate",
+            "description": "Validate the current file or a named file"
+          },
+          {
+            "name": "guide",
+            "description": "Show the 8-phase readiness checklist"
+          },
+          {
+            "name": "build",
+            "description": "Show how to build your deployment"
+          },
+          {
+            "name": "deploy",
+            "description": "Show how to deploy your deployment"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "strata.initWorkspace",
+        "title": "Strata: Initialize Workspace",
+        "icon": "$(cloud)"
+      },
+      {
+        "command": "strata.validateCurrentFile",
+        "title": "Strata: Validate Current File",
+        "icon": "$(check)"
+      },
+      {
+        "command": "strata.validateAll",
+        "title": "Strata: Validate All Files",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "strata.buildDryRun",
+        "title": "Strata: Build (Dry Run)",
+        "icon": "$(play)"
+      },
+      {
+        "command": "strata.buildRun",
+        "title": "Strata: Build",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "strata.deployDryRun",
+        "title": "Strata: Deploy (Dry Run)",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "strata.deployRun",
+        "title": "Strata: Deploy",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "strata.showGuide",
+        "title": "Strata: Show Guide",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "strata.switchProfile",
+        "title": "Strata: Switch Profile",
+        "icon": "$(account)"
+      },
+      {
+        "command": "strata.exportSchemas",
+        "title": "Strata: Export & Wire Schemas",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "strata.openConsole",
+        "title": "Strata: Open Console",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "strata.showDependencyGraph",
+        "title": "Strata: Show Dependency Graph",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "strata.refreshTreeView",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "strata.openFile",
+        "title": "Open File",
+        "icon": "$(go-to-file)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "strata-explorer",
+          "title": "Strata",
+          "icon": "resources/strata.svg"
+        }
+      ]
+    },
+    "views": {
+      "strata-explorer": [
+        {
+          "id": "strataWorkspace",
+          "name": "Workspace",
+          "contextualTitle": "Strata Workspace"
+        },
+        {
+          "id": "strataFiles",
+          "name": "Files",
+          "contextualTitle": "Strata Files"
+        },
+        {
+          "id": "strataRepositories",
+          "name": "Repositories",
+          "contextualTitle": "Strata Repositories"
+        },
+        {
+          "id": "strataTools",
+          "name": "Tools",
+          "contextualTitle": "Strata Tools"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "strata.refreshTreeView",
+          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.showGuide",
+          "when": "view == strataWorkspace",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "strata.validateCurrentFile",
+          "when": "view == strataFiles && viewItem == document",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.openFile",
+          "when": "view == strataFiles && viewItem == document",
+          "group": "strata@0"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "strata.validateCurrentFile",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Strata",
+      "properties": {
+        "strata.cliPath": {
+          "type": "string",
+          "default": "strata",
+          "description": "Path to the strata CLI. Use 'uv run strata' for uv-managed projects."
+        },
+        "strata.validateOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Validate strata YAML files automatically when saved."
+        },
+        "strata.validateOnType": {
+          "type": "boolean",
+          "default": false,
+          "description": "Validate strata YAML files as you type (debounced, 1.5 s delay). More responsive but heavier on CPU."
+        },
+        "strata.showCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Validate / Build / Deploy actions above strata YAML documents."
+        },
+        "strata.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show workspace readiness and active profile in the status bar."
+        },
+        "strata.autoExportSchemas": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-export and wire JSON schemas when a workspace is opened."
+        },
+        "strata.showFileDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show validation status badges (✓/⚠️/❌) on strata files in the Explorer."
+        },
+        "strata.defaultProfile": {
+          "type": "string",
+          "default": "",
+          "description": "Profile to activate automatically when the workspace opens. Leave empty to use the last active profile."
+        }
+      }
+    },
+    "taskDefinitions": [
+      {
+        "type": "strata",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "validate",
+              "build",
+              "deploy"
+            ],
+            "description": "Strata operation to run."
+          },
+          "file": {
+            "type": "string",
+            "description": "YAML file path relative to the workspace root."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": false,
+            "description": "Run in dry-run mode (no changes applied)."
+          },
+          "stage": {
+            "type": "string",
+            "description": "Target a specific deployment stage."
+          }
+        }
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "strata.gettingStarted",
+        "title": "Get started with Strata",
+        "description": "Set up your infrastructure workspace in a few steps.",
+        "steps": [
+          {
+            "id": "strata.gettingStarted.init",
+            "title": "Initialize your workspace",
+            "description": "Create the `.strata/` directory and solution registry.\n[Run strata sln init](command:strata.initWorkspace)",
+            "media": {
+              "markdown": "resources/walkthrough/init.md"
+            }
+          },
+          {
+            "id": "strata.gettingStarted.schemas",
+            "title": "Wire YAML schemas",
+            "description": "Enable autocomplete and inline validation for all strata YAML files.\n[Export & Wire Schemas](command:strata.exportSchemas)",
+            "media": {
+              "markdown": "resources/walkthrough/schemas.md"
+            }
+          },
+          {
+            "id": "strata.gettingStarted.guide",
+            "title": "Check workspace readiness",
+            "description": "See the 8-phase checklist and what to do next.\n[Show Guide](command:strata.showGuide)",
+            "media": {
+              "markdown": "resources/walkthrough/guide.md"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vscode/test-cli": "^0.0.9",
+    "@vscode/test-electron": "^2.4.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,1301 @@
+{
+  "$defs": {
+    "CommonLifecycleModel": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CommonLifecyclePhaseModel"
+      },
+      "default": {},
+      "description": "Lifecycle phases for common models.\nMaps phase names to phase configurations.\nPhase names follow pattern: {command}_{action}_{suffix}\nExamples: config_clear, config_fetch, deploy_plan_before, deploy_apply_after",
+      "title": "CommonLifecycleModel",
+      "type": "object"
+    },
+    "CommonLifecyclePhaseModel": {
+      "additionalProperties": false,
+      "description": "Model for common lifecycle phase with script validation.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        },
+        "scripts": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/ScriptPathModel"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scripts"
+        }
+      },
+      "title": "CommonLifecyclePhaseModel",
+      "type": "object"
+    },
+    "PlatformKind": {
+      "description": "Enumeration of supported platform kinds.",
+      "enum": [
+        "configuration",
+        "tenant",
+        "deployment",
+        "dns",
+        "environment",
+        "firewall",
+        "module",
+        "network",
+        "namespace",
+        "platform_model",
+        "deployment-manifest",
+        "provider",
+        "resource",
+        "workspace"
+      ],
+      "title": "PlatformKind",
+      "type": "string"
+    },
+    "PlatformVersion": {
+      "description": "Enumeration of supported platform versions.",
+      "enum": [
+        "strata.huybrechts.xyz/v1",
+        "strata.omp.com/v1"
+      ],
+      "title": "PlatformVersion",
+      "type": "string"
+    },
+    "ProvisionerType": {
+      "description": "Enumeration of supported provisioner names.",
+      "enum": [
+        "terraform",
+        "ansible",
+        "script",
+        "compose",
+        "helm"
+      ],
+      "title": "ProvisionerType",
+      "type": "string"
+    },
+    "ScriptPathModel": {
+      "additionalProperties": false,
+      "description": "Individual script with scope and execution metadata.",
+      "properties": {
+        "file": {
+          "description": "Path to script file",
+          "title": "File",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/PlatformKind",
+          "description": "Execution scope - determines how many times script runs (deployment, environment, workspace, provider, resource, module, namespace)"
+        },
+        "priority": {
+          "default": 100,
+          "description": "Execution order within scope (lower runs first)",
+          "maximum": 9999,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional target filter (e.g., 'vm-*', 'azure-*', 'production')",
+          "title": "Target"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "file",
+        "scope"
+      ],
+      "title": "ScriptPathModel",
+      "type": "object"
+    },
+    "SourceModel": {
+      "additionalProperties": false,
+      "description": "Reusable model for source configuration.\n\nTwo modes (mutually exclusive, validated):\n  1. Git-based: repository + source_path  \u2014 used for Terraform modules, local charts, etc.\n  2. Chart-based: chart_repository + chart_name  \u2014 used for Helm/ArgoCD chart registry pulls.\n\nExample \u2014 git-based:\n    source:\n      repository: my-infra-repo\n      source_path: terraform/modules/vpc\n      target_path: build/vpc\n\nExample \u2014 Helm chart registry:\n    source:\n      chart_name: authentik\n      chart_version: \"2024.12.0\"\n      chart_repository: https://charts.goauthentik.io",
+      "properties": {
+        "repository": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the repository from solution registered repositories (via strata repo add)",
+          "title": "Repository"
+        },
+        "source_path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to the source artifacts within the repository (relative path)",
+          "title": "Source Path"
+        },
+        "target_path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target path where artifacts should be built/deployed (relative to build/deploy directory)",
+          "title": "Target Path"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description for documentation purposes",
+          "title": "Description"
+        },
+        "chart_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Helm chart name (e.g. 'authentik'). Required when using chart_repository.",
+          "title": "Chart Name"
+        },
+        "chart_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Helm chart version (e.g. '2024.12.0'). Omit to use latest.",
+          "title": "Chart Version"
+        },
+        "chart_repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Helm chart repository URL or OCI reference (e.g. 'https://charts.goauthentik.io' or 'oci://ghcr.io/org/charts').",
+          "title": "Chart Repository"
+        }
+      },
+      "title": "SourceModel",
+      "type": "object"
+    },
+    "WorkspaceComponentModel": {
+      "additionalProperties": false,
+      "description": "Component model - simple resource name reference.",
+      "properties": {
+        "resource": {
+          "description": "Resource name reference (must match a resource defined in spec.resources)",
+          "minLength": 1,
+          "title": "Resource",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource"
+      ],
+      "title": "WorkspaceComponentModel",
+      "type": "object"
+    },
+    "WorkspaceDnsModel": {
+      "additionalProperties": false,
+      "description": "Model for a workspace DNS zone configuration reference.",
+      "properties": {
+        "name": {
+          "description": "Unique DNS zone configuration name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "file": {
+          "description": "File reference for the DNS zone configuration",
+          "title": "File",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "file"
+      ],
+      "title": "WorkspaceDnsModel",
+      "type": "object"
+    },
+    "WorkspaceFirewallModel": {
+      "additionalProperties": false,
+      "description": "Model for a workspace firewall.",
+      "properties": {
+        "name": {
+          "description": "Unique firewall name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "file": {
+          "description": "File reference for the firewall configuration",
+          "title": "File",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "file"
+      ],
+      "title": "WorkspaceFirewallModel",
+      "type": "object"
+    },
+    "WorkspaceIacAnsiblePropertiesModel": {
+      "additionalProperties": false,
+      "description": "Typed properties for an Ansible provisioner entry.",
+      "properties": {
+        "playbook": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Playbook file to run, relative to the playbook directory (default: site.yml)",
+          "title": "Playbook"
+        },
+        "inventory": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Static inventory file path, relative to the playbook directory",
+          "title": "Inventory"
+        },
+        "ssh_private_key_secret": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the secret holding the SSH private key (default: ssh_private_key)",
+          "title": "Ssh Private Key Secret"
+        },
+        "extra_vars": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Extra variables passed to ansible-playbook via --extra-vars",
+          "title": "Extra Vars"
+        }
+      },
+      "title": "WorkspaceIacAnsiblePropertiesModel",
+      "type": "object"
+    },
+    "WorkspaceIacBackendModel": {
+      "additionalProperties": false,
+      "description": "Model for IaC backend configuration (state storage).",
+      "properties": {
+        "type": {
+          "description": "Backend type (e.g., 'terraform_cloud', 's3', 'azurerm', 'gcs', 'local', 'remote')",
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "configuration": {
+          "additionalProperties": true,
+          "description": "Backend-specific configuration (supports either a constant value or references like ${var:tf_org}, ${secret:tf_token}, ${feat:enable_encryption})",
+          "title": "Configuration",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "configuration"
+      ],
+      "title": "WorkspaceIacBackendModel",
+      "type": "object"
+    },
+    "WorkspaceIacModel": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description of the provisioner for documentation purposes",
+          "title": "Description"
+        },
+        "provisioner": {
+          "$ref": "#/$defs/ProvisionerType",
+          "description": "IaC tool used for provisioning"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceModel",
+          "description": "IaC deployment configuration (file path, variables, secrets)"
+        },
+        "backend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceIacBackendModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Backend configuration for state storage (e.g., Terraform Cloud, S3, Azure Storage)"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceIacAnsiblePropertiesModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provisioner-specific typed properties (currently supported: ansible)"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tool-specific configuration (e.g. playbook, inventory, ssh_private_key_secret for Ansible; backend overrides for Terraform).",
+          "title": "Configuration"
+        }
+      },
+      "required": [
+        "name",
+        "provisioner",
+        "source"
+      ],
+      "title": "WorkspaceIacModel",
+      "type": "object"
+    },
+    "WorkspaceMetaModel": {
+      "additionalProperties": false,
+      "description": "Model for workspace metadata (name, annotations, labels, tags).",
+      "properties": {
+        "name": {
+          "description": "Unique workspace name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional annotations (key-value pairs for documentation)",
+          "title": "Annotations"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional labels (key-value pairs for classification/filtering)",
+          "title": "Labels"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tags (list of values for categorization)",
+          "title": "Tags"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "WorkspaceMetaModel",
+      "type": "object"
+    },
+    "WorkspaceModuleReferenceModel": {
+      "additionalProperties": false,
+      "description": "Module reference for a resource - links code/app to infrastructure.",
+      "properties": {
+        "name": {
+          "description": "Unique module name within this resource",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "file": {
+          "description": "File reference to the module configuration (module YAML file)",
+          "title": "File",
+          "type": "string"
+        },
+        "slot_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "main",
+          "description": "Deployment slot type: 'main' (primary/production), 'staging', 'canary', 'sidecar', 'init'. Defaults to 'main'. Custom values allowed but may generate warnings.",
+          "title": "Slot Type"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this module is enabled/deployed",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Module-specific configuration overrides for this workspace",
+          "title": "Configuration"
+        }
+      },
+      "required": [
+        "name",
+        "file"
+      ],
+      "title": "WorkspaceModuleReferenceModel",
+      "type": "object"
+    },
+    "WorkspaceNamespaceModel": {
+      "additionalProperties": false,
+      "description": "Model for a workspace namespace.",
+      "properties": {
+        "name": {
+          "description": "Unique namespace name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "file": {
+          "description": "File reference for the namespace configuration",
+          "title": "File",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "file"
+      ],
+      "title": "WorkspaceNamespaceModel",
+      "type": "object"
+    },
+    "WorkspaceNamespaceReferenceModel": {
+      "additionalProperties": false,
+      "description": "Namespace reference within a topology - links a namespace to this topology.",
+      "properties": {
+        "namespace": {
+          "description": "Namespace name reference (must match a namespace defined in spec.namespaces)",
+          "minLength": 1,
+          "title": "Namespace",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace"
+      ],
+      "title": "WorkspaceNamespaceReferenceModel",
+      "type": "object"
+    },
+    "WorkspaceNetworkModel": {
+      "additionalProperties": false,
+      "description": "Model for a workspace network topology reference.",
+      "properties": {
+        "name": {
+          "description": "Unique network configuration name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "file": {
+          "description": "File reference for the network topology configuration",
+          "title": "File",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "file"
+      ],
+      "title": "WorkspaceNetworkModel",
+      "type": "object"
+    },
+    "WorkspaceProviderModel": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Unique provider name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "file": {
+          "description": "Path to the provider configuration file",
+          "title": "File",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description of the provider for documentation purposes",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "name",
+        "file"
+      ],
+      "title": "WorkspaceProviderModel",
+      "type": "object"
+    },
+    "WorkspaceResourceModel": {
+      "additionalProperties": false,
+      "description": "Model for workspace resource definition (gluing layer).",
+      "properties": {
+        "name": {
+          "description": "Unique resource name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "file": {
+          "description": "Path to the resource configuration file",
+          "title": "File",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description of the resource for documentation purposes",
+          "title": "Description"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether this resource is enabled/deployed in this workspace",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Conditional expression for resource inclusion (e.g., '${environment} == production')",
+          "title": "Condition"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Role of the resource (e.g., networking, database, api)",
+          "title": "Role"
+        },
+        "count": {
+          "default": 1,
+          "description": "Number of resource instances (must be greater than 0)",
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "depends_on": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of resource names this resource depends on (workspace-specific gluing)",
+          "title": "Depends On"
+        },
+        "references": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cross-resource value references (e.g., {'storage_connection': 'contoso_storage.connection_string'})",
+          "title": "References"
+        },
+        "firewalls": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "References to firewall/NSG resource names for network security",
+          "title": "Firewalls"
+        },
+        "subnet": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Subnet reference in qualified format 'network_name/subnet_name'",
+          "title": "Subnet"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Workspace-specific configuration overrides (merged with resource file configuration)",
+          "title": "Configuration"
+        },
+        "custom": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional additional properties for the resource (key-value pairs)",
+          "title": "Custom"
+        },
+        "modules": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/WorkspaceModuleReferenceModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional module references (code/apps) - links apps to infrastructure (e.g., web app code on Azure Web App, function code on Function App, containers on AKS)",
+          "title": "Modules"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional labels (key-value pairs for classification/filtering)",
+          "title": "Labels"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tags (list of values for categorization)",
+          "title": "Tags"
+        }
+      },
+      "required": [
+        "name",
+        "file"
+      ],
+      "title": "WorkspaceResourceModel",
+      "type": "object"
+    },
+    "WorkspaceSpecModel": {
+      "additionalProperties": false,
+      "description": "Workspace specification model.",
+      "properties": {
+        "lifecycle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommonLifecycleModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Workspace workflow lifecycle phases"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Workspace properties",
+          "title": "Properties"
+        },
+        "custom": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional additional properties (key-value pairs)",
+          "title": "Custom"
+        },
+        "providers": {
+          "description": "Provider configurations",
+          "items": {
+            "$ref": "#/$defs/WorkspaceProviderModel"
+          },
+          "minItems": 1,
+          "title": "Providers",
+          "type": "array"
+        },
+        "provisioners": {
+          "description": "IaC provisioner configurations",
+          "items": {
+            "$ref": "#/$defs/WorkspaceIacModel"
+          },
+          "minItems": 1,
+          "title": "Provisioners",
+          "type": "array"
+        },
+        "topology": {
+          "description": "Workspace topology configurations",
+          "items": {
+            "$ref": "#/$defs/WorkspaceTopologyModel"
+          },
+          "minItems": 1,
+          "title": "Topology",
+          "type": "array"
+        },
+        "resources": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/WorkspaceResourceModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Workspace resources with dependencies (gluing layer for topology)",
+          "title": "Resources"
+        },
+        "namespaces": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/WorkspaceNamespaceModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Workspace namespaces",
+          "title": "Namespaces"
+        },
+        "firewalls": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/WorkspaceFirewallModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Workspace firewalls",
+          "title": "Firewalls"
+        },
+        "dns_zones": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/WorkspaceDnsModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "DNS zone file references",
+          "title": "Dns Zones"
+        },
+        "networks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/WorkspaceNetworkModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Network topology file references",
+          "title": "Networks"
+        }
+      },
+      "required": [
+        "providers",
+        "provisioners",
+        "topology"
+      ],
+      "title": "WorkspaceSpecModel",
+      "type": "object"
+    },
+    "WorkspaceTopologyModel": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Unique topology name",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider name used for this topology",
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "provisioner": {
+          "description": "IaC provisioner name reference (must match a provisioner defined in spec.provisioners)",
+          "minLength": 1,
+          "title": "Provisioner",
+          "type": "string"
+        },
+        "type": {
+          "description": "Topology type (e.g., dockerswarm, kubernetes, azure-native)",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Type",
+          "type": "string"
+        },
+        "components": {
+          "description": "Topology components",
+          "items": {
+            "$ref": "#/$defs/WorkspaceComponentModel"
+          },
+          "minItems": 1,
+          "title": "Components",
+          "type": "array"
+        },
+        "namespaces": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/WorkspaceNamespaceReferenceModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Namespace references deployed on this topology",
+          "title": "Namespaces"
+        },
+        "volumes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/WorkspaceVolumeModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Topology volumes",
+          "title": "Volumes"
+        }
+      },
+      "required": [
+        "name",
+        "provider",
+        "provisioner",
+        "type",
+        "components"
+      ],
+      "title": "WorkspaceTopologyModel",
+      "type": "object"
+    },
+    "WorkspaceVolumeModel": {
+      "additionalProperties": false,
+      "description": "Model for a workspace volume.",
+      "properties": {
+        "name": {
+          "description": "Unique volume name within the topology",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "default": "local",
+          "description": "Volume storage type (e.g., local, replicated, distributed, nfs, iscsi, etc.)",
+          "title": "Type",
+          "type": "string"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Volume capacity (e.g., '10Gi', '500Mi', '1Ti')",
+          "title": "Size"
+        },
+        "mount_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mount path for the volume (e.g., '/data', '/mnt/shared')",
+          "title": "Mount Path"
+        },
+        "access_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Volume access mode - concurrency pattern at container level (e.g., 'ReadWriteOnce', 'ReadWriteMany', 'ReadOnlyMany')",
+          "title": "Access Mode"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Filesystem permissions within the volume (e.g., '0755' octal, 'rw', 'ro')",
+          "title": "Mode"
+        },
+        "driver": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Storage driver or CSI plugin (e.g., 'nfs.csi.k8s.io', 'local-path')",
+          "title": "Driver"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Driver-specific configuration (e.g., server, share, secretRef)",
+          "title": "Configuration"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "WorkspaceVolumeModel",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root model for a workspace configuration file.",
+  "properties": {
+    "apiVersion": {
+      "$ref": "#/$defs/PlatformVersion",
+      "default": "strata.huybrechts.xyz/v1",
+      "description": "API version for workspace configuration"
+    },
+    "kind": {
+      "$ref": "#/$defs/PlatformKind",
+      "default": "workspace",
+      "description": "Platform kind (always 'Workspace')"
+    },
+    "meta": {
+      "$ref": "#/$defs/WorkspaceMetaModel",
+      "description": "Workspace metadata (name, annotations, labels, tags)"
+    },
+    "spec": {
+      "$ref": "#/$defs/WorkspaceSpecModel",
+      "description": "Workspace specification (properties, topology, providers, IaC, lifecycle)"
+    }
+  },
+  "required": [
+    "meta",
+    "spec"
+  ],
+  "title": "WorkspaceModel",
+  "type": "object"
+}

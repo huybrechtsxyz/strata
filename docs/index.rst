@@ -16,6 +16,21 @@ strata
 
 .. toctree::
    :maxdepth: 2
+   :caption: VS Code Extension:
+
+   vscode/README
+   vscode/publish
+   vscode/installation
+   vscode/features
+   vscode/tree-views
+   vscode/diagnostics
+   vscode/codelens
+   vscode/chat
+   vscode/settings
+   vscode/keyboard-shortcuts
+
+.. toctree::
+   :maxdepth: 2
    :caption: Platform Reference:
 
    platform/readme

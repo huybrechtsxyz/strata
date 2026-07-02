@@ -1,0 +1,254 @@
+{
+  "$defs": {
+    "PlatformVersion": {
+      "description": "Enumeration of supported platform versions.",
+      "enum": [
+        "strata.huybrechts.xyz/v1",
+        "strata.omp.com/v1"
+      ],
+      "title": "PlatformVersion",
+      "type": "string"
+    },
+    "TenantMetaModel": {
+      "additionalProperties": false,
+      "description": "Tenant metadata: name, annotations, labels, tags.",
+      "properties": {
+        "name": {
+          "description": "Unique tenant name (short code, e.g. 'acme')",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional annotations (key-value pairs for documentation)",
+          "title": "Annotations"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional labels (key-value pairs for classification/filtering)",
+          "title": "Labels"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional tags (list of values for categorization)",
+          "title": "Tags"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "TenantMetaModel",
+      "type": "object"
+    },
+    "TenantReferencesModel": {
+      "additionalProperties": false,
+      "description": "References to variables, secrets, and features required by this tenant's deployments.\n\nLists the keys that must be defined in the environment configuration.\nActual values and store backends are defined at environment/workspace level.",
+      "properties": {
+        "variables": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of variable keys this tenant's deployments require from environment",
+          "title": "Variables"
+        },
+        "secrets": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of secret keys this tenant's deployments require from environment",
+          "title": "Secrets"
+        },
+        "features": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "List of feature flag keys this tenant's deployments require from environment",
+          "title": "Features"
+        }
+      },
+      "title": "TenantReferencesModel",
+      "type": "object"
+    },
+    "TenantSpecModel": {
+      "additionalProperties": false,
+      "description": "tenant specification: identity, data residency, environment composition, and runtime references.",
+      "properties": {
+        "code": {
+          "description": "Short unique tenant identifier (e.g., 'acme'). Must match meta.name and the filename.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Code",
+          "type": "string"
+        },
+        "name": {
+          "description": "Human-readable tenant display name (e.g., 'Acme Corporation')",
+          "title": "Name",
+          "type": "string"
+        },
+        "zones": {
+          "description": "Zone names this tenant is allowed to deploy into. Validated against configuration.spec.zones at load time.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Zones",
+          "type": "array"
+        },
+        "onboarded": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO date the tenant was onboarded (e.g., 2025-03-15). Informational only.",
+          "title": "Onboarded"
+        },
+        "environments": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ordered list of environment file paths applied before deployment environments. Typically points to a tier file, e.g. ['environments/tiers/enterprise.yaml']. Validated against the filesystem during Phase 2.",
+          "title": "Environments"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Arbitrary key/value pairs for tenant-specific settings. Injected as deployment properties at slot generation time. Example: {'crm_id': '42', 'invoice_prefix': 'ACM'}",
+          "title": "Configuration"
+        },
+        "references": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TenantReferencesModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Variables, secrets, and feature flags this tenant's deployments require."
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "zones"
+      ],
+      "title": "TenantSpecModel",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root model for a tenant configuration file (kind: tenant).",
+  "properties": {
+    "apiVersion": {
+      "$ref": "#/$defs/PlatformVersion",
+      "default": "strata.huybrechts.xyz/v1",
+      "description": "API version for tenant configuration"
+    },
+    "kind": {
+      "const": "tenant",
+      "default": "tenant",
+      "description": "Resource kind (always 'Tenant')",
+      "title": "Kind",
+      "type": "string"
+    },
+    "meta": {
+      "$ref": "#/$defs/TenantMetaModel",
+      "description": "Tenant metadata (name, annotations, labels, tags)"
+    },
+    "spec": {
+      "$ref": "#/$defs/TenantSpecModel",
+      "description": "tenant specification (identity, zones, environments, references)"
+    }
+  },
+  "required": [
+    "meta",
+    "spec"
+  ],
+  "title": "TenantModel",
+  "type": "object"
+}

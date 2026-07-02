@@ -1,0 +1,375 @@
+{
+  "$defs": {
+    "CidrSourceModel": {
+      "additionalProperties": false,
+      "description": "CIDR value with value/var/secret union \u2014 exactly one must be set.",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Literal CIDR notation, e.g. '10.0.0.0/24'",
+          "title": "Value"
+        },
+        "var": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Variable key \u2014 resolved at build time",
+          "title": "Var"
+        },
+        "secret": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Secret key \u2014 resolved at deploy time via TF_VAR_*",
+          "title": "Secret"
+        }
+      },
+      "title": "CidrSourceModel",
+      "type": "object"
+    },
+    "NetworkDefinitionModel": {
+      "additionalProperties": false,
+      "description": "Model for a single network definition with subnets and peerings.",
+      "properties": {
+        "name": {
+          "description": "Unique network name within the spec",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description of the network",
+          "title": "Description"
+        },
+        "address_space": {
+          "description": "One or more CIDRs for this network's address space",
+          "items": {
+            "$ref": "#/$defs/CidrSourceModel"
+          },
+          "minItems": 1,
+          "title": "Address Space",
+          "type": "array"
+        },
+        "subnets": {
+          "description": "At least one subnet required per network",
+          "items": {
+            "$ref": "#/$defs/SubnetModel"
+          },
+          "minItems": 1,
+          "title": "Subnets",
+          "type": "array"
+        },
+        "peerings": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/PeeringReferenceModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional peering references to other networks",
+          "title": "Peerings"
+        }
+      },
+      "required": [
+        "name",
+        "address_space",
+        "subnets"
+      ],
+      "title": "NetworkDefinitionModel",
+      "type": "object"
+    },
+    "NetworkMetaModel": {
+      "additionalProperties": false,
+      "description": "Model for network resource metadata (name, annotations, labels, tags).",
+      "properties": {
+        "name": {
+          "description": "Unique name for the network resource.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional annotations (key-value pairs for documentation)",
+          "title": "Annotations"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional labels (key-value pairs for classification/filtering)",
+          "title": "Labels"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional list of tags for the network resource.",
+          "title": "Tags"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "NetworkMetaModel",
+      "type": "object"
+    },
+    "NetworkReferencesModel": {
+      "additionalProperties": false,
+      "description": "References to variables and secrets required by this network configuration.",
+      "properties": {
+        "variables": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Variable keys required from environment",
+          "title": "Variables"
+        },
+        "secrets": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Secret keys required from environment",
+          "title": "Secrets"
+        }
+      },
+      "title": "NetworkReferencesModel",
+      "type": "object"
+    },
+    "NetworkSpecModel": {
+      "additionalProperties": false,
+      "description": "Model for a network configuration specification.",
+      "properties": {
+        "references": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NetworkReferencesModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Variable and secret keys required by CIDRs in this network configuration"
+        },
+        "networks": {
+          "description": "List of network definitions (at least one required)",
+          "items": {
+            "$ref": "#/$defs/NetworkDefinitionModel"
+          },
+          "minItems": 1,
+          "title": "Networks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "networks"
+      ],
+      "title": "NetworkSpecModel",
+      "type": "object"
+    },
+    "PeeringReferenceModel": {
+      "additionalProperties": false,
+      "description": "Lightweight peering reference \u2014 name + target network only.",
+      "properties": {
+        "name": {
+          "description": "Unique peering name within the network",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "target": {
+          "description": "Name of the target network (must exist in same spec)",
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "target"
+      ],
+      "title": "PeeringReferenceModel",
+      "type": "object"
+    },
+    "PlatformKind": {
+      "description": "Enumeration of supported platform kinds.",
+      "enum": [
+        "configuration",
+        "tenant",
+        "deployment",
+        "dns",
+        "environment",
+        "firewall",
+        "module",
+        "network",
+        "namespace",
+        "platform_model",
+        "deployment-manifest",
+        "provider",
+        "resource",
+        "workspace"
+      ],
+      "title": "PlatformKind",
+      "type": "string"
+    },
+    "PlatformVersion": {
+      "description": "Enumeration of supported platform versions.",
+      "enum": [
+        "strata.huybrechts.xyz/v1",
+        "strata.omp.com/v1"
+      ],
+      "title": "PlatformVersion",
+      "type": "string"
+    },
+    "SubnetModel": {
+      "additionalProperties": false,
+      "description": "Model for a subnet within a network definition.",
+      "properties": {
+        "name": {
+          "description": "Unique subnet name within the network",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional description of the subnet",
+          "title": "Description"
+        },
+        "cidr": {
+          "$ref": "#/$defs/CidrSourceModel",
+          "description": "CIDR for this subnet (value/var/secret)"
+        }
+      },
+      "required": [
+        "name",
+        "cidr"
+      ],
+      "title": "SubnetModel",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level model for a network topology configuration resource.",
+  "properties": {
+    "apiVersion": {
+      "$ref": "#/$defs/PlatformVersion",
+      "default": "strata.huybrechts.xyz/v1",
+      "description": "API version of the network resource model."
+    },
+    "kind": {
+      "$ref": "#/$defs/PlatformKind",
+      "default": "network",
+      "description": "Resource kind: always 'network'."
+    },
+    "meta": {
+      "$ref": "#/$defs/NetworkMetaModel",
+      "description": "Metadata for the network resource."
+    },
+    "spec": {
+      "$ref": "#/$defs/NetworkSpecModel",
+      "description": "Specification for the network topology configuration."
+    }
+  },
+  "required": [
+    "meta",
+    "spec"
+  ],
+  "title": "NetworkModel",
+  "type": "object"
+}

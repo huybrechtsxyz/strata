@@ -94,6 +94,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.find-run.outputs.run_id }}
 
+      # Download the VS Code extension .vsix so it is included in the release
+      - name: Download vsix artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: vsix
+          path: dist/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-run.outputs.run_id }}
+
       - name: List dist contents
         run: ls -lh dist/
 
@@ -132,7 +141,34 @@ jobs:
         run: uv publish --trusted-publishing always
 
   # ---------------------------------------------------------------------------
-  # Job 3: Build and push the CLI Docker image to GHCR
+  # Job 3: Publish VS Code extension to the Marketplace
+  # ---------------------------------------------------------------------------
+  publish-vscode:
+    name: Publish VS Code Extension
+    runs-on: ubuntu-latest
+    needs: release
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download vsix artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: vsix
+          path: dist/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ needs.release.outputs.run_id }}
+
+      - name: Publish to VS Code Marketplace
+        run: npx @vscode/vsce publish --packagePath dist/*.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Build and push the CLI Docker image to GHCR
   # ---------------------------------------------------------------------------
   publish:
     name: Build and push Docker image

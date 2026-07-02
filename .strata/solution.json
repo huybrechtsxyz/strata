@@ -1,0 +1,21 @@
+{
+  "apiVersion": "strata.huybrechts.xyz/v1",
+  "kind": "solution",
+  "meta": {
+    "name": "dev"
+  },
+  "spec": {
+    "solution_id": "13a78223-eb8b-4d97-8975-7d6b4b8022ed",
+    "profiles": [
+      {
+        "name": "dev",
+        "active": true,
+        "created": "2026-07-02T10:32:15.208239+00:00",
+        "configfile_paths": [],
+        "envfile_paths": [],
+        "datafile_paths": [],
+        "secretfile_paths": []
+      }
+    ]
+  }
+}

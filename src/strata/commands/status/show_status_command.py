@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import click
 
 from strata.commands.base_command import BaseCommand
+from strata.controllers.guide_controller import GuideController
 
 
 class StatusCommand(BaseCommand):
@@ -133,9 +134,44 @@ class StatusCommand(BaseCommand):
         # ── Health signal ─────────────────────────────────────────────
         health, health_issues = self._compute_health(initialized, repos_data, profiles_data, integrations_status)
 
+        # ── Readiness (guide phases + next step) ──────────────────────
+        readiness_data: Dict[str, Any] = {
+            "phases_complete": 0,
+            "phases_total": 0,
+            "complete": False,
+            "checklist": [],
+            "next_step": None,
+        }
+        try:
+            guide = GuideController(self._work_path)
+            guide.load()
+            checklist = guide.evaluate()
+            next_step = guide.find_next_step()
+            complete_count = sum(1 for item in checklist if item.status == "ok")
+            readiness_data = {
+                "phases_complete": complete_count,
+                "phases_total": len(checklist),
+                "complete": guide.is_complete,
+                "checklist": [
+                    {"phase": item.phase, "label": item.label, "status": item.status, "detail": item.detail}
+                    for item in checklist
+                ],
+                "next_step": {
+                    "phase": next_step.phase,
+                    "label": next_step.label,
+                    "hint": next_step.hint,
+                    "see_also": next_step.see_also,
+                }
+                if next_step
+                else None,
+            }
+        except Exception as e:
+            self.logger.debug("Could not load readiness data", error=str(e))
+
         self._output_data = {
             "health": {"status": health, "issues": health_issues},
             "solution": solution_data,
+            "readiness": readiness_data,
             "profiles": profiles_data,
             "repositories": repos_data,
             "integrations": integrations_status,

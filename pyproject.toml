@@ -48,6 +48,9 @@ dynamic = ["version"]
 [tool.setuptools.dynamic]
 version = { file = "VERSION.txt" }
 
+[tool.uv]
+index-strategy = "unsafe-best-match"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
@@ -75,6 +78,9 @@ dev = [
     "pyyaml > 3.13",
     "types-PyYAML",
 ]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0"]
 
 doc = [
     "sphinx",

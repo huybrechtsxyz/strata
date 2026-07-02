@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Geological strata layers — matches the product name -->
+  <rect x="2" y="3"    width="20" height="5" rx="1.5" fill="currentColor"/>
+  <rect x="2" y="9.5"  width="20" height="5" rx="1.5" fill="currentColor"/>
+  <rect x="2" y="16"   width="20" height="5" rx="1.5" fill="currentColor"/>
+</svg>

@@ -34,7 +34,7 @@ if (-not $env:VIRTUAL_ENV) {
 
 # ── 1. Sync doc dependencies ────────────────────────────────────────────────
 Write-Host "[*] Installing documentation dependencies..." -ForegroundColor Blue
-uv sync --frozen --group doc
+uv sync --frozen --extra doc
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] Failed to install documentation dependencies." -ForegroundColor Red
     exit 1

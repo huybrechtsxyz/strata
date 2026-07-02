@@ -141,9 +141,15 @@ if ($LASTEXITCODE -ne 0) {
 # 2. Write new version
 Set-Content -Path $versionFile -Value $Version -NoNewline
 
+# 2b. Sync VS Code extension version
+$extensionPackageJson = Join-Path $projectRoot "src\vscode\package.json"
+$pkgContent = Get-Content $extensionPackageJson -Raw
+$pkgContent = $pkgContent -replace '("version"\s*:\s*")[^"]*(")', "`${1}$Version`${2}"
+Set-Content -Path $extensionPackageJson -Value $pkgContent -NoNewline
+
 # 3. Pin all @main action refs in deploy-workspace.yml to the release tag
 # 4. Stage and commit
-git add VERSION.txt
+git add VERSION.txt src/vscode/package.json
 git commit -m "chore: release $tag"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[!] git commit failed." -ForegroundColor Red

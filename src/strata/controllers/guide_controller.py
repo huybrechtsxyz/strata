@@ -472,10 +472,10 @@ class GuideController(BaseController):
 
         # Phase 3 — apiVersion present
         api_version = doc.get("apiVersion")
-        expected = PlatformVersion.v1.value
+        valid_versions = {v.value for v in PlatformVersion}
         if api_version is None:
             checklist.append(ChecklistItem(3, "apiVersion present", "pending"))
-        elif api_version == expected:
+        elif api_version in valid_versions:
             checklist.append(ChecklistItem(3, "apiVersion present", "ok", api_version))
         else:
             checklist.append(ChecklistItem(3, "apiVersion present", "warn", f'wrong value: "{api_version}"'))
