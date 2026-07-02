@@ -19,6 +19,7 @@ strata
    :caption: VS Code Extension:
 
    vscode/README
+   vscode/publish
    vscode/installation
    vscode/features
    vscode/tree-views

@@ -28,3 +28,4 @@ The extension **consumes the CLI directly** via `child_process.execFile`, not th
    chat
    settings
    keyboard-shortcuts
+   publish
