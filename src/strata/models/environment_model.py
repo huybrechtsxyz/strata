@@ -28,6 +28,7 @@ from strata.models.store_models import (
     validate_unique_secret_keys,
     validate_unique_variable_keys,
 )
+from strata.models.workspace_model import OutputFileModel
 
 
 class IncludeMergeStrategy(str, Enum):
@@ -267,6 +268,13 @@ class EnvironmentOverridesModel(PlatformBaseModel):
     remotes: Optional[List[EnvironmentRemoteOverrideModel]] = Field(
         None,
         description="Remote reference overrides — pin a remote to a specific version/tag/branch for this environment",
+    )
+    output_files: Optional[List[OutputFileModel]] = Field(
+        None,
+        description=(
+            "Additional output file definitions appended to the workspace provisioner's files[]. "
+            "Additive only — cannot remove or replace workspace-level file definitions."
+        ),
     )
 
     @model_validator(mode="after")

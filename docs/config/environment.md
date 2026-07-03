@@ -201,6 +201,31 @@ is checked out in detached-HEAD mode. The resolved commit SHA is logged.
 - Each `remote` name must exist in `configuration.spec.remotes` (Phase 2 cross-validation — build fails if not found)
 - Duplicate remote names within one environment are rejected at parse time
 
+### Build Output File Overrides (Terraform)
+
+An environment can **append** extra output file definitions on top of the workspace
+provisioner's `output.files[]`. This is additive only — environments cannot remove or
+replace workspace-level file definitions.
+
+```yaml
+spec:
+  overrides:
+    output_files:
+      - name: compliance.auto.tfvars.json
+        variable: compliance_config
+        type: object
+        source: properties
+        key: compliance_config
+
+      - name: tenant_overrides.auto.tfvars.json
+        type: script
+        script: "@my_repo/scripts/build_tenant_overrides.py"
+```
+
+Use this when certain environments require extra Terraform variables not present in other
+environments — for example, a production-only compliance config or a tenant-specific
+override file.
+
 ## Variables
 
 Environment-specific variables **override or extend** workspace variables:
