@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Optional, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
@@ -592,10 +593,178 @@ class GitIntegration(BaseIntegration):
         args = ["log", f"--format={format}", f"-{count}"]
         return self._run_integration(args, cwd=working_dir, timeout=timeout)
 
+    def list_tags(
+        self,
+        working_dir: str,
+        pattern: Optional[str] = None,
+        sort: str = "-creatordate",
+        timeout: int = 30,
+    ) -> List["TagInfo"]:
+        """List tags in the repository, optionally filtered by pattern.
+
+        Args:
+            working_dir: Git repository directory.
+            pattern: Optional grep pattern to filter tags (e.g., "^v[0-9]", "^tested").
+            sort: Sort order. Options:
+                - "-creatordate": newest first (default)
+                - "creatordate": oldest first
+                - "version:refname": semantic version order
+                - "refname": alphabetical
+            timeout: Command timeout in seconds.
+
+        Returns:
+            List of TagInfo sorted by creation date (newest first).
+            Empty list if no tags found or repository not available.
+
+        Raises:
+            RuntimeError: If git command fails unexpectedly.
+        """
+        available, error = self.ensure_available()
+        if not available:
+            logger.debug(
+                "Cannot list tags, git not available",
+                error=error,
+                name=self.integration_name,
+            )
+            return []
+
+        try:
+            # Build git tag command
+            # Format: name|shortsha|creatordate|tagger|contents
+            args = [
+                "tag",
+                "--list",
+                "--sort",
+                sort,
+                "--format=%(refname:short)|%(objectname:short)|%(creatordate:iso)|%(taggername)|%(contents)",
+            ]
+
+            # Add pattern if specified
+            if pattern:
+                args.append(pattern)
+            else:
+                args.append("*")  # All tags
+
+            result = self._run_integration(args, cwd=working_dir, timeout=timeout)
+
+            if result.returncode != 0:
+                logger.debug(
+                    "Git tag list failed",
+                    working_dir=working_dir,
+                    returncode=result.returncode,
+                    stderr=result.stderr,
+                    name=self.integration_name,
+                )
+                return []
+
+            # Parse output into TagInfo list
+            tags = []
+            for line in result.stdout.strip().split("\n"):
+                if not line.strip():
+                    continue
+
+                try:
+                    parts = line.split("|")
+                    if len(parts) < 3:
+                        continue
+
+                    name = parts[0].strip()
+                    short_commit = parts[1].strip()
+                    created_str = parts[2].strip()
+                    tagger = parts[3].strip() if len(parts) > 3 and parts[3].strip() else None
+                    message = parts[4].strip() if len(parts) > 4 and parts[4].strip() else None
+
+                    # Parse ISO format datetime
+                    try:
+                        created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                    except ValueError:
+                        # Fallback if parsing fails
+                        created = None
+
+                    # Get full commit SHA
+                    sha_result = self._run_integration(
+                        ["rev-list", "-n", "1", name],
+                        cwd=working_dir,
+                        timeout=5,
+                    )
+                    commit = sha_result.stdout.strip() if sha_result.returncode == 0 else short_commit
+
+                    tag_info = TagInfo(
+                        name=name,
+                        commit=commit,
+                        short_commit=short_commit,
+                        tagger=tagger,
+                        created=created,
+                        message=message,
+                        is_annotated=bool(tagger or message),
+                    )
+                    tags.append(tag_info)
+
+                except Exception as e:
+                    logger.debug(
+                        "Failed to parse tag",
+                        line=line,
+                        error=str(e),
+                        name=self.integration_name,
+                    )
+                    continue
+
+            logger.debug(
+                "Git tag list completed",
+                working_dir=working_dir,
+                tag_count=len(tags),
+                name=self.integration_name,
+            )
+            return tags
+
+        except Exception as e:
+            logger.error(
+                "Git tag list failed with exception",
+                working_dir=working_dir,
+                error_type=type(e).__name__,
+                name=self.integration_name,
+                exc_info=True,
+            )
+            return []
+
 
 # ---------------------------------------------------------------------------
 # Supporting data types
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class TagInfo:
+    """Git tag metadata."""
+
+    name: str  # e.g., "v1.2.0", "tested"
+    commit: str  # full SHA
+    short_commit: str  # short SHA (7 chars)
+    tagger: Optional[str] = None  # creator name (annotated tags only)
+    created: Optional[datetime] = None  # when tag was created
+    message: Optional[str] = None  # tag message (annotated tags only)
+    is_annotated: bool = False  # vs lightweight
+
+    @property
+    def age_days(self) -> Optional[int]:
+        """Age of tag in days since creation."""
+        if self.created is None:
+            return None
+        # Handle timezone-aware datetime
+        now = datetime.now(self.created.tzinfo) if self.created.tzinfo else datetime.now()
+        delta = now - self.created
+        return delta.days
+
+    @property
+    def age_str(self) -> str:
+        """Human-readable age string."""
+        if self.age_days is None:
+            return "unknown"
+        if self.age_days == 0:
+            return "today"
+        if self.age_days == 1:
+            return "1 day ago"
+        return f"{self.age_days} days ago"
 
 
 @dataclass
