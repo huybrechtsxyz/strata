@@ -65,6 +65,7 @@ spec:
 | `tenant_zone`             | `plan`     | Terraform resource regions vs. the tenant's allowed zones                        |
 | `required_tags`           | `build`    | Required tags/labels present on all resources in the platform artifact           |
 | `naming_pattern`          | `validate` | `meta.name` fields match a configured regex pattern                              |
+| `ref_convention`          | `validate` | Remote references follow configured tag naming conventions                       |
 | `script`                  | any        | Delegates to an external command (OPA, Checkov, custom script)                   |
 | `sbom_pinned_versions`    | `build`    | SBOM components have pinned, non-floating version tags                           |
 | `sbom_allowed_registries` | `build`    | Container images originate only from approved registries                         |
@@ -145,6 +146,56 @@ The `script` type can run at any phase — set `phase` to whichever phase you wa
   configuration:
     command: "opa eval --data policy.rego --input /dev/stdin -"
     timeout: 30
+```
+
+### `ref_convention`
+
+Evaluates at the `validate` phase. Checks that remote references (git tags, branches, or commit SHAs) in deployments and environments follow declared naming conventions.
+
+Useful for enforcing that production environments only pin to semantic version tags (e.g., `v1.2.0`), not branch names like `main` or raw commit SHAs. Works in tandem with [ADR 0017 (tag-based release workflows)](../decisions/0017-tag-based-release-workflow-option-c.md) to validate release discipline and detect accidental manual pins.
+
+Skipped gracefully when no deployments/environments are found, or when no remote patterns are configured.
+
+```yaml
+- name: release_tag_conventions
+  type: ref_convention
+  phase: validate
+  enforcement: warn
+  configuration:
+    remotes:
+      - name: my-service
+        release_pattern: "^v\\d+\\.\\d+\\.\\d+$"     # semver only
+        quality_pattern: "^tested(-\\d+)?$"           # quality gate tags
+      - name: tf-landscape
+        release_pattern: "^v\\d+\\.\\d+\\.\\d+$"
+```
+
+**Configuration fields:**
+
+| Field              | Type           | Description                                                                              |
+| ------------------ | -------------- | ---------------------------------------------------------------------------------------- |
+| `remotes`          | list           | List of remote repository configurations                                                 |
+| `remotes[].name`   | string         | Remote repository name (from `solution.remotes`)                                        |
+| `remotes[].release_pattern` | string | Regex pattern for release tags (e.g., `"^v\\d+\\.\\d+\\.\\d+$"` for semver)     |
+| `remotes[].quality_pattern` | string | Regex pattern for quality-gate tags (e.g., `"^tested(-\\d+)?$"`)                     |
+
+At least one pattern (`release_pattern` or `quality_pattern`) must be configured per remote.
+
+**Validation logic:**
+
+1. For each deployment and environment in the workspace
+2. For each `spec.overrides.remotes[]` reference
+3. If the remote is configured in the policy, check its reference against the declared patterns
+4. Report a violation if the reference matches neither pattern
+
+**Example violations:**
+
+```
+environment 'production' → remote 'my-service' reference 'main' 
+  does not match expected pattern (release: ^v\d+\.\d+\.\d+$ or quality: ^tested(-\d+)?$)
+
+deployment 'acme' → remote 'tf-landscape' reference 'abc1234f' 
+  does not match expected pattern (release: ^v\d+\.\d+\.\d+$)
 ```
 
 ### `sbom_pinned_versions`

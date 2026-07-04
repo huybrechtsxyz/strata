@@ -56,6 +56,10 @@
           {
             "name": "deploy",
             "description": "Show how to deploy your deployment"
+          },
+          {
+            "name": "repos",
+            "description": "Show repository status with latest release and quality-gate tags"
           }
         ]
       }

@@ -201,17 +201,24 @@ lifecycle:
   deploy_apply_before:
     scripts:
       - scripts/backup-state.ps1    # take a snapshot before applying
-  deploy_provision:
+  deploy_run_before:
     scripts:
       - scripts/notify-slack.sh     # post to Slack when provisioning starts
-  deploy_output:
+  deploy_stage_after:
     scripts:
-      - scripts/export-ips.ps1      # write IPs to a config file after deploy
+      - scripts/export-ips.ps1      # write IPs to a config file after each stage
 ```
 
 Scripts receive context via environment variables (`STRATA_PHASE`, `STRATA_BUILD_PATH`,
 `STRATA_WORKSPACE_PATH`, etc.). Works cross-platform — strata tries `.sh` on Linux, `.ps1` on
-Windows, with fallbacks. Skip all hooks with `--no-hooks`.
+Windows, with fallbacks.
+
+Stage-level hooks (`deploy_stage_before`, `deploy_apply_before`, `deploy_apply_after`,
+`deploy_stage_after`) execute **hierarchically**: scripts defined in the configuration, then the
+workspace, then each namespace, provider, resource, and module — in that order. Put a hook
+directly in a namespace or resource YAML and it fires automatically when that level is reached,
+with `STRATA_NAMESPACE` / `STRATA_RESOURCE` / etc. already set. No top-level orchestration
+scripts needed.
 
 ---
 

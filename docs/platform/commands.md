@@ -580,11 +580,87 @@ strata repo sync --name platform --force
 
 ### `repo status [--name NAME]`
 
-Show git working-tree state for registered repositories.
+Show git working-tree state and tag status for registered repositories.
+
+```
+strata repo status [--name NAME] [standard options]
+```
+
+**Output includes:**
+
+- Repository path, current branch, tracking remote
+- Ahead/behind counts vs. tracking remote
+- File status: count of staged, unstaged, untracked, conflicted files
+- **NEW:** Latest release tag and quality-gate tag with age (if any tags exist)
+
+**Console output example:**
+
+```
+Repository Status
+─────────────────
+
+  ✅ my-service  [main → origin/main]
+       Tags:
+         Release: v1.2.0 (14 days ago, abc1234)
+         Quality: tested (2 days ago, def5678)
+
+  ✅ tf-landscape  [main → origin/main]
+       Tags:
+         Release: v2.4.0 (7 days ago, ghi9abc)
+         Quality: tested-20260701 (1 day ago, jkl2def)
+
+  ⚠️  config-repo  [dev → origin/main ↑0 ↓2]
+       2 unstaged, 1 untracked
+```
+
+**JSON output** (with `--output json`) includes full tag metadata:
+
+```json
+{
+  "repos": [{
+    "name": "my-service",
+    "tags": {
+      "latest_release": {
+        "name": "v1.2.0",
+        "commit": "abc1234567890abcdef",
+        "short_commit": "abc1234",
+        "created": "2026-06-20T10:30:00+00:00",
+        "age_days": 14,
+        "age_str": "14 days ago"
+      },
+      "latest_quality": {
+        "name": "tested",
+        "commit": "def567890123",
+        "short_commit": "def5678",
+        "created": "2026-07-01T10:15:00+00:00",
+        "age_days": 2,
+        "age_str": "2 days ago"
+      }
+    }
+  }]
+}
+```
+
+**Options:**
+
+| Option        | Description                           |
+| ------------- | ------------------------------------- |
+| `--name NAME` | Show status for a single repository   |
+| `--verbose`   | List individual changed files        |
+
+**Discovering release candidates:**
+
+```bash
+strata repo status --output json | jq '.repos[] | select(.tags.latest_quality) | .tags.latest_quality'
+```
+
+**Usage:**
 
 ```bash
 strata repo status
-strata repo status --name platform
+strata repo status --name my-service
+strata repo status --output json
+strata repo status --verbose
 ```
 
 ---

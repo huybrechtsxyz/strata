@@ -18,6 +18,7 @@ This section documents the internal layers of the strata CLI.
 | [builders.md](builders.md)               | Build pipeline — PlatformBuilder, TerraformBuilder, artifact output     |
 | [deployers.md](deployers.md)             | Deploy pipeline — deployer table, step constants, execution order       |
 | [validators.md](validators.md)           | Validation pipeline — BaseValidator, PlatformValidator                  |
+| [policies.md](policies.md)               | Policy engine — built-in policy types, configuration, evaluation phases |
 | [lifecycles.md](lifecycles.md)           | Lifecycle hooks — phase naming, script execution, env variables         |
 | [exceptions.md](exceptions.md)           | Exception hierarchy — PlatformError subclasses and usage                |
 | [logging.md](logging.md)                 | Structured logging — get_logger, structlog config, YAML config files    |

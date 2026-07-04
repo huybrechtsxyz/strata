@@ -66,6 +66,105 @@ class BaseDeployCommand(BaseCommand):
     def get_required_integrations(self):
         return {}
 
+    # -------------------------------------------------------------------------
+    # Hierarchical lifecycle helper
+    # -------------------------------------------------------------------------
+
+    def _run_hierarchy_lifecycle_phase(self, phase_name: str, context: Optional[dict] = None) -> bool:
+        """Execute a lifecycle phase across the full service hierarchy.
+
+        Traversal order:
+          configuration → workspace → namespaces → providers → resources → modules
+
+        Each level runs its own scripts for *phase_name*.  A missing phase at any
+        level is silently skipped.  A non-zero script exit at any level aborts the
+        remaining levels and returns False.
+
+        Additional ``STRATA_*`` context variables are injected per level:
+          - namespace level  → ``STRATA_NAMESPACE``
+          - provider level   → ``STRATA_PROVIDER``
+          - resource level   → ``STRATA_RESOURCE``
+          - module level     → ``STRATA_MODULE``
+        """
+        from strata.controllers.lifecycle_controller import LifecycleController
+
+        lc = LifecycleController()
+
+        # 1 — configuration level
+        if not lc.execute_configuration_phase(phase_name=phase_name, work_path=self._work_path, context=context):
+            for err in lc.get_errors():
+                self._errors.append(f"Lifecycle hook '{phase_name}' (config) failed: {err}")
+            return False
+
+        if self._deployment_service is None:
+            return True
+
+        # 2 — workspace level
+        workspace = self._deployment_service.get_workspace_service()
+        if workspace is not None:
+            lc.clear_errors()
+            lc.clear_messages()
+            if not lc.execute_workspace_phase(
+                base_service=workspace, phase_name=phase_name, work_path=self._work_path, context=context
+            ):
+                for err in lc.get_errors():
+                    self._errors.append(f"Lifecycle hook '{phase_name}' (workspace) failed: {err}")
+                return False
+
+        # 3 — namespace level
+        for ns_name, ns_service in (self._deployment_service.get_namespace_services() or {}).items():
+            lc.clear_errors()
+            lc.clear_messages()
+            ns_ctx = {**(context or {}), "namespace": str(ns_name)}
+            if not lc.execute_workspace_phase(
+                base_service=ns_service, phase_name=phase_name, work_path=self._work_path, context=ns_ctx
+            ):
+                for err in lc.get_errors():
+                    self._errors.append(f"Lifecycle hook '{phase_name}' (namespace:{ns_name}) failed: {err}")
+                return False
+
+        # 4 — provider level
+        for prov_name, prov_service in (self._deployment_service.get_provider_services() or {}).items():
+            lc.clear_errors()
+            lc.clear_messages()
+            prov_ctx = {**(context or {}), "provider": str(prov_name)}
+            if not lc.execute_workspace_phase(
+                base_service=prov_service, phase_name=phase_name, work_path=self._work_path, context=prov_ctx
+            ):
+                for err in lc.get_errors():
+                    self._errors.append(f"Lifecycle hook '{phase_name}' (provider:{prov_name}) failed: {err}")
+                return False
+
+        # 5 — resource level
+        for res_name, res_service in (self._deployment_service.get_resource_services() or {}).items():
+            lc.clear_errors()
+            lc.clear_messages()
+            res_ctx = {**(context or {}), "resource": str(res_name)}
+            if not lc.execute_workspace_phase(
+                base_service=res_service, phase_name=phase_name, work_path=self._work_path, context=res_ctx
+            ):
+                for err in lc.get_errors():
+                    self._errors.append(f"Lifecycle hook '{phase_name}' (resource:{res_name}) failed: {err}")
+                return False
+
+        # 6 — module level
+        for mod_key, mod_service in (self._deployment_service.get_module_services() or {}).items():
+            lc.clear_errors()
+            lc.clear_messages()
+            mod_ctx = {**(context or {}), "module": str(mod_key)}
+            if not lc.execute_workspace_phase(
+                base_service=mod_service, phase_name=phase_name, work_path=self._work_path, context=mod_ctx
+            ):
+                for err in lc.get_errors():
+                    self._errors.append(f"Lifecycle hook '{phase_name}' (module:{mod_key}) failed: {err}")
+                return False
+
+        return True
+
+    # -------------------------------------------------------------------------
+    # Deployment lifecycle
+    # -------------------------------------------------------------------------
+
     def _before_execute(self) -> bool:
         """Load and validate the deployment file + configuration service."""
         if not super()._before_execute():

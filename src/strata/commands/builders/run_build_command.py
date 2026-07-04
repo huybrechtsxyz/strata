@@ -70,7 +70,14 @@ class RunBuildCommand(BaseBuildCommand):
                     click.echo("\n❌  Pre-build lifecycle hook failed")
                 self._finalize(success=False)
                 return False
-
+            if not self._run_lifecycle_phase(
+                "build_validate",
+                context={"file": str(self._file_path), "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n\u274c  Build validate lifecycle hook failed")
+                self._finalize(success=False)
+                return False
             if not self._execute_platform_build():
                 if self._is_console_output():
                     click.echo("\n❌  Platform build failed")
@@ -106,7 +113,14 @@ class RunBuildCommand(BaseBuildCommand):
                     click.echo("\n❌  SBOM build failed")
                 self._finalize(success=False)
                 return False
-
+            if not self._run_lifecycle_phase(
+                "build_generate",
+                context={"file": str(self._file_path), "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n\u274c  Build generate lifecycle hook failed")
+                self._finalize(success=False)
+                return False
             if not self._evaluate_build_policies():
                 if self._is_console_output():
                     click.echo("\n\u274c  Build policy check failed")

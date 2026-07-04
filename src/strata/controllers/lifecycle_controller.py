@@ -368,7 +368,7 @@ class LifecycleController(BaseController):
             description=log_desc or "",
         )
 
-        env = self._prepare_environment(context)
+        env = self._prepare_environment(phase_name, work_path, context)
 
         # Optional template substitution — writes processed copy to a temp dir
         script_to_execute: Optional[Path] = script_path
@@ -575,14 +575,21 @@ class LifecycleController(BaseController):
                     pass
             return None, None
 
-    def _prepare_environment(self, context: Optional[dict] = None) -> dict:
+    def _prepare_environment(
+        self,
+        phase_name: str,
+        work_path: Path,
+        context: Optional[dict] = None,
+    ) -> dict:
         """
         Build the environment dict for script execution.
 
-        Starts from the current process environment and adds each context
-        entry as XYZ_<KEY_UPPER> (string value).
+        Injects standard STRATA_* variables plus any context key/value pairs
+        as STRATA_<KEY_UPPER> (string value).
 
         Args:
+            phase_name: Current lifecycle phase name (injected as STRATA_PHASE)
+            work_path: Workspace root (injected as STRATA_WORKSPACE_PATH)
             context: Optional dict of extra key/value pairs
 
         Returns:
@@ -590,9 +597,16 @@ class LifecycleController(BaseController):
         """
         env = os.environ.copy()
 
+        # Standard STRATA_* variables
+        env["STRATA_PHASE"] = phase_name
+        env["STRATA_WORKSPACE_PATH"] = str(work_path)
+        env["STRATA_CONFIG_PATH"] = str(work_path / ".strata")
+        env["STRATA_BUILD_PATH"] = str(work_path / "build")
+        env["STRATA_OBJECT_PATH"] = str(work_path / "build" / "objects")
+
         if context:
             for key, value in context.items():
-                env_key = f"XYZ_{key.upper()}"
+                env_key = f"STRATA_{key.upper()}"
                 env[env_key] = str(value)
                 self.logger.debug(
                     "Added environment variable",

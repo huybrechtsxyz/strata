@@ -1,7 +1,7 @@
 # Lifecycle phases and environment variables — standardization and completeness
 
-- Status: proposed
-- Date: 2026-07-03
+- Status: accepted
+- Date: 2026-07-04
 
 ## Context and Problem Statement
 
@@ -45,7 +45,7 @@ Document all 27 implemented phases. Remove undocumented phases from documentatio
 - Bad: `XYZ_*` prefix contradicts all public documentation; hierarchical execution gap remains.
 - Bad: Inconsistent phase naming not addressed.
 
-### Option C — Full standardization and completeness (recommended)
+### Option C — Full standardization and completeness (decided)
 
 1. **Standardize environment variables** — All lifecycle scripts receive `STRATA_*` prefix (STRATA_PHASE, STRATA_WORKSPACE_PATH, STRATA_CONFIG_PATH, STRATA_BUILD_PATH, STRATA_OBJECT_PATH).
 2. **Document all 27 implemented phases** — Complete phase reference with triggers, context variables, and use cases.
@@ -75,7 +75,7 @@ STRATA_OBJECT_PATH="/path/to/build/objects"     # Objects directory
 - Update `ScriptDeployer._execute_script()` to use the same environment variable naming.
 - Context parameters passed to `_run_lifecycle_phase()` are converted to `STRATA_<KEY>` (not `XYZ_`).
 
-**Backward compatibility:** `XYZ_*` variables are deprecated but still injected for one major version to allow users to migrate scripts.
+**Backward compatibility:** None required — clean rename in a single release.
 
 ### Phase 2: Complete Phase Documentation (P1 — UX improvement)
 
@@ -127,16 +127,18 @@ Document all 27 implemented lifecycle phases with:
 
 Implement top-down lifecycle script execution:
 
-1. **Configuration level** (today — already implemented)
-2. **Workspace level** (to be added)
-3. **Namespace level** (to be added)
-4. **Module level** (to be added)
-5. **Provider level** (to be added)
-6. **Resource level** (to be added)
+1. **Configuration level** (implemented)
+2. **Workspace level** (implemented)
+3. **Namespace level** (implemented)
+4. **Provider level** (implemented)
+5. **Resource level** (implemented)
+6. **Module level** (implemented)
 
-When a phase executes, scripts run in hierarchy order, with each level's scripts executing before the next. Failures at any level stop the pipeline unless `continue_on_failure` is set.
+When a phase executes, scripts run in hierarchy order (configuration → workspace → namespaces → providers → resources → modules), with each level's scripts executing before the next. Failures at any level stop the pipeline.
 
-**Scope:** Deployment-related commands (deploy, destroy) only. Build, validate, and solution commands remain configuration-level only (unless explicitly extended).
+Each level injects additional `STRATA_*` context variables (`STRATA_NAMESPACE`, `STRATA_PROVIDER`, `STRATA_RESOURCE`, `STRATA_MODULE`) so scripts can self-scope without hard-coding names.
+
+**Scope:** Stage-level hooks (`deploy_stage_before`, `deploy_apply_before`, `deploy_apply_after`, `deploy_stage_after`) run hierarchically. Run-level hooks (`deploy_run_before`, `deploy_run_after`, `deploy_configure`) remain configuration-level only.
 
 ## Design: Phase Naming
 
@@ -180,26 +182,23 @@ This pattern applies consistently to all new and existing phases.
 
 ## Implementation Plan
 
-1. **Phase 1 (Weeks 1–2):**
-   - [ ] Update `LifecycleController` to inject `STRATA_*` variables.
-   - [ ] Update `ScriptDeployer` to use `STRATA_*` naming.
-   - [ ] Add deprecation notice to `XYZ_*` injection.
-   - [ ] Update all tests.
-   - [ ] Release in next minor version with deprecation warnings.
+1. **Phase 1 (complete):**
+   - [x] Update `LifecycleController` to inject `STRATA_*` variables.
+   - [x] Update `ScriptDeployer` to use `STRATA_*` naming.
+   - [x] Update all tests.
 
-2. **Phase 2 (Weeks 2–3):**
-   - [ ] Document all 27 phases in `docs/platform/lifecycles.md`.
-   - [ ] Implement `build_validate`, `build_generate`, `deploy_health`, `deploy_configure` hooks.
-   - [ ] Implement `deploy_apply_before/after` gates in `run_deploy_command.py`.
-   - [ ] Update phase naming documentation.
-   - [ ] Release in same minor version.
+2. **Phase 2 (complete):**
+   - [x] Document all phases in `docs/platform/lifecycles.md`.
+   - [x] Implement `build_validate`, `build_generate` hooks in `run_build_command.py`.
+   - [x] Implement `deploy_apply_before`/`deploy_apply_after` gates in `run_deploy_command.py`.
+   - [x] Implement `deploy_configure` hook in `run_deploy_command.py`.
+   - [x] Implement `deploy_health` hook in `health_deploy_command.py`.
 
-3. **Phase 3 (Weeks 4–6):**
-   - [ ] Extend deployment-related services (WorkspaceService, NamespaceService, etc.) with lifecycle phase support.
-   - [ ] Implement hierarchical execution in deployment controllers.
-   - [ ] Update `run_deploy_command.py` to traverse hierarchy.
-   - [ ] Update tests and examples.
-   - [ ] Release in next minor version.
+3. **Phase 3 (complete):**
+   - [x] Add `_run_hierarchy_lifecycle_phase()` to `BaseDeployCommand`.
+   - [x] Wire `deploy_stage_before`, `deploy_apply_before`, `deploy_apply_after`, `deploy_stage_after` to hierarchical execution.
+   - [x] Inject `STRATA_NAMESPACE`, `STRATA_PROVIDER`, `STRATA_RESOURCE`, `STRATA_MODULE` context per level.
+   - [x] Update tests (`TestRunHierarchyLifecyclePhase` in `test_commands_deploy.py`).
 
 ## Related Decisions
 
