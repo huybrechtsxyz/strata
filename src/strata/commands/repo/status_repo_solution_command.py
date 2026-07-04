@@ -130,6 +130,11 @@ class StatusRepoSolutionCommand(BaseCommand):
                         }
                     )
 
+                    # Discover tags (latest release and quality-gate tags)
+                    tags = self._discover_tags(git, str(local_path))
+                    if tags:
+                        entry["tags"] = tags
+
             results.append(entry)
 
         self._output_data = {"repos": results}
@@ -204,7 +209,93 @@ class StatusRepoSolutionCommand(BaseCommand):
                     for f in r.get("conflicted", []):
                         click.echo(f"         !  {f}")
 
+            # Show tags if discovered
+            tags = r.get("tags")
+            if tags:
+                latest_release = tags.get("latest_release")
+                latest_quality = tags.get("latest_quality")
+                if latest_release or latest_quality:
+                    click.echo("       Tags:")
+                    if latest_release:
+                        click.echo(
+                            f"         Release: {latest_release['name']} ({latest_release['age_str']}, {latest_release['commit']})"
+                        )
+                    if latest_quality:
+                        click.echo(
+                            f"         Quality: {latest_quality['name']} ({latest_quality['age_str']}, {latest_quality['commit']})"
+                        )
+
         click.echo("")
+
+    # -------------------------------------------------------------------------
+    # Tag discovery
+    # -------------------------------------------------------------------------
+
+    def _discover_tags(self, git: GitIntegration, repo_path: str) -> Optional[Dict[str, Any]]:
+        """Discover latest release and quality-gate tags.
+
+        Args:
+            git: GitIntegration instance
+            repo_path: Path to the repository
+
+        Returns:
+            Dict with latest_release and latest_quality tag info, or None if no tags found
+        """
+        try:
+            all_tags = git.list_tags(repo_path, timeout=30)
+            if not all_tags:
+                return None
+
+            # Find latest release tag (vX.Y.Z pattern)
+            latest_release = None
+            for tag in all_tags:
+                if tag.name.startswith("v") and self._looks_like_semver(tag.name):
+                    latest_release = tag
+                    break
+
+            # Find latest quality tag (tested, rc-, etc.)
+            latest_quality = None
+            for tag in all_tags:
+                if tag.name.startswith("tested") or tag.name.startswith("rc-"):
+                    latest_quality = tag
+                    break
+
+            if not latest_release and not latest_quality:
+                return None
+
+            result: Dict[str, Any] = {}
+
+            if latest_release:
+                result["latest_release"] = {
+                    "name": latest_release.name,
+                    "commit": latest_release.short_commit,
+                    "created": latest_release.created.isoformat() if latest_release.created else None,
+                    "age_days": latest_release.age_days,
+                    "age_str": latest_release.age_str,
+                }
+
+            if latest_quality:
+                result["latest_quality"] = {
+                    "name": latest_quality.name,
+                    "commit": latest_quality.short_commit,
+                    "created": latest_quality.created.isoformat() if latest_quality.created else None,
+                    "age_days": latest_quality.age_days,
+                    "age_str": latest_quality.age_str,
+                }
+
+            return result if result else None
+
+        except Exception as exc:
+            # Silently skip tag discovery on error
+            self.logger.debug(f"Tag discovery failed for {repo_path}: {exc}")
+            return None
+
+    @staticmethod
+    def _looks_like_semver(tag_name: str) -> bool:
+        """Check if tag name looks like a semantic version (vX.Y.Z)."""
+        import re
+
+        return bool(re.match(r"^v\d+\.\d+\.\d+", tag_name))
 
     # -------------------------------------------------------------------------
     # Git integration factory (mirrors RepositoryController pattern)

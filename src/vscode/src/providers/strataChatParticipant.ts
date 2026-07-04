@@ -24,7 +24,7 @@ import type { StrataClient, WorkspaceStatus, ValidationResult } from '../strataC
 const PARTICIPANT_ID = 'strata.chat';
 
 /** Slash-command metadata registered in package.json `chatParticipants[].commands`. */
-type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy';
+type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'repos';
 
 export class StrataChatParticipant implements vscode.Disposable {
     private _participant: vscode.ChatParticipant | undefined;
@@ -83,6 +83,8 @@ export class StrataChatParticipant implements vscode.Disposable {
                     return await this._handleBuildOrDeploy('build', response);
                 case 'deploy':
                     return await this._handleBuildOrDeploy('deploy', response);
+                case 'repos':
+                    return await this._handleRepos(response, token);
                 default:
                     return await this._handleFreeform(request, response, token);
             }
@@ -231,6 +233,61 @@ export class StrataChatParticipant implements vscode.Disposable {
         return { metadata: { command: action } };
     }
 
+    // ── /repos ─────────────────────────────────────────────────────────────────
+
+    private async _handleRepos(
+        response: vscode.ChatResponseStream,
+        _token: vscode.CancellationToken,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        try {
+            const data = await this._client.getRepoStatus();
+
+            if (!data.repos || data.repos.length === 0) {
+                response.markdown('No repositories configured. Initialize with:\n\n```sh\nstrata repo add --name <name> --path <path>\n```\n');
+                return { metadata: { command: 'repos' } };
+            }
+
+            response.markdown(`## Repository Status\n\n`);
+
+            for (const repo of data.repos) {
+                response.markdown(`### ${repo.name}\n\n`);
+
+                if (!repo.tags || Object.keys(repo.tags).length === 0) {
+                    response.markdown(`*No tags found*\n\n`);
+                    continue;
+                }
+
+                if (repo.tags.latest_release) {
+                    const tag = repo.tags.latest_release;
+                    response.markdown(
+                        `**Release:** [\`${tag.name}\`](command:strata.copyToClipboard?%5B%22${encodeURIComponent(tag.name)}%22%5D) ` +
+                        `(${tag.age_str}, commit \`${tag.short_commit}\`)\n\n`
+                    );
+                }
+
+                if (repo.tags.latest_quality) {
+                    const tag = repo.tags.latest_quality;
+                    response.markdown(
+                        `**Quality Gate:** [\`${tag.name}\`](command:strata.copyToClipboard?%5B%22${encodeURIComponent(tag.name)}%22%5D) ` +
+                        `(${tag.age_str}, commit \`${tag.short_commit}\`)\n\n`
+                    );
+                }
+            }
+
+            response.markdown(`💡 Use \`strata repo status --verbose\` for detailed git status.\n`);
+
+            return { metadata: { command: 'repos' } };
+        } catch (err) {
+            response.markdown(`**Error fetching repository status:** ${err instanceof Error ? err.message : String(err)}`);
+            return { errorDetails: { message: String(err) } };
+        }
+    }
+
     // ── Freeform (no slash command) ────────────────────────────────────────────
 
     private async _handleFreeform(
@@ -294,32 +351,37 @@ export class StrataChatParticipant implements vscode.Disposable {
             case 'status':
                 return [
                     { prompt: '', label: 'Show readiness guide', command: 'guide' },
-                    { prompt: '', label: 'Validate current file', command: 'validate' },
+                    { prompt: '', label: 'Check repositories', command: 'repos' },
                 ];
             case 'validate':
                 return [
                     { prompt: '', label: 'Show workspace status', command: 'status' },
-                    { prompt: '', label: 'How do I build?', command: 'build' },
+                    { prompt: '', label: 'Check repositories', command: 'repos' },
                 ];
             case 'guide':
                 return [
                     { prompt: '', label: 'Build my deployment', command: 'build' },
-                    { prompt: '', label: 'Deploy my deployment', command: 'deploy' },
+                    { prompt: '', label: 'Check repositories', command: 'repos' },
                 ];
             case 'build':
                 return [
                     { prompt: '', label: 'Deploy now', command: 'deploy' },
-                    { prompt: '', label: 'Check status', command: 'status' },
+                    { prompt: '', label: 'Check repositories', command: 'repos' },
                 ];
             case 'deploy':
                 return [
                     { prompt: '', label: 'Check status', command: 'status' },
-                    { prompt: '', label: 'Show guide', command: 'guide' },
+                    { prompt: '', label: 'Check repositories', command: 'repos' },
+                ];
+            case 'repos':
+                return [
+                    { prompt: '', label: 'Workspace status', command: 'status' },
+                    { prompt: '', label: 'Readiness guide', command: 'guide' },
                 ];
             default:
                 return [
                     { prompt: '', label: 'Workspace status', command: 'status' },
-                    { prompt: '', label: 'Readiness guide', command: 'guide' },
+                    { prompt: '', label: 'Check repositories', command: 'repos' },
                 ];
         }
     }

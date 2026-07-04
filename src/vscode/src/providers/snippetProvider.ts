@@ -23,19 +23,19 @@ import * as vscode from 'vscode';
 // ---------------------------------------------------------------------------
 
 interface SnippetDef {
-    kind: string;
-    description: string;
-    body: string;
+  kind: string;
+  description: string;
+  body: string;
 }
 
 const API_VERSION = 'strata.huybrechts.xyz/v1';
 
 const SNIPPETS: SnippetDef[] = [
-    // ── workspace ────────────────────────────────────────────────────────────
-    {
-        kind: 'workspace',
-        description: 'Top-level workspace — declares providers, provisioners, topology, and resources.',
-        body: `apiVersion: ${API_VERSION}
+  // ── workspace ────────────────────────────────────────────────────────────
+  {
+    kind: 'workspace',
+    description: 'Top-level workspace — declares providers, provisioners, topology, and resources.',
+    body: `apiVersion: ${API_VERSION}
 kind: workspace
 meta:
   name: \${1:my_workspace}
@@ -55,29 +55,31 @@ spec:
       source:
         repository: \${9:my_repo}
         source_path: \${10:terraform}
+      output:
+        format: \${11:strata}          # strata | custom | script | none
 
   topology:
-    - name: \${11:my_cluster}
+    - name: \${12:my_cluster}
       provider: \${5:my_provider}
       provisioner: \${8:terraform}
-      type: \${12:kubernetes}
+      type: \${13:kubernetes}
       components:
-        - resource: \${13:my_resource}
+        - resource: \${14:my_resource}
       namespaces:
-        - namespace: \${14:my_namespace}
+        - namespace: \${15:my_namespace}
 
   resources:
-    - name: \${13:my_resource}
-      file: "@\${6:repo}/stack/\${15:resource}.yaml"
-      description: \${16:Resource description}
+    - name: \${14:my_resource}
+      file: "@\${6:repo}/stack/\${16:resource}.yaml"
+      description: \${17:Resource description}
 $0`,
-    },
+  },
 
-    // ── configuration ────────────────────────────────────────────────────────
-    {
-        kind: 'configuration',
-        description: 'Configuration — layering strategy, deployment properties, remotes, and integrations.',
-        body: `apiVersion: ${API_VERSION}
+  // ── configuration ────────────────────────────────────────────────────────
+  {
+    kind: 'configuration',
+    description: 'Configuration — layering strategy, deployment properties, remotes, and integrations.',
+    body: `apiVersion: ${API_VERSION}
 kind: configuration
 meta:
   name: \${1:my_config}
@@ -114,13 +116,13 @@ spec:
       capabilities: [repository]
       required: true
 $0`,
-    },
+  },
 
-    // ── deployment ───────────────────────────────────────────────────────────
-    {
-        kind: 'deployment',
-        description: 'Deployment — orchestrates build and deploy stages across environments.',
-        body: `apiVersion: ${API_VERSION}
+  // ── deployment ───────────────────────────────────────────────────────────
+  {
+    kind: 'deployment',
+    description: 'Deployment — orchestrates build and deploy stages across environments.',
+    body: `apiVersion: ${API_VERSION}
 kind: deployment
 meta:
   name: \${1:my_deployment}
@@ -156,13 +158,13 @@ spec:
       depends_on: [\${11:infrastructure}]
       on_failure: stop
 $0`,
-    },
+  },
 
-    // ── environment ──────────────────────────────────────────────────────────
-    {
-        kind: 'environment',
-        description: 'Environment — variables and secrets for a deployment target.',
-        body: `apiVersion: ${API_VERSION}
+  // ── environment ──────────────────────────────────────────────────────────
+  {
+    kind: 'environment',
+    description: 'Environment — variables and secrets for a deployment target.',
+    body: `apiVersion: ${API_VERSION}
 kind: environment
 meta:
   name: \${1:my_env_dev}
@@ -188,13 +190,13 @@ spec:
       store: environment
       value: \${10:MY_SECRET}
 $0`,
-    },
+  },
 
-    // ── module ───────────────────────────────────────────────────────────────
-    {
-        kind: 'module',
-        description: 'Module — a deployable service unit (Helm chart, Compose service, etc.).',
-        body: `apiVersion: ${API_VERSION}
+  // ── module ───────────────────────────────────────────────────────────────
+  {
+    kind: 'module',
+    description: 'Module — a deployable service unit (Helm chart, Compose service, etc.).',
+    body: `apiVersion: ${API_VERSION}
 kind: module
 meta:
   name: \${1:my_module}
@@ -215,13 +217,13 @@ spec:
       configuration:
         replicaCount: \${11:1}
 $0`,
-    },
+  },
 
-    // ── namespace ────────────────────────────────────────────────────────────
-    {
-        kind: 'namespace',
-        description: 'Namespace — groups modules that share a Kubernetes namespace.',
-        body: `apiVersion: ${API_VERSION}
+  // ── namespace ────────────────────────────────────────────────────────────
+  {
+    kind: 'namespace',
+    description: 'Namespace — groups modules that share a Kubernetes namespace.',
+    body: `apiVersion: ${API_VERSION}
 kind: namespace
 meta:
   name: \${1:my_namespace}
@@ -235,13 +237,13 @@ spec:
     - name: \${5:my_module}
       file: "@\${6:repo}/stack/\${7:module}.yaml"
 $0`,
-    },
+  },
 
-    // ── provider ─────────────────────────────────────────────────────────────
-    {
-        kind: 'provider',
-        description: 'Provider — cloud or infrastructure target (region, account, cluster).',
-        body: `apiVersion: ${API_VERSION}
+  // ── provider ─────────────────────────────────────────────────────────────
+  {
+    kind: 'provider',
+    description: 'Provider — cloud or infrastructure target (region, account, cluster).',
+    body: `apiVersion: ${API_VERSION}
 kind: provider
 meta:
   name: \${1:my_provider}
@@ -255,13 +257,13 @@ spec:
     type: \${5|azure,aws,gcp,hetzner,kamatera|}
     region: \${6:westeurope}
 $0`,
-    },
+  },
 
-    // ── resource ─────────────────────────────────────────────────────────────
-    {
-        kind: 'resource',
-        description: 'Resource — a single infrastructure resource (VM, cluster, database, etc.).',
-        body: `apiVersion: ${API_VERSION}
+  // ── resource ─────────────────────────────────────────────────────────────
+  {
+    kind: 'resource',
+    description: 'Resource — a single infrastructure resource (VM, cluster, database, etc.).',
+    body: `apiVersion: ${API_VERSION}
 kind: resource
 meta:
   name: \${1:my_resource}
@@ -279,13 +281,13 @@ spec:
   configuration:
     \${9:key}: \${10:value}
 $0`,
-    },
+  },
 
-    // ── network ──────────────────────────────────────────────────────────────
-    {
-        kind: 'network',
-        description: 'Network — virtual network, address spaces, and subnets.',
-        body: `apiVersion: ${API_VERSION}
+  // ── network ──────────────────────────────────────────────────────────────
+  {
+    kind: 'network',
+    description: 'Network — virtual network, address spaces, and subnets.',
+    body: `apiVersion: ${API_VERSION}
 kind: network
 meta:
   name: \${1:my_network}
@@ -306,13 +308,13 @@ spec:
             value: "\${9:10.0.0.0/20}"
           description: \${10:Primary subnet}
 $0`,
-    },
+  },
 
-    // ── firewall ─────────────────────────────────────────────────────────────
-    {
-        kind: 'firewall',
-        description: 'Firewall — inbound and outbound rules for a host or cluster.',
-        body: `apiVersion: ${API_VERSION}
+  // ── firewall ─────────────────────────────────────────────────────────────
+  {
+    kind: 'firewall',
+    description: 'Firewall — inbound and outbound rules for a host or cluster.',
+    body: `apiVersion: ${API_VERSION}
 kind: firewall
 meta:
   name: \${1:my_firewall}
@@ -348,13 +350,13 @@ spec:
       port: \${5:443}
       comment: \${6:HTTPS}
 $0`,
-    },
+  },
 
-    // ── dns ──────────────────────────────────────────────────────────────────
-    {
-        kind: 'dns',
-        description: 'DNS — zones and records managed by a DNS provider.',
-        body: `apiVersion: ${API_VERSION}
+  // ── dns ──────────────────────────────────────────────────────────────────
+  {
+    kind: 'dns',
+    description: 'DNS — zones and records managed by a DNS provider.',
+    body: `apiVersion: ${API_VERSION}
 kind: dns
 meta:
   name: \${1:my_dns}
@@ -382,13 +384,13 @@ spec:
           type: A
           var: \${6:SERVER_IP}
 $0`,
-    },
+  },
 
-    // ── tenant ───────────────────────────────────────────────────────────────
-    {
-        kind: 'tenant',
-        description: 'Tenant — a customer or organisational unit with its own configuration scope.',
-        body: `apiVersion: ${API_VERSION}
+  // ── tenant ───────────────────────────────────────────────────────────────
+  {
+    kind: 'tenant',
+    description: 'Tenant — a customer or organisational unit with its own configuration scope.',
+    body: `apiVersion: ${API_VERSION}
 kind: tenant
 meta:
   name: \${1:my_tenant}
@@ -404,7 +406,7 @@ spec:
   configuration:
     \${7:key}: \${8:value}
 $0`,
-    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -413,62 +415,62 @@ $0`,
 
 export class SnippetProvider implements vscode.CompletionItemProvider, vscode.Disposable {
 
-    private _disposables: vscode.Disposable[] = [];
+  private _disposables: vscode.Disposable[] = [];
 
-    register(context: vscode.ExtensionContext): void {
-        this._disposables.push(
-            vscode.languages.registerCompletionItemProvider(
-                { language: 'yaml' },
-                this,
-                ':',   // trigger character — fires when user types ':'
-            ),
+  register(context: vscode.ExtensionContext): void {
+    this._disposables.push(
+      vscode.languages.registerCompletionItemProvider(
+        { language: 'yaml' },
+        this,
+        ':',   // trigger character — fires when user types ':'
+      ),
+    );
+    context.subscriptions.push(...this._disposables);
+  }
+
+  dispose(): void {
+    this._disposables.forEach((d) => d.dispose());
+    this._disposables = [];
+  }
+
+  // -------------------------------------------------------------------------
+  // CompletionItemProvider
+  // -------------------------------------------------------------------------
+
+  provideCompletionItems(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+  ): vscode.CompletionItem[] | null {
+    const lineText = document.lineAt(position).text;
+    const linePrefix = lineText.substring(0, position.character);
+
+    // Only activate when the line up-to-cursor matches `strata:` (with
+    // optional leading whitespace) followed by an optional partial kind.
+    const m = linePrefix.match(/(?:^|\s)strata:([a-z]*)$/);
+    if (!m) return null;
+
+    const typed = m[1];                             // what was typed after `:`
+    const triggerStart = linePrefix.lastIndexOf('strata:');
+    const replaceRange = new vscode.Range(
+      position.line, triggerStart,
+      position.line, position.character,
+    );
+
+    return SNIPPETS
+      .filter((s) => s.kind.startsWith(typed))
+      .map((s) => {
+        const item = new vscode.CompletionItem(
+          `strata:${s.kind}`,
+          vscode.CompletionItemKind.Snippet,
         );
-        context.subscriptions.push(...this._disposables);
-    }
-
-    dispose(): void {
-        this._disposables.forEach((d) => d.dispose());
-        this._disposables = [];
-    }
-
-    // -------------------------------------------------------------------------
-    // CompletionItemProvider
-    // -------------------------------------------------------------------------
-
-    provideCompletionItems(
-        document: vscode.TextDocument,
-        position: vscode.Position,
-    ): vscode.CompletionItem[] | null {
-        const lineText = document.lineAt(position).text;
-        const linePrefix = lineText.substring(0, position.character);
-
-        // Only activate when the line up-to-cursor matches `strata:` (with
-        // optional leading whitespace) followed by an optional partial kind.
-        const m = linePrefix.match(/(?:^|\s)strata:([a-z]*)$/);
-        if (!m) return null;
-
-        const typed = m[1];                             // what was typed after `:`
-        const triggerStart = linePrefix.lastIndexOf('strata:');
-        const replaceRange = new vscode.Range(
-            position.line, triggerStart,
-            position.line, position.character,
-        );
-
-        return SNIPPETS
-            .filter((s) => s.kind.startsWith(typed))
-            .map((s) => {
-                const item = new vscode.CompletionItem(
-                    `strata:${s.kind}`,
-                    vscode.CompletionItemKind.Snippet,
-                );
-                item.detail = `Strata ${s.kind} boilerplate`;
-                item.documentation = new vscode.MarkdownString(s.description);
-                item.insertText = new vscode.SnippetString(s.body);
-                item.range = replaceRange;
-                // Float strata snippets to top of the completion list
-                item.sortText = `0_strata_${s.kind}`;
-                item.filterText = `strata:${s.kind}`;
-                return item;
-            });
-    }
+        item.detail = `Strata ${s.kind} boilerplate`;
+        item.documentation = new vscode.MarkdownString(s.description);
+        item.insertText = new vscode.SnippetString(s.body);
+        item.range = replaceRange;
+        // Float strata snippets to top of the completion list
+        item.sortText = `0_strata_${s.kind}`;
+        item.filterText = `strata:${s.kind}`;
+        return item;
+      });
+  }
 }

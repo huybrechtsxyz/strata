@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pydantic models for workspace configuration validation."""
 
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import (
     Field,
@@ -20,6 +20,126 @@ from strata.models.common_models import (
     SourceModel,
     validate_slot_type,
 )
+
+# ---------------------------------------------------------------------------
+# Build output profile models
+# ---------------------------------------------------------------------------
+
+EmitCategory = Literal[
+    # Two-tier: constant/env at build-time; all stores at deploy-time via ResolvedValues
+    "features",
+    "variables",
+    # Build-time only — from platform.json structural model
+    "properties",
+    "custom",
+    "workspace",
+    "providers",
+    "topologies",
+    "modules",
+    "namespaces",
+    "firewalls",
+    "dns",
+    "networks",
+    "resources",
+    "tenant",
+    # NOTE: "secrets" is intentionally absent — secrets are never written to disk.
+]
+
+
+class OutputFileSourceModel(PlatformBaseModel):
+    """One variable entry within a multi-source file definition (sources[])."""
+
+    variable: str = Field(description="Top-level TF variable name for this entry")
+    source: Literal["properties", "custom"] = Field(description="Source dict to look in")
+    key: str = Field(description="Key within the source dict to extract")
+    type: Literal["object", "map", "list"] = Field(default="object")
+
+
+class OutputFileModel(PlatformBaseModel):
+    """Single custom output file produced by the Terraform builder."""
+
+    name: str = Field(description="Output filename (e.g. environment_info.auto.tfvars.json)")
+
+    # Single-source mode
+    variable: Optional[str] = Field(None, description="Top-level TF variable name to wrap the data in")
+    type: Literal["object", "map", "list", "flat", "script"] = Field(default="object")
+    source: Optional[Literal["properties", "custom"]] = Field(None)
+    key: Optional[str] = Field(None, description="Key within the source dict to extract")
+
+    # Multi-source mode — mutually exclusive with variable/source/key/script
+    sources: Optional[List[OutputFileSourceModel]] = Field(
+        None, description="Multiple variable sources merged into one file"
+    )
+
+    # Script mode — supports @repo_name/path resolution
+    script: Optional[str] = Field(None, description="Path to script (required when type=script)")
+
+    @model_validator(mode="after")
+    def validate_file_mode(self) -> "OutputFileModel":
+        has_sources = bool(self.sources)
+        has_single = bool(self.source or self.variable)
+        has_script = bool(self.script) or self.type == "script"
+        if sum([has_sources, has_single, has_script]) > 1:
+            raise ValueError("sources[], variable/source/key, and script are mutually exclusive")
+        if self.type == "script" and not self.script:
+            raise ValueError("'script' path is required when type is 'script'")
+        if self.source and not self.key:
+            raise ValueError("'key' is required when 'source' is set")
+        if self.sources:
+            for i, entry in enumerate(self.sources):
+                if not entry.variable or not entry.source or not entry.key:
+                    raise ValueError(f"sources[{i}] requires variable, source, and key")
+        return self
+
+
+class OutputProfileModel(PlatformBaseModel):
+    """Build output profile for a Terraform provisioner.
+
+    Controls what tfvars files are emitted by ``strata build run``.
+    Defaults to ``format: strata`` (current behaviour) when absent.
+    """
+
+    format: Literal["strata", "custom", "script", "none"] = Field(
+        default="strata",
+        description=(
+            "strata=emit all built-in files (default); "
+            "custom=emit only emits[]+files[]; "
+            "script=one user script owns all output; "
+            "none=source files copied, no tfvars"
+        ),
+    )
+    script: Optional[str] = Field(
+        None,
+        description="Path to build script (required when format=script). Supports @repo_name/path.",
+    )
+    emits: Optional[List[EmitCategory]] = Field(
+        None,
+        description=(
+            "Explicit list of categories to emit. Omit to use format defaults: strata=all, custom/script/none=none."
+        ),
+    )
+    files: Optional[List[OutputFileModel]] = Field(None, description="Custom file definitions")
+
+    def should_emit(self, category: str) -> bool:
+        """Return True when *category* should be emitted according to this profile.
+
+        "secrets" always returns False — secrets are never written to disk.
+        """
+        if category == "secrets":
+            return False
+        if self.emits is not None:
+            return category in self.emits
+        return self.format == "strata"
+
+    @model_validator(mode="after")
+    def validate_script_format(self) -> "OutputProfileModel":
+        if self.format == "script" and not self.script:
+            raise ValueError("'script' path is required when format is 'script'")
+        if self.format != "script" and self.script:
+            raise ValueError("'script' is only valid when format is 'script'")
+        if self.format == "none" and (self.files or self.emits):
+            raise ValueError("emits and files[] have no effect when format is 'none'")
+        return self
 
 
 class WorkspaceNamespaceModel(PlatformBaseModel):
@@ -297,6 +417,14 @@ class WorkspaceIacModel(PlatformBaseModel):
     configuration: Optional[Dict[str, Any]] = Field(
         None,
         description="Tool-specific configuration (e.g. playbook, inventory, ssh_private_key_secret for Ansible; backend overrides for Terraform).",
+    )
+    output: Optional[OutputProfileModel] = Field(
+        None,
+        description=(
+            "Build output profile for Terraform provisioners. "
+            "Controls what tfvars files are emitted by 'strata build run'. "
+            "Defaults to format=strata (current behaviour) when absent."
+        ),
     )
 
     @model_validator(mode="after")

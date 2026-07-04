@@ -66,7 +66,14 @@ class HealthDeployCommand(BaseDeployCommand):
                     click.echo("\n❌  Pre-execution validation failed")
                 self._finalize(success=False)
                 return False
-
+            if not self._run_lifecycle_phase(
+                "deploy_health",
+                context={"file": str(self._file_path)},
+            ):
+                if self._is_console_output():
+                    click.echo("\n\u274c  Health lifecycle hook failed")
+                self._finalize(success=False)
+                return False
             ok = self._run_health_checks()
 
             if not self._after_execute():

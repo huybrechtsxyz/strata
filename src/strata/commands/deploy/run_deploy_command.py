@@ -128,6 +128,16 @@ class RunDeployCommand(BaseDeployCommand):
                 return False
 
             if not self._run_lifecycle_phase(
+                "deploy_configure",
+                context={"file": str(self._file_path), "stage": self._stage, "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n\u274c  Configure lifecycle hook failed")
+                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
+                self._finalize(success=False)
+                return False
+
+            if not self._run_lifecycle_phase(
                 "deploy_run_after",
                 context={"file": str(self._file_path), "stage": self._stage, "dry_run": self._dry_run},
             ):
@@ -537,7 +547,7 @@ class RunDeployCommand(BaseDeployCommand):
             )
 
         # --- stage-level before hook ---
-        if not self._run_lifecycle_phase(
+        if not self._run_hierarchy_lifecycle_phase(
             "deploy_stage_before",
             context={"stage": str(stage.name), "dry_run": self._dry_run},
         ):
@@ -597,6 +607,26 @@ class RunDeployCommand(BaseDeployCommand):
             step_fn = getattr(deployer, step_name)
             # Steps that support line_callback accept it as a keyword arg;
             # output/show_plan return (bool, dict, list) and don't stream.
+
+            # --- deploy_apply_before hook ---
+            if step_name == STEP_APPLY:
+                if not self._run_hierarchy_lifecycle_phase(
+                    "deploy_apply_before",
+                    context={"stage": str(stage.name), "dry_run": self._dry_run},
+                ):
+                    self._errors.append(f"Stage '{stage.name}': deploy_apply_before lifecycle hook blocked apply.")
+                    self._record_stage_result(
+                        stage_name=str(stage.name),
+                        provisioner=stage.provisioner,
+                        topology=stage.topology,
+                        status="failed",
+                        started_at=stage_started,
+                        completed_at=_dt.now(_tz.utc).isoformat(),
+                        steps=steps_to_run,
+                        error="deploy_apply_before hook blocked apply",
+                    )
+                    return False
+
             if step_name in (STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY, STEP_DESTROY):
                 ok, msgs = step_fn(line_callback=line_cb)
             else:
@@ -641,6 +671,25 @@ class RunDeployCommand(BaseDeployCommand):
                         "ts": _dt.now(_tz.utc).isoformat(),
                     }
                 )
+
+            # --- deploy_apply_after hook ---
+            if step_name == STEP_APPLY:
+                if not self._run_hierarchy_lifecycle_phase(
+                    "deploy_apply_after",
+                    context={"stage": str(stage.name), "dry_run": self._dry_run},
+                ):
+                    self._errors.append(f"Stage '{stage.name}': deploy_apply_after lifecycle hook failed.")
+                    self._record_stage_result(
+                        stage_name=str(stage.name),
+                        provisioner=stage.provisioner,
+                        topology=stage.topology,
+                        status="failed",
+                        started_at=stage_started,
+                        completed_at=_dt.now(_tz.utc).isoformat(),
+                        steps=steps_to_run,
+                        error="deploy_apply_after hook failed",
+                    )
+                    return False
 
             # --- plan gate: enforce deploy_plan_after hook before apply ---
             if step_name == STEP_PLAN and STEP_APPLY in steps_to_run:
@@ -775,7 +824,7 @@ class RunDeployCommand(BaseDeployCommand):
         )
 
         # --- stage-level after hook ---
-        if not self._run_lifecycle_phase(
+        if not self._run_hierarchy_lifecycle_phase(
             "deploy_stage_after",
             context={"stage": str(stage.name), "dry_run": self._dry_run},
         ):

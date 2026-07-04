@@ -214,3 +214,38 @@ class TestLifecycleControllerExecuteScript:
         )
         assert result is False
         assert ctrl.has_errors()
+
+    def test_strata_env_vars_injected(self, tmp_path):
+        """STRATA_PHASE and standard STRATA_* vars must be present in subprocess env."""
+        script_file = tmp_path / "probe.sh"
+        script_file.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+
+        ctrl = LifecycleController(enable_templating=False)
+        captured_env: dict = {}
+
+        def _capture(cmd, **kwargs):
+            captured_env.update(kwargs.get("env", {}))
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        with patch("subprocess.run", side_effect=_capture):
+            ctrl._execute_script(
+                phase_name="deploy_apply_before",
+                script_file=Path("probe.sh"),
+                script_desc=None,
+                work_path=tmp_path,
+                context={"stage": "infra", "dry_run": False},
+            )
+
+        assert captured_env.get("STRATA_PHASE") == "deploy_apply_before"
+        assert captured_env.get("STRATA_WORKSPACE_PATH") == str(tmp_path)
+        assert "STRATA_CONFIG_PATH" in captured_env
+        assert "STRATA_BUILD_PATH" in captured_env
+        assert "STRATA_OBJECT_PATH" in captured_env
+        assert captured_env.get("STRATA_STAGE") == "infra"
+        assert captured_env.get("STRATA_DRY_RUN") == "False"
+        # Old XYZ_ prefix must NOT be present
+        assert not any(k.startswith("XYZ_") for k in captured_env)

@@ -5,7 +5,9 @@ It only documents required keys.
 """
 
 import json
+import os
 import shutil
+import subprocess
 from glob import glob
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -13,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from strata.builders.base_builder import BaseBuilder
 from strata.models.environment_model import IncludeMergeStrategy
 from strata.models.platform_artifact_model import PlatformArtifactModel
+from strata.models.workspace_model import OutputFileModel, OutputProfileModel
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
 from strata.utils.terraform_loader import TerraformLoader
@@ -113,7 +116,14 @@ class TerraformBuilder(BaseBuilder):
                     if terraform_paths
                     else deployment_service.get_build_path(build_path) / "terraform"
                 )
-                planned = [name for name, _ in self._planned_files(terraform_vars)]
+                # Use the first terraform provisioner's profile for dry-run display
+                ws_service = deployment_service.get_workspace_service()
+                first_profile: Optional[OutputProfileModel] = None
+                if ws_service and ws_service.model:
+                    tf_provs = [p for p in ws_service.model.spec.provisioners if p.provisioner.value == "terraform"]
+                    if tf_provs:
+                        first_profile = tf_provs[0].output
+                planned = [name for name, _ in self._planned_files(terraform_vars, profile=first_profile)]
                 for filename in planned:
                     self._messages.append(f"[DRY-RUN] Would write: {terraform_path / filename}")
                 self._messages.append(f"[DRY-RUN] Planned {len(planned)} Terraform artifact file(s)")
@@ -153,7 +163,14 @@ class TerraformBuilder(BaseBuilder):
                 return True
 
             self._messages.extend(
-                self._save_terraform_vars(terraform_vars, deployment_service, build_path, solution_controller)
+                self._save_terraform_vars(
+                    terraform_vars,
+                    deployment_service,
+                    build_path,
+                    solution_controller,
+                    work_path=work_path,
+                    repo_map=repo_map or {},
+                )
             )
 
             # Copy terraform source files from the provisioner source_path into the build
@@ -715,54 +732,73 @@ class TerraformBuilder(BaseBuilder):
             if prov.provisioner.value == "terraform"
         ]
 
-    def _planned_files(self, terraform_vars: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
+    def _planned_files(
+        self,
+        terraform_vars: Dict[str, Any],
+        profile: Optional[OutputProfileModel] = None,
+    ) -> List[Tuple[str, Dict[str, Any]]]:
         """Return ``(filename, payload)`` pairs for every non-empty tfvars file.
 
-        Only files whose payload contains actual data are included.
-        ``workspace.auto.tfvars.json`` is always included — it is always
-        populated from workspace metadata.  All other files are omitted when
-        their data section is an empty dict or list, so that Terraform modules
-        that do not declare those variables never receive an undeclared-variable
-        warning.
+        When *profile* is provided its ``should_emit()`` gate is applied.
+        ``workspace.auto.tfvars.json`` is always included when the strata format
+        is active.  All other files are omitted when their data section is an empty
+        dict or list so that Terraform modules that do not declare those variables
+        never receive an undeclared-variable warning.
+
+        For ``format: custom`` or ``format: script`` profiles the built-in files are
+        controlled by ``emits[]``.  ``format: none`` produces no files at all.
         """
+        # When format=none, produce nothing
+        if profile is not None and profile.format == "none":
+            return []
+
         files: List[tuple] = []
 
-        # Always write — workspace name/version/labels are always present
-        files.append(("workspace.auto.tfvars.json", terraform_vars["workspace"]))
+        def _emit(category: str) -> bool:
+            return profile is None or profile.should_emit(category)
 
-        # Conditional — only when the config section has entries
-        if terraform_vars.get("providers", {}).get("platform_providers"):
+        # workspace — always include when the strata format is active
+        if _emit("workspace"):
+            files.append(("workspace.auto.tfvars.json", terraform_vars["workspace"]))
+
+        if _emit("providers") and terraform_vars.get("providers", {}).get("platform_providers"):
             files.append(("providers.auto.tfvars.json", terraform_vars["providers"]))
 
-        if terraform_vars.get("topologies", {}).get("topologies"):
+        if _emit("topologies") and terraform_vars.get("topologies", {}).get("topologies"):
             files.append(("topologies.auto.tfvars.json", terraform_vars["topologies"]))
 
-        if terraform_vars.get("modules", {}).get("modules"):
+        if _emit("modules") and terraform_vars.get("modules", {}).get("modules"):
             files.append(("modules.auto.tfvars.json", terraform_vars["modules"]))
 
-        if terraform_vars.get("namespaces", {}).get("namespaces"):
+        if _emit("namespaces") and terraform_vars.get("namespaces", {}).get("namespaces"):
             files.append(("namespaces.auto.tfvars.json", terraform_vars["namespaces"]))
 
-        if terraform_vars.get("firewalls", {}).get("firewalls"):
+        if _emit("firewalls") and terraform_vars.get("firewalls", {}).get("firewalls"):
             files.append(("firewalls.auto.tfvars.json", terraform_vars["firewalls"]))
 
-        dns = terraform_vars.get("dns", {})
-        if dns.get("dns_zones"):
-            files.append(("dns.auto.tfvars.json", {"dns_zones": dns["dns_zones"]}))
-        if dns.get("dns_secret_records"):
-            files.append(
-                (
-                    "dns_secret_records.auto.tfvars.json",
-                    {"dns_secret_records": dns["dns_secret_records"]},
+        if _emit("dns"):
+            dns = terraform_vars.get("dns", {})
+            if dns.get("dns_zones"):
+                files.append(("dns.auto.tfvars.json", {"dns_zones": dns["dns_zones"]}))
+            if dns.get("dns_secret_records"):
+                files.append(
+                    (
+                        "dns_secret_records.auto.tfvars.json",
+                        {"dns_secret_records": dns["dns_secret_records"]},
+                    )
                 )
-            )
 
-        if terraform_vars.get("networks", {}).get("networks"):
+        if _emit("networks") and terraform_vars.get("networks", {}).get("networks"):
             files.append(("networks.auto.tfvars.json", terraform_vars["networks"]))
 
-        for resource_type, payload in terraform_vars.get("resources_by_category", {}).items():
-            files.append((f"resx_{resource_type}.auto.tfvars.json", payload))
+        if _emit("resources"):
+            for resource_type, payload in terraform_vars.get("resources_by_category", {}).items():
+                files.append((f"resx_{resource_type}.auto.tfvars.json", payload))
 
+        if _emit("tenant") and terraform_vars.get("Tenant"):
+            files.append(("tenant.auto.tfvars.json", terraform_vars["Tenant"]))
+
+        # Documentation files — always produced regardless of profile
         if terraform_vars.get("required_variables", {}).get("variables"):
             files.append(("tf_required_variables.json", terraform_vars["required_variables"]))
 
@@ -772,10 +808,333 @@ class TerraformBuilder(BaseBuilder):
         if terraform_vars.get("required_secrets", {}).get("secrets"):
             files.append(("tf_required_secrets.json", terraform_vars["required_secrets"]))
 
-        if terraform_vars.get("Tenant"):
-            files.append(("tenant.auto.tfvars.json", terraform_vars["Tenant"]))
-
         return files
+
+    # ------------------------------------------------------------------
+    # Phase 1 helpers — emit categories and custom files
+    # ------------------------------------------------------------------
+
+    def _build_feature_flags_vars(self, deployment_service: DeploymentService) -> Dict[str, bool]:
+        """Resolve constant/environment-store feature flags for build-time emission.
+
+        Returns a flat ``{key: bool}`` dict suitable for ``flags.auto.tfvars.json``.
+        Integration-backed stores (Flagsmith, etc.) are skipped here — the deployer
+        writes those from ``ResolvedValues`` before ``terraform init``.
+        """
+        from strata.models.store_models import FeatureStoreType
+
+        env_service = deployment_service.get_environment_service()
+        if env_service is None or env_service.model is None:
+            return {}
+        result: Dict[str, bool] = {}
+        for feat in env_service.get_features():
+            if feat.store == FeatureStoreType.CONSTANT:
+                raw = feat.value
+                if isinstance(raw, bool):
+                    result[feat.key] = raw
+                elif isinstance(raw, str):
+                    result[feat.key] = raw.lower() not in ("false", "0", "no", "")
+                else:
+                    result[feat.key] = bool(raw)
+            elif feat.store == FeatureStoreType.ENVIRONMENT:
+                env_val = os.environ.get(str(feat.value))
+                if env_val is not None:
+                    result[feat.key] = env_val.lower() not in ("false", "0", "no", "")
+        return result
+
+    def _build_flat_variables(self, deployment_service: DeploymentService) -> Dict[str, Any]:
+        """Resolve constant/environment-store variables for build-time emission.
+
+        Returns a flat ``{key: value}`` dict suitable for ``variables.auto.tfvars.json``.
+        """
+        from strata.models.store_models import VariableStoreType
+
+        env_service = deployment_service.get_environment_service()
+        if env_service is None or env_service.model is None:
+            return {}
+        result: Dict[str, Any] = {}
+        for var in env_service.get_variables():
+            if var.store == VariableStoreType.CONSTANT:
+                result[var.key] = var.value
+            elif var.store == VariableStoreType.ENVIRONMENT:
+                env_val = os.environ.get(str(var.value))
+                if env_val is not None:
+                    result[var.key] = env_val
+        return result
+
+    def _resolve_merged_properties(
+        self,
+        deployment_service: DeploymentService,
+        source: str = "properties",
+    ) -> Dict[str, Any]:
+        """Return deep-merged {source} dict: workspace → environment → deployment."""
+        result: Dict[str, Any] = {}
+
+        def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+            merged = dict(base)
+            for k, v in override.items():
+                if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+                    merged[k] = _deep_merge(merged[k], v)
+                else:
+                    merged[k] = v
+            return merged
+
+        ws_service = deployment_service.get_workspace_service()
+        if ws_service and ws_service.model and ws_service.model.spec:
+            ws_val = getattr(ws_service.model.spec, source, None) or {}
+            result = _deep_merge(result, ws_val)
+
+        env_service = deployment_service.get_environment_service()
+        if env_service and env_service.model and env_service.model.spec:
+            env_val = getattr(env_service.model.spec, source, None) or {}
+            result = _deep_merge(result, env_val)
+            # Also pick up environment.spec.overrides.properties when source=="properties"
+            if source == "properties":
+                overrides = getattr(env_service.model.spec, "overrides", None)
+                if overrides and overrides.properties:
+                    result = _deep_merge(result, overrides.properties)
+
+        return result
+
+    def _build_custom_output_files(
+        self,
+        profile: OutputProfileModel,
+        deployment_service: DeploymentService,
+        terraform_path: Path,
+        platform_path: Path,
+        build_path: Path,
+        work_path: Path,
+        repo_map: Dict[str, str],
+        dry_run: bool = False,
+    ) -> bool:
+        """Execute custom file definitions from ``output.files[]``.
+
+        Handles source mode (properties/custom pass-through) and script mode.
+        Returns True on success.
+        """
+        effective_files = list(profile.files or [])
+
+        # Phase 1C: append environment-level overrides (additive only)
+        env_service = deployment_service.get_environment_service()
+        if env_service and env_service.model and env_service.model.spec:
+            overrides = getattr(env_service.model.spec, "overrides", None)
+            if overrides and overrides.output_files:
+                # Warn on name collision
+                ws_names = {f.name for f in (profile.files or [])}
+                for env_file in overrides.output_files:
+                    if env_file.name in ws_names:
+                        self._messages.append(
+                            f"⚠ Environment output_file '{env_file.name}' collides with "
+                            "a workspace-level file definition — environment entry appended "
+                            "(both will be written; last write wins)."
+                        )
+                effective_files.extend(overrides.output_files)
+
+        for file_def in effective_files:
+            if file_def.type == "script" or file_def.script:
+                ok = self._execute_file_script(
+                    file_def=file_def,
+                    terraform_path=terraform_path,
+                    platform_path=platform_path,
+                    build_path=build_path,
+                    work_path=work_path,
+                    repo_map=repo_map,
+                    dry_run=dry_run,
+                )
+                if not ok:
+                    return False
+            elif file_def.sources:
+                ok = self._write_sources_file(
+                    file_def=file_def,
+                    terraform_path=terraform_path,
+                    deployment_service=deployment_service,
+                    dry_run=dry_run,
+                )
+                if not ok:
+                    return False
+            elif file_def.source:
+                ok = self._write_source_file(
+                    file_def=file_def,
+                    terraform_path=terraform_path,
+                    deployment_service=deployment_service,
+                    dry_run=dry_run,
+                )
+                if not ok:
+                    return False
+        return True
+
+    def _write_source_file(
+        self,
+        file_def: OutputFileModel,
+        terraform_path: Path,
+        deployment_service: DeploymentService,
+        dry_run: bool = False,
+    ) -> bool:
+        """Write a single source-mode file (properties/custom pass-through)."""
+        assert file_def.source is not None
+        assert file_def.key is not None
+
+        merged = self._resolve_merged_properties(deployment_service, file_def.source)
+        value = merged.get(file_def.key)
+        if value is None:
+            self._messages.append(
+                f"⚠ output.files['{file_def.name}']: key '{file_def.key}' not found in "
+                f"merged {file_def.source} — skipping file."
+            )
+            return True
+
+        payload = {file_def.variable: value} if file_def.variable else value
+        if dry_run:
+            self._messages.append(f"[DRY-RUN] Would write source file: {terraform_path / file_def.name}")
+            return True
+
+        self._write_json(terraform_path / file_def.name, payload)
+        self._written_file_names.append(file_def.name)
+        return True
+
+    def _write_sources_file(
+        self,
+        file_def: OutputFileModel,
+        terraform_path: Path,
+        deployment_service: DeploymentService,
+        dry_run: bool = False,
+    ) -> bool:
+        """Write a multi-source file (sources[] form — multiple TF variables in one file)."""
+        assert file_def.sources is not None
+
+        payload: Dict[str, Any] = {}
+        for entry in file_def.sources:
+            merged = self._resolve_merged_properties(deployment_service, entry.source)
+            value = merged.get(entry.key)
+            if value is None:
+                self._messages.append(
+                    f"⚠ output.files['{file_def.name}'].sources['{entry.variable}']: "
+                    f"key '{entry.key}' not found in merged {entry.source} — emitting null."
+                )
+            payload[entry.variable] = value
+
+        if dry_run:
+            self._messages.append(f"[DRY-RUN] Would write sources file: {terraform_path / file_def.name}")
+            return True
+
+        self._write_json(terraform_path / file_def.name, payload)
+        self._written_file_names.append(file_def.name)
+        return True
+
+    def _execute_file_script(
+        self,
+        file_def: OutputFileModel,
+        terraform_path: Path,
+        platform_path: Path,
+        build_path: Path,
+        work_path: Path,
+        repo_map: Dict[str, str],
+        dry_run: bool = False,
+    ) -> bool:
+        """Execute a per-file user script that produces one output file."""
+        from strata.utils.system import resolve_path
+
+        assert file_def.script is not None
+
+        try:
+            script_path = resolve_path(str(work_path), file_def.script, repo_map=repo_map)
+        except ValueError as exc:
+            self._errors.append(f"output.files['{file_def.name}']: script path resolution failed: {exc}")
+            return False
+
+        if not script_path.exists():
+            self._errors.append(f"output.files['{file_def.name}']: script not found: {script_path}")
+            return False
+
+        if dry_run:
+            self._messages.append(f"[DRY-RUN] Would execute file script: {script_path} → {file_def.name}")
+            return True
+
+        env = {
+            **os.environ,
+            "STRATA_PLATFORM_PATH": str(platform_path),
+            "STRATA_BUILD_PATH": str(build_path),
+            "STRATA_OUTPUT_PATH": str(terraform_path),
+            "STRATA_OUTPUT_FILE": file_def.name,
+            "STRATA_WORKSPACE_PATH": str(work_path),
+            "STRATA_DRY_RUN": "false",
+        }
+        result = subprocess.run(
+            ["python", str(script_path)],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            self._errors.append(
+                f"output.files['{file_def.name}']: script failed (exit {result.returncode}):\n{result.stderr}"
+            )
+            return False
+
+        expected = terraform_path / file_def.name
+        if not expected.exists():
+            self._messages.append(
+                f"⚠ output.files['{file_def.name}']: script exited 0 but did not write the expected file."
+            )
+        else:
+            self._written_file_names.append(file_def.name)
+        return True
+
+    def _execute_format_script(
+        self,
+        profile: OutputProfileModel,
+        terraform_path: Path,
+        platform_path: Path,
+        build_path: Path,
+        work_path: Path,
+        repo_map: Dict[str, str],
+        provisioner_name: str,
+        dry_run: bool = False,
+    ) -> bool:
+        """Execute a format-level user script that owns all output files."""
+        from strata.utils.system import resolve_path
+
+        assert profile.script is not None
+
+        try:
+            script_path = resolve_path(str(work_path), profile.script, repo_map=repo_map)
+        except ValueError as exc:
+            self._errors.append(f"format=script: script path resolution failed: {exc}")
+            return False
+
+        if not script_path.exists():
+            self._errors.append(f"format=script: script not found: {script_path}")
+            return False
+
+        if dry_run:
+            self._messages.append(f"[DRY-RUN] Would execute format script: {script_path}")
+            return True
+
+        env = {
+            **os.environ,
+            "STRATA_PLATFORM_PATH": str(platform_path),
+            "STRATA_BUILD_PATH": str(build_path),
+            "STRATA_OUTPUT_PATH": str(terraform_path),
+            "STRATA_WORKSPACE_PATH": str(work_path),
+            "STRATA_PROVISIONER": provisioner_name,
+            "STRATA_DRY_RUN": "false",
+        }
+        result = subprocess.run(
+            ["python", str(script_path)],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            self._errors.append(f"format=script: script failed (exit {result.returncode}):\n{result.stderr}")
+            return False
+
+        tfvars_files = list(terraform_path.glob("*.auto.tfvars.json"))
+        if not tfvars_files:
+            self._messages.append(
+                f"⚠ format=script: script exited 0 but no *.auto.tfvars.json files found in {terraform_path}."
+            )
+        return True
 
     def _save_terraform_vars(
         self,
@@ -783,23 +1142,129 @@ class TerraformBuilder(BaseBuilder):
         deployment_service: DeploymentService,
         build_path: Path,
         solution_controller: Optional["SolutionController"] = None,
+        work_path: Optional[Path] = None,
+        repo_map: Optional[Dict[str, str]] = None,
     ) -> List[str]:
-        """Write all non-empty Terraform payload files."""
+        """Write Terraform payload files, applying the provisioner output profile.
+
+        Iterates once per Terraform provisioner so each provisioner's ``output``
+        profile drives its own set of emitted files.  This fixes the bug where
+        the old implementation wrote identical files to every provisioner path.
+        """
         messages: List[str] = []
 
         try:
-            terraform_paths = self._resolve_terraform_paths(deployment_service, build_path, solution_controller)
-            if not terraform_paths:
-                # Fallback: legacy single directory
-                terraform_paths = [deployment_service.get_build_path(build_path) / "terraform"]
+            ws_service = deployment_service.get_workspace_service()
+            provisioners = (
+                [p for p in ws_service.model.spec.provisioners if p.provisioner.value == "terraform"]
+                if ws_service and ws_service.model
+                else []
+            )
 
-            planned = self._planned_files(terraform_vars)
-            self._written_file_names = [name for name, _ in planned]
-
-            for terraform_path in terraform_paths:
+            if not provisioners:
+                # Fallback for workspaces with no provisioner list loaded
+                terraform_path = deployment_service.get_build_path(build_path) / "terraform"
                 terraform_path.mkdir(parents=True, exist_ok=True)
+                planned = self._planned_files(terraform_vars, profile=None)
+                self._written_file_names = [name for name, _ in planned]
                 for filename, payload in planned:
                     self._write_json(terraform_path / filename, payload)
+                messages.append(f"✓ Terraform artifacts saved to: {terraform_path}")
+                return messages
+
+            for prov in provisioners:
+                terraform_path = (
+                    solution_controller.get_provisioner_path(deployment_service, build_path, prov)
+                    if solution_controller is not None
+                    else deployment_service.get_build_path(build_path) / "terraform"
+                )
+                terraform_path.mkdir(parents=True, exist_ok=True)
+
+                profile: Optional[OutputProfileModel] = prov.output
+                # Default: strata format (backward compat)
+
+                # --- format: none — no output files ---
+                if profile is not None and profile.format == "none":
+                    messages.append(f"✓ Provisioner '{prov.name}': format=none, skipping tfvars output.")
+                    continue
+
+                # --- format: script — user script owns all output ---
+                if profile is not None and profile.format == "script":
+                    platform_path = (
+                        solution_controller.get_platform_path(deployment_service, build_path)
+                        if solution_controller
+                        else deployment_service.get_build_path(build_path) / "platform.json"
+                    )
+                    ok = self._execute_format_script(
+                        profile=profile,
+                        terraform_path=terraform_path,
+                        platform_path=platform_path,
+                        build_path=deployment_service.get_build_path(build_path),
+                        work_path=work_path or Path("."),
+                        repo_map=repo_map or {},
+                        provisioner_name=str(prov.name),
+                        dry_run=False,
+                    )
+                    if not ok:
+                        return messages
+                    messages.append(f"✓ Provisioner '{prov.name}': format=script output written.")
+                    continue
+
+                # --- format: strata / custom — built-in files + optional custom files ---
+                planned = self._planned_files(terraform_vars, profile=profile)
+                written = [name for name, _ in planned]
+                for filename, payload in planned:
+                    self._write_json(terraform_path / filename, payload)
+
+                # Emit features (build-time: constant/env stores only)
+                if profile is not None and profile.should_emit("features"):
+                    flags = self._build_feature_flags_vars(deployment_service)
+                    if flags:
+                        self._write_json(terraform_path / "flags.auto.tfvars.json", flags)
+                        written.append("flags.auto.tfvars.json")
+
+                # Emit variables (build-time: constant/env stores only)
+                if profile is not None and profile.should_emit("variables"):
+                    flat_vars = self._build_flat_variables(deployment_service)
+                    if flat_vars:
+                        self._write_json(terraform_path / "variables.auto.tfvars.json", flat_vars)
+                        written.append("variables.auto.tfvars.json")
+
+                # Emit properties flat dump
+                if profile is not None and profile.should_emit("properties"):
+                    merged_props = self._resolve_merged_properties(deployment_service, "properties")
+                    if merged_props:
+                        self._write_json(terraform_path / "properties.auto.tfvars.json", merged_props)
+                        written.append("properties.auto.tfvars.json")
+
+                # Emit custom flat dump
+                if profile is not None and profile.should_emit("custom"):
+                    merged_custom = self._resolve_merged_properties(deployment_service, "custom")
+                    if merged_custom:
+                        self._write_json(terraform_path / "custom.auto.tfvars.json", merged_custom)
+                        written.append("custom.auto.tfvars.json")
+
+                # Custom file definitions (source mode + per-file scripts)
+                if profile is not None and profile.files:
+                    platform_path = (
+                        solution_controller.get_platform_path(deployment_service, build_path)
+                        if solution_controller
+                        else deployment_service.get_build_path(build_path) / "platform.json"
+                    )
+                    ok = self._build_custom_output_files(
+                        profile=profile,
+                        deployment_service=deployment_service,
+                        terraform_path=terraform_path,
+                        platform_path=platform_path,
+                        build_path=deployment_service.get_build_path(build_path),
+                        work_path=work_path or Path("."),
+                        repo_map=repo_map or {},
+                        dry_run=False,
+                    )
+                    if not ok:
+                        return messages
+
+                self._written_file_names.extend(written)
                 messages.append(f"✓ Terraform artifacts saved to: {terraform_path}")
 
         except Exception as exc:

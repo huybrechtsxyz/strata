@@ -68,6 +68,30 @@ export interface RepositoryInfo {
     cloned: boolean;
 }
 
+/** Tag info returned by `strata repo status --output json` */
+export interface TagInfo {
+    name: string;
+    commit: string;
+    short_commit: string;
+    created: string;  // ISO format datetime
+    age_days: number;
+    age_str: string;  // Human-readable age (e.g., "14 days ago")
+}
+
+/** Repository status from `strata repo status --output json` */
+export interface RepositoryStatus {
+    name: string;
+    tags?: {
+        latest_release?: TagInfo;
+        latest_quality?: TagInfo;
+    };
+}
+
+/** Data from `strata repo status --output json` */
+export interface RepoStatusData {
+    repos: RepositoryStatus[];
+}
+
 export interface IntegrationInfo {
     name: string;
     available: boolean;
@@ -262,6 +286,14 @@ export class StrataClient {
     async getStatus(): Promise<WorkspaceStatus> {
         const resp = await this._run<WorkspaceStatus>([
             'sln', 'status', '--output', 'json',
+        ]);
+        return resp.data;
+    }
+
+    /** Run `strata repo status --output json` and return repository tag information. */
+    async getRepoStatus(): Promise<RepoStatusData> {
+        const resp = await this._run<RepoStatusData>([
+            'repo', 'status', '--output', 'json',
         ]);
         return resp.data;
     }

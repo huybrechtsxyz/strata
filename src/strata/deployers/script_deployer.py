@@ -241,7 +241,7 @@ class ScriptDeployer(BaseDeployer):
             if self.verbose:
                 messages.append(f"  [{idx}/{len(phase.scripts)}] Running: {script_file.name}")
 
-            success, script_messages = self._execute_script(script_file, timeout)
+            success, script_messages = self._execute_script(script_file, phase_name, timeout)
             messages.extend(script_messages)
 
             if not success:
@@ -251,7 +251,9 @@ class ScriptDeployer(BaseDeployer):
         messages.append(f"Phase '{phase_name}' completed successfully")
         return True, messages
 
-    def _execute_script(self, script_path: Path, timeout: int = _SCRIPT_TIMEOUT) -> Tuple[bool, List[str]]:
+    def _execute_script(
+        self, script_path: Path, phase_name: str, timeout: int = _SCRIPT_TIMEOUT
+    ) -> Tuple[bool, List[str]]:
         """Execute a single script file."""
         messages: List[str] = []
 
@@ -269,10 +271,13 @@ class ScriptDeployer(BaseDeployer):
         env = os.environ.copy()
         if self.resolved_values is not None:
             env.update(self.resolved_values.as_compose_env())
-        # Fixed keys always win — set after resolved values
-        env["WORK_PATH"] = str(self.work_path)
-        env["BUILD_PATH"] = str(self.build_path)
-        env["STAGE_NAME"] = self.stage.name
+        # Standard STRATA_* vars always win — set after resolved values
+        env["STRATA_PHASE"] = phase_name
+        env["STRATA_WORKSPACE_PATH"] = str(self.work_path)
+        env["STRATA_BUILD_PATH"] = str(self.build_path)
+        env["STRATA_CONFIG_PATH"] = str(self.work_path / ".strata")
+        env["STRATA_OBJECT_PATH"] = str(self.build_path / "objects")
+        env["STRATA_STAGE_NAME"] = self.stage.name
 
         try:
             result = subprocess.run(

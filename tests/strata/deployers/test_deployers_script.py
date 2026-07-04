@@ -196,7 +196,7 @@ class TestScriptDeployerRunPhase:
 
         call_count = 0
 
-        def side_effect(path, timeout=300):
+        def side_effect(path, phase_name, timeout=300):
             nonlocal call_count
             call_count += 1
             return (False, ["failed"])
@@ -249,7 +249,7 @@ class TestScriptDeployerExecuteScript:
         script = tmp_path / "run.rb"
         script.write_text("puts 'hello'")
         d = _make_deployer(tmp_path=tmp_path)
-        ok, msgs = d._execute_script(script)
+        ok, msgs = d._execute_script(script, "deploy_setup")
         assert ok is False
         assert any("Unsupported script type" in m for m in msgs)
 
@@ -264,7 +264,7 @@ class TestScriptDeployerExecuteScript:
         mock_result.stderr = ""
 
         with patch("subprocess.run", return_value=mock_result) as mock_run:
-            ok, msgs = d._execute_script(script)
+            ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
         cmd = mock_run.call_args[0][0]
@@ -281,7 +281,7 @@ class TestScriptDeployerExecuteScript:
         mock_result.stderr = ""
 
         with patch("subprocess.run", return_value=mock_result) as mock_run:
-            ok, msgs = d._execute_script(script)
+            ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
         cmd = mock_run.call_args[0][0]
@@ -298,7 +298,7 @@ class TestScriptDeployerExecuteScript:
         mock_result.stderr = ""
 
         with patch("subprocess.run", return_value=mock_result) as mock_run:
-            ok, msgs = d._execute_script(script)
+            ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
         cmd = mock_run.call_args[0][0]
@@ -315,7 +315,7 @@ class TestScriptDeployerExecuteScript:
         mock_result.stderr = "something broke"
 
         with patch("subprocess.run", return_value=mock_result):
-            ok, msgs = d._execute_script(script)
+            ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is False
         assert any("1" in m for m in msgs)  # exit code in message
@@ -327,7 +327,7 @@ class TestScriptDeployerExecuteScript:
         d = _make_deployer(tmp_path=tmp_path)
 
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="bash", timeout=300)):
-            ok, msgs = d._execute_script(script)
+            ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is False
         assert any("timed out" in m for m in msgs)
@@ -338,7 +338,7 @@ class TestScriptDeployerExecuteScript:
         d = _make_deployer(tmp_path=tmp_path)
 
         with patch("subprocess.run", side_effect=FileNotFoundError):
-            ok, msgs = d._execute_script(script)
+            ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is False
         assert any("Interpreter not found" in m for m in msgs)
@@ -357,12 +357,12 @@ class TestScriptDeployerExecuteScript:
         mock_result.stderr = ""
 
         with patch("subprocess.run", return_value=mock_result) as mock_run:
-            d._execute_script(script)
+            d._execute_script(script, "deploy_setup")
 
         env = mock_run.call_args[1]["env"]
-        assert env["WORK_PATH"] == str(Path("/my/work"))
-        assert env["BUILD_PATH"] == str(Path("/my/build"))
-        assert env["STAGE_NAME"] == "staging"
+        assert env["STRATA_WORKSPACE_PATH"] == str(Path("/my/work"))
+        assert env["STRATA_BUILD_PATH"] == str(Path("/my/build"))
+        assert env["STRATA_STAGE_NAME"] == "staging"
 
     def test_verbose_stdout_added_to_messages(self, tmp_path):
         script = tmp_path / "out.sh"
@@ -375,7 +375,7 @@ class TestScriptDeployerExecuteScript:
         mock_result.stderr = ""
 
         with patch("subprocess.run", return_value=mock_result):
-            ok, msgs = d._execute_script(script)
+            ok, msgs = d._execute_script(script, "deploy_setup")
 
         assert ok is True
         assert "hello" in msgs

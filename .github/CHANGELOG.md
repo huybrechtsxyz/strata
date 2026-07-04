@@ -9,10 +9,21 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
-## [0.15.0] — 2026-07-02
+## [0.15.0] — 2026-07-03
 
 ### Added
 
+- **Configurable Terraform build output profiles (ADR 0019)**
+  - New `output:` block on Terraform provisioners in `workspace.yaml` — controls what `.auto.tfvars.json` files `strata build run` produces
+  - `format` modes: `strata` (default, backward compatible), `custom` (emit only what `emits[]` and `files[]` specify), `script` (one user script owns all output), `none` (suppress tfvars output entirely)
+  - `emits[]` gate — selectively enable/disable each built-in emit category (`features`, `variables`, `properties`, `workspace`, `providers`, `topologies`, `modules`, `namespaces`, `firewalls`, `dns`, `networks`, `resources`, `tenant`)
+  - `files[]` custom file definitions — source mode (pass-through a key from merged properties/custom dict) and script mode (per-file Python/shell script with `STRATA_PLATFORM_PATH`, `STRATA_BUILD_PATH`, `STRATA_OUTPUT_PATH`, `STRATA_OUTPUT_FILE`, `STRATA_WORKSPACE_PATH`, `STRATA_DRY_RUN` env vars)
+  - `format: script` top-level — single script receives `STRATA_PROVISIONER` additionally
+  - `output_files` override on `EnvironmentOverridesModel` — additive extra file definitions per environment; cannot remove or replace workspace-level definitions; collision warnings logged
+  - Backend configuration expression resolution — `${var:KEY}` and `${secret:KEY}` placeholders now resolved from `resolved_values` at deploy time
+  - Two-phase emission: `features` and `variables` written at build time (constant/env-store only); integration-backed entries re-written by deployer immediately before `terraform init`
+  - Security invariant enforced: secrets are never written to any `.auto.tfvars.json` file regardless of configuration; always injected as `TF_VAR_*` environment variables only
+  - 43 new tests covering profile models, `_planned_files`, feature/variable extraction, property merging, deploy-time vars, and backend expression resolution
 - **`strata env status`** — renamed from `strata env state` for naming consistency; added `--all` and `--path DIR` flags to scan all deployment manifests in the workspace without requiring a single `-f FILE`
 - **`strata audit changes/resend --output json`** — now emits the standard CLI JSON envelope (`{ success, command, execution_id, timestamp, data, messages, errors }`) instead of a raw array, consistent with every other command
 - **Audit Trail documentation** — new `## audit` section in `docs/platform/commands.md` covering `audit changes`, `audit resend`, `audit export`, audit path template configuration, and SIEM sink YAML examples for Sentinel, ELK, and OTel
@@ -28,6 +39,24 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - `strata env state` → `strata env status` (command renamed; old name removed)
 - `strata audit changes --output json` data shape changed from raw array to `data: { entries: [...], count: N }`
 - `strata audit resend --output json` data shape changed from `{"sent": N, "failed": N}` to standard envelope with same payload in `data`
+
+### Fixed
+
+- `_save_terraform_vars` previously wrote identical tfvars to every Terraform provisioner path; now iterates per-provisioner and applies per-provisioner output profile
+
+### Documentation
+
+- Added ADR 0019: Configurable Terraform Build Output
+- Updated `docs/config/workspace.md` with full Build Output Profile reference: format modes table, `emits[]` categories, source-mode and script-mode file examples, two new worked examples
+- Updated `docs/config/environment.md` with `spec.overrides.output_files[]` documentation
+
+### VS Code Extension
+
+- Workspace snippet updated: Terraform provisioner block now includes `output: / format:` stub with comment showing all valid modes
+
+### Testing
+
+- Full test suite passing: 1060+ passed, 0 failed
 
 ---
 

@@ -715,3 +715,161 @@ class TestDeployList:
             ["list", "--path", str(tmp_path / "does_not_exist"), "--work-path", str(tmp_path)],
         )
         assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# _run_hierarchy_lifecycle_phase
+# ---------------------------------------------------------------------------
+
+
+def _make_service_mock(name: str) -> MagicMock:
+    svc = MagicMock()
+    svc.__class__.__name__ = name
+    return svc
+
+
+class TestRunHierarchyLifecyclePhase:
+    """Unit tests for BaseDeployCommand._run_hierarchy_lifecycle_phase."""
+
+    def _make_command(self, tmp_path) -> RunDeployCommand:
+        cmd = RunDeployCommand.__new__(RunDeployCommand)
+        cmd._work_path = tmp_path
+        cmd._errors = []
+        cmd._messages = []
+        cmd._deployment_service = None
+        cmd._output_format = "json"
+        return cmd
+
+    def _make_deployment_service(self, namespaces=None, providers=None, resources=None, modules=None):
+        ws = _make_service_mock("WorkspaceService")
+        ds = MagicMock()
+        ds.get_workspace_service.return_value = ws
+        ds.get_namespace_services.return_value = namespaces or {}
+        ds.get_provider_services.return_value = providers or {}
+        ds.get_resource_services.return_value = resources or {}
+        ds.get_module_services.return_value = modules or {}
+        return ds, ws
+
+    def test_no_deployment_service_returns_true(self, tmp_path):
+        cmd = self._make_command(tmp_path)
+        with patch(
+            "strata.controllers.lifecycle_controller.LifecycleController.execute_configuration_phase",
+            return_value=True,
+        ):
+            assert cmd._run_hierarchy_lifecycle_phase("deploy_stage_before") is True
+
+    def test_all_levels_called_in_order(self, tmp_path):
+        cmd = self._make_command(tmp_path)
+        ns_svc = _make_service_mock("NamespaceService")
+        prov_svc = _make_service_mock("ProviderService")
+        res_svc = _make_service_mock("ResourceService")
+        mod_svc = _make_service_mock("ModuleService")
+        ds, ws_svc = self._make_deployment_service(
+            namespaces={"ns1": ns_svc},
+            providers={"prov1": prov_svc},
+            resources={"res1": res_svc},
+            modules={"res1:mod1": mod_svc},
+        )
+        cmd._deployment_service = ds
+
+        call_order: list[str] = []
+
+        def config_phase(*args, **kwargs):
+            call_order.append("config")
+            return True
+
+        def workspace_phase(base_service, *args, **kwargs):
+            call_order.append(f"workspace:{base_service.__class__.__name__}")
+            return True
+
+        with (
+            patch(
+                "strata.controllers.lifecycle_controller.LifecycleController.execute_configuration_phase",
+                side_effect=config_phase,
+            ),
+            patch(
+                "strata.controllers.lifecycle_controller.LifecycleController.execute_workspace_phase",
+                side_effect=workspace_phase,
+            ),
+        ):
+            result = cmd._run_hierarchy_lifecycle_phase("deploy_stage_before")
+
+        assert result is True
+        assert call_order[0] == "config"
+        # workspace level fires for workspace + each ns + prov + res + module
+        assert "workspace:WorkspaceService" in call_order
+        assert any("NamespaceService" in e for e in call_order)
+        assert any("ProviderService" in e for e in call_order)
+        assert any("ResourceService" in e for e in call_order)
+        assert any("ModuleService" in e for e in call_order)
+
+    def test_config_failure_stops_traversal(self, tmp_path):
+        cmd = self._make_command(tmp_path)
+        ds, _ = self._make_deployment_service()
+        cmd._deployment_service = ds
+
+        lc = MagicMock()
+        lc.execute_configuration_phase.return_value = False
+        lc.get_errors.return_value = ["config script exited 1"]
+        lc.execute_workspace_phase.return_value = True
+
+        with patch("strata.controllers.lifecycle_controller.LifecycleController", return_value=lc):
+            result = cmd._run_hierarchy_lifecycle_phase("deploy_stage_before")
+
+        assert result is False
+        lc.execute_workspace_phase.assert_not_called()
+        assert any("config" in e for e in cmd._errors)
+
+    def test_workspace_failure_stops_traversal(self, tmp_path):
+        cmd = self._make_command(tmp_path)
+        ns_svc = _make_service_mock("NamespaceService")
+        ds, ws_svc = self._make_deployment_service(namespaces={"ns1": ns_svc})
+        cmd._deployment_service = ds
+
+        call_count = {"workspace": 0}
+
+        def workspace_phase(base_service, *args, **kwargs):
+            call_count["workspace"] += 1
+            return False  # fail on workspace
+
+        lc = MagicMock()
+        lc.execute_configuration_phase.return_value = True
+        lc.get_errors.return_value = ["workspace hook failed"]
+        lc.execute_workspace_phase.side_effect = workspace_phase
+
+        with patch("strata.controllers.lifecycle_controller.LifecycleController", return_value=lc):
+            result = cmd._run_hierarchy_lifecycle_phase("deploy_stage_before")
+
+        assert result is False
+        # workspace level was called once (for the workspace itself)
+        assert lc.execute_workspace_phase.call_count == 1
+
+    def test_context_enriched_per_level(self, tmp_path):
+        cmd = self._make_command(tmp_path)
+        ns_svc = _make_service_mock("NamespaceService")
+        ds, ws_svc = self._make_deployment_service(namespaces={"production": ns_svc})
+        cmd._deployment_service = ds
+
+        captured_contexts: list[dict] = []
+
+        def workspace_phase(base_service, phase_name, work_path, context=None, **kwargs):
+            captured_contexts.append(dict(context or {}))
+            return True
+
+        with (
+            patch(
+                "strata.controllers.lifecycle_controller.LifecycleController.execute_configuration_phase",
+                return_value=True,
+            ),
+            patch(
+                "strata.controllers.lifecycle_controller.LifecycleController.execute_workspace_phase",
+                side_effect=workspace_phase,
+            ),
+        ):
+            cmd._run_hierarchy_lifecycle_phase("deploy_stage_before", context={"stage": "infra"})
+
+        # namespace call should inject "namespace" key
+        ns_ctx = next((c for c in captured_contexts if "namespace" in c), None)
+        assert ns_ctx is not None
+        assert ns_ctx["namespace"] == "production"
+        assert ns_ctx["stage"] == "infra"

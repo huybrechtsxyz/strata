@@ -40,7 +40,7 @@ from strata.deployers.base_deployer import (
 )
 from strata.integrations.terraform import TerraformIntegration
 from strata.models.deployment_model import DeploymentStageModel
-from strata.models.workspace_model import WorkspaceIacModel
+from strata.models.workspace_model import OutputProfileModel, WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 from strata.utils.resolved_values import ResolvedValues, inject_tf_vars
@@ -190,6 +190,12 @@ class TerraformDeployer(BaseDeployer):
 
         backend_config = self._build_backend_config(self._iac_model)
         messages.append(f"terraform init  ({self._working_dir})")
+
+        # Phase 1B: write deploy-time store-backed tfvars before terraform init
+        if self.resolved_values and self._working_dir:
+            profile = self._get_output_profile_for_provisioner()
+            if profile is not None:
+                self._write_deploy_time_vars(self.resolved_values, profile, self._working_dir)
 
         try:
             result = self._tf.init(
@@ -563,11 +569,71 @@ class TerraformDeployer(BaseDeployer):
         return deployment_build_path / target
 
     def _build_backend_config(self, iac_model: WorkspaceIacModel) -> Optional[Dict[str, str]]:
-        """Extract backend configuration key-value pairs from the IaC model."""
+        """Extract backend configuration key-value pairs from the IaC model.
+
+        Resolves ``${var:KEY}`` and ``${secret:KEY}`` expressions using
+        ``self.resolved_values`` when available.
+        """
         if not iac_model.backend:
             return None
         config = iac_model.backend.configuration or {}
-        return {k: str(v) for k, v in config.items()} if config else None
+        if not config:
+            return None
+
+        result: Dict[str, str] = {}
+        for k, v in config.items():
+            str_v = str(v)
+            resolved = self._resolve_backend_expr(str_v)
+            result[k] = resolved
+        return result
+
+    def _resolve_backend_expr(self, value: str) -> str:
+        """Resolve ``${var:KEY}`` and ``${secret:KEY}`` expressions in a string value."""
+        import re
+
+        def replace(m: "re.Match[str]") -> str:
+            kind = m.group(1)  # "var" or "secret"
+            key = m.group(2)
+            if self.resolved_values is None:
+                return m.group(0)  # leave unreplaced
+            if kind == "var":
+                return str(self.resolved_values.variables.get(key, m.group(0)))
+            if kind == "secret":
+                return str(self.resolved_values.secrets.get(key, m.group(0)))
+            return m.group(0)
+
+        return re.sub(r"\$\{(var|secret):([^}]+)\}", replace, value)
+
+    def _write_deploy_time_vars(
+        self,
+        resolved: ResolvedValues,
+        profile: OutputProfileModel,
+        output_path: Path,
+    ) -> None:
+        """Write (or overwrite) store-backed tfvars files from fully-resolved values.
+
+        Called before ``terraform init`` so integration-backed features and variables
+        (Flagsmith, Azure App Config, Vault, …) are available to Terraform.
+
+        Secrets are never written to disk — they are always injected as
+        ``TF_VAR_*`` environment variables via ``inject_tf_vars``.
+        """
+        if profile.should_emit("features") and resolved.features:
+            flags: Dict[str, Any] = {k: bool(v) if v is not None else False for k, v in resolved.features.items()}
+            output_path.mkdir(parents=True, exist_ok=True)
+            (output_path / "flags.auto.tfvars.json").write_text(json.dumps(flags, indent=2), encoding="utf-8")
+
+        if profile.should_emit("variables") and resolved.variables:
+            output_path.mkdir(parents=True, exist_ok=True)
+            (output_path / "variables.auto.tfvars.json").write_text(
+                json.dumps(resolved.variables, indent=2), encoding="utf-8"
+            )
+
+    def _get_output_profile_for_provisioner(self) -> Optional[OutputProfileModel]:
+        """Return the OutputProfileModel for the current provisioner, if any."""
+        if self._iac_model is None:
+            return None
+        return self._iac_model.output
 
     @staticmethod
     def _get_terraform_integration(name: str) -> TerraformIntegration:
