@@ -251,7 +251,9 @@ class ScriptDeployer(BaseDeployer):
         messages.append(f"Phase '{phase_name}' completed successfully")
         return True, messages
 
-    def _execute_script(self, script_path: Path, phase_name: str, timeout: int = _SCRIPT_TIMEOUT) -> Tuple[bool, List[str]]:
+    def _execute_script(
+        self, script_path: Path, phase_name: str, timeout: int = _SCRIPT_TIMEOUT
+    ) -> Tuple[bool, List[str]]:
         """Execute a single script file."""
         messages: List[str] = []
 

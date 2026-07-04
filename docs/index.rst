@@ -115,7 +115,10 @@ strata
    decisions/0015-flow-command-dependency-graph
    decisions/0016-console-interactive-repl
    decisions/0017-jinja2-template-engine
+   decisions/0017-tag-based-release-workflow-option-c
    decisions/0018-deployment-audit-traceability
+   decisions/0019-configurable-terraform-build-output
+   decisions/0020-lifecycle-phases-and-environment-variables
 
 .. toctree::
    :maxdepth: 2
