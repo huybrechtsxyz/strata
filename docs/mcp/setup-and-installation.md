@@ -256,12 +256,12 @@ You should see a response (even if it's an error). If you see nothing, check tha
 
 Configure server behavior via environment variables:
 
-| Variable | Purpose | Example |
-|----------|---------|---------|
+| Variable           | Purpose                             | Example              |
+| ------------------ | ----------------------------------- | -------------------- |
 | `STRATA_WORK_PATH` | Workspace root (overrides CWD walk) | `/path/to/workspace` |
-| `STRATA_VERBOSE` | Enable verbose logging | `1` |
-| `STRATA_QUIET` | Suppress non-error output | `1` |
-| `STRATA_OUTPUT` | Output format | `json` or `text` |
+| `STRATA_VERBOSE`   | Enable verbose logging              | `1`                  |
+| `STRATA_QUIET`     | Suppress non-error output           | `1`                  |
+| `STRATA_OUTPUT`    | Output format                       | `json` or `text`     |
 
 Example:
 ```bash

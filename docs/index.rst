@@ -31,6 +31,18 @@ strata
 
 .. toctree::
    :maxdepth: 2
+   :caption: MCP Server for AI Agents:
+
+   mcp/README
+   mcp/setup-and-installation
+   mcp/claude-deployment-assistant
+   mcp/copilot-integration
+   mcp/security-and-workflows
+   mcp/ai-troubleshooting
+   mcp/tools-reference
+
+.. toctree::
+   :maxdepth: 2
    :caption: Platform Reference:
 
    platform/readme

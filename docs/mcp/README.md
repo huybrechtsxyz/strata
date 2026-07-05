@@ -23,14 +23,14 @@ The AI now has access to 13 specialized tools and 2 auto-loaded resources.
 
 ## What's Possible with MCP
 
-| Scenario | Workflow | Executor |
-|----------|----------|----------|
-| **Setup** | AI scaffolds YAML from template | AI tool: `scaffold_file()` |
-| **Validation** | AI validates YAML structure & cross-references | AI tool: `validate_file()` |
-| **Preview** | AI shows what build/deploy _would_ produce | AI tool: `build_plan()`, `deploy_plan()` |
-| **Execute** | User approves and runs via CLI | **User via CLI only** |
-| **Monitor** | AI checks health, status, and audit logs | AI tool: `deploy_status()`, `audit_query()` |
-| **Troubleshoot** | AI analyzes drift and suggests remediation | AI tool: `deploy_status()`, `audit_query()`, `validate_file()` |
+| Scenario         | Workflow                                       | Executor                                                       |
+| ---------------- | ---------------------------------------------- | -------------------------------------------------------------- |
+| **Setup**        | AI scaffolds YAML from template                | AI tool: `scaffold_file()`                                     |
+| **Validation**   | AI validates YAML structure & cross-references | AI tool: `validate_file()`                                     |
+| **Preview**      | AI shows what build/deploy _would_ produce     | AI tool: `build_plan()`, `deploy_plan()`                       |
+| **Execute**      | User approves and runs via CLI                 | **User via CLI only**                                          |
+| **Monitor**      | AI checks health, status, and audit logs       | AI tool: `deploy_status()`, `audit_query()`                    |
+| **Troubleshoot** | AI analyzes drift and suggests remediation     | AI tool: `deploy_status()`, `audit_query()`, `validate_file()` |
 
 ## Key Principles
 
@@ -53,14 +53,14 @@ The AI now has access to 13 specialized tools and 2 auto-loaded resources.
 
 ## Documentation Map
 
-| Chapter | Topic |
-|---------|-------|
-| [Setup & Installation](setup-and-installation.md) | Prerequisites, installation, server startup, workspace resolution |
+| Chapter                                                       | Topic                                                                            |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [Setup & Installation](setup-and-installation.md)             | Prerequisites, installation, server startup, workspace resolution                |
 | [Claude Deployment Assistant](claude-deployment-assistant.md) | Full end-to-end example: setup Claude, validate, build, preview, deploy workflow |
-| [Copilot Integration](copilot-integration.md) | Ideas for enhancing GitHub Copilot extension with MCP-based validation |
-| [Security & Workflows](security-and-workflows.md) | API keys, secrets management, audit logging, approval gates, RBAC patterns |
-| [AI-Assisted Troubleshooting](ai-troubleshooting.md) | Use case: detect drift, analyze changes, suggest fixes via MCP tools |
-| [Tools Reference](tools-reference.md) | Complete API documentation for all 13 MCP tools |
+| [Copilot Integration](copilot-integration.md)                 | Ideas for enhancing GitHub Copilot extension with MCP-based validation           |
+| [Security & Workflows](security-and-workflows.md)             | API keys, secrets management, audit logging, approval gates, RBAC patterns       |
+| [AI-Assisted Troubleshooting](ai-troubleshooting.md)          | Use case: detect drift, analyze changes, suggest fixes via MCP tools             |
+| [Tools Reference](tools-reference.md)                         | Complete API documentation for all 13 MCP tools                                  |
 
 ---
 
