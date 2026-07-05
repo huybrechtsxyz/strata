@@ -40,7 +40,7 @@ These options are accepted by every command and subcommand:
 | `ref` †      | `env` `config` `data` `secret`                                               | Manage file references within profiles                    |
 | `repo` †     | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                       |
 | `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                    |
-| `validate`   | —                                                                            | Validate a single platform YAML file                      |
+| `validate`   | `run` `graph`                                                                | Validate YAML files and visualize workspace dependencies  |
 | `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
 | `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
 | `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
@@ -794,21 +794,75 @@ strata build clean --dry-run
 
 ## `validate`
 
+`validate` is a command group with two subcommands. Bare invocation (`strata validate -f file.yaml`) delegates to `run` for backward compatibility.
+
+```
+strata validate run [OPTIONS]     ← validate a YAML file
+strata validate graph [OPTIONS]   ← build a dependency graph
+strata validate -f FILE           ← shorthand; equivalent to `validate run -f FILE`
+```
+
+### `validate run`
+
 Validate a single platform YAML file against its kind-specific schema.
 
 ```
-strata validate FILE_PATH [--deep] [standard options]
+strata validate run -f FILE_PATH [--deep] [--explain] [standard options]
 ```
 
-| Option   | Description                                                                                                                                               |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--deep` | Enable Phase 2 (cross-reference) validation against the active profile's configuration sources. Requires an initialized workspace with an active profile. |
+| Option             | Description                                                                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-f / --file PATH` | File to validate. Required (unless `--path` glob is used).                                                                                               |
+| `--path GLOB`      | Validate multiple files matching a glob. Requires an initialized workspace with an active profile.                                                        |
+| `--deep`           | Enable Phase 2 (cross-reference) validation against the active profile's configuration sources. Requires an initialized workspace with an active profile. |
+| `--explain`        | After validation, emit a plain-English summary of what the file describes.                                                                                |
 
 **Exit codes:** 0 valid · 1 system failure · 2 missing argument · 3 schema-invalid
 
 ```bash
-strata validate config/xyz-config.yaml
-strata validate config/xyz-ws-platform.yaml --deep
+strata validate run -f config/xyz-config.yaml
+strata validate run -f config/xyz-ws-platform.yaml --deep
+strata validate run --path "deployments/**"
+strata validate -f config/xyz-config.yaml        # backward compat
+```
+
+### `validate graph`
+
+Build a Mermaid dependency diagram of the workspace. Two modes:
+
+- **`--mode files`** (default) — nodes are YAML files, edges are cross-file references. Shows which files wire together and highlights missing or invalid files.
+- **`--mode resources`** — nodes are logical resources/modules/namespaces, edges are `depends_on` chains, module attachments, and subnet assignments. Shows the infrastructure topology organized by provisioner.
+
+```
+strata validate graph [--mode files|resources] [--entry PATH] [--save PATH] [--direction LR|TD|BT|RL] [--no-validate] [standard options]
+```
+
+| Option               | Default      | Description                                                                               |
+| -------------------- | ------------ | ----------------------------------------------------------------------------------------- |
+| `--mode`             | `files`      | Graph type: `files` or `resources`.                                                       |
+| `--entry / -e PATH`  | auto-detect  | Entry point file (deployment or workspace YAML). Discovers all deployments if omitted.    |
+| `--save / -s PATH`   | —            | Write Mermaid markdown to file. Defaults to `graph.md` when flag used without a value.   |
+| `--direction`        | LR (files), TD (resources) | Mermaid graph direction: `LR`, `TD`, `BT`, `RL`.                        |
+| `--no-validate`      | off          | Skip validation — all nodes shown as neutral. Faster for large workspaces.                |
+
+**Node status colours (file mode):**
+
+| Status   | Colour | Condition                                                                |
+| -------- | ------ | ------------------------------------------------------------------------ |
+| Valid    | green  | File exists and passes Phase 1 validation                                |
+| Invalid  | orange | File exists but fails validation                                         |
+| Missing  | red    | Referenced by another file but not present on disk                       |
+| External | grey   | `@repo/path` reference to a file in another repository                   |
+| Orphan   | dashed | File exists and validates but no other file references it                |
+
+**Exit codes:** 0 success (including missing nodes — graph always produces output) · 1 system failure
+
+```bash
+strata validate graph
+strata validate graph --entry deploy/deploy-prd.yaml
+strata validate graph --mode resources --entry stack/ws-platform.yaml
+strata validate graph --save graph.md
+strata validate graph --output json
 ```
 
 ---
