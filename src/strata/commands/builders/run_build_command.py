@@ -33,6 +33,7 @@ class RunBuildCommand(BaseBuildCommand):
         audit: bool = False,
         audit_severity: str = "MEDIUM",
         fail_on: Optional[str] = None,
+        audit_report: Optional[str] = None,
     ):
         super().__init__(
             file=file,
@@ -45,6 +46,7 @@ class RunBuildCommand(BaseBuildCommand):
         self._audit = audit
         self._audit_severity = audit_severity
         self._fail_on = fail_on
+        self._audit_report = audit_report
         self._build_started_at: Optional[str] = None
         self._sbom_reference = None
         self._policy_results: List[Dict[str, Any]] = []

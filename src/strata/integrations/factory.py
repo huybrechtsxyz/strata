@@ -50,6 +50,7 @@ class IntegrationFactory:
         "sentinel": ("strata.integrations.siem.sentinel_integration", "SentinelIntegration"),
         "elk": ("strata.integrations.siem.elk_siem_integration", "ElkSiemIntegration"),
         "otel": ("strata.integrations.siem.otel_siem_integration", "OtelSiemIntegration"),
+        "splunk": ("strata.integrations.siem.splunk_siem_integration", "SplunkSiemIntegration"),
     }
 
     @classmethod

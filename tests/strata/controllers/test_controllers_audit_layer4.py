@@ -210,6 +210,109 @@ class TestForwardToSiem:
         assert req.full_url == "https://example.com/hook"
         assert req.get_method() == "POST"
 
+    def test_syslog_sink_sends_json_by_default(self, tmp_path: Path) -> None:
+        config = AuditConfigModel(sinks=[AuditSinkModel(name="syslog_sink", type="syslog", address="127.0.0.1:514")])
+        controller = AuditController(work_path=tmp_path)
+
+        with patch.object(controller, "_send_syslog") as mock_syslog:
+            controller.forward_to_siem(_sample_payload(), audit_config=config)
+            mock_syslog.assert_called_once()
+            # fmt argument defaults to "json"
+            _, kwargs = mock_syslog.call_args if mock_syslog.call_args.kwargs else (mock_syslog.call_args[0], {})
+            fmt = (
+                mock_syslog.call_args[1].get("fmt") or mock_syslog.call_args[0][2]
+                if mock_syslog.call_args[0][2:]
+                else "json"
+            )
+            assert fmt == "json"
+
+    def test_syslog_sink_passes_cef_format(self, tmp_path: Path) -> None:
+        config = AuditConfigModel(
+            sinks=[AuditSinkModel(name="syslog_cef", type="syslog", address="127.0.0.1:514", format="cef")]
+        )
+        controller = AuditController(work_path=tmp_path)
+
+        with patch.object(controller, "_send_syslog") as mock_syslog:
+            controller.forward_to_siem(_sample_payload(), audit_config=config)
+            mock_syslog.assert_called_once()
+            call_fmt = mock_syslog.call_args[1].get("fmt")
+            assert call_fmt == "cef"
+
+
+class TestFormatCef:
+    """Tests for AuditController._format_cef()."""
+
+    def test_cef_header_structure(self) -> None:
+        data = {
+            "execution_id": "exec-001",
+            "deployment": "prod",
+            "version": "2.0.0",
+            "success": True,
+            "timestamp": "2024-06-17T10:45:33Z",
+        }
+        result = AuditController._format_cef(data)
+        assert result.startswith("CEF:0|strata|strata-audit|")
+        assert "|deploy_audit|Deployment Audit Event|" in result
+
+    def test_cef_severity_low_on_success(self) -> None:
+        data = {"success": True, "deployment": "prod"}
+        result = AuditController._format_cef(data)
+        # Severity 3 = Low
+        assert "|3|" in result
+
+    def test_cef_severity_high_on_failure(self) -> None:
+        data = {"success": False, "deployment": "prod"}
+        result = AuditController._format_cef(data)
+        # Severity 7 = High
+        assert "|7|" in result
+
+    def test_cef_extension_contains_key_fields(self) -> None:
+        data = {
+            "success": True,
+            "deployment": "my_deploy",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "execution_id": "abc-123",
+        }
+        result = AuditController._format_cef(data)
+        assert "dst=my_deploy" in result
+        assert "rt=2024-01-01T00:00:00Z" in result
+        assert "externalId=abc-123" in result
+        assert "act=success" in result
+
+    def test_cef_escapes_special_characters(self) -> None:
+        data = {"success": True, "deployment": "prod=abc", "timestamp": "", "execution_id": ""}
+        result = AuditController._format_cef(data)
+        assert "dst=prod\\=abc" in result
+
+    def test_send_syslog_cef_format(self, tmp_path: Path) -> None:
+        from unittest.mock import MagicMock, patch
+
+        controller = AuditController(work_path=tmp_path)
+        data = {"success": True, "deployment": "prod", "version": "1.0", "timestamp": "", "execution_id": ""}
+
+        mock_sock = MagicMock()
+        with patch("socket.socket", return_value=mock_sock):
+            controller._send_syslog(data, "127.0.0.1:514", fmt="cef")
+
+        sent_bytes = mock_sock.sendto.call_args[0][0]
+        sent_str = sent_bytes.decode("utf-8")
+        assert "CEF:0|strata|strata-audit|" in sent_str
+
+    def test_send_syslog_json_format(self, tmp_path: Path) -> None:
+        from unittest.mock import MagicMock, patch
+
+        controller = AuditController(work_path=tmp_path)
+        data = {"success": True, "deployment": "prod"}
+
+        mock_sock = MagicMock()
+        with patch("socket.socket", return_value=mock_sock):
+            controller._send_syslog(data, "127.0.0.1:514", fmt="json")
+
+        sent_bytes = mock_sock.sendto.call_args[0][0]
+        sent_str = sent_bytes.decode("utf-8")
+        assert "<14>" in sent_str
+        assert '"deployment": "prod"' in sent_str or '"deployment":"prod"' in sent_str
+
 
 class TestResend:
     """Tests for AuditController.resend()."""

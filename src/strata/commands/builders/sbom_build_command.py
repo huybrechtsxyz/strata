@@ -38,6 +38,7 @@ class SbomBuildCommand(BaseBuildCommand):
         audit: bool = False,
         audit_severity: str = "MEDIUM",
         fail_on: Optional[str] = None,
+        audit_report: Optional[str] = None,
     ):
         super().__init__(
             file=file,
@@ -53,6 +54,7 @@ class SbomBuildCommand(BaseBuildCommand):
         self._audit = audit
         self._audit_severity = audit_severity
         self._fail_on = fail_on
+        self._audit_report = audit_report
 
     def get_required_integrations(self):
         return {}

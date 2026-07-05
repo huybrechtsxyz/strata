@@ -493,22 +493,45 @@ spec:
 
 ### SIEM / Log Aggregation
 
-**Forward manifests to Splunk, DataDog, or CloudWatch:**
+**Native SIEM forwarding via `strata audit`:**
 
 ```bash
-#!/bin/bash
-# Stream manifests to Splunk
+# Forward all deploy-log entries to Splunk HEC (configured integration)
+strata audit export --siem splunk_hec
 
-splunk_hec_url="https://splunk.acme.com:8088/services/collector"
-splunk_token="your-hec-token"
+# Forward last 30 entries and write a local backup
+strata audit export --siem splunk_hec --last 30 --out audit-backup.json
 
-strata manifest list --output json | while read manifest_path; do
-  manifest=$(strata manifest show "$manifest_path" --output json)
-  
-  curl -X POST "$splunk_hec_url" \
-    -H "Authorization: Splunk $splunk_token" \
-    -d "{\"event\": $manifest, \"sourcetype\": \"deployment_manifest\"}"
-done
+# Replay entries after SIEM downtime
+strata audit resend --since 2024-06-01T00:00:00Z
+```
+
+See [SIEM Audit Forwarding](./siem-audit-forwarding.md) for full configuration of Splunk HEC, Azure Sentinel, ELK, and OpenTelemetry backends.
+
+**Forward manifests to Splunk via native HEC:**
+
+Configure the integration in `configuration.yaml`:
+
+```yaml
+integrations:
+  - name: splunk_hec
+    type: splunk
+    capabilities: [audit]
+    endpoints:
+      address: https://splunk.acme.com:8088
+    authentication:
+      method: api_key
+      api_key:
+        api_key: ${SPLUNK_HEC_TOKEN}
+    properties:
+      index: infra_audit
+      sourcetype: strata_deploy
+```
+
+Then forward:
+
+```bash
+strata audit export --siem splunk_hec
 ```
 
 ### Compliance Scanning

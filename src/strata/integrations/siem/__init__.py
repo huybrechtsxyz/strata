@@ -4,10 +4,12 @@ from strata.integrations.siem.base_siem_integration import SiemBaseIntegration
 from strata.integrations.siem.elk_siem_integration import ElkSiemIntegration
 from strata.integrations.siem.otel_siem_integration import OtelSiemIntegration
 from strata.integrations.siem.sentinel_integration import SentinelIntegration
+from strata.integrations.siem.splunk_siem_integration import SplunkSiemIntegration
 
 __all__ = [
     "SiemBaseIntegration",
     "SentinelIntegration",
     "ElkSiemIntegration",
     "OtelSiemIntegration",
+    "SplunkSiemIntegration",
 ]

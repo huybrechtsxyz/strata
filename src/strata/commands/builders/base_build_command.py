@@ -364,10 +364,41 @@ class BaseBuildCommand(BaseCommand):
         if self._is_console_output() and result.total_findings == 0:
             click.echo("✅  No vulnerabilities found")
 
+        # -- Write audit report files (VEX / SARIF) --------------------------
+        audit_report_formats = getattr(self, "_audit_report", None)
+        if audit_report_formats and sbom_path:
+            from strata.utils.audit_report import write_sarif, write_vex
+
+            strata_version = self._get_strata_version()
+            report_dir = sbom_path.parent
+            formats = [f.strip().lower() for f in audit_report_formats.split(",")]
+
+            for fmt in formats:
+                if fmt == "vex":
+                    vex_path = write_vex(result, report_dir, sbom_path, strata_version)
+                    if self._is_console_output():
+                        click.echo(f"📄  VEX written: {vex_path}")
+                    self._output_data.setdefault("audit_reports", {})[fmt] = str(vex_path)
+                elif fmt == "sarif":
+                    sarif_path = write_sarif(result, report_dir, sbom_path, strata_version)
+                    if self._is_console_output():
+                        click.echo(f"📄  SARIF written: {sarif_path}")
+                    self._output_data.setdefault("audit_reports", {})[fmt] = str(sarif_path)
+
         # Store for policy engine consumption
         self._cve_audit_result = result
 
         return True
+
+    @staticmethod
+    def _get_strata_version() -> str:
+        """Return the strata CLI version string."""
+        try:
+            from strata import __version__
+
+            return __version__
+        except Exception:
+            return "0.0.0"
 
     @staticmethod
     def _load_cve_allowed(work_path: Path) -> list:
