@@ -9,6 +9,52 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.16.0] — 2026-07-05
+
+### Added
+
+- **Environment Composition: Flat Merge Fix (ADR 0024)**
+  - `EnvironmentService.merge_envfiles()` now merges **all 8 spec sections** (previously only 3): variables, secrets, features, properties, custom, lifecycle, audit, and all override subsections
+  - Per-section merge strategy documented and implemented: last-wins by key for variables/secrets/features, shallow dict-merge for properties/custom, wholesale last-wins for lifecycle/audit, resource/provider/remote last-wins by name, includes/output_files are additive with deduplication
+  - `MergeProvenance` dataclass tracks which environment file contributed each key — populated during merge, carried through `ResolvedValues` to CLI output
+  - Multiple environment files enable composition pattern: base + region + environment layers for DRY configuration
+  - `strata values list --trace` flag shows provenance: which file each variable/secret/feature originates from in console table and JSON output
+  - `merge_order` exposed in `values list` JSON output — list of files in merge sequence
+  - 21 comprehensive tests covering all merge strategies, override merging, features by-key semantics, and provenance tracking
+- **Environment Composition Guide** (`docs/guides/environment-composition.md`)
+  - When and why to compose; merge semantics per section; base + region + prd example with effective-result table
+  - `strata values list --trace` usage with console and JSON examples; merge order visualization
+  - Common patterns: base + region + environment, shared security policy, tenant overlays
+  - Troubleshooting and validation notes
+- **Updated merge order documentation**
+  - `docs/config/deployment.md` Configuration Merge Order section now includes precise per-section table and `--trace` usage link
+  - `docs/config/environment.md` new Multi-file Composition section with strategy table
+- **Index coverage** — environment-composition guide added to `docs/index.rst`
+
+### Changed
+
+- `EnvironmentService.merge_envfiles()` now returns `Tuple[EnvironmentModel, MergeProvenance]` instead of just `EnvironmentModel`
+- `deployment_service.py` unpacks and stores provenance from merge; exposed via `get_merge_provenance()` getter
+- `ResolvedValues` dataclass now includes `variable_sources`, `secret_sources`, `feature_sources`, and `merge_order` dicts
+- `ValueController.resolve_values()` populates provenance sources from deployment's merge provenance
+
+### Fixed
+
+- `merge_envfiles()` previously dropped properties, custom, lifecycle, audit, and all override sections from every file after the first
+- Features now merge by key (last-wins per flag) instead of whole-file replacement
+
+### Documentation
+
+- Added ADR 0024: Environment Composition — Flat Merge Fix
+- New comprehensive composition guide with patterns and examples
+- Updated config reference docs with merge semantics and `--trace` usage
+
+### Testing
+
+- 3771 tests passing (3750 existing + 21 new merge/provenance tests), 15 skipped, 1 warning
+
+---
+
 ## [0.15.0] — 2026-07-03
 
 ### Added
