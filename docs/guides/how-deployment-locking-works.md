@@ -48,15 +48,15 @@ Add a `locking` block to your deployment's `spec`:
 spec:
   locking:
     enabled: true
-    strategy: strata          # "strata" | "delegate"
+    strategy: wrap            # "wrap" | "delegate"
     wait_timeout: "5m"        # how long to poll before giving up
 ```
 
-| Field          | Default  | Description                                                                                                                           |
-| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled`      | `false`  | Set to `true` to activate locking                                                                                                     |
-| `strategy`     | `strata` | `strata` = strata manages the lock; `delegate` = trust the backend's own locking (e.g. TFC run queue) and skip strata's lock entirely |
-| `wait_timeout` | `"5m"`   | Duration to wait for a held lock before aborting. Accepts `s`, `m`, `h` (e.g. `"90s"`, `"2m"`, `"1h"`)                                |
+| Field          | Default | Description                                                                                                                        |
+| -------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`      | `false` | Set to `true` to activate locking                                                                                                  |
+| `strategy`     | `wrap`  | `wrap` = strata manages the lock; `delegate` = trust the backend's own locking (e.g. TFC run queue) and skip strata's lock entirely |
+| `wait_timeout` | `"5m"`  | Duration to wait for a held lock before aborting. Accepts `s`, `m`, `h` (e.g. `"90s"`, `"2m"`, `"1h"`)                             |
 
 ---
 
@@ -87,7 +87,7 @@ meta:
 spec:
   locking:
     enabled: true
-    strategy: strata
+    strategy: wrap
     wait_timeout: "2m"
   stages:
     - name: production

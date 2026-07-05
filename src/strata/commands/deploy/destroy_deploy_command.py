@@ -12,6 +12,10 @@ from strata.deployers.base_deployer import (
     STEP_SETUP,
 )
 from strata.deployers.terraform_deployer import TerraformDeployer
+from strata.integrations.lock.base_lock_backend import (
+    BaseLockBackend,
+    LockHandle,
+)
 from strata.models.common_models import ProvisionerType
 from strata.models.deployment_model import DeploymentStageModel
 
@@ -34,6 +38,7 @@ class DestroyDeployCommand(BaseDeployCommand):
         scope: Optional[str] = None,
         force: bool = False,
         dry_run: bool = False,
+        force_lock: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -49,6 +54,7 @@ class DestroyDeployCommand(BaseDeployCommand):
         self._scope = scope
         self._force = force
         self._dry_run = dry_run
+        self._force_lock = force_lock
         self._resolved_values: Optional[ResolvedValues] = None
 
     # -------------------------------------------------------------------------
@@ -193,29 +199,43 @@ class DestroyDeployCommand(BaseDeployCommand):
             action = "Planning destroy for" if self._dry_run else "Destroying"
             click.echo(f"\n💣  {action} {len(stages_to_run)} stage(s)…")
 
-        for stage in stages_to_run:
-            if self._is_console_output():
-                label = f"[{stage.name}]"
-                if stage.provisioner:
-                    label += f" via {stage.provisioner}"
-                elif stage.topology:
-                    label += f" topology:{stage.topology}"
-                prefix = "[DRY-RUN] " if self._dry_run else ""
-                click.echo(f"\n  ▶  {prefix}Stage: {stage.name}  {label}")
-
-            ok = self._execute_stage_destroy(stage)
-            if not ok:
-                if stage.on_failure == "continue":
-                    if self._is_console_output():
-                        click.echo(f"  ⚠️  Stage '{stage.name}' failed — on_failure=continue, proceeding.")
-                    continue
-                self._errors.append(f"Stage '{stage.name}' failed (on_failure=stop).")
+        # Acquire deployment lock wrapping the full stage pipeline.
+        # Destroy is a destructive operation and must hold the lock.
+        lock_handle: Optional[LockHandle] = None
+        lock_backend: Optional[BaseLockBackend] = None
+        if self._should_lock():
+            lock_backend = self._resolve_lock_backend(stages_to_run)
+            lock_handle = self._acquire_lock(lock_backend)
+            if lock_handle is None:
                 return False
 
-        if self._is_console_output() and not self._dry_run:
-            click.echo("\n✅  All stages destroyed.")
+        try:
+            for stage in stages_to_run:
+                if self._is_console_output():
+                    label = f"[{stage.name}]"
+                    if stage.provisioner:
+                        label += f" via {stage.provisioner}"
+                    elif stage.topology:
+                        label += f" topology:{stage.topology}"
+                    prefix = "[DRY-RUN] " if self._dry_run else ""
+                    click.echo(f"\n  ▶  {prefix}Stage: {stage.name}  {label}")
 
-        return True
+                ok = self._execute_stage_destroy(stage)
+                if not ok:
+                    if stage.on_failure == "continue":
+                        if self._is_console_output():
+                            click.echo(f"  ⚠️  Stage '{stage.name}' failed — on_failure=continue, proceeding.")
+                        continue
+                    self._errors.append(f"Stage '{stage.name}' failed (on_failure=stop).")
+                    return False
+
+            if self._is_console_output() and not self._dry_run:
+                click.echo("\n✅  All stages destroyed.")
+
+            return True
+        finally:
+            if lock_handle is not None and lock_backend is not None:
+                self._release_lock(lock_backend, lock_handle)
 
     def _execute_stage_destroy(self, stage: DeploymentStageModel) -> bool:
         stage_started = _dt.now(_tz.utc).isoformat()

@@ -56,6 +56,12 @@ def deploy():
     default=False,
     help="Validate and plan the deploy without running any provisioners.",
 )
+@click.option(
+    "--force-lock",
+    is_flag=True,
+    default=False,
+    help="Force-release any held lock before acquiring. Use to recover from a crashed pipeline.",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -66,6 +72,7 @@ def deploy_run(
     scope: Optional[str] = None,
     force: bool = False,
     dry_run: bool = False,
+    force_lock: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -78,6 +85,7 @@ def deploy_run(
         scope=scope,
         force=force,
         dry_run=dry_run,
+        force_lock=force_lock,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -113,6 +121,12 @@ def deploy_run(
     default=False,
     help="Plan what would be destroyed (terraform plan -destroy) without removing anything.",
 )
+@click.option(
+    "--force-lock",
+    is_flag=True,
+    default=False,
+    help="Force-release any held lock before acquiring. Use to recover from a crashed pipeline.",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -123,6 +137,7 @@ def deploy_destroy(
     scope: Optional[str] = None,
     force: bool = False,
     dry_run: bool = False,
+    force_lock: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -135,6 +150,7 @@ def deploy_destroy(
         scope=scope,
         force=force,
         dry_run=dry_run,
+        force_lock=force_lock,
         output=output,
         verbose=verbose,
         quiet=quiet,

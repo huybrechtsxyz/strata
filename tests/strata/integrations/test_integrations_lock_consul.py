@@ -1,5 +1,6 @@
 """Unit tests for ConsulLockBackend."""
 
+import base64
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -41,6 +42,20 @@ def _entry_json(holder: str = "alice", lock_id: str = "lid") -> bytes:
             "reason": "ci",
             "stage": None,
         }
+    ).encode()
+
+
+def _kv_response(holder: str = "alice", lock_id: str = "lid", session: str = "sess-1") -> bytes:
+    """Build a Consul KV GET response (JSON array with base64-encoded Value)."""
+    value_b64 = base64.b64encode(_entry_json(holder, lock_id)).decode()
+    return json.dumps(
+        [
+            {
+                "Key": "strata/locks/dep",
+                "Value": value_b64,
+                "Session": session,
+            }
+        ]
     ).encode()
 
 
@@ -267,10 +282,18 @@ class TestConsulStatus:
 
     def test_status_locked_returns_entry(self, tmp_path):
         backend = _make_backend(tmp_path)
-        backend._http = MagicMock(return_value=(200, _entry_json("alice")))
+        backend._http = MagicMock(return_value=(200, _kv_response("alice")))
         entry = backend.status("dep")
         assert entry is not None
         assert entry.holder == "alice"
+
+    def test_status_no_session_returns_none(self, tmp_path):
+        """KV key exists but no active session — lock is not held."""
+        backend = _make_backend(tmp_path)
+        value_b64 = base64.b64encode(_entry_json("alice")).decode()
+        body = json.dumps([{"Key": "strata/locks/dep", "Value": value_b64, "Session": ""}]).encode()
+        backend._http = MagicMock(return_value=(200, body))
+        assert backend.status("dep") is None
 
     def test_status_unexpected_http_raises(self, tmp_path):
         backend = _make_backend(tmp_path)

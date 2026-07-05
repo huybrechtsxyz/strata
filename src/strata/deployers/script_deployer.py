@@ -1,23 +1,34 @@
 """Script deployer — executes lifecycle scripts defined in the deployment model.
 
 Supported steps (map to lifecycle phase names):
-  setup        — deploy_setup
+  setup        — pre_provision → deploy_setup → post_provision
   check        — deploy_check
   plan         — deploy_plan
-  apply        — deploy_apply
+  apply        — pre_deploy → deploy_apply → post_deploy
   destroy      — deploy_destroy
   plan_destroy — deploy_plan_destroy
   output       — deploy_output  (returns empty dict; no structured output)
   show_plan    — not applicable (returns empty dict)
 
+Pre/post hooks (optional — skipped silently if not defined in the lifecycle block):
+  pre_provision  — runs before deploy_setup
+  post_provision — runs after deploy_setup succeeds
+  pre_deploy     — runs before deploy_apply (non-zero blocks apply)
+  post_deploy    — runs after deploy_apply succeeds
+
 Scripts are looked up in deployment_model.spec.lifecycle.root[<phase_name>].scripts.
 Each script entry is either a plain path string or a ScriptPathModel (has .file).
 
-Supported script types: .sh, .bash, .py, .ps1
+Supported script types: .sh, .bash, .py, .ps1, .js, .mjs, .go
+Working directory for scripts: stage build directory (falls back to work_path)
 Environment variables injected into every script subprocess:
-  WORK_PATH   — work_path passed to the deployer
-  BUILD_PATH  — build_path passed to the deployer
-  STAGE_NAME  — current stage name
+  STRATA_PHASE          — current lifecycle phase name
+  STRATA_WORKSPACE_PATH — workspace root directory
+  STRATA_BUILD_PATH     — build artifacts directory
+  STRATA_CONFIG_PATH    — strata state directory (.strata/)
+  STRATA_OBJECT_PATH    — objects sub-directory
+  STRATA_STAGE_NAME     — current stage name
+  + all resolved secrets and variables (via ResolvedValues)
 """
 
 import os
@@ -50,6 +61,11 @@ _STEP_TO_PHASE: Dict[str, str] = {
     STEP_DESTROY: "deploy_destroy",
     STEP_PLAN_DESTROY: "deploy_plan_destroy",
     STEP_OUTPUT: "deploy_output",
+    # Pre/post hooks — map literally to the same-named lifecycle phase.
+    "pre_provision": "pre_provision",
+    "post_provision": "post_provision",
+    "pre_deploy": "pre_deploy",
+    "post_deploy": "post_deploy",
 }
 
 # Default timeout (seconds) for a single script subprocess.
@@ -153,7 +169,14 @@ class ScriptDeployer(BaseDeployer):
     # ------------------------------------------------------------------
 
     def setup(self) -> Tuple[bool, List[str]]:
-        return self._run_phase(STEP_SETUP, self._get_timeout(STEP_SETUP, _STEP_TIMEOUT_DEFAULTS[STEP_SETUP]))
+        timeout = self._get_timeout(STEP_SETUP, _STEP_TIMEOUT_DEFAULTS[STEP_SETUP])
+        all_msgs: List[str] = []
+        for hook in ("pre_provision", STEP_SETUP, "post_provision"):
+            ok, msgs = self._run_phase(hook, timeout)
+            all_msgs.extend(msgs)
+            if not ok:
+                return False, all_msgs
+        return True, all_msgs
 
     def check(self) -> Tuple[bool, List[str]]:
         return self._run_phase(STEP_CHECK, self._get_timeout(STEP_CHECK, _STEP_TIMEOUT_DEFAULTS[STEP_CHECK]))
@@ -162,12 +185,15 @@ class ScriptDeployer(BaseDeployer):
         return self._run_phase(STEP_PLAN, self._get_timeout(STEP_PLAN, _STEP_TIMEOUT_DEFAULTS[STEP_PLAN]))
 
     def apply(self) -> Tuple[bool, List[str]]:
-        success, messages = self._run_phase(
-            STEP_APPLY, self._get_timeout(STEP_APPLY, _STEP_TIMEOUT_DEFAULTS[STEP_APPLY])
-        )
-        if success:
-            messages.append(f"✓ Stage '{self.stage.name}' applied successfully.")
-        return success, messages
+        timeout = self._get_timeout(STEP_APPLY, _STEP_TIMEOUT_DEFAULTS[STEP_APPLY])
+        all_msgs: List[str] = []
+        for hook in ("pre_deploy", STEP_APPLY, "post_deploy"):
+            ok, msgs = self._run_phase(hook, timeout)
+            all_msgs.extend(msgs)
+            if not ok:
+                return False, all_msgs
+        all_msgs.append(f"✓ Stage '{self.stage.name}' applied successfully.")
+        return True, all_msgs
 
     def destroy(self) -> Tuple[bool, List[str]]:
         success, messages = self._run_phase(
@@ -194,6 +220,11 @@ class ScriptDeployer(BaseDeployer):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _get_stage_dir(self) -> Path:
+        """Return the stage build directory, falling back to work_path if it doesn't exist."""
+        stage_dir = self.build_path / self.stage.name
+        return stage_dir if stage_dir.exists() else self.work_path
 
     def _run_phase(self, step: str, timeout: int = _SCRIPT_TIMEOUT) -> Tuple[bool, List[str]]:
         """Map a step name to a lifecycle phase and execute its scripts."""
@@ -264,6 +295,10 @@ class ScriptDeployer(BaseDeployer):
             cmd = ["python", str(script_path)]
         elif suffix == ".ps1":
             cmd = ["pwsh", "-File", str(script_path)]
+        elif suffix in (".js", ".mjs"):
+            cmd = ["node", str(script_path)]
+        elif suffix == ".go":
+            cmd = ["go", "run", str(script_path)]
         else:
             messages.append(f"Unsupported script type: {suffix}")
             return False, messages
@@ -282,7 +317,7 @@ class ScriptDeployer(BaseDeployer):
         try:
             result = subprocess.run(
                 cmd,
-                cwd=self.work_path,
+                cwd=self._get_stage_dir(),
                 env=env,
                 capture_output=True,
                 text=True,
@@ -301,7 +336,7 @@ class ScriptDeployer(BaseDeployer):
                 messages.append(result.stderr.strip())
             return False, messages
 
-        if self.verbose and result.stdout:
+        if result.stdout:
             messages.append(result.stdout.strip())
 
         return True, messages
