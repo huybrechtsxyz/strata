@@ -364,10 +364,11 @@ class TestScriptDeployerExecuteScript:
         assert env["STRATA_BUILD_PATH"] == str(Path("/my/build"))
         assert env["STRATA_STAGE_NAME"] == "staging"
 
-    def test_verbose_stdout_added_to_messages(self, tmp_path):
+    def test_stdout_always_captured(self, tmp_path):
+        """stdout is always added to messages regardless of verbose flag."""
         script = tmp_path / "out.sh"
         script.write_text("#!/bin/bash\necho hello")
-        d = _make_deployer(tmp_path=tmp_path, verbose=True)
+        d = _make_deployer(tmp_path=tmp_path, verbose=False)
 
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -380,6 +381,57 @@ class TestScriptDeployerExecuteScript:
         assert ok is True
         assert "hello" in msgs
 
+    def test_node_script_success(self, tmp_path):
+        script = tmp_path / "run.js"
+        script.write_text("console.log('hi')")
+        d = _make_deployer(tmp_path=tmp_path)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            ok, msgs = d._execute_script(script, "deploy_setup")
+
+        assert ok is True
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "node"
+
+    def test_mjs_script_uses_node(self, tmp_path):
+        script = tmp_path / "run.mjs"
+        script.write_text("console.log('hi')")
+        d = _make_deployer(tmp_path=tmp_path)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            ok, msgs = d._execute_script(script, "deploy_setup")
+
+        assert ok is True
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "node"
+
+    def test_go_script_uses_go_run(self, tmp_path):
+        script = tmp_path / "run.go"
+        script.write_text("package main\nfunc main() {}")
+        d = _make_deployer(tmp_path=tmp_path)
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            ok, msgs = d._execute_script(script, "deploy_setup")
+
+        assert ok is True
+        cmd = mock_run.call_args[0][0]
+        assert cmd[:2] == ["go", "run"]
+
 
 class TestStepToPhaseMapping:
     def test_all_mapped_steps_have_phase(self):
@@ -389,6 +441,11 @@ class TestStepToPhaseMapping:
     def test_show_plan_not_in_mapping(self):
         # show_plan has no lifecycle equivalent — handled directly
         assert "show_plan" not in _STEP_TO_PHASE
+
+    def test_hook_phases_in_mapping(self):
+        for hook in ("pre_provision", "post_provision", "pre_deploy", "post_deploy"):
+            assert hook in _STEP_TO_PHASE, f"Hook '{hook}' not in _STEP_TO_PHASE"
+            assert _STEP_TO_PHASE[hook] == hook  # hooks map to themselves
 
 
 class TestScriptDeployerTimeouts:
@@ -479,3 +536,190 @@ class TestScriptDeployerTimeouts:
         with patch("subprocess.run", return_value=self._mock_ok()) as mock_run:
             d.apply()
         assert mock_run.call_args[1].get("timeout") == 999  # override
+
+
+class TestScriptDeployerHooks:
+    """Verify pre/post hooks run within setup() and apply()."""
+
+    def _phase(self, scripts):
+        phase = MagicMock()
+        phase.scripts = scripts
+        return phase
+
+    def _mock_ok(self):
+        r = MagicMock()
+        r.returncode = 0
+        r.stdout = ""
+        r.stderr = ""
+        return r
+
+    def test_pre_provision_runs_before_setup(self, tmp_path):
+        hook_script = tmp_path / "pre.sh"
+        hook_script.write_text("#!/bin/bash")
+        setup_script = tmp_path / "setup.sh"
+        setup_script.write_text("#!/bin/bash")
+        lifecycle = {
+            "pre_provision": self._phase([str(hook_script)]),
+            "deploy_setup": self._phase([str(setup_script)]),
+        }
+        d = _make_deployer(lifecycle_root=lifecycle, tmp_path=tmp_path)
+        call_order = []
+
+        def track(path, phase_name, timeout=300):
+            call_order.append(phase_name)
+            return (True, [])
+
+        with patch.object(d, "_execute_script", side_effect=track):
+            ok, msgs = d.setup()
+
+        assert ok is True
+        assert call_order.index("pre_provision") < call_order.index("deploy_setup")
+
+    def test_post_provision_runs_after_setup(self, tmp_path):
+        setup_script = tmp_path / "setup.sh"
+        setup_script.write_text("#!/bin/bash")
+        hook_script = tmp_path / "post.sh"
+        hook_script.write_text("#!/bin/bash")
+        lifecycle = {
+            "deploy_setup": self._phase([str(setup_script)]),
+            "post_provision": self._phase([str(hook_script)]),
+        }
+        d = _make_deployer(lifecycle_root=lifecycle, tmp_path=tmp_path)
+        call_order = []
+
+        def track(path, phase_name, timeout=300):
+            call_order.append(phase_name)
+            return (True, [])
+
+        with patch.object(d, "_execute_script", side_effect=track):
+            ok, msgs = d.setup()
+
+        assert ok is True
+        assert call_order.index("deploy_setup") < call_order.index("post_provision")
+
+    def test_pre_provision_failure_blocks_setup(self, tmp_path):
+        hook_script = tmp_path / "pre.sh"
+        hook_script.write_text("#!/bin/bash")
+        setup_script = tmp_path / "setup.sh"
+        setup_script.write_text("#!/bin/bash")
+        lifecycle = {
+            "pre_provision": self._phase([str(hook_script)]),
+            "deploy_setup": self._phase([str(setup_script)]),
+        }
+        d = _make_deployer(lifecycle_root=lifecycle, tmp_path=tmp_path)
+        called_phases = []
+
+        def track(path, phase_name, timeout=300):
+            called_phases.append(phase_name)
+            if phase_name == "pre_provision":
+                return (False, ["hook failed"])
+            return (True, [])
+
+        with patch.object(d, "_execute_script", side_effect=track):
+            ok, msgs = d.setup()
+
+        assert ok is False
+        assert "deploy_setup" not in called_phases
+
+    def test_pre_deploy_runs_before_apply(self, tmp_path):
+        hook_script = tmp_path / "pre.sh"
+        hook_script.write_text("#!/bin/bash")
+        apply_script = tmp_path / "apply.sh"
+        apply_script.write_text("#!/bin/bash")
+        lifecycle = {
+            "pre_deploy": self._phase([str(hook_script)]),
+            "deploy_apply": self._phase([str(apply_script)]),
+        }
+        d = _make_deployer(lifecycle_root=lifecycle, tmp_path=tmp_path)
+        call_order = []
+
+        def track(path, phase_name, timeout=300):
+            call_order.append(phase_name)
+            return (True, [])
+
+        with patch.object(d, "_execute_script", side_effect=track):
+            ok, msgs = d.apply()
+
+        assert ok is True
+        assert call_order.index("pre_deploy") < call_order.index("deploy_apply")
+        assert any("applied successfully" in m for m in msgs)
+
+    def test_post_deploy_runs_after_apply(self, tmp_path):
+        apply_script = tmp_path / "apply.sh"
+        apply_script.write_text("#!/bin/bash")
+        hook_script = tmp_path / "post.sh"
+        hook_script.write_text("#!/bin/bash")
+        lifecycle = {
+            "deploy_apply": self._phase([str(apply_script)]),
+            "post_deploy": self._phase([str(hook_script)]),
+        }
+        d = _make_deployer(lifecycle_root=lifecycle, tmp_path=tmp_path)
+        call_order = []
+
+        def track(path, phase_name, timeout=300):
+            call_order.append(phase_name)
+            return (True, [])
+
+        with patch.object(d, "_execute_script", side_effect=track):
+            ok, msgs = d.apply()
+
+        assert ok is True
+        assert call_order.index("deploy_apply") < call_order.index("post_deploy")
+
+    def test_pre_deploy_failure_blocks_apply(self, tmp_path):
+        hook_script = tmp_path / "pre.sh"
+        hook_script.write_text("#!/bin/bash")
+        apply_script = tmp_path / "apply.sh"
+        apply_script.write_text("#!/bin/bash")
+        lifecycle = {
+            "pre_deploy": self._phase([str(hook_script)]),
+            "deploy_apply": self._phase([str(apply_script)]),
+        }
+        d = _make_deployer(lifecycle_root=lifecycle, tmp_path=tmp_path)
+        called_phases = []
+
+        def track(path, phase_name, timeout=300):
+            called_phases.append(phase_name)
+            if phase_name == "pre_deploy":
+                return (False, ["hook failed"])
+            return (True, [])
+
+        with patch.object(d, "_execute_script", side_effect=track):
+            ok, msgs = d.apply()
+
+        assert ok is False
+        assert "deploy_apply" not in called_phases
+        assert not any("applied successfully" in m for m in msgs)
+
+    def test_hooks_skipped_when_not_defined(self, tmp_path):
+        """Hooks are optional — missing phases are silently skipped."""
+        apply_script = tmp_path / "apply.sh"
+        apply_script.write_text("#!/bin/bash")
+        lifecycle = {"deploy_apply": self._phase([str(apply_script)])}
+        d = _make_deployer(lifecycle_root=lifecycle, tmp_path=tmp_path)
+
+        with patch.object(d, "_execute_script", return_value=(True, [])):
+            ok, msgs = d.apply()
+
+        assert ok is True
+
+
+class TestScriptDeployerGetStageDir:
+    def test_returns_stage_dir_when_exists(self, tmp_path):
+        stage_dir = tmp_path / "production"
+        stage_dir.mkdir()
+        d = _make_deployer(tmp_path=tmp_path)
+        d.build_path = tmp_path
+        d.stage.name = "production"
+        assert d._get_stage_dir() == stage_dir
+
+    def test_falls_back_to_work_path_when_stage_dir_missing(self, tmp_path):
+        work = tmp_path / "work"
+        work.mkdir()
+        build = tmp_path / "build"
+        build.mkdir()
+        d = _make_deployer()
+        d.work_path = work
+        d.build_path = build
+        d.stage.name = "nonexistent"
+        assert d._get_stage_dir() == work

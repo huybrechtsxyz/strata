@@ -2,7 +2,7 @@
 """Fixed configuration constants for the strata package."""
 
 # List of valid script file extensions
-SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1"}
+SCRIPT_EXTENSIONS = {".sh", ".bash", ".py", ".ps1", ".js", ".mjs", ".go"}
 
 # Default path constants (empty string = use hardcoded fallback in callers)
 DEFAULT_BUILD_PATH: str = "build"

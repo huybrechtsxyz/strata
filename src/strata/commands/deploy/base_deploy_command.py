@@ -3,12 +3,22 @@
 import hashlib
 import json
 import os
+import socket
 from abc import abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import click
+
 from strata.commands.base_command import BaseCommand
+from strata.integrations.lock.base_lock_backend import (
+    BaseLockBackend,
+    LockBackendError,
+    LockHandle,
+    LockTimeoutError,
+)
+from strata.models.common_models import ProvisionerType
 from strata.models.deployment_manifest_model import (
     DeploymentManifestMetaModel,
     DeploymentManifestModel,
@@ -23,9 +33,11 @@ from strata.models.deployment_manifest_model import (
     ManifestRepositoryModel,
     ManifestStageModel,
 )
+from strata.models.deployment_model import DeploymentStageModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_manifest_service import DeploymentManifestService
 from strata.services.deployment_service import DeploymentService
+from strata.utils.duration import parse_duration
 
 
 class BaseDeployCommand(BaseCommand):
@@ -58,6 +70,9 @@ class BaseDeployCommand(BaseCommand):
         self._policy_results: List[ManifestPolicyResultModel] = []
         self._lock_ref: Optional[ManifestLockReferenceModel] = None
         self._audit_log_path: Optional[str] = None
+        # Subclasses override these before calling _execute_provisioning.
+        self._dry_run: bool = False
+        self._force_lock: bool = False
 
     @abstractmethod
     def execute(self) -> bool:
@@ -65,6 +80,145 @@ class BaseDeployCommand(BaseCommand):
 
     def get_required_integrations(self):
         return {}
+
+    # -------------------------------------------------------------------------
+    # Lock helpers — shared by RunDeployCommand and DestroyDeployCommand
+    # -------------------------------------------------------------------------
+
+    def _should_lock(self) -> bool:
+        """Return True if locking is enabled and this is not a dry-run.
+
+        Returns False immediately for dry-runs and for the ``delegate``
+        strategy (which trusts the backend's native locking, e.g. TFC run queue).
+        """
+        if self._dry_run:
+            return False
+        if self._deployment_service is None:
+            return False
+        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
+        locking = getattr(spec, "locking", None)
+        if locking is None or not locking.enabled:
+            return False
+        if locking.strategy == "delegate":
+            return False
+        return True
+
+    def _resolve_lock_backend(self, stages: List[DeploymentStageModel]) -> BaseLockBackend:
+        """Return the lock backend from the first Terraform provisioner with a backend.
+
+        Falls back to ``LocalLockBackend`` when no matching provisioner is found.
+        """
+        from strata.integrations.lock.lock_factory import LockFactory
+
+        if self._deployment_service is not None:
+            workspace_service = self._deployment_service.get_workspace_service()
+            if workspace_service is not None:
+                spec = workspace_service.model.spec  # type: ignore[union-attr]
+                provisioners = spec.provisioners or []
+                for stage in stages:
+                    if stage.provisioner:
+                        iac = next(
+                            (p for p in provisioners if p.name == stage.provisioner),
+                            None,
+                        )
+                        if iac and iac.provisioner == ProvisionerType.TERRAFORM and iac.backend:
+                            return LockFactory.create(iac.backend, self._work_path)
+
+        return LockFactory.create(None, self._work_path)
+
+    def _acquire_lock(self, backend: BaseLockBackend) -> Optional[LockHandle]:
+        """Acquire the deployment lock. Returns the handle or ``None`` on failure.
+
+        When ``self._force_lock`` is True and a lock is already held, the held
+        lock is force-released before acquiring.  A warning is printed so the
+        audit trail is clear about the override.
+        """
+        if self._deployment_service is None:
+            return None
+        deploy_name = str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+        spec = self._deployment_service.model.spec  # type: ignore[union-attr]
+        locking = getattr(spec, "locking", None)
+        wait_timeout: str = getattr(locking, "wait_timeout", "30m") if locking else "30m"
+        timeout_seconds = parse_duration(wait_timeout)
+        holder = os.environ.get("GITHUB_ACTOR") or os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+
+        # Force-release a held lock when --force-lock is set.
+        if self._force_lock:
+            try:
+                existing = backend.status(deploy_name)
+                if existing is not None:
+                    if self._is_console_output():
+                        click.echo(
+                            f"\n⚠️   --force-lock: releasing lock held by '{existing.holder}' "
+                            f"on {existing.hostname} (lock_id: {existing.lock_id})"
+                        )
+                    backend.force_release(deploy_name)
+                    self.logger.warning(
+                        "deploy_lock_force_released_before_acquire",
+                        deployment=deploy_name,
+                        previous_holder=existing.holder,
+                    )
+            except LockBackendError as exc:
+                self._errors.append(f"Force-lock release failed: {exc}")
+                return None
+
+        reason = f"strata {self.OPERATION.replace('_', ' ')}"
+        try:
+            handle = backend.acquire(
+                deployment_name=deploy_name,
+                holder=holder,
+                reason=reason,
+                timeout_seconds=timeout_seconds,
+            )
+            self._lock_ref = ManifestLockReferenceModel(
+                lock_id=handle.lock_id,
+                backend=handle.backend_type,
+                acquired_at=handle.acquired_at,
+                holder=holder,
+                hostname=socket.gethostname(),
+            )
+            if self._is_console_output():
+                click.echo(f"\n\U0001f512  Lock acquired ({handle.backend_type}) for '{deploy_name}'")
+            self.logger.info(
+                "deploy_lock_acquired",
+                lock_id=handle.lock_id,
+                backend=handle.backend_type,
+            )
+            return handle
+        except LockTimeoutError as exc:
+            self._errors.append(str(exc))
+            if self._is_console_output():
+                click.echo(
+                    f"\n\U0001f512  Could not acquire lock \u2014 held by {exc.holder!r}. "
+                    "Run `strata deploy lock status` for details."
+                )
+            self.logger.error(
+                "deploy_lock_timeout",
+                deployment=deploy_name,
+                holder=exc.holder,
+            )
+            return None
+        except LockBackendError as exc:
+            self._errors.append(f"Lock backend error: {exc}")
+            self.logger.error("deploy_lock_backend_error", error=str(exc))
+            return None
+
+    def _release_lock(self, backend: BaseLockBackend, handle: LockHandle) -> None:
+        """Release the deployment lock. Safe to call in a ``finally`` block."""
+        released_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            backend.release(handle)
+            if self._lock_ref is not None:
+                self._lock_ref = self._lock_ref.model_copy(update={"released_at": released_at})
+            if self._is_console_output():
+                click.echo(f"\n\U0001f513  Lock released ({handle.backend_type})")
+            self.logger.info("deploy_lock_released", lock_id=handle.lock_id)
+        except Exception as exc:  # noqa: BLE001
+            self.logger.warning(
+                "deploy_lock_release_failed",
+                lock_id=handle.lock_id,
+                error=str(exc),
+            )
 
     # -------------------------------------------------------------------------
     # Hierarchical lifecycle helper

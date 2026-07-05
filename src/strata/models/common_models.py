@@ -130,7 +130,9 @@ class ScriptPathModel(PlatformBaseModel):
         if not path.is_file():
             raise ValueError(f"Script path is not a file: {v}")
         if path.suffix not in SCRIPT_EXTENSIONS:
-            raise ValueError(f"Script must have a valid extension (.sh, .bash, .py, .ps1), got: {path.suffix}")
+            raise ValueError(
+                f"Script must have a valid extension (.sh, .bash, .py, .ps1, .js, .mjs, .go), got: {path.suffix}"
+            )
         return v
 
 
@@ -157,7 +159,9 @@ class ScriptsModel(PlatformBaseModel):
                 if not path.is_file():
                     raise ValueError(f"Script path is not a file: {item}")
                 if path.suffix not in SCRIPT_EXTENSIONS:
-                    raise ValueError(f"Script must have a valid extension (.sh, .bash, .py, .ps1), got: {path.suffix}")
+                    raise ValueError(
+                        f"Script must have a valid extension (.sh, .bash, .py, .ps1, .js, .mjs, .go), got: {path.suffix}"
+                    )
                 # Will be converted to ScriptModel with scope inferred from context during build
                 normalized.append(item)
             else:

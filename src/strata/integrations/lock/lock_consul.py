@@ -261,17 +261,35 @@ class ConsulLockBackend(BaseLockBackend):
             )
 
     def status(self, deployment_name: str) -> Optional[LockEntry]:
-        """Return a ``LockEntry`` if the KV key is locked, or ``None``."""
+        """Return a ``LockEntry`` if the KV key is actively locked, or ``None``.
+
+        Uses the full KV response (not ``?raw``) so we can inspect the
+        ``Session`` field.  A KV key that exists but has no active session
+        is *not* locked — this avoids false-positives after release.
+        """
+        import base64
+
         kv_key = self._kv_key(deployment_name)
-        status_code, body = self._http("GET", f"/v1/kv/{kv_key}?raw")
+        status_code, body = self._http("GET", f"/v1/kv/{kv_key}")
         if status_code == 404:
             return None
         if status_code == 200:
             if not body:
                 return None
             try:
-                return LockEntry(**json.loads(body))
-            except (json.JSONDecodeError, TypeError):
+                items = json.loads(body)
+                if not items:
+                    return None
+                item = items[0] if isinstance(items, list) else items
+                # No active session means the key is not locked.
+                if not item.get("Session"):
+                    return None
+                value_b64 = item.get("Value", "")
+                if not value_b64:
+                    return None
+                value_bytes = base64.b64decode(value_b64)
+                return LockEntry(**json.loads(value_bytes))
+            except (json.JSONDecodeError, TypeError, KeyError, ValueError):
                 return None
         raise LockBackendError(f"ConsulLockBackend.status: HTTP {status_code}")
 
