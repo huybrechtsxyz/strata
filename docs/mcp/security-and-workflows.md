@@ -8,10 +8,10 @@ Security considerations for using the strata MCP server in production, including
 
 The MCP server is designed with a **fundamental security boundary**:
 
-| Operation Type | Tool Availability | Executor |
-|---|---|---|
-| **Query** (read-only) | ✅ Available via MCP | AI tool |
-| **Preview** (dry-run) | ✅ Available via MCP | AI tool |
+| Operation Type            | Tool Availability       | Executor              |
+| ------------------------- | ----------------------- | --------------------- |
+| **Query** (read-only)     | ✅ Available via MCP     | AI tool               |
+| **Preview** (dry-run)     | ✅ Available via MCP     | AI tool               |
 | **Execute** (destructive) | ❌ NOT available via MCP | **User via CLI only** |
 
 **Example:**
@@ -423,14 +423,14 @@ Before using strata MCP in production:
 
 ## Common Threats & Mitigations
 
-| Threat | Mitigation |
-|--------|-----------|
-| AI tool executes destructive operations without approval | Only CLI can execute; MCP is preview/query only |
-| Secrets leaked in AI chat | Secrets never exposed via MCP; resolved at CLI time |
-| Unauthorized user runs deployments | RBAC + file permissions; audit logs track who ran what |
-| Deployment fails silently | Audit logs capture success/failure; Claude can query history |
-| Invalid YAML deploys to production | `validate_file()` catches issues; always validate before deploy |
-| Infrastructure drift undetected | `deploy_status()` and `deploy_health()` detect changes |
+| Threat                                                   | Mitigation                                                      |
+| -------------------------------------------------------- | --------------------------------------------------------------- |
+| AI tool executes destructive operations without approval | Only CLI can execute; MCP is preview/query only                 |
+| Secrets leaked in AI chat                                | Secrets never exposed via MCP; resolved at CLI time             |
+| Unauthorized user runs deployments                       | RBAC + file permissions; audit logs track who ran what          |
+| Deployment fails silently                                | Audit logs capture success/failure; Claude can query history    |
+| Invalid YAML deploys to production                       | `validate_file()` catches issues; always validate before deploy |
+| Infrastructure drift undetected                          | `deploy_status()` and `deploy_health()` detect changes          |
 
 ---
 

@@ -6,21 +6,21 @@ Complete API documentation for all strata MCP tools.
 
 The strata MCP server exposes **13 tools** and **2 resources** for infrastructure management.
 
-| Tool | Type | Purpose |
-|------|------|---------|
-| `workspace_status()` | Query | Get workspace state and readiness |
-| `validate_file()` | Query | Validate YAML against schema |
-| `list_schemas()` | Query | List all supported document kinds |
-| `get_schema()` | Query | Get JSON Schema for a kind |
-| `scaffold_file()` | Action | Generate YAML from template |
-| `build_plan()` | Preview | Dry-run: show what build would generate |
-| `build_run()` | Action | Execute build and generate artifacts |
-| `build_sbom()` | Action | Generate SBOM or dependency inventory |
-| `deploy_plan()` | Preview | Dry-run: show what deploy would change |
-| `deploy_status()` | Query | Get current infrastructure state |
-| `deploy_health()` | Action | Run health checks on deployed stages |
-| `deploy_history()` | Query | Get recent deployment history |
-| `audit_query()` | Query | Query deployment audit logs |
+| Tool                 | Type    | Purpose                                 |
+| -------------------- | ------- | --------------------------------------- |
+| `workspace_status()` | Query   | Get workspace state and readiness       |
+| `validate_file()`    | Query   | Validate YAML against schema            |
+| `list_schemas()`     | Query   | List all supported document kinds       |
+| `get_schema()`       | Query   | Get JSON Schema for a kind              |
+| `scaffold_file()`    | Action  | Generate YAML from template             |
+| `build_plan()`       | Preview | Dry-run: show what build would generate |
+| `build_run()`        | Action  | Execute build and generate artifacts    |
+| `build_sbom()`       | Action  | Generate SBOM or dependency inventory   |
+| `deploy_plan()`      | Preview | Dry-run: show what deploy would change  |
+| `deploy_status()`    | Query   | Get current infrastructure state        |
+| `deploy_health()`    | Action  | Run health checks on deployed stages    |
+| `deploy_history()`   | Query   | Get recent deployment history           |
+| `audit_query()`      | Query   | Query deployment audit logs             |
 
 ---
 
@@ -35,9 +35,9 @@ Return full workspace state: readiness phases, profiles, repos, integrations, an
 **Always call this first.** The response tells you exactly what command to run next.
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `work_path` | str | CWD | Workspace root path (override auto-detection) |
+| Parameter   | Type | Default | Description                                   |
+| ----------- | ---- | ------- | --------------------------------------------- |
+| `work_path` | str  | CWD     | Workspace root path (override auto-detection) |
 
 **Returns:**
 ```json
@@ -88,11 +88,11 @@ Validate a strata YAML file against its kind-specific schema.
 2. **Phase 2 (deep=True):** Cross-reference validation (requires active profile)
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `file_path` | str | required | Path to YAML (absolute or relative to work_path) |
-| `work_path` | str | CWD | Workspace root |
-| `deep` | bool | False | Enable Phase 2 cross-reference validation |
+| Parameter   | Type | Default  | Description                                      |
+| ----------- | ---- | -------- | ------------------------------------------------ |
+| `file_path` | str  | required | Path to YAML (absolute or relative to work_path) |
+| `work_path` | str  | CWD      | Workspace root                                   |
+| `deep`      | bool | False    | Enable Phase 2 cross-reference validation        |
 
 **Returns:**
 ```json
@@ -180,9 +180,9 @@ for kind in result["data"]["kinds"]:
 Return the full JSON Schema for a strata document kind.
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `kind` | str | required | Document kind (e.g., deployment, namespace) |
+| Parameter | Type | Default  | Description                                 |
+| --------- | ---- | -------- | ------------------------------------------- |
+| `kind`    | str  | required | Document kind (e.g., deployment, namespace) |
 
 **Returns:** JSON Schema (OpenAPI 3.0 format)
 
@@ -222,11 +222,11 @@ validate(instance=yaml_doc, schema=schema["data"])
 Return current infrastructure state (Terraform outputs) for a deployment.
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `file` | str | required | Path to deployment YAML |
-| `work_path` | str | CWD | Workspace root |
-| `stage` | str | None | Limit to specific stage name |
+| Parameter   | Type | Default  | Description                  |
+| ----------- | ---- | -------- | ---------------------------- |
+| `file`      | str  | required | Path to deployment YAML      |
+| `work_path` | str  | CWD      | Workspace root               |
+| `stage`     | str  | None     | Limit to specific stage name |
 
 **Returns:**
 ```json
@@ -269,11 +269,11 @@ for stage in status["data"]["stages"]:
 Return recent deployment execution history.
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `work_path` | str | CWD | Workspace root |
-| `lines` | int | 20 | Number of history entries to return |
-| `operation` | str | None | Filter by operation type: "run" or "destroy" |
+| Parameter   | Type | Default | Description                                  |
+| ----------- | ---- | ------- | -------------------------------------------- |
+| `work_path` | str  | CWD     | Workspace root                               |
+| `lines`     | int  | 20      | Number of history entries to return          |
+| `operation` | str  | None    | Filter by operation type: "run" or "destroy" |
 
 **Returns:**
 ```json
@@ -314,12 +314,12 @@ for entry in history["data"]["entries"]:
 Query deployment audit logs.
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `work_path` | str | CWD | Workspace root |
-| `last` | int | 20 | Max entries to return |
-| `since` | str | None | ISO timestamp: return entries after this time |
-| `stage` | str | None | Filter to specific stage name |
+| Parameter   | Type | Default | Description                                   |
+| ----------- | ---- | ------- | --------------------------------------------- |
+| `work_path` | str  | CWD     | Workspace root                                |
+| `last`      | int  | 20      | Max entries to return                         |
+| `since`     | str  | None    | ISO timestamp: return entries after this time |
+| `stage`     | str  | None    | Filter to specific stage name                 |
 
 **Returns:**
 ```json
@@ -370,10 +370,10 @@ These tools show what _would_ happen without making changes.
 Preview what the build would produce (dry-run).
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `file` | str | required | Path to deployment YAML |
-| `work_path` | str | CWD | Workspace root |
+| Parameter   | Type | Default  | Description             |
+| ----------- | ---- | -------- | ----------------------- |
+| `file`      | str  | required | Path to deployment YAML |
+| `work_path` | str  | CWD      | Workspace root          |
 
 **Returns:**
 ```json
@@ -423,11 +423,11 @@ Preview what the deployment would do (dry-run).
 **Shows Terraform plan output and resource changes.**
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `file` | str | required | Path to deployment YAML |
-| `work_path` | str | CWD | Workspace root |
-| `stage` | str | None | Limit plan to specific stage |
+| Parameter   | Type | Default  | Description                  |
+| ----------- | ---- | -------- | ---------------------------- |
+| `file`      | str  | required | Path to deployment YAML      |
+| `work_path` | str  | CWD      | Workspace root               |
+| `stage`     | str  | None     | Limit plan to specific stage |
 
 **Returns:**
 ```json
@@ -496,11 +496,11 @@ These tools modify the workspace or generate outputs.
 Generate a strata YAML file from template (returns content, doesn't write to disk).
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `kind` | str | required | Document kind (deployment, namespace, etc.) |
-| `name` | str | required | The `meta.name` value |
-| `extra_vars` | dict | {} | Additional template variables (owner, version, etc.) |
+| Parameter    | Type | Default  | Description                                          |
+| ------------ | ---- | -------- | ---------------------------------------------------- |
+| `kind`       | str  | required | Document kind (deployment, namespace, etc.)          |
+| `name`       | str  | required | The `meta.name` value                                |
+| `extra_vars` | dict | {}       | Additional template variables (owner, version, etc.) |
 
 **Returns:**
 ```json
@@ -548,10 +548,10 @@ Execute the full build pipeline and generate artifacts.
 **⚠️ Creates files in `build/` directory. Safe to retry/delete.**
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `file` | str | required | Path to deployment YAML |
-| `work_path` | str | CWD | Workspace root |
+| Parameter   | Type | Default  | Description             |
+| ----------- | ---- | -------- | ----------------------- |
+| `file`      | str  | required | Path to deployment YAML |
+| `work_path` | str  | CWD      | Workspace root          |
 
 **Returns:**
 ```json
@@ -596,12 +596,12 @@ Generate SBOM (Software Bill of Materials) or dependency inventory.
 2. **Scan:** Scan directory directly (no deployment file needed)
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `file` | str | None | Path to deployment YAML (standard mode) |
-| `work_path` | str | CWD | Workspace root |
-| `scan` | str | None | Directory to scan (scan mode) |
-| `report` | str | "inventory" | Output format: "cyclonedx" (JSON) or "inventory" (text) |
+| Parameter   | Type | Default     | Description                                             |
+| ----------- | ---- | ----------- | ------------------------------------------------------- |
+| `file`      | str  | None        | Path to deployment YAML (standard mode)                 |
+| `work_path` | str  | CWD         | Workspace root                                          |
+| `scan`      | str  | None        | Directory to scan (scan mode)                           |
+| `report`    | str  | "inventory" | Output format: "cyclonedx" (JSON) or "inventory" (text) |
 
 **Returns (inventory mode):**
 ```json
@@ -664,11 +664,11 @@ Run health checks against provisioned deployment stages.
 **Executes HTTP GET or TCP checks defined in deployment YAML.**
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `file` | str | required | Path to deployment YAML |
-| `work_path` | str | CWD | Workspace root |
-| `stage` | str | None | Limit checks to specific stage |
+| Parameter   | Type | Default  | Description                    |
+| ----------- | ---- | -------- | ------------------------------ |
+| `file`      | str  | required | Path to deployment YAML        |
+| `work_path` | str  | CWD      | Workspace root                 |
+| `stage`     | str  | None     | Limit checks to specific stage |
 
 **Returns:**
 ```json
@@ -769,12 +769,12 @@ else:
 
 ### Error Codes
 
-| Code | Meaning | Action |
-|------|---------|--------|
-| 0 | Success | Proceed normally |
-| 1 | System/execution failure | Check `messages` for crash reason |
-| 2 | Usage error (bad arguments) | Fix command syntax |
-| 3 | Validation failure | Check `errors` array for specifics |
+| Code | Meaning                     | Action                             |
+| ---- | --------------------------- | ---------------------------------- |
+| 0    | Success                     | Proceed normally                   |
+| 1    | System/execution failure    | Check `messages` for crash reason  |
+| 2    | Usage error (bad arguments) | Fix command syntax                 |
+| 3    | Validation failure          | Check `errors` array for specifics |
 
 ### Example Error Response
 
