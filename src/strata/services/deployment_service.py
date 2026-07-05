@@ -11,6 +11,7 @@ from strata.services.base_service import BaseService
 from strata.services.configuration_service import ConfigurationService
 from strata.services.environment_service import EnvironmentService
 from strata.services.workspace_service import WorkspaceService
+from strata.utils.merge_provenance import MergeProvenance
 
 
 class DeploymentService(BaseService["DeploymentModel"]):
@@ -22,6 +23,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
         # self._related_services: Optional[Dict[str, Optional[BaseService]]] = None
         self._environment_service: Optional[EnvironmentService] = None
         self._workspace_service: Optional[WorkspaceService] = None
+        self._merge_provenance: Optional[MergeProvenance] = None
         self._validation_errors: List[str] = []
         self._structured_errors: List = []
 
@@ -707,7 +709,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 if len(env_paths) > 1:
                     self.logger.debug("Merging environment files for deployment", count=len(env_paths))
                     work_path = Path(objects_path)
-                    merged_env = EnvironmentService.merge_envfiles(env_paths, work_path)
+                    merged_env, merge_provenance = EnvironmentService.merge_envfiles(env_paths, work_path)
+                    self._merge_provenance = merge_provenance
                     # Create a service from the merged model
                     env_service = EnvironmentService(data=merged_env.model_dump())
                     # Validate the merged environment
@@ -956,6 +959,14 @@ class DeploymentService(BaseService["DeploymentModel"]):
             raise ServiceNotValidatedError("EnvironmentService")
 
         return self._environment_service
+
+    def get_merge_provenance(self) -> Optional[MergeProvenance]:
+        """Return the merge provenance from the last :meth:`merge_envfiles` call.
+
+        Returns ``None`` when the deployment uses a single environment file
+        (no merge was performed).
+        """
+        return self._merge_provenance
 
     def get_workspace_service(self) -> Optional[WorkspaceService]:
         """

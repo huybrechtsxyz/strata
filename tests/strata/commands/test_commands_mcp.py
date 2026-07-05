@@ -190,3 +190,114 @@ class TestMcpServerTools:
         with patch("strata.commands.status.show_status_command.StatusCommand.execute", return_value=True):
             result = mcp_server_module.workspace_status(work_path=str(tmp_path))
         assert isinstance(result, dict)
+
+    # -- new tools -----------------------------------------------------------
+
+    def test_server_has_audit_query_tool(self, mcp_server_module):
+        assert hasattr(mcp_server_module, "audit_query")
+        assert callable(mcp_server_module.audit_query)
+
+    def test_server_has_deploy_history_tool(self, mcp_server_module):
+        assert hasattr(mcp_server_module, "deploy_history")
+        assert callable(mcp_server_module.deploy_history)
+
+    def test_server_has_deploy_status_tool(self, mcp_server_module):
+        assert hasattr(mcp_server_module, "deploy_status")
+        assert callable(mcp_server_module.deploy_status)
+
+    def test_server_has_deploy_health_tool(self, mcp_server_module):
+        assert hasattr(mcp_server_module, "deploy_health")
+        assert callable(mcp_server_module.deploy_health)
+
+    def test_server_has_build_sbom_tool(self, mcp_server_module):
+        assert hasattr(mcp_server_module, "build_sbom")
+        assert callable(mcp_server_module.build_sbom)
+
+    # -- _run_command envelope -----------------------------------------------
+
+    def test_run_command_envelope_on_success(self, mcp_server_module, tmp_path):
+        """_run_command returns {success, data, errors, messages} on success."""
+
+        class _FakeCmd:
+            _output_data = {"key": "value"}
+
+            def execute(self):
+                pass
+
+            def has_errors(self):
+                return False
+
+            def get_errors(self):
+                return []
+
+            def get_messages(self):
+                return ["all good"]
+
+        result = mcp_server_module._run_command(_FakeCmd())
+        assert result["success"] is True
+        assert result["data"] == {"key": "value"}
+        assert result["errors"] == []
+        assert result["messages"] == ["all good"]
+
+    def test_run_command_envelope_on_failure(self, mcp_server_module):
+        """_run_command surfaces errors and sets success=False."""
+
+        class _FailingCmd:
+            _output_data = {}
+
+            def execute(self):
+                pass
+
+            def has_errors(self):
+                return True
+
+            def get_errors(self):
+                return ["something went wrong"]
+
+            def get_messages(self):
+                return []
+
+        result = mcp_server_module._run_command(_FailingCmd())
+        assert result["success"] is False
+        assert "something went wrong" in result["errors"]
+
+    # -- audit_query functional -----------------------------------------------
+
+    def test_audit_query_returns_entries(self, mcp_server_module, tmp_path):
+        """audit_query calls AuditController and returns a structured dict."""
+        from unittest.mock import MagicMock
+
+        fake_entry = MagicMock()
+        fake_entry.model_dump.return_value = {"deployment": "test", "success": True}
+
+        with patch(
+            "strata.controllers.audit_controller.AuditController.query_deploy_logs",
+            return_value=[fake_entry],
+        ):
+            result = mcp_server_module.audit_query(work_path=str(tmp_path), last=5)
+
+        assert result["success"] is True
+        assert result["count"] == 1
+        assert result["entries"][0]["deployment"] == "test"
+
+    def test_audit_query_empty_returns_zero_count(self, mcp_server_module, tmp_path):
+        with patch(
+            "strata.controllers.audit_controller.AuditController.query_deploy_logs",
+            return_value=[],
+        ):
+            result = mcp_server_module.audit_query(work_path=str(tmp_path))
+
+        assert result["success"] is True
+        assert result["count"] == 0
+        assert result["entries"] == []
+
+    # -- deploy_history functional --------------------------------------------
+
+    def test_deploy_history_calls_command(self, mcp_server_module, tmp_path):
+        with patch(
+            "strata.commands.deploy.history_deploy_command.HistoryDeployCommand.execute",
+            return_value=True,
+        ):
+            result = mcp_server_module.deploy_history(work_path=str(tmp_path))
+        assert isinstance(result, dict)
+        assert "success" in result

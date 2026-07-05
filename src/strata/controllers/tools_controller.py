@@ -153,7 +153,7 @@ class ToolsController(BaseController):
             ws_svc = WorkspaceService.load(str(base / dep.spec.workspace.file))
             if ws_svc.is_validated() and ws_svc.model is not None:
                 for prov in ws_svc.model.spec.provisioners or []:
-                    mapped = _PROVISIONER_TO_INTEGRATION.get(prov.provisioner.value)
+                    mapped = _PROVISIONER_TO_INTEGRATION.get(prov.provisioner)
                     if mapped:
                         _mark(mapped, True)
         except Exception as exc:

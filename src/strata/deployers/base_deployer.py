@@ -12,6 +12,7 @@ from strata.services.deployment_service import DeploymentService
 
 if TYPE_CHECKING:
     from strata.controllers.solution_controller import SolutionController
+    from strata.utils.resolved_values import ResolvedValues
 
 # Canonical step name constants — use these in get_supported_steps() and callers.
 STEP_SETUP = "setup"
@@ -22,6 +23,8 @@ STEP_DESTROY = "destroy"
 STEP_PLAN_DESTROY = "plan_destroy"
 STEP_SHOW_PLAN = "show_plan"
 STEP_OUTPUT = "output"
+STEP_STATUS = "status"
+STEP_HEALTH = "health"
 
 
 class BaseDeployer(ABC):
@@ -51,6 +54,7 @@ class BaseDeployer(ABC):
         verbose: bool = False,
         force: bool = False,
         solution_controller: Optional["SolutionController"] = None,
+        resolved_values: Optional["ResolvedValues"] = None,
     ):
         self.stage = stage
         self.deployment_service = deployment_service
@@ -60,6 +64,7 @@ class BaseDeployer(ABC):
         self.verbose = verbose
         self.force = force
         self.solution_controller = solution_controller
+        self.resolved_values = resolved_values
         self.logger = get_logger(self.__class__.__module__)
 
     # ------------------------------------------------------------------
@@ -226,6 +231,33 @@ class BaseDeployer(ABC):
             (success, outputs_dict, messages)
         """
         raise NotImplementedError
+
+    # ------------------------------------------------------------------
+    # Optional lifecycle methods (non-abstract, override as needed)
+    # ------------------------------------------------------------------
+
+    def status(self) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """Query current infrastructure state.
+
+        Override in deployers that can report live state (e.g. terraform show).
+        Default returns empty data with an informational message.
+
+        Returns:
+            (success, status_data, messages)
+        """
+        return True, {}, [f"Status not implemented for '{self.get_deployer_name()}' provisioner"]
+
+    def health(self) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """Run health checks against deployed infrastructure.
+
+        Override in deployers that can verify deployment health (e.g. helm
+        status, argocd app health).  Default returns empty data with an
+        informational message.
+
+        Returns:
+            (success, health_data, messages)
+        """
+        return True, {}, [f"Health check not implemented for '{self.get_deployer_name()}' provisioner"]
 
     # ------------------------------------------------------------------
     # Timeout helpers

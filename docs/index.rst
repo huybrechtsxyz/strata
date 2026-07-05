@@ -31,6 +31,18 @@ strata
 
 .. toctree::
    :maxdepth: 2
+   :caption: MCP Server for AI Agents:
+
+   mcp/README
+   mcp/setup-and-installation
+   mcp/claude-deployment-assistant
+   mcp/copilot-integration
+   mcp/security-and-workflows
+   mcp/ai-troubleshooting
+   mcp/tools-reference
+
+.. toctree::
+   :maxdepth: 2
    :caption: Platform Reference:
 
    platform/readme
@@ -54,6 +66,7 @@ strata
    platform/services
    platform/configuration
    platform/integrations
+   platform/mcp
    platform/builders
    platform/deployers
    platform/validators
@@ -125,6 +138,8 @@ strata
    decisions/0020-lifecycle-phases-and-environment-variables
    decisions/0021-deployment-manifests-as-first-class-build-artifacts
    decisions/0022-siem-integration-splunk-hec-cef
+   decisions/0023-pluggable-provisioner-framework
+   decisions/0024-environment-composition-flat-merge-fix
 
 .. toctree::
    :maxdepth: 2
@@ -137,6 +152,7 @@ strata
    guides/faq
    guides/config-faq
    guides/cookbook-add-environment
+   guides/environment-composition
    guides/pattern-cross-env-changes
    guides/troubleshooting-what-changed
    guides/setup-azure-oidc
@@ -145,6 +161,7 @@ strata
    guides/siem-audit-forwarding
    guides/extending-sbom-plugins
    guides/sbom-plugin-examples
+   guides/cve-vulnerability-scanning
    guides/at-scale
    guides/using-console
 

@@ -8,15 +8,21 @@ from strata.builders.sbom.lockfile_parsers._registry import DEFAULT_REGISTRY
 
 
 class RawDependency(NamedTuple):
-    """A (name, version) pair extracted from a dependency manifest.
+    """A (name, version, dep_type) triple extracted from a dependency manifest.
 
     ``version`` is ``None`` when the dependency is unpinned or the format
     does not express an exact version.  A purl without ``@version`` is valid
     per the purl spec and means "version unspecified".
+
+    ``dep_type`` carries the semantic role of the dependency when the lockfile
+    format distinguishes them.  Common values: ``"dev"``, ``"optional"``,
+    ``"peer"``, ``"test"``, ``"build"``.  ``None`` means the format does not
+    differentiate, or the parser has not been updated to populate this field.
     """
 
     name: str
     version: Optional[str]
+    dep_type: Optional[str] = None
 
 
 class LockfileParser(ABC):

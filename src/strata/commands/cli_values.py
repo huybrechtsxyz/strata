@@ -61,6 +61,13 @@ def values_group():
     default=False,
     help="Show only entries that failed to resolve.",
 )
+@click.option(
+    "--trace",
+    "trace",
+    is_flag=True,
+    default=False,
+    help="Show which environment file each value originates from (provenance).",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -71,6 +78,7 @@ def values_list(
     type_filter: Optional[str] = None,
     show_store: bool = False,
     unresolved_only: bool = False,
+    trace: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -87,6 +95,7 @@ def values_list(
         type_filter=type_filter,
         show_store=show_store,
         unresolved_only=unresolved_only,
+        trace=trace,
         output=output,
         verbose=verbose,
         quiet=quiet,

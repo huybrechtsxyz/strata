@@ -8,8 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.deployers.terraform_deployer import TerraformDeployer
-from strata.models.common_models import ProvisionerType
+from strata.deployers.factory import DeployerFactory
 from strata.models.deployment_model import DeploymentStageModel, HealthCheckModel
 
 
@@ -310,28 +309,16 @@ class HealthDeployCommand(BaseDeployCommand):
         Returns None silently when no provisioner is configured (health checks
         run without live deployer output in that case).
         """
-        resolved_type: Optional[str] = None
+        if self._deployment_service is None:
+            return None
 
-        if stage.provisioner and self._deployment_service is not None:
-            workspace_service = self._deployment_service.get_workspace_service()
-            if workspace_service:
-                spec = workspace_service.model.spec  # type: ignore[union-attr]
-                _provisioners = spec.provisioners or []
-                _iac = next((p for p in _provisioners if p.name == stage.provisioner), None)
-                if _iac and _iac.provisioner == ProvisionerType.TERRAFORM:
-                    resolved_type = "terraform"
-                elif _iac and _iac.provisioner == ProvisionerType.ANSIBLE:
-                    resolved_type = "ansible"
-                elif _iac and _iac.provisioner == ProvisionerType.COMPOSE:
-                    resolved_type = "compose"
-                elif _iac and _iac.provisioner == ProvisionerType.HELM:
-                    resolved_type = "helm"
-
+        resolved_type, _errors = DeployerFactory.resolve_type(stage, self._deployment_service)
         if resolved_type is None:
             return None
 
-        if resolved_type == "terraform":
-            return TerraformDeployer(
+        try:
+            return DeployerFactory.create(
+                resolved_type,
                 stage=stage,
                 deployment_service=self._deployment_service,  # type: ignore[arg-type]
                 configuration_service=self._configuration_service,  # type: ignore[arg-type]
@@ -339,41 +326,5 @@ class HealthDeployCommand(BaseDeployCommand):
                 work_path=self._work_path,
                 verbose=self._is_verbose(),
             )
-
-        if resolved_type == "ansible":
-            from strata.deployers.ansible_deployer import AnsibleDeployer
-
-            return AnsibleDeployer(
-                stage=stage,
-                deployment_service=self._deployment_service,  # type: ignore[arg-type]
-                configuration_service=self._configuration_service,  # type: ignore[arg-type]
-                build_path=self._build_path,
-                work_path=self._work_path,
-                verbose=self._is_verbose(),
-            )
-
-        if resolved_type == "compose":
-            from strata.deployers.compose_deployer import ComposeDeployer
-
-            return ComposeDeployer(
-                stage=stage,
-                deployment_service=self._deployment_service,  # type: ignore[arg-type]
-                configuration_service=self._configuration_service,  # type: ignore[arg-type]
-                build_path=self._build_path,
-                work_path=self._work_path,
-                verbose=self._is_verbose(),
-            )
-
-        if resolved_type == "helm":
-            from strata.deployers.helm_deployer import HelmDeployer
-
-            return HelmDeployer(
-                stage=stage,
-                deployment_service=self._deployment_service,  # type: ignore[arg-type]
-                configuration_service=self._configuration_service,  # type: ignore[arg-type]
-                build_path=self._build_path,
-                work_path=self._work_path,
-                verbose=self._is_verbose(),
-            )
-
-        return None
+        except ValueError:
+            return None

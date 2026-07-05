@@ -69,8 +69,8 @@ class ComposeDeployer(BaseDeployer):
             verbose=verbose,
             force=force,
             solution_controller=solution_controller,
+            resolved_values=resolved_values,
         )
-        self.resolved_values = resolved_values
         self._compose_files: Dict[str, Path] = {}
         self._docker: Optional[DockerIntegration] = None
 

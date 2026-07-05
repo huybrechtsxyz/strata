@@ -257,19 +257,16 @@ class OutputDeployCommand(BaseDeployCommand):
         if not stage.provisioner or self._deployment_service is None:
             self._errors.append(f"Stage '{stage.name}': missing provisioner reference.")
             return None
-
         workspace_service = self._deployment_service.get_workspace_service()
         if not workspace_service:
             self._errors.append(f"Stage '{stage.name}': workspace service not loaded.")
             return None
-
         spec = workspace_service.model.spec  # type: ignore[union-attr]
         provisioners = spec.provisioners or []
         iac = next((p for p in provisioners if p.name == stage.provisioner), None)
         if iac is None or iac.provisioner != ProvisionerType.TERRAFORM:
             self._errors.append(f"Stage '{stage.name}': provisioner '{stage.provisioner}' is not terraform.")
             return None
-
         return TerraformDeployer(
             stage=stage,
             deployment_service=self._deployment_service,  # type: ignore[arg-type]

@@ -50,9 +50,18 @@ def _work_path(work_path: Optional[str]) -> str:
 
 
 def _run_command(cmd: Any) -> Dict[str, Any]:
-    """Execute a BaseCommand in quiet mode and return its output_data dict."""
+    """Execute a BaseCommand and return a structured envelope.
+
+    Always returns ``{success, data, errors, messages}`` so MCP callers can
+    inspect ``success`` and read ``errors`` without extra logic.
+    """
     cmd.execute()
-    return cmd._output_data  # type: ignore[attr-defined]
+    return {
+        "success": not cmd.has_errors(),  # type: ignore[attr-defined]
+        "data": cmd._output_data,  # type: ignore[attr-defined]
+        "errors": cmd.get_errors(),  # type: ignore[attr-defined]
+        "messages": cmd.get_messages(),  # type: ignore[attr-defined]
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +291,185 @@ def deploy_plan(
         work_path=_work_path(work_path),
         stage=stage,
         dry_run=True,
+        output="json",
+        quiet=True,
+    )
+    return _run_command(cmd)
+
+
+# ---------------------------------------------------------------------------
+# Tool: audit_query
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def audit_query(
+    work_path: Optional[str] = None,
+    last: int = 20,
+    since: Optional[str] = None,
+    stage: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Query deploy-log entries from workspace audit logs.
+
+    Args:
+        work_path: Workspace root. Defaults to CWD.
+        last: Maximum number of entries to return (default 20).
+        since: ISO timestamp — return only entries after this time (e.g. "2026-07-01T00:00:00").
+        stage: Filter to entries that executed a specific stage name.
+
+    Returns ``{"success": true, "entries": [...], "count": N}``.
+    Each entry has: timestamp, deployment, success, duration_seconds, stages[].
+    """
+    from strata.controllers.audit_controller import AuditController
+    from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+
+    wp = Path(_work_path(work_path))
+    base_path = wp / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+    controller = AuditController(work_path=wp)
+    entries = controller.query_deploy_logs(
+        base_path=base_path,
+        since=since,
+        stage=stage,
+        last=last,
+    )
+    entries_data = [e.model_dump(exclude_none=True) for e in entries]
+    return {"success": True, "entries": entries_data, "count": len(entries_data)}
+
+
+# ---------------------------------------------------------------------------
+# Tool: deploy_history
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def deploy_history(
+    work_path: Optional[str] = None,
+    lines: int = 20,
+    operation: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Return recent deployment execution history from workspace logs.
+
+    Does not require a deployment YAML file — reads ``.strata/logs/`` only.
+
+    Args:
+        work_path: Workspace root. Defaults to CWD.
+        lines: Maximum history entries to return (default 20).
+        operation: Filter by operation type — ``"run"`` or ``"destroy"``.
+    """
+    from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
+
+    cmd = HistoryDeployCommand(
+        work_path=_work_path(work_path),
+        lines=lines,
+        operation=operation,
+        output="json",
+        quiet=True,
+    )
+    return _run_command(cmd)
+
+
+# ---------------------------------------------------------------------------
+# Tool: deploy_status
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def deploy_status(
+    file: str,
+    work_path: Optional[str] = None,
+    stage: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Return live infrastructure outputs (Terraform) for a deployment.
+
+    Runs ``terraform output -json`` for each provisioned stage and returns the
+    current infrastructure state. Use this to inspect what is deployed, not to
+    check execution history (use ``deploy_history`` for that).
+
+    Args:
+        file: Path to the deployment YAML file.
+        work_path: Workspace root. Defaults to CWD.
+        stage: Limit output to a specific stage name.
+    """
+    from strata.commands.deploy.status_deploy_command import StatusDeployCommand
+
+    cmd = StatusDeployCommand(
+        file=file,
+        work_path=_work_path(work_path),
+        stage=stage,
+        output="json",
+        quiet=True,
+    )
+    return _run_command(cmd)
+
+
+# ---------------------------------------------------------------------------
+# Tool: deploy_health
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def deploy_health(
+    file: str,
+    work_path: Optional[str] = None,
+    stage: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run health checks against provisioned deployment stages.
+
+    For each stage that has ``health_checks`` defined, resolves the target
+    (URL / host:port) from Terraform outputs and executes HTTP GET or TCP
+    connect checks. Returns pass/fail per check and an overall ``success`` flag.
+
+    Args:
+        file: Path to the deployment YAML file.
+        work_path: Workspace root. Defaults to CWD.
+        stage: Limit checks to a specific stage name.
+    """
+    from strata.commands.deploy.health_deploy_command import HealthDeployCommand
+
+    cmd = HealthDeployCommand(
+        file=file,
+        work_path=_work_path(work_path),
+        stage=stage,
+        output="json",
+        quiet=True,
+    )
+    return _run_command(cmd)
+
+
+# ---------------------------------------------------------------------------
+# Tool: build_sbom
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def build_sbom(
+    file: Optional[str] = None,
+    work_path: Optional[str] = None,
+    scan: Optional[str] = None,
+    report: str = "inventory",
+) -> Dict[str, Any]:
+    """Generate an SBOM or dependency inventory for a deployment.
+
+    Standard mode (``file`` provided): loads the platform artifact from a
+    previous ``build_run``, runs all SBOM collectors, and returns the result.
+
+    Scan mode (``scan`` provided): runs file-based collectors against the given
+    directory without requiring a workspace or deployment file.
+
+    Args:
+        file: Path to the deployment YAML file (standard mode).
+        work_path: Workspace root. Defaults to CWD.
+        scan: Directory to scan directly (scan mode; no deployment file needed).
+        report: ``"cyclonedx"`` for a machine-readable SBOM, or ``"inventory"``
+                for a human-readable component list (default).
+    """
+    from strata.commands.builders.sbom_build_command import SbomBuildCommand
+
+    cmd = SbomBuildCommand(
+        file=file,
+        work_path=_work_path(work_path),
+        scan_path=scan,
+        report=report,
         output="json",
         quiet=True,
     )
