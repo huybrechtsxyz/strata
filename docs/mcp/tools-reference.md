@@ -186,7 +186,7 @@ Return the full JSON Schema for a strata document kind.
 
 **Returns:** JSON Schema (OpenAPI 3.0 format)
 
-```json
+```text
 {
   "success": true,
   "data": {

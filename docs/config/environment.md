@@ -508,13 +508,52 @@ spec:
       value: 1
 ```
 
+## Multi-file Composition
+
+A deployment can list multiple environment files under `spec.environments`. strata merges
+them left-to-right before applying overrides to the workspace. Later files win on conflict.
+
+```yaml
+# deploy-prd.yaml
+spec:
+  environments:
+    - environments/base.yaml        # shared baseline
+    - environments/eu-region.yaml   # region-specific settings
+    - environments/prd.yaml         # production overrides — highest precedence
+```
+
+### Per-section merge strategy
+
+| Section                  | Strategy                                                           |
+| ------------------------ | ------------------------------------------------------------------ |
+| `variables`              | Last-wins by `key`                                                 |
+| `secrets`                | Last-wins by `key`                                                 |
+| `features`               | Last-wins by `key` (each flag merged independently)                |
+| `properties`             | Shallow `dict.update()` — keys absent in later files are preserved |
+| `custom`                 | Shallow `dict.update()`                                            |
+| `lifecycle`              | Last-wins (wholesale)                                              |
+| `audit`                  | Last-wins (wholesale)                                              |
+| `overrides.resources`    | Last-wins by `resource` name                                       |
+| `overrides.modules`      | Last-wins by `(module, resource, namespace, slot_type)`            |
+| `overrides.providers`    | Last-wins by `provider` name                                       |
+| `overrides.remotes`      | Last-wins by `remote` name                                         |
+| `overrides.properties`   | Shallow `dict.update()`                                            |
+| `overrides.includes`     | Append, deduplicated by `source` path                              |
+| `overrides.output_files` | Append, deduplicated by output `path`                              |
+
+Single-file deployments follow the same rules — they simply produce an unchanged result.
+
+See [Environment Composition](../guides/environment-composition.md) for patterns and examples.
+
 ## Configuration Merge Order
 
 1. Workspace defaults (base)
 2. Environment overrides (override/extend)
 3. Runtime parameters (CLI args)
 
-**Merge strategy:** Variables/secrets with same key override, new keys extend.
+**Merge strategy:** Variables/secrets with the same key override; new keys extend.
+Properties and custom use shallow dict merge. See the [composition section above](#multi-file-composition)
+for the full per-section table when multiple environment files are listed.
 
 ## Use Cases
 

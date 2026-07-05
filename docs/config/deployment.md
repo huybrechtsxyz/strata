@@ -153,12 +153,30 @@ Precedence from lowest to highest:
 
 1. Workspace defaults (base)
 2. Environment 1
-3. Environment 2...N (in order)
+3. Environment 2…N (in order)
 4. Configuration 1
-5. Configuration 2...N (in order)
+5. Configuration 2…N (in order)
 6. **Deployment overrides** (highest precedence)
 
-**Merge rules:** Later values override earlier by key (variables/secrets) or extend/override (properties/custom/features).
+**Per-section merge rules when multiple environment files are listed:**
+
+| Section                                         | Strategy                                                                 |
+| ----------------------------------------------- | ------------------------------------------------------------------------ |
+| `variables` / `secrets`                         | Last-wins by `key`                                                       |
+| `features`                                      | Last-wins by `key` (each flag merged independently)                      |
+| `properties` / `custom`                         | Shallow `dict.update()` — earlier keys preserved if absent in later file |
+| `lifecycle` / `audit`                           | Last-wins (wholesale)                                                    |
+| `overrides.resources` / `providers` / `remotes` | Last-wins by name                                                        |
+| `overrides.modules`                             | Last-wins by `(module, resource, namespace, slot_type)`                  |
+| `overrides.includes` / `output_files`           | Additive (deduplicated)                                                  |
+
+To trace which file contributed each resolved value:
+
+```bash
+strata values list -f deploy/deploy-prd.yaml --trace
+```
+
+See [Environment Composition](../guides/environment-composition.md) for patterns and full examples.
 
 ## Examples
 
