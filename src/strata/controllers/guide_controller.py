@@ -742,7 +742,9 @@ class GuideController(BaseController):
             check_fn = self._workflow_checks.get(step.check)
             if check_fn is None:
                 self.logger.warning("Unknown check function in workflow", check=step.check, step=step.id)
-                checklist.append(ChecklistItem(phase, step.name, "warn", f"unknown check: {step.check}", step_id=step.id))
+                checklist.append(
+                    ChecklistItem(phase, step.name, "warn", f"unknown check: {step.check}", step_id=step.id)
+                )
                 step_results[step.id] = "warn"
                 continue
 

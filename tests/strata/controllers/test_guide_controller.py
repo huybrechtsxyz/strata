@@ -456,7 +456,7 @@ class TestGuideControllerWorkflowNextStep:
         # Do NOT call evaluate_from_workflow() first
         step = ctrl.find_next_step_from_workflow()
         assert step is not None
-        assert step.phase == 1        # workspace_init is pending → repos_registered and profile_created should be skipped
+        assert step.phase == 1  # workspace_init is pending → repos_registered and profile_created should be skipped
         _make_workspace(tmp_path)
         ctrl = GuideController(tmp_path)
         ctrl.load()

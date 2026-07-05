@@ -77,6 +77,7 @@ strata
    config/dns
    config/network
    config/manifest
+   config/workflow
 
 .. toctree::
    :maxdepth: 2
@@ -136,6 +137,7 @@ strata
    guides/setup-azure-oidc
    guides/deployment-manifests
    guides/at-scale
+   guides/using-console
 
 .. toctree::
    :maxdepth: 1
