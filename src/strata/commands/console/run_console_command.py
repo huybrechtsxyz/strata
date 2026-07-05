@@ -53,7 +53,7 @@ class ConsoleCommand(BaseCommand):
 
             self._guide_controller = GuideController(self._work_path)
             self._guide_controller.load()
-            self._guide_controller.evaluate()
+            self._guide_controller.evaluate_from_workflow()
 
             self._session = self._create_prompt_session()
 
@@ -138,27 +138,27 @@ class ConsoleCommand(BaseCommand):
     def _handle_status(self) -> None:
         assert self._guide_controller is not None
         self._guide_controller.reload()
-        self._guide_controller.evaluate()
+        self._guide_controller.evaluate_from_workflow()
         self._render_status()
 
     def _handle_next(self) -> None:
         assert self._guide_controller is not None
         self._guide_controller.reload()
-        self._guide_controller.evaluate()
+        self._guide_controller.evaluate_from_workflow()
         self._render_next()
 
     def _handle_do(self) -> None:
         assert self._guide_controller is not None
         self._guide_controller.reload()
-        self._guide_controller.evaluate()
-        next_step = self._guide_controller.find_next_step()
+        self._guide_controller.evaluate_from_workflow()
+        next_step = self._guide_controller.find_next_step_from_workflow()
 
         if next_step is None:
             self._console.print("[green]✅ All steps complete. Your workspace is ready.[/green]")
             return
 
-        # Execute the hint as a command (first line only)
-        command = next_step.hint.splitlines()[0].strip()
+        # Prefer the concrete command from the workflow; fall back to first line of hint
+        command = next_step.command or next_step.hint.splitlines()[0].strip()
         if not command or command.startswith("#"):
             self._console.print(f"[yellow]→ Manual step required:[/yellow] {next_step.hint}")
             return
@@ -233,7 +233,7 @@ class ConsoleCommand(BaseCommand):
     def _handle_reload(self) -> None:
         assert self._guide_controller is not None
         self._guide_controller.reload()
-        self._guide_controller.evaluate()
+        self._guide_controller.evaluate_from_workflow()
         self._console.print("[green]✅ Workspace state reloaded.[/green]")
         self._render_status()
 
@@ -246,7 +246,7 @@ class ConsoleCommand(BaseCommand):
         assert self._guide_controller is not None
         old_checklist = list(self._guide_controller.checklist)
         self._guide_controller.reload()
-        new_checklist = self._guide_controller.evaluate()
+        new_checklist = self._guide_controller.evaluate_from_workflow()
 
         # Show delta
         for old, new in zip(old_checklist, new_checklist, strict=False):
@@ -298,7 +298,7 @@ class ConsoleCommand(BaseCommand):
         ctrl = self._guide_controller
         assert ctrl is not None
 
-        next_step = ctrl.find_next_step()
+        next_step = ctrl.find_next_step_from_workflow()
         if next_step is None:
             self._console.print()
             self._console.print("[green]→ All setup phases complete. Your workspace is ready to deploy.[/green]")
@@ -307,6 +307,8 @@ class ConsoleCommand(BaseCommand):
         hint_text = Text()
         hint_text.append("→ Next: ", style="bold")
         hint_text.append(next_step.hint)
+        if next_step.command:
+            hint_text.append(f"\n\n  $ {next_step.command}", style="cyan")
         if next_step.see_also:
             hint_text.append(f"\n  See: {next_step.see_also}", style="dim")
 

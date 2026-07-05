@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 import yaml
 
@@ -14,6 +14,13 @@ from strata.controllers.solution_controller import SolutionController
 from strata.exceptions.service_exception import PlatformFileNotFoundError
 from strata.models.common_models import PlatformKind, PlatformVersion
 from strata.models.solution_model import SolutionModel
+from strata.models.workflow_model import (
+    CheckResult,
+    CheckStatus,
+    WorkflowDefinition,
+    WorkflowStep,
+    get_default_workflow,
+)
 
 
 @dataclass
@@ -22,6 +29,7 @@ class ChecklistItem:
     label: str
     status: Literal["ok", "warn", "pending"]
     detail: Optional[str] = None
+    step_id: Optional[str] = None  # Workflow step ID; None for legacy 8-phase checklist
 
 
 @dataclass
@@ -30,6 +38,7 @@ class NextStepItem:
     label: str
     hint: str
     see_also: Optional[str] = None
+    command: Optional[str] = None  # Concrete strata command to run (from workflow.yaml)
 
 
 class GuideController(BaseController):
@@ -43,6 +52,8 @@ class GuideController(BaseController):
         self._checklist: List[ChecklistItem] = []
         self._solution: Optional[SolutionModel] = None
         self._solution_exists: bool = False
+        self._workflow: Optional[WorkflowDefinition] = None
+        self._workflow_checks: Dict[str, Callable[..., CheckResult]] = {}
 
     @property
     def work_path(self) -> Path:
@@ -85,6 +96,11 @@ class GuideController(BaseController):
             return self._solution_controller.get_solution_id()
         return None
 
+    @property
+    def workflow(self) -> Optional[WorkflowDefinition]:
+        """Return the loaded workflow, or None if not loaded."""
+        return self._workflow
+
     # ------------------------------------------------------------------
     # Initialization
     # ------------------------------------------------------------------
@@ -93,6 +109,8 @@ class GuideController(BaseController):
         """Load solution state and hints. Safe to call multiple times (reload)."""
         self._load_solution()
         self._hints = self._load_hints()
+        self._load_workflow()
+        self._register_workflow_checks()
 
     def reload(self) -> None:
         """Re-read workspace state from disk."""
@@ -541,3 +559,298 @@ class GuideController(BaseController):
             next_steps.append(NextStepItem(phase=0, label="Register", hint=register_hint, see_also=see_also))
 
         return next_steps
+
+    # ------------------------------------------------------------------
+    # Private: workflow loading
+    # ------------------------------------------------------------------
+
+    def _load_workflow(self) -> None:
+        """Load .strata/workflow.yaml from workspace; fall back to built-in default."""
+        workspace_workflow = self._work_path / ".strata" / "workflow.yaml"
+        if workspace_workflow.exists():
+            try:
+                with open(workspace_workflow, "r", encoding="utf-8") as fh:
+                    content = fh.read()
+                self._workflow = WorkflowDefinition.load_yaml(content)
+                self.logger.debug("Loaded custom workflow", path=str(workspace_workflow))
+                return
+            except Exception as e:
+                self.logger.warning("Could not load workflow.yaml, using built-in default", error=str(e))
+
+        # Fall back to built-in data file
+        builtin_path = Path(__file__).parent.parent / "data" / "workflow.yaml"
+        if builtin_path.exists():
+            try:
+                with open(builtin_path, "r", encoding="utf-8") as fh:
+                    content = fh.read()
+                self._workflow = WorkflowDefinition.load_yaml(content)
+                return
+            except Exception as e:
+                self.logger.warning("Could not load built-in workflow.yaml, using code default", error=str(e))
+
+        self._workflow = get_default_workflow()
+
+    def _register_workflow_checks(self) -> None:
+        """Register the built-in check functions keyed by name."""
+        self._workflow_checks = {
+            "solution_exists": self._check_solution_exists,
+            "repos_registered": self._check_repos_registered,
+            "repos_cloned": self._check_repos_cloned,
+            "profile_exists": self._check_profile_exists,
+            "profile_active": self._check_profile_active,
+            "files_registered": self._check_files_registered,
+            "build_exists": self._check_build_exists,
+            "sbom_exists": self._check_sbom_exists,
+        }
+
+    # ------------------------------------------------------------------
+    # Private: workflow check functions
+    # ------------------------------------------------------------------
+
+    def _check_solution_exists(self) -> CheckResult:
+        if not self._solution_exists:
+            return CheckResult("pending")
+        if self._solution is None:
+            return CheckResult("warn", "solution.json could not be parsed")
+        if not str(self._solution.meta.name).strip():
+            return CheckResult("warn", "workspace name is empty")
+        return CheckResult("ok")
+
+    def _check_repos_registered(self) -> CheckResult:
+        if self._solution is None:
+            return CheckResult("pending")
+        repos = self._solution.spec.repositories or []
+        if not repos:
+            return CheckResult("pending")
+        return CheckResult("ok", str(len(repos)))
+
+    def _check_repos_cloned(self) -> CheckResult:
+        if self._solution is None:
+            return CheckResult("pending")
+        repos = self._solution.spec.repositories or []
+        missing: List[str] = []
+        for repo in repos:
+            repo_path = Path(repo.path)
+            if not repo_path.is_absolute():
+                repo_path = self._work_path / repo_path
+            if not repo_path.exists():
+                missing.append(str(repo.name))
+        if missing:
+            found = len(repos) - len(missing)
+            return CheckResult("warn", f"{found}/{len(repos)} cloned — {', '.join(missing)} not found")
+        return CheckResult("ok")
+
+    def _check_profile_exists(self) -> CheckResult:
+        if self._solution is None:
+            return CheckResult("pending")
+        profiles = self._solution.spec.profiles or []
+        if not profiles:
+            return CheckResult("pending")
+        detail = ", ".join(str(p.name) for p in profiles)
+        return CheckResult("ok", detail)
+
+    def _check_profile_active(self) -> CheckResult:
+        if self._solution is None:
+            return CheckResult("pending")
+        profiles = self._solution.spec.profiles or []
+        active_list = [p for p in profiles if p.active]
+        if not active_list:
+            return CheckResult("pending")
+        return CheckResult("ok", str(active_list[0].name))
+
+    def _check_files_registered(self) -> CheckResult:
+        if self._solution is None:
+            return CheckResult("pending")
+        profiles = self._solution.spec.profiles or []
+        active_list = [p for p in profiles if p.active]
+        if not active_list:
+            return CheckResult("pending")
+        profile = active_list[0]
+        profile_name = str(profile.name)
+        config_count = len(profile.configfile_paths or [])
+        env_count = len(profile.envfile_paths or [])
+        secret_count = len(profile.secretfile_paths or [])
+        data_count = len(profile.datafile_paths or [])
+        total = config_count + env_count + secret_count + data_count
+        if total == 0:
+            return CheckResult("warn", f"0 registered on active profile '{profile_name}'")
+        type_parts: List[str] = []
+        if config_count:
+            type_parts.append(f"config: {config_count}")
+        if env_count:
+            type_parts.append(f"env: {env_count}")
+        if secret_count:
+            type_parts.append(f"secret: {secret_count}")
+        if data_count:
+            type_parts.append(f"data: {data_count}")
+        detail = f"{total} registered on active profile '{profile_name}' ({', '.join(type_parts)})"
+        return CheckResult("ok", detail)
+
+    def _check_build_exists(self) -> CheckResult:
+        build_path = self._work_path / "build"
+        if not build_path.exists():
+            return CheckResult("pending")
+        if not any(f for f in build_path.rglob("*") if f.is_file()):
+            return CheckResult("warn", "directory is empty")
+        return CheckResult("ok")
+
+    def _check_sbom_exists(self) -> CheckResult:
+        build_path = self._work_path / "build"
+        if not build_path.exists():
+            return CheckResult("pending")
+        sbom_files = list(build_path.rglob("sbom.json"))
+        if not sbom_files:
+            return CheckResult("pending")
+        total_components = 0
+        for sbom_path in sbom_files:
+            try:
+                with open(sbom_path, encoding="utf-8") as fh:
+                    sbom_data = json.load(fh)
+                total_components += len(sbom_data.get("components", []))
+            except Exception:
+                pass
+        if total_components > 0:
+            return CheckResult("ok", f"{total_components} components")
+        return CheckResult("warn", "sbom.json present but empty")
+
+    # ------------------------------------------------------------------
+    # Public: workflow-driven evaluation
+    # ------------------------------------------------------------------
+
+    def evaluate_from_workflow(self) -> List[ChecklistItem]:
+        """Evaluate the workspace checklist driven by workflow.yaml steps.
+
+        Converts workflow step check results to ChecklistItem objects, respecting
+        depends_on ordering. Steps whose dependencies are not satisfied are shown
+        as pending. Results are cached to ``self._checklist``.
+        """
+        if self._workflow is None:
+            return self.evaluate()
+
+        step_results: Dict[str, CheckStatus] = {}
+        checklist: List[ChecklistItem] = []
+
+        for idx, step in enumerate(self._workflow.steps):
+            phase = idx + 1
+
+            deps_satisfied = all(step_results.get(dep) == "ok" for dep in step.depends_on)
+            if not deps_satisfied:
+                checklist.append(ChecklistItem(phase, step.name, "pending", step_id=step.id))
+                step_results[step.id] = "pending"
+                continue
+
+            check_fn = self._workflow_checks.get(step.check)
+            if check_fn is None:
+                self.logger.warning("Unknown check function in workflow", check=step.check, step=step.id)
+                checklist.append(
+                    ChecklistItem(phase, step.name, "warn", f"unknown check: {step.check}", step_id=step.id)
+                )
+                step_results[step.id] = "warn"
+                continue
+
+            result = check_fn()
+            checklist.append(ChecklistItem(phase, step.name, result.status, result.detail, step_id=step.id))
+            step_results[step.id] = result.status
+
+        self._checklist = checklist
+        return checklist
+
+    def find_next_step_from_workflow(self) -> Optional[NextStepItem]:
+        """Walk workflow steps; return first incomplete step whose dependencies are satisfied.
+
+        Uses the cached checklist from ``evaluate_from_workflow()`` when available
+        to avoid re-running check functions. Falls back to ``find_next_step()`` if
+        no workflow is loaded.
+        """
+        if self._workflow is None:
+            return self.find_next_step()
+
+        steps = self._workflow.steps
+
+        # Use the cached checklist when it's consistent with the current workflow
+        # (same number of steps). Otherwise do a lightweight re-evaluation.
+        if self._checklist and len(self._checklist) == len(steps):
+            step_status: Dict[str, CheckStatus] = {
+                item.step_id: item.status  # type: ignore[misc]
+                for item in self._checklist
+                if item.step_id is not None
+            }
+        else:
+            step_status = self._evaluate_step_statuses()
+
+        active_profile = self.active_profile_name
+        for idx, step in enumerate(steps):
+            status = step_status.get(step.id, "pending")
+            if status == "ok":
+                continue
+
+            deps_satisfied = all(step_status.get(dep) == "ok" for dep in step.depends_on)
+            if not deps_satisfied:
+                continue  # skip — not yet actionable
+
+            hint = self._get_dynamic_hint(step) or step.hint
+            if active_profile and "{active}" in hint:
+                hint = hint.replace("{active}", active_profile)
+
+            return NextStepItem(
+                phase=idx + 1,
+                label=step.name,
+                hint=hint,
+                see_also=step.see_also,
+                command=step.command,
+            )
+
+        return None
+
+    # ------------------------------------------------------------------
+    # Private: workflow step evaluation
+    # ------------------------------------------------------------------
+
+    def _evaluate_step_statuses(self) -> Dict[str, CheckStatus]:
+        """Run check functions for all workflow steps; return step-id → status map.
+
+        Respects ``depends_on`` ordering: a step whose dependency is not ``ok``
+        is marked ``pending`` without running its check function.
+        """
+        if self._workflow is None:
+            return {}
+        results: Dict[str, CheckStatus] = {}
+        for step in self._workflow.steps:
+            deps_ok = all(results.get(dep) == "ok" for dep in step.depends_on)
+            if not deps_ok:
+                results[step.id] = "pending"
+                continue
+            check_fn = self._workflow_checks.get(step.check)
+            if check_fn is None:
+                self.logger.warning("Unknown check function in workflow", check=step.check, step=step.id)
+                results[step.id] = "warn"
+                continue
+            results[step.id] = check_fn().status
+        return results
+
+    def _get_dynamic_hint(self, step: WorkflowStep) -> Optional[str]:
+        """Return a runtime-generated hint for steps that need live workspace data.
+
+        Returns ``None`` when no dynamic hint is available (caller falls back to
+        ``step.hint`` from the workflow YAML).
+
+        Currently handles:
+        - ``repos_cloned``: generates ``git clone`` lines for missing repositories.
+        """
+        if step.check == "repos_cloned" and self._solution is not None:
+            repos = self._solution.spec.repositories or []
+            missing = [
+                r
+                for r in repos
+                if not (Path(r.path) if Path(r.path).is_absolute() else self._work_path / r.path).exists()
+            ]
+            lines: List[str] = []
+            for repo in missing:
+                url_str = str(repo.url).strip() if repo.url else ""
+                if url_str:
+                    lines.append(f"git clone {repo.url} {repo.path}")
+                else:
+                    lines.append(f"# local repo not found: {repo.path}")
+            if lines:
+                return "\n".join(lines)
+        return None

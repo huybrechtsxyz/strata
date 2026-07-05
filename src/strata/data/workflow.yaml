@@ -1,0 +1,79 @@
+# Workspace onboarding workflow
+# This file drives the `strata console` interactive session.
+#
+# Customize per-project by editing steps, adding new ones, or changing commands.
+# Each step has a check function that determines if it's complete.
+# Steps can depend on other steps — only complete steps in the checklist become available.
+#
+# Built-in check functions:
+#   - solution_exists: .strata/solution.json exists
+#   - repos_registered: At least one repository is registered in solution.json
+#   - repos_cloned: All registered repositories are cloned to disk
+#   - profile_exists: At least one profile exists
+#   - profile_active: A profile is currently active
+#   - files_registered: Configuration files are registered in the active profile
+#   - build_exists: A build artifact exists (.strata/build/)
+#   - sbom_exists: An SBOM has been generated (.strata/sbom/)
+
+steps:
+  - id: workspace_init
+    name: Workspace initialized
+    check: solution_exists
+    command: "strata sln init {name}"
+    hint: "Initialize the workspace to create .strata/ and solution.json"
+    see_also: "strata help --topic quickstart"
+
+  - id: repos_registered
+    name: Repositories registered
+    check: repos_registered
+    depends_on: [workspace_init]
+    command: "strata repo add {name} {url}"
+    hint: "Register at least one configuration repository"
+    see_also: "strata help --topic repos"
+
+  - id: repos_on_disk
+    name: Repositories on disk
+    check: repos_cloned
+    depends_on: [repos_registered]
+    # command: null  — dynamic, git clone per missing repo
+    hint: "Clone registered repositories to their configured paths"
+    see_also: "strata help --topic repos"
+
+  - id: profile_created
+    name: Profile created
+    check: profile_exists
+    depends_on: [workspace_init]
+    command: "strata profile add {name} --activate"
+    hint: "Create a profile to organize file references"
+    see_also: "strata help --topic profiles"
+
+  - id: profile_activated
+    name: Profile activated
+    check: profile_active
+    depends_on: [profile_created]
+    command: "strata profile activate {name}"
+    hint: "Activate a profile to set the working context"
+    see_also: "strata help --topic profiles"
+
+  - id: files_registered
+    name: File references registered
+    check: files_registered
+    depends_on: [profile_activated]
+    command: "strata ref config add {name} @{repo}/path/to/config.yaml --profile {active}"
+    hint: "Register configuration files against the active profile"
+    see_also: "strata help --topic environments"
+
+  - id: build_exists
+    name: Build artifact exists
+    check: build_exists
+    command: "strata build run"
+    hint: "Run a build to generate deployment artifacts"
+    see_also: "strata help --topic build"
+
+  - id: inventory_generated
+    name: Platform inventory generated
+    check: sbom_exists
+    depends_on: [build_exists]
+    command: "strata build sbom -f {file}"
+    hint: "Generate the platform inventory:\n\n  strata build sbom -f <file>\n\nOr for a human-readable overview:\n\n  strata build sbom -f <file> --report inventory"
+    see_also: "docs/platform/builders.md"
