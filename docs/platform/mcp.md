@@ -1,317 +1,33 @@
-# MCP Server — Design & Implementation Guide
+# MCP Server
 
-**Issue:** [#166 MCP Server Implementation](https://github.com/huybrechtsxyz/strata/issues/166)
-**Milestone:** v1.0.0
-
----
-
-## Overview
-
-The strata MCP server exposes workspace operations as [Model Context Protocol](https://modelcontextprotocol.io/) tools so AI assistants (Claude, GitHub Copilot, ChatGPT) can query and act on a workspace without parsing CLI text output. The server is launched by `strata mcp serve` and communicates over **stdio** (default) or **SSE**.
+The strata MCP server exposes workspace operations as [Model Context Protocol](https://modelcontextprotocol.io/) tools so AI assistants (VS Code Copilot, Claude, ChatGPT) can query and act on a workspace without parsing CLI text output. The server is launched by `strata mcp serve` and communicates over **stdio** (default) or **SSE**.
 
 ---
 
-## Current State (Implemented)
+## Installation
 
-### CLI entry point (`src/strata/commands/cli_mcp.py`)
-- `strata mcp serve --transport stdio|sse` — registered under the `mcp` command group in `cli.py`
-- Lazy-imports `strata.mcp.server`; raises a clear error when the optional `mcp` extra is not installed
+The MCP server requires an optional extra that pulls in the `mcp` SDK:
 
-### Server (`src/strata/mcp/server.py`)
-
-| Tool               | Command class                    | Description                                                             |
-| ------------------ | -------------------------------- | ----------------------------------------------------------------------- |
-| `workspace_status` | `StatusCommand`                  | Full workspace state — readiness phases, profiles, repos                |
-| `validate_file`    | `ValidateCommand`                | Schema + Phase 2 cross-reference validation                             |
-| `list_schemas`     | `PlatformKind`                   | Enumerate all supported document kinds                                  |
-| `get_schema`       | `_KIND_TO_MODEL`                 | Return JSON Schema for a document kind                                  |
-| `scaffold_file`    | `TemplateProcessor`              | Generate YAML from template (no disk write)                             |
-| `build_plan`       | `RunBuildCommand(dry_run=True)`  | Dry-run build                                                           |
-| `build_run`        | `RunBuildCommand(dry_run=False)` | Full build pipeline                                                     |
-| `deploy_plan`      | `RunDeployCommand(dry_run=True)` | Dry-run deploy (safe; explicit user confirm required for actual deploy) |
-
-Resources registered: `strata://schema/{kind}`, `strata://workspace`
-
-### Optional dependency (`pyproject.toml`)
-```toml
-[project.optional-dependencies]
-mcp = ["mcp>=1.0"]
+```bash
+pip install xyz-strata[mcp]
+# or with uv
+uv add xyz-strata[mcp]
 ```
 
-### Tests (`tests/strata/commands/test_commands_mcp.py`)
-- CLI group help / `--transport` option presence
-- Graceful error when `mcp` package absent
-- Presence tests for all 8 tools
-- Functional tests: `list_schemas`, `get_schema`, `scaffold_file`, `workspace_status` (mocked)
+Verify the server starts:
 
----
-
-## Gap Analysis
-
-| Issue Requirement                | Status | Notes                                                               |
-| -------------------------------- | :----: | ------------------------------------------------------------------- |
-| stdio transport                  |   ✅    | `--transport stdio` (default)                                       |
-| SSE/TCP transport                |   ✅    | `--transport sse`                                                   |
-| `strata/validate` tool           |   ✅    | `validate_file`                                                     |
-| `strata/build` tool              |   ✅    | `build_plan` + `build_run`                                          |
-| `strata/deploy` tool (plan)      |   ✅    | `deploy_plan` (dry-run; actual deploy is intentionally CLI-only)    |
-| `strata/audit` tool              |   ❌    | **Missing** — issue explicitly lists this                           |
-| `strata/schema` tool             |   ✅    | `list_schemas` + `get_schema`                                       |
-| Deploy observability tools       |   ❌    | `deploy_history`, `deploy_status`, `deploy_health` missing          |
-| `build_sbom` tool                |   ❌    | **Missing**                                                         |
-| Response envelope compliance     |   ⚠️    | `_run_command` returns `_output_data` only; errors silently dropped |
-| Authentication (API key / SSE)   |   ❌    | Not implemented; deferred (see §3.7)                                |
-| Rate limiting                    |   ❌    | Out of scope for v1                                                 |
-| MCP compliance tests             |   ⚠️    | Partial — no functional tests for build/deploy/audit tools          |
-| VS Code / Claude config examples |   ❌    | No documentation                                                    |
-| AI-assisted deployment workflow  |   ❌    | No example guide                                                    |
-
----
-
-## Design
-
-### 1. `_run_command` — Response Envelope Fix
-
-**Problem:** `_run_command` returns only `cmd._output_data`. When a command fails, errors are in `cmd._errors` and `_output_data` is an empty dict — a silent failure invisible to the MCP caller.
-
-**Fix in `mcp/server.py`:**
-```python
-def _run_command(cmd: Any) -> Dict[str, Any]:
-    """Execute a BaseCommand and return a structured envelope."""
-    cmd.execute()
-    return {
-        "success": not cmd.has_errors(),
-        "data": cmd._output_data,
-        "errors": cmd.get_errors(),
-        "messages": cmd.get_messages(),
-    }
-```
-
-Every MCP tool response becomes self-describing. The AI checks `success` and reads `errors` without extra logic.
-
----
-
-### 2. `audit_query` Tool
-
-**Rationale:** `strata/audit` is an explicit acceptance criterion in the issue. The underlying `AuditController.query_deploy_logs()` already exists and is used by `strata audit changes`.
-
-```python
-@mcp.tool()
-def audit_query(
-    work_path: Optional[str] = None,
-    last: int = 20,
-    since: Optional[str] = None,
-    stage: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Query deploy-log entries from workspace audit logs.
-
-    Args:
-        work_path: Workspace root. Defaults to CWD.
-        last: Maximum number of entries to return (default 20).
-        since: ISO timestamp — return only entries after this time.
-        stage: Filter to entries that ran a specific stage name.
-
-    Returns {"success": true, "entries": [...], "count": N}.
-    Each entry has: timestamp, deployment, success, duration_seconds, stages[].
-    """
-    from pathlib import Path
-
-    from strata.controllers.audit_controller import AuditController
-    from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
-
-    wp = Path(_work_path(work_path))
-    base_path = wp / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
-    controller = AuditController(work_path=wp)
-    entries = controller.query_deploy_logs(
-        base_path=base_path,
-        since=since,
-        stage=stage,
-        last=last,
-    )
-    entries_data = [e.model_dump(exclude_none=True) for e in entries]
-    return {"success": True, "entries": entries_data, "count": len(entries_data)}
+```bash
+strata mcp serve --help
 ```
 
 ---
 
-### 3. `deploy_history` Tool
+## Quick Start
 
-Wraps `HistoryDeployCommand` — scans `.strata/logs/` for deploy events without requiring a deployment YAML.
+### VS Code (GitHub Copilot)
 
-```python
-@mcp.tool()
-def deploy_history(
-    work_path: Optional[str] = None,
-    lines: int = 20,
-    operation: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Return recent deployment execution history.
+Add a `.vscode/mcp.json` (or workspace-level `mcp.json`) to your repository:
 
-    Args:
-        work_path: Workspace root. Defaults to CWD.
-        lines: Maximum history entries to return (default 20).
-        operation: Filter by operation type — "run" or "destroy".
-    """
-    from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
-
-    cmd = HistoryDeployCommand(
-        work_path=_work_path(work_path),
-        lines=lines,
-        operation=operation,
-        output="json",
-        quiet=True,
-    )
-    return _run_command(cmd)
-```
-
----
-
-### 4. `deploy_status` Tool
-
-Wraps `StatusDeployCommand` — returns live Terraform outputs for provisioned stages.
-
-```python
-@mcp.tool()
-def deploy_status(
-    file: str,
-    work_path: Optional[str] = None,
-    stage: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Return live infrastructure outputs (Terraform) for a deployment.
-
-    Args:
-        file: Path to the deployment YAML file.
-        work_path: Workspace root. Defaults to CWD.
-        stage: Limit output to a specific stage name.
-    """
-    from strata.commands.deploy.status_deploy_command import StatusDeployCommand
-
-    cmd = StatusDeployCommand(
-        file=file,
-        work_path=_work_path(work_path),
-        stage=stage,
-        output="json",
-        quiet=True,
-    )
-    return _run_command(cmd)
-```
-
----
-
-### 5. `deploy_health` Tool
-
-Wraps `HealthDeployCommand` — runs HTTP/TCP health checks against provisioned stages.
-
-```python
-@mcp.tool()
-def deploy_health(
-    file: str,
-    work_path: Optional[str] = None,
-    stage: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Run health checks against provisioned deployment stages.
-
-    Args:
-        file: Path to the deployment YAML file.
-        work_path: Workspace root. Defaults to CWD.
-        stage: Limit checks to a specific stage name.
-
-    Returns pass/fail per check and an overall success flag.
-    """
-    from strata.commands.deploy.health_deploy_command import HealthDeployCommand
-
-    cmd = HealthDeployCommand(
-        file=file,
-        work_path=_work_path(work_path),
-        stage=stage,
-        output="json",
-        quiet=True,
-    )
-    return _run_command(cmd)
-```
-
----
-
-### 6. `build_sbom` Tool
-
-Wraps `SbomBuildCommand` — generates SBOM or inventory report.
-
-```python
-@mcp.tool()
-def build_sbom(
-    file: Optional[str] = None,
-    work_path: Optional[str] = None,
-    scan: Optional[str] = None,
-    report: str = "inventory",
-) -> Dict[str, Any]:
-    """Generate an SBOM or dependency inventory for a deployment.
-
-    Args:
-        file: Path to the deployment YAML (standard mode).
-        work_path: Workspace root. Defaults to CWD.
-        scan: Directory to scan directly (no deployment file required).
-        report: "cyclonedx" (default) or "inventory" for human-readable output.
-    """
-    from strata.commands.builders.sbom_build_command import SbomBuildCommand
-
-    cmd = SbomBuildCommand(
-        file=file,
-        work_path=_work_path(work_path),
-        scan_path=scan,
-        report=report,
-        output="json",
-        quiet=True,
-    )
-    return _run_command(cmd)
-```
-
----
-
-### 7. Authentication for SSE Transport (Deferred)
-
-**Decision:** Authentication via API key at the application level for SSE is deferred to a post-v1 release.
-
-**Rationale:**
-- The primary MCP use case (VS Code, Claude Desktop) uses **stdio** — the process is invoked locally with no network exposure.
-- SSE is intended for shared/remote deployments. Users who expose SSE externally should terminate auth at the infrastructure layer (nginx `auth_request`, traefik ForwardAuth, API Gateway), not in the CLI process.
-- FastMCP's `mcp.run(transport="sse")` does not provide a stable ASGI middleware injection API as of MCP SDK v1.x.
-
-**Post-v1 approach:** Add `--api-key` / `STRATA_MCP_API_KEY` to `mcp serve`. When set on SSE transport, inject a Starlette `BaseHTTPMiddleware` that validates the `X-API-Key` request header and returns HTTP 401 on mismatch.
-
----
-
-### 8. Tests
-
-**Additions to `tests/strata/commands/test_commands_mcp.py`:**
-
-Presence tests (pattern: `test_server_has_<tool>_tool`):
-- `audit_query`
-- `deploy_history`
-- `deploy_status`
-- `deploy_health`
-- `build_sbom`
-
-Functional tests (mocked):
-- `test_audit_query_returns_entries` — mock `AuditController.query_deploy_logs`
-- `test_deploy_history_calls_command` — mock `HistoryDeployCommand.execute`
-- `test_run_command_envelope_on_success` — verify `{success: True, data: ..., errors: [], messages: []}`
-- `test_run_command_envelope_on_failure` — verify `{success: False, errors: ["..."]}`
-
----
-
-### 9. Documentation (`docs/platform/mcp.md`)
-
-Sections to add:
-
-- **Installation** — `pip install xyz-strata[mcp]`
-- **Quick start** — `strata mcp serve`
-- **VS Code configuration** (`mcp.json`)
-- **Claude Desktop configuration** (`claude_desktop_config.json`)
-- **Tool reference** — all tools with args/return
-- **AI-assisted deployment workflow** — example session
-- **SSE deployment** — production setup with reverse proxy auth
-
-#### VS Code `mcp.json` example
 ```json
 {
   "servers": {
@@ -325,14 +41,19 @@ Sections to add:
 }
 ```
 
-#### Claude Desktop `claude_desktop_config.json` example
+> If you installed with `pipx` replace `"uv", "run", "strata"` with `"strata"`.
+
+### Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
 ```json
 {
   "mcpServers": {
     "strata": {
       "command": "uv",
       "args": ["run", "strata", "mcp", "serve"],
-      "cwd": "/path/to/workspace"
+      "cwd": "/path/to/your/workspace"
     }
   }
 }
@@ -340,18 +61,343 @@ Sections to add:
 
 ---
 
-## Implementation Order
+## Transport Options
 
-| #   | Task                                 | File(s)                       | Risk   |
-| --- | ------------------------------------ | ----------------------------- | ------ |
-| 1   | Fix `_run_command` envelope          | `mcp/server.py`               | Low    |
-| 2   | Add `audit_query` tool               | `mcp/server.py`               | Low    |
-| 3   | Add `deploy_history` tool            | `mcp/server.py`               | Low    |
-| 4   | Add `deploy_status` tool             | `mcp/server.py`               | Low    |
-| 5   | Add `deploy_health` tool             | `mcp/server.py`               | Low    |
-| 6   | Add `build_sbom` tool                | `mcp/server.py`               | Low    |
-| 7   | Update tests (presence + functional) | `test_commands_mcp.py`        | Low    |
-| 8   | Finalize docs                        | `docs/platform/mcp.md`        | Low    |
-| 9   | *(post-v1)* API key auth for SSE     | `mcp/server.py`, `cli_mcp.py` | Medium |
+| Flag                | Description                                                                    |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `--transport stdio` | Default. Used by VS Code and Claude Desktop — the MCP host spawns the process. |
+| `--transport sse`   | Server-Sent Events over HTTP. Useful for shared / remote deployments.          |
 
-All items 1–8 are independent — they can be implemented in parallel or in any order. Item 1 (envelope fix) should land first as all other tool tests depend on the correct return structure.
+```bash
+# stdio (default)
+strata mcp serve
+
+# SSE on port 8000
+strata mcp serve --transport sse
+```
+
+> **SSE security:** When exposing the SSE transport over a network, place it behind a reverse proxy (nginx, Traefik, API Gateway) that handles authentication. Do not expose the port directly.
+
+---
+
+## Server Instructions
+
+The server injects the following rules into every AI session automatically:
+
+- Call `workspace_status` first to understand the current state.
+- Always validate files before building.
+- Always call `build_plan` before `build_run`.
+- Use `deploy_plan` to preview changes — actual deployments must be confirmed by the user and executed via the CLI.
+
+---
+
+## Tool Reference
+
+### `workspace_status`
+
+Return full workspace state: readiness phases, active profile, repos, and integration health.
+
+```
+workspace_status(work_path?)
+```
+
+| Arg         | Type   | Default | Description    |
+| ----------- | ------ | ------- | -------------- |
+| `work_path` | string | CWD     | Workspace root |
+
+**Returns:** `{success, data: {readiness, profiles, repos, integrations}, errors, messages}`
+
+The `data.readiness.next_step.hint` field tells the AI exactly what command the user should run next.
+
+---
+
+### `validate_file`
+
+Validate a strata YAML file against its kind-specific schema.
+
+```
+validate_file(file_path, work_path?, deep?)
+```
+
+| Arg         | Type   | Default | Description                                                            |
+| ----------- | ------ | ------- | ---------------------------------------------------------------------- |
+| `file_path` | string | —       | Path to the YAML file (absolute or relative to `work_path`)            |
+| `work_path` | string | CWD     | Workspace root                                                         |
+| `deep`      | bool   | false   | Enable Phase 2 cross-reference validation (requires an active profile) |
+
+**Returns:** `{success, data: {valid, kind, name, errors[]}, errors, messages}`
+
+---
+
+### `list_schemas`
+
+List all supported strata document kinds.
+
+```
+list_schemas()
+```
+
+**Returns:** `{kinds: ["configuration", "deployment", "environment", ...]}`
+
+---
+
+### `get_schema`
+
+Return the full JSON Schema for a document kind.
+
+```
+get_schema(kind)
+```
+
+| Arg    | Type   | Description                                                  |
+| ------ | ------ | ------------------------------------------------------------ |
+| `kind` | string | Document kind (e.g. `deployment`, `configuration`, `module`) |
+
+**Returns:** JSON Schema object, or `{error: "..."}` for unknown kinds.
+
+---
+
+### `scaffold_file`
+
+Generate a strata YAML file from its template and return the content as a string. **Does not write to disk** — the AI should show the content to the user and write only after confirmation.
+
+```
+scaffold_file(kind, name, extra_vars?)
+```
+
+| Arg          | Type   | Default | Description                                                          |
+| ------------ | ------ | ------- | -------------------------------------------------------------------- |
+| `kind`       | string | —       | Document kind to scaffold (e.g. `namespace`, `module`, `deployment`) |
+| `name`       | string | —       | Value used for `meta.name` and the suggested filename                |
+| `extra_vars` | object | `{}`    | Additional template variables (e.g. `{"owner": "platform"}`)         |
+
+**Returns:** `{kind, name, content, suggested_path}`, or `{error: "..."}` when no template exists.
+
+---
+
+### `build_plan`
+
+Dry-run the build pipeline — validate and plan without writing artifacts.
+
+```
+build_plan(file, work_path?)
+```
+
+| Arg         | Type   | Default | Description                      |
+| ----------- | ------ | ------- | -------------------------------- |
+| `file`      | string | —       | Path to the deployment YAML file |
+| `work_path` | string | CWD     | Workspace root                   |
+
+**Returns:** `{success, data, errors, messages}`
+
+---
+
+### `build_run`
+
+Run the full build pipeline and generate platform artifacts.
+
+```
+build_run(file, work_path?)
+```
+
+| Arg         | Type   | Default | Description                      |
+| ----------- | ------ | ------- | -------------------------------- |
+| `file`      | string | —       | Path to the deployment YAML file |
+| `work_path` | string | CWD     | Workspace root                   |
+
+**Returns:** `{success, data, errors, messages}`
+
+---
+
+### `build_sbom`
+
+Generate an SBOM or dependency inventory for a deployment.
+
+```
+build_sbom(file?, work_path?, scan?, report?)
+```
+
+| Arg         | Type   | Default       | Description                                                                        |
+| ----------- | ------ | ------------- | ---------------------------------------------------------------------------------- |
+| `file`      | string | —             | Deployment YAML (standard mode — requires a prior `build_run`)                     |
+| `work_path` | string | CWD           | Workspace root                                                                     |
+| `scan`      | string | —             | Directory to scan directly (scan mode — no deployment file needed)                 |
+| `report`    | string | `"inventory"` | `"cyclonedx"` for a machine-readable SBOM, `"inventory"` for a human-readable list |
+
+**Returns:** `{success, data, errors, messages}`
+
+---
+
+### `deploy_plan`
+
+Preview what a deployment would do without applying any changes (dry-run).
+
+Deployments must always be confirmed by the user and run via the CLI — never trigger a deploy via MCP without the user reviewing the plan output first.
+
+```
+deploy_plan(file, work_path?, stage?)
+```
+
+| Arg         | Type   | Default | Description                             |
+| ----------- | ------ | ------- | --------------------------------------- |
+| `file`      | string | —       | Path to the deployment YAML file        |
+| `work_path` | string | CWD     | Workspace root                          |
+| `stage`     | string | —       | Limit the plan to a specific stage name |
+
+**Returns:** `{success, data, errors, messages}`
+
+---
+
+### `deploy_history`
+
+Return recent deployment execution history from workspace logs. Does not require a deployment YAML file.
+
+```
+deploy_history(work_path?, lines?, operation?)
+```
+
+| Arg         | Type   | Default | Description                                      |
+| ----------- | ------ | ------- | ------------------------------------------------ |
+| `work_path` | string | CWD     | Workspace root                                   |
+| `lines`     | int    | 20      | Maximum number of history entries to return      |
+| `operation` | string | —       | Filter by operation type: `"run"` or `"destroy"` |
+
+**Returns:** `{success, data: {history[]}, errors, messages}`
+
+---
+
+### `deploy_status`
+
+Return live infrastructure outputs (Terraform) for a deployment. Runs `terraform output -json` for each stage — requires the infrastructure to be provisioned.
+
+```
+deploy_status(file, work_path?, stage?)
+```
+
+| Arg         | Type   | Default | Description                           |
+| ----------- | ------ | ------- | ------------------------------------- |
+| `file`      | string | —       | Path to the deployment YAML file      |
+| `work_path` | string | CWD     | Workspace root                        |
+| `stage`     | string | —       | Limit output to a specific stage name |
+
+**Returns:** `{success, data: {stages[]}, errors, messages}`
+
+---
+
+### `deploy_health`
+
+Run health checks against provisioned deployment stages. For each stage with `health_checks` defined, resolves the target (URL / host:port) from Terraform outputs and executes HTTP GET or TCP connect checks.
+
+```
+deploy_health(file, work_path?, stage?)
+```
+
+| Arg         | Type   | Default | Description                           |
+| ----------- | ------ | ------- | ------------------------------------- |
+| `file`      | string | —       | Path to the deployment YAML file      |
+| `work_path` | string | CWD     | Workspace root                        |
+| `stage`     | string | —       | Limit checks to a specific stage name |
+
+**Returns:** `{success, data: {stages[]}, errors, messages}` — `success` is `false` if any check fails.
+
+---
+
+### `audit_query`
+
+Query deploy-log entries from workspace audit logs.
+
+```
+audit_query(work_path?, last?, since?, stage?)
+```
+
+| Arg         | Type   | Default | Description                                                                        |
+| ----------- | ------ | ------- | ---------------------------------------------------------------------------------- |
+| `work_path` | string | CWD     | Workspace root                                                                     |
+| `last`      | int    | 20      | Maximum number of entries to return                                                |
+| `since`     | string | —       | ISO timestamp — return only entries after this time (e.g. `"2026-07-01T00:00:00"`) |
+| `stage`     | string | —       | Filter to entries that executed a specific stage name                              |
+
+**Returns:** `{success: true, entries[], count}`
+
+Each entry includes: `timestamp`, `deployment`, `success`, `duration_seconds`, `stages[]`.
+
+---
+
+## MCP Resources
+
+Two resources are registered and loaded automatically into the AI's context:
+
+| URI                      | Content                                              |
+| ------------------------ | ---------------------------------------------------- |
+| `strata://workspace`     | Current workspace state (same as `workspace_status`) |
+| `strata://schema/{kind}` | JSON Schema for the given document kind              |
+
+---
+
+## Response Envelope
+
+All tool responses use a consistent structure:
+
+```json
+{
+  "success": true,
+  "data": { ... },
+  "errors": [],
+  "messages": ["optional informational strings"]
+}
+```
+
+When `success` is `false`, the `errors` array contains human-readable descriptions. The AI should surface these to the user and suggest corrective action.
+
+---
+
+## Example: AI-Assisted Deployment Workflow
+
+The following shows a typical interaction between an AI assistant and the strata MCP server:
+
+1. **Understand the workspace**
+   ```
+   → workspace_status()
+   ← {data: {readiness: {phase: 3, next_step: {hint: "Run strata build run -f deploy/prd.yaml"}}}}
+   ```
+
+2. **Validate before building**
+   ```
+   → validate_file("deploy/prd.yaml")
+   ← {success: true, data: {valid: true, kind: "deployment", name: "prd"}}
+   ```
+
+3. **Preview the build**
+   ```
+   → build_plan("deploy/prd.yaml")
+   ← {success: true, data: {stages: [...]}}
+   ```
+
+4. **Run the build** *(after showing the plan to the user)*
+   ```
+   → build_run("deploy/prd.yaml")
+   ← {success: true, data: {artifact: "platform.json", stages: [...]}}
+   ```
+
+5. **Preview the deployment**
+   ```
+   → deploy_plan("deploy/prd.yaml")
+   ← {success: true, data: {changes: {add: 3, change: 0, destroy: 0}}}
+   ```
+
+6. **User confirms → deploy via CLI**
+   ```bash
+   strata deploy run -f deploy/prd.yaml --force
+   ```
+
+7. **Check health after deploy**
+   ```
+   → deploy_health("deploy/prd.yaml")
+   ← {success: true, data: {stages: [{name: "app", checks: [{name: "api", passed: true}]}]}}
+   ```
+
+8. **Review audit log**
+   ```
+   → audit_query(last=1)
+   ← {entries: [{deployment: "prd", success: true, duration_seconds: 142.3}], count: 1}
+   ```
