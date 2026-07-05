@@ -82,40 +82,42 @@ class TestCveScannerRealScan:
     def test_scan_returns_findings(self, scanner: CveScannerIntegration) -> None:
         """Real scan against a deliberately vulnerable SBOM must return ≥1 finding."""
         result = scanner.scan_sbom(_FIXTURE_SBOM, severity_threshold="LOW")
-        assert result.total > 0, (
+        assert result.total_findings > 0, (
             "Expected at least one CVE finding for the known-vulnerable fixture SBOM "
             "(openssl 1.0.1e, log4j-core 2.14.1, lodash 4.17.15). "
-            f"Got total={result.total}. Check that the scanner has an up-to-date DB."
+            f"Got total_findings={result.total_findings}. Check that the scanner has an up-to-date DB."
         )
 
     def test_scan_findings_have_required_fields(self, scanner: CveScannerIntegration) -> None:
         result = scanner.scan_sbom(_FIXTURE_SBOM, severity_threshold="LOW")
         assert result.findings, "Expected at least one finding"
         for f in result.findings:
-            assert f.id, "Each finding must have an id (CVE ID)"
+            assert f.vulnerability_id, "Each finding must have a vulnerability_id (CVE ID)"
             assert f.severity in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"), f"Unexpected severity: {f.severity}"
-            assert f.package, "Each finding must have a package name"
+            assert f.package_name, "Each finding must have a package_name"
 
     def test_scan_severity_threshold_filters_results(self, scanner: CveScannerIntegration) -> None:
         """HIGH threshold must return fewer (or equal) findings than LOW threshold."""
         low_result = scanner.scan_sbom(_FIXTURE_SBOM, severity_threshold="LOW")
         high_result = scanner.scan_sbom(_FIXTURE_SBOM, severity_threshold="HIGH")
-        assert high_result.total <= low_result.total, (
+        assert high_result.total_findings <= low_result.total_findings, (
             "Stricter severity threshold should not produce more findings than a looser one"
         )
 
     def test_scan_severity_counts_consistent(self, scanner: CveScannerIntegration) -> None:
         result = scanner.scan_sbom(_FIXTURE_SBOM, severity_threshold="LOW")
         total_from_counts = result.critical + result.high + result.medium + result.low + result.unknown
-        assert total_from_counts == result.total, (
-            f"severity counts sum ({total_from_counts}) must equal total ({result.total})"
+        assert total_from_counts == result.total_findings, (
+            f"severity counts sum ({total_from_counts}) must equal total_findings ({result.total_findings})"
         )
 
     def test_scan_high_threshold_excludes_low(self, scanner: CveScannerIntegration) -> None:
         """With HIGH threshold, no LOW findings should appear in the list."""
         result = scanner.scan_sbom(_FIXTURE_SBOM, severity_threshold="HIGH")
         low_findings = [f for f in result.findings if f.severity == "LOW"]
-        assert low_findings == [], f"Expected no LOW findings when threshold=HIGH, got: {[f.id for f in low_findings]}"
+        assert low_findings == [], (
+            f"Expected no LOW findings when threshold=HIGH, got: {[f.vulnerability_id for f in low_findings]}"
+        )
 
     def test_scan_critical_severity_detected(self, scanner: CveScannerIntegration) -> None:
         """The fixture SBOM must trigger at least one CRITICAL CVE (openssl 1.0.1e / log4j)."""

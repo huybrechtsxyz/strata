@@ -6,7 +6,7 @@ Complete schema reference for deployment manifests in JSON format.
 
 ## Root Structure
 
-```json
+```text
 {
   "apiVersion": "strata.huybrechts.xyz/v1",
   "kind": "deployment-manifest",
@@ -76,7 +76,7 @@ Complete schema reference for deployment manifests in JSON format.
 
 ## Specification Section
 
-```json
+```text
 "spec": {
   "deployment_name": "prod_deployment",
   "workspace_name": "prod_workspace",
@@ -168,7 +168,7 @@ Complete schema reference for deployment manifests in JSON format.
 
 ## Artifacts Section
 
-```json
+```text
 "artifacts": {
   "platform": { ... },
   "repositories": { ... },
@@ -182,7 +182,7 @@ Complete schema reference for deployment manifests in JSON format.
 
 **Type:** object
 
-```json
+```text
 "platform": {
   "hash": "sha256:abc123def456...",
   "path": ".strata/build/prod_deployment/platform.json",
@@ -411,7 +411,7 @@ Complete schema reference for deployment manifests in JSON format.
 
 ## Complete Example: Build Manifest
 
-```json
+```text
 {
   "apiVersion": "strata.huybrechts.xyz/v1",
   "kind": "deployment-manifest",
@@ -479,7 +479,7 @@ Complete schema reference for deployment manifests in JSON format.
 
 ## Complete Example: Deploy Manifest
 
-```json
+```text
 {
   "apiVersion": "strata.huybrechts.xyz/v1",
   "kind": "deployment-manifest",

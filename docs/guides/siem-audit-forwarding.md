@@ -248,7 +248,7 @@ integrations:
 
 Each event sent to Splunk:
 
-```json
+```text
 {
   "event": {
     "execution_id": "abc-123",

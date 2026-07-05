@@ -45,7 +45,7 @@ A **deploy manifest** is created by `strata deploy run` and captures everything 
 
 ### The Build → Deploy Workflow
 
-```mermaid
+```
 graph LR
     A["strata build run"] -->|generates| B["Build Manifest<br/>config + SBOM + repos"]
     B -->|input to| C["strata deploy run"]
@@ -582,7 +582,7 @@ strata build run -f deploy.yaml
 
 ### Build Manifest Structure
 
-```json
+```text
 {
   "apiVersion": "strata.huybrechts.xyz/v1",
   "kind": "deployment-manifest",

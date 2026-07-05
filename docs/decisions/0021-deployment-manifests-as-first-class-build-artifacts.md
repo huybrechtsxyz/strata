@@ -154,7 +154,7 @@ Storing in `.strata/build/{deployment}/manifest.json` keeps them alongside other
 
 ### Build Manifest
 
-```json
+```text
 {
   "apiVersion": "strata.huybrechts.xyz/v1",
   "kind": "deployment-manifest",
