@@ -26,6 +26,7 @@ from strata.utils.config import (
     SOLUTION_COLLECTORS_FILE,
     SOLUTION_CONFIG_FILE,
     SOLUTION_CONFIGURATION_FILE,
+    SOLUTION_CVE_ALLOWED_FILE,
     SOLUTION_DEPLOY_LOG_DIR,
     SOLUTION_DEPLOYMENTS_DIR,
     SOLUTION_DIR,
@@ -1132,6 +1133,11 @@ class SolutionController(BaseController):
     def get_collectors_path(work_path: Path) -> Path:
         """Return the path to the .strata/collectors.yaml file."""
         return work_path / SOLUTION_DIR / SOLUTION_COLLECTORS_FILE
+
+    @staticmethod
+    def get_cve_allowed_path(work_path: Path) -> Path:
+        """Return the path to the .strata/cve-allowed.yaml file."""
+        return work_path / SOLUTION_DIR / SOLUTION_CVE_ALLOWED_FILE
 
     @staticmethod
     def get_sbom_ignore_path(work_path: Path) -> Path:

@@ -24,6 +24,17 @@ Integrations connect the platform to external tools and services (git, terraform
 | `EtcdIntegration`           | `integrations.etcd`             | `etcd`             | `IVariableStore`, `IKVStore`                 |
 | `FlagsmithIntegration`      | `integrations.flagsmith`        | `flagsmith`        | `IFeatureStore`                              |
 
+**SIEM / audit sink integrations** (implement `ISiemSink`, used by `AuditController`):
+
+| Class | Module | Type string | Backend |
+|-------|--------|-------------|---------|
+| `SplunkSiemIntegration` | `integrations.siem.splunk_siem_integration` | `splunk` | Splunk HTTP Event Collector (HEC) |
+| `SentinelIntegration` | `integrations.siem.sentinel_integration` | `sentinel` | Azure Monitor / Sentinel (DCR Logs Ingestion API) |
+| `ElkSiemIntegration` | `integrations.siem.elk_siem_integration` | `elk` | Logstash (TCP) or Elasticsearch (HTTP Bulk API) |
+| `OtelSiemIntegration` | `integrations.siem.otel_siem_integration` | `otel` | Any OTLP/HTTP backend (Grafana, Datadog, Sumo Logic, etc.) |
+
+SIEM integrations are HTTP-based — they have no CLI command and are not included in `strata tools status`. Use `strata tools check <name>` to probe connectivity. See [SIEM Audit Forwarding Guide](../guides/siem-audit-forwarding.md) for configuration examples.
+
 ## Creating an Integration
 
 ```python

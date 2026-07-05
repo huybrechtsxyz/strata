@@ -268,6 +268,145 @@ Artifact structure:
 
 ---
 
+## Integrations
+
+`spec.integrations` declares external service integrations used by the platform — primarily
+SIEM sinks for audit event forwarding. Each integration is referenced by name from
+`spec.audit.sinks[].integration` in environment YAML.
+
+```yaml
+spec:
+  integrations:
+    - name: splunk_hec           # Referenced by audit sinks
+      type: splunk
+      enabled: true
+      endpoints:
+        address: "https://splunk.internal:8088"
+      authentication:
+        method: api_key
+        api_key:
+          api_key: "${SPLUNK_HEC_TOKEN}"    # Resolved from env at deploy time
+      properties:
+        index: strata
+        source: strata-deploy
+        sourcetype: _json
+        channel: "guid-for-indexer-ack"    # optional HEC channel
+```
+
+### Supported SIEM types
+
+#### `splunk` — Splunk HTTP Event Collector (HEC)
+
+Forwards events via the HEC endpoint (`POST /services/collector`).
+
+| Property     | Default  | Description                                        |
+| ------------ | -------- | -------------------------------------------------- |
+| `index`      | `main`   | Splunk index                                       |
+| `source`     | `strata` | Event source label                                 |
+| `sourcetype` | `_json`  | Sourcetype (use `_json` for structured data)       |
+| `channel`    | —        | HEC channel GUID (enables indexer acknowledgement) |
+
+```yaml
+- name: splunk_hec
+  type: splunk
+  endpoints:
+    address: "https://splunk.corp.example:8088"
+  authentication:
+    method: api_key
+    api_key:
+      api_key: "${SPLUNK_HEC_TOKEN}"
+  properties:
+    index: platform
+    sourcetype: _json
+```
+
+#### `elk` — ELK / Logstash
+
+Forwards events via TCP (Logstash JSON codec) or HTTP (Elasticsearch Bulk API).
+
+| Property        | Default        | Description                                |
+| --------------- | -------------- | ------------------------------------------ |
+| `protocol`      | `tcp`          | `tcp` (Logstash) or `http` (Elasticsearch) |
+| `index_pattern` | `strata-audit` | Elasticsearch index prefix                 |
+
+```yaml
+# TCP (Logstash JSON input)
+- name: elk_logstash
+  type: elk
+  endpoints:
+    address: "logstash.internal:5044"
+  properties:
+    protocol: tcp
+
+# HTTP (Elasticsearch Bulk API)
+- name: elk_es
+  type: elk
+  endpoints:
+    address: "https://es.internal:9200"
+  authentication:
+    method: basic
+    basic:
+      username: strata
+      password: "${ES_PASSWORD}"
+  properties:
+    protocol: http
+    index_pattern: strata-prod
+```
+
+#### `otel` — OpenTelemetry (OTLP/HTTP)
+
+Forwards events as OTLP Log Records to any OpenTelemetry-compatible backend
+(Grafana, Datadog, Splunk OTel Collector, etc.).
+
+| Property              | Default | Description                        |
+| --------------------- | ------- | ---------------------------------- |
+| `protocol`            | `http`  | `http` (OTLP/HTTP JSON)            |
+| `resource_attributes` | `{}`    | Extra OTel resource attributes map |
+
+```yaml
+- name: otel_collector
+  type: otel
+  endpoints:
+    address: "https://otel.internal:4318"
+  properties:
+    resource_attributes:
+      service.name: strata
+      deployment.environment: production
+```
+
+#### `sentinel` — Azure Sentinel (DCR Logs Ingestion API)
+
+Forwards events via the Azure Monitor Logs Ingestion API (DCR-based).
+Uses `DefaultAzureCredential` — managed identity, service principal, or Azure CLI.
+
+| Property                  | Required | Description                                       |
+| ------------------------- | -------- | ------------------------------------------------- |
+| `data_collection_rule_id` | Yes      | Immutable DCR ID (e.g. `dcr-abc123`)              |
+| `stream_name`             | Yes      | Custom stream name (e.g. `Custom-DeployAudit_CL`) |
+
+```yaml
+- name: azure_sentinel
+  type: sentinel
+  endpoints:
+    address: "https://my-dce.westeurope-1.ingest.monitor.azure.com"
+  properties:
+    data_collection_rule_id: dcr-0abc1234567890def
+    stream_name: Custom-StrataDeployAudit_CL
+```
+
+### Integration field reference
+
+| Field               | Type   | Required | Description                                                 |
+| ------------------- | ------ | -------- | ----------------------------------------------------------- |
+| `name`              | string | Yes      | Unique name referenced by `audit.sinks[].integration`       |
+| `type`              | enum   | Yes      | `splunk`, `elk`, `otel`, `sentinel`                         |
+| `enabled`           | bool   | No       | Defaults to `true`. Set `false` to disable without removing |
+| `endpoints.address` | string | Yes      | Target URL or `host:port`                                   |
+| `authentication`    | object | No       | `method`: `api_key`, `basic`, `bearer`                      |
+| `properties`        | map    | No       | Type-specific configuration (see per-type tables)           |
+
+---
+
 ## Notes
 
 - Built-in default in `src/STRATA_platform/data/configuration.yaml` always loads first

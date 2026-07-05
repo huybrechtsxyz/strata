@@ -58,6 +58,15 @@ class CveFindingModel(PlatformBaseModel):
     purl: Optional[str] = Field(None, description="Package URL of the affected component")
 
 
+class CveAllowedEntryModel(PlatformBaseModel):
+    """A single entry in the CVE allowlist (.strata/cve-allowed.yaml)."""
+
+    id: str = Field(description="CVE identifier to suppress (e.g. 'CVE-2024-1234')")
+    reason: str = Field(description="Justification for allowing this CVE")
+    package: Optional[str] = Field(None, description="Scope to a specific package name (optional)")
+    expires: Optional[str] = Field(None, description="ISO date after which this entry is ignored (e.g. '2026-12-31')")
+
+
 class CveAuditResultModel(PlatformBaseModel):
     """Summary of CVE vulnerability scan results."""
 

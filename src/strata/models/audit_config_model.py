@@ -50,6 +50,10 @@ class AuditSinkModel(PlatformBaseModel):
     address: Optional[str] = Field(default=None, description="Target address (syslog only)")
     url: Optional[str] = Field(default=None, description="Target URL (webhook only)")
     headers: Optional[Dict[str, str]] = Field(default=None, description="HTTP headers (webhook only)")
+    format: Optional[str] = Field(
+        default=None,
+        description="Payload format for syslog sink: 'json' (default) or 'cef' (Common Event Format)",
+    )
 
     @model_validator(mode="after")
     def validate_sink_target(self) -> "AuditSinkModel":
@@ -64,28 +68,30 @@ class AuditSinkModel(PlatformBaseModel):
     def validate_type_specific_fields(self) -> "AuditSinkModel":
         """Validate that type-specific fields match the declared type."""
         if self.integration:
-            if any([self.path, self.address, self.url, self.headers]):
+            if any([self.path, self.address, self.url, self.headers, self.format]):
                 raise ValueError("Integration-backed sinks must not have type-specific fields")
             return self
 
         match self.type:
             case "stdout":
-                if any([self.path, self.address, self.url, self.headers]):
+                if any([self.path, self.address, self.url, self.headers, self.format]):
                     raise ValueError("stdout sink takes no extra fields")
             case "ndjson":
                 if not self.path:
                     raise ValueError("ndjson sink requires 'path'")
-                if any([self.address, self.url, self.headers]):
+                if any([self.address, self.url, self.headers, self.format]):
                     raise ValueError("ndjson sink only accepts 'path'")
             case "syslog":
                 if not self.address:
                     raise ValueError("syslog sink requires 'address'")
                 if any([self.path, self.url, self.headers]):
-                    raise ValueError("syslog sink only accepts 'address'")
+                    raise ValueError("syslog sink only accepts 'address' and 'format'")
+                if self.format and self.format not in ("json", "cef"):
+                    raise ValueError("syslog sink 'format' must be 'json' or 'cef'")
             case "webhook":
                 if not self.url:
                     raise ValueError("webhook sink requires 'url'")
-                if any([self.path, self.address]):
+                if any([self.path, self.address, self.format]):
                     raise ValueError("webhook sink only accepts 'url' and 'headers'")
         return self
 

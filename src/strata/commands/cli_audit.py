@@ -31,6 +31,75 @@ def _make_envelope(
     }
 
 
+def _forward_entries_to_siem(
+    siem_name: str,
+    entries: list,
+    work_path,
+    quiet: bool,
+) -> bool:
+    """Forward deploy-log entries to a named SIEM integration.
+
+    Loads the integration from configuration.yaml, creates an instance via
+    IntegrationFactory, and calls send_batch.  Returns True on success.
+    """
+    from pathlib import Path as _Path
+
+    from strata.integrations.capabilities import ISiemSink
+    from strata.integrations.factory import IntegrationFactory
+    from strata.services.configuration_service import ConfigurationService
+    from strata.utils.config import SOLUTION_DIR
+
+    wp = _Path(str(work_path))
+
+    # Attempt to load integration model from configuration
+    integration_model = None
+    for cfg_path in (wp / SOLUTION_DIR).rglob("*.yaml"):
+        try:
+            svc = ConfigurationService.load(str(cfg_path), validate=False)
+            if svc.model and svc.model.spec:
+                integrations = getattr(svc.model.spec, "integrations", []) or []
+                for m in integrations:
+                    if m.name == siem_name:
+                        integration_model = m
+                        break
+            if integration_model:
+                break
+        except Exception:
+            continue
+
+    if not integration_model:
+        click.echo(
+            f"SIEM integration '{siem_name}' not found in configuration. "
+            "Ensure it is declared under spec.integrations in a configuration YAML.",
+            err=True,
+        )
+        return False
+
+    try:
+        instance = IntegrationFactory.create(integration_model)
+    except Exception as exc:
+        click.echo(f"Failed to create SIEM integration '{siem_name}': {exc}", err=True)
+        return False
+
+    if not isinstance(instance, ISiemSink):
+        click.echo(
+            f"Integration '{siem_name}' (type: {integration_model.type}) does not support SIEM forwarding.",
+            err=True,
+        )
+        return False
+
+    payloads = [e.model_dump(exclude_none=True) for e in entries]
+    ok = instance.send_batch("deploy_audit", payloads)
+
+    if not quiet:
+        if ok:
+            click.echo(f"Forwarded {len(payloads)} entries to SIEM '{siem_name}'.")
+        else:
+            click.echo(f"SIEM forwarding to '{siem_name}' failed (partial or complete). Check logs.", err=True)
+
+    return ok
+
+
 @click.group(
     name="audit",
     help="Deployment audit trail — query deploy-logs and manage audit evidence.",
@@ -230,6 +299,20 @@ def audit_resend(
     help="Export format.",
 )
 @click.option(
+    "--include-manifests",
+    is_flag=True,
+    default=False,
+    help="Include deployment manifests in the export.",
+)
+@click.option(
+    "--siem",
+    "siem_name",
+    default=None,
+    type=str,
+    metavar="NAME",
+    help="Forward entries to a configured SIEM integration by name (e.g. splunk_hec, sentinel).",
+)
+@click.option(
     "--out",
     "out_file",
     default=None,
@@ -244,6 +327,8 @@ def audit_export(
     last: Optional[int],
     since: Optional[str],
     export_format: str,
+    include_manifests: bool,
+    siem_name: Optional[str],
     out_file: Optional[str],
     work_path: str,
     quiet: bool,
@@ -252,7 +337,7 @@ def audit_export(
     from pathlib import Path
 
     from strata.controllers.audit_controller import AuditController
-    from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+    from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DEPLOYMENTS_DIR, SOLUTION_DIR
 
     wp = Path(work_path)
     base_path = wp / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
@@ -264,12 +349,43 @@ def audit_export(
         last=last,
     )
 
+    # Optionally bundle deployment manifests alongside deploy-logs
+    manifest_data = []
+    if include_manifests:
+        from strata.services.deployment_manifest_service import DeploymentManifestService
+
+        manifest_base = wp / SOLUTION_DIR / SOLUTION_DEPLOYMENTS_DIR
+        if manifest_base.exists():
+            manifest_files = DeploymentManifestService.list_manifests(manifest_base)
+            if last:
+                manifest_files = manifest_files[:last]
+            for mf in manifest_files:
+                try:
+                    manifest_data.append(json.loads(mf.read_text(encoding="utf-8")))
+                except (json.JSONDecodeError, OSError):
+                    pass
+
     if export_format == "ndjson":
         lines = [json.dumps(e.model_dump(exclude_none=True), default=str) for e in entries]
+        if include_manifests:
+            for md in manifest_data:
+                lines.append(json.dumps(md, default=str))
         content = "\n".join(lines) + ("\n" if lines else "")
     else:
-        data = [e.model_dump(exclude_none=True) for e in entries]
-        content = json.dumps(data, indent=2, default=str) + "\n"
+        log_data = [e.model_dump(exclude_none=True) for e in entries]
+        if include_manifests:
+            # Wrapped format when manifests are bundled
+            content = (
+                json.dumps(
+                    {"deploy_logs": log_data, "manifests": manifest_data},
+                    indent=2,
+                    default=str,
+                )
+                + "\n"
+            )
+        else:
+            # Backward-compatible flat array
+            content = json.dumps(log_data, indent=2, default=str) + "\n"
 
     if out_file:
         out_path = Path(out_file)
@@ -277,7 +393,13 @@ def audit_export(
         out_path.write_text(content, encoding="utf-8")
         if not quiet:
             click.echo(f"Exported {len(entries)} entries to {out_path}")
-    else:
+    elif not siem_name:
+        # Only print to stdout when not forwarding to SIEM
         click.echo(content, nl=False)
 
-    handle_command_exit("audit export", success=True)
+    # --- Optional SIEM forwarding ---
+    siem_success = True
+    if siem_name:
+        siem_success = _forward_entries_to_siem(siem_name, entries, wp, quiet)
+
+    handle_command_exit("audit export", success=siem_success)

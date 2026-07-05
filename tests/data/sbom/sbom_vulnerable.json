@@ -1,0 +1,44 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "serialNumber": "urn:uuid:test-fixture-known-cves-0001",
+  "metadata": {
+    "timestamp": "2024-01-15T10:00:00+00:00",
+    "tools": [
+      {
+        "vendor": "strata",
+        "name": "strata",
+        "version": "test"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "name": "strata-test-fixture",
+      "version": "0.0.1"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "openssl",
+      "version": "1.0.1e",
+      "purl": "pkg:generic/openssl@1.0.1e",
+      "bom-ref": "openssl-1.0.1e"
+    },
+    {
+      "type": "library",
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "bom-ref": "log4j-core-2.14.1"
+    },
+    {
+      "type": "library",
+      "name": "lodash",
+      "version": "4.17.15",
+      "purl": "pkg:npm/lodash@4.17.15",
+      "bom-ref": "lodash-4.17.15"
+    }
+  ]
+}

@@ -12,6 +12,7 @@ __all__ = [
     "IInfrastructureTool",
     "IContainerTool",
     "ISiemSink",
+    "ICveScanner",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -239,6 +240,26 @@ class ISiemSink(Protocol):
         ...
 
 
+@runtime_checkable
+class ICveScanner(Protocol):
+    """
+    Capability: Integration supports CVE vulnerability scanning.
+
+    Integrations implementing this interface can scan CycloneDX SBOM files
+    and return structured vulnerability findings.
+
+    Examples: Trivy, Grype
+    """
+
+    def scan_sbom(self, sbom_path, severity_threshold: str = "MEDIUM", timeout: int = 300):
+        """Scan a CycloneDX SBOM file for vulnerabilities.
+
+        Returns:
+            CveAuditResultModel with findings and severity counts.
+        """
+        ...
+
+
 # Capability registry for metadata
 # NOTE: ISiemSink is intentionally absent from CAPABILITY_REGISTRY — it is a
 # platform-wide forwarding protocol, not a data-store capability.  Sinks are
@@ -280,6 +301,11 @@ CAPABILITY_REGISTRY = {
         "methods": ["build", "run", "push", "pull"],
         "examples": ["Docker", "Podman", "Helm"],
     },
+    "ICveScanner": {
+        "description": "CVE vulnerability scanning via CycloneDX SBOM",
+        "methods": ["scan_sbom"],
+        "examples": ["Trivy", "Grype"],
+    },
 }
 
 
@@ -293,11 +319,12 @@ CAPABILITY_MAP = {
     "infrastructure": IInfrastructureTool,
     "container": IContainerTool,
     "audit": ISiemSink,
+    "cve_scanner": ICveScanner,
 }
 
 
 # Valid capability names users can specify in config
-VALID_CAPABILITY_NAMES = frozenset(CAPABILITY_MAP.keys()) | {"api"}
+VALID_CAPABILITY_NAMES = frozenset(CAPABILITY_MAP.keys()) | {"api", "cve_scanner"}
 
 
 # Custom integration types

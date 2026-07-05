@@ -71,10 +71,11 @@ class TestExecuteAudit:
         cmd._errors = []
         cmd._messages = []
         cmd._output_data = {}
+        cmd._work_path = Path("/tmp/fake-workspace")
         cmd.logger = MagicMock()
         return cmd
 
-    @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
+    @patch("strata.commands.builders.base_build_command.CveScannerIntegration")
     def test_scanner_unavailable_returns_true(self, mock_scanner):
         """When no scanner installed, audit is skipped gracefully."""
         instance = mock_scanner.return_value
@@ -83,7 +84,7 @@ class TestExecuteAudit:
         cmd = self._make_command()
         assert cmd._execute_audit(Path("sbom.json")) is True
 
-    @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
+    @patch("strata.commands.builders.base_build_command.CveScannerIntegration")
     def test_clean_audit_returns_true(self, mock_scanner):
         """No findings → success."""
         instance = mock_scanner.return_value
@@ -94,7 +95,7 @@ class TestExecuteAudit:
         assert cmd._execute_audit(Path("sbom.json")) is True
         assert cmd._output_data["audit"]["total_findings"] == 0
 
-    @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
+    @patch("strata.commands.builders.base_build_command.CveScannerIntegration")
     def test_findings_without_fail_on_returns_true(self, mock_scanner):
         """Findings exist but no --fail-on → success (advisory only)."""
         instance = mock_scanner.return_value
@@ -108,7 +109,7 @@ class TestExecuteAudit:
         assert cmd._execute_audit(Path("sbom.json")) is True
         assert cmd._output_data["audit"]["high"] == 2
 
-    @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
+    @patch("strata.commands.builders.base_build_command.CveScannerIntegration")
     def test_fail_on_breached_returns_false(self, mock_scanner):
         """--fail-on HIGH with HIGH findings → failure."""
         instance = mock_scanner.return_value
@@ -122,7 +123,7 @@ class TestExecuteAudit:
         assert cmd._execute_audit(Path("sbom.json")) is False
         assert any("gate failed" in e for e in cmd._errors)
 
-    @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
+    @patch("strata.commands.builders.base_build_command.CveScannerIntegration")
     def test_fail_on_critical_passes_when_only_high(self, mock_scanner):
         """--fail-on CRITICAL with only HIGH findings → pass."""
         instance = mock_scanner.return_value
@@ -135,7 +136,7 @@ class TestExecuteAudit:
         cmd = self._make_command(fail_on="CRITICAL")
         assert cmd._execute_audit(Path("sbom.json")) is True
 
-    @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
+    @patch("strata.commands.builders.base_build_command.CveScannerIntegration")
     def test_ndjson_output_emits_findings(self, mock_scanner):
         """In NDJSON mode, each finding is emitted as a data event."""
         instance = mock_scanner.return_value
@@ -154,7 +155,7 @@ class TestExecuteAudit:
         assert payload["event"] == "data"
         assert payload["audit_finding"]["severity"] == "CRITICAL"
 
-    @patch("strata.commands.builders.sbom_build_command.CveScannerIntegration")
+    @patch("strata.commands.builders.base_build_command.CveScannerIntegration")
     def test_runtime_error_from_scanner(self, mock_scanner):
         """Scanner raises RuntimeError → audit fails."""
         instance = mock_scanner.return_value

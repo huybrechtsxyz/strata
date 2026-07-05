@@ -31,6 +31,14 @@ _SAMPLE_ROWS = [
         "command": "terraform",
         "requirement": None,
     },
+    {
+        "name": "cve_scanner",
+        "available": False,
+        "version": None,
+        "capabilities": ["ICveScanner"],
+        "command": "trivy",
+        "requirement": None,
+    },
 ]
 
 _SAMPLE_ROWS_WITH_DEPLOYMENT = [
@@ -200,6 +208,14 @@ class TestToolsStatus:
             )
         assert result.exit_code == 0
         assert "--required/--optional require --file" in result.output
+
+    def test_cve_scanner_shown_in_status(self, tmp_path):
+        """cve_scanner must appear in tools status output with ICveScanner capability."""
+        runner = CliRunner()
+        with patch("strata.commands.tools.status_tools_command.ToolsController") as mock_ctrl:
+            mock_ctrl.return_value.status.return_value = (True, _SAMPLE_ROWS, [])
+            result = runner.invoke(tools_group, ["status", "--work-path", str(tmp_path)])
+        assert "cve_scanner" in result.output
 
     def test_required_and_optional_combined(self, tmp_path):
         """--required --optional together shows both required and optional integrations."""

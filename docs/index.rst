@@ -42,6 +42,9 @@ strata
    platform/ci-integration
    platform/architecture
    platform/exit-codes
+   platform/manifest-cli
+   platform/manifest-schema
+   platform/sbom-plugin-api
 
 .. toctree::
    :maxdepth: 2
@@ -120,6 +123,8 @@ strata
    decisions/0018-deployment-audit-traceability
    decisions/0019-configurable-terraform-build-output
    decisions/0020-lifecycle-phases-and-environment-variables
+   decisions/0021-deployment-manifests-as-first-class-build-artifacts
+   decisions/0022-siem-integration-splunk-hec-cef
 
 .. toctree::
    :maxdepth: 2
@@ -136,6 +141,10 @@ strata
    guides/troubleshooting-what-changed
    guides/setup-azure-oidc
    guides/deployment-manifests
+   guides/compliance-and-deployment-manifests
+   guides/siem-audit-forwarding
+   guides/extending-sbom-plugins
+   guides/sbom-plugin-examples
    guides/at-scale
    guides/using-console
 

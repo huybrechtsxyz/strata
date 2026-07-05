@@ -33,6 +33,34 @@ def build():
     default=False,
     help="Validate and plan the build without writing any output files.",
 )
+@click.option(
+    "--audit",
+    is_flag=True,
+    default=False,
+    help="Run CVE vulnerability scan after generating the SBOM (requires trivy or grype).",
+)
+@click.option(
+    "--severity",
+    "audit_severity",
+    type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"], case_sensitive=False),
+    default="MEDIUM",
+    show_default=True,
+    help="Minimum severity to report in CVE audit.",
+)
+@click.option(
+    "--fail-on",
+    "fail_on",
+    type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW"], case_sensitive=False),
+    default=None,
+    help="Exit non-zero (code 3) if findings at this severity or above exist.",
+)
+@click.option(
+    "--audit-report",
+    "audit_report",
+    default=None,
+    metavar="FORMATS",
+    help="Write audit report files. Comma-separated: vex, sarif (e.g. --audit-report vex,sarif).",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -40,6 +68,10 @@ def build_run(
     file: Optional[str] = None,
     work_path: Optional[str] = None,
     dry_run: bool = False,
+    audit: bool = False,
+    audit_severity: str = "MEDIUM",
+    fail_on: Optional[str] = None,
+    audit_report: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -49,6 +81,10 @@ def build_run(
         file=file,
         work_path=work_path,
         dry_run=dry_run,
+        audit=audit,
+        audit_severity=audit_severity.upper(),
+        fail_on=fail_on.upper() if fail_on else None,
+        audit_report=audit_report,
         output=output,
         verbose=verbose,
         quiet=quiet,
@@ -193,6 +229,13 @@ def build_plan(
     default=None,
     help="Exit non-zero (code 3) if findings at this severity or above exist.",
 )
+@click.option(
+    "--audit-report",
+    "audit_report",
+    default=None,
+    metavar="FORMATS",
+    help="Write audit report files. Comma-separated: vex, sarif (e.g. --audit-report vex,sarif).",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -206,6 +249,7 @@ def build_sbom(
     audit: bool = False,
     audit_severity: str = "MEDIUM",
     fail_on: Optional[str] = None,
+    audit_report: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -227,6 +271,7 @@ def build_sbom(
         audit=audit,
         audit_severity=audit_severity.upper(),
         fail_on=fail_on.upper() if fail_on else None,
+        audit_report=audit_report,
     )
     success = command.execute()
     handle_command_exit(command, success)

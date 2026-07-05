@@ -346,7 +346,7 @@ class AuditController(BaseController):
                                     f.write(json.dumps(data, default=str) + "\n")
                         case "syslog":
                             if sink.address:
-                                self._send_syslog(data, sink.address)
+                                self._send_syslog(data, sink.address, fmt=sink.format or "json")
                         case "webhook":
                             if sink.url:
                                 self._send_webhook(data, sink.url, sink.headers)
@@ -377,8 +377,14 @@ class AuditController(BaseController):
         with urllib.request.urlopen(req, timeout=10):  # noqa: S310 — URL comes from user config
             pass
 
-    def _send_syslog(self, data: dict, address: str) -> None:
-        """Send payload to a syslog server via UDP."""
+    def _send_syslog(self, data: dict, address: str, fmt: str = "json") -> None:
+        """Send payload to a syslog server via UDP.
+
+        Args:
+            data:    Event data dict.
+            address: ``host:port`` or ``host`` (default port 514).
+            fmt:     ``"json"`` (default) or ``"cef"`` (Common Event Format).
+        """
         import socket
 
         host, _, port_str = address.rpartition(":")
@@ -386,12 +392,53 @@ class AuditController(BaseController):
         if not host:
             host = address
 
-        message = f"<14>strata audit: {json.dumps(data, default=str)}"
+        if fmt == "cef":
+            body = self._format_cef(data)
+        else:
+            body = json.dumps(data, default=str)
+
+        message = f"<14>{body}"
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             sock.sendto(message.encode("utf-8")[:65000], (host, port))
         finally:
             sock.close()
+
+    @staticmethod
+    def _format_cef(data: dict) -> str:
+        """Format an audit event as CEF (Common Event Format).
+
+        CEF:Version|Device Vendor|Device Product|Device Version|Signature ID|
+            Name|Severity|Extension
+
+        Severity mapping: success → 3 (Low), failure → 7 (High).
+        """
+        version = data.get("version", "unknown")
+        deployment = data.get("deployment", "unknown")
+        success = data.get("success", True)
+        severity = 3 if success else 7
+        timestamp = data.get("timestamp", "")
+        user = data.get("user", "") or ""
+        execution_id = data.get("execution_id", "") or ""
+
+        # CEF extension key=value pairs (space-separated, pipe/backslash escaped)
+        def _cef_escape(v: str) -> str:
+            return v.replace("\\", "\\\\").replace("=", "\\=").replace("\n", "\\n")
+
+        ext_parts = [
+            f"rt={_cef_escape(str(timestamp))}",
+            f"src={_cef_escape(str(user))}",
+            f"dst={_cef_escape(str(deployment))}",
+            f"act={'success' if success else 'failure'}",
+            f"externalId={_cef_escape(str(execution_id))}",
+            f"msg={_cef_escape(json.dumps(data, default=str))}",
+        ]
+        extension = " ".join(ext_parts)
+
+        return (
+            f"CEF:0|strata|strata-audit|{_cef_escape(str(version))}"
+            f"|deploy_audit|Deployment Audit Event|{severity}|{extension}"
+        )
 
     def resend(
         self,
