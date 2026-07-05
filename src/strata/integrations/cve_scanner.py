@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
+from strata.integrations.capabilities import ICveScanner
 from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
 from strata.models.sbom_model import CveAuditResultModel, CveFindingModel
@@ -34,6 +35,7 @@ class CveScannerIntegration(BaseIntegration):
     """
 
     COMMAND = "trivy"  # default; overridden at init if grype is detected instead
+    CAPABILITIES: list = [ICveScanner]
 
     @classmethod
     def _get_instance_key_static(cls, class_ref, *args, **kwargs) -> str:

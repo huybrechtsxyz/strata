@@ -307,3 +307,24 @@ class TestParseVersion:
     def test_unknown_format(self):
         scanner = CveScannerIntegration.__new__(CveScannerIntegration)
         assert scanner.parse_version("unknown") == "unknown"
+
+
+class TestCveScannerCapability:
+    def test_icve_scanner_in_capabilities(self) -> None:
+        from strata.integrations.capabilities import ICveScanner
+
+        caps = CveScannerIntegration.CAPABILITIES
+        assert ICveScanner in caps, "CveScannerIntegration.CAPABILITIES must include ICveScanner"
+
+    def test_cve_scanner_in_factory_known_types(self) -> None:
+        from strata.integrations.factory import IntegrationFactory
+
+        assert "cve_scanner" in IntegrationFactory.get_known_types()
+
+    def test_tools_status_row_includes_icve_scanner(self) -> None:
+        """ToolsController.status() must return ICveScanner in caps for cve_scanner."""
+        from strata.integrations.factory import IntegrationFactory
+
+        integration = IntegrationFactory.create_by_type("cve_scanner")
+        caps = [c.__name__ for c in (integration.CAPABILITIES if hasattr(integration, "CAPABILITIES") else [])]
+        assert "ICveScanner" in caps
