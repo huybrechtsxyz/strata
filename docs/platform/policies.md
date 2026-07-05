@@ -60,18 +60,19 @@ spec:
 
 ### Built-in types
 
-| Type                      | Phase      | What it checks                                                                   |
-| ------------------------- | ---------- | -------------------------------------------------------------------------------- |
-| `tenant_zone`             | `plan`     | Terraform resource regions vs. the tenant's allowed zones                        |
-| `required_tags`           | `build`    | Required tags/labels present on all resources in the platform artifact           |
-| `naming_pattern`          | `validate` | `meta.name` fields match a configured regex pattern                              |
-| `ref_convention`          | `validate` | Remote references follow configured tag naming conventions                       |
-| `script`                  | any        | Delegates to an external command (OPA, Checkov, custom script)                   |
-| `sbom_pinned_versions`    | `build`    | SBOM components have pinned, non-floating version tags                           |
-| `sbom_allowed_registries` | `build`    | Container images originate only from approved registries                         |
-| `sbom_denied_packages`    | `build`    | No SBOM component matches a purl/name blocklist pattern                          |
-| `sbom_max_components`     | `build`    | Total SBOM component count stays within a configured budget                      |
-| `sbom_license`            | `build`    | SBOM component licenses match an allow/deny list (via `strata:license` property) |
+| Type                         | Phase      | What it checks                                                                   |
+| ---------------------------- | ---------- | -------------------------------------------------------------------------------- |
+| `tenant_zone`                | `plan`     | Terraform resource regions vs. the tenant's allowed zones                        |
+| `resource_type_restrictions` | `plan`     | Allow or deny Terraform resource types (allowlist or blocklist)                  |
+| `required_tags`              | `build`    | Required tags/labels present on all resources in the platform artifact           |
+| `naming_pattern`             | `validate` | `meta.name` fields match a configured regex pattern                              |
+| `ref_convention`             | `validate` | Remote references follow configured tag naming conventions                       |
+| `script`                     | any        | Delegates to an external command (OPA, Checkov, custom script)                   |
+| `sbom_pinned_versions`       | `build`    | SBOM components have pinned, non-floating version tags                           |
+| `sbom_allowed_registries`    | `build`    | Container images originate only from approved registries                         |
+| `sbom_denied_packages`       | `build`    | No SBOM component matches a purl/name blocklist pattern                          |
+| `sbom_max_components`        | `build`    | Total SBOM component count stays within a configured budget                      |
+| `sbom_license`               | `build`    | SBOM component licenses match an allow/deny list (via `strata:license` property) |
 
 ### `tenant_zone`
 
@@ -86,6 +87,50 @@ It reads:
 For each resource change, it checks whether the target region (from `location` or `region` in the plan) falls within the tenant's allowed regions. Any resource targeting a disallowed region is reported as a violation.
 
 No `configuration` block is needed — the policy reads zone data from the configuration file automatically.
+
+### `resource_type_restrictions`
+
+Evaluates at the `plan` phase. Reads every `create` and `update` resource change from the Terraform plan JSON and checks the resource type against a configured list.
+
+Two modes:
+
+- **`deny`** (default) — the policy fails if any planned resource has a type on the denied list. Use this to block specific resource types outright.
+- **`allow`** — the policy fails if any planned resource has a type that is _not_ on the allowed list. Use this for a strict allowlist.
+
+```yaml
+# Block bare VMs — use managed node pools instead
+- name: no_bare_vms
+  type: resource_type_restrictions
+  phase: plan
+  enforcement: deny
+  configuration:
+    mode: deny
+    types:
+      - azurerm_virtual_machine
+      - aws_instance
+      - google_compute_instance
+
+# Strict allowlist
+- name: approved_types_only
+  type: resource_type_restrictions
+  phase: plan
+  enforcement: deny
+  configuration:
+    mode: allow
+    types:
+      - azurerm_kubernetes_cluster
+      - azurerm_storage_account
+```
+
+**Configuration fields:**
+
+| Field     | Type           | Default            | Description                                                                        |
+| --------- | -------------- | ------------------ | ---------------------------------------------------------------------------------- |
+| `mode`    | string         | `deny`             | Operating mode: `deny` (block listed types) or `allow` (permit only listed types). |
+| `types`   | list of string | required           | Terraform resource type strings (e.g. `azurerm_virtual_machine`, `aws_instance`).  |
+| `actions` | list of string | `[create, update]` | Which plan actions trigger the check (`create`, `update`, `delete`, `replace`).    |
+
+Skipped gracefully when no plan data is available or `types` is empty.
 
 ### `required_tags`
 
@@ -172,12 +217,12 @@ Skipped gracefully when no deployments/environments are found, or when no remote
 
 **Configuration fields:**
 
-| Field              | Type           | Description                                                                              |
-| ------------------ | -------------- | ---------------------------------------------------------------------------------------- |
-| `remotes`          | list           | List of remote repository configurations                                                 |
-| `remotes[].name`   | string         | Remote repository name (from `solution.remotes`)                                        |
-| `remotes[].release_pattern` | string | Regex pattern for release tags (e.g., `"^v\\d+\\.\\d+\\.\\d+$"` for semver)     |
-| `remotes[].quality_pattern` | string | Regex pattern for quality-gate tags (e.g., `"^tested(-\\d+)?$"`)                     |
+| Field                       | Type   | Description                                                                 |
+| --------------------------- | ------ | --------------------------------------------------------------------------- |
+| `remotes`                   | list   | List of remote repository configurations                                    |
+| `remotes[].name`            | string | Remote repository name (from `solution.remotes`)                            |
+| `remotes[].release_pattern` | string | Regex pattern for release tags (e.g., `"^v\\d+\\.\\d+\\.\\d+$"` for semver) |
+| `remotes[].quality_pattern` | string | Regex pattern for quality-gate tags (e.g., `"^tested(-\\d+)?$"`)            |
 
 At least one pattern (`release_pattern` or `quality_pattern`) must be configured per remote.
 
