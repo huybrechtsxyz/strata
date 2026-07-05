@@ -22,16 +22,16 @@ spec:
 
 `merge_envfiles()` only merges `variables`, `secrets`, and `features`. The remaining five `EnvironmentSpecModel` sections are **silently dropped** from every file after the first:
 
-| Section | Merged? | Consequence |
-|---------|---------|-------------|
-| `variables` | ✅ Last-wins by key | Works correctly |
-| `secrets` | ✅ Last-wins by key | Works correctly |
-| `features` | ✅ Last-list-wins | Works correctly (wholesale replacement) |
-| `overrides` | ❌ Hardcoded to `None` | Environment overrides in non-first files are silently ignored |
-| `properties` | ❌ Hardcoded to `None` | Properties in any file are silently ignored |
-| `custom` | ❌ Hardcoded to `None` | Custom data in any file is silently ignored |
-| `lifecycle` | ❌ Hardcoded to `None` | Lifecycle hooks in any file are silently ignored |
-| `audit` | ❌ Hardcoded to `None` | Audit config in any file is silently ignored |
+| Section      | Merged?               | Consequence                                                   |
+| ------------ | --------------------- | ------------------------------------------------------------- |
+| `variables`  | ✅ Last-wins by key    | Works correctly                                               |
+| `secrets`    | ✅ Last-wins by key    | Works correctly                                               |
+| `features`   | ✅ Last-list-wins      | Works correctly (wholesale replacement)                       |
+| `overrides`  | ❌ Hardcoded to `None` | Environment overrides in non-first files are silently ignored |
+| `properties` | ❌ Hardcoded to `None` | Properties in any file are silently ignored                   |
+| `custom`     | ❌ Hardcoded to `None` | Custom data in any file is silently ignored                   |
+| `lifecycle`  | ❌ Hardcoded to `None` | Lifecycle hooks in any file are silently ignored              |
+| `audit`      | ❌ Hardcoded to `None` | Audit config in any file is silently ignored                  |
 
 The merged `EnvironmentSpecModel` is constructed with explicit `None` for all five sections:
 
@@ -63,10 +63,10 @@ The `strata values list` command shows resolved values with optional `--show-sto
 
 We evaluated two approaches:
 
-| Approach | Description |
-|----------|-------------|
+| Approach                     | Description                                                                        |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
 | **Hierarchical inheritance** | Add `extends: parent.yaml` to environment schema; resolve parent chain recursively |
-| **Flat list (fix gaps)** | Keep existing `environments: [a.yaml, b.yaml]` list; fix the incomplete merge |
+| **Flat list (fix gaps)**     | Keep existing `environments: [a.yaml, b.yaml]` list; fix the incomplete merge      |
 
 **Chosen: Flat list.** Hierarchy adds complexity (circular dependency detection, diamond problem, hidden behavior, non-obvious resolution order) for minimal benefit. Real-world environments use 2–3 layers at most — a flat ordered list handles this cleanly without hidden parent chains. The deployment file already declares the exact merge order explicitly, which is easier to reason about and debug.
 
@@ -98,22 +98,22 @@ Fix `merge_envfiles()` to merge all sections, add source-file provenance to `Res
 
 Extend the merge loop to handle all eight sections with clear, documented semantics:
 
-| Section | Merge strategy | Rationale |
-|---------|---------------|-----------|
-| `variables` | Last-wins by `key` | Existing behavior, correct |
-| `secrets` | Last-wins by `key` | Existing behavior, correct |
-| `features` | Last-wins by `key` | **Changed** from wholesale list replacement to per-key merge for consistency |
-| `overrides.resources` | Last-wins by `resource` name | Prd file should be able to override resource counts defined in base |
-| `overrides.modules` | Last-wins by composite key `(module, resource, namespace, slot_type)` | Matches existing uniqueness validator |
-| `overrides.providers` | Last-wins by `provider` name | Same pattern as resources |
-| `overrides.properties` | Shallow `dict.update()` | Later file's properties overlay earlier ones; keys not present in later file are preserved |
-| `overrides.includes` | Append (deduplicate by source path) | Includes are additive — each env file can contribute Terraform includes |
-| `overrides.remotes` | Last-wins by `remote` name | Pin version per remote |
-| `overrides.output_files` | Append (deduplicate by output path) | Output files are additive |
-| `properties` | Shallow `dict.update()` | Same as overrides.properties |
-| `custom` | Shallow `dict.update()` | Same as properties |
-| `lifecycle` | Last-wins (wholesale) | Last file's lifecycle config takes precedence |
-| `audit` | Last-wins (wholesale) | Last file's audit config takes precedence |
+| Section                  | Merge strategy                                                        | Rationale                                                                                  |
+| ------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `variables`              | Last-wins by `key`                                                    | Existing behavior, correct                                                                 |
+| `secrets`                | Last-wins by `key`                                                    | Existing behavior, correct                                                                 |
+| `features`               | Last-wins by `key`                                                    | **Changed** from wholesale list replacement to per-key merge for consistency               |
+| `overrides.resources`    | Last-wins by `resource` name                                          | Prd file should be able to override resource counts defined in base                        |
+| `overrides.modules`      | Last-wins by composite key `(module, resource, namespace, slot_type)` | Matches existing uniqueness validator                                                      |
+| `overrides.providers`    | Last-wins by `provider` name                                          | Same pattern as resources                                                                  |
+| `overrides.properties`   | Shallow `dict.update()`                                               | Later file's properties overlay earlier ones; keys not present in later file are preserved |
+| `overrides.includes`     | Append (deduplicate by source path)                                   | Includes are additive — each env file can contribute Terraform includes                    |
+| `overrides.remotes`      | Last-wins by `remote` name                                            | Pin version per remote                                                                     |
+| `overrides.output_files` | Append (deduplicate by output path)                                   | Output files are additive                                                                  |
+| `properties`             | Shallow `dict.update()`                                               | Same as overrides.properties                                                               |
+| `custom`                 | Shallow `dict.update()`                                               | Same as properties                                                                         |
+| `lifecycle`              | Last-wins (wholesale)                                                 | Last file's lifecycle config takes precedence                                              |
+| `audit`                  | Last-wins (wholesale)                                                 | Last file's audit config takes precedence                                                  |
 
 #### Implementation sketch
 
@@ -345,39 +345,39 @@ Each row in the JSON output gains `source` and `overridden_from` fields:
 
 #### Files to modify
 
-| File | Change |
-|------|--------|
-| `services/environment_service.py` | Extend `merge_envfiles()` to merge all sections; return `MergeProvenance` alongside the model |
-| `models/environment_model.py` | No changes (schema is unchanged) |
-| `utils/resolved_values.py` | Add `variable_sources`, `secret_sources`, `feature_sources` dicts |
-| `utils/merge_provenance.py` | **New** — `MergeProvenance` dataclass |
-| `controllers/value_controller.py` | Accept and forward provenance to `ResolvedValues` |
-| `services/deployment_service.py` | Store `MergeProvenance` from env merge; expose via getter |
-| `commands/cli_values.py` | Add `--trace` option |
-| `commands/deploy/list_values_deploy_command.py` | Add source column when `--trace`; include provenance in JSON output |
+| File                                            | Change                                                                                        |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `services/environment_service.py`               | Extend `merge_envfiles()` to merge all sections; return `MergeProvenance` alongside the model |
+| `models/environment_model.py`                   | No changes (schema is unchanged)                                                              |
+| `utils/resolved_values.py`                      | Add `variable_sources`, `secret_sources`, `feature_sources` dicts                             |
+| `utils/merge_provenance.py`                     | **New** — `MergeProvenance` dataclass                                                         |
+| `controllers/value_controller.py`               | Accept and forward provenance to `ResolvedValues`                                             |
+| `services/deployment_service.py`                | Store `MergeProvenance` from env merge; expose via getter                                     |
+| `commands/cli_values.py`                        | Add `--trace` option                                                                          |
+| `commands/deploy/list_values_deploy_command.py` | Add source column when `--trace`; include provenance in JSON output                           |
 
 #### Files unchanged
 
-| File | Why |
-|------|-----|
-| `models/environment_model.py` | No schema additions — provenance is runtime-only |
-| `deployers/*` | Deployers consume `ResolvedValues`; new fields are additive |
-| `builders/*` | Build does not use value resolution |
+| File                          | Why                                                         |
+| ----------------------------- | ----------------------------------------------------------- |
+| `models/environment_model.py` | No schema additions — provenance is runtime-only            |
+| `deployers/*`                 | Deployers consume `ResolvedValues`; new fields are additive |
+| `builders/*`                  | Build does not use value resolution                         |
 
 ### 5. Testing strategy
 
-| Test | Purpose |
-|------|---------|
-| `test_merge_envfiles_overrides` | Verify resource/module/provider/remote overrides merge correctly |
-| `test_merge_envfiles_properties` | Verify properties/custom shallow-merge |
-| `test_merge_envfiles_lifecycle_audit` | Verify last-wins for lifecycle and audit |
-| `test_merge_envfiles_features_by_key` | Verify features now merge by key (not wholesale) |
-| `test_merge_provenance_tracking` | Verify each key records correct source file |
-| `test_merge_provenance_override_chain` | Verify overridden_from tracks all previous sources for a key |
-| `test_values_list_trace_console` | Verify `--trace` console output includes source column |
-| `test_values_list_trace_json` | Verify `--trace` JSON includes source and merge_order |
-| `test_single_file_no_merge` | Verify single-file deployment still works (no regression) |
-| `test_backward_compat_vars_secrets` | Verify existing variable/secret merge behavior is unchanged |
+| Test                                   | Purpose                                                          |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| `test_merge_envfiles_overrides`        | Verify resource/module/provider/remote overrides merge correctly |
+| `test_merge_envfiles_properties`       | Verify properties/custom shallow-merge                           |
+| `test_merge_envfiles_lifecycle_audit`  | Verify last-wins for lifecycle and audit                         |
+| `test_merge_envfiles_features_by_key`  | Verify features now merge by key (not wholesale)                 |
+| `test_merge_provenance_tracking`       | Verify each key records correct source file                      |
+| `test_merge_provenance_override_chain` | Verify overridden_from tracks all previous sources for a key     |
+| `test_values_list_trace_console`       | Verify `--trace` console output includes source column           |
+| `test_values_list_trace_json`          | Verify `--trace` JSON includes source and merge_order            |
+| `test_single_file_no_merge`            | Verify single-file deployment still works (no regression)        |
+| `test_backward_compat_vars_secrets`    | Verify existing variable/secret merge behavior is unchanged      |
 
 ### 6. Migration and backward compatibility
 
