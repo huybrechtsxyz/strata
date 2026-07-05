@@ -35,6 +35,14 @@ Integrations connect the platform to external tools and services (git, terraform
 
 SIEM integrations are HTTP-based — they have no CLI command and are not included in `strata tools status`. Use `strata tools check <name>` to probe connectivity. See [SIEM Audit Forwarding Guide](../guides/siem-audit-forwarding.md) for configuration examples.
 
+**Security & Scanning integrations** (implement `ICveScanner`, used by `RunBuildCommand`):
+
+| Class | Module | Type string | Backend | Auto-detect |
+|-------|--------|-------------|---------|------------|
+| `CveScannerIntegration` | `integrations.cve_scanner` | `cve_scanner` | Trivy (default) or Grype | Yes (first available) |
+
+CVE scanner is optional and used with `strata build run --audit`. It auto-detects the first available backend (Trivy preferred, Grype fallback). See [CVE Vulnerability Scanning Guide](../guides/cve-vulnerability-scanning.md) for configuration and usage examples.
+
 ## Creating an Integration
 
 ```python

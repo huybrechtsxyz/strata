@@ -145,6 +145,7 @@ strata
    guides/siem-audit-forwarding
    guides/extending-sbom-plugins
    guides/sbom-plugin-examples
+   guides/cve-vulnerability-scanning
    guides/at-scale
    guides/using-console
 
