@@ -36,6 +36,7 @@ class PolicyEngine:
             if policy.phase != phase:
                 continue
             result = policy.evaluate(context)
+            result.policy_type = policy.policy.type
             self.logger.debug(
                 "policy_evaluated",
                 policy=policy.name,
@@ -61,6 +62,7 @@ class PolicyEngine:
 
     def _create(self, policy_model: PolicyModel) -> BasePolicy:
         """Dispatch policy type to its concrete implementation."""
+        from strata.validators.policies.cve_max_severity_policy import CveMaxSeverityPolicy
         from strata.validators.policies.naming_policy import NamingPolicy
         from strata.validators.policies.ref_convention_policy import RefConventionPolicy
         from strata.validators.policies.required_tags_policy import RequiredTagsPolicy
@@ -85,6 +87,7 @@ class PolicyEngine:
             "sbom_denied_packages": SbomDeniedPackagesPolicy,
             "sbom_max_components": SbomMaxComponentsPolicy,
             "sbom_license": SbomLicensePolicy,
+            "cve_max_severity": CveMaxSeverityPolicy,
         }
 
         policy_class = _builtin.get(policy_model.type) or self._custom_types.get(policy_model.type)

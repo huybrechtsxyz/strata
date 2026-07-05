@@ -217,6 +217,7 @@ class RunBuildCommand(BaseBuildCommand):
             platform_artifact=platform_artifact,
             build_path=self._build_path,
             sbom_components=getattr(self, "_sbom_components", None),
+            cve_audit_result=getattr(self, "_cve_audit_result", None),
         )
 
         engine = PolicyEngine(build_policies)

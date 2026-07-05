@@ -364,6 +364,9 @@ class BaseBuildCommand(BaseCommand):
         if self._is_console_output() and result.total_findings == 0:
             click.echo("✅  No vulnerabilities found")
 
+        # Store for policy engine consumption
+        self._cve_audit_result = result
+
         return True
 
     @staticmethod

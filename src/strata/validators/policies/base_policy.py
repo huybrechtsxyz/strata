@@ -29,6 +29,7 @@ class PolicyContext:
     plan_data: Optional[Dict[str, Any]] = None  # terraform show -json output
     build_path: Optional[Path] = None
     sbom_components: Optional[List[Any]] = None  # List[SbomComponentModel]
+    cve_audit_result: Optional[Any] = None  # CveAuditResultModel — populated when --audit ran before policies
 
 
 @dataclass
@@ -38,6 +39,7 @@ class PolicyResult:
     passed: bool
     policy_name: str
     enforcement: str  # deny | warn | audit
+    policy_type: str = ""
     violations: List[str] = field(default_factory=list)
     details: Optional[Dict[str, Any]] = None
 
