@@ -118,9 +118,18 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # Run strata against its own source tree (dogfood)
-      - name: Generate SBOM (scan mode)
-        run: uv run strata build sbom --scan . --report cyclonedx --output-file sbom.json
+      # Install Trivy for CVE vulnerability scanning
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget apt-transport-https gnupg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      # Run strata against its own source tree (dogfood) with CVE audit
+      - name: Generate SBOM and audit for vulnerabilities
+        run: uv run strata build sbom --scan . --report cyclonedx --output-file sbom.json --audit --fail-on HIGH
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v7
