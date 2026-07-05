@@ -139,6 +139,7 @@ strata
    decisions/0021-deployment-manifests-as-first-class-build-artifacts
    decisions/0022-siem-integration-splunk-hec-cef
    decisions/0023-pluggable-provisioner-framework
+   decisions/0024-environment-composition-flat-merge-fix
 
 .. toctree::
    :maxdepth: 2
