@@ -40,6 +40,12 @@ class ResolvedValues:
     variable_notes: Dict[str, str] = field(default_factory=dict)
     secret_notes: Dict[str, str] = field(default_factory=dict)
     feature_notes: Dict[str, str] = field(default_factory=dict)
+    # Provenance: which environment file each declared value came from
+    variable_sources: Dict[str, str] = field(default_factory=dict)
+    secret_sources: Dict[str, str] = field(default_factory=dict)
+    feature_sources: Dict[str, str] = field(default_factory=dict)
+    # Merge order recorded during merge_envfiles()
+    merge_order: List[str] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         """Return True when no values were resolved."""
@@ -69,6 +75,10 @@ class ResolvedValues:
                 variable_notes=dict(self.variable_notes),
                 secret_notes={},
                 feature_notes=dict(self.feature_notes),
+                variable_sources=dict(self.variable_sources),
+                secret_sources={},
+                feature_sources=dict(self.feature_sources),
+                merge_order=list(self.merge_order),
             )
 
         if allowed_secrets == ["*"]:
@@ -82,6 +92,10 @@ class ResolvedValues:
                 variable_notes=dict(self.variable_notes),
                 secret_notes=dict(self.secret_notes),
                 feature_notes=dict(self.feature_notes),
+                variable_sources=dict(self.variable_sources),
+                secret_sources=dict(self.secret_sources),
+                feature_sources=dict(self.feature_sources),
+                merge_order=list(self.merge_order),
             )
 
         allowed = set(allowed_secrets)
@@ -95,6 +109,10 @@ class ResolvedValues:
             variable_notes=dict(self.variable_notes),
             secret_notes={k: v for k, v in self.secret_notes.items() if k in allowed},
             feature_notes=dict(self.feature_notes),
+            variable_sources=dict(self.variable_sources),
+            secret_sources={k: v for k, v in self.secret_sources.items() if k in allowed},
+            feature_sources=dict(self.feature_sources),
+            merge_order=list(self.merge_order),
         )
 
     def debug_summary(self) -> Dict[str, Any]:

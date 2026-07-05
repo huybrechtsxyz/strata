@@ -60,6 +60,14 @@ class ValueController(BaseController):
             logger.warning("No environment service attached to deployment — no variables/secrets/features to resolve.")
             return True, resolved, []
 
+        # Attach provenance from the merge step (None for single-file deployments)
+        provenance = deployment_service.get_merge_provenance()
+        if provenance is not None:
+            resolved.variable_sources = dict(provenance.variable_sources)
+            resolved.secret_sources = dict(provenance.secret_sources)
+            resolved.feature_sources = dict(provenance.feature_sources)
+            resolved.merge_order = list(provenance.merge_order)
+
         # Lazy-init integrations once (idempotent; no-op if already done).
         self._ensure_integrations_initialized()
 

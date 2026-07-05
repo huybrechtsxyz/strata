@@ -1,0 +1,39 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: merge_override
+  labels:
+    version: "1.0.0"
+spec:
+  properties:
+    log_level: warning
+    extra_prop: prd_value
+  custom:
+    costcenter: prd
+  variables:
+    - key: APP_HOST
+      store: constant
+      value: prd.internal
+    - key: APP_TIMEOUT
+      store: constant
+      value: "30"
+  secrets:
+    - key: DB_PASSWORD
+      store: constant
+      value: prd-secret
+  features:
+    - key: enable_debug
+      store: constant
+      value: true
+  overrides:
+    resources:
+      - resource: manager
+        count: 3
+        configuration:
+          vm_size: Standard_D4s_v3
+      - resource: worker
+        count: 2
+    providers:
+      - provider: cloud_provider
+        configuration:
+          datacenter: FR

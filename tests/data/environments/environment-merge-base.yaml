@@ -1,0 +1,44 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: merge_base
+  labels:
+    version: "1.0.0"
+spec:
+  properties:
+    region: eu-fr
+    log_level: info
+  custom:
+    costcenter: base
+    team: platform
+  variables:
+    - key: APP_HOST
+      store: constant
+      value: base.internal
+    - key: APP_PORT
+      store: constant
+      value: "8080"
+  secrets:
+    - key: DB_PASSWORD
+      store: constant
+      value: base-secret
+    - key: API_KEY
+      store: constant
+      value: base-api-key
+  features:
+    - key: enable_debug
+      store: constant
+      value: false
+    - key: enable_metrics
+      store: constant
+      value: true
+  overrides:
+    resources:
+      - resource: manager
+        count: 1
+        configuration:
+          vm_size: Standard_D2s_v3
+    providers:
+      - provider: cloud_provider
+        configuration:
+          datacenter: EU

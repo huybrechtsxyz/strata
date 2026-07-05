@@ -5,8 +5,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.environment_model import (
+    EnvironmentIncludeModel,
     EnvironmentModel,
     EnvironmentModuleOverrideModel,
+    EnvironmentOverridesModel,
     EnvironmentProviderOverrideModel,
     EnvironmentRemoteOverrideModel,
     EnvironmentResourceOverrideModel,
@@ -20,7 +22,9 @@ from strata.models.store_models import (
     VariableStoreType,
     validate_store_security_policy,
 )
+from strata.models.workspace_model import OutputFileModel
 from strata.services.base_service import BaseService
+from strata.utils.merge_provenance import MergeProvenance
 
 
 class EnvironmentService(BaseService["EnvironmentModel"]):
@@ -53,83 +57,193 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
         pass
 
     @classmethod
-    def merge_envfiles(cls, envfiles: List[str], work_path: Path) -> EnvironmentModel:
+    def merge_envfiles(cls, envfiles: List[str], work_path: Path) -> Tuple["EnvironmentModel", "MergeProvenance"]:
         """
         Merge multiple environment files into a single EnvironmentModel.
 
-        Later files override earlier files for conflicting keys.
-        Feature flags from the last file take precedence.
+        All spec sections participate in the merge.  Later files override
+        earlier files for conflicting keys (last-wins semantics).  The
+        returned :class:`~strata.utils.merge_provenance.MergeProvenance`
+        records which file contributed each key.
+
+        Merge semantics per section:
+
+        * ``variables``           — last-wins by ``key``
+        * ``secrets``             — last-wins by ``key``
+        * ``features``            — last-wins by ``key``
+        * ``properties``          — shallow ``dict.update``
+        * ``custom``              — shallow ``dict.update``
+        * ``lifecycle``           — last-wins (wholesale)
+        * ``audit``               — last-wins (wholesale)
+        * ``overrides.resources`` — last-wins by ``resource`` name
+        * ``overrides.modules``   — last-wins by ``(module, resource, namespace, slot_type)``
+        * ``overrides.providers`` — last-wins by ``provider`` name
+        * ``overrides.remotes``   — last-wins by ``remote`` name
+        * ``overrides.properties``— shallow ``dict.update``
+        * ``overrides.includes``  — append; deduplicated by ``source`` path
+        * ``overrides.output_files`` — append; deduplicated by ``path``
 
         Args:
-            envfiles: List of environment file paths to merge (relative to work_path)
-            work_path: Base working directory for resolving relative paths
+            envfiles: List of environment file paths to merge (relative to work_path).
+            work_path: Base working directory for resolving relative paths.
 
         Returns:
-            EnvironmentModel: Merged environment configuration
+            Tuple of (merged EnvironmentModel, MergeProvenance).
 
         Raises:
-            ValueError: If any environment file is invalid
+            ValueError: If any environment file fails validation.
         """
-        merged_vars = {}
-        merged_secrets = {}
-        merged_features = None
+        from strata.models.environment_model import (
+            EnvironmentMetaModel,
+            EnvironmentSpecModel,
+        )
+
+        provenance = MergeProvenance()
+
+        # Per-type accumulators
+        merged_vars: Dict[str, Any] = {}  # key → VariableStoreModel
+        merged_secrets: Dict[str, Any] = {}  # key → SecretStoreModel
+        merged_features: Dict[str, Any] = {}  # key → FeatureStoreModel
+        merged_lifecycle = None
+        merged_properties: Dict[str, Any] = {}
+        merged_custom: Dict[str, Any] = {}
+        merged_audit = None
         meta = None
 
+        # Override accumulators
+        merged_res_overrides: Dict[str, EnvironmentResourceOverrideModel] = {}
+        merged_mod_overrides: Dict[str, EnvironmentModuleOverrideModel] = {}
+        merged_prov_overrides: Dict[str, EnvironmentProviderOverrideModel] = {}
+        merged_remote_overrides: Dict[str, EnvironmentRemoteOverrideModel] = {}
+        merged_ovr_properties: Dict[str, Any] = {}
+        merged_includes: Dict[str, EnvironmentIncludeModel] = {}
+        merged_output_files: Dict[str, OutputFileModel] = {}
+
         for envfile_path in envfiles:
+            provenance.merge_order.append(envfile_path)
             env_service = cls(str(work_path / envfile_path))
             is_valid, errors = env_service.validate()
             if not is_valid:
                 raise ValueError(f"Invalid environment file: {envfile_path}\nErrors: {errors}")
 
             env_model = env_service.get_model()
-            if not env_model:
+            if not env_model or not env_model.spec:
                 continue
 
             if meta is None and env_model.meta:
                 meta = env_model.meta
 
-            # Merge variables (later files override earlier ones)
-            if env_model.spec and env_model.spec.variables:
-                for var in env_model.spec.variables:
-                    merged_vars[var.key] = var
+            spec = env_model.spec
 
-            # Merge secrets (later files override earlier ones)
-            if env_model.spec and env_model.spec.secrets:
-                for secret in env_model.spec.secrets:
-                    merged_secrets[secret.key] = secret
+            # --- Variables: last-wins by key ---
+            if spec.variables:
+                for var in spec.variables:
+                    key = var.key
+                    if key in merged_vars:
+                        provenance.variable_overridden.setdefault(key, []).append(provenance.variable_sources[key])
+                    merged_vars[key] = var
+                    provenance.variable_sources[key] = envfile_path
 
-            # Last features wins
-            if env_model.spec and env_model.spec.features:
-                merged_features = env_model.spec.features
+            # --- Secrets: last-wins by key ---
+            if spec.secrets:
+                for secret in spec.secrets:
+                    key = secret.key
+                    if key in merged_secrets:
+                        provenance.secret_overridden.setdefault(key, []).append(provenance.secret_sources[key])
+                    merged_secrets[key] = secret
+                    provenance.secret_sources[key] = envfile_path
 
-        # Build merged EnvironmentModel
-        from strata.models.environment_model import (
-            EnvironmentMetaModel,
-            EnvironmentSpecModel,
+            # --- Features: last-wins by key ---
+            if spec.features:
+                for feat in spec.features:
+                    key = feat.key
+                    if key in merged_features:
+                        provenance.feature_overridden.setdefault(key, []).append(provenance.feature_sources[key])
+                    merged_features[key] = feat
+                    provenance.feature_sources[key] = envfile_path
+
+            # --- Properties / Custom: shallow merge ---
+            if spec.properties:
+                merged_properties.update(spec.properties)
+            if spec.custom:
+                merged_custom.update(spec.custom)
+
+            # --- Lifecycle / Audit: last-wins ---
+            if spec.lifecycle:
+                merged_lifecycle = spec.lifecycle
+            if spec.audit:
+                merged_audit = spec.audit
+
+            # --- Overrides ---
+            if spec.overrides:
+                ovr = spec.overrides
+                if ovr.resources:
+                    for res in ovr.resources:
+                        merged_res_overrides[str(res.resource)] = res
+                if ovr.modules:
+                    for mod in ovr.modules:
+                        mod_key = f"{mod.module}:{mod.resource or ''}:{mod.namespace or ''}:{mod.slot_type or ''}"
+                        merged_mod_overrides[mod_key] = mod
+                if ovr.providers:
+                    for prov in ovr.providers:
+                        merged_prov_overrides[str(prov.provider)] = prov
+                if ovr.remotes:
+                    for rem in ovr.remotes:
+                        merged_remote_overrides[str(rem.remote)] = rem
+                if ovr.properties:
+                    merged_ovr_properties.update(ovr.properties)
+                if ovr.includes:
+                    for inc in ovr.includes:
+                        merged_includes[inc.source] = inc
+                if ovr.output_files:
+                    for of in ovr.output_files:
+                        merged_output_files[of.path] = of
+
+        # Build merged EnvironmentOverridesModel (only when at least one override exists)
+        has_overrides = any(
+            [
+                merged_res_overrides,
+                merged_mod_overrides,
+                merged_prov_overrides,
+                merged_remote_overrides,
+                merged_ovr_properties,
+                merged_includes,
+                merged_output_files,
+            ]
+        )
+        merged_overrides: Optional[EnvironmentOverridesModel] = (
+            EnvironmentOverridesModel(
+                resources=list(merged_res_overrides.values()) or None,
+                modules=list(merged_mod_overrides.values()) or None,
+                providers=list(merged_prov_overrides.values()) or None,
+                remotes=list(merged_remote_overrides.values()) or None,
+                properties=merged_ovr_properties or None,
+                includes=list(merged_includes.values()) or None,
+                output_files=list(merged_output_files.values()) or None,
+            )
+            if has_overrides
+            else None
         )
 
-        variables = list(merged_vars.values()) if merged_vars else None
-        secrets = list(merged_secrets.values()) if merged_secrets else None
-
         spec = EnvironmentSpecModel(
-            variables=variables,
-            secrets=secrets,
-            features=merged_features,
-            lifecycle=None,
-            properties=None,
-            custom=None,
-            overrides=None,
+            variables=list(merged_vars.values()) or None,
+            secrets=list(merged_secrets.values()) or None,
+            features=list(merged_features.values()) or None,
+            lifecycle=merged_lifecycle,
+            properties=merged_properties or None,
+            custom=merged_custom or None,
+            overrides=merged_overrides,
+            audit=merged_audit,
         )
 
         if meta is None:
             meta = EnvironmentMetaModel(name="Unknown", annotations=None, labels=None, tags=None)
 
-        return EnvironmentModel(
-            # apiVersion=PlatformVersion.v1.value, --- IGNORE ---
-            # kind=PlatformKind.ENVIRONMENT.value, --- IGNORE ---
+        merged_model = EnvironmentModel(
             meta=meta,
             spec=spec,
         )
+        return merged_model, provenance
 
     # Internal methods for validation phases
 

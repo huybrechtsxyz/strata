@@ -44,6 +44,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         type_filter: Optional[str] = None,
         show_store: bool = False,
         unresolved_only: bool = False,
+        trace: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -59,6 +60,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         self._type_filter = type_filter  # "variables" | "secrets" | "features" | None (all)
         self._show_store = show_store
         self._unresolved_only = unresolved_only
+        self._trace = trace
 
     # ------------------------------------------------------------------
     # Entry point
@@ -116,12 +118,14 @@ class ListValuesDeployCommand(BaseDeployCommand):
         _, resolved, _ = controller.resolve_values(self._deployment_service, strict=False)
 
         # Build per-type result rows
-        var_rows = self._build_var_rows(declared_vars, resolved.variables, resolved.errors, resolved.variable_notes)
+        var_rows = self._build_var_rows(
+            declared_vars, resolved.variables, resolved.errors, resolved.variable_notes, resolved.variable_sources
+        )
         secret_rows = self._build_secret_rows(
-            declared_secrets, resolved.secrets, resolved.errors, resolved.secret_notes
+            declared_secrets, resolved.secrets, resolved.errors, resolved.secret_notes, resolved.secret_sources
         )
         feature_rows = self._build_feature_rows(
-            declared_features, resolved.features, resolved.errors, resolved.feature_notes
+            declared_features, resolved.features, resolved.errors, resolved.feature_notes, resolved.feature_sources
         )
 
         if self._unresolved_only:
@@ -134,6 +138,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
             "variables": var_rows,
             "secrets": secret_rows,
             "features": feature_rows,
+            "merge_order": resolved.merge_order,
         }
 
         any_failed = (
@@ -162,6 +167,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         resolved: Dict[str, Any],
         errors: List[str],
         notes: Dict[str, str],
+        sources: Dict[str, str],
     ) -> List[Dict[str, Any]]:
         rows = []
         for item in declared:
@@ -177,6 +183,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "ok": True,
                         "note": notes.get(key, ""),
                         "description": item.description,
+                        "source": sources.get(key, ""),
                     }
                 )
             else:
@@ -190,6 +197,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "ok": False,
                         "note": "",
                         "description": item.description,
+                        "source": "",
                     }
                 )
         return rows
@@ -200,6 +208,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         resolved: Dict[str, Any],
         errors: List[str],
         notes: Dict[str, str],
+        sources: Dict[str, str],
     ) -> List[Dict[str, Any]]:
         rows = []
         for item in declared:
@@ -214,6 +223,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "ok": True,
                         "note": notes.get(key, ""),
                         "description": item.description,
+                        "source": sources.get(key, ""),
                     }
                 )
             else:
@@ -227,6 +237,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "ok": False,
                         "note": "",
                         "description": item.description,
+                        "source": "",
                     }
                 )
         return rows
@@ -237,6 +248,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
         resolved: Dict[str, Optional[bool]],
         errors: List[str],
         notes: Dict[str, str],
+        sources: Dict[str, str],
     ) -> List[Dict[str, Any]]:
         rows = []
         for item in declared:
@@ -253,6 +265,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "ok": True,
                         "note": notes.get(key, ""),
                         "description": item.description,
+                        "source": sources.get(key, ""),
                     }
                 )
             else:
@@ -266,6 +279,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                         "ok": False,
                         "note": "",
                         "description": item.description,
+                        "source": "",
                     }
                 )
         return rows
@@ -289,6 +303,10 @@ class ListValuesDeployCommand(BaseDeployCommand):
         if tf is None or tf == "features":
             self._print_section("FEATURES", feature_rows)
 
+        if self._trace and len(self._output_data.get("merge_order", [])) > 1:
+            order = self._output_data["merge_order"]
+            click.echo("\n  Merge order: " + " \u2192 ".join(order))
+
     def _print_section(self, title: str, rows: List[Dict[str, Any]]) -> None:
         col_key = max((len(r["key"]) for r in rows), default=3)
         col_key = max(col_key, len("KEY"))
@@ -297,8 +315,11 @@ class ListValuesDeployCommand(BaseDeployCommand):
         col_ref = max((len(r["store_ref"]) for r in rows), default=9) if self._show_store else 0
         col_val = max((len(r["display"]) for r in rows), default=5)
         col_val = max(col_val, len("VALUE / STATUS"))
+        col_src = max((len(r.get("source", "")) for r in rows), default=6) if self._trace else 0
+        col_src = max(col_src, len("SOURCE")) if self._trace else 0
 
-        sep = "─" * (col_key + col_store + col_val + (col_ref + 2 if self._show_store else 0) + 6)
+        extra = (col_ref + 2 if self._show_store else 0) + (col_src + 2 if self._trace else 0)
+        sep = "\u2500" * (col_key + col_store + col_val + extra + 6)
 
         click.echo(f"\n  {title}")
         click.echo(f"  {sep}")
@@ -307,6 +328,8 @@ class ListValuesDeployCommand(BaseDeployCommand):
         if self._show_store:
             header += f"  {'STORE REF':<{col_ref}}"
         header += f"  {'VALUE / STATUS':<{col_val}}"
+        if self._trace:
+            header += f"  {'SOURCE':<{col_src}}"
         click.echo(header)
 
         click.echo(f"  {sep}")
@@ -318,6 +341,8 @@ class ListValuesDeployCommand(BaseDeployCommand):
             if self._show_store:
                 line += f"  {row['store_ref']:<{col_ref}}"
             line += f"  {row['display']:<{col_val}}"
+            if self._trace:
+                line += f"  {row.get('source', ''):<{col_src}}"
             if row.get("note"):
                 line += f"  [{row['note']}]"
             click.echo(line)
