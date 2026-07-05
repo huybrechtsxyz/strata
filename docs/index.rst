@@ -54,6 +54,7 @@ strata
    platform/services
    platform/configuration
    platform/integrations
+   platform/mcp
    platform/builders
    platform/deployers
    platform/validators

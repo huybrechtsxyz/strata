@@ -107,6 +107,7 @@ class ScriptDeployer(BaseDeployer):
         verbose: bool = False,
         force: bool = False,
         resolved_values: Optional[ResolvedValues] = None,
+        solution_controller=None,
     ) -> None:
         super().__init__(
             stage=stage,
@@ -116,8 +117,9 @@ class ScriptDeployer(BaseDeployer):
             work_path=work_path,
             verbose=verbose,
             force=force,
+            solution_controller=solution_controller,
+            resolved_values=resolved_values,
         )
-        self.resolved_values = resolved_values
 
     # ------------------------------------------------------------------
     # Metadata

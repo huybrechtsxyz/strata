@@ -325,9 +325,7 @@ class AnsibleBuilder(BaseBuilder):
                 topologies_dict[str(topology.name)] = {
                     "type": str(topology.type),
                     "provider": str(topology.provider),
-                    "provisioner": topology.provisioner
-                    if isinstance(topology.provisioner, str)
-                    else topology.provisioner.value,
+                    "provisioner": str(topology.provisioner),
                     "components": components,
                     "volumes": volumes,
                 }
@@ -631,7 +629,7 @@ class AnsibleBuilder(BaseBuilder):
         template_context = self._build_template_context(deployment_service)
 
         for prov in provisioners:
-            if prov.provisioner.value != "ansible":
+            if prov.provisioner != "ansible":
                 continue
 
             source = prov.source
@@ -693,7 +691,7 @@ class AnsibleBuilder(BaseBuilder):
         return [
             solution_controller.get_provisioner_path(deployment_service, build_path, prov)
             for prov in provisioners
-            if prov.provisioner.value == "ansible"
+            if prov.provisioner == "ansible"
         ]
 
     # ------------------------------------------------------------------

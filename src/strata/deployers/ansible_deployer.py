@@ -87,8 +87,8 @@ class AnsibleDeployer(BaseDeployer):
             verbose=verbose,
             force=force,
             solution_controller=solution_controller,
+            resolved_values=resolved_values,
         )
-        self.resolved_values = resolved_values
         self._iac_model: Optional[WorkspaceIacModel] = None
         self._working_dir: Optional[Path] = None
         self._ansible: Optional[AnsibleIntegration] = None

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
+from strata.deployers.factory import DeployerFactory
 from strata.deployers.terraform_deployer import TerraformDeployer
 from strata.models.common_models import ProvisionerType
 from strata.models.deployment_model import DeploymentStageModel
@@ -301,7 +302,8 @@ class OutputEnvCommand(BaseDeployCommand):
         if iac is None or iac.provisioner != ProvisionerType.TERRAFORM:
             self._errors.append(f"Stage '{stage.name}': provisioner '{stage.provisioner}' is not terraform.")
             return None
-        return TerraformDeployer(
+        return DeployerFactory.create(  # type: ignore[return-value]
+            "terraform",
             stage=stage,
             deployment_service=self._deployment_service,  # type: ignore[arg-type]
             configuration_service=self._configuration_service,  # type: ignore[arg-type]

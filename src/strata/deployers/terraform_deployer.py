@@ -74,8 +74,8 @@ class TerraformDeployer(BaseDeployer):
             verbose=verbose,
             force=force,
             solution_controller=solution_controller,
+            resolved_values=resolved_values,
         )
-        self.resolved_values = resolved_values
         self._iac_model: Optional[WorkspaceIacModel] = None
         self._working_dir: Optional[Path] = None
         self._plan_file: Optional[Path] = None

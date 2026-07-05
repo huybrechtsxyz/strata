@@ -5,8 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.deployers.terraform_deployer import TerraformDeployer
-from strata.models.common_models import ProvisionerType
+from strata.deployers.factory import DeployerFactory
 from strata.models.deployment_model import DeploymentStageModel
 
 
@@ -272,46 +271,19 @@ class StatusDeployCommand(BaseDeployCommand):
         'provisioner' is required on every stage; convention-based fallback is not
         supported. An error is appended to self._errors when resolution fails.
         """
-        resolved_type: Optional[str] = None
-        _iac = None
-        _available: List[str] = []
-
-        if stage.provisioner and self._deployment_service is not None:
-            workspace_service = self._deployment_service.get_workspace_service()
-            if workspace_service:
-                spec = workspace_service.model.spec  # type: ignore[union-attr]
-                _provisioners = spec.provisioners or []
-                _available = [str(p.name) for p in _provisioners]
-                _iac = next((p for p in _provisioners if p.name == stage.provisioner), None)
-                if _iac and _iac.provisioner == ProvisionerType.TERRAFORM:
-                    resolved_type = "terraform"
-                elif _iac and _iac.provisioner == ProvisionerType.ANSIBLE:
-                    resolved_type = "ansible"
-                elif _iac and _iac.provisioner == ProvisionerType.COMPOSE:
-                    resolved_type = "compose"
-                elif _iac and _iac.provisioner == ProvisionerType.HELM:
-                    resolved_type = "helm"
-
-        if resolved_type is None:
-            if not stage.provisioner:
-                self._errors.append(
-                    f"Stage '{stage.name}': 'provisioner' is required — "
-                    "add a provisioner name matching an entry in the workspace provisioners list."
-                )
-            elif _iac is None:
-                self._errors.append(
-                    f"Stage '{stage.name}': provisioner '{stage.provisioner}' not found in workspace. "
-                    f"Available: {_available if _available else ['(none defined)']}"
-                )
-            else:
-                self._errors.append(
-                    f"Stage '{stage.name}': provisioner '{stage.provisioner}' has unsupported type "
-                    f"'{_iac.provisioner}'. Supported: terraform, ansible, compose, helm."
-                )
+        if self._deployment_service is None:
+            self._errors.append(f"Stage '{stage.name}': deployment service not loaded.")
             return None
 
-        if resolved_type == "terraform":
-            return TerraformDeployer(
+        resolved_type, errors = DeployerFactory.resolve_type(stage, self._deployment_service)
+        if errors:
+            self._errors.extend(errors)
+        if resolved_type is None:
+            return None
+
+        try:
+            return DeployerFactory.create(
+                resolved_type,
                 stage=stage,
                 deployment_service=self._deployment_service,  # type: ignore[arg-type]
                 configuration_service=self._configuration_service,  # type: ignore[arg-type]
@@ -320,44 +292,6 @@ class StatusDeployCommand(BaseDeployCommand):
                 verbose=self._is_verbose(),
                 solution_controller=self._solution_controller,
             )
-
-        if resolved_type == "ansible":
-            from strata.deployers.ansible_deployer import AnsibleDeployer
-
-            return AnsibleDeployer(
-                stage=stage,
-                deployment_service=self._deployment_service,  # type: ignore[arg-type]
-                configuration_service=self._configuration_service,  # type: ignore[arg-type]
-                build_path=self._build_path,
-                work_path=self._work_path,
-                verbose=self._is_verbose(),
-                solution_controller=self._solution_controller,
-            )
-
-        if resolved_type == "compose":
-            from strata.deployers.compose_deployer import ComposeDeployer
-
-            return ComposeDeployer(
-                stage=stage,
-                deployment_service=self._deployment_service,  # type: ignore[arg-type]
-                configuration_service=self._configuration_service,  # type: ignore[arg-type]
-                build_path=self._build_path,
-                work_path=self._work_path,
-                verbose=self._is_verbose(),
-                solution_controller=self._solution_controller,
-            )
-
-        if resolved_type == "helm":
-            from strata.deployers.helm_deployer import HelmDeployer
-
-            return HelmDeployer(
-                stage=stage,
-                deployment_service=self._deployment_service,  # type: ignore[arg-type]
-                configuration_service=self._configuration_service,  # type: ignore[arg-type]
-                build_path=self._build_path,
-                work_path=self._work_path,
-                verbose=self._is_verbose(),
-                solution_controller=self._solution_controller,
-            )
-
-        return None
+        except ValueError as exc:
+            self._errors.append(str(exc))
+            return None

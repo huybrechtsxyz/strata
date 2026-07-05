@@ -107,8 +107,8 @@ class HelmDeployer(BaseDeployer):
             verbose=verbose,
             force=force,
             solution_controller=solution_controller,
+            resolved_values=resolved_values,
         )
-        self.resolved_values = resolved_values
         self._helm_modules: List[HelmModuleTarget] = []
         self._helm: Optional[HelmIntegration] = None
 

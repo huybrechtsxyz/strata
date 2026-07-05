@@ -324,6 +324,11 @@ class BaseDeployCommand(BaseCommand):
         if not super()._before_execute():
             return False
 
+        # Load user provisioner plugins from .strata/provisioners/
+        from strata.deployers.factory import DeployerFactory
+
+        DeployerFactory.load_plugins(self._work_path)
+
         if not self._file_path:
             self._errors.append("No deployment file specified. Use --file.")
             return False
@@ -847,7 +852,7 @@ class BaseDeployCommand(BaseCommand):
             result.append(
                 ManifestArtifactProviderModel(
                     name=str(prov.name),
-                    type=prov.provisioner.value,
+                    type=prov.provisioner,
                     backend=backend_dict,
                     details=details,
                 )

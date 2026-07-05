@@ -776,7 +776,7 @@ class RunBuildCommand(BaseBuildCommand):
             result.append(
                 ManifestArtifactProviderModel(
                     name=str(prov.name),
-                    type=prov.provisioner.value,
+                    type=prov.provisioner,
                     backend=backend_dict,
                     details=details,
                 )

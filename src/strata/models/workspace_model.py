@@ -404,7 +404,13 @@ class WorkspaceIacModel(PlatformBaseModel):
         None,
         description="Optional description of the provisioner for documentation purposes",
     )
-    provisioner: ProvisionerType = Field(..., description="IaC tool used for provisioning")
+    provisioner: str = Field(
+        ...,
+        description=(
+            "IaC tool used for provisioning. Built-in types: terraform, ansible, "
+            "compose, helm, script. Custom provisioner plugins are also accepted."
+        ),
+    )
     source: SourceModel = Field(description="IaC deployment configuration (file path, variables, secrets)")
     backend: Optional[WorkspaceIacBackendModel] = Field(
         None,
@@ -433,7 +439,7 @@ class WorkspaceIacModel(PlatformBaseModel):
         if self.properties is not None and self.provisioner != ProvisionerType.ANSIBLE:
             raise ValueError(
                 f"Provisioner '{self.name}': 'properties' is only supported for ansible provisioners "
-                f"(got provisioner='{self.provisioner.value}')"
+                f"(got provisioner='{self.provisioner}')"
             )
         return self
 

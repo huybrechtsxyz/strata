@@ -338,7 +338,7 @@ Two resources are registered and loaded automatically into the AI's context:
 
 All tool responses use a consistent structure:
 
-```json
+```text
 {
   "success": true,
   "data": { ... },

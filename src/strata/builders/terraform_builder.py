@@ -120,7 +120,7 @@ class TerraformBuilder(BaseBuilder):
                 ws_service = deployment_service.get_workspace_service()
                 first_profile: Optional[OutputProfileModel] = None
                 if ws_service and ws_service.model:
-                    tf_provs = [p for p in ws_service.model.spec.provisioners if p.provisioner.value == "terraform"]
+                    tf_provs = [p for p in ws_service.model.spec.provisioners if p.provisioner == "terraform"]
                     if tf_provs:
                         first_profile = tf_provs[0].output
                 planned = [name for name, _ in self._planned_files(terraform_vars, profile=first_profile)]
@@ -479,9 +479,7 @@ class TerraformBuilder(BaseBuilder):
                 topologies_dict[topology.name] = {
                     "type": topology.type,
                     "provider": topology.provider,
-                    "provisioner": topology.provisioner
-                    if isinstance(topology.provisioner, str)
-                    else topology.provisioner.value,
+                    "provisioner": str(topology.provisioner),
                     "components": components,
                     "volumes": volumes,
                 }
@@ -729,7 +727,7 @@ class TerraformBuilder(BaseBuilder):
         return [
             solution_controller.get_provisioner_path(deployment_service, build_path, prov)
             for prov in provisioners
-            if prov.provisioner.value == "terraform"
+            if prov.provisioner == "terraform"
         ]
 
     def _planned_files(
@@ -1156,7 +1154,7 @@ class TerraformBuilder(BaseBuilder):
         try:
             ws_service = deployment_service.get_workspace_service()
             provisioners = (
-                [p for p in ws_service.model.spec.provisioners if p.provisioner.value == "terraform"]
+                [p for p in ws_service.model.spec.provisioners if p.provisioner == "terraform"]
                 if ws_service and ws_service.model
                 else []
             )
@@ -1307,7 +1305,7 @@ class TerraformBuilder(BaseBuilder):
         template_context = self._build_template_context(deployment_service)
 
         for prov in provisioners:
-            if prov.provisioner.value != "terraform":
+            if prov.provisioner != "terraform":
                 continue
 
             source = prov.source
