@@ -125,6 +125,7 @@ strata
    decisions/0020-lifecycle-phases-and-environment-variables
    decisions/0021-deployment-manifests-as-first-class-build-artifacts
    decisions/0022-siem-integration-splunk-hec-cef
+   decisions/0023-pluggable-provisioner-framework
 
 .. toctree::
    :maxdepth: 2
