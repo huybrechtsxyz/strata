@@ -4,9 +4,37 @@ Learn how to enable, interpret, and use deployment manifests for compliance, aud
 
 ---
 
+## Overview
+
+**Deployment manifests** are immutable snapshots created at two points in your workflow:
+
+1. **Build time** — `strata build run` captures the configuration and build outputs (artifacts, SBOM)
+2. **Deploy time** — `strata deploy run` captures the full deployment record (provisioner outputs, stage results)
+
+Think of manifests as **evidence** — a complete record of what was intended (build) and what actually happened (deploy). Together, they form your compliance audit trail.
+
+---
+
 ## What is a Deployment Manifest?
 
-A **deployment manifest** is an immutable snapshot captured by `strata deploy run` containing everything that was deployed:
+### Build Manifest
+
+A **build manifest** is created by `strata build run` and captures:
+
+- **Configuration snapshot** — Full `platform.json` with all resolved values
+- **Build artifacts** — Terraform, Ansible, Helm, Docker Compose files (if generated)
+- **Repository state** — Git commits for all solution repositories
+- **Bill of Materials** — SBOM with component versions
+- **Build environment** — Timestamp, user, version, environment variables
+- **Policy results** — Any policy engine outputs (if enabled)
+
+**Purpose:** Proves what was built, by whom, when, and from which source code.
+
+**Example use case:** Your security team asks, "What was in the build artifact that went to staging?" You show them the build manifest with the exact platform.json snapshot and commit SHAs.
+
+### Deploy Manifest
+
+A **deploy manifest** is created by `strata deploy run` and captures everything that was deployed:
 
 - **Exact configuration** — Full `platform.json` snapshot
 - **Pinned versions** — Git commits for all repositories
@@ -15,7 +43,22 @@ A **deployment manifest** is an immutable snapshot captured by `strata deploy ru
 - **Audit metadata** — Timestamp, user, deployment status, stage results
 - **Bill of Materials** — SBOM with component versions and vulnerabilities
 
-Think of it as **evidence** — a complete record of what was actually deployed, not just what was intended.
+### The Build → Deploy Workflow
+
+```mermaid
+graph LR
+    A["strata build run"] -->|generates| B["Build Manifest<br/>config + SBOM + repos"]
+    B -->|input to| C["strata deploy run"]
+    C -->|extends| D["Deploy Manifest<br/>build manifest + results"]
+    D -->|compliance evidence| E["Audit Trail"]
+```
+
+**Timeline:**
+
+1. **Build phase** → Build manifest written to `.strata/build/{deployment}/manifest.json`
+2. **Review & testing** → Inspect build manifest before approving to deploy
+3. **Deploy phase** → Deploy manifest written to `.strata/deployments/{deployment}/{version}/`
+4. **Audit** → Both manifests available for compliance queries
 
 ---
 
@@ -264,7 +307,25 @@ Manifests are JSON files with this structure:
 
 ## Common Tasks
 
-### List All Deployments
+### List All Manifests
+
+**Using `strata manifest` CLI:**
+
+```bash
+# List all available manifests
+strata manifest list
+
+# JSON output for scripting
+strata manifest list --output json
+
+# Filter by deployment
+strata manifest list --deployment prod_deployment --output json
+
+# Show last 5 manifests
+strata manifest list --last 5
+```
+
+**Manual filesystem traversal:**
 
 **Local storage:**
 
@@ -287,16 +348,57 @@ cd xyz-state
 find deployments -name "*.json" | sort -r
 ```
 
+### View a Manifest
+
+**Using `strata manifest` CLI:**
+
+```bash
+# Show manifest in console-friendly format
+strata manifest show 2024-06-17T10:45:33Z.json
+
+# JSON output
+strata manifest show 2024-06-17T10:45:33Z.json --output json
+
+# Query specific fields with jq
+strata manifest show 2024-06-17T10:45:33Z.json --output json | \
+  jq '.spec.artifacts.repositories'
+```
+
+### Export Manifests for Compliance
+
+**Create compliance evidence package:**
+
+```bash
+# Export all manifests with SBOM and platform.json
+strata manifest export --output-dir ./compliance_package \
+  --include-sbom \
+  --include-platform
+
+# Result:
+# compliance_package/
+#   manifests/
+#     2024-06-17T10:45:33Z.json
+#     2024-06-16T14:22:10Z.json
+#   sboms/
+#     2024-06-17T10:45:33Z-sbom.json
+#   artifacts/
+#     platform-2024-06-17T10:45:33Z.json
+```
+
 ### Compare Two Deployments
 
 ```bash
+# Export both manifests to JSON
+manifest1=$(strata manifest show m1.json --output json)
+manifest2=$(strata manifest show m2.json --output json)
+
 # What repositories changed?
-diff <(jq -r '.spec.artifacts.repositories | keys[]' manifest1.json | sort) \
-     <(jq -r '.spec.artifacts.repositories | keys[]' manifest2.json | sort)
+diff <(echo "$manifest1" | jq -r '.spec.artifacts.repositories | keys[]' | sort) \
+     <(echo "$manifest2" | jq -r '.spec.artifacts.repositories | keys[]' | sort)
 
 # What commits changed?
-diff <(jq '.spec.artifacts.repositories' manifest1.json) \
-     <(jq '.spec.artifacts.repositories' manifest2.json)
+diff <(echo "$manifest1" | jq '.spec.artifacts.repositories') \
+     <(echo "$manifest2" | jq '.spec.artifacts.repositories')
 ```
 
 ### Extract Terraform Outputs
@@ -446,6 +548,131 @@ strata deploy run -f prod.yaml --verbose 2>&1 | grep -i "git\|push\|branch"
 ```bash
 strata build run -f prod.yaml
 strata deploy run -f prod.yaml
+```
+
+### Export Audit Trail with Manifests
+
+```bash
+# Export all deployment logs plus associated manifests
+strata audit export --output-dir ./audit_export --include-manifests
+
+# Result:
+# audit_export/
+#   deploy_logs/
+#     log_001.json
+#     log_002.json
+#   manifests/
+#     manifest_001.json
+#     manifest_002.json
+```
+
+---
+
+## Build Manifests
+
+Build manifests are generated automatically during `strata build run` and stored in `.strata/build/{deployment}/manifest.json`. They capture the state **before** deployment.
+
+### When are Build Manifests Created?
+
+```bash
+strata build run -f deploy.yaml
+# Executes: platform builder → terraform builder → ansible builder → helm builder → sbom builder
+# Writes: .strata/build/{deployment}/manifest.json (contains all build artifacts + SBOM reference)
+```
+
+### Build Manifest Structure
+
+```json
+{
+  "apiVersion": "strata.huybrechts.xyz/v1",
+  "kind": "deployment-manifest",
+  "meta": {
+    "name": "prod_deployment",
+    "labels": {
+      "version": "2.3.0",
+      "environment": "production"
+    }
+  },
+  "spec": {
+    "deployment_name": "prod_deployment",
+    "workspace_name": "prod_workspace",
+    "action": "build",
+    "status": "success",
+    "timestamp": "2024-06-17T10:35:20Z",
+    "user": "devops@acme.com",
+    "platform_version": "1.2.0",
+    "build_duration_seconds": 87,
+    
+    "artifacts": {
+      "platform": {
+        "hash": "sha256:abc123def456...",
+        "path": ".strata/build/prod_deployment/platform.json",
+        "content": { ...full platform.json snapshot... }
+      },
+      
+      "repositories": {
+        "xyz-infrastructure": {
+          "url": "git@github.com:acme/xyz-infra.git",
+          "ref": "v2.3.0",
+          "commit": "a1b2c3d4e5f6g7h8..."
+        }
+      },
+      
+      "sbom": {
+        "path": ".strata/build/prod_deployment/sbom.json",
+        "format": "cyclonedx-1.6",
+        "sha256": "sha256:xyz789..."
+      }
+    },
+    
+    "policy_results": {
+      "status": "passed",
+      "policies_checked": 12,
+      "policies_passed": 12,
+      "violations": []
+    }
+  }
+}
+```
+
+### Key Differences from Deploy Manifests
+
+| Aspect | Build | Deploy |
+|--------|-------|--------|
+| **Trigger** | `strata build run` | `strata deploy run` |
+| **Stages** | None | Multiple (infrastructure, configure, etc.) |
+| **Outputs** | SBOM, policy results | Stage outputs, resource IDs, IPs |
+| **Errors** | Build/validation errors | Provisioner errors |
+| **Purpose** | Gate before deploying | Record what was deployed |
+
+### Querying Build Manifests
+
+```bash
+# List only build manifests (not deployment manifests)
+find .strata/build -name "manifest.json" -type f
+
+# Show details of a build
+jq '.spec | {timestamp, user, build_duration_seconds, policy_results}' \
+  .strata/build/prod_deployment/manifest.json
+
+# Check if build passed all policies
+jq '.spec.policy_results.status' .strata/build/prod_deployment/manifest.json
+```
+
+### Workflow: Review Build Before Deploying
+
+```bash
+# 1. Build artifacts
+strata build run -f deploy/prod.yaml
+
+# 2. Review the build manifest
+strata manifest show .strata/build/prod_deployment/manifest.json
+
+# 3. Check policy results
+jq '.spec.policy_results' .strata/build/prod_deployment/manifest.json
+
+# 4. If satisfied, deploy
+strata deploy run -f deploy/prod.yaml
 ```
 
 ---

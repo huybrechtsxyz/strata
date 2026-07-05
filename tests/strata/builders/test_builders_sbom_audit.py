@@ -71,6 +71,7 @@ class TestExecuteAudit:
         cmd._errors = []
         cmd._messages = []
         cmd._output_data = {}
+        cmd._work_path = Path("/tmp/fake-workspace")
         cmd.logger = MagicMock()
         return cmd
 

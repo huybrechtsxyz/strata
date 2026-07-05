@@ -214,9 +214,11 @@ class BaseBuildCommand(BaseCommand):
         Subclasses must set ``self._audit_severity`` and ``self._fail_on``
         before calling this method.
         """
-        from datetime import datetime, timezone
+        from datetime import date, datetime, timezone
 
         import click
+
+        from strata.models.sbom_model import CveAllowedEntryModel
 
         config = IntegrationModel(name="cve_scanner", type="cve_scanner")
         scanner = CveScannerIntegration(config)
@@ -237,6 +239,59 @@ class BaseBuildCommand(BaseCommand):
         except RuntimeError as exc:
             self._errors.append(f"CVE audit failed: {exc}")
             return False
+
+        # -- Load CVE allowlist and filter findings ---------------------------
+        allowed_entries = self._load_cve_allowed(self._work_path)
+        today = date.today()
+        allowed_ids: dict[str, CveAllowedEntryModel] = {}
+        for entry in allowed_entries:
+            if entry.expires:
+                try:
+                    if date.fromisoformat(entry.expires) < today:
+                        self.logger.debug("CVE allowlist entry expired", id=entry.id, expires=entry.expires)
+                        continue
+                except ValueError:
+                    self.logger.warning("Invalid expires date in cve-allowed.yaml", id=entry.id, expires=entry.expires)
+            allowed_ids[entry.id] = entry
+
+        original_count = result.total_findings
+        if allowed_ids:
+            filtered = []
+            suppressed = 0
+            for f in result.findings:
+                entry = allowed_ids.get(f.vulnerability_id)
+                if entry and (entry.package is None or entry.package == f.package_name):
+                    suppressed += 1
+                    self.logger.debug(
+                        "CVE suppressed by allowlist",
+                        id=f.vulnerability_id,
+                        package=f.package_name,
+                        reason=entry.reason,
+                    )
+                else:
+                    filtered.append(f)
+
+            if suppressed > 0:
+                # Rebuild counts from filtered findings
+                severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
+                for f in filtered:
+                    if f.severity in severity_counts:
+                        severity_counts[f.severity] += 1
+
+                result = result.model_copy(
+                    update={
+                        "findings": filtered,
+                        "total_findings": len(filtered),
+                        "critical": severity_counts["CRITICAL"],
+                        "high": severity_counts["HIGH"],
+                        "medium": severity_counts["MEDIUM"],
+                        "low": severity_counts["LOW"],
+                        "unknown": severity_counts["UNKNOWN"],
+                    }
+                )
+
+                if self._is_console_output():
+                    click.echo(f"ℹ️  {suppressed} finding(s) suppressed by cve-allowed.yaml")
 
         # -- NDJSON: emit each finding as a data event -----------------------
         if self._is_ndjson_output():
@@ -310,3 +365,24 @@ class BaseBuildCommand(BaseCommand):
             click.echo("✅  No vulnerabilities found")
 
         return True
+
+    @staticmethod
+    def _load_cve_allowed(work_path: Path) -> list:
+        """Load .strata/cve-allowed.yaml and return a list of CveAllowedEntryModel."""
+        import yaml
+
+        from strata.controllers.solution_controller import SolutionController
+        from strata.models.sbom_model import CveAllowedEntryModel
+
+        allowed_path = SolutionController.get_cve_allowed_path(work_path)
+        if not allowed_path.exists():
+            return []
+        try:
+            with allowed_path.open("r", encoding="utf-8") as fh:
+                data = yaml.safe_load(fh)
+            if not isinstance(data, dict):
+                return []
+            entries = data.get("allowed") or []
+            return [CveAllowedEntryModel(**e) for e in entries if isinstance(e, dict)]
+        except Exception:
+            return []
