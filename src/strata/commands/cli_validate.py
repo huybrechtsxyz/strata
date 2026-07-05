@@ -1,5 +1,6 @@
 """Click CLI wiring for the validate command group."""
 
+import json
 from typing import Optional
 
 import click
@@ -14,6 +15,7 @@ from strata.commands.cli_common import (
 )
 from strata.commands.validate.graph_validate_command import GraphCommand
 from strata.commands.validate.run_validate_command import ValidateCommand
+from strata.commands.validate.sbom_ignore_validate_command import SbomIgnoreValidateCommand
 
 
 class _ValidateGroup(click.Group):
@@ -191,6 +193,46 @@ def validate_graph(
         quiet=quiet,
     )
     success = command.execute()
+    handle_command_exit(command, success)
+
+
+@validate_group.command(name="sbom-ignore")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+@click.pass_context
+def validate_sbom_ignore(
+    ctx: click.Context,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Validate .strata/sbom-ignore.yaml and detect orphaned rules.
+
+    Checks the schema of the ignore file and runs a dependency scan to find
+    rules that no longer match any file or package in the workspace.
+
+        strata validate sbom-ignore
+        strata validate sbom-ignore --output json
+    """
+    command = SbomIgnoreValidateCommand(
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+
+    if output == "json":
+        envelope = {
+            "success": success,
+            "command": "validate sbom-ignore",
+            "data": command.get_result(),
+        }
+        click.echo(json.dumps(envelope, indent=2))
+
     handle_command_exit(command, success)
 
 

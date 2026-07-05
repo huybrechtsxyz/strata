@@ -1,8 +1,8 @@
 """Pydantic models for SBOM references and internal component representation."""
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from strata.models.common_models import PlatformBaseModel
 
@@ -80,3 +80,110 @@ class CveAuditResultModel(PlatformBaseModel):
     low: int = Field(default=0, description="Count of LOW severity findings")
     unknown: int = Field(default=0, description="Count of UNKNOWN severity findings")
     findings: List[CveFindingModel] = Field(default_factory=list, description="Individual vulnerability findings")
+
+
+# ---------------------------------------------------------------------------
+# sbom-ignore.yaml models
+# ---------------------------------------------------------------------------
+
+
+class SbomIgnorePathRuleModel(PlatformBaseModel):
+    """A single path glob ignore rule with justification."""
+
+    pattern: str = Field(
+        description="Glob pattern matched against the file path relative to the scan root (e.g. 'docs/**')"
+    )
+    justification: Optional[str] = Field(
+        None, description="Reason this path is excluded from SBOM scanning (audit trail)"
+    )
+
+
+class SbomIgnoreFileRuleModel(PlatformBaseModel):
+    """A single filename ignore rule — exact match or Python regex."""
+
+    pattern: str = Field(
+        description=(
+            "Filename to exclude.  Exact match by default; set is_regex=true for a "
+            "Python regex (e.g. '^.+-dev\\\\.txt$')"
+        )
+    )
+    is_regex: bool = Field(default=False, description="Treat pattern as a Python regular expression when True")
+    justification: Optional[str] = Field(
+        None, description="Reason this file is excluded from SBOM scanning (audit trail)"
+    )
+
+
+class SbomIgnorePackageRuleModel(PlatformBaseModel):
+    """A single package-name glob ignore rule."""
+
+    pattern: str = Field(description="Glob pattern matched against the package name (e.g. 'pytest*', 'dev-*')")
+    justification: Optional[str] = Field(
+        None, description="Reason this package is excluded from the SBOM (audit trail)"
+    )
+
+
+class SbomIgnoreTypeRuleModel(PlatformBaseModel):
+    """Ignore dependencies by semantic type."""
+
+    type: str = Field(description="Dependency type to exclude: dev | optional | peer | test | build")
+    justification: Optional[str] = Field(
+        None, description="Reason this dependency type is excluded from the SBOM (audit trail)"
+    )
+
+
+class SbomIgnoreConfigModel(PlatformBaseModel):
+    """Schema for ``.strata/sbom-ignore.yaml``.
+
+    Controls which dependency files, paths, packages, and dependency types are
+    excluded from the SBOM produced by ``DependencyFileCollector``.  Rules are
+    **additive** — they extend the built-in default ignores rather than replace them.
+
+    Each list item accepts either a bare string (backward-compatible shorthand
+    for ``{pattern: "..."}`` / ``{type: "..."}``) or a full object with a
+    ``justification`` field for audit traceability.
+    """
+
+    ignore_paths: List[SbomIgnorePathRuleModel] = Field(
+        default_factory=list,
+        description="Glob patterns matched against file paths relative to each scan root",
+    )
+    ignore_files: List[SbomIgnoreFileRuleModel] = Field(
+        default_factory=list,
+        description="Filenames (exact or regex) to exclude regardless of location",
+    )
+    ignore_packages: List[SbomIgnorePackageRuleModel] = Field(
+        default_factory=list,
+        description="Package name glob patterns to exclude after parsing",
+    )
+    ignore_dependency_types: List[SbomIgnoreTypeRuleModel] = Field(
+        default_factory=list,
+        description="Dependency types to exclude (requires parsers that populate dep_type)",
+    )
+
+    @field_validator("ignore_paths", mode="before")
+    @classmethod
+    def _coerce_paths(cls, v: Any) -> Any:
+        if isinstance(v, list):
+            return [{"pattern": item} if isinstance(item, str) else item for item in v]
+        return v
+
+    @field_validator("ignore_files", mode="before")
+    @classmethod
+    def _coerce_files(cls, v: Any) -> Any:
+        if isinstance(v, list):
+            return [{"pattern": item} if isinstance(item, str) else item for item in v]
+        return v
+
+    @field_validator("ignore_packages", mode="before")
+    @classmethod
+    def _coerce_packages(cls, v: Any) -> Any:
+        if isinstance(v, list):
+            return [{"pattern": item} if isinstance(item, str) else item for item in v]
+        return v
+
+    @field_validator("ignore_dependency_types", mode="before")
+    @classmethod
+    def _coerce_types(cls, v: Any) -> Any:
+        if isinstance(v, list):
+            return [{"type": item} if isinstance(item, str) else item for item in v]
+        return v

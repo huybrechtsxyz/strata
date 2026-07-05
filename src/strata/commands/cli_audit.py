@@ -400,6 +400,47 @@ def audit_export(
     # --- Optional SIEM forwarding ---
     siem_success = True
     if siem_name:
-        siem_success = _forward_entries_to_siem(siem_name, entries, wp, quiet)
+        # Include sbom-ignore rules as evidence alongside the deploy-log entries.
+        from strata.builders.sbom.deps_collector import DependencyFileCollector
+
+        ignore_cfg = DependencyFileCollector.load_ignore_config(wp)
+        ignore_evidence = ignore_cfg.model_dump(exclude_none=True)
+
+        # Build a combined evidence list: deploy-log entries + ignore-rules metadata
+        evidence_entries = list(entries)
+        siem_success = _forward_entries_to_siem(siem_name, evidence_entries, wp, quiet)
+
+        # Send ignore rules as a separate batch under a distinct event type
+        if ignore_evidence:
+            try:
+                from strata.integrations.capabilities import ISiemSink
+                from strata.integrations.factory import IntegrationFactory
+                from strata.services.configuration_service import ConfigurationService
+                from strata.utils.config import SOLUTION_DIR
+
+                integration_model = None
+                for cfg_path in (wp / SOLUTION_DIR).rglob("*.yaml"):
+                    try:
+                        svc = ConfigurationService.load(str(cfg_path), validate=False)
+                        if svc.model and svc.model.spec:
+                            integrations = getattr(svc.model.spec, "integrations", []) or []
+                            for m in integrations:
+                                if m.name == siem_name:
+                                    integration_model = m
+                                    break
+                        if integration_model:
+                            break
+                    except Exception:
+                        continue
+
+                if integration_model:
+                    instance = IntegrationFactory.create(integration_model)
+                    if isinstance(instance, ISiemSink):
+                        instance.send_batch("sbom_ignore_rules", [ignore_evidence])
+                        if not quiet:
+                            click.echo(f"Forwarded sbom-ignore rules to SIEM '{siem_name}'.")
+            except Exception as exc:
+                if not quiet:
+                    click.echo(f"Could not forward sbom-ignore rules to SIEM: {exc}", err=True)
 
     handle_command_exit("audit export", success=siem_success)

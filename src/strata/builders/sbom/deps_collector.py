@@ -2,8 +2,9 @@
 
 import fnmatch
 import json
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 import yaml
 
@@ -11,12 +12,16 @@ from strata.builders.sbom.base_sbom_collector import BaseSbomCollector
 from strata.builders.sbom.lockfile_parsers import DEFAULT_REGISTRY, LockfileParserRegistry
 from strata.logger import get_logger
 from strata.models.platform_artifact_model import PlatformArtifactModel
-from strata.models.sbom_model import SbomComponentModel
-from strata.utils.config import SOLUTION_DIR, SOLUTION_SBOM_IGNORE_FILE
+from strata.models.sbom_model import (
+    SbomComponentModel,
+    SbomIgnoreConfigModel,
+    SbomIgnoreFileRuleModel,
+    SbomIgnorePackageRuleModel,
+    SbomIgnorePathRuleModel,
+)
+from strata.utils.config import SOLUTION_DIR, SOLUTION_FILE, SOLUTION_SBOM_IGNORE_FILE
 
 logger = get_logger(__name__)
-
-_SBOM_IGNORE_CONFIG = f"{SOLUTION_DIR}/{SOLUTION_SBOM_IGNORE_FILE}"
 
 # Default ignore path globs — always applied before sbom-ignore.yaml additions.
 _DEFAULT_IGNORE_PATHS = (
@@ -44,8 +49,9 @@ class DependencyFileCollector(BaseSbomCollector):
     - Paths scanned are taken from the workspace ``solution.json``
       ``spec.repositories`` list (resolved relative to *work_path*).  Falls
       back to *work_path* itself when no solution or no repos are registered.
-    - Optional ``ignore_paths`` / ``ignore_files`` lists from
-      ``.strata/sbom-ignore.yaml`` are applied on top of built-in defaults.
+    - ``ignore_paths`` / ``ignore_files`` / ``ignore_packages`` /
+      ``ignore_dependency_types`` from ``.strata/sbom-ignore.yaml`` are applied
+      on top of the built-in defaults.
 
     Components are de-duplicated by purl across all scanned files and paths.
 
@@ -75,11 +81,12 @@ class DependencyFileCollector(BaseSbomCollector):
             return []
 
         scan_paths = self._resolve_scan_paths(work_path)
-        ignore_config = self._load_ignore_config(work_path)
-        ignore_paths_globs: List[str] = list(_DEFAULT_IGNORE_PATHS) + (ignore_config.get("ignore_paths") or [])
-        ignore_files_set: set[str] = set(ignore_config.get("ignore_files") or [])
+        ignore_cfg = self._load_ignore_config(work_path)
 
-        seen_purls: Dict[str, SbomComponentModel] = {}
+        ignore_paths_globs: List[str] = list(_DEFAULT_IGNORE_PATHS) + [r.pattern for r in ignore_cfg.ignore_paths]
+        ignored_types: set[str] = {r.type for r in ignore_cfg.ignore_dependency_types}
+
+        seen_purls: dict[str, SbomComponentModel] = {}
 
         for scan_root in scan_paths:
             if not scan_root.exists():
@@ -89,7 +96,9 @@ class DependencyFileCollector(BaseSbomCollector):
                 for file_path in scan_root.rglob(pattern):
                     if not file_path.is_file():
                         continue
-                    if self._is_ignored(file_path, scan_root, ignore_paths_globs, ignore_files_set):
+                    if self._is_path_ignored(file_path, scan_root, ignore_paths_globs):
+                        continue
+                    if self._is_filename_ignored(file_path.name, ignore_cfg.ignore_files):
                         continue
                     parser = self._registry.find(file_path.name)
                     if parser is None:
@@ -100,6 +109,10 @@ class DependencyFileCollector(BaseSbomCollector):
                         self._warnings.append(f"Failed to parse {file_path.name}: {exc}")
                         continue
                     for dep in raw_deps:
+                        if dep.dep_type and dep.dep_type in ignored_types:
+                            continue
+                        if self._is_package_ignored(dep.name, ignore_cfg.ignore_packages):
+                            continue
                         purl = self._build_purl(parser.ecosystem, dep.name, dep.version)
                         if purl not in seen_purls:
                             seen_purls[purl] = SbomComponentModel(
@@ -113,6 +126,57 @@ class DependencyFileCollector(BaseSbomCollector):
         return list(seen_purls.values())
 
     # ------------------------------------------------------------------
+    # Orphan-detection helper (used by validate sbom-ignore)
+    # ------------------------------------------------------------------
+
+    def scan_raw_items(
+        self,
+        work_path: Path,
+    ) -> tuple[list[tuple[Path, Path]], list[str]]:
+        """Return raw scannable items *before* any ignore rules are applied.
+
+        Used by ``validate sbom-ignore`` to detect orphaned rules.
+
+        Returns:
+            ``(file_entries, package_names)`` where *file_entries* is a list of
+            ``(file_path, scan_root)`` pairs for every lockfile found, and
+            *package_names* is the deduplicated list of package names across all
+            parsed files.
+        """
+        patterns = self._registry.all_patterns()
+        if not patterns:
+            return [], []
+
+        scan_paths = self._resolve_scan_paths(work_path)
+        file_entries: list[tuple[Path, Path]] = []
+        package_names: list[str] = []
+        seen_packages: set[str] = set()
+
+        for scan_root in scan_paths:
+            if not scan_root.exists():
+                continue
+            for pattern in patterns:
+                for file_path in scan_root.rglob(pattern):
+                    if not file_path.is_file():
+                        continue
+                    # Apply only the built-in default path ignores (not user rules)
+                    if self._is_path_ignored(file_path, scan_root, list(_DEFAULT_IGNORE_PATHS)):
+                        continue
+                    file_entries.append((file_path, scan_root))
+                    parser = self._registry.find(file_path.name)
+                    if parser is None:
+                        continue
+                    try:
+                        for dep in parser.parse(file_path):
+                            if dep.name not in seen_packages:
+                                seen_packages.add(dep.name)
+                                package_names.append(dep.name)
+                    except ValueError:
+                        pass
+
+        return file_entries, package_names
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
@@ -124,7 +188,7 @@ class DependencyFileCollector(BaseSbomCollector):
         Falls back to ``[work_path]`` when the solution is absent or has no
         registered repositories.
         """
-        solution_path = work_path / ".strata" / "solution.json"
+        solution_path = work_path / SOLUTION_DIR / SOLUTION_FILE
         if not solution_path.exists():
             return [work_path]
         try:
@@ -147,29 +211,38 @@ class DependencyFileCollector(BaseSbomCollector):
             logger.debug("Could not read solution.json for dependency scan scoping", error=str(exc))
             return [work_path]
 
-    def _load_ignore_config(self, work_path: Path) -> Dict[str, Any]:
-        """Load ``.strata/sbom-ignore.yaml`` — returns empty dict if absent."""
-        ignore_path = work_path / _SBOM_IGNORE_CONFIG
+    @staticmethod
+    def load_ignore_config(work_path: Path) -> SbomIgnoreConfigModel:
+        """Load and validate ``.strata/sbom-ignore.yaml``.
+
+        Returns an empty ``SbomIgnoreConfigModel`` when the file is absent.
+        Logs a warning and returns an empty config when the file exists but
+        fails Pydantic validation (so a bad ignore file never blocks a build).
+        """
+        ignore_path = work_path / SOLUTION_DIR / SOLUTION_SBOM_IGNORE_FILE
         if not ignore_path.exists():
-            return {}
+            return SbomIgnoreConfigModel()
         try:
             with ignore_path.open("r", encoding="utf-8") as fh:
-                data = yaml.safe_load(fh)
-            return data if isinstance(data, dict) else {}
+                raw: Any = yaml.safe_load(fh)
+            if not isinstance(raw, dict):
+                return SbomIgnoreConfigModel()
+            return SbomIgnoreConfigModel.model_validate(raw)
         except Exception as exc:
-            logger.debug("Could not load sbom-ignore.yaml", error=str(exc))
-            return {}
+            logger.warning("Could not load sbom-ignore.yaml — ignoring file", error=str(exc))
+            return SbomIgnoreConfigModel()
+
+    # Alias kept for internal callers (collectors should use the static method)
+    def _load_ignore_config(self, work_path: Path) -> SbomIgnoreConfigModel:
+        return DependencyFileCollector.load_ignore_config(work_path)
 
     @staticmethod
-    def _is_ignored(
+    def _is_path_ignored(
         file_path: Path,
         scan_root: Path,
         ignore_paths_globs: List[str],
-        ignore_files_set: set[str],
     ) -> bool:
-        """Return True when *file_path* should be excluded from scanning."""
-        if file_path.name in ignore_files_set:
-            return True
+        """Return True when *file_path* should be excluded by a path glob rule."""
         try:
             rel = file_path.relative_to(scan_root)
         except ValueError:
@@ -179,19 +252,57 @@ class DependencyFileCollector(BaseSbomCollector):
         parts = rel.parts  # e.g. ("node_modules", "pkg", "file.txt")
 
         for glob in ignore_paths_globs:
-            # Strip leading **/ for directory-segment matching
             segment = glob.lstrip("*/")
-            # Check the full relative path
             if fnmatch.fnmatch(rel_str, glob):
                 return True
-            # Check each individual path component (handles **/node_modules matching
-            # a directory anywhere in the tree — any ancestor named `node_modules`
-            # means the file should be ignored)
+            # Match individual path components to handle **/node_modules style
             if "/" not in segment:
-                for part in parts[:-1]:  # skip filename itself — check ancestor dirs
+                for part in parts[:-1]:  # ancestor dirs only, not the filename
                     if fnmatch.fnmatch(part, segment):
                         return True
         return False
+
+    @staticmethod
+    def _is_filename_ignored(
+        filename: str,
+        rules: List[SbomIgnoreFileRuleModel],
+    ) -> bool:
+        """Return True when *filename* matches any file ignore rule.
+
+        Rules with ``is_regex=True`` are matched via ``re.fullmatch``; all
+        others use exact string equality (case-sensitive).
+        """
+        for rule in rules:
+            if rule.is_regex:
+                try:
+                    if re.fullmatch(rule.pattern, filename):
+                        return True
+                except re.error:
+                    logger.warning("Invalid regex in sbom-ignore.yaml ignore_files", pattern=rule.pattern)
+            else:
+                if filename == rule.pattern:
+                    return True
+        return False
+
+    @staticmethod
+    def _is_package_ignored(
+        name: str,
+        rules: List[SbomIgnorePackageRuleModel],
+    ) -> bool:
+        """Return True when *name* matches any package-name glob rule."""
+        for rule in rules:
+            if fnmatch.fnmatch(name.lower(), rule.pattern.lower()):
+                return True
+        return False
+
+    @staticmethod
+    def _is_path_ignored_by_rules(
+        file_path: Path,
+        scan_root: Path,
+        rules: List[SbomIgnorePathRuleModel],
+    ) -> bool:
+        """Return True when *file_path* matches any ``SbomIgnorePathRuleModel``."""
+        return DependencyFileCollector._is_path_ignored(file_path, scan_root, [r.pattern for r in rules])
 
     @staticmethod
     def _build_purl(ecosystem: str, name: str, version: Optional[str]) -> str:
