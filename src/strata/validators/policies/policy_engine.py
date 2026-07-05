@@ -64,6 +64,7 @@ class PolicyEngine:
         from strata.validators.policies.naming_policy import NamingPolicy
         from strata.validators.policies.ref_convention_policy import RefConventionPolicy
         from strata.validators.policies.required_tags_policy import RequiredTagsPolicy
+        from strata.validators.policies.resource_type_restrictions_policy import ResourceTypeRestrictionsPolicy
         from strata.validators.policies.sbom_allowed_registries_policy import SbomAllowedRegistriesPolicy
         from strata.validators.policies.sbom_denied_packages_policy import SbomDeniedPackagesPolicy
         from strata.validators.policies.sbom_license_policy import SbomLicensePolicy
@@ -77,6 +78,7 @@ class PolicyEngine:
             "required_tags": RequiredTagsPolicy,
             "naming_pattern": NamingPolicy,
             "ref_convention": RefConventionPolicy,
+            "resource_type_restrictions": ResourceTypeRestrictionsPolicy,
             "script": ScriptPolicy,
             "sbom_pinned_versions": SbomPinnedVersionsPolicy,
             "sbom_allowed_registries": SbomAllowedRegistriesPolicy,
