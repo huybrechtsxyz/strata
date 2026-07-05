@@ -230,6 +230,12 @@ def audit_resend(
     help="Export format.",
 )
 @click.option(
+    "--include-manifests",
+    is_flag=True,
+    default=False,
+    help="Include deployment manifests in the export.",
+)
+@click.option(
     "--out",
     "out_file",
     default=None,
@@ -244,6 +250,7 @@ def audit_export(
     last: Optional[int],
     since: Optional[str],
     export_format: str,
+    include_manifests: bool,
     out_file: Optional[str],
     work_path: str,
     quiet: bool,
@@ -252,7 +259,7 @@ def audit_export(
     from pathlib import Path
 
     from strata.controllers.audit_controller import AuditController
-    from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+    from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DEPLOYMENTS_DIR, SOLUTION_DIR
 
     wp = Path(work_path)
     base_path = wp / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
@@ -264,12 +271,43 @@ def audit_export(
         last=last,
     )
 
+    # Optionally bundle deployment manifests alongside deploy-logs
+    manifest_data = []
+    if include_manifests:
+        from strata.services.deployment_manifest_service import DeploymentManifestService
+
+        manifest_base = wp / SOLUTION_DIR / SOLUTION_DEPLOYMENTS_DIR
+        if manifest_base.exists():
+            manifest_files = DeploymentManifestService.list_manifests(manifest_base)
+            if last:
+                manifest_files = manifest_files[:last]
+            for mf in manifest_files:
+                try:
+                    manifest_data.append(json.loads(mf.read_text(encoding="utf-8")))
+                except (json.JSONDecodeError, OSError):
+                    pass
+
     if export_format == "ndjson":
         lines = [json.dumps(e.model_dump(exclude_none=True), default=str) for e in entries]
+        if include_manifests:
+            for md in manifest_data:
+                lines.append(json.dumps(md, default=str))
         content = "\n".join(lines) + ("\n" if lines else "")
     else:
-        data = [e.model_dump(exclude_none=True) for e in entries]
-        content = json.dumps(data, indent=2, default=str) + "\n"
+        log_data = [e.model_dump(exclude_none=True) for e in entries]
+        if include_manifests:
+            # Wrapped format when manifests are bundled
+            content = (
+                json.dumps(
+                    {"deploy_logs": log_data, "manifests": manifest_data},
+                    indent=2,
+                    default=str,
+                )
+                + "\n"
+            )
+        else:
+            # Backward-compatible flat array
+            content = json.dumps(log_data, indent=2, default=str) + "\n"
 
     if out_file:
         out_path = Path(out_file)

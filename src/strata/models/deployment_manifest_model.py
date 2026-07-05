@@ -231,7 +231,7 @@ class DeploymentManifestSpecModel(PlatformBaseModel):
     environment: Optional[str] = Field(None, description="Environment label (e.g. production, staging)")
 
     # Action & timing
-    action: str = Field(description="Action performed: deploy | destroy")
+    action: str = Field(description="Action performed: build | deploy | destroy")
     started_at: str = Field(description="ISO-8601 timestamp when the deploy started")
     completed_at: Optional[str] = Field(None, description="ISO-8601 timestamp when the deploy completed")
     duration_seconds: Optional[int] = Field(None, description="Total wall-clock duration in seconds")
@@ -253,7 +253,11 @@ class DeploymentManifestSpecModel(PlatformBaseModel):
 
     # Extension points
     sbom: Optional[SbomReferenceModel] = Field(None, description="Reference to the generated CycloneDX SBOM file")
-    signatures: Optional[Dict[str, Any]] = Field(None, description="Signing/attestation data (future)")
+    signatures: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Signing/attestation data — when GPG signing is configured, "
+        "contains {method, key_id, signature, signed_at}",
+    )
     policy_results: Optional[List[ManifestPolicyResultModel]] = Field(
         None, description="Policy evaluation results from all phases run during this deployment"
     )
@@ -273,10 +277,18 @@ class DeploymentManifestSpecModel(PlatformBaseModel):
 class DeploymentManifestModel(PlatformBaseModel):
     """Root model for a deployment manifest file.
 
-    Written by the deploy command after each deploy run (success or failure).
-    Captures the complete deployment receipt: platform artifact (with embedded
-    platform.json), pinned repository commits, container images, provisioner
-    backends, and per-stage execution results.
+    Written automatically by both the build and deploy commands:
+
+    * **Build:** ``strata build run`` writes ``manifest.json`` alongside the
+      build artifacts (platform.json, terraform files, SBOM) capturing the
+      full bill of materials at build time.
+    * **Deploy:** ``strata deploy run/destroy`` writes a manifest on completion
+      (success or failure) capturing per-stage execution results, state lock
+      audit trail, and deployed-by identity.
+
+    The manifest captures: platform artifact (with embedded platform.json),
+    pinned repository commits, container images, provisioner backends, SBOM
+    references, policy evaluation results, and optional signing attestations.
     """
 
     apiVersion: PlatformVersion = Field(

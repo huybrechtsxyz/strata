@@ -35,6 +35,7 @@ from strata.commands.cli_env import env_group
 from strata.commands.cli_guide import guide_command
 from strata.commands.cli_help import help_command
 from strata.commands.cli_log import log_group
+from strata.commands.cli_manifest import manifest_group
 from strata.commands.cli_mcp import mcp_group
 from strata.commands.cli_new import new_command
 from strata.commands.cli_policy import policy_group
@@ -281,6 +282,7 @@ main.add_command(tools_group, name="tools")
 main.add_command(secret_group, name="secret")
 main.add_command(service_group, name="service")
 main.add_command(audit_group, name="audit")
+main.add_command(manifest_group, name="manifest")
 main.add_command(mcp_group, name="mcp")
 # ENTRY POINT
 #

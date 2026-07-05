@@ -26,6 +26,7 @@ SOLUTION_WORKSPACE_SUFFIX: str = ".code-workspace"
 SOLUTION_AUDIT_LOG_FILE: str = "audit.log"
 SOLUTION_COLLECTORS_FILE: str = "collectors.yaml"
 SOLUTION_SBOM_IGNORE_FILE: str = "sbom-ignore.yaml"
+SOLUTION_CVE_ALLOWED_FILE: str = "cve-allowed.yaml"
 SOLUTION_GUIDE_FILE: str = "guide.yaml"
 
 # .strata/ subdirectory names (relative to SOLUTION_DIR)

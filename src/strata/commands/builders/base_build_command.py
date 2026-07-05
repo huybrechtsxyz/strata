@@ -6,6 +6,8 @@ from typing import Dict, Optional
 
 from strata.commands.base_command import BaseCommand
 from strata.controllers.repository_controller import RepositoryController
+from strata.integrations.cve_scanner import CveScannerIntegration
+from strata.models.integration_model import IntegrationModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 
@@ -202,3 +204,109 @@ class BaseBuildCommand(BaseCommand):
 
     def _finalize(self, success: bool = False, show_footer: bool = True) -> bool:
         return super()._finalize(success=success, show_footer=show_footer)
+
+    def _execute_audit(self, sbom_path: Path) -> bool:
+        """Run CVE audit against a generated SBOM file.
+
+        Returns True if audit passed (or scanner not available), False if
+        ``--fail-on`` threshold was breached.
+
+        Subclasses must set ``self._audit_severity`` and ``self._fail_on``
+        before calling this method.
+        """
+        from datetime import datetime, timezone
+
+        import click
+
+        config = IntegrationModel(name="cve_scanner", type="cve_scanner")
+        scanner = CveScannerIntegration(config)
+
+        available, reason = scanner.ensure_available()
+        if not available:
+            msg = f"CVE audit skipped — no scanner found ({reason})"
+            self.logger.warning(msg)
+            if self._is_console_output():
+                click.echo(f"⚠️  {msg}")
+            return True  # non-fatal
+
+        try:
+            result = scanner.scan_sbom(
+                sbom_path,
+                severity_threshold=self._audit_severity,
+            )
+        except RuntimeError as exc:
+            self._errors.append(f"CVE audit failed: {exc}")
+            return False
+
+        # -- NDJSON: emit each finding as a data event -----------------------
+        if self._is_ndjson_output():
+            for f in result.findings:
+                self.emit_ndjson(
+                    {
+                        "event": "data",
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "audit_finding": {
+                            "vulnerability_id": f.vulnerability_id,
+                            "severity": f.severity,
+                            "package_name": f.package_name,
+                            "installed_version": f.installed_version,
+                            "fixed_version": f.fixed_version,
+                            "title": f.title,
+                        },
+                    }
+                )
+
+        # -- Console: severity summary table ----------------------------------
+        if self._is_console_output():
+            click.echo(
+                f"\n🔍  CVE audit ({result.scanner} {result.scanner_version}): {result.total_findings} finding(s)"
+            )
+            click.echo(
+                f"    CRITICAL={result.critical}  HIGH={result.high}  "
+                f"MEDIUM={result.medium}  LOW={result.low}  UNKNOWN={result.unknown}"
+            )
+            if result.findings:
+                click.echo("")
+                for f in result.findings[:10]:
+                    fixed = f" → {f.fixed_version}" if f.fixed_version else ""
+                    click.echo(
+                        f"    [{f.severity}] {f.vulnerability_id}: {f.package_name}@{f.installed_version}{fixed}"
+                    )
+                if result.total_findings > 10:
+                    click.echo(f"    ... and {result.total_findings - 10} more")
+
+        # -- Structured output ------------------------------------------------
+        self._output_data["audit"] = {
+            "scanner": result.scanner,
+            "scanner_version": result.scanner_version,
+            "total_findings": result.total_findings,
+            "critical": result.critical,
+            "high": result.high,
+            "medium": result.medium,
+            "low": result.low,
+            "unknown": result.unknown,
+        }
+
+        # -- Fail-on gate -----------------------------------------------------
+        if self._fail_on:
+            severity_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
+            threshold_idx = severity_order.index(self._fail_on) if self._fail_on in severity_order else 2
+            counts = {
+                "CRITICAL": result.critical,
+                "HIGH": result.high,
+                "MEDIUM": result.medium,
+                "LOW": result.low,
+                "UNKNOWN": result.unknown,
+            }
+            breaching = sum(counts[s] for s in severity_order[: threshold_idx + 1] if s in counts)
+            if breaching > 0:
+                msg = f"CVE audit gate failed: {breaching} finding(s) at or above {self._fail_on}"
+                self._errors.append(msg)
+                if self._is_console_output():
+                    click.echo(f"\n❌  {msg}")
+                return False
+
+        if self._is_console_output() and result.total_findings == 0:
+            click.echo("✅  No vulnerabilities found")
+
+        return True
