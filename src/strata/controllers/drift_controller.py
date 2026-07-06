@@ -63,9 +63,7 @@ class DriftClassifier:
             elif "resource_type" in rule:
                 self._type_rules.append((rule["resource_type"], severity))
 
-    def classify(
-        self, resource_type: str, changed_attributes: List[str]
-    ) -> DriftSeverity:
+    def classify(self, resource_type: str, changed_attributes: List[str]) -> DriftSeverity:
         """Return the severity for the given resource change."""
         # 1. Attribute-level check (most specific, highest priority)
         for attr_pattern, sev in self._attr_rules:
@@ -270,6 +268,10 @@ class DriftController(BaseController):
             changed_attributes = _extract_changed_attributes(change)
 
             severity = classifier.classify(resource_type, changed_attributes)
+
+            # Skip acknowledged entries — they are intentional / known drift
+            if history.is_acknowledged(address):
+                continue
 
             # Merge history metadata
             hist_entry = history.get_entry(address)

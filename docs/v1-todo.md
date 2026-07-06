@@ -167,7 +167,7 @@ Each issue includes enough implementation context for a session to proceed witho
   - Exit code 3 when drift found, 0 when clean
   - Tests: `tests/strata/commands/test_commands_deploy.py`, `tests/strata/controllers/test_drift_controller.py`
 
-- [ ] **#XXX** — [ADR-0008] Drift Phase 2 — Severity customization, `acknowledge`, `history` subcommands, CI helpers
+- [x] **#XXX** — [ADR-0008] Drift Phase 2 — Severity customization, `acknowledge`, `history` subcommands, CI helpers ✅ **DONE**
 
   > Extends Phase 1 with user-configurable severity overrides, acknowledgement workflow, and history querying.
   > ADR: `docs/decisions/0008-infrastructure-drift-detection.md` (Phase 2 section)

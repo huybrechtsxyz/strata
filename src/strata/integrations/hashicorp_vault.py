@@ -7,6 +7,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.integrations.capabilities import (
+    IFeatureStore,
     IKVStore,
     ISecretStore,
     IVariableStore,
@@ -36,7 +37,7 @@ class VaultIntegration(StoreIntegration):
     COMMAND = "vault"
 
     # Declare supported capabilities
-    CAPABILITIES = [IVariableStore, ISecretStore, IKVStore]
+    CAPABILITIES = [IVariableStore, ISecretStore, IKVStore, IFeatureStore]
 
     # Singleton instance keying based on endpoint
 
@@ -360,6 +361,68 @@ class VaultIntegration(StoreIntegration):
     def set_variable(self, key: str, value: Any, **kwargs) -> bool:
         """Set a variable in HashiCorp Vault (delegates to set_secret)."""
         return self.set_secret(key, str(value), **kwargs)
+
+    # IFeatureStore implementation — feature flags stored as Vault KV secrets
+
+    def get_feature(self, key: str, **kwargs) -> Optional[Any]:
+        """
+        Get a feature flag value from HashiCorp Vault.
+
+        Feature flags are stored as Vault KV secrets under a configurable prefix
+        (default: ``features/``).  Returns the flag's enabled state as bool, or
+        ``None`` if the flag does not exist.
+
+        Args:
+            key: Feature flag name
+            **kwargs: features_path (default ``"features"``), field, prefer_cli, timeout
+
+        Returns:
+            True/False for the enabled state, or None if not found
+        """
+        features_path = kwargs.get("features_path", "features")
+        raw = self.get_secret(f"{features_path}/{key}", **kwargs)
+        if raw is None:
+            return None
+        return raw.lower() == "true"
+
+    def set_feature(self, key: str, value: Any, **kwargs) -> bool:
+        """
+        Set a feature flag in HashiCorp Vault (create-if-not-exists semantics).
+
+        Feature flags are stored as Vault KV secrets under a configurable prefix
+        (default: ``features/``).  Never overwrites an existing entry — if the key
+        already exists the method returns ``True`` without writing.
+
+        Args:
+            key: Feature flag name
+            value: Initial enabled state (truthy/falsy)
+            **kwargs: features_path (default ``"features"``), prefer_cli, timeout
+
+        Returns:
+            True if the feature exists (created now or already present), False on failure
+        """
+        features_path = kwargs.get("features_path", "features")
+        return self.set_secret(f"{features_path}/{key}", "true" if value else "false", **kwargs)
+
+    def list_features(self, prefix: str = "", **kwargs) -> List[str]:
+        """
+        List feature flag names from HashiCorp Vault.
+
+        Feature flags are stored as Vault KV secrets under a configurable prefix
+        (default: ``features/``).  The prefix is stripped from the returned names.
+
+        Args:
+            prefix: Optional name prefix filter
+            **kwargs: features_path (default ``"features"``), prefer_cli, timeout
+
+        Returns:
+            List of feature flag names (without the ``features/`` path prefix)
+        """
+        features_path = kwargs.get("features_path", "features")
+        path = f"{features_path}/{prefix}" if prefix else features_path
+        keys = self.list_secrets(path, **kwargs)
+        strip = f"{features_path}/"
+        return [k[len(strip) :] if k.startswith(strip) else k for k in keys]
 
     # Auth helpers
 

@@ -4,7 +4,7 @@
 from unittest.mock import MagicMock, patch
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IKVStore, ISecretStore, IVariableStore
+from strata.integrations.capabilities import IFeatureStore, IKVStore, ISecretStore, IVariableStore
 from strata.integrations.hashicorp_vault import VaultIntegration
 from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
@@ -26,6 +26,7 @@ class TestVaultIntegrationInit:
         assert ISecretStore in VaultIntegration.CAPABILITIES
         assert IVariableStore in VaultIntegration.CAPABILITIES
         assert IKVStore in VaultIntegration.CAPABILITIES
+        assert IFeatureStore in VaultIntegration.CAPABILITIES
 
     def test_version_command(self):
         i = VaultIntegration(_cfg())
@@ -88,3 +89,92 @@ class TestVaultGetSecret:
             result = i.get_secret("secret/data/myapp#password")
         # May return value or None depending on key parsing
         assert result is None or result == "s3cr3t"
+
+
+class TestVaultFeatureStore:
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+
+    def test_get_feature_not_available_returns_none(self):
+        i = VaultIntegration(_cfg())
+        assert i.get_feature("my-flag") is None
+
+    def test_get_feature_true(self, monkeypatch):
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        i = VaultIntegration(_cfg(address="https://vault.example.com"))
+        with patch.object(i, "get_secret", return_value="true"):
+            assert i.get_feature("my-flag") is True
+
+    def test_get_feature_false(self, monkeypatch):
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        i = VaultIntegration(_cfg(address="https://vault.example.com"))
+        with patch.object(i, "get_secret", return_value="false"):
+            assert i.get_feature("my-flag") is False
+
+    def test_get_feature_not_found_returns_none(self, monkeypatch):
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        i = VaultIntegration(_cfg(address="https://vault.example.com"))
+        with patch.object(i, "get_secret", return_value=None):
+            assert i.get_feature("my-flag") is None
+
+    def test_get_feature_uses_features_prefix(self, monkeypatch):
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        i = VaultIntegration(_cfg(address="https://vault.example.com"))
+        captured = {}
+        with patch.object(i, "get_secret", side_effect=lambda k, **kw: captured.update({"key": k}) or "true"):
+            i.get_feature("dark-mode")
+        assert captured["key"] == "features/dark-mode"
+
+    def test_get_feature_custom_prefix(self, monkeypatch):
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        i = VaultIntegration(_cfg(address="https://vault.example.com"))
+        captured = {}
+        with patch.object(i, "get_secret", side_effect=lambda k, **kw: captured.update({"key": k}) or "true"):
+            i.get_feature("dark-mode", features_path="flags")
+        assert captured["key"] == "flags/dark-mode"
+
+    def test_set_feature_delegates_to_set_secret_with_prefix(self, monkeypatch):
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        i = VaultIntegration(_cfg(address="https://vault.example.com"))
+        captured = {}
+        with patch.object(
+            i, "set_secret", side_effect=lambda k, v, **kw: captured.update({"key": k, "val": v}) or True
+        ):
+            result = i.set_feature("dark-mode", True)
+        assert result is True
+        assert captured["key"] == "features/dark-mode"
+        assert captured["val"] == "true"
+
+    def test_set_feature_false_value(self, monkeypatch):
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        i = VaultIntegration(_cfg(address="https://vault.example.com"))
+        captured = {}
+        with patch.object(i, "set_secret", side_effect=lambda k, v, **kw: captured.update({"val": v}) or True):
+            i.set_feature("dark-mode", False)
+        assert captured["val"] == "false"
+
+    def test_list_features_strips_prefix(self, monkeypatch):
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        i = VaultIntegration(_cfg(address="https://vault.example.com"))
+        with patch.object(i, "list_secrets", return_value=["features/dark-mode", "features/beta-ui"]):
+            result = i.list_features()
+        assert result == ["dark-mode", "beta-ui"]
+
+    def test_list_features_with_name_prefix(self, monkeypatch):
+        monkeypatch.setenv("VAULT_TOKEN", "hvs.test")
+        BaseIntegration._instances.clear()
+        i = VaultIntegration(_cfg(address="https://vault.example.com"))
+        captured = {}
+        with patch.object(
+            i, "list_secrets", side_effect=lambda k, **kw: captured.update({"path": k}) or ["features/payment-v2"]
+        ):
+            i.list_features(prefix="payment-")
+        assert captured["path"] == "features/payment-"

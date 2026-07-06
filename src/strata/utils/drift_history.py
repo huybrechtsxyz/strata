@@ -117,16 +117,112 @@ class DriftHistoryStore:
                 entries[address]["consecutive_checks"] = 0
 
         # Append run record
-        runs.append({
-            "checked_at": checked_at,
-            "addresses": drifted_addresses,
-        })
+        runs.append(
+            {
+                "checked_at": checked_at,
+                "addresses": drifted_addresses,
+            }
+        )
 
     def get_entry(self, address: str) -> Optional[Dict[str, Any]]:
         """Return the history entry for a resource address, or None."""
         if not self._loaded:
             self.load()
         return self._data.get("entries", {}).get(address)
+
+    def is_acknowledged(self, address: str) -> bool:
+        """Return True if the address has been acknowledged."""
+        entry = self.get_entry(address)
+        return bool(entry and entry.get("acknowledged", False))
+
+    def acknowledge(self, address: str, reason: str = "", acknowledged_by: str = "") -> bool:
+        """Mark a resource address as acknowledged, suppressing it from future drift reports.
+
+        If no prior history entry exists for the address a placeholder entry is created so
+        the acknowledgement is persisted even if the address has not been seen in a run yet.
+
+        Returns True always (the operation is idempotent).
+        """
+        if not self._loaded:
+            self.load()
+        entries: Dict[str, Any] = self._data.setdefault("entries", {})
+        now = self.now_iso()
+        if address not in entries:
+            entries[address] = {
+                "first_detected": now,
+                "last_detected": now,
+                "consecutive_checks": 0,
+                "acknowledged": True,
+                "acknowledged_reason": reason,
+                "acknowledged_by": acknowledged_by,
+                "acknowledged_at": now,
+            }
+        else:
+            entries[address]["acknowledged"] = True
+            entries[address]["acknowledged_reason"] = reason
+            entries[address]["acknowledged_by"] = acknowledged_by
+            entries[address]["acknowledged_at"] = now
+        return True
+
+    def remove_acknowledgement(self, address: str) -> bool:
+        """Remove acknowledgement for a resource address so it appears in future reports.
+
+        Returns True if an acknowledged entry was found and updated, False otherwise.
+        """
+        if not self._loaded:
+            self.load()
+        entry = self._data.get("entries", {}).get(address)
+        if entry is None or not entry.get("acknowledged", False):
+            return False
+        entry["acknowledged"] = False
+        entry.pop("acknowledged_reason", None)
+        entry.pop("acknowledged_by", None)
+        entry.pop("acknowledged_at", None)
+        return True
+
+    def reset_baseline(self) -> None:
+        """Reset the baseline: clear run history and per-address tracking.
+
+        Sets ``baseline_at`` to now. Used after a known-good deploy so that age tracking
+        starts fresh from this point.  Any previously acknowledged entries are also cleared.
+        """
+        if not self._loaded:
+            self.load()
+        self._data["baseline_at"] = self.now_iso()
+        self._data["entries"] = {}
+        self._data["runs"] = []
+
+    def list_runs(self, last: int = 0) -> List[Dict[str, Any]]:
+        """Return the most recent drift-check runs.
+
+        Args:
+            last: Maximum number of runs to return (0 = return all).
+
+        Returns:
+            List of run records, most recent last.
+        """
+        if not self._loaded:
+            self.load()
+        runs: List[Dict[str, Any]] = self._data.get("runs", [])
+        if last > 0:
+            return list(runs[-last:])
+        return list(runs)
+
+    def list_acknowledged(self) -> List[Dict[str, Any]]:
+        """Return all acknowledged address entries with their metadata."""
+        if not self._loaded:
+            self.load()
+        result = []
+        for address, entry in self._data.get("entries", {}).items():
+            if entry.get("acknowledged", False):
+                result.append({"address": address, **entry})
+        return result
+
+    def get_baseline_at(self) -> Optional[str]:
+        """Return the baseline timestamp if one has been set, otherwise None."""
+        if not self._loaded:
+            self.load()
+        return self._data.get("baseline_at")
 
     def save(self) -> None:
         """Persist history to disk. Creates parent directories as needed."""

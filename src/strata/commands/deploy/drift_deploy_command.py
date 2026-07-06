@@ -8,6 +8,7 @@ from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.controllers.drift_controller import DriftController
 from strata.models.deployment_model import DeploymentStageModel
 from strata.models.drift_model import DriftSeverity
+from strata.utils.drift_history import DriftHistoryStore
 
 
 class DriftDeployCommand(BaseDeployCommand):
@@ -31,6 +32,7 @@ class DriftDeployCommand(BaseDeployCommand):
         work_path: Optional[str] = None,
         stage: Optional[str] = None,
         severity: Optional[str] = None,
+        baseline: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -44,6 +46,7 @@ class DriftDeployCommand(BaseDeployCommand):
         )
         self._stage = stage
         self._severity_threshold = DriftSeverity(severity or "info")
+        self._baseline = baseline
 
     # -------------------------------------------------------------------------
     # Entry point
@@ -101,9 +104,7 @@ class DriftDeployCommand(BaseDeployCommand):
 
         stages = [s for s in all_stages if s.name == self._stage] if self._stage else all_stages
         if self._stage and not stages:
-            self._errors.append(
-                f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}"
-            )
+            self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
             return False
 
         if self._is_console_output():
@@ -131,6 +132,26 @@ class DriftDeployCommand(BaseDeployCommand):
 
         # Store for JSON output
         self._output_data = report.to_dict()
+
+        # --baseline mode: acknowledge all detected entries, reset history, always exit 0
+        if self._baseline:
+            deployment_name = str(self._deployment_service.model.meta.name)  # type: ignore[union-attr]
+            history = DriftHistoryStore(self._work_path, deployment_name)
+            history.load()
+            history.reset_baseline()
+            for entry in report.entries:
+                history.acknowledge(entry.address, reason="baseline")
+            history.save()
+
+            if self._is_console_output():
+                if report.has_drift:
+                    click.echo(
+                        f"\n  📌  Baseline set: {len(report.entries)} entry(ies) acknowledged "
+                        "— they will be suppressed in future drift checks.\n"
+                    )
+                else:
+                    click.echo("\n  ✅  Baseline set: no drift found — history reset.\n")
+            return True
 
         # Determine success: drift above threshold → exit 3
         if report.above_threshold(self._severity_threshold):
@@ -171,7 +192,7 @@ class DriftDeployCommand(BaseDeployCommand):
         for stage_name, entries in by_stage.items():
             click.echo(f"  Stage: {stage_name}")
             click.echo(f"  {'ADDRESS':<52}  {'ACTION':<8}  {'SEVERITY':<10}  CHANGED ATTRIBUTES")
-            click.echo(f"  {'-'*52}  {'-'*8}  {'-'*10}  {'-'*30}")
+            click.echo(f"  {'-' * 52}  {'-' * 8}  {'-' * 10}  {'-' * 30}")
 
             for entry in sorted(entries, key=lambda e: DriftSeverity.ordered().index(e.severity)):
                 icon = severity_icons.get(entry.severity, "  ")
@@ -183,10 +204,7 @@ class DriftDeployCommand(BaseDeployCommand):
                 addr = entry.address
                 if len(addr) > 52:
                     addr = addr[:49] + "..."
-                click.echo(
-                    f"  {addr:<52}  [{action_sym}]{' ':<5}  "
-                    f"{icon} {entry.severity.value:<8}  {attrs_preview}"
-                )
+                click.echo(f"  {addr:<52}  [{action_sym}]{' ':<5}  {icon} {entry.severity.value:<8}  {attrs_preview}")
                 if entry.consecutive_checks > 1:
                     click.echo(f"  {'':>54}  (drifting for {entry.consecutive_checks} consecutive check(s))")
             click.echo()

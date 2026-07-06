@@ -12,8 +12,10 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
+from strata.commands.deploy.acknowledge_drift_deploy_command import AcknowledgeDriftDeployCommand
 from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
 from strata.commands.deploy.drift_deploy_command import DriftDeployCommand
+from strata.commands.deploy.drift_history_deploy_command import DriftHistoryDeployCommand
 from strata.commands.deploy.health_deploy_command import HealthDeployCommand
 from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
 from strata.commands.deploy.list_deploy_command import ListDeployCommand
@@ -328,7 +330,18 @@ def deploy_health(
     handle_command_exit(command, success)
 
 
-@deploy.command(name="drift", help="Detect configuration drift between Terraform state and code.")
+# ---------------------------------------------------------------------------
+# deploy drift (subgroup)
+# ---------------------------------------------------------------------------
+
+
+@deploy.group(name="drift", help="Drift detection: run checks, acknowledge expected drift, view history.")
+def deploy_drift_group():
+    """Drift subcommand group."""
+    pass
+
+
+@deploy_drift_group.command(name="run", help="Detect configuration drift between Terraform state and code.")
 @click.option(
     "--file",
     "-f",
@@ -351,14 +364,21 @@ def deploy_health(
     type=click.Choice(["critical", "high", "medium", "low", "info"], case_sensitive=False),
     help="Minimum severity threshold for exit-code 3. Changes below this level are reported but do not fail.",
 )
+@click.option(
+    "--baseline",
+    is_flag=True,
+    default=False,
+    help="Acknowledge all currently drifted resources as the accepted baseline and reset history. Always exits 0.",
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
-def deploy_drift(
+def deploy_drift_run(
     file: str,
     work_path: Optional[str] = None,
     stage: Optional[str] = None,
     severity: str = "info",
+    baseline: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -369,6 +389,104 @@ def deploy_drift(
         work_path=work_path,
         stage=stage,
         severity=severity,
+        baseline=baseline,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@deploy_drift_group.command(name="acknowledge", help="Acknowledge expected drift for a resource address.")
+@click.option(
+    "--file",
+    "-f",
+    required=True,
+    envvar="STRATA_FILE",
+    metavar="PATH",
+    help="Path to the deployment YAML file. [env: STRATA_FILE]",
+)
+@click_work_path
+@click.option(
+    "--address",
+    required=True,
+    metavar="ADDRESS",
+    help="Terraform resource address to acknowledge (e.g. azurerm_autoscale_setting.web).",
+)
+@click.option(
+    "--reason",
+    default="",
+    metavar="TEXT",
+    help="Human-readable explanation of why this drift is expected.",
+)
+@click.option(
+    "--remove",
+    is_flag=True,
+    default=False,
+    help="Remove a previously added acknowledgement so the address is reported again.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_drift_acknowledge(
+    file: str,
+    work_path: Optional[str] = None,
+    address: str = "",
+    reason: str = "",
+    remove: bool = False,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Acknowledge (or un-acknowledge) expected drift for a specific resource address."""
+    command = AcknowledgeDriftDeployCommand(
+        file=file,
+        work_path=work_path,
+        address=address,
+        reason=reason,
+        remove=remove,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@deploy_drift_group.command(name="history", help="Show drift-check run history and acknowledged addresses.")
+@click.option(
+    "--file",
+    "-f",
+    required=True,
+    envvar="STRATA_FILE",
+    metavar="PATH",
+    help="Path to the deployment YAML file. [env: STRATA_FILE]",
+)
+@click_work_path
+@click.option(
+    "--last",
+    default=10,
+    show_default=True,
+    metavar="N",
+    help="Number of most-recent drift-check runs to show.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_drift_history(
+    file: str,
+    work_path: Optional[str] = None,
+    last: int = 10,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Show per-run history and acknowledged (suppressed) addresses for a deployment."""
+    command = DriftHistoryDeployCommand(
+        file=file,
+        work_path=work_path,
+        last=last,
         output=output,
         verbose=verbose,
         quiet=quiet,

@@ -59,8 +59,7 @@ def schema_list(output: Optional[str] = None) -> None:
 
     if output == "json":
         items = [
-            {"kind": k.value, "model": m.__name__, "internal": k in INTERNAL_KINDS}
-            for k, m in _KIND_TO_MODEL.items()
+            {"kind": k.value, "model": m.__name__, "internal": k in INTERNAL_KINDS} for k, m in _KIND_TO_MODEL.items()
         ]
         click.echo(json.dumps({"kinds": sorted(items, key=lambda x: x["kind"])}, indent=2))
         return

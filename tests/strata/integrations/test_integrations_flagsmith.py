@@ -4,7 +4,7 @@
 from unittest.mock import MagicMock, patch
 
 from strata.integrations.base_integration import BaseIntegration
-from strata.integrations.capabilities import IFeatureStore
+from strata.integrations.capabilities import IFeatureStore, IVariableStore
 from strata.integrations.flagsmith import FlagsmithIntegration
 from strata.models.integration_model import IntegrationEndpointsSpecModel, IntegrationModel
 
@@ -24,6 +24,7 @@ class TestFlagsmithIntegrationInit:
 
     def test_capabilities(self):
         assert IFeatureStore in FlagsmithIntegration.CAPABILITIES
+        assert IVariableStore in FlagsmithIntegration.CAPABILITIES
 
     def test_address_from_endpoint(self):
         i = FlagsmithIntegration(_cfg(address="https://flagsmith.example.com"))
@@ -172,14 +173,24 @@ class TestFlagsmithSetFeature:
     def setup_method(self):
         BaseIntegration._instances.clear()
 
-    def test_set_feature_always_returns_false(self, monkeypatch):
+    def test_set_feature_returns_true_when_flag_exists(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        flags = [{"feature": {"name": "my-flag"}, "enabled": True, "feature_state_value": None}]
+        with patch.object(i, "is_available", return_value=True):
+            with patch.object(i, "_fetch_flags", return_value=flags):
+                assert i.set_feature("my-flag", True) is True
+
+    def test_set_feature_returns_false_when_flag_not_found(self, monkeypatch):
         monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
         BaseIntegration._instances.clear()
         i = FlagsmithIntegration(_cfg())
         with patch.object(i, "is_available", return_value=True):
-            assert i.set_feature("my-flag", True) is False
+            with patch.object(i, "_fetch_flags", return_value=[]):
+                assert i.set_feature("missing-flag", True) is False
 
-    def test_set_feature_no_key_also_returns_false(self):
+    def test_set_feature_no_key_returns_false(self):
         i = FlagsmithIntegration(_cfg())
         assert i.set_feature("my-flag", True) is False
 
@@ -273,3 +284,111 @@ class TestFlagsmithGetSetupInfo:
         assert info["name"] == "flagsmith"
         env_names = [e["name"] for e in info["env_vars"]]
         assert "FLAGSMITH_ENVIRONMENT_KEY" in env_names
+        assert "FLAGSMITH_MANAGEMENT_KEY" in env_names
+
+
+class TestFlagsmithVariableStore:
+    def setup_method(self):
+        BaseIntegration._instances.clear()
+
+    def test_get_variable_not_available_returns_none(self):
+        i = FlagsmithIntegration(_cfg())
+        assert i.get_variable("theme") is None
+
+    def test_get_variable_returns_trait_value(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        traits = [{"trait_key": "theme", "trait_value": "dark"}, {"trait_key": "lang", "trait_value": "en"}]
+        with patch.object(i, "is_available", return_value=True):
+            with patch.object(i, "_fetch_traits", return_value=traits):
+                assert i.get_variable("theme") == "dark"
+
+    def test_get_variable_returns_none_when_not_found(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        with patch.object(i, "is_available", return_value=True):
+            with patch.object(i, "_fetch_traits", return_value=[]):
+                assert i.get_variable("unknown") is None
+
+    def test_set_variable_creates_when_not_exists(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        with patch.object(i, "is_available", return_value=True):
+            with patch.object(i, "get_variable", return_value=None):
+                with patch.object(i, "_set_trait_via_api", return_value=True) as mock_set:
+                    result = i.set_variable("theme", "dark")
+        assert result is True
+        mock_set.assert_called_once_with("default", "theme", "dark")
+
+    def test_set_variable_skips_when_already_exists(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        with patch.object(i, "is_available", return_value=True):
+            with patch.object(i, "get_variable", return_value="dark"):
+                with patch.object(i, "_set_trait_via_api") as mock_set:
+                    result = i.set_variable("theme", "light")
+        assert result is True
+        mock_set.assert_not_called()
+
+    def test_set_variable_respects_identity_kwarg(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        with patch.object(i, "is_available", return_value=True):
+            with patch.object(i, "get_variable", return_value=None):
+                with patch.object(i, "_set_trait_via_api", return_value=True) as mock_set:
+                    i.set_variable("theme", "dark", identity="user-123")
+        mock_set.assert_called_once_with("user-123", "theme", "dark")
+
+    def test_set_variable_not_available_returns_false(self):
+        i = FlagsmithIntegration(_cfg())
+        assert i.set_variable("theme", "dark") is False
+
+    def test_list_variables_returns_trait_keys(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        traits = [{"trait_key": "theme"}, {"trait_key": "lang"}, {"trait_key": "tz"}]
+        with patch.object(i, "is_available", return_value=True):
+            with patch.object(i, "_fetch_traits", return_value=traits):
+                result = i.list_variables()
+        assert set(result) == {"theme", "lang", "tz"}
+
+    def test_list_variables_with_prefix(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        traits = [{"trait_key": "ui_theme"}, {"trait_key": "ui_lang"}, {"trait_key": "tz"}]
+        with patch.object(i, "is_available", return_value=True):
+            with patch.object(i, "_fetch_traits", return_value=traits):
+                result = i.list_variables(prefix="ui_")
+        assert result == ["ui_theme", "ui_lang"]
+
+    def test_list_variables_not_available_returns_empty(self):
+        i = FlagsmithIntegration(_cfg())
+        assert i.list_variables() == []
+
+    def test_management_key_loaded_from_env(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        monkeypatch.setenv("FLAGSMITH_MANAGEMENT_KEY", "mgmt.key.123")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        assert i.management_key == "mgmt.key.123"
+
+    def test_management_key_none_when_not_set(self, monkeypatch):
+        monkeypatch.delenv("FLAGSMITH_MANAGEMENT_KEY", raising=False)
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        assert not i.management_key
+
+    def test_get_info_includes_management_key_flag(self, monkeypatch):
+        monkeypatch.setenv("FLAGSMITH_ENVIRONMENT_KEY", "test.env.key")
+        monkeypatch.setenv("FLAGSMITH_MANAGEMENT_KEY", "mgmt.key")
+        BaseIntegration._instances.clear()
+        i = FlagsmithIntegration(_cfg())
+        info = i.get_info()
+        assert info["has_management_key"] is True

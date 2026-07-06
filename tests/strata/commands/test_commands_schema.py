@@ -27,8 +27,9 @@ class TestSchemaList:
         runner = CliRunner()
         result = runner.invoke(schema_group, ["list", "--output", "json"])
         data = json.loads(result.output)
+        present_kinds = [k["kind"] if isinstance(k, dict) else k for k in data["kinds"]]
         for kind in PlatformKind:
-            assert kind.value in data["kinds"]
+            assert kind.value in present_kinds
 
     def test_text_output_one_kind_per_line(self):
         runner = CliRunner()

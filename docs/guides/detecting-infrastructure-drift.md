@@ -23,7 +23,7 @@ Drift happens when:
 ## Quick start
 
 ```bash
-strata deploy drift -f deploy/deploy-prd.yaml
+strata deploy drift run -f deploy/deploy-prd.yaml
 ```
 
 When drift is found, the output looks like:
@@ -76,10 +76,20 @@ Tag changes are always `low` regardless of resource type — they match the attr
 
 ---
 
-## Flags
+## Command reference
+
+`strata deploy drift` is a **subgroup** with three subcommands:
 
 ```
-strata deploy drift -f <FILE> [OPTIONS]
+strata deploy drift run         # detect drift (was: strata deploy drift)
+strata deploy drift acknowledge # suppress a known-drifted address
+strata deploy drift history     # view run history and acknowledged addresses
+```
+
+### `drift run` flags
+
+```
+strata deploy drift run -f <FILE> [OPTIONS]
 ```
 
 | Flag               | Default    | Description                                                      |
@@ -87,6 +97,7 @@ strata deploy drift -f <FILE> [OPTIONS]
 | `-f / --file`      | required   | Path to the deployment YAML file                                 |
 | `--stage NAME`     | all stages | Run drift detection on one stage only                            |
 | `--severity LEVEL` | `info`     | Minimum severity for exit code 3 (critical/high/medium/low/info) |
+| `--baseline`       | off        | Acknowledge all detected drift as baseline; always exits 0       |
 | `--output FORMAT`  | console    | `console` or `json`                                              |
 | `--verbose`        | off        | Show terraform output lines                                      |
 
@@ -99,10 +110,10 @@ By default, **any drift** (including tag changes) triggers exit code 3. Use
 
 ```bash
 # Fail only on security-sensitive or core-infrastructure changes
-strata deploy drift -f deploy/deploy-prd.yaml --severity high
+strata deploy drift run -f deploy/deploy-prd.yaml --severity high
 
 # Fail on anything medium or above (ignore tags, data sources)
-strata deploy drift -f deploy/deploy-prd.yaml --severity medium
+strata deploy drift run -f deploy/deploy-prd.yaml --severity medium
 ```
 
 Exit code 0 is returned when all detected drift is below the threshold. The drift is
@@ -113,7 +124,7 @@ still **reported** in the output — the threshold only controls the exit code.
 ## Checking one stage
 
 ```bash
-strata deploy drift -f deploy/deploy-prd.yaml --stage infrastructure
+strata deploy drift run -f deploy/deploy-prd.yaml --stage infrastructure
 ```
 
 Useful when a specific stage is suspected to have drift and you don't want to run
@@ -121,10 +132,78 @@ Useful when a specific stage is suspected to have drift and you don't want to ru
 
 ---
 
+## Setting a baseline
+
+After a known-good deploy, reset the drift history so age tracking starts from now:
+
+```bash
+strata deploy drift run -f deploy/deploy-prd.yaml --baseline
+```
+
+This runs drift detection, shows the report, acknowledges every detected entry, clears
+the run history, and records a `baseline_at` timestamp. Future checks will treat those
+resources as having `first_detected` from the next run they appear in.
+
+`--baseline` always exits 0, regardless of what drift was found.
+
+---
+
+## Acknowledging expected drift
+
+Some resources drift intentionally — auto-scalers change replica counts, policy agents
+add tags. Rather than resetting the entire baseline, suppress individual addresses:
+
+```bash
+# Suppress one address
+strata deploy drift acknowledge -f deploy/deploy-prd.yaml \
+    --address "azurerm_autoscale_setting.web" \
+    --reason "auto-scaler managed — expected drift"
+
+# Re-enable reporting for an address
+strata deploy drift acknowledge -f deploy/deploy-prd.yaml \
+    --address "azurerm_autoscale_setting.web" \
+    --remove
+```
+
+Acknowledged addresses are **excluded from the report and do not affect the exit code**.
+They remain suppressed until explicitly removed or until the baseline is reset.
+
+### `drift acknowledge` flags
+
+| Flag               | Required | Description                                                    |
+| ------------------ | -------- | -------------------------------------------------------------- |
+| `-f / --file`      | yes      | Deployment YAML to identify the deployment                     |
+| `--address ADDR`   | yes      | Terraform resource address (e.g. `azurerm_autoscale_setting.web`) |
+| `--reason TEXT`    | no       | Explanation stored in history for audit purposes               |
+| `--remove`         | no       | Remove a previously added acknowledgement                      |
+
+---
+
+## Viewing drift history
+
+```bash
+strata deploy drift history -f deploy/deploy-prd.yaml
+strata deploy drift history -f deploy/deploy-prd.yaml --last 5
+```
+
+Shows:
+- A table of recent drift-check runs with their timestamps and drifted resource counts.
+- A list of currently acknowledged (suppressed) addresses.
+
+### `drift history` flags
+
+| Flag           | Default | Description                                      |
+| -------------- | ------- | ------------------------------------------------ |
+| `-f / --file`  | yes     | Deployment YAML to identify the deployment       |
+| `--last N`     | `10`    | Number of most-recent runs to display            |
+| `--output`     | console | `console` or `json`                              |
+
+---
+
 ## JSON output for CI
 
 ```bash
-strata deploy drift -f deploy/deploy-prd.yaml --output json
+strata deploy drift run -f deploy/deploy-prd.yaml --output json
 ```
 
 Output shape:
@@ -215,7 +294,7 @@ Add a drift check step before every deploy to catch out-of-band changes:
 ```yaml
 # .github/workflows/deploy.yml (example)
 - name: Check for drift
-  run: strata deploy drift -f deploy/deploy-prd.yaml --severity high
+  run: strata deploy drift run -f deploy/deploy-prd.yaml --severity high
   continue-on-error: true   # report drift but don't block the deploy
 
 - name: Deploy
@@ -226,8 +305,31 @@ Or fail the pipeline on critical drift:
 
 ```yaml
 - name: Fail on critical drift
-  run: strata deploy drift -f deploy/deploy-prd.yaml --severity critical
+  run: strata deploy drift run -f deploy/deploy-prd.yaml --severity critical
 ```
+
+### Nightly scheduled drift check
+
+A reusable GitHub Actions workflow is provided at
+`.github/workflows/drift-check.yml`. Use it directly:
+
+```yaml
+# .github/workflows/nightly.yml
+jobs:
+  drift:
+    uses: ./.github/workflows/drift-check.yml
+    with:
+      deployment: deploy/production.yaml
+      severity: high
+    secrets: inherit
+```
+
+The workflow:
+- Runs nightly at 02:00 UTC.
+- Posts a Slack notification when critical/high drift is found (optional — set
+  `SLACK_DRIFT_WEBHOOK` secret).
+- Uploads `drift-report.json` as an artifact (kept 90 days).
+- Exits 3 when drift at or above `severity` is detected.
 
 ---
 

@@ -404,3 +404,231 @@ class TestDriftController:
         assert report.entries[0].severity == DriftSeverity.CRITICAL
         assert report.entries[0].address == "azurerm_network_security_rule.allow_http"
         assert report.summary.critical == 1
+
+
+# ---------------------------------------------------------------------------
+# DriftHistoryStore — Phase 2 (acknowledge / baseline / list)
+# ---------------------------------------------------------------------------
+
+
+class TestDriftHistoryStorePhase2:
+    def test_is_acknowledged_false_by_default(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.record_run("2026-01-01T00:00:00Z", ["res.a"])
+        assert store.is_acknowledged("res.a") is False
+
+    def test_acknowledge_marks_entry(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.record_run("2026-01-01T00:00:00Z", ["res.a"])
+        store.acknowledge("res.a", reason="expected", acknowledged_by="alice")
+        assert store.is_acknowledged("res.a") is True
+        entry = store.get_entry("res.a")
+        assert entry["acknowledged_reason"] == "expected"
+        assert entry["acknowledged_by"] == "alice"
+
+    def test_acknowledge_creates_placeholder_for_unknown_address(self, tmp_path):
+        """Acknowledging an address never seen in a run creates a placeholder entry."""
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.acknowledge("res.new", reason="pre-ack")
+        assert store.is_acknowledged("res.new") is True
+
+    def test_acknowledge_is_idempotent(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.acknowledge("res.a", reason="first")
+        store.acknowledge("res.a", reason="second")
+        entry = store.get_entry("res.a")
+        assert entry["acknowledged_reason"] == "second"
+
+    def test_remove_acknowledgement(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.record_run("2026-01-01T00:00:00Z", ["res.a"])
+        store.acknowledge("res.a", reason="ok")
+        assert store.remove_acknowledgement("res.a") is True
+        assert store.is_acknowledged("res.a") is False
+        entry = store.get_entry("res.a")
+        assert "acknowledged_reason" not in entry
+
+    def test_remove_acknowledgement_returns_false_when_not_acknowledged(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.record_run("2026-01-01T00:00:00Z", ["res.a"])
+        assert store.remove_acknowledgement("res.a") is False
+
+    def test_remove_acknowledgement_returns_false_for_unknown_address(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        assert store.remove_acknowledgement("nonexistent") is False
+
+    def test_reset_baseline_clears_history(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.record_run("2026-01-01T00:00:00Z", ["res.a"])
+        store.acknowledge("res.a", reason="known")
+        store.reset_baseline()
+        assert store.get_entry("res.a") is None
+        assert store.list_runs() == []
+        assert store.get_baseline_at() is not None
+
+    def test_reset_baseline_sets_baseline_at(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        assert store.get_baseline_at() is None
+        store.reset_baseline()
+        assert store.get_baseline_at() is not None
+
+    def test_list_runs_returns_all(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.record_run("2026-01-01T00:00:00Z", ["res.a"])
+        store.record_run("2026-01-02T00:00:00Z", ["res.b"])
+        runs = store.list_runs()
+        assert len(runs) == 2
+
+    def test_list_runs_last_n(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        for i in range(5):
+            store.record_run(f"2026-01-0{i + 1}T00:00:00Z", [f"res.{i}"])
+        runs = store.list_runs(last=2)
+        assert len(runs) == 2
+        # most recent two
+        assert runs[-1]["checked_at"] == "2026-01-05T00:00:00Z"
+
+    def test_list_acknowledged(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.record_run("2026-01-01T00:00:00Z", ["res.a", "res.b"])
+        store.acknowledge("res.a", reason="known")
+        acked = store.list_acknowledged()
+        assert len(acked) == 1
+        assert acked[0]["address"] == "res.a"
+
+    def test_acknowledge_persists_through_save_reload(self, tmp_path):
+        store = DriftHistoryStore(tmp_path, "d")
+        store.load()
+        store.record_run("2026-01-01T00:00:00Z", ["res.a"])
+        store.acknowledge("res.a", reason="stable")
+        store.save()
+
+        store2 = DriftHistoryStore(tmp_path, "d")
+        store2.load()
+        assert store2.is_acknowledged("res.a") is True
+        assert store2.get_entry("res.a")["acknowledged_reason"] == "stable"
+
+
+# ---------------------------------------------------------------------------
+# DriftController — Phase 2: acknowledged entries are filtered
+# ---------------------------------------------------------------------------
+
+
+class TestDriftControllerAcknowledged:
+    def _make_stage(self, name: str = "infra") -> MagicMock:
+        stage = MagicMock()
+        stage.name = name
+        stage.provisioner = "terraform"
+        stage.topology = None
+        return stage
+
+    def _make_deployment_service(self) -> MagicMock:
+        svc = MagicMock()
+        svc.model.meta.name = "test-deploy"
+        svc.model.spec.stages = []
+        return svc
+
+    def _resource_changes(self):
+        return [
+            {
+                "address": "azurerm_network_security_rule.allow_http",
+                "type": "azurerm_network_security_rule",
+                "change": {
+                    "actions": ["update"],
+                    "before": {"priority": 100},
+                    "after": {"priority": 200},
+                },
+            }
+        ]
+
+    def test_acknowledged_entry_excluded_from_report(self, tmp_path):
+        """An acknowledged resource address must not appear in DriftReport entries."""
+        # Pre-acknowledge the address that the deployer will return
+        history = DriftHistoryStore(tmp_path, "test-deploy")
+        history.load()
+        history.acknowledge("azurerm_network_security_rule.allow_http", reason="known")
+        history.save()
+
+        ctrl = DriftController()
+        dep_svc = self._make_deployment_service()
+        cfg_svc = MagicMock()
+        stage = self._make_stage()
+
+        deployer_mock = MagicMock()
+        deployer_mock.validate_workspace.return_value = (True, [])
+        deployer_mock.validate_environment.return_value = (True, [])
+        deployer_mock.setup.return_value = (True, [])
+        deployer_mock.drift.return_value = (True, {"resource_changes": self._resource_changes()}, [])
+
+        with (
+            patch(
+                "strata.controllers.drift_controller.DeployerFactory.resolve_type",
+                return_value=("terraform", []),
+            ),
+            patch(
+                "strata.controllers.drift_controller.DeployerFactory.create",
+                return_value=deployer_mock,
+            ),
+        ):
+            report = ctrl.detect_drift(
+                stages=[stage],
+                deployment_service=dep_svc,
+                configuration_service=cfg_svc,
+                build_path=tmp_path,
+                work_path=tmp_path,
+            )
+
+        assert not report.has_drift
+        assert report.summary.critical == 0
+
+    def test_non_acknowledged_entry_still_reported(self, tmp_path):
+        """Only acknowledged addresses are suppressed; others still appear."""
+        # Acknowledge a different address
+        history = DriftHistoryStore(tmp_path, "test-deploy")
+        history.load()
+        history.acknowledge("some_other.resource", reason="ok")
+        history.save()
+
+        ctrl = DriftController()
+        dep_svc = self._make_deployment_service()
+        cfg_svc = MagicMock()
+        stage = self._make_stage()
+
+        deployer_mock = MagicMock()
+        deployer_mock.validate_workspace.return_value = (True, [])
+        deployer_mock.validate_environment.return_value = (True, [])
+        deployer_mock.setup.return_value = (True, [])
+        deployer_mock.drift.return_value = (True, {"resource_changes": self._resource_changes()}, [])
+
+        with (
+            patch(
+                "strata.controllers.drift_controller.DeployerFactory.resolve_type",
+                return_value=("terraform", []),
+            ),
+            patch(
+                "strata.controllers.drift_controller.DeployerFactory.create",
+                return_value=deployer_mock,
+            ),
+        ):
+            report = ctrl.detect_drift(
+                stages=[stage],
+                deployment_service=dep_svc,
+                configuration_service=cfg_svc,
+                build_path=tmp_path,
+                work_path=tmp_path,
+            )
+
+        assert report.has_drift
+        assert report.summary.critical == 1

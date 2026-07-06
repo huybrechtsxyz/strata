@@ -103,10 +103,8 @@ def _make_base_build_cmd(tmp_path: Path) -> BaseBuildCommand:
     cmd._solution_controller = MagicMock()
     cmd._solution_controller.get_repo_map.return_value = {}
     cmd._output_format = "json"
+    cmd.logger = MagicMock()
     return cmd
-
-
-class TestConfigFetchLifecyclePhase:
     """config_fetch_before and config_fetch_after are fired around _load_configuration_service()."""
 
     def _make_cmd_with_file(self, tmp_path: Path) -> BaseBuildCommand:
@@ -142,13 +140,9 @@ class TestConfigFetchLifecyclePhase:
             with patch("strata.commands.base_command.BaseCommand._before_execute", return_value=True):
                 cmd._before_execute()
 
-        fetch_before_idx = next(
-            (i for i, v in enumerate(call_order) if v == "lifecycle:config_fetch_before"), None
-        )
+        fetch_before_idx = next((i for i, v in enumerate(call_order) if v == "lifecycle:config_fetch_before"), None)
         load_idx = next((i for i, v in enumerate(call_order) if v == "load_config"), None)
-        fetch_after_idx = next(
-            (i for i, v in enumerate(call_order) if v == "lifecycle:config_fetch_after"), None
-        )
+        fetch_after_idx = next((i for i, v in enumerate(call_order) if v == "lifecycle:config_fetch_after"), None)
 
         assert fetch_before_idx is not None, "config_fetch_before was never called"
         assert load_idx is not None, "load_configuration_service was never called"
@@ -234,6 +228,7 @@ def _make_clean_cmd(tmp_path: Path) -> CleanBuildCommand:
     cmd._output_data = {}
     cmd._output_format = "json"
     cmd._configuration_service = None
+    cmd.logger = MagicMock()
 
     svc = MagicMock()
     svc.get_build_path.return_value = tmp_path / "build" / "d1"
