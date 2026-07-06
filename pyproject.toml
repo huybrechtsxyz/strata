@@ -78,10 +78,6 @@ dev = [
     "pyyaml > 3.13",
     "types-PyYAML",
 ]
-
-[project.optional-dependencies]
-mcp = ["mcp>=1.0"]
-
 doc = [
     "sphinx",
     "sphinx-autoapi",
@@ -92,6 +88,9 @@ doc = [
     "coverage-badge",
     "anybadge",
 ]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0"]
 [tool.ruff]
 exclude = [
     ".eggs",
