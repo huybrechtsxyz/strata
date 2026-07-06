@@ -1,0 +1,1 @@
+{"lock_id": "lid", "deployment": "dep", "holder": "alice", "hostname": "h", "pid": 1, "acquired_at": "2024-01-01T00:00:00Z", "expires_at": "", "reason": "ci", "stage": null}

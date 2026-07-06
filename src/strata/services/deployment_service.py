@@ -1047,16 +1047,24 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         # Validation 2: Stage provisioner/topology references
         if self.model and self.model.spec and self.model.spec.stages:
-            for stage in self.model.spec.stages:
-                if stage.provisioner:
-                    # Check provisioner exists (would need workspace.get_provisioner_service())
-                    # TODO: Implement when provisioner service exists
-                    pass
+            provisioner_names: set = set()
+            topology_names: set = set()
+            if workspace.model and workspace.model.spec:
+                provisioner_names = {p.name for p in (workspace.model.spec.provisioners or [])}
+                topology_names = {t.name for t in (workspace.model.spec.topology or [])}
 
-                if stage.topology:
-                    # Check topology exists (would need workspace.get_topology_service())
-                    # TODO: Implement when topology service exists
-                    pass
+            for stage in self.model.spec.stages:
+                if stage.provisioner and stage.provisioner not in provisioner_names:
+                    errors.append(
+                        f"Stage '{stage.name}' references undefined provisioner '{stage.provisioner}'. "
+                        f"Available provisioners: {', '.join(sorted(provisioner_names)) or '(none)'}"
+                    )
+
+                if stage.topology and stage.topology not in topology_names:
+                    errors.append(
+                        f"Stage '{stage.name}' references undefined topology '{stage.topology}'. "
+                        f"Available topologies: {', '.join(sorted(topology_names)) or '(none)'}"
+                    )
 
         # Validation 3: Resource cross-references (workspace-level dependencies)
         # Check that workspace resource dependencies reference existing resources

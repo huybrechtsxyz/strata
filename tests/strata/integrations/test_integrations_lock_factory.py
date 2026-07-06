@@ -1,11 +1,11 @@
 """Unit tests for LockFactory."""
 
-import pytest
-
 from strata.integrations.lock.lock_azurerm import AzurermLockBackend
 from strata.integrations.lock.lock_consul import ConsulLockBackend
 from strata.integrations.lock.lock_factory import LockFactory
+from strata.integrations.lock.lock_gcs import GcsLockBackend
 from strata.integrations.lock.lock_local import LocalLockBackend
+from strata.integrations.lock.lock_s3 import S3LockBackend
 from strata.integrations.lock.lock_tfc import TfcLockBackend
 from strata.models.workspace_model import WorkspaceIacBackendModel
 
@@ -102,24 +102,41 @@ class TestLockFactoryRemotePhase2:
 
 
 # ---------------------------------------------------------------------------
-# Phase 3 remote backends — still NotImplementedError
+# S3 and GCS backends
 # ---------------------------------------------------------------------------
 
 
-class TestLockFactoryRemoteNotImplemented:
-    @pytest.mark.parametrize("backend_type", ["s3", "gcs"])
-    def test_phase3_type_raises_not_implemented(self, tmp_path, backend_type):
-        model = _make_backend_model(backend_type)
-        with pytest.raises(NotImplementedError) as exc_info:
-            LockFactory.create(model, tmp_path)
-        assert "Phase 3" in str(exc_info.value)
+class TestLockFactoryS3Gcs:
+    def test_s3_returns_s3_backend(self, tmp_path):
+        model = _make_backend_model("s3", {"bucket": "my-lock-bucket"})
+        backend = LockFactory.create(model, tmp_path)
+        assert isinstance(backend, S3LockBackend)
 
-    def test_s3_error_mentions_backend_name(self, tmp_path):
-        model = _make_backend_model("s3")
-        with pytest.raises(NotImplementedError, match="S3LockBackend"):
-            LockFactory.create(model, tmp_path)
+    def test_s3_passes_configuration(self, tmp_path):
+        model = _make_backend_model("s3", {"bucket": "my-lock-bucket", "region": "us-east-1"})
+        backend = LockFactory.create(model, tmp_path)
+        assert isinstance(backend, S3LockBackend)
+        assert backend._configuration["bucket"] == "my-lock-bucket"
 
-    def test_gcs_error_mentions_backend_name(self, tmp_path):
-        model = _make_backend_model("gcs")
-        with pytest.raises(NotImplementedError, match="GcsLockBackend"):
-            LockFactory.create(model, tmp_path)
+    def test_s3_passes_work_path(self, tmp_path):
+        model = _make_backend_model("s3", {"bucket": "b"})
+        backend = LockFactory.create(model, tmp_path)
+        assert isinstance(backend, S3LockBackend)
+        assert backend._locks_dir == tmp_path / ".strata" / "locks"
+
+    def test_gcs_returns_gcs_backend(self, tmp_path):
+        model = _make_backend_model("gcs", {"bucket": "my-lock-bucket"})
+        backend = LockFactory.create(model, tmp_path)
+        assert isinstance(backend, GcsLockBackend)
+
+    def test_gcs_passes_configuration(self, tmp_path):
+        model = _make_backend_model("gcs", {"bucket": "my-lock-bucket", "prefix": "locks"})
+        backend = LockFactory.create(model, tmp_path)
+        assert isinstance(backend, GcsLockBackend)
+        assert backend._configuration["bucket"] == "my-lock-bucket"
+
+    def test_gcs_passes_work_path(self, tmp_path):
+        model = _make_backend_model("gcs", {"bucket": "b"})
+        backend = LockFactory.create(model, tmp_path)
+        assert isinstance(backend, GcsLockBackend)
+        assert backend._locks_dir == tmp_path / ".strata" / "locks"

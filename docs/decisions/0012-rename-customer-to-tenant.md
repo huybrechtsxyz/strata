@@ -1,8 +1,8 @@
 # Rename CustomerModel to TenantModel
 
-- Status: proposed
+- Status: implemented
 - Date: 2026-06-23
-- Issue: naming collision between "customer" layer and CustomerModel entity
+- Implemented in: v0.11.0 (breaking change released)
 
 ## Context and Problem Statement
 

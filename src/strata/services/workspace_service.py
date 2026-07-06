@@ -93,7 +93,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
 
         # Build solution repository names from the repo map registered via `strata repo add`
         # (stored in solution.json, set on self._repo_map before _validate_dynamic is called).
-        # Note: configuration_model.spec.repositories is for gitops manifest backends — a different concept.
+        # Note: configuration_model.spec.remotes is for named remote endpoints — a different concept.
         solution_repository_names: Set[str] = set(self._repo_map.keys()) if self._repo_map else set()
 
         # STEP 1: Validate provisioner repository references

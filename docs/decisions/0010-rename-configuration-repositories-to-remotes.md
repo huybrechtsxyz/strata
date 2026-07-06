@@ -1,6 +1,6 @@
 # Rename configuration spec.repositories to spec.remotes
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-06-18
 - Issue: repo validation bug (provisioner source.repository checked against wrong set)
 

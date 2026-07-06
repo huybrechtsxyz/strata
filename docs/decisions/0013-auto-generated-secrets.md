@@ -1,6 +1,6 @@
 # Auto-generated store values (secrets, variables, features)
 
-- Status: accepted
+- Status: implemented
 - Date: 2025-06-23
 
 ## Context and Problem Statement
@@ -1279,3 +1279,140 @@ Complete matrix of what each integration needs to implement across all phases:
 | `tests/strata/models/test_store_models.py`              | 1+2   | Model validation tests                                    |
 | `tests/strata/controllers/test_value_controller.py`     | 1+2   | Seed-on-missing flow tests                                |
 | `tests/strata/integrations/test_*`                      | 1+2+3 | Per-integration `set_*` tests                             |
+
+---
+
+## Post-v1.0 Gaps & Future Work
+
+This section documents features designed but not implemented in v1.0, explicitly scoped for future releases.
+
+### Gap 1: Build Plan Seed Status Display
+
+**Status:** ✅ IMPLEMENTED (core tracking) | ⚠️ PARTIAL (display missing)
+
+The `ValueController` correctly tracks generated/seeded values in `ResolvedValues.secret_notes`, `variable_notes`, `feature_notes` dictionaries (fields populated with `"generated"` or `"default: X"`).
+
+However, `strata build plan` **does not display these notes** in its output. The values are tracked internally; the information is just not visible to users.
+
+**What's missing:**
+- Update `plan_build_command.py` to include seed status in the plan output table
+- Display format: `[generated]` for secrets, `[default: "value"]` for variables/features
+- The information already exists in `ResolvedValues` — only the display code is needed
+
+**Impact:** Low — users can still run `strata deploy list-values` to see seed status post-deployment. This gap is cosmetic for v1.
+
+**Post-v1 action:**
+```
+Feature: "strata build plan should show seed/generate status"
+- Update plan_build_command.py table rendering
+- Add seed_notes, variable_notes, feature_notes columns
+- Add test cases for plan output with seeds
+- Estimated effort: 2-4 hours
+```
+
+---
+
+### Gap 2: Missing Integration Implementations
+
+**Status:** ⚠️ PARTIAL (5 of 7 integrations)
+
+Phase 1+2 implementations exist for:
+- ✅ Azure Key Vault (`set_secret()`)
+- ✅ Azure App Config (`set_variable()`, `set_feature()`)
+- ✅ Bitwarden (`set_secret()`)
+- ✅ Infisical (`set_secret()`, `set_variable()`)
+- ✅ etcd (`set_variable()`)
+
+**Missing implementations:**
+- ❌ HashiCorp Vault (`set_secret()`, `set_variable()`)
+- ❌ HashiCorp Consul (`set_variable()`)
+- ❌ Flagsmith (`set_feature()`)
+
+The `set_*` method stubs exist (return `False`). The design is clear; the code is not written. Vault and Consul integrations are partially designed (subprocess commands, error handling); Flagsmith requires API calls.
+
+**Impact:** Medium — deployments using only the 5 implemented integrations are unaffected. Users relying on Vault, Consul, or Flagsmith must manually seed values (today's workflow) or upgrade to a post-v1 release.
+
+**Post-v1 action:**
+```
+Task: "Implement set_* methods for Vault, Consul, Flagsmith"
+- Vault: set_secret() [kv put with -cas=0], set_variable() [delegate to set_secret]
+- Consul: set_variable() [kv put with ?cas=0]
+- Flagsmith: set_feature() [REST API POST + state update]
+- Each requires auth, error handling, integration tests
+- Estimated effort: 8-12 hours (3 integrations × 2.5-4h each)
+```
+
+---
+
+### Gap 3: Secret Rotation (Phase 3)
+
+**Status:** ❌ NOT STARTED (design complete, code not implemented)
+
+The design sketch for rotation (age-based advisory + opt-in regeneration) is documented in this ADR under "Secret Rotation (Phase 3 — Design Sketch)".
+
+**What's missing — the entire Phase 3 implementation:**
+1. `SecretRotateSpec` model (`max_age`, `policy` enum) — designed, not coded
+2. `get_secret_metadata()` protocol method — designed, not coded
+3. `update_secret()` method (distinct from `set_secret()` to preserve overwrite protection) — designed, not coded
+4. Age-check logic in `_resolve_secret()` (warn vs. rotate policy) — designed, not coded
+5. Affected module detection and reporting — designed, not coded
+6. Integration implementations for metadata fetching (Azure Key Vault, Vault, Bitwarden, Infisical) — designed, not coded
+7. Integration implementations for `update_secret()` (replacement writes) — designed, not coded
+8. Comprehensive test suite for rotation scenarios — designed, not coded
+9. `strata build plan` reporting of rotation intent (age warnings) — designed, not coded
+10. `strata deploy plan` reporting of affected modules — designed, not coded
+
+**Impact:** High for long-lived deployments with security rotation policies. Low for initial deployments.
+
+Rotation is **opt-in via `generate.rotate` spec** — if not present, Phase 1 behavior (seed-once, never touch again) is standard. Phase 3 is additive; v1 deployments are not affected by its absence.
+
+**Post-v1 action:**
+```
+Epic: "Secret Rotation — Age-based advisory and automatic rotation"
+Phase 3a: Core infrastructure (models, metadata protocol, update methods)
+  - Define SecretRotateSpec + enums
+  - Add get_secret_metadata() + SecretMetadata dataclass
+  - Add update_secret() to store integration base
+  - Test model validation, protocol stubs
+  - Estimated effort: 6-8 hours
+
+Phase 3b: Integration implementations
+  - Azure Key Vault: metadata fetch + update
+  - HashiCorp Vault: metadata fetch + update
+  - Bitwarden: metadata fetch + update
+  - Infisical: metadata fetch + update
+  - Estimated effort: 12-16 hours
+
+Phase 3c: Controller logic + reporting
+  - Age check in _resolve_secret()
+  - Warn vs. rotate logic
+  - Affected module detection
+  - Audit logging for rotations
+  - Estimated effort: 8-10 hours
+
+Phase 3d: Plan and test coverage
+  - build plan rotation intent reporting
+  - deploy plan affected modules display
+  - Comprehensive test suite (age detection, warn, auto-rotate)
+  - Estimated effort: 10-12 hours
+
+Total estimated effort for Phase 3: 36-46 hours
+```
+
+---
+
+### Summary: v1.0 vs Post-v1.0
+
+| Feature                      | v1.0 Status    | Gap Impact  | Post-v1 Effort |
+| ---------------------------- | -------------- | ----------- | -------------- |
+| Secret generation            | ✅ Implemented | None        | —              |
+| Variable defaults            | ✅ Implemented | None        | —              |
+| Feature flag defaults        | ✅ Implemented | None        | —              |
+| Build plan seed display      | ⚠️ Partial     | Cosmetic    | 2–4h           |
+| Vault `set_*` methods        | ❌ Missing     | Medium      | 4–6h           |
+| Consul `set_variable()`      | ❌ Missing     | Medium      | 2–3h           |
+| Flagsmith `set_feature()`    | ❌ Missing     | Medium      | 2–3h           |
+| Rotation (Phase 3)           | ❌ Not started | High        | 36–46h         |
+| **Total post-v1.0 backlog**  |                |             | **48–62 hours**|
+
+**v1.0 is production-ready** for seed-on-missing with the 5 implemented integrations. Rotation and missing integrations are enhancements, explicitly deferred to post-v1.0 releases.
