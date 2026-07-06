@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.deployers.terraform_deployer import TerraformDeployer
-from strata.models.common_models import ProvisionerType
+from strata.deployers.base_deployer import BaseDeployer
+from strata.deployers.factory import DeployerFactory
 from strata.models.deployment_model import DeploymentStageModel
 from strata.utils.config import SOLUTION_DIR, SOLUTION_OUTPUTS_DIR
 
@@ -242,40 +242,37 @@ class OutputDeployCommand(BaseDeployCommand):
 
     def _is_terraform_stage(self, stage: DeploymentStageModel) -> bool:
         """Return True when the stage resolves to a terraform provisioner."""
-        if not stage.provisioner or self._deployment_service is None:
+        if self._deployment_service is None:
             return False
-        workspace_service = self._deployment_service.get_workspace_service()
-        if not workspace_service:
-            return False
-        spec = workspace_service.model.spec  # type: ignore[union-attr]
-        provisioners = spec.provisioners or []
-        iac = next((p for p in provisioners if p.name == stage.provisioner), None)
-        return iac is not None and iac.provisioner == ProvisionerType.TERRAFORM
+        resolved_type, _ = DeployerFactory.resolve_type(stage, self._deployment_service)
+        return resolved_type == "terraform"
 
-    def _create_deployer(self, stage: DeploymentStageModel) -> Optional[TerraformDeployer]:
-        """Instantiate TerraformDeployer for *stage*, or None if resolution fails."""
-        if not stage.provisioner or self._deployment_service is None:
-            self._errors.append(f"Stage '{stage.name}': missing provisioner reference.")
+    def _create_deployer(self, stage: DeploymentStageModel) -> Optional[BaseDeployer]:
+        """Instantiate the deployer for *stage*, or None if resolution fails."""
+        if self._deployment_service is None:
+            self._errors.append(f"Stage '{stage.name}': deployment service not loaded.")
             return None
-        workspace_service = self._deployment_service.get_workspace_service()
-        if not workspace_service:
-            self._errors.append(f"Stage '{stage.name}': workspace service not loaded.")
+
+        resolved_type, errors = DeployerFactory.resolve_type(stage, self._deployment_service)
+        if errors:
+            self._errors.extend(errors)
+        if resolved_type is None:
             return None
-        spec = workspace_service.model.spec  # type: ignore[union-attr]
-        provisioners = spec.provisioners or []
-        iac = next((p for p in provisioners if p.name == stage.provisioner), None)
-        if iac is None or iac.provisioner != ProvisionerType.TERRAFORM:
-            self._errors.append(f"Stage '{stage.name}': provisioner '{stage.provisioner}' is not terraform.")
+
+        try:
+            return DeployerFactory.create(
+                resolved_type,
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+                solution_controller=self._solution_controller,
+            )
+        except ValueError as exc:
+            self._errors.append(str(exc))
             return None
-        return TerraformDeployer(
-            stage=stage,
-            deployment_service=self._deployment_service,  # type: ignore[arg-type]
-            configuration_service=self._configuration_service,  # type: ignore[arg-type]
-            build_path=self._build_path,
-            work_path=self._work_path,
-            verbose=self._is_verbose(),
-            solution_controller=self._solution_controller,
-        )
 
     # -------------------------------------------------------------------------
     # Stored artifacts mode (--version / --all-versions)

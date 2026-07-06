@@ -72,6 +72,35 @@ class CleanBuildCommand(BaseBuildCommand):
                 self._finalize(success=False)
                 return False
 
+            # config_clean_before: fires before the configuration service cache is reset.
+            # Scripts can still read resolved config values at this point.
+            if not self._run_lifecycle_phase(
+                "config_clean_before",
+                context={"work_path": str(self._work_path), "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Pre-config-clean lifecycle hook failed")
+                self._finalize(success=False)
+                return False
+
+            # Reset the in-process configuration service cache so subsequent commands
+            # pick up a fresh config load rather than stale state from this build.
+            if not self._dry_run:
+                from strata.services.configuration_service import ConfigurationService
+
+                ConfigurationService.reset()
+                self.logger.debug("Configuration service cache reset after build clean")
+
+            # config_clean_after: fires after the configuration service is reset.
+            if not self._run_lifecycle_phase(
+                "config_clean_after",
+                context={"work_path": str(self._work_path), "dry_run": self._dry_run},
+            ):
+                if self._is_console_output():
+                    click.echo("\n❌  Post-config-clean lifecycle hook failed")
+                self._finalize(success=False)
+                return False
+
             if not self._after_execute():
                 if self._is_console_output():
                     click.echo("\n❌  Post-execution hook failed")

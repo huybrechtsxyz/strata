@@ -45,7 +45,7 @@
   | 0020 Lifecycle phases        | accepted       | **KEEP** — All 27 lifecycle phases + STRATA_* env vars complete for v1. Only config_fetch/config_clean deferred                                              |
   | 0021 Deployment manifests    | accepted       | **KEEP** — Build + deploy manifests fully implemented; compliance audit trail ready for v1.0                                                                 |
   | 0022 SIEM Splunk             | accepted       | **KEEP CORE** — Splunk HEC integration shipped. CEF syslog format deferred to post-v1                                                                        |
-  | 0023 Pluggable provisioners  | proposed       | **MARK DEFERRED** — Plugin discovery not implemented; 5 built-in provisioners (terraform, ansible, helm, compose, script) sufficient for v1                  |
+  | 0023 Pluggable provisioners  | proposed       | **MARK ACCEPTED** — `DeployerFactory`, plugin discovery, `BaseDeployer` extensions, all command files migrated; guide + API ref + 2 example plugins          |
   | 0024 Environment composition | proposed       | **MARK ACCEPTED** — Merge + provenance shipped in v0.16.0. Only --trace flag deferred to post-v1                                                             |
 
 - [ ] **commands.md gaps** — add documentation sections for these 6 undocumented command groups:
@@ -90,7 +90,7 @@ These are designed (ADRs exist) but explicitly deferred beyond v1. Core infrastr
 - ADR-0018 Layer 4: SIEM integrations — Sentinel partially done; Splunk/ELK/OpenTelemetry post-v1
 - ADR-0020: `config_fetch` / `config_clean` lifecycle phases — full design, no implementation (all other 27 phases complete)
 - ADR-0022: CEF syslog format — design complete; Splunk HEC core ships in v1.0
-- ADR-0023: Pluggable provisioner framework — full design, no implementation; 5 built-in provisioners sufficient for v1
+- ADR-0023: Pluggable provisioner framework — full design and implementation complete in v1.0
 - ADR-0024: `--trace` flag for merge provenance — design complete; core merge + provenance tracking ships in v1.0
 
 **Feature-level backlog:**
@@ -159,10 +159,10 @@ Track all deferred features via GitHub issues for post-v1.0 prioritization and p
 
 - [ ] **#XXX** — [ADR-0018 Layer 4] Extend SIEM integrations — Splunk CEF syslog format, ELK, OpenTelemetry exporters
 
-### ADR-0020: Lifecycle Phases
+### ADR-0020: Lifecycle Phases [done]
 
-- [ ] **#XXX** — [ADR-0020] Implement `config_fetch` lifecycle phase — pre-fetch hooks for remote config optimization
-- [ ] **#XXX** — [ADR-0020] Implement `config_clean` lifecycle phase — companion to `config_fetch` for cleanup
+- [x] ~~[ADR-0020] Implement `config_fetch` lifecycle phase~~ — **done**: `config_fetch_before/after` wired in `BaseBuildCommand._before_execute()` around `_load_configuration_service()`
+- [x] ~~[ADR-0020] Implement `config_clean` lifecycle phase~~ — **done**: `config_clean_before/after` wired in `CleanBuildCommand.execute()` after build artifact cleanup; `ConfigurationService.reset()` called between hooks (skipped on `--dry-run`)
 
 ### ADR-0022: SIEM Integration (Splunk)
 
@@ -170,7 +170,7 @@ Track all deferred features via GitHub issues for post-v1.0 prioritization and p
 
 ### ADR-0023: Pluggable Provisioners
 
-- [ ] **#XXX** — [ADR-0023] Implement pluggable provisioner framework — third-party provisioner discovery, registration, and loading
+- [x] ~~[ADR-0023] Implement pluggable provisioner framework~~ — **done**: `DeployerFactory` with plugin discovery, `BaseDeployer` extensions, all command files migrated; guide + API reference + 2 example plugins added
 
 ### ADR-0024: Environment Composition
 
@@ -190,7 +190,6 @@ Track all deferred features via GitHub issues for post-v1.0 prioritization and p
 | ADR-0018 SIEM Layer 4                                | 16–24h      | Low      |
 | ADR-0020 Config phases (2 items)                     | 4–6h        | Very Low |
 | ADR-0022 CEF syslog                                  | 6–8h        | Low      |
-| ADR-0023 Pluggable provisioners                      | 24–32h      | Medium   |
 | ADR-0024 Provenance tracing                          | 4–6h        | Low      |
 
-**Total estimated post-v1.0 backlog: ~158–216 hours** (3–4 engineer-months at standard sprint capacity)
+**Total estimated post-v1.0 backlog: ~134–184 hours** (2.5–3.5 engineer-months at standard sprint capacity)
