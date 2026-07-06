@@ -247,28 +247,41 @@ Each issue includes enough implementation context for a session to proceed witho
 - [ ] **#XXX** — [ADR-0013] Implement secret rotation (Phase 3)
 
   > Age-based advisory + opt-in regeneration for auto-generated secrets.
-  > `strata secret rotate --key X --deployment Y` for explicit on-demand rotation.
+  > `strata secret rotate --key X --deployment Y` for explicit on-demand rotation (generated secrets only).
   > ADR: `docs/decisions/0013-auto-generated-secrets.md` (Phase 3 section)
   > Effort: 16–20h
 
-  **New / modified files:**
-  - `src/strata/models/store_models.py` — add `SecretRotateSpec` model: `max_age` (days), `policy` (`advisory` | `rotate`); attach as optional field on `SecretStoreModel`
-  - `src/strata/integrations/base_integration.py` — add `get_secret_age() → Optional[timedelta]` stub; use store-native metadata (Key Vault: `updated` field, Vault: `metadata.created_time`)
-  - `src/strata/integrations/azure_keyvault.py` — implement `get_secret_age()` using Key Vault secret properties API
-  - `src/strata/integrations/hashicorp_vault.py` — implement `get_secret_age()` from `metadata.created_time`
-  - `src/strata/controllers/value_controller.py` — `_check_rotation_advisory()`: reads `max_age`, calls `get_secret_age()`, emits `WARNING` log when overdue; `policy: rotate` calls `update_secret()` (regenerate + overwrite)
-  - New: `src/strata/commands/secret/rotate_secret_command.py` — `strata secret rotate --key <key> --deployment <file>`: explicit on-demand rotation
+  **Design decisions (resolved — see ADR issues #11–14):**
+  - `rotate:` is a **sibling of `generate:`** on `SecretStoreModel`, not nested inside `SecretGenerateSpec`
+  - `policy: warn` valid with or without `generate:`; `policy: rotate` requires `generate:` (model validator)
+  - `max_age` is `int` (days), not a duration string
+  - Stores without timestamp support emit a `WARNING` log (deduplicated per key); not a silent no-op
+  - `strata build plan` shows `[rotation: Nd / policy]` from YAML only — no store read, no age annotation
+  - Age checking and `[rotation overdue]` annotation happen only in `strata deploy run`
+  - `strata secret rotate` works only on secrets with `generate:`; manually-placed secrets fail with explicit error
 
-  **Design decisions (from ADR):**
-  - Phase 3 is inform-only for `advisory` policy — application is responsible for consumer coordination
-  - `update_secret()` is separate from `set_secret()` (create-if-not-exists) — rotation always overwrites
-  - Only store-native metadata supported (no external metadata store)
-  - Rotation writes structured audit log entry (action: `rotate`)
+  **New / modified files:**
+  - `src/strata/utils/secret_metadata.py` — `SecretMetadata` dataclass: `created`, `updated`, `expires_on` (all `Optional[datetime]`)
+  - `src/strata/models/store_models.py` — add `SecretRotateSpec` model: `max_age: int` (days, >= 1), `policy: Literal["warn", "rotate"]`; add `rotate: Optional[SecretRotateSpec]` to `SecretStoreModel` (sibling of `generate:`); add model validator enforcing `policy: rotate` requires `generate:`
+  - `src/strata/integrations/capabilities.py` — add `get_secret_metadata(key) → Optional[SecretMetadata]` to `ISecretStore` protocol
+  - `src/strata/integrations/azure_keyvault.py` — implement `get_secret_metadata()` using Key Vault secret properties API (`created_on`, `updated_on`, `expires_on`)
+  - `src/strata/integrations/hashicorp_vault.py` — implement `get_secret_metadata()` from `metadata.created_time`
+  - `src/strata/integrations/capabilities.py` — add `update_secret(key, value) → bool` to `ISecretStore` (explicit overwrite; distinct from `set_secret()`)
+  - `src/strata/integrations/azure_keyvault.py` — implement `update_secret()` (always overwrites)
+  - `src/strata/integrations/hashicorp_vault.py` — implement `update_secret()` (always overwrites)
+  - `src/strata/controllers/value_controller.py` — in `_resolve_secret()`, after successful read: if `item.rotate` set → call `get_secret_metadata()` → compute age → warn or call `update_secret()` (rotate path); log WARNING if metadata unavailable
+  - `src/strata/commands/builders/plan_build_command.py` — extend value status table: secrets with `rotate:` show `[rotation: Nd / policy]` in the detail column
+  - New: `src/strata/commands/cli_secret.py` + `src/strata/commands/secret/rotate_secret_command.py` — `strata secret rotate --key K --deployment F [--force]`; requires `generate:` on secret or exits with error; `--force` bypasses age check
 
   **Acceptance criteria:**
-  - `strata build plan` shows `[rotation overdue]` annotation when `max_age` exceeded
-  - `strata secret rotate --key <k> --deployment <f>` regenerates the secret and updates the store
-  - `policy: rotate` in YAML triggers automatic regeneration during `build run`
+  - `strata build plan` shows `rotation: 90d / rotate` in detail column for secrets with `rotate:` spec ✅ (YAML-only, no store)
+  - `strata deploy run` logs `⚠ Secret 'X' is N days old (max_age: Md)` when overdue with `policy: warn`
+  - `strata deploy run` with `policy: rotate` calls `update_secret()` and writes audit log entry `action: secret_rotated`
+  - Stores without timestamp support emit a WARNING log (not silent)
+  - `strata secret rotate --key K --deployment F` regenerates and updates the store for generated secrets
+  - `strata secret rotate` on a manually-placed secret (no `generate:`) exits with a clear error
+  - `policy: rotate` on a secret without `generate:` is a model validation error
+  - Tests: model validation, warn path, rotate path (update_secret called not set_secret), metadata-unavailable warning, rotate command happy path and error paths
 
 - [x] **#XXX** — [ADR-0013] Add missing `set_*` methods for Vault, Consul, Flagsmith integrations ✅ **DONE**
 
