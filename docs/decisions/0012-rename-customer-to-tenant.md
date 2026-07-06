@@ -1,6 +1,6 @@
 # Rename CustomerModel to TenantModel
 
-- Status: implemented
+- Status: accepted
 - Date: 2026-06-23
 - Implemented in: v0.11.0 (breaking change released)
 

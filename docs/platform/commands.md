@@ -31,28 +31,34 @@ These options are accepted by every command and subcommand:
 
 ## Command Groups
 
-| Group        | Subcommands                                                                  | Description                                               |
-| ------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `sln`        | `init` `update` `clean` `status` `export`                                    | Solution workspace lifecycle                              |
-| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset` | Manage persistent workspace defaults and logging config   |
-| `log` †      | `list`                                                                       | View execution logs (read-only)                           |
-| `profile` †  | `add` `remove` `list` `activate` `show`                                      | Manage environment profiles                               |
-| `ref` †      | `env` `config` `data` `secret`                                               | Manage file references within profiles                    |
-| `repo` †     | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                       |
-| `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                    |
-| `validate`   | `run` `graph`                                                                | Validate YAML files and visualize workspace dependencies  |
-| `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
-| `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
-| `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
-| `audit` †    | `changes` `resend` `export`                                                  | Query deploy-log evidence and forward to audit sinks      |
-| `deploy` †   | `run` `destroy` `show` `status` `history` `health` `output` `outputs` `lock` | Deploy platform using provisioners                        |
-| `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
-| `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
-| `tools`      | `status` `check` `install`                                                   | Manage and inspect external tool integrations             |
-| `new` †      | —                                                                            | Create a platform config file from a template             |
-| `version`    | —                                                                            | Show CLI version                                          |
-| `completion` | `bash` `zsh` `fish` `powershell`                                             | Output shell completion script for the given shell        |
-| `help`       | —                                                                            | Show help topics                                          |
+| Group        | Subcommands                                                                    | Description                                               |
+| ------------ | ------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| `sln`        | `init` `update` `clean` `status` `export`                                      | Solution workspace lifecycle                              |
+| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset`   | Manage persistent workspace defaults and logging config   |
+| `log` †      | `list`                                                                         | View execution logs (read-only)                           |
+| `profile` †  | `add` `remove` `list` `activate` `show`                                        | Manage environment profiles                               |
+| `ref` †      | `env` `config` `data` `secret`                                                 | Manage file references within profiles                    |
+| `repo` †     | `add` `remove` `list` `sync` `status`                                          | Manage repositories in the solution                       |
+| `build` †    | `run` `plan` `clean` `sbom`                                                    | Build platform and Terraform artifacts; generate SBOMs    |
+| `validate`   | `run` `graph`                                                                  | Validate YAML files and visualize workspace dependencies  |
+| `env` †      | `info` `output` `show` `status` `drift` `doctor`                               | Inspect environment configuration and infrastructure      |
+| `guide`      | —                                                                              | Show workspace setup progress and suggest the next action |
+| `console` †  | —                                                                              | Interactive workspace REPL                                |
+| `schema`     | `list` `get`                                                                   | Inspect JSON schemas for platform YAML kinds              |
+| `policy` †   | `list` `check`                                                                 | Inspect and evaluate deployment guardrails                |
+| `secret`     | `generate` `mask`                                                              | Generate and manage secret values                         |
+| `audit` †    | `changes` `resend` `export`                                                    | Query deploy-log evidence and forward to audit sinks      |
+| `deploy` †   | `run` `destroy` `show` `status` `history` `health` `output` `outputs` `lock *` | Deploy platform using provisioners                        |
+| `service` †  | `list` `status` `deploy` `destroy`                                             | Deploy and manage individual services                     |
+| `manifest` † | `list` `show` `export`                                                         | Query and export deployment manifests                     |
+| `mcp`        | `serve`                                                                        | Model Context Protocol server for AI integration          |
+| `values` †   | `list` `get` `set` `resolve`                                                   | Inspect and manage resolved deployment values             |
+| `vars` †     | `set` `unset` `list`                                                           | Manage team-shared template variables                     |
+| `tools`      | `status` `check` `install`                                                     | Manage and inspect external tool integrations             |
+| `new` †      | —                                                                              | Create a platform config file from a template             |
+| `version`    | —                                                                              | Show CLI version                                          |
+| `completion` | `bash` `zsh` `fish` `powershell`                                               | Output shell completion script for the given shell        |
+| `help`       | —                                                                              | Show help topics                                          |
 
 > **†** Requires an initialized workspace (`.strata/` directory). Run `strata sln init --name NAME` first.
 
@@ -643,10 +649,10 @@ Repository Status
 
 **Options:**
 
-| Option        | Description                           |
-| ------------- | ------------------------------------- |
-| `--name NAME` | Show status for a single repository   |
-| `--verbose`   | List individual changed files        |
+| Option        | Description                         |
+| ------------- | ----------------------------------- |
+| `--name NAME` | Show status for a single repository |
+| `--verbose`   | List individual changed files       |
 
 **Discovering release candidates:**
 
@@ -812,7 +818,7 @@ strata validate run -f FILE_PATH [--deep] [--explain] [standard options]
 
 | Option             | Description                                                                                                                                               |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-f / --file PATH` | File to validate. Required (unless `--path` glob is used).                                                                                               |
+| `-f / --file PATH` | File to validate. Required (unless `--path` glob is used).                                                                                                |
 | `--path GLOB`      | Validate multiple files matching a glob. Requires an initialized workspace with an active profile.                                                        |
 | `--deep`           | Enable Phase 2 (cross-reference) validation against the active profile's configuration sources. Requires an initialized workspace with an active profile. |
 | `--explain`        | After validation, emit a plain-English summary of what the file describes.                                                                                |
@@ -837,23 +843,23 @@ Build a Mermaid dependency diagram of the workspace. Two modes:
 strata validate graph [--mode files|resources] [--entry PATH] [--save PATH] [--direction LR|TD|BT|RL] [--no-validate] [standard options]
 ```
 
-| Option               | Default      | Description                                                                               |
-| -------------------- | ------------ | ----------------------------------------------------------------------------------------- |
-| `--mode`             | `files`      | Graph type: `files` or `resources`.                                                       |
-| `--entry / -e PATH`  | auto-detect  | Entry point file (deployment or workspace YAML). Discovers all deployments if omitted.    |
-| `--save / -s PATH`   | —            | Write Mermaid markdown to file. Defaults to `graph.md` when flag used without a value.   |
-| `--direction`        | LR (files), TD (resources) | Mermaid graph direction: `LR`, `TD`, `BT`, `RL`.                        |
-| `--no-validate`      | off          | Skip validation — all nodes shown as neutral. Faster for large workspaces.                |
+| Option              | Default                    | Description                                                                            |
+| ------------------- | -------------------------- | -------------------------------------------------------------------------------------- |
+| `--mode`            | `files`                    | Graph type: `files` or `resources`.                                                    |
+| `--entry / -e PATH` | auto-detect                | Entry point file (deployment or workspace YAML). Discovers all deployments if omitted. |
+| `--save / -s PATH`  | —                          | Write Mermaid markdown to file. Defaults to `graph.md` when flag used without a value. |
+| `--direction`       | LR (files), TD (resources) | Mermaid graph direction: `LR`, `TD`, `BT`, `RL`.                                       |
+| `--no-validate`     | off                        | Skip validation — all nodes shown as neutral. Faster for large workspaces.             |
 
 **Node status colours (file mode):**
 
-| Status   | Colour | Condition                                                                |
-| -------- | ------ | ------------------------------------------------------------------------ |
-| Valid    | green  | File exists and passes Phase 1 validation                                |
-| Invalid  | orange | File exists but fails validation                                         |
-| Missing  | red    | Referenced by another file but not present on disk                       |
-| External | grey   | `@repo/path` reference to a file in another repository                   |
-| Orphan   | dashed | File exists and validates but no other file references it                |
+| Status   | Colour | Condition                                                 |
+| -------- | ------ | --------------------------------------------------------- |
+| Valid    | green  | File exists and passes Phase 1 validation                 |
+| Invalid  | orange | File exists but fails validation                          |
+| Missing  | red    | Referenced by another file but not present on disk        |
+| External | grey   | `@repo/path` reference to a file in another repository    |
+| Orphan   | dashed | File exists and validates but no other file references it |
 
 **Exit codes:** 0 success (including missing nodes — graph always produces output) · 1 system failure
 
@@ -1877,7 +1883,239 @@ spec:
 
 ---
 
-## `values`
+## `service`
+
+Deploy and manage individual services (namespaces or modules). Useful for selective deployments, health checks, and targeted updates to specific services without deploying the entire deployment.
+
+### `service list`
+
+```
+strata service list -f FILE [standard options]
+```
+
+List all services declared in a deployment definition. Shows namespace and module names.
+
+| Option    | Description                                  |
+| --------- | -------------------------------------------- |
+| `-f FILE` | ✅ Required. Path to the deployment YAML file |
+
+```bash
+strata service list -f xyz-deploy-prd.yaml
+strata service list -f xyz-deploy-prd.yaml --output json
+```
+
+**JSON output keys:** `deployment`, `services[]` (each with `name`, `type` — namespace or module, `provisioner`, `configured_replicas`).
+
+### `service status`
+
+```
+strata service status -f FILE NAME [standard options]
+```
+
+Show runtime status of a specific service by name (live query against the provisioner backend).
+
+| Option    | Description                                         |
+| --------- | --------------------------------------------------- |
+| `-f FILE` | ✅ Required. Path to the deployment YAML file        |
+| `NAME`    | ✅ Required. Service name as shown in `service list` |
+
+```bash
+strata service status -f xyz-deploy-prd.yaml core-services
+strata service status -f xyz-deploy-prd.yaml my-namespace --output json
+```
+
+**JSON output keys:** `service`, `type`, `status`, `replicas_ready`, `replicas_total`, `events[]`, `resources[]`.
+
+### `service deploy`
+
+```
+strata service deploy -f FILE NAME [--force] [--dry-run] [standard options]
+```
+
+Deploy or update a single service by name. Runs the provisioner only for that service's stages.
+
+| Option      | Description                                  |
+| ----------- | -------------------------------------------- |
+| `-f FILE`   | ✅ Required. Path to the deployment YAML file |
+| `NAME`      | ✅ Required. Service name to deploy           |
+| `--force`   | Continue even if health check fails          |
+| `--dry-run` | Validate and plan only — no provisioners run |
+
+```bash
+strata service deploy -f xyz-deploy-prd.yaml core-services
+strata service deploy -f xyz-deploy-prd.yaml my-namespace --dry-run
+strata service deploy -f xyz-deploy-prd.yaml my-namespace --force --output json
+```
+
+**Exit codes:** `0` success · `1` execution error · `3` service not found or health check failed (without `--force`).
+
+### `service destroy`
+
+```
+strata service destroy -f FILE NAME [--force] [standard options]
+```
+
+Tear down a single service by name. Runs destroy provisioners for that service only.
+
+| Option    | Description                             |
+| --------- | --------------------------------------- |
+| `-f FILE` | ✅ Required. Path to the deployment file |
+| `NAME`    | ✅ Required. Service name to destroy     |
+| `--force` | Required. Non-interactive destroy.      |
+
+```bash
+strata service destroy -f xyz-deploy-prd.yaml core-services --force
+```
+
+---
+
+## `manifest`
+
+Query and export deployment manifests. Build and deploy manifests are first-class records captured at artifact generation and deployment execution time. They contain configuration snapshots, SBOM data, policy results, and deployment outcomes.
+
+### `manifest list`
+
+```
+strata manifest list [--deployment NAME] [--last N] [--work-path PATH] [standard options]
+```
+
+List all deployment manifests in the workspace. Manifests are stored in `.strata/build/{deployment_name}/manifest.json` (build manifests) and `.strata/deploy/{deployment_name}_{timestamp}.json` (deploy manifests).
+
+| Option              | Description                                   |
+| ------------------- | --------------------------------------------- |
+| `--deployment NAME` | Filter by deployment name (optional)          |
+| `--last N`          | Show only the last N manifests (default: all) |
+
+```bash
+strata manifest list
+strata manifest list --deployment xyz-deploy-prd
+strata manifest list --last 20 --output json
+```
+
+**JSON output keys:** `manifests[]` — each with `path`, `deployment`, `action`, `status`, `started_at`, `deployed_by`.
+
+### `manifest show`
+
+```
+strata manifest show [--deployment NAME] [--last 1] [standard options]
+```
+
+Display the full content of a deployment manifest (build or deploy). By default shows the most recent manifest; use `--deployment` and `--last` to select a specific one.
+
+| Option              | Description                                      |
+| ------------------- | ------------------------------------------------ |
+| `--deployment NAME` | Show manifest for this deployment (required)     |
+| `--last N`          | Show the Nth most recent manifest (default: `1`) |
+
+```bash
+strata manifest show --deployment xyz-deploy-prd
+strata manifest show --deployment xyz-deploy-prd --last 5
+strata manifest show --deployment xyz-deploy-prd --output json
+```
+
+**Displayed fields:** `kind`, `apiVersion`, `meta` (name, timestamp), `spec` (deployment name, action, status, configuration snapshot, SBOM, policy results, stages, commit hash).
+
+### `manifest export`
+
+```
+strata manifest export [--deployment NAME] [--last N] [--format json|csv] [--out PATH] [standard options]
+```
+
+Export manifests to a file for compliance, audit, or external tooling. Supports JSON and CSV formats.
+
+| Option              | Description                                     |
+| ------------------- | ----------------------------------------------- |
+| `--deployment NAME` | Export manifests for this deployment (required) |
+| `--last N`          | Export only the last N manifests                |
+| `--format`          | Output format: `json` (default) or `csv`        |
+| `--out PATH`        | Write to this file (default: stdout)            |
+
+```bash
+strata manifest export --deployment xyz-deploy-prd
+strata manifest export --deployment xyz-deploy-prd --last 30 --format csv --out manifests.csv
+strata manifest export --deployment xyz-deploy-prd --format json --out manifests.json
+```
+
+---
+
+## `mcp`
+
+Model Context Protocol server for AI agent integration. Start an MCP server that exposes strata workspace operations as tools, allowing AI assistants (Claude, GitHub Copilot, custom agents) to validate, plan, and query infrastructure without parsing CLI output.
+
+### `mcp serve`
+
+```
+strata mcp serve [--transport stdio|sse]
+```
+
+Start the strata MCP server. The server exposes the following tools to connected AI clients:
+
+| Tool             | Action                                             |
+| ---------------- | -------------------------------------------------- |
+| `validate_file`  | Validate a single YAML file                        |
+| `validate_glob`  | Validate files matching a glob pattern             |
+| `build_plan`     | Preview a build (platform, Terraform, SBOM)        |
+| `deploy_plan`    | Preview a deploy (what would run, stages, changes) |
+| `deploy_status`  | Query live infrastructure state and drift          |
+| `audit_query`    | Query deployment history and audit logs            |
+| `scaffold_file`  | Generate a new YAML file from a template           |
+| `resolve_values` | Resolve variables, secrets, features for a deploy  |
+| `policy_check`   | Evaluate deployment policies                       |
+
+| Option        | Type             | Default | Description                                                         |
+| ------------- | ---------------- | ------- | ------------------------------------------------------------------- |
+| `--transport` | `stdio` \| `sse` | `stdio` | Transport protocol. Use `stdio` for VS Code; `sse` for web clients. |
+
+**Setup (VS Code):**
+
+Add to `.vscode/settings.json` or user settings:
+
+```json
+{
+  "mcp-servers": {
+    "strata": {
+      "command": "uv",
+      "args": ["run", "strata", "mcp", "serve", "--transport", "stdio"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+Then restart VS Code and Copilot Chat will gain access to strata workspace operations.
+
+**Setup (Claude Desktop):**
+
+Add to `~/.config/claude/claude.json` (macOS) or `%APPDATA%\Claude\claude.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "strata": {
+      "command": "uv",
+      "args": ["run", "strata", "mcp", "serve", "--transport", "stdio"],
+      "cwd": "/path/to/workspace"
+    }
+  }
+}
+```
+
+Restart Claude Desktop and the server will be available.
+
+**Requires the optional mcp dependency:**
+
+```bash
+pip install xyz-strata[mcp]
+```
+
+```bash
+strata mcp serve
+strata mcp serve --transport sse
+```
+
+---
+
+
 
 Inspect resolved deployment values (variables, secrets, feature flags).
 

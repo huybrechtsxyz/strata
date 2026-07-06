@@ -1,6 +1,6 @@
 # Deployment state locking for concurrent deploy protection
 
-- Status: implemented
+- Status: accepted
 - Date: 2026-06-16
 
 ## Context and Problem Statement

@@ -1,6 +1,6 @@
 # Promotion strategies for version progression across environments
 
-- Status: proposed
+- Status: deferred
 - Date: 2026-06-23
 
 ## Context and Problem Statement

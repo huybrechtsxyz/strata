@@ -1,6 +1,6 @@
 # Tag-based release workflow support (Option C: Validation + Visibility)
 
-- Status: proposed
+- Status: deferred
 - Date: 2026-07-03
 - Related: [GitHub Issue #111](https://github.com/huybrechtsxyz/strata/issues/111), [ADR 0011 (Promotion strategies)](0011-promotion-strategies-for-version-progression.md)
 

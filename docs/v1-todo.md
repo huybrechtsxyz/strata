@@ -37,16 +37,16 @@
   | 0013 Auto-generated secrets  | implemented    | Mark **accepted** — core 100% complete (seed-on-missing, all store types); 5/7 integrations; rotation deferred                                               |
   | 0014 Onboarding              | accepted       | Mark **accepted** — 18/21 items done (console REPL, guide controller, flow graph, batch validate, error hints). Only init wizard (phase 3) remains → post-v1 |
   | 0015 Dependency graph        | implemented    | Mark **accepted**                                                                                                                                            |
-  | 0016 Console REPL            | accepted       | Keep                                                                                                                                                         |
-  | 0017 Jinja2 templates        | accepted       | Keep                                                                                                                                                         |
-  | 0017b Tag-based release      | proposed       | Mark **deferred**                                                                                                                                            |
-  | 0018 Audit traceability      | accepted       | Keep                                                                                                                                                         |
-  | 0019 Terraform build output  | accepted       | Keep                                                                                                                                                         |
-  | 0020 Lifecycle phases        | accepted       | Keep — clear TBD items for config_fetch/config_clean (mark as post-v1)                                                                                       |
-  | 0021 Deployment manifests    | accepted       | Keep                                                                                                                                                         |
-  | 0022 SIEM Splunk             | accepted       | Keep — CEF syslog is post-v1                                                                                                                                 |
-  | 0023 Pluggable provisioners  | proposed       | Mark **deferred** — not implemented                                                                                                                          |
-  | 0024 Environment composition | proposed       | Mark **accepted** — implemented in v0.16.0                                                                                                                   |
+  | 0016 Console REPL            | accepted       | **KEEP** — Core REPL production-ready for v1. Only init wizard (Phase 3) deferred to post-v1                                                                 |
+  | 0017 Jinja2 templates        | accepted       | **KEEP** — 100% complete: dual-mode processor (strict/lenient), conditionals, loops all working                                                              |
+  | 0017b Tag-based release      | proposed       | **MARK DEFERRED** — Git infrastructure complete; CLI UX/docs enhancements post-v1                                                                            |
+  | 0018 Audit traceability      | accepted       | **KEEP** — Layers 2–3 production-ready (deploy-log JSON, audit CLI). Layer 4 (SIEM) extensible post-v1                                                       |
+  | 0019 Terraform build output  | accepted       | **KEEP** — 100% complete: all output modes, backend var resolution, security controls wired and tested                                                       |
+  | 0020 Lifecycle phases        | accepted       | **KEEP** — All 27 lifecycle phases + STRATA_* env vars complete for v1. Only config_fetch/config_clean deferred                                              |
+  | 0021 Deployment manifests    | accepted       | **KEEP** — Build + deploy manifests fully implemented; compliance audit trail ready for v1.0                                                                 |
+  | 0022 SIEM Splunk             | accepted       | **KEEP CORE** — Splunk HEC integration shipped. CEF syslog format deferred to post-v1                                                                        |
+  | 0023 Pluggable provisioners  | proposed       | **MARK DEFERRED** — Plugin discovery not implemented; 5 built-in provisioners (terraform, ansible, helm, compose, script) sufficient for v1                  |
+  | 0024 Environment composition | proposed       | **MARK ACCEPTED** — Merge + provenance shipped in v0.16.0. Only --trace flag deferred to post-v1                                                             |
 
 - [ ] **commands.md gaps** — add documentation sections for these 6 undocumented command groups:
   - `env` — info, output, show, status, drift, doctor
@@ -77,21 +77,31 @@ All changes were already implemented prior to this checklist:
 
 ---
 
-## Nice-to-Have (Post-v1)
+## Post-v1.0 Deferred Features
 
-These are designed (ADRs exist) but not required for a usable v1:
+These are designed (ADRs exist) but explicitly deferred beyond v1. Core infrastructure is stable; gaps are enhancements or integrations.
 
-- Infrastructure drift detection (ADR-0008)
-- Promotion strategies for version progression (ADR-0011)
-- Console init wizard (ADR-0014, item 10)
-- `--explain` flag on validation errors (ADR-0014)
-- Validation error fix suggestions (ADR-0014)
-- `config_fetch` / `config_clean` lifecycle phases (ADR-0020)
-- Pluggable provisioner framework (ADR-0023)
-- Tag-based release workflow (ADR-0017b)
-- ~~S3/GCS lock backends~~ — **done**: `lock_s3.py` and `lock_gcs.py` implemented; wired into `lock_factory.py`; 65 passing tests
-- CEF syslog format for Splunk SIEM
-- Controller-level and CLI command-level unit test expansion
+**ADR-level gaps (by ADR):**
+- ADR-0008: Infrastructure drift detection — full design, no implementation
+- ADR-0011: Promotion strategies — full design, no implementation
+- ADR-0014 item 10: Console init wizard — Phase 3 only; core REPL already production-ready
+- ADR-0017b: Tag-based release — git tag infrastructure done; CLI visibility/UX enhancements post-v1
+- ADR-0018 Layer 1: PR template generation tooling — by design, user-provided in `.github/pull_request_template.md`
+- ADR-0018 Layer 4: SIEM integrations — Sentinel partially done; Splunk/ELK/OpenTelemetry post-v1
+- ADR-0020: `config_fetch` / `config_clean` lifecycle phases — full design, no implementation (all other 27 phases complete)
+- ADR-0022: CEF syslog format — design complete; Splunk HEC core ships in v1.0
+- ADR-0023: Pluggable provisioner framework — full design, no implementation; 5 built-in provisioners sufficient for v1
+- ADR-0024: `--trace` flag for merge provenance — design complete; core merge + provenance tracking ships in v1.0
+
+**Feature-level backlog:**
+- Progressive dependency scaffolding (ADR-0014 Phase 5)
+- Auto-refresh REPL mode (ADR-0014 Phase 5)
+- Template marketplace / community templates (ADR-0014 Phase 5)
+- Controller-level and CLI command-level test expansion
+- CEF syslog output for SIEM compatibility (ADR-0022 Phase 2)
+- Secret rotation (Phase 3, ADR-0013) — 5/7 integrations, design complete
+- Missing integrations for value seeding (ADR-0013: Vault, Consul, Flagsmith `set_*` methods)
+- Build plan seed status display (ADR-0013: values tracked, display missing)
 
 ---
 
