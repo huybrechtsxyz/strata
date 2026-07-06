@@ -163,6 +163,25 @@ Full command reference: [platform/commands.md](platform/commands.md)
 
 ---
 
+## AI Integration via MCP
+
+**Connect strata to Claude, GitHub Copilot, or custom AI agents** using the Model Context Protocol (MCP) server.
+
+The strata MCP server exposes infrastructure operations as AI-friendly tools:
+- **Validate** YAML with `validate_file()` — catch errors before deployment
+- **Preview** builds and deployments with `build_plan()` and `deploy_plan()`
+- **Query** infrastructure state with `deploy_status()` and `audit_query()`
+- **Generate** deployment files with `scaffold_file()` from templates
+
+**Perfect for:**
+- AI-assisted infrastructure planning and code review
+- Troubleshooting via drift detection and audit log analysis
+- Approval workflows: AI previews, human reviews, CLI executes
+
+Get started: [MCP Server Integration Guide for AI Agents](mcp/README.md)
+
+---
+
 ## Deployment Workflow
 
 The full lifecycle from workspace setup to running infrastructure:

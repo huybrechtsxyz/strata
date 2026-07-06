@@ -174,7 +174,7 @@ a pair.
 `terraform apply`.  Drift detection therefore **acquires the deployment lock** using
 the same mechanism as `deploy run`:
 
-- `strategy: strata` — acquires the lock before running plan, releases after
+- `strategy: wrap` — acquires the lock before running plan, releases after
 - `strategy: delegate` — skips strata's lock (TFC queues plans natively)
 - `--dry-run` is NOT set — this is a real plan with state refresh
 
@@ -623,7 +623,7 @@ Full `terraform plan` catches both directions and is the established mechanism.
 ## Related
 
 - [ADR 0007 — Deployment state locking](0007-deployment-state-locking.md) — drift checks
-  respect the locking mechanism (`strategy: strata` acquires a read lock; `delegate`
+  respect the locking mechanism (`strategy: wrap` acquires a read lock; `delegate`
   skips)
 - [How deployments work](../guides/how-deployments-work.md) — stage/provisioner model
 - [Deployers reference](../platform/deployers.md) — `TerraformDeployer` step interface

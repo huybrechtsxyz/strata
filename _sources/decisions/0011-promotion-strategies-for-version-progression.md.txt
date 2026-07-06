@@ -23,6 +23,17 @@ The platform needs a structured promotion system that:
 - Provides visibility into current versions and in-flight promotions
 - Supports unpromotion (controlled rollback) using the same strategy and safety checks
 
+## Related Work
+
+**[ADR 0017: Tag-based release workflow](0017-tag-based-release-workflow-option-c.md)** addresses the **release lifecycle**: how versions move from code (commits, tests) into tagged releases and release branches. This ADR (0011) addresses **promotion**: how tagged releases are deployed progressively across environments.
+
+They are complementary:
+
+- **ADR 0017** (Release Lifecycle): Commits → Tests pass → `tested` tag → Release branch → `vX.Y.Z` semantic tag
+- **ADR 0011** (Promotion): Semantic tag → dev environment → test → acceptance → production (with waves and validation)
+
+Together they provide end-to-end visibility and control over version progression from code to production.
+
 ## Key Observations
 
 ### Terraform vs Helm: different risk profiles

@@ -81,6 +81,94 @@ provisioners:
       ssh_private_key_secret: <name>   # Ansible: secret key name in resolved_values.secrets
       extra_vars:                      # Ansible: extra -e variables
         key: value
+    output:                            # Terraform only — controls build output files
+      format: strata | custom | script | none   # default: strata
+      emits: []                        # categories to emit (omit = format defaults)
+      files: []                        # custom file definitions (see Build Output Profile)
+```
+
+### Build Output Profile (Terraform only)
+
+The `output` block on a Terraform provisioner controls what `.auto.tfvars.json` files
+`strata build run` produces. When absent, `format: strata` is assumed (current behaviour).
+
+**`output.format` modes:**
+
+| Mode     | Behaviour                                                                                            |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| `strata` | Default. Emit all built-in files (`workspace.auto.tfvars.json`, `providers.auto.tfvars.json`, etc.). |
+| `custom` | Emit only what `emits[]` and `files[]` specify.                                                      |
+| `script` | One user-provided Python/shell script owns all output files.                                         |
+| `none`   | Copy source files only — no tfvars output generated.                                                 |
+
+**`output.emits[]` categories:**
+
+| Category     | File produced                                          | Tier           |
+| ------------ | ------------------------------------------------------ | -------------- |
+| `features`   | `flags.auto.tfvars.json` — flat `{key: bool}` map      | Build + Deploy |
+| `variables`  | `variables.auto.tfvars.json` — flat `{key: value}` map | Build + Deploy |
+| `properties` | `properties.auto.tfvars.json` — all merged properties  | Build          |
+| `custom`     | `custom.auto.tfvars.json` — all merged custom fields   | Build          |
+| `workspace`  | `workspace.auto.tfvars.json`                           | Build          |
+| `providers`  | `providers.auto.tfvars.json`                           | Build          |
+| `topologies` | `topologies.auto.tfvars.json`                          | Build          |
+| `modules`    | `modules.auto.tfvars.json`                             | Build          |
+| `namespaces` | `namespaces.auto.tfvars.json`                          | Build          |
+| `firewalls`  | `firewalls.auto.tfvars.json`                           | Build          |
+| `dns`        | `dns.auto.tfvars.json`                                 | Build          |
+| `networks`   | `networks.auto.tfvars.json`                            | Build          |
+| `resources`  | `resx_<type>.auto.tfvars.json`                         | Build          |
+| `tenant`     | `tenant.auto.tfvars.json`                              | Build          |
+
+`features` and `variables` are two-tier: `constant`/`environment` store entries are
+written at build time; integration-backed entries (Flagsmith, Azure App Config, Vault)
+are written by the deployer immediately before `terraform init`. Secrets are **never**
+written to any file — they are always injected as `TF_VAR_*` environment variables.
+
+**`output.files[]` — custom file definitions:**
+
+Each entry produces one `.auto.tfvars.json` file. Two modes, mutually exclusive:
+
+*Source mode* — pass through a key from the merged properties/custom dict:
+
+```yaml
+files:
+  - name: aks_config.auto.tfvars.json
+    variable: aks_config        # wraps output as { "aks_config": { ... } }
+    type: object                # object (default) | map | list | flat
+    source: properties          # properties | custom
+    key: aks_config             # key to extract from the merged dict
+
+  # Multiple variables in one file
+  - name: platform.auto.tfvars.json
+    sources:
+      - variable: aks_config
+        source: properties
+        key: aks_config
+      - variable: dns_config
+        source: properties
+        key: dns_config
+```
+
+*Script mode* — run a Python/shell script that reads `platform.json` and writes the file:
+
+```yaml
+files:
+  - name: environment_info.auto.tfvars.json
+    type: script
+    script: "@my_repo/scripts/build_env_info.py"   # supports @repo_name/path
+```
+
+The script receives these environment variables: `STRATA_PLATFORM_PATH`,
+`STRATA_BUILD_PATH`, `STRATA_OUTPUT_PATH`, `STRATA_OUTPUT_FILE`,
+`STRATA_WORKSPACE_PATH`, `STRATA_DRY_RUN`.
+
+**`format: script`** — one script produces all output files:
+
+```yaml
+output:
+  format: script
+  script: scripts/build_tfvars.py   # script receives STRATA_PROVISIONER too
 ```
 
 **Single-repo form** — when IaC lives inside the workspace itself, omit `repository` and
@@ -384,6 +472,78 @@ spec:
       file: config/namespaces/infra.yaml
     - name: applications
       file: config/namespaces/apps.yaml
+```
+
+**Custom build output — wrapping an existing Terraform repo:**
+
+```yaml
+meta:
+  name: aks_core
+spec:
+  properties:
+    git_repo_name: iac_aks_core
+    kubernetes_version: "1.31"
+  providers:
+    - name: azure_westeurope
+      file: "@iac_aks_core/stack/provider.yaml"
+  provisioners:
+    - name: terraform
+      provisioner: terraform
+      source:
+        repository: iac_aks_core
+        source_path: .
+      backend:
+        type: azurerm
+        configuration:
+          resource_group_name: ${var:TF_RG}
+          storage_account_name: ${var:TF_SA}
+          container_name: tfstate
+          key: ${var:TF_STATE_KEY}
+      output:
+        format: custom
+        emits:
+          - features        # → flags.auto.tfvars.json  (enable_* booleans)
+          - variables       # → variables.auto.tfvars.json
+        files:
+          # Script produces environment_info.auto.tfvars.json from platform.json
+          - name: environment_info.auto.tfvars.json
+            type: script
+            script: "@iac_aks_core/scripts/build_env_info.py"
+          # Pass through aks_config/dns_config from environment properties
+          - name: aks.auto.tfvars.json
+            variable: aks_config
+            type: object
+            source: properties
+            key: aks_config
+          - name: dns.auto.tfvars.json
+            variable: dns_config
+            type: object
+            source: properties
+            key: dns_config
+  topology:
+    - name: aks_platform
+      provider: azure_westeurope
+      provisioner: terraform
+      type: kubernetes
+      components:
+        - resource: aks_cluster
+  resources:
+    - name: aks_cluster
+      file: "@iac_aks_core/stack/aks.yaml"
+```
+
+**Full-control script output:**
+
+```yaml
+provisioners:
+  - name: terraform
+    provisioner: terraform
+    source:
+      repository: my_tf_repo
+      source_path: .
+    output:
+      format: script
+      script: scripts/build_tfvars.py   # writes all .auto.tfvars.json files itself
 ```
 
 ## Execution Flow

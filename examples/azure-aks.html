@@ -56,6 +56,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../README.html#quick-start">Quick Start</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#configuration">Configuration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#cli-reference">CLI Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../README.html#ai-integration-via-mcp">AI Integration via MCP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#deployment-workflow">Deployment Workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#testing">Testing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#troubleshooting">Troubleshooting</a></li>
@@ -72,6 +73,407 @@
 <li class="toctree-l3"><a class="reference internal" href="../README.html#audit-trail">Audit Trail</a></li>
 </ul>
 </li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">VS Code Extension:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/README.html">VS Code Extension</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/publish.html">Publishing</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/publish.html#automated-publishing-ci">Automated publishing (CI)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/publish.html#adding-the-vsce-pat-secret">Adding the VSCE_PAT secret</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/publish.html#manual-publishing">Manual publishing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/publish.html#bumping-the-extension-version">Bumping the extension version</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/publish.html#verifying-a-release">Verifying a release</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/installation.html#from-the-marketplace">From the Marketplace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/installation.html#from-source">From source</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/installation.html#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/installation.html#activation">Activation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/installation.html#settings">Settings</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/features.html">Features</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#activity-bar">Activity Bar</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#status-bar">Status Bar</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#tree-views">Tree Views</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#workspace">Workspace</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#files">Files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#repositories">Repositories</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/features.html#tools">Tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#command-palette">Command Palette</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#diagnostics-problems-panel">Diagnostics (Problems Panel)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#codelens">CodeLens</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#file-decorations">File Decorations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#hover-and-go-to-definition">Hover and Go-to-Definition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#snippet-provider">Snippet Provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#dependency-graph">Dependency Graph</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#chat-integration">Chat Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#auto-refresh">Auto-Refresh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#walkthrough">Walkthrough</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/features.html#task-provider">Task Provider</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/tree-views.html">Tree Views</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/tree-views.html#workspace">Workspace</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/tree-views.html#files">Files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/tree-views.html#repositories">Repositories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/tree-views.html#tools">Tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/tree-views.html#interactivity">Interactivity</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/diagnostics.html">Real-Time Validation &amp; Diagnostics</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#when-validation-runs">When Validation Runs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#problems-panel">Problems Panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#error-details">Error Details</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#quick-fixes">Quick Fixes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#validation-phases">Validation Phases</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/diagnostics.html#phase-1-structural-pydantic">Phase 1: Structural (Pydantic)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/diagnostics.html#phase-2-dynamic-cross-reference-profile">Phase 2: Dynamic (Cross-Reference &amp; Profile)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#validation-coverage">Validation Coverage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#file-decorations">File Decorations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#error-change-notifications">Error Change Notifications</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/diagnostics.html#troubleshooting">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/codelens.html">CodeLens</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/codelens.html#available-lenses">Available Lenses</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/codelens.html#validate">Validate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/codelens.html#schema">Schema</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/codelens.html#build-dryrun">Build DryRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/codelens.html#deploy-dryrun">Deploy DryRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/codelens.html#guide">Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/codelens.html#enabling-disabling">Enabling/Disabling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/codelens.html#viewing-codelens">Viewing CodeLens</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/codelens.html#terminal-integration">Terminal Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/codelens.html#keyboard-shortcut">Keyboard Shortcut</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/codelens.html#styling">Styling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/codelens.html#troubleshooting">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/chat.html">Chat Integration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/chat.html#how-to-use">How to Use</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/chat.html#slash-commands">Slash Commands</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/chat.html#status"><code class="docutils literal notranslate"><span class="pre">/status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/chat.html#validate"><code class="docutils literal notranslate"><span class="pre">/validate</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/chat.html#guide"><code class="docutils literal notranslate"><span class="pre">/guide</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/chat.html#build"><code class="docutils literal notranslate"><span class="pre">/build</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/chat.html#deploy"><code class="docutils literal notranslate"><span class="pre">/deploy</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/chat.html#freeform-questions">Freeform Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/chat.html#follow-up-suggestions">Follow-Up Suggestions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/chat.html#workspace-context-injection">Workspace Context Injection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/chat.html#error-handling">Error Handling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/chat.html#privacy">Privacy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/chat.html#limitations">Limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/chat.html#examples">Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/chat.html#how-do-i-set-up-a-new-deployment">“How do I set up a new deployment?”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/chat.html#what-s-blocking-me-from-deploying">“What’s blocking me from deploying?”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/chat.html#check-this-file-for-me">“Check this file for me”</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/settings.html">Settings</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/settings.html#all-settings">All Settings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/settings.html#details">Details</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#strata-clipath"><code class="docutils literal notranslate"><span class="pre">strata.cliPath</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#strata-validateonsave"><code class="docutils literal notranslate"><span class="pre">strata.validateOnSave</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#strata-validateontype"><code class="docutils literal notranslate"><span class="pre">strata.validateOnType</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#strata-showcodelens"><code class="docutils literal notranslate"><span class="pre">strata.showCodeLens</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#strata-showstatusbar"><code class="docutils literal notranslate"><span class="pre">strata.showStatusBar</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#strata-autoexportschemas"><code class="docutils literal notranslate"><span class="pre">strata.autoExportSchemas</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#strata-showfiledecorations"><code class="docutils literal notranslate"><span class="pre">strata.showFileDecorations</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#strata-defaultprofile"><code class="docutils literal notranslate"><span class="pre">strata.defaultProfile</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/settings.html#workspace-vs-user-settings">Workspace vs User Settings</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#user-settings-config-code-settings-json">User Settings (<code class="docutils literal notranslate"><span class="pre">.config/Code/settings.json</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/settings.html#workspace-settings-vscode-settings-json">Workspace Settings (<code class="docutils literal notranslate"><span class="pre">.vscode/settings.json</span></code>)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/settings.html#command-line-configuration">Command-Line Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/settings.html#programmatic-access">Programmatic Access</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/settings.html#troubleshooting">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../vscode/keyboard-shortcuts.html">Keyboard Shortcuts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#built-in-shortcuts">Built-in Shortcuts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#extension-commands-via-command-palette">Extension Commands (via Command Palette)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#custom-keyboard-bindings">Custom Keyboard Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#common-workflows">Common Workflows</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#quick-validate-view-errors">Quick Validate &amp; View Errors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#explore-schema-while-editing">Explore Schema While Editing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#build-deploy-workflow">Build &amp; Deploy Workflow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#switch-profile-refresh">Switch Profile &amp; Refresh</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#tips">Tips</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../vscode/keyboard-shortcuts.html#see-also">See Also</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">MCP Server for AI Agents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/README.html">MCP Server Integration Guide for AI Agents</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/README.html#quick-start">Quick Start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/README.html#what-s-possible-with-mcp">What’s Possible with MCP</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/README.html#key-principles">Key Principles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/README.html#documentation-map">Documentation Map</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/README.html#available-tools">Available Tools</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/README.html#workspace-schema">Workspace &amp; Schema</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/README.html#authoring">Authoring</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/README.html#build-pipeline">Build Pipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/README.html#deployment">Deployment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/README.html#monitoring-diagnostics">Monitoring &amp; Diagnostics</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/README.html#who-should-read-this">Who Should Read This?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/README.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/README.html#next-steps">Next Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/README.html#support-examples">Support &amp; Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/setup-and-installation.html">Setup &amp; Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/setup-and-installation.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/setup-and-installation.html#step-1-install-the-mcp-optional-dependency">Step 1: Install the MCP Optional Dependency</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#option-a-install-in-your-project-environment">Option A: Install in Your Project Environment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#option-b-install-in-a-global-environment">Option B: Install in a Global Environment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#verify-installation">Verify Installation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/setup-and-installation.html#step-2-start-the-mcp-server">Step 2: Start the MCP Server</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#specify-workspace-explicitly">Specify Workspace Explicitly</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/setup-and-installation.html#step-3-configure-your-mcp-client">Step 3: Configure Your MCP Client</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#claude-via-claude-desktop">Claude (via Claude Desktop)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#claude-api-python-sdk">Claude API / Python SDK</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#github-copilot">GitHub Copilot</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#generic-mcp-client-python-node-js">Generic MCP Client (Python / Node.js)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/setup-and-installation.html#step-4-test-the-connection">Step 4: Test the Connection</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#in-claude-desktop">In Claude Desktop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#programmatically">Programmatically</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/setup-and-installation.html#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#error-command-not-found-strata">Error: “command not found: strata”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#error-the-mcp-package-is-required">Error: “The <code class="docutils literal notranslate"><span class="pre">mcp</span></code> package is required”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#error-not-inside-a-strata-workspace">Error: “Not inside a strata workspace”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/setup-and-installation.html#server-starts-but-client-can-t-connect">Server starts but client can’t connect</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/setup-and-installation.html#environment-variables">Environment Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/setup-and-installation.html#next-steps">Next Steps</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/claude-deployment-assistant.html">Claude Deployment Assistant: End-to-End Example</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#scenario">Scenario</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#step-1-configure-claude-desktop">Step 1: Configure Claude Desktop</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#step-2-verify-mcp-connection">Step 2: Verify MCP Connection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#step-3-full-workflow-claude-guides-you">Step 3: Full Workflow — Claude Guides You</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#a-generate-deployment-yaml">3a. Generate Deployment YAML</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#b-validate-the-yaml">3b. Validate the YAML</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#c-preview-the-build">3c. Preview the Build</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#d-ask-for-improvements">3d. Ask for Improvements</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#step-5-monitor-verify">Step 5: Monitor &amp; Verify</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#step-6-troubleshoot-issues">Step 6: Troubleshoot Issues</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#summary-claude-workflow-checklist">Summary: Claude Workflow Checklist</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#tips-best-practices">Tips &amp; Best Practices</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#always-validate-before-building">1. Always Validate Before Building</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#always-preview-before-deploying">2. Always Preview Before Deploying</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#use-claude-for-analysis-cli-for-action">3. Use Claude for Analysis, CLI for Action</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#ask-for-improvements">4. Ask for Improvements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#multi-step-workflows">5. Multi-Step Workflows</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/claude-deployment-assistant.html#next-steps">Next Steps</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/copilot-integration.html">GitHub Copilot Integration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/copilot-integration.html#current-state-cli-based-extension">Current State: CLI-Based Extension</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/copilot-integration.html#vision-mcp-enhanced-copilot">Vision: MCP-Enhanced Copilot</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#idea-1-inline-copilot-chat-with-strata-tools">Idea 1: Inline Copilot Chat with Strata Tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#idea-2-codelens-with-copilot-quick-actions">Idea 2: CodeLens with Copilot Quick Actions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#idea-3-inline-error-explanations">Idea 3: Inline Error Explanations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#idea-4-diff-view-with-copilot-commentary">Idea 4: Diff View with Copilot Commentary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#idea-5-multi-file-deployment-planning">Idea 5: Multi-File Deployment Planning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#idea-6-collaborative-deployment-comments">Idea 6: Collaborative Deployment Comments</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/copilot-integration.html#implementation-roadmap">Implementation Roadmap</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#phase-1-mvp-current-state">Phase 1: MVP (Current State)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#phase-2-mcp-integration-proposed">Phase 2: MCP Integration (Proposed)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#phase-3-enhanced-ai-features">Phase 3: Enhanced AI Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#phase-4-collaborative-workflows">Phase 4: Collaborative Workflows</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/copilot-integration.html#security-considerations">Security Considerations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#mcp-scope-in-vs-code-extension">MCP Scope in VS Code Extension</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#best-practice">Best Practice</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/copilot-integration.html#example-implementation-validate-command">Example Implementation: Validate Command</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/copilot-integration.html#testing-the-integration">Testing the Integration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#local-testing">Local Testing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/copilot-integration.html#end-to-end-test">End-to-End Test</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/copilot-integration.html#next-steps">Next Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/copilot-integration.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/security-and-workflows.html">Security &amp; Workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/security-and-workflows.html#security-model">Security Model</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#core-principle-ai-previews-humans-execute">Core Principle: “AI Previews, Humans Execute”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#destructive-operations-note">Destructive Operations Note</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/security-and-workflows.html#api-keys-secrets-management">API Keys &amp; Secrets Management</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#secrets-are-never-exposed-via-mcp">✅ Secrets Are Never Exposed via MCP</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#how-mcp-tools-handle-secrets">How MCP Tools Handle Secrets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#best-practice-never-paste-secrets-in-prompts">Best Practice: Never Paste Secrets in Prompts</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/security-and-workflows.html#audit-logging">Audit Logging</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#what-s-logged">What’s Logged?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#querying-audit-logs-via-mcp">Querying Audit Logs via MCP</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#example-claude-auditing-a-deployment">Example: Claude Auditing a Deployment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#integration-with-compliance-tools">Integration with Compliance Tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/security-and-workflows.html#approval-workflows">Approval Workflows</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#pattern-1-ai-suggests-human-approves-cli-executes">Pattern 1: AI Suggests, Human Approves, CLI Executes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#pattern-2-slack-teams-bot-with-approval-gate">Pattern 2: Slack/Teams Bot with Approval Gate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#pattern-3-role-based-access-control-rbac">Pattern 3: Role-Based Access Control (RBAC)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/security-and-workflows.html#network-security">Network Security</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#mcp-transport-stdio-local-only">MCP Transport: Stdio (Local Only)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#remote-mcp-via-ssh-advanced">Remote MCP via SSH (Advanced)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/security-and-workflows.html#secrets-management-integration">Secrets Management Integration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#pattern-1-local-strata-secrets-directory">Pattern 1: Local <code class="docutils literal notranslate"><span class="pre">.strata/secrets/</span></code> Directory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#pattern-2-bitwarden-integration">Pattern 2: Bitwarden Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#pattern-3-aws-secrets-manager">Pattern 3: AWS Secrets Manager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/security-and-workflows.html#best-practice-least-privilege">Best Practice: Least Privilege</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/security-and-workflows.html#production-checklist">Production Checklist</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/security-and-workflows.html#common-threats-mitigations">Common Threats &amp; Mitigations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/security-and-workflows.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/ai-troubleshooting.html">AI-Assisted Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#scenario-infrastructure-drift-detection">Scenario: Infrastructure Drift Detection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#use-case-1-detect-what-changed">Use Case 1: Detect What Changed</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#the-problem">The Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#the-claude-workflow">The Claude Workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#use-case-2-analyze-recent-deployments">Use Case 2: Analyze Recent Deployments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id1">The Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id2">The Claude Workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#use-case-3-diagnose-a-failed-deployment">Use Case 3: Diagnose a Failed Deployment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id3">The Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id4">The Claude Workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#use-case-4-compare-two-deployments">Use Case 4: Compare Two Deployments</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id5">The Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id6">The Claude Workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#use-case-5-suggest-configuration-improvements">Use Case 5: Suggest Configuration Improvements</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id7">The Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id8">The Claude Workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#use-case-6-rollback-after-failed-deployment">Use Case 6: Rollback After Failed Deployment</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id9">The Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id10">The Claude Workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#use-case-7-cross-environment-consistency-check">Use Case 7: Cross-Environment Consistency Check</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id11">The Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id12">The Claude Workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#use-case-8-generate-post-mortem-report">Use Case 8: Generate Post-Mortem Report</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id13">The Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#id14">The Claude Workflow</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#best-practices-for-ai-assisted-troubleshooting">Best Practices for AI-Assisted Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#always-validate-before-deploying">1. Always Validate Before Deploying</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#query-history-before-major-changes">2. Query History Before Major Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#use-dry-runs-for-safe-testing">3. Use Dry-Runs for Safe Testing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#compare-before-assuming-drift">4. Compare Before Assuming Drift</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/ai-troubleshooting.html#document-findings">5. Document Findings</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/ai-troubleshooting.html#next-steps">Next Steps</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../mcp/tools-reference.html">MCP Tools Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/tools-reference.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/tools-reference.html#query-tools-read-only">Query Tools (Read-Only)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#workspace-status-work-path-str-none-dict"><code class="docutils literal notranslate"><span class="pre">workspace_status(work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#validate-file-file-path-str-work-path-str-none-deep-bool-false-dict"><code class="docutils literal notranslate"><span class="pre">validate_file(file_path:</span> <span class="pre">str,</span> <span class="pre">work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">deep:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#list-schemas-dict"><code class="docutils literal notranslate"><span class="pre">list_schemas()</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#get-schema-kind-str-dict"><code class="docutils literal notranslate"><span class="pre">get_schema(kind:</span> <span class="pre">str)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#deploy-status-file-str-work-path-str-none-stage-str-none-dict"><code class="docutils literal notranslate"><span class="pre">deploy_status(file:</span> <span class="pre">str,</span> <span class="pre">work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">stage:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#deploy-history-work-path-str-none-lines-int-20-operation-str-none-dict"><code class="docutils literal notranslate"><span class="pre">deploy_history(work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">lines:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">20,</span> <span class="pre">operation:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#audit-query-work-path-str-none-last-int-20-since-str-none-stage-str-none-dict"><code class="docutils literal notranslate"><span class="pre">audit_query(work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">last:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">20,</span> <span class="pre">since:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">stage:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/tools-reference.html#preview-tools-dry-run">Preview Tools (Dry-Run)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#build-plan-file-str-work-path-str-none-dict"><code class="docutils literal notranslate"><span class="pre">build_plan(file:</span> <span class="pre">str,</span> <span class="pre">work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#deploy-plan-file-str-work-path-str-none-stage-str-none-dict"><code class="docutils literal notranslate"><span class="pre">deploy_plan(file:</span> <span class="pre">str,</span> <span class="pre">work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">stage:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/tools-reference.html#action-tools">Action Tools</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#scaffold-file-kind-str-name-str-extra-vars-dict-none-dict"><code class="docutils literal notranslate"><span class="pre">scaffold_file(kind:</span> <span class="pre">str,</span> <span class="pre">name:</span> <span class="pre">str,</span> <span class="pre">extra_vars:</span> <span class="pre">dict</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#build-run-file-str-work-path-str-none-dict"><code class="docutils literal notranslate"><span class="pre">build_run(file:</span> <span class="pre">str,</span> <span class="pre">work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#build-sbom-file-str-none-work-path-str-none-scan-str-none-report-str-inventory-dict"><code class="docutils literal notranslate"><span class="pre">build_sbom(file:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">scan:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">report:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">&quot;inventory&quot;)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#deploy-health-file-str-work-path-str-none-stage-str-none-dict"><code class="docutils literal notranslate"><span class="pre">deploy_health(file:</span> <span class="pre">str,</span> <span class="pre">work_path:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">stage:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">None)</span> <span class="pre">→</span> <span class="pre">dict</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/tools-reference.html#mcp-resources">MCP Resources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#strata-schema-kind"><code class="docutils literal notranslate"><span class="pre">strata://schema/{kind}</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#strata-workspace"><code class="docutils literal notranslate"><span class="pre">strata://workspace</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/tools-reference.html#error-handling">Error Handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#success-field">Success Field</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#error-codes">Error Codes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../mcp/tools-reference.html#example-error-response">Example Error Response</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/tools-reference.html#rate-limits-timeouts">Rate Limits &amp; Timeouts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../mcp/tools-reference.html#see-also">See Also</a></li>
 </ul>
 </li>
 </ul>
@@ -184,7 +586,11 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#build-clean"><code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">clean</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#validate"><code class="docutils literal notranslate"><span class="pre">validate</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-run"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">run</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#validate-graph"><code class="docutils literal notranslate"><span class="pre">validate</span> <span class="pre">graph</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#guide"><code class="docutils literal notranslate"><span class="pre">guide</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#workspace-mode">Workspace mode</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#file-mode-file">File mode (<code class="docutils literal notranslate"><span class="pre">--file</span></code>)</a></li>
@@ -216,17 +622,33 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-destroy"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-show"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">show</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-list"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">list</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-status"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-plan"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">plan</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-history"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">history</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-health"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">health</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-output"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">output</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-outputs"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">outputs</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#deploy-lock"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="../platform/commands.html#deploy-lock-status"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">status</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="../platform/commands.html#deploy-lock-release"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">release</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="../platform/commands.html#deploy-lock-history"><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">history</span></code></a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#env"><code class="docutils literal notranslate"><span class="pre">env</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-info"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">info</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-output"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">output</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-show"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-status"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-drift"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">drift</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#env-doctor"><code class="docutils literal notranslate"><span class="pre">env</span> <span class="pre">doctor</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#audit"><code class="docutils literal notranslate"><span class="pre">audit</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#audit-changes"><code class="docutils literal notranslate"><span class="pre">audit</span> <span class="pre">changes</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#audit-resend"><code class="docutils literal notranslate"><span class="pre">audit</span> <span class="pre">resend</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#audit-export"><code class="docutils literal notranslate"><span class="pre">audit</span> <span class="pre">export</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#audit-configuration">Audit configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#siem-sink-configuration">SIEM sink configuration</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#values"><code class="docutils literal notranslate"><span class="pre">values</span></code></a><ul>
@@ -291,7 +713,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#full-deploy">7.3 Full deploy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#force-skip-approval-gates">7.4 Force (skip approval gates)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#destroy-tear-down-infrastructure">7.5 Destroy (tear down infrastructure)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#status-outputs-plan-details-history">7.6 Status (outputs, plan details, history)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#outputs-plan-details-and-history">7.6 Outputs, plan details, and history</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#health-checks">7.7 Health checks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#execution-history">7.8 Execution history</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/workflow.html#declare-approval-metadata">7.9 Declare approval metadata</a></li>
@@ -341,6 +763,13 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/ci-integration.html#suppress-console-noise">Suppress console noise</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/ci-integration.html#state-locking-in-ci">State Locking in CI</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/ci-integration.html#recovering-from-a-crashed-pipeline">Recovering from a crashed pipeline</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/ci-integration.html#github-actions-concurrent-run-guard">GitHub Actions — concurrent run guard</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/ci-integration.html#azure-pipelines-exclusive-lock">Azure Pipelines — exclusive lock</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/ci-integration.html#checking-lock-status-from-ci">Checking lock status from CI</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../platform/architecture.html">Platform Architecture</a><ul>
@@ -363,6 +792,203 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/exit-codes.html#powershell">PowerShell</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../platform/manifest-cli.html">Manifest CLI Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-cli.html#commands">Commands</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-cli.html#strata-manifest-list"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">manifest</span> <span class="pre">list</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#options">Options</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#output">Output</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-cli.html#strata-manifest-show"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">manifest</span> <span class="pre">show</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#arguments">Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#id1">Options</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#id2">Output</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#id3">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-cli.html#strata-manifest-export"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">manifest</span> <span class="pre">export</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#id4">Options</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#output-structure">Output Structure</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#summary-file">Summary File</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-cli.html#id5">Examples</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-cli.html#integration-with-strata-audit">Integration with <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-cli.html#common-workflows">Common Workflows</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-cli.html#audit-manifest-before-deploying">Audit Manifest Before Deploying</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-cli.html#create-compliance-evidence-package">Create Compliance Evidence Package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-cli.html#query-manifest-history">Query Manifest History</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-cli.html#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-cli.html#no-manifests-found">No Manifests Found</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-cli.html#manifest-file-not-readable">Manifest File Not Readable</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-cli.html#export-directory-not-created">Export Directory Not Created</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-cli.html#exit-codes">Exit Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-cli.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../platform/manifest-schema.html">Deployment Manifest Schema</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#root-structure">Root Structure</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#apiversion"><code class="docutils literal notranslate"><span class="pre">apiVersion</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#kind"><code class="docutils literal notranslate"><span class="pre">kind</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#metadata-section">Metadata Section</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#meta-name"><code class="docutils literal notranslate"><span class="pre">meta.name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#meta-annotations"><code class="docutils literal notranslate"><span class="pre">meta.annotations</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#meta-labels"><code class="docutils literal notranslate"><span class="pre">meta.labels</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#specification-section">Specification Section</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#core-fields">Core Fields</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-schema.html#spec-deployment-name"><code class="docutils literal notranslate"><span class="pre">spec.deployment_name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-schema.html#spec-workspace-name"><code class="docutils literal notranslate"><span class="pre">spec.workspace_name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-schema.html#spec-action"><code class="docutils literal notranslate"><span class="pre">spec.action</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-schema.html#spec-status"><code class="docutils literal notranslate"><span class="pre">spec.status</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-schema.html#spec-timestamp"><code class="docutils literal notranslate"><span class="pre">spec.timestamp</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-schema.html#spec-user"><code class="docutils literal notranslate"><span class="pre">spec.user</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-schema.html#spec-platform-version"><code class="docutils literal notranslate"><span class="pre">spec.platform_version</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-schema.html#spec-build-duration-seconds"><code class="docutils literal notranslate"><span class="pre">spec.build_duration_seconds</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/manifest-schema.html#spec-deploy-duration-seconds"><code class="docutils literal notranslate"><span class="pre">spec.deploy_duration_seconds</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#artifacts-section">Artifacts Section</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#artifacts-platform"><code class="docutils literal notranslate"><span class="pre">artifacts.platform</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#artifacts-repositories"><code class="docutils literal notranslate"><span class="pre">artifacts.repositories</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#artifacts-images"><code class="docutils literal notranslate"><span class="pre">artifacts.images</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#artifacts-providers"><code class="docutils literal notranslate"><span class="pre">artifacts.providers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#artifacts-sbom"><code class="docutils literal notranslate"><span class="pre">artifacts.sbom</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#stages-section">Stages Section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#policy-results-section">Policy Results Section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#optional-sections">Optional Sections</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#signatures-future-support">Signatures (Future Support)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#complete-example-build-manifest">Complete Example: Build Manifest</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#complete-example-deploy-manifest">Complete Example: Deploy Manifest</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#validation-rules">Validation Rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#type-definitions">Type Definitions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#gitcommit">GitCommit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#containerimage">ContainerImage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#provisionerinfo">ProvisionerInfo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#sbomreference">SbomReference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#platformartifact">PlatformArtifact</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#deploymentstage">DeploymentStage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/manifest-schema.html#policyresult">PolicyResult</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/manifest-schema.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../platform/sbom-plugin-api.html">SBOM Plugin API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#lockfile-parser-base-class">Lockfile Parser Base Class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#strata-builders-sbom-lockfile-parsers-base-lockfileparser"><code class="docutils literal notranslate"><span class="pre">strata.builders.sbom.lockfile_parsers._base.LockfileParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#auto-registration">Auto-Registration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#abstract-properties">Abstract Properties</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#ecosystem-property"><code class="docutils literal notranslate"><span class="pre">ecosystem</span></code> (property)</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#abstract-methods">Abstract Methods</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#filename-patterns-list-str"><code class="docutils literal notranslate"><span class="pre">filename_patterns()</span> <span class="pre">-&gt;</span> <span class="pre">List[str]</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#parse-path-path-list-rawdependency"><code class="docutils literal notranslate"><span class="pre">parse(path:</span> <span class="pre">Path)</span> <span class="pre">-&gt;</span> <span class="pre">List[RawDependency]</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#rawdependency-namedtuple"><code class="docutils literal notranslate"><span class="pre">RawDependency</span></code> NamedTuple</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#construction">Construction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#usage-in-parse-method">Usage in <code class="docutils literal notranslate"><span class="pre">parse()</span></code> method</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#collector-base-class">Collector Base Class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#strata-builders-sbom-base-sbom-collector-basesbomcollector"><code class="docutils literal notranslate"><span class="pre">strata.builders.sbom.base_sbom_collector.BaseSbomCollector</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#lifecycle">Lifecycle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#id1">Abstract Methods</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#get-collector-name-str"><code class="docutils literal notranslate"><span class="pre">get_collector_name()</span> <span class="pre">-&gt;</span> <span class="pre">str</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#collect-platform-work-path-deployment-build-path-list-sbomcomponentmodel"><code class="docutils literal notranslate"><span class="pre">collect(platform,</span> <span class="pre">work_path,</span> <span class="pre">deployment_build_path)</span> <span class="pre">-&gt;</span> <span class="pre">List[SbomComponentModel]</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#protected-methods">Protected Methods</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#reset-warnings-none"><code class="docutils literal notranslate"><span class="pre">_reset_warnings()</span> <span class="pre">-&gt;</span> <span class="pre">None</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#warnings-list-str"><code class="docutils literal notranslate"><span class="pre">_warnings:</span> <span class="pre">List[str]</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#public-methods">Public Methods</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#get-warnings-list-str"><code class="docutils literal notranslate"><span class="pre">get_warnings()</span> <span class="pre">-&gt;</span> <span class="pre">List[str]</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#component-model">Component Model</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#strata-models-sbom-model-sbomcomponentmodel"><code class="docutils literal notranslate"><span class="pre">strata.models.sbom_model.SbomComponentModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#fields">Fields</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#id2">Construction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#types-when-to-use-each">Types — When to Use Each</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#plugin-loader-registry">Plugin Loader &amp; Registry</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#collectorpluginloader"><code class="docutils literal notranslate"><span class="pre">CollectorPluginLoader</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#methods">Methods</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#load-work-path-path-list-basesbomcollector-static"><code class="docutils literal notranslate"><span class="pre">load(work_path:</span> <span class="pre">Path)</span> <span class="pre">-&gt;</span> <span class="pre">List[BaseSbomCollector]</span></code> (static)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#lockfileparserregistry"><code class="docutils literal notranslate"><span class="pre">LockfileParserRegistry</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#default-registry">DEFAULT_REGISTRY</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#id3">Methods</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#find-filename-str-optional-lockfileparser"><code class="docutils literal notranslate"><span class="pre">find(filename:</span> <span class="pre">str)</span> <span class="pre">-&gt;</span> <span class="pre">Optional[LockfileParser]</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#all-patterns-list-str"><code class="docutils literal notranslate"><span class="pre">all_patterns()</span> <span class="pre">-&gt;</span> <span class="pre">List[str]</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="../platform/sbom-plugin-api.html#all-parsers-list-lockfileparser"><code class="docutils literal notranslate"><span class="pre">all_parsers()</span> <span class="pre">-&gt;</span> <span class="pre">List[LockfileParser]</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#configuration-models">Configuration Models</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#strata-collectors-yaml-schema"><code class="docutils literal notranslate"><span class="pre">.strata/collectors.yaml</span></code> Schema</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/sbom-plugin-api.html#example">Example</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#common-patterns">Common Patterns</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#de-duplicate-components-by-purl">De-duplicate Components by purl</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#handle-optional-configuration">Handle Optional Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#add-custom-properties-warnings-metadata">Add Custom Properties (Warnings/Metadata)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#parse-with-graceful-fallback">Parse with Graceful Fallback</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#error-handling">Error Handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#valueerror-in-parsers-gracefully-caught">ValueError in Parsers (Gracefully Caught)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#valueerror-in-collectors-not-caught">ValueError in Collectors (NOT Caught)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#platformerror-in-plugin-loader">PlatformError in Plugin Loader</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#platform-artifact-structure">Platform Artifact Structure</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/sbom-plugin-api.html#module-structure">Module Structure</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#see-also">See Also</a></li>
 </ul>
 </li>
 </ul>
@@ -511,6 +1137,36 @@
 </li>
 </ul>
 </li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../platform/mcp.html">MCP Server</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../platform/mcp.html#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/mcp.html#quick-start">Quick Start</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#vs-code-github-copilot">VS Code (GitHub Copilot)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#claude-desktop">Claude Desktop</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/mcp.html#transport-options">Transport Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/mcp.html#server-instructions">Server Instructions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/mcp.html#tool-reference">Tool Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#workspace-status"><code class="docutils literal notranslate"><span class="pre">workspace_status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#validate-file"><code class="docutils literal notranslate"><span class="pre">validate_file</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#list-schemas"><code class="docutils literal notranslate"><span class="pre">list_schemas</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#get-schema"><code class="docutils literal notranslate"><span class="pre">get_schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#scaffold-file"><code class="docutils literal notranslate"><span class="pre">scaffold_file</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#build-plan"><code class="docutils literal notranslate"><span class="pre">build_plan</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#build-run"><code class="docutils literal notranslate"><span class="pre">build_run</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#build-sbom"><code class="docutils literal notranslate"><span class="pre">build_sbom</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#deploy-plan"><code class="docutils literal notranslate"><span class="pre">deploy_plan</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#deploy-history"><code class="docutils literal notranslate"><span class="pre">deploy_history</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#deploy-status"><code class="docutils literal notranslate"><span class="pre">deploy_status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#deploy-health"><code class="docutils literal notranslate"><span class="pre">deploy_health</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/mcp.html#audit-query"><code class="docutils literal notranslate"><span class="pre">audit_query</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/mcp.html#mcp-resources">MCP Resources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/mcp.html#response-envelope">Response Envelope</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/mcp.html#example-ai-assisted-deployment-workflow">Example: AI-Assisted Deployment Workflow</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../platform/builders.html">Builders Documentation</a><ul>
@@ -707,11 +1363,24 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../platform/lifecycles.html">Lifecycles</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#configuration">Configuration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#platform-agnostic-execution">Platform-Agnostic Execution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#hierarchical-execution">Hierarchical Execution</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#environment-variables">Environment Variables</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#phase-naming">Phase Naming</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#phase-reference">Phase Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/lifecycles.html#validate">validate</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/lifecycles.html#solution">solution</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/lifecycles.html#config">config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/lifecycles.html#build">build</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/lifecycles.html#deploy-run">deploy run</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/lifecycles.html#hierarchical-execution">Hierarchical execution</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/lifecycles.html#deploy-destroy">deploy destroy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/lifecycles.html#deploy-health">deploy health</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/lifecycles.html#scriptdeployer-steps">ScriptDeployer steps</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#phase-naming-convention">Phase Naming Convention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#gate-behaviour">Gate Behaviour</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#examples">Examples</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/lifecycles.html#best-practices">Best Practices</a></li>
 </ul>
 </li>
@@ -724,9 +1393,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../platform/policies.html#policy-types">Policy Types</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#built-in-types">Built-in types</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#tenant-zone"><code class="docutils literal notranslate"><span class="pre">tenant_zone</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#resource-type-restrictions"><code class="docutils literal notranslate"><span class="pre">resource_type_restrictions</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#required-tags"><code class="docutils literal notranslate"><span class="pre">required_tags</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#naming-pattern"><code class="docutils literal notranslate"><span class="pre">naming_pattern</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#script"><code class="docutils literal notranslate"><span class="pre">script</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#ref-convention"><code class="docutils literal notranslate"><span class="pre">ref_convention</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#sbom-pinned-versions"><code class="docutils literal notranslate"><span class="pre">sbom_pinned_versions</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#sbom-allowed-registries"><code class="docutils literal notranslate"><span class="pre">sbom_allowed_registries</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/policies.html#sbom-denied-packages"><code class="docutils literal notranslate"><span class="pre">sbom_denied_packages</span></code></a></li>
@@ -816,6 +1487,17 @@
 <li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#terraform-output-artifact-storage">Terraform Output Artifact Storage</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#integrations">Integrations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#supported-siem-types">Supported SIEM types</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/configuration.html#splunk-splunk-http-event-collector-hec"><code class="docutils literal notranslate"><span class="pre">splunk</span></code> — Splunk HTTP Event Collector (HEC)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/configuration.html#elk-elk-logstash"><code class="docutils literal notranslate"><span class="pre">elk</span></code> — ELK / Logstash</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/configuration.html#otel-opentelemetry-otlp-http"><code class="docutils literal notranslate"><span class="pre">otel</span></code> — OpenTelemetry (OTLP/HTTP)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/configuration.html#sentinel-azure-sentinel-dcr-logs-ingestion-api"><code class="docutils literal notranslate"><span class="pre">sentinel</span></code> — Azure Sentinel (DCR Logs Ingestion API)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/configuration.html#integration-field-reference">Integration field reference</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../config/configuration.html#notes">Notes</a></li>
 </ul>
 </li>
@@ -824,6 +1506,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#lifecycle-phases">Lifecycle Phases</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#providers">Providers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/workspace.html#provisioners">Provisioners</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/workspace.html#build-output-profile-terraform-only">Build Output Profile (Terraform only)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/workspace.html#provisioner-types">Provisioner types</a></li>
 </ul>
 </li>
@@ -891,13 +1574,30 @@
 <li class="toctree-l3"><a class="reference internal" href="../config/environment.html#resource-overrides">Resource Overrides</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/environment.html#provider-overrides">Provider Overrides</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../config/environment.html#remote-reference-overrides">Remote Reference Overrides</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/environment.html#build-output-file-overrides-terraform">Build Output File Overrides (Terraform)</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#variables">Variables</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#secrets">Secrets</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#features">Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/environment.html#audit">Audit</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/environment.html#event-policy">Event Policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/environment.html#sinks">Sinks</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../config/environment.html#built-in-sink-types">Built-in sink types</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/environment.html#integration-backed-sinks-siem">Integration-backed sinks (SIEM)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../config/environment.html#deploy-log-structure">Deploy-Log Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/environment.html#forwarding-via-cli">Forwarding via CLI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/environment.html#sink-field-reference">Sink field reference</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#examples">Examples</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#workspace-environment-relationship">Workspace &amp; Environment Relationship</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/environment.html#multi-file-composition">Multi-file Composition</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/environment.html#per-section-merge-strategy">Per-section merge strategy</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#configuration-merge-order">Configuration Merge Order</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#use-cases">Use Cases</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/environment.html#cli-integration">CLI Integration</a></li>
@@ -1071,6 +1771,23 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../config/manifest.html#troubleshooting">Troubleshooting</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../config/manifest.html#integration-with-deployment-configuration">Integration with Deployment Configuration</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workflow.html">Workflow Configuration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../config/workflow.html#schema">Schema</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/workflow.html#field-reference">Field Reference</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/workflow.html#built-in-check-functions">Built-in Check Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/workflow.html#default-workflow">Default Workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/workflow.html#resolution-order">Resolution Order</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../config/workflow.html#customization-examples">Customization Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../config/workflow.html#reorder-steps">Reorder steps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/workflow.html#add-a-project-specific-step">Add a project-specific step</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../config/workflow.html#simplify-for-a-compose-only-project">Simplify for a compose-only project</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../config/workflow.html#dynamic-steps">Dynamic Steps</a></li>
 </ul>
 </li>
 </ul>
@@ -1497,6 +2214,7 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html">Promotion strategies for version progression across environments</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#key-observations">Key Observations</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#terraform-vs-helm-different-risk-profiles">Terraform vs Helm: different risk profiles</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0011-promotion-strategies-for-version-progression.html#a-promotion-is-a-yaml-edit">A promotion is a YAML edit</a></li>
@@ -1870,6 +2588,56 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html">Tag-based release workflow support (Option C: Validation + Visibility)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#context-and-problem-statement">Context and Problem Statement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#what-teams-need">What teams need</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#what-strata-provides-today">What Strata provides today</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#what-s-missing">What’s missing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#why-option-c">Why Option C?</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#relationship-to-adr-0011-promotion-strategies">Relationship to ADR 0011 (Promotion Strategies)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#detailed-design">Detailed Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#extend-gitintegration-with-tag-operations">1. Extend GitIntegration with tag operations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#implement-refconventionpolicy-new-built-in">2. Implement RefConventionPolicy (new built-in)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#enhance-strata-repo-status-with-tag-visibility">3. Enhance <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">repo</span> <span class="pre">status</span></code> with tag visibility</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#usage-examples">Usage Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#example-1-declare-release-conventions-in-configuration">Example 1: Declare release conventions in configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#example-2-check-what-s-available-to-promote">Example 2: Check what’s available to promote</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#example-3-validate-before-deployment">Example 3: Validate before deployment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#example-4-pin-to-a-release-tag-in-deployment">Example 4: Pin to a release tag in deployment</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#phase-1-extend-gitintegration-1-2-days">Phase 1: Extend GitIntegration (1-2 days)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#phase-2-implement-refconventionpolicy-2-3-days">Phase 2: Implement RefConventionPolicy (2-3 days)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#phase-3-enhance-repo-status-1-2-days">Phase 3: Enhance repo status (1-2 days)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#phase-4-documentation-1-day">Phase 4: Documentation (1 day)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#consequences">Consequences</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#positive">Positive</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#negative">Negative</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#neutral">Neutral</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#appendix-example-release-workflow-using-ci-cd-option-c">Appendix: Example Release Workflow (Using CI/CD + Option C)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#week-1-main-branch-development">Week 1: Main branch development</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#week-4-release-candidate-creation-ci-cd-job-on-schedule">Week 4: Release candidate creation (CI/CD job on schedule)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#release-approval-manual">Release approval (manual)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0017-tag-based-release-workflow-option-c.html#strata-validation-deployment">Strata validation + deployment</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../decisions/0018-deployment-audit-traceability.html">Deployment audit and traceability for compliance (ISO 27001 / ISAE 3402)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0018-deployment-audit-traceability.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0018-deployment-audit-traceability.html#decision-drivers">Decision Drivers</a></li>
@@ -1972,6 +2740,228 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0018-deployment-audit-traceability.html#implementation-status">Implementation Status</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html">Configurable Terraform build output</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#decision-outcome">Decision Outcome</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#design-summary">Design Summary</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#output-format-modes"><code class="docutils literal notranslate"><span class="pre">output.format</span></code> modes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#two-phase-emission-features-and-variables">Two-phase emission (features and variables)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#security">Security</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#environment-level-output-overrides">Environment-level output overrides</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#backend-config-var-secret-resolution">Backend config <code class="docutils literal notranslate"><span class="pre">${var:...}</span></code> / <code class="docutils literal notranslate"><span class="pre">${secret:...}</span></code> resolution</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#consequences">Consequences</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#positive">Positive</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#negative-trade-offs">Negative / trade-offs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0019-configurable-terraform-build-output.html#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html">Lifecycle phases and environment variables — standardization and completeness</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#option-a-status-quo">Option A — Status quo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#option-b-fix-documentation-only">Option B — Fix documentation only</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#option-c-full-standardization-and-completeness-decided">Option C — Full standardization and completeness (decided)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#phase-1-environment-variable-standardization-p0-blocking">Phase 1: Environment Variable Standardization (P0 — blocking)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#phase-2-complete-phase-documentation-p1-ux-improvement">Phase 2: Complete Phase Documentation (P1 — UX improvement)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#phase-3-hierarchical-execution-p2-composability">Phase 3: Hierarchical Execution (P2 — composability)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#design-phase-naming">Design: Phase Naming</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#naming-pattern-command-action-suffix">Naming pattern: <code class="docutils literal notranslate"><span class="pre">{command}_{action}[_{suffix}]</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#consequences">Consequences</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#phase-1-environment-variables-high-impact-medium-risk">Phase 1 (Environment Variables) — High impact, medium risk</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#phase-2-documentation-high-impact-low-risk">Phase 2 (Documentation) — High impact, low risk</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#phase-3-hierarchical-execution-medium-impact-medium-to-high-risk">Phase 3 (Hierarchical Execution) — Medium impact, medium-to-high risk</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#implementation-plan">Implementation Plan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#related-decisions">Related Decisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html">Deployment Manifests as First-Class Build Artifacts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#problem">Problem</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#before">Before</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#solution">Solution</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#build-manifests">1. Build Manifests</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#deploy-manifests-enhanced">2. Deploy Manifests Enhanced</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#cli-commands-strata-manifest">3. CLI Commands (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">manifest</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#audit-export-enhancement">4. Audit Export Enhancement</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#design-rationale">Design Rationale</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#why-generate-at-build-time">Why Generate at Build Time?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#why-both-build-and-deploy">Why Both Build and Deploy?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#why-cli-commands">Why CLI Commands?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#why-store-in-strata-build">Why Store in <code class="docutils literal notranslate"><span class="pre">.strata/build/</span></code>?</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#manifest-structure">Manifest Structure</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#build-manifest">Build Manifest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#deploy-manifest">Deploy Manifest</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#implementation">Implementation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#changes-to-strata-build-run">Changes to <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#new-command-strata-manifest">New Command: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">manifest</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#changes-to-strata-audit-export">Changes to <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">export</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#model-changes">Model Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#compliance-governance">Compliance &amp; Governance</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#isae-3402-nis2-alignment">ISAE 3402 / NIS2 Alignment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#use-cases">Use Cases</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#trade-offs">Trade-offs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#pro">Pro</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#con">Con</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#mitigation">Mitigation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#future-enhancements">Future Enhancements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#alternatives-considered">Alternatives Considered</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#alt-1-manifests-only-at-deploy-time-rejected">Alt 1: Manifests Only at Deploy Time (Rejected)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#alt-2-store-build-manifest-inline-in-platform-json-rejected">Alt 2: Store Build Manifest Inline in Platform.json (Rejected)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#alt-3-no-cli-commands-manual-json-queries-rejected">Alt 3: No CLI Commands, Manual JSON Queries (Rejected)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#alt-4-manifests-only-in-gitops-store-rejected">Alt 4: Manifests Only in GitOps Store (Rejected)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0021-deployment-manifests-as-first-class-build-artifacts.html#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html">SIEM Integration: Splunk HEC + CEF Format</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#problem">Problem</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#before-this-adr">Before this ADR</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#decision">Decision</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#splunksiemintegration-type-splunk">1. <code class="docutils literal notranslate"><span class="pre">SplunkSiemIntegration</span></code> (type: <code class="docutils literal notranslate"><span class="pre">splunk</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#cef-format-on-syslog-sink">2. CEF format on <code class="docutils literal notranslate"><span class="pre">syslog</span></code> sink</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#siem-name-flag-on-audit-export">3. <code class="docutils literal notranslate"><span class="pre">--siem</span> <span class="pre">&lt;name&gt;</span></code> flag on <code class="docutils literal notranslate"><span class="pre">audit</span> <span class="pre">export</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#alternatives-considered">Alternatives Considered</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#alt-a-add-datadog-and-sumo-logic-integrations">Alt A: Add Datadog and Sumo Logic integrations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#alt-b-cef-as-a-separate-sink-type-syslog-cef">Alt B: CEF as a separate sink type (<code class="docutils literal notranslate"><span class="pre">syslog_cef</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#alt-c-strata-audit-forward-siem-name-as-a-new-command">Alt C: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">forward</span> <span class="pre">--siem</span> <span class="pre">&lt;name&gt;</span></code> as a new command</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#impact">Impact</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#new-files">New files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#modified-files">Modified files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#new-tests">New tests</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#backward-compatibility">Backward compatibility</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#configuration-examples">Configuration Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#splunk-hec">Splunk HEC</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#syslog-with-cef">Syslog with CEF</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#on-demand-forwarding">On-demand forwarding</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0022-siem-integration-splunk-hec-cef.html#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html">Pluggable provisioner framework</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#context-and-problem-statement">Context and Problem Statement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#current-architecture-debt">Current Architecture Debt</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#option-a-deployer-factory-with-auto-discovery-recommended">Option A — Deployer Factory with auto-discovery (recommended)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#option-b-entry-point-based-plugins">Option B — Entry-point based plugins</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#option-c-configuration-only-no-code-plugins">Option C — Configuration-only (no code plugins)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#detailed-design">Detailed Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#deployerfactory-deployers-factory-py">1. DeployerFactory (<code class="docutils literal notranslate"><span class="pre">deployers/factory.py</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#provisionertype-enum-extension">2. ProvisionerType Enum Extension</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#provisioner-manifest-optional">3. Provisioner Manifest (Optional)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#basedeployer-lifecycle-additions">4. BaseDeployer Lifecycle Additions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#deployer-context">5. Deployer Context</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#command-layer-refactoring">6. Command Layer Refactoring</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#build-command-refactoring-follow-up">7. Build Command Refactoring (Follow-up)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#example-provisioners">8. Example Provisioners</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#pulumi-example-strata-provisioners-pulumi-provisioner-py">Pulumi Example (<code class="docutils literal notranslate"><span class="pre">.strata/provisioners/pulumi_provisioner.py</span></code>)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#argocd-example-strata-provisioners-argocd-provisioner-py">ArgoCD Example (<code class="docutils literal notranslate"><span class="pre">.strata/provisioners/argocd_provisioner.py</span></code>)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#phase-1-factory-centralization-core">Phase 1 — Factory &amp; Centralization (core)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#phase-2-plugin-discovery">Phase 2 — Plugin Discovery</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#phase-3-examples-documentation">Phase 3 — Examples &amp; Documentation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#file-impact-summary">File Impact Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#risks">Risks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0023-pluggable-provisioner-framework.html#more-information">More Information</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html">Environment composition — complete flat-merge and provenance tracking</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#context-and-problem-statement">Context and Problem Statement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#gap-1-incomplete-section-merging">Gap 1 — Incomplete section merging</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#gap-2-no-provenance-tracking">Gap 2 — No provenance tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#gap-3-no-trace-option-on-values-list">Gap 3 — No <code class="docutils literal notranslate"><span class="pre">--trace</span></code> option on <code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#design-decision-flat-list-not-hierarchy">Design decision: flat list, not hierarchy</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#detailed-design">Detailed Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#complete-section-merging-in-merge-envfiles">1. Complete section merging in <code class="docutils literal notranslate"><span class="pre">merge_envfiles()</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#implementation-sketch">Implementation sketch</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#behavior-change-features">Behavior change: features</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#provenance-tracking-in-resolvedvalues">2. Provenance tracking in <code class="docutils literal notranslate"><span class="pre">ResolvedValues</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#where-provenance-is-recorded">Where provenance is recorded</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#trace-flag-on-strata-values-list">3. <code class="docutils literal notranslate"><span class="pre">--trace</span></code> flag on <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">values</span> <span class="pre">list</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#console-output-with-trace">Console output with <code class="docutils literal notranslate"><span class="pre">--trace</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#json-output-with-trace">JSON output with <code class="docutils literal notranslate"><span class="pre">--trace</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#implementation-plan">4. Implementation plan</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#files-to-modify">Files to modify</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#files-unchanged">Files unchanged</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#testing-strategy">5. Testing strategy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#migration-and-backward-compatibility">6. Migration and backward compatibility</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#links">Links</a></li>
 </ul>
 </li>
 </ul>
@@ -2152,6 +3142,29 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/cookbook-add-environment.html#common-mistakes">Common mistakes</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/environment-composition.html">Environment Composition</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/environment-composition.html#why-compose">Why compose?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/environment-composition.html#merge-semantics">Merge semantics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/environment-composition.html#example-base-prd">Example: base + prd</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/environment-composition.html#environments-base-yaml"><code class="docutils literal notranslate"><span class="pre">environments/base.yaml</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/environment-composition.html#environments-prd-yaml"><code class="docutils literal notranslate"><span class="pre">environments/prd.yaml</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/environment-composition.html#effective-result">Effective result</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/environment-composition.html#tracing-value-origins-with-trace">Tracing value origins with <code class="docutils literal notranslate"><span class="pre">--trace</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/environment-composition.html#json-output-with-trace">JSON output with <code class="docutils literal notranslate"><span class="pre">--trace</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/environment-composition.html#common-patterns">Common patterns</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/environment-composition.html#base-region-environment">Base + region + environment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/environment-composition.html#shared-security-policy">Shared security policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/environment-composition.html#tenant-overlays">Tenant overlays</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/environment-composition.html#merge-validation">Merge validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/environment-composition.html#see-also">See also</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/pattern-cross-env-changes.html">Pattern: Change a Value Across All Environments</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/pattern-cross-env-changes.html#the-layering-model">The layering model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/pattern-cross-env-changes.html#recipe-change-a-resource-property-everywhere">Recipe: Change a resource property everywhere</a></li>
@@ -2194,7 +3207,13 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/deployment-manifests.html">Deployment Manifests Guide</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-manifests.html#what-is-a-deployment-manifest">What is a Deployment Manifest?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-manifests.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-manifests.html#what-is-a-deployment-manifest">What is a Deployment Manifest?</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#build-manifest">Build Manifest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#deploy-manifest">Deploy Manifest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#the-build-deploy-workflow">The Build → Deploy Workflow</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deployment-manifests.html#why-use-deployment-manifests">Why Use Deployment Manifests?</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#compliance-audit">Compliance &amp; Audit</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#operational-visibility">Operational Visibility</a></li>
@@ -2212,7 +3231,9 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deployment-manifests.html#common-tasks">Common Tasks</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#list-all-deployments">List All Deployments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#list-all-manifests">List All Manifests</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#view-a-manifest">View a Manifest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#export-manifests-for-compliance">Export Manifests for Compliance</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#compare-two-deployments">Compare Two Deployments</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#extract-terraform-outputs">Extract Terraform Outputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#check-deployment-duration">Check Deployment Duration</a></li>
@@ -2228,10 +3249,256 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#manifest-not-written">Manifest Not Written</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#gitops-push-failed">GitOps Push Failed</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#manifest-has-empty-artifacts-content">Manifest Has Empty <code class="docutils literal notranslate"><span class="pre">artifacts.content</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#export-audit-trail-with-manifests">Export Audit Trail with Manifests</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/deployment-manifests.html#build-manifests">Build Manifests</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#when-are-build-manifests-created">When are Build Manifests Created?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#build-manifest-structure">Build Manifest Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#key-differences-from-deploy-manifests">Key Differences from Deploy Manifests</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#querying-build-manifests">Querying Build Manifests</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/deployment-manifests.html#workflow-review-build-before-deploying">Workflow: Review Build Before Deploying</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deployment-manifests.html#best-practices">Best Practices</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/deployment-manifests.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html">Deployment Manifests for Compliance &amp; Audit</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#compliance-frameworks">Compliance Frameworks</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#nis2-directive-eu">NIS2 Directive (EU)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#isae-3402-type-2-soc-2">ISAE 3402 Type 2 (SOC 2)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#pci-dss-payment-card-industry">PCI DSS (Payment Card Industry)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#evidence-collection">Evidence Collection</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#build-time-evidence">Build-Time Evidence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#deploy-time-evidence">Deploy-Time Evidence</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#audit-workflows">Audit Workflows</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#internal-audit-what-changed">Internal Audit: “What Changed?”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#external-audit-prove-compliance">External Audit: “Prove Compliance”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#post-incident-what-exactly-happened">Post-Incident: “What Exactly Happened?”</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#policy-governance">Policy &amp; Governance</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#build-time-policy-enforcement">Build-Time Policy Enforcement</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#change-windows">Change Windows</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#approval-workflows">Approval Workflows</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#regulatory-reporting">Regulatory Reporting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#quarterly-audit-report">Quarterly Audit Report</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#manifest-storage-for-compliance">Manifest Storage for Compliance</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#local-filesystem-development">Local Filesystem (Development)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#gitops-production">GitOps (Production)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#integration-points">Integration Points</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#siem-log-aggregation">SIEM / Log Aggregation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#compliance-scanning">Compliance Scanning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#change-management-system">Change Management System</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#best-practices">Best Practices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/compliance-and-deployment-manifests.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/siem-audit-forwarding.html">SIEM Audit Forwarding</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#supported-backends">Supported Backends</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#setup-automatic-forwarding">Setup: Automatic Forwarding</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#step-1-declare-the-integration">Step 1 — Declare the integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#step-2-configure-the-audit-sink">Step 2 — Configure the audit sink</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#step-3-deploy">Step 3 — Deploy</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#setup-on-demand-forwarding-siem">Setup: On-Demand Forwarding (<code class="docutils literal notranslate"><span class="pre">--siem</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#syslog-with-cef-format">Syslog with CEF Format</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#cef-message-structure">CEF Message Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#default-syslog-json">Default syslog (JSON)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#all-sink-types">All Sink Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#splunk-hec-reference">Splunk HEC Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#configuration">Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#event-structure">Event Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#verify-connectivity">Verify Connectivity</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#environment-variable">Environment Variable</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#azure-sentinel-reference">Azure Sentinel Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#id1">Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#authentication-options">Authentication options</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#elk-reference">ELK Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#tcp-logstash-json-codec-input">TCP (Logstash JSON codec input)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#http-elasticsearch-bulk-api">HTTP (Elasticsearch Bulk API)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#opentelemetry-reference">OpenTelemetry Reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#to-grafana-loki">To Grafana Loki</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#to-datadog-native-otlp">To Datadog (native OTLP)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#to-sumo-logic-otlp-endpoint">To Sumo Logic (OTLP endpoint)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#retry-behavior">Retry Behavior</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#event-fields-reference">Event Fields Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#filtering-events">Filtering Events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#resend-historical-entries">Resend Historical Entries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#siem-integration-not-found">SIEM integration not found</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#authentication-errors">Authentication errors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#no-events-appearing-in-splunk">No events appearing in Splunk</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/siem-audit-forwarding.html#cef-messages-not-parsed">CEF messages not parsed</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/siem-audit-forwarding.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/extending-sbom-plugins.html">Extending strata SBOM — Custom Collectors and Parsers</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#overview">Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#lockfile-parsers-zero-config-drop-in">1. Lockfile Parsers — zero-config drop-in</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#collectors-config-driven">2. Collectors — config-driven</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#quick-start">Quick Start</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#option-a-add-a-lockfile-parser-easiest">Option A: Add a Lockfile Parser (easiest)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#option-b-add-a-collector-advanced">Option B: Add a Collector (advanced)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#lockfile-parser-api">Lockfile Parser API</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#base-class-lockfileparser">Base Class: <code class="docutils literal notranslate"><span class="pre">LockfileParser</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../guides/extending-sbom-plugins.html#ecosystem-property">1. <code class="docutils literal notranslate"><span class="pre">ecosystem</span></code> (property)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../guides/extending-sbom-plugins.html#filename-patterns-method">2. <code class="docutils literal notranslate"><span class="pre">filename_patterns()</span></code> method</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../guides/extending-sbom-plugins.html#parse-path-path-list-rawdependency-method">3. <code class="docutils literal notranslate"><span class="pre">parse(path:</span> <span class="pre">Path)</span> <span class="pre">-&gt;</span> <span class="pre">List[RawDependency]</span></code> method</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#rawdependency-return-type"><code class="docutils literal notranslate"><span class="pre">RawDependency</span></code> — Return Type</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#auto-registration">Auto-Registration</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#collector-api">Collector API</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#base-class-basesbomcollector">Base Class: <code class="docutils literal notranslate"><span class="pre">BaseSbomCollector</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../guides/extending-sbom-plugins.html#get-collector-name-method">1. <code class="docutils literal notranslate"><span class="pre">get_collector_name()</span></code> method</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../guides/extending-sbom-plugins.html#collect-method">2. <code class="docutils literal notranslate"><span class="pre">collect()</span></code> method</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../guides/extending-sbom-plugins.html#warnings-handling">3. Warnings handling</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#sbomcomponentmodel-return-type"><code class="docutils literal notranslate"><span class="pre">SbomComponentModel</span></code> — Return Type</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#complete-example-python-private-index-parser">Complete Example: Python Private Index Parser</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#complete-example-custom-collector-terraform-variables">Complete Example: Custom Collector — Terraform Variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#testing-custom-plugins">Testing Custom Plugins</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#testing-lockfile-parsers">Testing Lockfile Parsers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#testing-collectors">Testing Collectors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#running-tests">Running Tests</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#auto-discovery-behavior">Auto-Discovery Behavior</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#lockfile-parsers-strata-lockfile-parsers">Lockfile Parsers (<code class="docutils literal notranslate"><span class="pre">.strata/lockfile_parsers/</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#collectors-strata-collectors">Collectors (<code class="docutils literal notranslate"><span class="pre">.strata/collectors/</span></code>)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#lifecycle-error-handling">Lifecycle &amp; Error Handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#lockfile-parser-lifecycle">Lockfile Parser Lifecycle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#collector-lifecycle">Collector Lifecycle</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#debugging-troubleshooting">Debugging &amp; Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#enable-debug-logging">Enable debug logging</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#check-which-plugins-are-loaded">Check which plugins are loaded</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#test-parse-in-isolation">Test parse in isolation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#verify-collector-is-loaded">Verify collector is loaded</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#best-practices">Best Practices</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#lockfile-parsers">Lockfile Parsers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#collectors">Collectors</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#integration-with-strata">Integration with strata</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#build-phase">Build Phase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/extending-sbom-plugins.html#audit-export">Audit Export</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/extending-sbom-plugins.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/sbom-plugin-examples.html">Custom SBOM Plugin Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom-plugin-examples.html#example-1-ruby-bundler-gemfile-lock-parser">Example 1: Ruby Bundler Gemfile.lock Parser</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom-plugin-examples.html#example-2-go-go-mod-parser">Example 2: Go go.mod Parser</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom-plugin-examples.html#example-3-composer-php-parser">Example 3: Composer (PHP) Parser</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom-plugin-examples.html#example-4-custom-collector-database-schemas">Example 4: Custom Collector — Database Schemas</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom-plugin-examples.html#example-5-custom-collector-external-apis">Example 5: Custom Collector — External APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom-plugin-examples.html#testing-examples">Testing Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/sbom-plugin-examples.html#test-a-lockfile-parser">Test a Lockfile Parser</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/sbom-plugin-examples.html#test-a-collector">Test a Collector</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom-plugin-examples.html#integration-testing">Integration Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/sbom-plugin-examples.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html">CVE Vulnerability Scanning</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#quick-start">Quick Start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#backends">Backends</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#installing-scanners">Installing Scanners</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#check-scanner-availability">Check Scanner Availability</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#scanning-with-audit">Scanning with <code class="docutils literal notranslate"><span class="pre">--audit</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#basic-scan">Basic Scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#filter-by-severity">Filter by Severity</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#generate-reports">Generate Reports</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#allowlist-ignore-known-issues">Allowlist: Ignore Known Issues</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#create-an-allowlist">Create an Allowlist</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#how-allowlists-work">How Allowlists Work</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#policy-cve-max-severity">Policy: <code class="docutils literal notranslate"><span class="pre">cve_max_severity</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#default-behavior">Default Behavior</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#configure-in-workspace-yaml">Configure in Workspace YAML</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#enforcement-levels">Enforcement Levels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#disable-the-policy">Disable the Policy</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#understanding-cve-results">Understanding CVE Results</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#console-output">Console Output</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#cve-finding-fields">CVE Finding Fields</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#json-audit-result">JSON Audit Result</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#remediation">Remediation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#update-to-fixed-version">1. Update to Fixed Version</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#suppress-with-allowlist-temporary">2. Suppress with Allowlist (Temporary)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#use-vulnerability-data">3. Use Vulnerability Data</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#sbom-integration">SBOM Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#deployment-manifests">Deployment Manifests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#ci-cd-integration">CI/CD Integration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#github-actions">GitHub Actions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#gitlab-ci">GitLab CI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#generic-ci-exit-code-check">Generic CI (exit code check)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#no-scanner-found">No Scanner Found</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#scan-takes-too-long">Scan Takes Too Long</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#false-positives-in-allowlist-not-working">False Positives in Allowlist Not Working</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#policy-blocking-build-need-to-investigate">Policy Blocking Build, Need to Investigate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#see-also">See Also</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/at-scale.html">Operating Strata at Scale — Multi-Tenant Design</a><ul>
@@ -2323,6 +3590,21 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#open-questions">Open Questions</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/using-console.html">Using strata console</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#starting-the-console">Starting the console</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#the-basic-loop">The basic loop</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#inspecting-files">Inspecting files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#scaffolding-files">Scaffolding files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#running-validation">Running validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#opening-files">Opening files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#checking-tool-availability">Checking tool availability</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#reloading-workspace-state">Reloading workspace state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#tab-completion-and-history">Tab completion and history</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#all-commands">All commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#customizing-the-workflow">Customizing the workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#non-interactive-use">Non-interactive use</a></li>
 </ul>
 </li>
 </ul>

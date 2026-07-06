@@ -40,10 +40,11 @@ These options are accepted by every command and subcommand:
 | `ref` †      | `env` `config` `data` `secret`                                               | Manage file references within profiles                    |
 | `repo` †     | `add` `remove` `list` `sync` `status`                                        | Manage repositories in the solution                       |
 | `build` †    | `run` `plan` `clean`                                                         | Build platform and Terraform artifacts                    |
-| `validate`   | —                                                                            | Validate a single platform YAML file                      |
+| `validate`   | `run` `graph`                                                                | Validate YAML files and visualize workspace dependencies  |
 | `guide`      | —                                                                            | Show workspace setup progress and suggest the next action |
 | `schema`     | `list` `get`                                                                 | Inspect JSON schemas for platform YAML kinds              |
 | `secret`     | `generate` `mask`                                                            | Generate and manage secret values                         |
+| `audit` †    | `changes` `resend` `export`                                                  | Query deploy-log evidence and forward to audit sinks      |
 | `deploy` †   | `run` `destroy` `show` `status` `history` `health` `output` `outputs` `lock` | Deploy platform using provisioners                        |
 | `values` †   | `list` `get`                                                                 | Inspect resolved deployment values                        |
 | `vars` †     | `set` `unset` `list`                                                         | Manage team-shared template variables                     |
@@ -73,7 +74,7 @@ strata sln init --name NAME [--template NAME-OR-PATH] [--list] [standard options
 | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `--name NAME`             | ✅        | Name of the solution workspace                                                                                                            |
 | `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`, `compose`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
-| `--list`                  | —        | List available scaffold templates and exit. Does not require `--name`.                                                                     |
+| `--list`                  | —        | List available scaffold templates and exit. Does not require `--name`.                                                                    |
 
 **Discovering templates:**
 
@@ -194,10 +195,10 @@ strata sln export --name NAME [--force] [--dry-run] [standard options]
 
 **Output structure:**
 
-| Path                                     | Description                                           |
-| ---------------------------------------- | ----------------------------------------------------- |
+| Path                                     | Description                                              |
+| ---------------------------------------- | -------------------------------------------------------- |
 | `.strata/templates/<name>/scaffold/`     | Workspace files with `{{ solution_name }}` substitutions |
-| `.strata/templates/<name>/template.yaml` | Template manifest (name, description, variables)      |
+| `.strata/templates/<name>/template.yaml` | Template manifest (name, description, variables)         |
 
 **Excluded from export:** `.git/`, `repos/`, `.venv/`, `node_modules/`, `.strata/logs/`, `__pycache__/`, `*.pyc`, `*.log`
 
@@ -276,14 +277,14 @@ strata new TEMPLATE NAME [--path PATH] [--overwrite] [--set KEY=VALUE ...] [stan
 strata new --list
 ```
 
-| Option / Argument | Description                                                       |
-| ----------------- | ----------------------------------------------------------------- |
-| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `tenant`)            |
+| Option / Argument | Description                                                          |
+| ----------------- | -------------------------------------------------------------------- |
+| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `tenant`)               |
 | `NAME`            | Injected as `{{ name }}`; used in output filenames and path segments |
-| `--path PATH`     | Output directory (default: current directory)                     |
-| `--overwrite`     | Overwrite output file(s) if they already exist                    |
-| `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)           |
-| `--list`          | List available templates and bundles, then exit                   |
+| `--path PATH`     | Output directory (default: current directory)                        |
+| `--overwrite`     | Overwrite output file(s) if they already exist                       |
+| `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)              |
+| `--list`          | List available templates and bundles, then exit                      |
 
 **Template discovery** — `strata new --list` shows all templates grouped by type:
 
@@ -579,11 +580,87 @@ strata repo sync --name platform --force
 
 ### `repo status [--name NAME]`
 
-Show git working-tree state for registered repositories.
+Show git working-tree state and tag status for registered repositories.
+
+```
+strata repo status [--name NAME] [standard options]
+```
+
+**Output includes:**
+
+- Repository path, current branch, tracking remote
+- Ahead/behind counts vs. tracking remote
+- File status: count of staged, unstaged, untracked, conflicted files
+- **NEW:** Latest release tag and quality-gate tag with age (if any tags exist)
+
+**Console output example:**
+
+```
+Repository Status
+─────────────────
+
+  ✅ my-service  [main → origin/main]
+       Tags:
+         Release: v1.2.0 (14 days ago, abc1234)
+         Quality: tested (2 days ago, def5678)
+
+  ✅ tf-landscape  [main → origin/main]
+       Tags:
+         Release: v2.4.0 (7 days ago, ghi9abc)
+         Quality: tested-20260701 (1 day ago, jkl2def)
+
+  ⚠️  config-repo  [dev → origin/main ↑0 ↓2]
+       2 unstaged, 1 untracked
+```
+
+**JSON output** (with `--output json`) includes full tag metadata:
+
+```json
+{
+  "repos": [{
+    "name": "my-service",
+    "tags": {
+      "latest_release": {
+        "name": "v1.2.0",
+        "commit": "abc1234567890abcdef",
+        "short_commit": "abc1234",
+        "created": "2026-06-20T10:30:00+00:00",
+        "age_days": 14,
+        "age_str": "14 days ago"
+      },
+      "latest_quality": {
+        "name": "tested",
+        "commit": "def567890123",
+        "short_commit": "def5678",
+        "created": "2026-07-01T10:15:00+00:00",
+        "age_days": 2,
+        "age_str": "2 days ago"
+      }
+    }
+  }]
+}
+```
+
+**Options:**
+
+| Option        | Description                           |
+| ------------- | ------------------------------------- |
+| `--name NAME` | Show status for a single repository   |
+| `--verbose`   | List individual changed files        |
+
+**Discovering release candidates:**
+
+```bash
+strata repo status --output json | jq '.repos[] | select(.tags.latest_quality) | .tags.latest_quality'
+```
+
+**Usage:**
 
 ```bash
 strata repo status
-strata repo status --name platform
+strata repo status --name my-service
+strata repo status --output json
+strata repo status --verbose
 ```
 
 ---
@@ -717,21 +794,75 @@ strata build clean --dry-run
 
 ## `validate`
 
+`validate` is a command group with two subcommands. Bare invocation (`strata validate -f file.yaml`) delegates to `run` for backward compatibility.
+
+```
+strata validate run [OPTIONS]     ← validate a YAML file
+strata validate graph [OPTIONS]   ← build a dependency graph
+strata validate -f FILE           ← shorthand; equivalent to `validate run -f FILE`
+```
+
+### `validate run`
+
 Validate a single platform YAML file against its kind-specific schema.
 
 ```
-strata validate FILE_PATH [--deep] [standard options]
+strata validate run -f FILE_PATH [--deep] [--explain] [standard options]
 ```
 
-| Option   | Description                                                                                                                                               |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--deep` | Enable Phase 2 (cross-reference) validation against the active profile's configuration sources. Requires an initialized workspace with an active profile. |
+| Option             | Description                                                                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-f / --file PATH` | File to validate. Required (unless `--path` glob is used).                                                                                               |
+| `--path GLOB`      | Validate multiple files matching a glob. Requires an initialized workspace with an active profile.                                                        |
+| `--deep`           | Enable Phase 2 (cross-reference) validation against the active profile's configuration sources. Requires an initialized workspace with an active profile. |
+| `--explain`        | After validation, emit a plain-English summary of what the file describes.                                                                                |
 
 **Exit codes:** 0 valid · 1 system failure · 2 missing argument · 3 schema-invalid
 
 ```bash
-strata validate config/xyz-config.yaml
-strata validate config/xyz-ws-platform.yaml --deep
+strata validate run -f config/xyz-config.yaml
+strata validate run -f config/xyz-ws-platform.yaml --deep
+strata validate run --path "deployments/**"
+strata validate -f config/xyz-config.yaml        # backward compat
+```
+
+### `validate graph`
+
+Build a Mermaid dependency diagram of the workspace. Two modes:
+
+- **`--mode files`** (default) — nodes are YAML files, edges are cross-file references. Shows which files wire together and highlights missing or invalid files.
+- **`--mode resources`** — nodes are logical resources/modules/namespaces, edges are `depends_on` chains, module attachments, and subnet assignments. Shows the infrastructure topology organized by provisioner.
+
+```
+strata validate graph [--mode files|resources] [--entry PATH] [--save PATH] [--direction LR|TD|BT|RL] [--no-validate] [standard options]
+```
+
+| Option               | Default      | Description                                                                               |
+| -------------------- | ------------ | ----------------------------------------------------------------------------------------- |
+| `--mode`             | `files`      | Graph type: `files` or `resources`.                                                       |
+| `--entry / -e PATH`  | auto-detect  | Entry point file (deployment or workspace YAML). Discovers all deployments if omitted.    |
+| `--save / -s PATH`   | —            | Write Mermaid markdown to file. Defaults to `graph.md` when flag used without a value.   |
+| `--direction`        | LR (files), TD (resources) | Mermaid graph direction: `LR`, `TD`, `BT`, `RL`.                        |
+| `--no-validate`      | off          | Skip validation — all nodes shown as neutral. Faster for large workspaces.                |
+
+**Node status colours (file mode):**
+
+| Status   | Colour | Condition                                                                |
+| -------- | ------ | ------------------------------------------------------------------------ |
+| Valid    | green  | File exists and passes Phase 1 validation                                |
+| Invalid  | orange | File exists but fails validation                                         |
+| Missing  | red    | Referenced by another file but not present on disk                       |
+| External | grey   | `@repo/path` reference to a file in another repository                   |
+| Orphan   | dashed | File exists and validates but no other file references it                |
+
+**Exit codes:** 0 success (including missing nodes — graph always produces output) · 1 system failure
+
+```bash
+strata validate graph
+strata validate graph --entry deploy/deploy-prd.yaml
+strata validate graph --mode resources --entry stack/ws-platform.yaml
+strata validate graph --save graph.md
+strata validate graph --output json
 ```
 
 ---
@@ -868,10 +999,10 @@ Interactive workspace session with guided onboarding. Launches a persistent REPL
 strata console [OPTIONS]
 ```
 
-| Option             | Type | Default       | Description                                                                 |
-| ------------------ | ---- | ------------- | --------------------------------------------------------------------------- |
-| `--work-path PATH` | path | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH`, then CWD walk.  |
-| `--no-color`       | flag | off           | Disable color output.                                                       |
+| Option             | Type | Default       | Description                                                                |
+| ------------------ | ---- | ------------- | -------------------------------------------------------------------------- |
+| `--work-path PATH` | path | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH`, then CWD walk. |
+| `--no-color`       | flag | off           | Disable color output.                                                      |
 
 **Exit code:** `0` on normal exit · `1` on crash.
 
@@ -1256,17 +1387,22 @@ jobs:
       - run: strata deploy run --file "${{ matrix.deployment.file }}"
 ```
 
-### `deploy status`
+### `deploy plan`
 
 ```
-strata deploy status [-f FILE] [--stage NAME] [--plan] [standard options]
+strata deploy plan -f FILE [--stage NAME] [standard options]
 ```
 
-Show live Terraform outputs or saved plan details. `--plan` reads the last saved `.tfplan` file without backend calls.
+Show the resource change summary from the last saved `.tfplan` file produced by `deploy run --dry-run`. Runs `terraform show -json` locally — no backend calls.
+
+| Option         | Description                        |
+| -------------- | ---------------------------------- |
+| `--stage NAME` | Limit to a single deployment stage |
 
 ```bash
-strata deploy status -f xyz-deploy-prd.yaml
-strata deploy status --stage production --plan
+strata deploy plan -f xyz-deploy-prd.yaml
+strata deploy plan -f xyz-deploy-prd.yaml --stage production
+strata deploy plan -f xyz-deploy-prd.yaml --output json
 ```
 
 ### `deploy history`
@@ -1313,35 +1449,8 @@ Show Terraform outputs from the local cache (`.tf-outputs.json`) or fetch live f
 strata deploy output -f xyz-deploy-prd.yaml
 strata deploy output -f xyz-deploy-prd.yaml --stage production --key endpoint
 strata deploy output -f xyz-deploy-prd.yaml --refresh
-```
-
-### `deploy outputs`
-
-```
-strata deploy outputs -f FILE [--stage NAME] [--key NAME] [--version VERSION] [--all-versions] [standard options]
-```
-
-Show **stored output artifacts** written by `deploy run` to the configured outputs path (default: `.strata/outputs`). These files persist across runs and are not affected by Terraform state changes.
-
-Distinct from `deploy output`: `deploy output` reads the Terraform cache / hits the backend live; `deploy outputs` reads the durable per-stage JSON artifact files.
-
-| Option              | Description                                                                      |
-| ------------------- | -------------------------------------------------------------------------------- |
-| `--stage NAME`      | Limit display to a single stage                                                  |
-| `--key NAME`        | Show only a single output key                                                    |
-| `--version VERSION` | Show artifacts for a specific version tag (default: current version from labels) |
-| `--all-versions`    | Show artifacts for every version directory found in the outputs path             |
-
-Artifacts are grouped by version in console output. Sensitive values are shown as `(sensitive)` or omitted, depending on `spec.deployment.outputs.sensitive` in the configuration.
-
-**Output keys (`--output json`):** `deployment`, `artifacts[]` (each with `deployment`, `version`, `stage`, `written_at`, `outputs{}`).
-
-```bash
-strata deploy outputs -f xyz-deploy-prd.yaml
-strata deploy outputs -f xyz-deploy-prd.yaml --stage production
-strata deploy outputs -f xyz-deploy-prd.yaml --key endpoint
-strata deploy outputs -f xyz-deploy-prd.yaml --all-versions
-strata deploy outputs -f xyz-deploy-prd.yaml --version 2.0.0 --output json
+strata deploy output -f xyz-deploy-prd.yaml --version 2.0.0
+strata deploy output -f xyz-deploy-prd.yaml --all-versions --output json
 ```
 
 ### `deploy lock`
@@ -1403,6 +1512,368 @@ strata deploy lock history -f xyz-deploy-prd.yaml --output json
 ```
 
 **JSON output keys:** `deployment`, `entries[]` — each entry: `lock_id`, `holder`, `hostname`, `pid`, `acquired_at`, `expires_at`, `reason`, `stage`.
+
+---
+
+## `env`
+
+Inspect environment configuration and live infrastructure state.
+
+### `env info`
+
+```
+strata env info [standard options]
+```
+
+Show instant workspace context — solution name, active profile, strata version, and work path. No subprocess calls.
+
+```bash
+strata env info
+strata env info --output json
+```
+
+**JSON output keys:** `solution_id`, `active_profile`, `version`, `work_path`.
+
+### `env output`
+
+```
+strata env output -f FILE [--name NAME] [--provisioner NAME] [--raw] [--json] [standard options]
+```
+
+Show live Terraform outputs per stage by running `terraform output -json` against the backend. Results are grouped by provisioner in a table.
+
+| Option               | Description                                                                                   |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `--name NAME`        | Show only a single output key across all stages                                               |
+| `--provisioner NAME` | Limit to stages referencing a specific provisioner                                            |
+| `--raw`              | Print the bare value only — requires `--name`. Suppresses all chrome; ideal for shell scripts |
+| `--json`             | Emit the raw outputs dict as JSON — bypasses the strata envelope                              |
+
+```bash
+strata env output -f xyz-deploy-prd.yaml
+strata env output -f xyz-deploy-prd.yaml --name endpoint
+strata env output -f xyz-deploy-prd.yaml --provisioner platform_iac
+IP=$(strata env output -f deploy.yaml --name hearth_ip --raw)
+strata env output -f xyz-deploy-prd.yaml --json
+```
+
+**JSON output keys:** `file`, `stages{}` — each stage: `provisioner`, `outputs{}`, `ok`, `error`.
+
+### `env show`
+
+```
+strata env show -f FILE [--stage NAME] [standard options]
+```
+
+Show the full resolved environment for a deployment: meta, properties, variables, secrets (masked), feature flags, overrides, and stages. Uses cached resolution — no subprocess calls.
+
+| Option         | Description                                                              |
+| -------------- | ------------------------------------------------------------------------ |
+| `--stage NAME` | Filter secrets visibility to a specific stage's allowlist (default: all) |
+
+```bash
+strata env show -f xyz-deploy-prd.yaml
+strata env show -f xyz-deploy-prd.yaml --stage production
+strata env show -f xyz-deploy-prd.yaml --output json
+```
+
+**JSON output keys:** `file`, `deployment`, `meta{}`, `properties{}`, `variables[]`, `secrets[]`, `features[]`, `overrides{}`, `stages[]`.
+
+### `env status`
+
+```
+strata env status [-f FILE | --path DIR | --all] [--stage NAME] [--offline] [standard options]
+```
+
+Show infrastructure status. Supports three modes:
+
+| Mode             | Flags                   | Description                                                                               |
+| ---------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| Single (live)    | `-f FILE`               | Per-stage detail via `terraform show -json` — resources, outputs, serial, cache freshness |
+| Single (offline) | `-f FILE --offline`     | Per-stage detail from build cache only — no backend contact                               |
+| Multi            | `--all` or `--path DIR` | One-line summary per deployment found — always offline (reads build cache)                |
+
+| Option         | Description                                                                     |
+| -------------- | ------------------------------------------------------------------------------- |
+| `--stage NAME` | Query only a single stage. Single-deployment mode only.                         |
+| `--offline`    | Use cached data only — no remote backend contact. Single-deployment mode only.  |
+| `--path DIR`   | Scan a directory for deployment manifests and show a summary for each.          |
+| `--all`        | Scan the entire workspace for deployment manifests and show a summary for each. |
+
+```bash
+strata env status -f xyz-deploy-prd.yaml
+strata env status -f xyz-deploy-prd.yaml --offline
+strata env status -f xyz-deploy-prd.yaml --stage production
+strata env status --all
+strata env status --path deploy/
+strata env status --all --output json
+```
+
+**JSON output keys (single):** `file`, `deployment`, `mode`, `stages[]` — each stage: `name`, `provisioner`, `reachable`, `resources`, `outputs`, `serial`, `cache{}`.
+
+**JSON output keys (multi):** `scan_path`, `deployments[]` — each: `file`, `name`, `stage_count`, `cached_count`, `stages[]`.
+
+### `env drift`
+
+```
+strata env drift -f FILE [--stage NAME] [standard options]
+```
+
+Detect configuration drift by running `terraform plan -detailed-exitcode` against the live backend. Reports create/update/delete/replace counts per stage. Exit code 3 if drift is detected.
+
+| Option         | Description                              |
+| -------------- | ---------------------------------------- |
+| `--stage NAME` | Check only a single stage (default: all) |
+
+```bash
+strata env drift -f xyz-deploy-prd.yaml
+strata env drift -f xyz-deploy-prd.yaml --stage production
+strata env drift -f xyz-deploy-prd.yaml --output json
+```
+
+**JSON output keys:** `file`, `deployment`, `stages[]` — each stage: `name`, `provisioner`, `drift_detected`, `to_add`, `to_change`, `to_destroy`, `to_replace`, `plan_output`.
+
+### `env doctor`
+
+```
+strata env doctor [-f FILE] [--category CATEGORY] [--deep] [standard options]
+```
+
+Run a workspace health check across five categories. Exit code 3 if any check fails.
+
+| Category    | What is checked                                                       |
+| ----------- | --------------------------------------------------------------------- |
+| `runtime`   | Python version, OS, available memory and disk                         |
+| `workspace` | `.strata/` directory, `solution.json`, active profile                 |
+| `tools`     | External tool availability (terraform, helm, docker, ansible, git, …) |
+| `config`    | Deployment file validity, stage configuration, provisioner references |
+| `auth`      | Backend authentication and secret store reachability                  |
+
+| Option            | Description                                                               |
+| ----------------- | ------------------------------------------------------------------------- |
+| `-f FILE`         | Check only the tools referenced by this deployment file                   |
+| `--category NAME` | Run only one category (`runtime`, `workspace`, `tools`, `config`, `auth`) |
+| `--deep`          | Enable deeper checks (requires an active profile)                         |
+
+```bash
+strata env doctor
+strata env doctor -f xyz-deploy-prd.yaml
+strata env doctor --category tools
+strata env doctor --deep --output json
+```
+
+**JSON output keys:** `categories[]` — each: `name`, `status`, `checks[]` — each check: `name`, `ok`, `message`.
+
+---
+
+## `audit`
+
+> **Note:** Requires an initialized workspace. Audit records are written automatically by `strata deploy run` to `.strata/deploy-log/` — no extra configuration required to start collecting evidence. Configure `spec.deployment.audit` in the configuration YAML to enable remote push, structured path layout, and SIEM forwarding.
+
+Query deployment audit logs and manage compliance evidence (ISO 27001 / ISAE 3402 layer 2 audit trail).
+
+Every `strata deploy run` execution writes a structured JSON audit record to the local deploy-log directory. These records capture who ran the deployment, from which commit, which stages ran, whether they succeeded, step timings, and any PR metadata linked to the commit.
+
+All `audit` subcommands accept standard options (`--work-path`, `--output`, `--verbose`, `--quiet`).
+
+### `audit changes`
+
+```
+strata audit changes [--last N] [--since TIMESTAMP] [--stage NAME] [standard options]
+```
+
+List recent deployment executions from the local deploy-log. Results are sorted by timestamp descending (most recent first).
+
+| Option              | Default | Description                                                                       |
+| ------------------- | ------- | --------------------------------------------------------------------------------- |
+| `--last N`          | `10`    | Maximum number of entries to show                                                 |
+| `--since TIMESTAMP` | —       | Show only entries on or after an ISO 8601 timestamp (e.g. `2026-01-15T00:00:00Z`) |
+| `--stage NAME`      | —       | Show only entries that include a stage with this exact name                       |
+
+```bash
+# Show the 10 most recent deployments
+strata audit changes
+
+# Show all deployments in the last 7 days
+strata audit changes --since 2026-06-25T00:00:00Z
+
+# Show deployments that ran the 'infrastructure' stage
+strata audit changes --stage infrastructure
+
+# Machine-readable output for CI / compliance tooling
+strata audit changes --last 50 --output json
+```
+
+**Console output columns:** `timestamp`, `deployment`, `environment`, `success`, `duration`, `stages` (count), `commit` (short SHA).
+
+**JSON output keys** (per entry): `execution_id`, `timestamp`, `version`, `deployment`, `workspace`, `environment`, `file`, `success`, `duration_seconds`, `commit_sha`, `stages[]`, `pull_request{}`.
+
+### `audit resend`
+
+```
+strata audit resend [--last N] [--since TIMESTAMP] [standard options]
+```
+
+Re-forward local deploy-log entries to all configured audit sinks (webhook, ndjson, syslog, SIEM integrations). Useful after adding a new sink or recovering from a delivery failure.
+
+| Option              | Default | Description                                     |
+| ------------------- | ------- | ----------------------------------------------- |
+| `--last N`          | —       | Resend only the last N entries                  |
+| `--since TIMESTAMP` | —       | Resend only entries since an ISO 8601 timestamp |
+
+```bash
+# Resend all local records to currently configured sinks
+strata audit resend
+
+# Resend only the most recent 5 entries
+strata audit resend --last 5
+
+# Resend entries from the last 24 hours (machine-readable result)
+strata audit resend --since 2026-07-01T00:00:00Z --output json
+```
+
+**JSON output keys:** `sent` (int), `failed` (int).
+
+### `audit export`
+
+```
+strata audit export [--last N] [--since TIMESTAMP] [--format json|ndjson] [--out PATH] [standard options]
+```
+
+Export deploy-log entries to a file or stdout. Useful for offline compliance reviews and feeding records into external tooling.
+
+| Option              | Default | Description                                              |
+| ------------------- | ------- | -------------------------------------------------------- |
+| `--last N`          | —       | Export only the last N entries                           |
+| `--since TIMESTAMP` | —       | Export only entries since an ISO 8601 timestamp          |
+| `--format`          | `json`  | Output format: `json` (array) or `ndjson` (one per line) |
+| `--out PATH`        | stdout  | Write to a file instead of stdout                        |
+
+```bash
+# Export all records as JSON array to stdout
+strata audit export
+
+# Export as NDJSON (one JSON object per line — preferred for log pipelines)
+strata audit export --format ndjson --out audit-$(date +%Y%m).ndjson
+
+# Export the last 30 days and pipe into jq
+strata audit export --since 2026-06-01T00:00:00Z --format ndjson | jq 'select(.success == false)'
+```
+
+### Audit configuration
+
+Configure audit output in the `spec.deployment.audit` block of your **configuration** YAML (`kind: configuration`):
+
+```yaml
+spec:
+  deployment:
+    paths:
+      by-execution: "{{ deployment }}/{{ timestamp }}"
+      by-tenant:    "{{ tenant }}/{{ deployment }}/{{ timestamp }}"
+
+    audit:
+      path: .strata/deploy-log         # base directory (relative to workspace root)
+      structure: by-execution          # named path from spec.deployment.paths, or inline Jinja2
+      file_per_stage: true             # true: one JSON per stage; false: single execution.json
+      remote: xyz-configuration        # gitops remote to push audit records to (optional)
+      include_in_manifest: true        # cross-reference audit path in deployment manifest (optional)
+```
+
+**Path templates** — `structure` accepts a named path from `spec.deployment.paths` or an inline [Jinja2](https://jinja.palletsprojects.com/) template. Available tokens:
+
+| Token               | Example                | Always available |
+| ------------------- | ---------------------- | ---------------- |
+| `{{ deployment }}`  | `xyz_platform_prd`     | Yes              |
+| `{{ workspace }}`   | `xyz_platform`         | Yes              |
+| `{{ environment }}` | `prd`                  | Yes              |
+| `{{ timestamp }}`   | `2026-06-24T14-32-00Z` | Yes              |
+| `{{ date }}`        | `2026-06-24`           | Yes              |
+| `{{ tenant }}`      | `example-xyz`          | No (if labelled) |
+| `{{ version }}`     | `1.0.0`                | No (if labelled) |
+| `{{ stage }}`       | `infrastructure`       | Per-stage only   |
+
+### SIEM sink configuration
+
+Configure structured event forwarding to external immutable stores in the `spec.audit.sinks[]` block of your **configuration** YAML. Each sink forwards every `deploy_audit` event to an external receiver.
+
+**Built-in sink types** (no integration credentials required):
+
+```yaml
+spec:
+  audit:
+    sinks:
+      - name: local-ndjson
+        type: ndjson
+        enabled: true
+        path: .strata/audit-events.ndjson   # appended on every deployment
+
+      - name: ops-webhook
+        type: webhook
+        enabled: true
+        url: https://hooks.example.com/audit
+        headers:
+          X-API-Key: "${WEBHOOK_SECRET}"
+
+      - name: syslog-server
+        type: syslog
+        enabled: true
+        address: "syslog.internal:514"      # UDP
+```
+
+**Integration-backed sinks** (`sentinel`, `elk`, `otel`) — reference an integration declared in `spec.integrations[]`:
+
+```yaml
+spec:
+  integrations:
+    # Azure Sentinel — DCR Logs Ingestion API
+    - name: sentinel-audit
+      type: sentinel
+      enabled: true
+      endpoints:
+        address: https://my-dce.eastus-1.ingest.monitor.azure.com
+      properties:
+        data_collection_rule_id: dcr-abc123abc456abc789
+        stream_name: Custom-DeployAudit_CL
+      # Authentication: DefaultAzureCredential — managed identity, service principal, or az CLI
+
+    # ELK — TCP (Logstash JSON codec input)
+    - name: elk-audit
+      type: elk
+      enabled: true
+      endpoints:
+        address: "logstash.internal:5000"   # host:port for TCP
+      properties:
+        protocol: tcp                        # or "http" for Elasticsearch Bulk API
+
+    # OpenTelemetry — OTLP/HTTP to any OTel-compatible backend
+    - name: otel-audit
+      type: otel
+      enabled: true
+      endpoints:
+        address: https://otel-collector.internal:4318
+      properties:
+        resource_attributes:
+          environment: production
+          team: platform
+
+  audit:
+    sinks:
+      - name: sentinel
+        type: integration
+        integration: sentinel-audit
+        enabled: true
+        events: [deploy_audit]
+      - name: elk
+        type: integration
+        integration: elk-audit
+        enabled: true
+      - name: otel
+        type: integration
+        integration: otel-audit
+        enabled: true
+```
+
+**Non-blocking design:** SIEM delivery failures are always logged at `WARNING` level but never fail a deployment. The deploy-log JSON on disk is the primary source of truth; SIEM sinks are best-effort secondary delivery.
 
 ---
 

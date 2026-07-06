@@ -15,9 +15,11 @@ This section documents the internal layers of the strata CLI.
 | [services.md](services.md)               | Service layer — BaseService, load/cache lifecycle, two-phase validation |
 | [configuration.md](configuration.md)     | ConfigurationService — load order, repo map, merge strategy             |
 | [integrations.md](integrations.md)       | Integration layer — factory, singleton lifecycle, subprocess wrapping   |
+| [sbom-plugin-api.md](sbom-plugin-api.md) | SBOM plugin API — `BaseSbomCollector`, `LockfileParser` base classes     |
 | [builders.md](builders.md)               | Build pipeline — PlatformBuilder, TerraformBuilder, artifact output     |
 | [deployers.md](deployers.md)             | Deploy pipeline — deployer table, step constants, execution order       |
 | [validators.md](validators.md)           | Validation pipeline — BaseValidator, PlatformValidator                  |
+| [policies.md](policies.md)               | Policy engine — built-in policy types, configuration, evaluation phases |
 | [lifecycles.md](lifecycles.md)           | Lifecycle hooks — phase naming, script execution, env variables         |
 | [exceptions.md](exceptions.md)           | Exception hierarchy — PlatformError subclasses and usage                |
 | [logging.md](logging.md)                 | Structured logging — get_logger, structlog config, YAML config files    |

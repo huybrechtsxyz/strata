@@ -34,6 +34,12 @@ spec:
   variables: [] # Override/extend workspace variables
   secrets: [] # Override/extend workspace secrets
   features: {} # Feature flags
+  audit: # Audit event policy and sink routing
+    policy:
+      events: {} # Event type → enabled flag
+    sinks: [] # Where to send audit events
+    structure: by-execution # Deploy-log directory layout
+    deploy_log_path: null # Custom deploy-log base path (default: .strata/deploy-log)
 ```
 
 ## Properties & Custom
@@ -201,6 +207,31 @@ is checked out in detached-HEAD mode. The resolved commit SHA is logged.
 - Each `remote` name must exist in `configuration.spec.remotes` (Phase 2 cross-validation — build fails if not found)
 - Duplicate remote names within one environment are rejected at parse time
 
+### Build Output File Overrides (Terraform)
+
+An environment can **append** extra output file definitions on top of the workspace
+provisioner's `output.files[]`. This is additive only — environments cannot remove or
+replace workspace-level file definitions.
+
+```yaml
+spec:
+  overrides:
+    output_files:
+      - name: compliance.auto.tfvars.json
+        variable: compliance_config
+        type: object
+        source: properties
+        key: compliance_config
+
+      - name: tenant_overrides.auto.tfvars.json
+        type: script
+        script: "@my_repo/scripts/build_tenant_overrides.py"
+```
+
+Use this when certain environments require extra Terraform variables not present in other
+environments — for example, a production-only compliance config or a tenant-specific
+override file.
+
 ## Variables
 
 Environment-specific variables **override or extend** workspace variables:
@@ -238,6 +269,120 @@ features:
   auto_scaling: true
   canary_deployments: false
 ```
+
+## Audit
+
+`spec.audit` configures which events are written to the deploy-log and where they are forwarded.
+Settings are merged across all `environments[]` listed in the deployment (later entries override earlier ones).
+
+### Event Policy
+
+Control which event types are active:
+
+```yaml
+audit:
+  policy:
+    events:
+      deploy_audit: true      # Every deploy execution (default: on)
+      cli_action: true        # CLI command invocations (default: on)
+      policy_violation: true  # Policy rule failures (default: on)
+      secret_access: true     # Secret reads at build/deploy time (default: on)
+      lock_event: false       # Deploy-lock acquire/release (default: off)
+      validation_result: false # Validate command outcomes (default: off)
+      drift_alert: false      # Infrastructure drift detections (default: off)
+      build_event: false      # Build command outcomes (default: off)
+```
+
+### Sinks
+
+Each sink routes audit events to a destination. Multiple sinks can be active simultaneously.
+
+#### Built-in sink types
+
+| Type      | Required fields | Optional fields            | Notes                            |
+| --------- | --------------- | -------------------------- | -------------------------------- |
+| `stdout`  | —               | —                          | Human-readable to terminal       |
+| `ndjson`  | `path`          | —                          | Appends one JSON object per line |
+| `syslog`  | `address`       | `format` (`json` or `cef`) | UDP/TCP to `host:port`           |
+| `webhook` | `url`           | `headers`                  | HTTP POST, JSON body             |
+
+```yaml
+audit:
+  sinks:
+    - name: local_log
+      type: ndjson
+      path: .strata/audit.ndjson
+
+    - name: ops_syslog
+      type: syslog
+      address: "10.0.0.5:514"
+      format: cef          # Common Event Format for SIEM ingestion
+
+    - name: alert_hook
+      type: webhook
+      url: "https://hooks.example.com/strata"
+      headers:
+        Authorization: "Bearer ${WEBHOOK_TOKEN}"
+      events: [policy_violation]   # Only forward violations
+```
+
+#### Integration-backed sinks (SIEM)
+
+Reference a named SIEM integration declared in `configuration.spec.integrations`:
+
+```yaml
+audit:
+  sinks:
+    - name: splunk
+      integration: splunk_hec    # Must match configuration.spec.integrations[].name
+    - name: elk_stack
+      integration: elk_logstash
+      events: [deploy_audit, policy_violation]
+```
+
+See [configuration.md](configuration.md) for how to declare Splunk, ELK, OpenTelemetry, and Azure Sentinel integrations.
+
+### Deploy-Log Structure
+
+Controls the directory layout under the deploy-log base path:
+
+| Value          | Path template                                           |
+| -------------- | ------------------------------------------------------- |
+| `flat`         | `<base>/<deployment>/`                                  |
+| `by-stage`     | `<base>/<deployment>/<stage>/`                          |
+| `by-execution` | `<base>/<deployment>/<timestamp>/` _(default)_          |
+| `by-tenant`    | `<base>/<tenant>/<deployment>/<timestamp>/`             |
+| `full`         | `<base>/<tenant>/<workspace>/<deployment>/<timestamp>/` |
+
+```yaml
+audit:
+  structure: by-execution          # default
+  deploy_log_path: logs/deploy     # relative to workspace root (default: .strata/deploy-log)
+```
+
+### Forwarding via CLI
+
+Re-forward deploy-log entries to a SIEM integration without re-deploying:
+
+```bash
+strata audit export --siem splunk_hec
+strata audit export --siem splunk_hec --out export.json   # also write JSON file
+```
+
+### Sink field reference
+
+| Field         | Type     | Default | Description                                            |
+| ------------- | -------- | ------- | ------------------------------------------------------ |
+| `name`        | string   | —       | Unique sink name                                       |
+| `type`        | string   | —       | Built-in type: `stdout`, `ndjson`, `syslog`, `webhook` |
+| `integration` | string   | —       | SIEM integration name (mutually exclusive with `type`) |
+| `enabled`     | bool     | `true`  | Toggle sink without removing it                        |
+| `events`      | string[] | all     | Event type filter (`null` = all active events)         |
+| `path`        | string   | —       | Output file path (`ndjson` only)                       |
+| `address`     | string   | —       | `host:port` target (`syslog` only)                     |
+| `format`      | string   | `json`  | Payload format: `json` or `cef` (`syslog` only)        |
+| `url`         | string   | —       | POST target URL (`webhook` only)                       |
+| `headers`     | map      | —       | HTTP headers (`webhook` only)                          |
 
 ## Examples
 
@@ -363,13 +508,52 @@ spec:
       value: 1
 ```
 
+## Multi-file Composition
+
+A deployment can list multiple environment files under `spec.environments`. strata merges
+them left-to-right before applying overrides to the workspace. Later files win on conflict.
+
+```yaml
+# deploy-prd.yaml
+spec:
+  environments:
+    - environments/base.yaml        # shared baseline
+    - environments/eu-region.yaml   # region-specific settings
+    - environments/prd.yaml         # production overrides — highest precedence
+```
+
+### Per-section merge strategy
+
+| Section                  | Strategy                                                           |
+| ------------------------ | ------------------------------------------------------------------ |
+| `variables`              | Last-wins by `key`                                                 |
+| `secrets`                | Last-wins by `key`                                                 |
+| `features`               | Last-wins by `key` (each flag merged independently)                |
+| `properties`             | Shallow `dict.update()` — keys absent in later files are preserved |
+| `custom`                 | Shallow `dict.update()`                                            |
+| `lifecycle`              | Last-wins (wholesale)                                              |
+| `audit`                  | Last-wins (wholesale)                                              |
+| `overrides.resources`    | Last-wins by `resource` name                                       |
+| `overrides.modules`      | Last-wins by `(module, resource, namespace, slot_type)`            |
+| `overrides.providers`    | Last-wins by `provider` name                                       |
+| `overrides.remotes`      | Last-wins by `remote` name                                         |
+| `overrides.properties`   | Shallow `dict.update()`                                            |
+| `overrides.includes`     | Append, deduplicated by `source` path                              |
+| `overrides.output_files` | Append, deduplicated by output `path`                              |
+
+Single-file deployments follow the same rules — they simply produce an unchanged result.
+
+See [Environment Composition](../guides/environment-composition.md) for patterns and examples.
+
 ## Configuration Merge Order
 
 1. Workspace defaults (base)
 2. Environment overrides (override/extend)
 3. Runtime parameters (CLI args)
 
-**Merge strategy:** Variables/secrets with same key override, new keys extend.
+**Merge strategy:** Variables/secrets with the same key override; new keys extend.
+Properties and custom use shallow dict merge. See the [composition section above](#multi-file-composition)
+for the full per-section table when multiple environment files are listed.
 
 ## Use Cases
 

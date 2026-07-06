@@ -24,6 +24,25 @@ Integrations connect the platform to external tools and services (git, terraform
 | `EtcdIntegration`           | `integrations.etcd`             | `etcd`             | `IVariableStore`, `IKVStore`                 |
 | `FlagsmithIntegration`      | `integrations.flagsmith`        | `flagsmith`        | `IFeatureStore`                              |
 
+**SIEM / audit sink integrations** (implement `ISiemSink`, used by `AuditController`):
+
+| Class | Module | Type string | Backend |
+|-------|--------|-------------|---------|
+| `SplunkSiemIntegration` | `integrations.siem.splunk_siem_integration` | `splunk` | Splunk HTTP Event Collector (HEC) |
+| `SentinelIntegration` | `integrations.siem.sentinel_integration` | `sentinel` | Azure Monitor / Sentinel (DCR Logs Ingestion API) |
+| `ElkSiemIntegration` | `integrations.siem.elk_siem_integration` | `elk` | Logstash (TCP) or Elasticsearch (HTTP Bulk API) |
+| `OtelSiemIntegration` | `integrations.siem.otel_siem_integration` | `otel` | Any OTLP/HTTP backend (Grafana, Datadog, Sumo Logic, etc.) |
+
+SIEM integrations are HTTP-based — they have no CLI command and are not included in `strata tools status`. Use `strata tools check <name>` to probe connectivity. See [SIEM Audit Forwarding Guide](../guides/siem-audit-forwarding.md) for configuration examples.
+
+**Security & Scanning integrations** (implement `ICveScanner`, used by `RunBuildCommand`):
+
+| Class | Module | Type string | Backend | Auto-detect |
+|-------|--------|-------------|---------|------------|
+| `CveScannerIntegration` | `integrations.cve_scanner` | `cve_scanner` | Trivy (default) or Grype | Yes (first available) |
+
+CVE scanner is optional and used with `strata build run --audit`. It auto-detects the first available backend (Trivy preferred, Grype fallback). See [CVE Vulnerability Scanning Guide](../guides/cve-vulnerability-scanning.md) for configuration and usage examples.
+
 ## Creating an Integration
 
 ```python

@@ -296,3 +296,99 @@ strata deploy run --file $STRATA_FILE --force --quiet
 ```
 
 Or combine `--output json` with `--quiet` to get only the JSON envelope with no progress messages on stderr.
+
+---
+
+## State Locking in CI
+
+Locking prevents two pipelines from deploying or destroying the same environment at the
+same time. Enable it by adding a `locking` block to your deployment file:
+
+```yaml
+spec:
+  locking:
+    enabled: true
+    strategy: wrap       # strata acquires the lock (default)
+    wait_timeout: "10m"  # how long a second pipeline waits before failing
+```
+
+When a second pipeline starts while a deploy is in progress, strata exits with **code 1**
+and prints:
+
+```
+🔒  Could not acquire lock — held by 'ci-bot@runner-07'.
+    Run `strata deploy lock status` for details.
+```
+
+### Recovering from a crashed pipeline
+
+If a pipeline is killed (OOM, timeout, node reboot) the lock may stay held. Use
+`--force-lock` on the next run to break the stale lock and proceed:
+
+```bash
+# GitHub Actions
+strata deploy run --file $STRATA_FILE --force --force-lock
+
+# Azure Pipelines
+strata deploy run --file $(STRATA_FILE) --force --force-lock
+```
+
+Or use the standalone release command (useful from a maintenance step):
+
+```bash
+strata deploy lock release --file $STRATA_FILE --force
+```
+
+### GitHub Actions — concurrent run guard
+
+Combine `concurrency:` with strata locking for defence-in-depth:
+
+```yaml
+# .github/workflows/deploy.yml
+jobs:
+  deploy:
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false   # queue, not cancel
+    steps:
+      - run: strata deploy run --file deploy/deploy-prd.yaml --force
+```
+
+The `concurrency` group ensures only one GitHub Actions run is active at a time.
+strata's lock provides a second layer that protects against runs from different
+workflow files, manual triggers, or external CI systems hitting the same environment.
+
+### Azure Pipelines — exclusive lock
+
+Use an Azure DevOps **Exclusive Lock** on the `environment` resource in combination
+with strata locking:
+
+```yaml
+- stage: Deploy
+  jobs:
+    - deployment: DeployProduction
+      environment:
+        name: production
+        resourceType: VirtualMachine  # or Kubernetes, etc.
+      # ADO environments support an "Exclusive Lock" check in the UI —
+      # enable it to prevent concurrent deployments within this pipeline.
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - script: strata deploy run --file deploy/deploy-prd.yaml --force
+                displayName: Deploy to production
+```
+
+### Checking lock status from CI
+
+```bash
+# Exit 0 if locked, 1 if not
+strata deploy lock status --file $STRATA_FILE --output json
+
+# Show history (useful in post-failure diagnostics)
+strata deploy lock history --file $STRATA_FILE --last 5
+```
+
+For a full walk-through of lock backends, strategies, and manual management see
+[How Deployment Locking Works](../guides/how-deployment-locking-works.md).

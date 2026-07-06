@@ -24,6 +24,10 @@ strata uses YAML configuration files to define infrastructure, environments, and
 - [module.md](module.md) - Reusable components
 - [namespace.md](namespace.md) - Application packages
 
+**Workspace state:**
+
+- [workflow.md](workflow.md) - `.strata/workflow.yaml` — onboarding sequence for `strata console`
+
 ## Architecture
 
 Deployment → Environment → Workspace → Resources (providers, VMs, firewalls, modules)
