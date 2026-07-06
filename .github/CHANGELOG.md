@@ -9,6 +9,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [0.16.1] — 2026-07-06
+
+### Fixed
+
+- Moved `doc` from `[project.optional-dependencies]` to `[dependency-groups]` in `pyproject.toml` — resolves "group doc is not defined" error in `uv sync --group doc` introduced by uv's stricter group/extra distinction
+- Updated `Dockerfile.docs` and CI docs job to use `--group doc` instead of `--extra doc`
+
+---
+
 ## [0.16.0] — 2026-07-05
 
 ### Added
