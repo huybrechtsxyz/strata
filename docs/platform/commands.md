@@ -48,7 +48,7 @@ These options are accepted by every command and subcommand:
 | `policy` †   | `list` `check`                                                                 | Inspect and evaluate deployment guardrails                |
 | `secret`     | `generate` `mask`                                                              | Generate and manage secret values                         |
 | `audit` †    | `changes` `resend` `export`                                                    | Query deploy-log evidence and forward to audit sinks      |
-| `deploy` †   | `run` `destroy` `show` `status` `history` `health` `output` `outputs` `lock *` | Deploy platform using provisioners                        |
+| `deploy` †   | `run` `destroy` `show` `status` `history` `health` `drift` `output` `outputs` `lock *` | Deploy platform using provisioners                        |
 | `service` †  | `list` `status` `deploy` `destroy`                                             | Deploy and manage individual services                     |
 | `manifest` † | `list` `show` `export`                                                         | Query and export deployment manifests                     |
 | `mcp`        | `serve`                                                                        | Model Context Protocol server for AI integration          |

@@ -13,6 +13,7 @@ from strata.commands.cli_common import (
     handle_command_exit,
 )
 from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
+from strata.commands.deploy.drift_deploy_command import DriftDeployCommand
 from strata.commands.deploy.health_deploy_command import HealthDeployCommand
 from strata.commands.deploy.history_deploy_command import HistoryDeployCommand
 from strata.commands.deploy.list_deploy_command import ListDeployCommand
@@ -319,6 +320,55 @@ def deploy_health(
         file=file,
         work_path=work_path,
         stage=stage,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@deploy.command(name="drift", help="Detect configuration drift between Terraform state and code.")
+@click.option(
+    "--file",
+    "-f",
+    required=True,
+    envvar="STRATA_FILE",
+    metavar="PATH",
+    help="Path to the deployment YAML file. [env: STRATA_FILE]",
+)
+@click_work_path
+@click.option(
+    "--stage",
+    default=None,
+    metavar="NAME",
+    help="Limit drift detection to a specific deployment stage.",
+)
+@click.option(
+    "--severity",
+    default="info",
+    show_default=True,
+    type=click.Choice(["critical", "high", "medium", "low", "info"], case_sensitive=False),
+    help="Minimum severity threshold for exit-code 3. Changes below this level are reported but do not fail.",
+)
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def deploy_drift(
+    file: str,
+    work_path: Optional[str] = None,
+    stage: Optional[str] = None,
+    severity: str = "info",
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Detect infrastructure drift by running a non-destructive terraform plan for each stage."""
+    command = DriftDeployCommand(
+        file=file,
+        work_path=work_path,
+        stage=stage,
+        severity=severity,
         output=output,
         verbose=verbose,
         quiet=quiet,

@@ -1,0 +1,173 @@
+# drift_rules.yaml — classification rules for infrastructure drift severity
+#
+# Resolution order (first matching rule wins):
+#   1. Attribute-level rules (most specific — match any resource with this attribute)
+#   2. Resource-type rules (match by resource_type prefix/glob)
+#   3. defaults.severity (catch-all)
+#
+# Glob patterns: "*" matches any sequence of characters within the type string.
+# Pattern matching is case-insensitive.
+
+rules:
+  # -----------------------------------------------------------------------
+  # Attribute-level overrides (apply regardless of resource type)
+  # -----------------------------------------------------------------------
+
+  # Tag changes are always cosmetic — demote to low regardless of resource type
+  - attribute: "tags"
+    severity: low
+  - attribute: "tags_all"
+    severity: low
+  - attribute: "description"
+    severity: low
+
+  # -----------------------------------------------------------------------
+  # CRITICAL — Security-sensitive resources (any change is dangerous)
+  # -----------------------------------------------------------------------
+
+  # Azure: network security / firewall
+  - resource_type: "azurerm_network_security_rule"
+    severity: critical
+  - resource_type: "azurerm_network_security_group"
+    severity: critical
+  - resource_type: "azurerm_web_application_firewall_policy"
+    severity: critical
+  - resource_type: "azurerm_firewall*"
+    severity: critical
+
+  # Azure: identity / access
+  - resource_type: "azurerm_role_assignment"
+    severity: critical
+  - resource_type: "azurerm_role_definition"
+    severity: critical
+  - resource_type: "azurerm_key_vault_access_policy"
+    severity: critical
+  - resource_type: "azurerm_managed_identity*"
+    severity: critical
+
+  # AWS: security groups / IAM
+  - resource_type: "aws_security_group"
+    severity: critical
+  - resource_type: "aws_security_group_rule"
+    severity: critical
+  - resource_type: "aws_iam_*"
+    severity: critical
+  - resource_type: "aws_kms_*"
+    severity: critical
+  - resource_type: "aws_wafv2_*"
+    severity: critical
+
+  # GCP: IAM / firewall
+  - resource_type: "google_project_iam_*"
+    severity: critical
+  - resource_type: "google_compute_firewall"
+    severity: critical
+  - resource_type: "google_kms_*"
+    severity: critical
+
+  # -----------------------------------------------------------------------
+  # HIGH — Core infrastructure changes (blast radius is high)
+  # -----------------------------------------------------------------------
+
+  # Azure: compute
+  - resource_type: "azurerm_virtual_machine*"
+    severity: high
+  - resource_type: "azurerm_linux_virtual_machine*"
+    severity: high
+  - resource_type: "azurerm_windows_virtual_machine*"
+    severity: high
+  - resource_type: "azurerm_kubernetes_cluster"
+    severity: high
+  - resource_type: "azurerm_kubernetes_cluster_node_pool"
+    severity: high
+
+  # Azure: networking
+  - resource_type: "azurerm_virtual_network"
+    severity: high
+  - resource_type: "azurerm_subnet"
+    severity: high
+  - resource_type: "azurerm_private_endpoint"
+    severity: high
+  - resource_type: "azurerm_application_gateway"
+    severity: high
+  - resource_type: "azurerm_load_balancer"
+    severity: high
+
+  # Azure: storage
+  - resource_type: "azurerm_storage_account"
+    severity: high
+  - resource_type: "azurerm_postgresql_*"
+    severity: high
+  - resource_type: "azurerm_mysql_*"
+    severity: high
+  - resource_type: "azurerm_cosmosdb_*"
+    severity: high
+
+  # AWS: core compute / networking
+  - resource_type: "aws_instance"
+    severity: high
+  - resource_type: "aws_eks_*"
+    severity: high
+  - resource_type: "aws_vpc"
+    severity: high
+  - resource_type: "aws_subnet"
+    severity: high
+  - resource_type: "aws_rds_*"
+    severity: high
+  - resource_type: "aws_db_instance"
+    severity: high
+  - resource_type: "aws_elasticache_*"
+    severity: high
+
+  # GCP: core compute / GKE
+  - resource_type: "google_compute_instance*"
+    severity: high
+  - resource_type: "google_container_cluster"
+    severity: high
+  - resource_type: "google_container_node_pool"
+    severity: high
+  - resource_type: "google_sql_database_instance"
+    severity: high
+
+  # -----------------------------------------------------------------------
+  # MEDIUM — Configuration and application-layer changes (default)
+  # -----------------------------------------------------------------------
+
+  # Kubernetes workloads (helm-managed or terraform kubernetes provider)
+  - resource_type: "kubernetes_deployment*"
+    severity: medium
+  - resource_type: "kubernetes_stateful_set*"
+    severity: medium
+  - resource_type: "kubernetes_config_map*"
+    severity: medium
+  - resource_type: "kubernetes_secret*"
+    severity: medium
+
+  # Azure: app config / monitoring
+  - resource_type: "azurerm_app_configuration*"
+    severity: medium
+  - resource_type: "azurerm_monitor_*"
+    severity: medium
+  - resource_type: "azurerm_log_analytics_*"
+    severity: medium
+
+  # -----------------------------------------------------------------------
+  # LOW — Output resources and data sources
+  # -----------------------------------------------------------------------
+
+  - resource_type: "terraform_remote_state"
+    severity: info
+  - resource_type: "data.*"
+    severity: info
+
+  # Null resources / time resources are purely infrastructure bookkeeping
+  - resource_type: "null_resource"
+    severity: info
+  - resource_type: "time_*"
+    severity: info
+  - resource_type: "random_*"
+    severity: low
+
+defaults:
+  # Catch-all for any resource type not matched above
+  severity: medium

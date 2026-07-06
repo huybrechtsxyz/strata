@@ -25,6 +25,7 @@ STEP_SHOW_PLAN = "show_plan"
 STEP_OUTPUT = "output"
 STEP_STATUS = "status"
 STEP_HEALTH = "health"
+STEP_DRIFT = "drift"
 
 
 class BaseDeployer(ABC):
@@ -258,6 +259,23 @@ class BaseDeployer(ABC):
             (success, health_data, messages)
         """
         return True, {}, [f"Health check not implemented for '{self.get_deployer_name()}' provisioner"]
+
+    def drift(self) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """Detect infrastructure drift by comparing state to configuration.
+
+        Override in deployers that can run a non-destructive plan/diff
+        (e.g. ``terraform plan -detailed-exitcode -json``).  Default returns
+        an informational message indicating the feature is not implemented.
+
+        Returns:
+            (success, resource_changes_dict, messages)
+
+            ``resource_changes_dict`` must contain a key ``"resource_changes"``
+            whose value is a list of resource-change dicts compatible with the
+            ``terraform show -json`` schema so that ``DriftController`` can
+            classify them uniformly regardless of the underlying deployer.
+        """
+        return True, {}, [f"Drift detection not implemented for '{self.get_deployer_name()}' provisioner"]
 
     # ------------------------------------------------------------------
     # Timeout helpers

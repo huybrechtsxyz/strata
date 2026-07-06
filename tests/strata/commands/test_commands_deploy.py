@@ -1139,3 +1139,64 @@ class TestDestroyLocking:
 
         assert result is False
         assert len(cmd._errors) > 0
+
+
+# ---------------------------------------------------------------------------
+# deploy drift CLI routing tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeployDrift:
+    """CLI routing tests for `strata deploy drift`."""
+
+    def test_drift_basic(self, tmp_path):
+        """drift command with --file routes to DriftDeployCommand and exits 0."""
+        runner = CliRunner()
+        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
+            result = runner.invoke(
+                deploy, ["drift", "--file", "deploy.yaml", "--work-path", str(tmp_path)]
+            )
+        assert result.exit_code == 0
+
+    def test_drift_stage_option(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
+            result = runner.invoke(
+                deploy,
+                ["drift", "--file", "deploy.yaml", "--stage", "networking", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_drift_severity_option(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
+            result = runner.invoke(
+                deploy,
+                ["drift", "--file", "deploy.yaml", "--severity", "high", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_drift_invalid_severity_exits_2(self, tmp_path):
+        """Passing an invalid severity value should return Click usage error (exit 2)."""
+        runner = CliRunner()
+        result = runner.invoke(
+            deploy,
+            ["drift", "--file", "deploy.yaml", "--severity", "badvalue", "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 2
+
+    def test_drift_execute_false_returns_nonzero(self, tmp_path):
+        """When DriftDeployCommand.execute() returns False the CLI exits non-zero."""
+        runner = CliRunner()
+        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=False):
+            result = runner.invoke(
+                deploy, ["drift", "--file", "deploy.yaml", "--work-path", str(tmp_path)]
+            )
+        assert result.exit_code != 0
+
+    def test_drift_file_required(self, tmp_path):
+        """Omitting --file should return Click usage error (exit 2)."""
+        runner = CliRunner()
+        result = runner.invoke(deploy, ["drift", "--work-path", str(tmp_path)])
+        assert result.exit_code == 2
+

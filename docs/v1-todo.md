@@ -133,7 +133,7 @@ Each issue includes enough implementation context for a session to proceed witho
 
 ### ADR-0008: Infrastructure Drift Detection
 
-- [ ] **#XXX** — [ADR-0008] Implement infrastructure drift detection (Phase 1 — Terraform MVP)
+- [x] **#XXX** — [ADR-0008] Implement infrastructure drift detection (Phase 1 — Terraform MVP) ✅ **DONE**
 
   > Detect configuration drift between deployed Terraform state and current workspace config.
   > Uses `terraform plan` with a classification layer. Exit code 3 when drift is found (same as validation failures).

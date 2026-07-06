@@ -31,6 +31,7 @@ from strata.deployers.base_deployer import (
     STEP_APPLY,
     STEP_CHECK,
     STEP_DESTROY,
+    STEP_DRIFT,
     STEP_OUTPUT,
     STEP_PLAN,
     STEP_PLAN_DESTROY,
@@ -100,6 +101,7 @@ class TerraformDeployer(BaseDeployer):
             STEP_PLAN_DESTROY,
             STEP_SHOW_PLAN,
             STEP_OUTPUT,
+            STEP_DRIFT,
         ]
 
     # ------------------------------------------------------------------
@@ -535,6 +537,135 @@ class TerraformDeployer(BaseDeployer):
             msgs.append(f"Could not write plan JSON: {exc}")
             return False, None, msgs
         return True, out_path, msgs
+
+    def drift(self) -> Tuple[bool, Dict[str, Any], List[str]]:
+        """Detect infrastructure drift via a non-destructive terraform plan.
+
+        Runs ``terraform plan -detailed-exitcode`` against a temporary plan file
+        so it does not overwrite any existing run-plan.  When changes are found
+        (exit code 2), ``terraform show -json`` decodes the plan and sensitive
+        values are redacted before returning.
+
+        Returns:
+            (success, data, messages)
+
+            ``data["resource_changes"]`` is a list of resource-change dicts
+            compatible with the ``terraform show -json`` schema.  Empty list
+            means no drift was found.
+        """
+        messages: List[str] = []
+        data: Dict[str, Any] = {"resource_changes": []}
+        if not self._ready(messages):
+            return False, data, messages
+        assert self._working_dir is not None
+        assert self._plan_file is not None
+        assert self._tf is not None
+
+        # Use a dedicated drift plan file so we never overwrite an existing plan
+        drift_plan_file = self._plan_file.parent / f"{self.stage.name}.drift.tfplan"
+        messages.append(f"terraform plan (drift check)  \u2192 {drift_plan_file.name}")
+
+        try:
+            ctx = inject_tf_vars(self.resolved_values) if self.resolved_values else nullcontext()
+            with ctx:
+                result = self._tf.plan(
+                    str(self._working_dir),
+                    out_file=str(drift_plan_file),
+                    detailed_exitcode=True,
+                    timeout=self._get_timeout("plan", 600),
+                )
+            if result.returncode == 0:
+                messages.append("\u21b3 No drift detected \u2014 infrastructure matches configuration.")
+                return True, data, messages
+            elif result.returncode == 2:
+                pass  # changes present — decode below
+            else:
+                output = "\n".join(filter(None, [result.stderr, result.stdout]))
+                messages.append(f"terraform plan (drift check) failed:\n{output}")
+                return False, data, messages
+        except RuntimeError as exc:
+            messages.append(f"terraform plan (drift check) error: {exc}")
+            return False, data, messages
+
+        # Decode the plan to structured JSON
+        try:
+            show_result = self._tf.show(
+                str(self._working_dir),
+                plan_file=str(drift_plan_file),
+                json_format=True,
+            )
+            if show_result.returncode != 0:
+                messages.append(f"terraform show (drift check) failed:\n{show_result.stderr}")
+                return False, data, messages
+            plan_data = json.loads(show_result.stdout or "{}")
+            raw_changes = plan_data.get("resource_changes", [])
+            data["resource_changes"] = self._redact_sensitive_changes(raw_changes)
+        except (RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            messages.append(f"terraform show (drift check) error: {exc}")
+            return False, data, messages
+        finally:
+            try:
+                if drift_plan_file.exists():
+                    drift_plan_file.unlink()
+            except OSError:
+                pass
+
+        n = len(data.get("resource_changes", []))
+        messages.append(f"\u21b3 Drift detected: {n} resource(s) have changes.")
+        return True, data, messages
+
+    @staticmethod
+    def _redact_sensitive_changes(resource_changes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove sensitive values from terraform show -json resource_changes.
+
+        Terraform marks sensitive values via ``before_sensitive`` /
+        ``after_sensitive`` in each change block.  When a key maps to ``True``
+        (or the entire block is ``True``), the corresponding value is replaced
+        with ``"(sensitive)"`` so it is never stored in drift history.
+
+        Resources with action ``no-op`` or ``read`` are excluded (they do not
+        represent real infrastructure drift).
+        """
+        redacted: List[Dict[str, Any]] = []
+        for rc in resource_changes:
+            change = rc.get("change", {})
+            actions = change.get("actions", [])
+            if not actions or actions == ["no-op"] or actions == ["read"]:
+                continue
+
+            before = change.get("before") or {}
+            after = change.get("after") or {}
+            before_sensitive = change.get("before_sensitive") or {}
+            after_sensitive = change.get("after_sensitive") or {}
+
+            redacted_rc = dict(rc)
+            redacted_change = dict(change)
+            if before:
+                redacted_change["before"] = TerraformDeployer._redact_values(before, before_sensitive)
+            if after:
+                redacted_change["after"] = TerraformDeployer._redact_values(after, after_sensitive)
+            redacted_rc["change"] = redacted_change
+            redacted.append(redacted_rc)
+        return redacted
+
+    @staticmethod
+    def _redact_values(values: Dict[str, Any], sensitive_mask: Any) -> Dict[str, Any]:
+        """Apply a sensitive mask to an attribute dict, replacing flagged values.
+
+        ``sensitive_mask`` can be:
+        - ``True``  → entire dict is sensitive; replace all values
+        - ``dict``  → per-key flags; replace only those marked ``True``
+        - anything else → return values unchanged
+        """
+        if sensitive_mask is True:
+            return {k: "(sensitive)" for k in values}
+        if isinstance(sensitive_mask, dict):
+            result = dict(values)
+            for key, is_sensitive in sensitive_mask.items():
+                if is_sensitive and key in result:
+                    result[key] = "(sensitive)"
+            return result
+        return values
 
     # ------------------------------------------------------------------
     # Internal helpers
