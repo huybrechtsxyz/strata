@@ -90,9 +90,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # Add the doc optional-dependency group on top of the dev install
+      # Add the doc dependency group on top of the dev install
       - name: Install doc dependencies
-        run: uv sync --frozen --extra doc
+        run: uv sync --frozen --group doc
 
       # Treat warnings as errors (-W) so broken refs / missing modules fail fast
       - name: Build Sphinx docs
