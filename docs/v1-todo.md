@@ -121,3 +121,76 @@ These are designed (ADRs exist) but explicitly deferred beyond v1. Core infrastr
 | Tests              | ~3750 passing                                        |
 | Production TODOs   | 2 (both in deployment_service.py)                    |
 | Undocumented cmds  | 6 command groups missing from commands.md            |
+
+---
+
+## Post-v1.0 GitHub Issues for Deferred Work
+
+Track all deferred features via GitHub issues for post-v1.0 prioritization and planning:
+
+### ADR-0008: Infrastructure Drift Detection
+
+- [ ] **#XXX** — [ADR-0008] Implement infrastructure drift detection (`strata env drift`) — full implementation with plan-based detection and detailed change reporting
+
+### ADR-0011: Promotion Strategies
+
+- [ ] **#XXX** — [ADR-0011] Implement promotion strategies for version progression across environments
+
+### ADR-0013: Auto-generated Secrets
+
+- [ ] **#XXX** — [ADR-0013] Implement secret rotation (Phase 3) — periodic key regeneration and vault updates
+- [ ] **#XXX** — [ADR-0013] Add missing integrations: Vault, Consul, Flagsmith `set_secret` / `set_variable` / `set_feature` methods
+- [ ] **#XXX** — [ADR-0013] Display seed-on-missing status in `strata build plan` — show which secrets/variables were auto-generated
+
+### ADR-0014: Onboarding Experience
+
+- [ ] **#XXX** — [ADR-0014 item 10] Implement `init` wizard inside `strata console` REPL (Phase 3) — Q&A flow for guided workspace scaffolding
+- [ ] **#XXX** — [ADR-0014 item 15] Implement interactive `strata new` in REPL — conversational scaffolding prompts
+- [ ] **#XXX** — [ADR-0014 item 17] Implement `strata env doctor` health check command — workspace diagnostics with fix suggestions
+- [ ] **#XXX** — [ADR-0014 item 19] Implement progressive dependency scaffolding — auto-create missing referenced files during `strata new`
+- [ ] **#XXX** — [ADR-0014 item 20] Implement auto-refresh REPL mode (`strata console --auto`) — live polling on workspace file changes
+- [ ] **#XXX** — [ADR-0014 item 21] Implement template marketplace / community templates — registry for `strata sln init --template https://...`
+
+### ADR-0017b: Tag-based Release Workflow
+
+- [ ] **#XXX** — [ADR-0017b] Enhance CLI UX for tag-based release workflow — `strata repo tag` commands, validation heuristics, documentation
+
+### ADR-0018: Deployment Audit Traceability
+
+- [ ] **#XXX** — [ADR-0018 Layer 4] Extend SIEM integrations — Splunk CEF syslog format, ELK, OpenTelemetry exporters
+
+### ADR-0020: Lifecycle Phases
+
+- [ ] **#XXX** — [ADR-0020] Implement `config_fetch` lifecycle phase — pre-fetch hooks for remote config optimization
+- [ ] **#XXX** — [ADR-0020] Implement `config_clean` lifecycle phase — companion to `config_fetch` for cleanup
+
+### ADR-0022: SIEM Integration (Splunk)
+
+- [ ] **#XXX** — [ADR-0022] Implement CEF syslog format for SIEM — structured event format for security monitoring
+
+### ADR-0023: Pluggable Provisioners
+
+- [ ] **#XXX** — [ADR-0023] Implement pluggable provisioner framework — third-party provisioner discovery, registration, and loading
+
+### ADR-0024: Environment Composition
+
+- [ ] **#XXX** — [ADR-0024] Implement `--trace` flag for merge provenance — interactive visualization of multi-file environment merges
+
+---
+
+## Post-v1.0 Backlog Summary
+
+| Category                                             | Total Hours | Priority |
+| ---------------------------------------------------- | ----------- | -------- |
+| ADR-0008 Drift detection                             | 16–20h      | Medium   |
+| ADR-0011 Promotion strategies                        | 12–16h      | Low      |
+| ADR-0013 Secrets (rotation + integrations + display) | 48–62h      | Medium   |
+| ADR-0014 Onboarding (6 items)                        | 20–30h      | High     |
+| ADR-0017b Tag-based release UX                       | 8–12h       | Low      |
+| ADR-0018 SIEM Layer 4                                | 16–24h      | Low      |
+| ADR-0020 Config phases (2 items)                     | 4–6h        | Very Low |
+| ADR-0022 CEF syslog                                  | 6–8h        | Low      |
+| ADR-0023 Pluggable provisioners                      | 24–32h      | Medium   |
+| ADR-0024 Provenance tracing                          | 4–6h        | Low      |
+
+**Total estimated post-v1.0 backlog: ~158–216 hours** (3–4 engineer-months at standard sprint capacity)
