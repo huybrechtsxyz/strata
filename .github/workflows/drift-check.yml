@@ -1,7 +1,9 @@
 # Drift Detection — Reusable Workflow
 #
-# Runs nightly to detect configuration drift between Terraform state and declared config.
+# Orchestrates nightly drift detection across deployments.
 # Exit code 3 = drift detected. Exit code 0 = clean.
+#
+# This workflow is reusable and can be called from other repositories.
 #
 # Usage (in your repo's workflow):
 #
@@ -18,6 +20,8 @@
 #   AZURE_CLIENT_SECRET  — Azure service principal secret
 #   AZURE_TENANT_ID      — Azure tenant ID
 #   SLACK_DRIFT_WEBHOOK  — (optional) Slack incoming webhook URL
+#
+# See .github/actions/drift-check for the underlying action implementation.
 
 name: Infrastructure Drift Detection
 
@@ -30,11 +34,10 @@ on:
   workflow_dispatch:
     inputs:
       deployment:
-        description: "Path to deployment YAML file"
-        required: false
-        default: ""
+        description: "Path to deployment YAML file (required)"
+        required: true
       severity:
-        description: "Minimum severity that causes exit code 3 (critical/high/medium/low/info)"
+        description: "Minimum severity threshold (critical/high/medium/low/info)"
         required: false
         default: "high"
       baseline:
@@ -47,7 +50,7 @@ on:
   workflow_call:
     inputs:
       deployment:
-        description: "Path to deployment YAML file"
+        description: "Path to deployment YAML file (required)"
         type: string
         required: true
       severity:
@@ -86,13 +89,13 @@ on:
 
 jobs:
   drift-check:
-    name: Drift Check — ${{ inputs.deployment || 'all deployments' }}
+    name: Drift Check — ${{ inputs.deployment }}
     runs-on: ubuntu-latest
 
-    # Permissions needed for commenting on PRs (optional) and OIDC auth
+    # Permissions needed for OIDC auth
     permissions:
       contents: read
-      id-token: write # Required for OIDC Azure login (no stored secret needed)
+      id-token: write
 
     steps:
       # -----------------------------------------------------------------------
@@ -102,24 +105,7 @@ jobs:
         uses: actions/checkout@v4
 
       # -----------------------------------------------------------------------
-      # 2. Python + strata
-      # -----------------------------------------------------------------------
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python-version || '3.13' }}
-
-      - name: Install strata CLI
-        run: |
-          if [ -n "${{ inputs.strata-version }}" ]; then
-            pip install "xyz-strata==${{ inputs.strata-version }}"
-          else
-            pip install xyz-strata
-          fi
-          strata --version
-
-      # -----------------------------------------------------------------------
-      # 3. Authenticate to cloud (Azure example — adapt for AWS/GCP)
+      # 2. Authenticate to cloud (Azure example — override in your repo)
       # -----------------------------------------------------------------------
       - name: Authenticate to Azure (service principal)
         if: ${{ secrets.AZURE_CLIENT_ID != '' }}
@@ -132,92 +118,39 @@ jobs:
           AZURE_CONFIG_DIR: /tmp/.azure
 
       # -----------------------------------------------------------------------
-      # 4. Build deployment artifacts (required before drift detection)
+      # 3. Run drift detection (delegated to composite action)
       # -----------------------------------------------------------------------
-      - name: Build deployment artifacts
-        run: |
-          FILE="${{ inputs.deployment }}"
-          if [ -n "$FILE" ]; then
-            strata build run -f "$FILE" --output json
-          else
-            echo "No deployment file specified; skipping build step."
-          fi
-        env:
-          STRATA_OUTPUT: json
-
-      # -----------------------------------------------------------------------
-      # 5. Detect drift
-      # -----------------------------------------------------------------------
-      - name: Detect drift
+      - name: Detect infrastructure drift
         id: drift
-        run: |
-          FILE="${{ inputs.deployment }}"
-          SEVERITY="${{ inputs.severity || 'high' }}"
-          BASELINE_FLAG=""
-          if [ "${{ inputs.baseline }}" = "true" ]; then
-            BASELINE_FLAG="--baseline"
-          fi
-
-          if [ -n "$FILE" ]; then
-            strata deploy drift run \
-              -f "$FILE" \
-              --severity "$SEVERITY" \
-              $BASELINE_FLAG \
-              --output json > drift-report.json
-          else
-            echo '{"success":true,"data":{"has_drift":false,"entries":[]}}' > drift-report.json
-          fi
-
-          EXIT_CODE=$?
-          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
-
-          # Surface summary as step output
-          if command -v jq &>/dev/null; then
-            TOTAL=$(jq -r '.data.summary.total // 0' drift-report.json 2>/dev/null || echo 0)
-            CRITICAL=$(jq -r '.data.summary.critical // 0' drift-report.json 2>/dev/null || echo 0)
-            HIGH=$(jq -r '.data.summary.high // 0' drift-report.json 2>/dev/null || echo 0)
-            echo "total=$TOTAL" >> $GITHUB_OUTPUT
-            echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-            echo "high=$HIGH" >> $GITHUB_OUTPUT
-          fi
-
-          exit $EXIT_CODE
-        continue-on-error: true # we handle exit code explicitly below
-        env:
-          STRATA_OUTPUT: json
-
-      # -----------------------------------------------------------------------
-      # 6. Upload drift report as artifact
-      # -----------------------------------------------------------------------
-      - name: Upload drift report
-        uses: actions/upload-artifact@v4
-        if: always()
+        uses: huybrechtsxyz/strata/.github/actions/drift-check@main
         with:
-          name: drift-report
-          path: drift-report.json
-          retention-days: 90
+          deployment: ${{ inputs.deployment }}
+          severity: ${{ inputs.severity }}
+          baseline: ${{ inputs.baseline }}
+          python-version: ${{ inputs.python-version || '3.13' }}
+          strata-version: ${{ inputs.strata-version }}
 
       # -----------------------------------------------------------------------
-      # 7. Post critical drift to Slack (optional)
+      # 4. Post critical drift to Slack (optional)
       # -----------------------------------------------------------------------
       - name: Post drift summary to Slack
         if: |
-          steps.drift.outputs.exit_code == '3' &&
+          steps.drift.outputs.exit-code == '3' &&
           secrets.SLACK_DRIFT_WEBHOOK != ''
         run: |
-          DEPLOYMENT="${{ inputs.deployment || 'unknown' }}"
-          TOTAL="${{ steps.drift.outputs.total || '?' }}"
-          CRITICAL="${{ steps.drift.outputs.critical || '0' }}"
-          HIGH="${{ steps.drift.outputs.high || '0' }}"
+          DEPLOYMENT="${{ inputs.deployment }}"
+          TOTAL="${{ steps.drift.outputs.total }}"
+          CRITICAL="${{ steps.drift.outputs.critical }}"
+          HIGH="${{ steps.drift.outputs.high }}"
 
           ENTRIES=$(python3 - <<'EOF'
-          import json, sys
+          import json
           try:
               with open("drift-report.json") as f:
                   report = json.load(f)
               entries = report.get("data", {}).get("entries", [])
               lines = []
-              for e in entries[:10]:  # limit to 10 entries in Slack message
+              for e in entries[:10]:
                   sev = e.get("severity", "?").upper()
                   addr = e.get("address", "?")
                   action = e.get("action", "?")
@@ -253,14 +186,14 @@ jobs:
             "${{ secrets.SLACK_DRIFT_WEBHOOK }}"
 
       # -----------------------------------------------------------------------
-      # 8. Fail the job if drift was found above threshold
+      # 5. Fail the job if drift was found above threshold
       # -----------------------------------------------------------------------
       - name: Fail on drift
-        if: steps.drift.outputs.exit_code == '3'
+        if: steps.drift.outputs.exit-code == '3'
         run: |
           echo "::error::Drift detected. See drift-report artifact for details."
           exit 3
 
-      - name: Clean result
-        if: steps.drift.outputs.exit_code == '0'
-        run: echo "No drift detected at or above the '${{ inputs.severity || 'high' }}' threshold."
+      - name: Report clean result
+        if: steps.drift.outputs.exit-code == '0'
+        run: echo "✓ No drift detected at or above the '${{ inputs.severity }}' threshold."

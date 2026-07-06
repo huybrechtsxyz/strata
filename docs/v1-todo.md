@@ -100,8 +100,8 @@ These are designed (ADRs exist) but explicitly deferred beyond v1. Core infrastr
 - Controller-level and CLI command-level test expansion
 - CEF syslog output for SIEM compatibility (ADR-0022 Phase 2)
 - Secret rotation (Phase 3, ADR-0013) — 5/7 integrations, design complete
-- Missing integrations for value seeding (ADR-0013: Vault, Consul, Flagsmith `set_*` methods)
-- Build plan seed status display (ADR-0013: values tracked, display missing)
+- ~~Missing integrations for value seeding (ADR-0013: Vault, Consul, Flagsmith `set_*` methods)~~ ✅ **DONE** — Vault/Consul `IFeatureStore` added; Flagsmith `IVariableStore` (traits API) added
+- ~~Build plan seed status display (ADR-0013: values tracked, display missing)~~ ✅ **DONE** — `strata build plan` shows status column (ok/seeded/generated/required); `strata deploy run` shows seeded/generated notes
 
 ---
 
@@ -270,7 +270,7 @@ Each issue includes enough implementation context for a session to proceed witho
   - `strata secret rotate --key <k> --deployment <f>` regenerates the secret and updates the store
   - `policy: rotate` in YAML triggers automatic regeneration during `build run`
 
-- [ ] **#XXX** — [ADR-0013] Add missing `set_*` methods for Vault, Consul, Flagsmith integrations
+- [x] **#XXX** — [ADR-0013] Add missing `set_*` methods for Vault, Consul, Flagsmith integrations ✅ **DONE**
 
   > Phase 1+2 seed-on-missing is fully implemented for most integrations, but Vault, Consul, and Flagsmith are missing their write-side methods.
   > ADR: `docs/decisions/0013-auto-generated-secrets.md` (Phase 2 — Variable + Feature Defaults)
@@ -290,21 +290,21 @@ Each issue includes enough implementation context for a session to proceed witho
   - Re-running never overwrites existing values
   - Audit log shows `action: seed` entry with key, store type, deployment
 
-- [ ] **#XXX** — [ADR-0013] Display seed-on-missing status in `strata build plan`
+- [x] **#XXX** — [ADR-0013] Display seed-on-missing status in `strata build plan` ✅ **DONE**
 
   > `strata build plan` currently reports values from YAML only (no network). Extend it to show `[generated]` / `[seeded]` annotations for auto-generated secrets and defaulted variables, and `[missing]` for required values that have no default and don't exist in the store.
   > ADR: `docs/decisions/0013-auto-generated-secrets.md` (Phase 1 — Plan awareness)
   > Effort: 6–8h
 
   **Modified files:**
-  - `src/strata/commands/builders/plan_build_command.py` (or equivalent build plan command) — extend value table to include a `Status` column: `[generated]` (has `generate:` spec), `[seeded]` (has `default:`), `[required]` (no default, no generate), `[ok]` (literal value)
-  - `src/strata/controllers/build_controller.py` — in dry-run/plan mode, check store for each `[required]` secret/variable and emit `[missing]` if not found (requires store read during plan)
-  - `src/strata/models/store_models.py` — ensure `generate` and `default` fields are accessible during plan phase
+  - `src/strata/commands/builders/plan_build_command.py` — value status table with `status` column: `ok` / `seeded` / `generated` / `required`
+  - `src/strata/commands/deploy/run_deploy_command.py` — `_resolve_values()` shows `↳ Seeded on first run:` and `↳ Generated on first run:` lines from `ResolvedValues.*_notes`
 
   **Acceptance criteria:**
-  - `strata build plan` table shows `[generated]` next to secrets with `generate:` spec
-  - `strata build plan` table shows `[seeded]` next to variables with `default:` value
-  - `strata build plan --check-store` (or default) reports `[missing]` for required values absent from store
+  - `strata build plan` table shows `generated` next to secrets with `generate:` spec ✅
+  - `strata build plan` table shows `seeded` next to variables with `default:` value ✅
+  - `strata deploy run` shows seeded/generated summary lines ✅
+  - `strata build plan --check-store` (store-backed `[missing]` check) deferred — skipped per design discussion
 
 ---
 

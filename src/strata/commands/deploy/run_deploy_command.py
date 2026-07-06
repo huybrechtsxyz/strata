@@ -383,6 +383,16 @@ class RunDeployCommand(BaseDeployCommand):
                 f"{len(resolved.secrets)} secret(s), "
                 f"{len(resolved.features)} feature(s)."
             )
+            seeded = [
+                f"{k}={v[len('default: ') :]}"
+                for k, v in {**resolved.variable_notes, **resolved.feature_notes}.items()
+                if v.startswith("default: ")
+            ]
+            generated = [k for k, v in resolved.secret_notes.items() if v == "generated"]
+            if seeded:
+                click.echo(f"  \u21b3  Seeded on first run: {', '.join(seeded)}")
+            if generated:
+                click.echo(f"  \u21b3  Generated on first run: {', '.join(generated)}")
 
         # Always log STRATA_CONTEXT/STRATA_SENSITIVE at DEBUG; show under --verbose
         self.logger.debug("strata_context_resolved", **resolved.debug_summary())

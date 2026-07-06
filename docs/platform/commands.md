@@ -700,10 +700,21 @@ strata build plan [-f FILE] [--stage NAME] [--artifacts-only] [standard options]
 
 Builds into a temp directory, diffs against existing artifacts, then runs `terraform init → validate → plan` per stage. Nothing is written to the real build path.
 
+Also shows a **value status table** derived from YAML alone (no store access required) — useful for verifying that all required values have a source before deploying.
+
 | Option             | Description                                   |
 | ------------------ | --------------------------------------------- |
 | `--stage NAME`     | Limit terraform plan to one stage             |
 | `--artifacts-only` | Skip terraform plan — show artifact diff only |
+
+Value status column values:
+
+| Status      | Meaning                                                              |
+| ----------- | -------------------------------------------------------------------- |
+| `ok`        | Built-in store (`constant`, `environment`, `github`) — always available |
+| `seeded`    | Integration-backed with `default:` — seeded on first run             |
+| `generated` | Secret with `generate:` spec — auto-generated on first run           |
+| `required`  | Integration-backed with no `default:` or `generate:` — must exist in store |
 
 ```bash
 strata build plan -f xyz-deploy-prd.yaml
@@ -1264,6 +1275,16 @@ Execute the deploy pipeline (setup → check → plan → apply).
 | `--stage NAME` | Limit execution to one deployment stage      |
 | `--force`      | Skip confirmation prompts and approval gates |
 | `--dry-run`    | Validate and plan only — no provisioners run |
+
+After resolving values, the command prints a summary of any values that were seeded or generated for the first time:
+
+```
+  ✓  Resolved 3 variable(s), 2 secret(s), 1 feature(s).
+  ↳  Seeded on first run: LOG_LEVEL=info, DARK_MODE=false
+  ↳  Generated on first run: DB_PASSWORD
+```
+
+These lines only appear when values were actually seeded or auto-generated (i.e., on the first deploy against a new store). Subsequent runs are silent.
 
 ```bash
 strata deploy run -f xyz-deploy-prd.yaml

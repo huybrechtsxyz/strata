@@ -1,0 +1,132 @@
+name: "Infrastructure Drift Detection"
+description: "Detect infrastructure drift between Terraform state and declared configuration"
+author: "huybrechtsxyz"
+
+inputs:
+  deployment:
+    description: "Path to deployment YAML file (required for drift detection)"
+    required: true
+
+  severity:
+    description: "Minimum severity threshold (critical/high/medium/low/info)"
+    required: false
+    default: "high"
+
+  baseline:
+    description: "Set current state as baseline (acknowledge all drift, reset history)"
+    required: false
+    default: "false"
+
+  python-version:
+    description: "Python version to use"
+    required: false
+    default: "3.13"
+
+  strata-version:
+    description: "Strata version to install (empty = latest)"
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: "Exit code from drift detection (0 = clean, 3 = drift found)"
+    value: ${{ steps.drift.outputs.exit_code }}
+
+  has-drift:
+    description: "Boolean: true if drift detected above severity threshold"
+    value: ${{ steps.drift.outputs.has_drift }}
+
+  total:
+    description: "Total number of drift entries"
+    value: ${{ steps.drift.outputs.total }}
+
+  critical:
+    description: "Number of critical-severity drift entries"
+    value: ${{ steps.drift.outputs.critical }}
+
+  high:
+    description: "Number of high-severity drift entries"
+    value: ${{ steps.drift.outputs.high }}
+
+runs:
+  using: "composite"
+
+  steps:
+    # -----------------------------------------------------------------------
+    # 1. Set up Python + strata CLI
+    # -----------------------------------------------------------------------
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install strata CLI
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.strata-version }}" ]; then
+          pip install "xyz-strata==${{ inputs.strata-version }}"
+        else
+          pip install xyz-strata
+        fi
+        strata --version
+
+    # -----------------------------------------------------------------------
+    # 2. Build deployment artifacts (required before drift detection)
+    # -----------------------------------------------------------------------
+    - name: Build deployment artifacts
+      shell: bash
+      env:
+        STRATA_OUTPUT: json
+      run: |
+        strata build run -f "${{ inputs.deployment }}" --output json
+
+    # -----------------------------------------------------------------------
+    # 3. Detect drift
+    # -----------------------------------------------------------------------
+    - name: Detect drift
+      id: drift
+      shell: bash
+      env:
+        STRATA_OUTPUT: json
+      run: |
+        SEVERITY="${{ inputs.severity }}"
+        BASELINE_FLAG=""
+        if [ "${{ inputs.baseline }}" = "true" ]; then
+          BASELINE_FLAG="--baseline"
+        fi
+
+        strata deploy drift run \
+          -f "${{ inputs.deployment }}" \
+          --severity "$SEVERITY" \
+          $BASELINE_FLAG \
+          --output json > drift-report.json
+
+        EXIT_CODE=$?
+        echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+        # Surface summary as step output
+        if command -v jq &>/dev/null; then
+          TOTAL=$(jq -r '.data.summary.total // 0' drift-report.json 2>/dev/null || echo 0)
+          CRITICAL=$(jq -r '.data.summary.critical // 0' drift-report.json 2>/dev/null || echo 0)
+          HIGH=$(jq -r '.data.summary.high // 0' drift-report.json 2>/dev/null || echo 0)
+          HAS_DRIFT=$((CRITICAL + HIGH > 0 ? 1 : 0))
+
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "has_drift=$HAS_DRIFT" >> $GITHUB_OUTPUT
+        fi
+
+        # Don't fail here; caller decides how to handle exit code
+        exit 0
+
+    # -----------------------------------------------------------------------
+    # 4. Upload drift report as artifact
+    # -----------------------------------------------------------------------
+    - name: Upload drift report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: drift-report
+        path: drift-report.json
+        retention-days: 90

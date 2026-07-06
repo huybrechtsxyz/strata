@@ -132,15 +132,18 @@ class PlanBuildCommand(BaseBuildCommand):
                 resolved = self._resolve_values()
                 plan_results = self._run_terraform_plan(tmp_build_path, resolved)
 
+        value_rows = self._build_value_status_rows()
+
         self._output_data = {
             "file": str(self._file_path),
             "deployment": deployment_name,
             "artifact_diff": diff_rows,
             "terraform_plan": plan_results,
+            "values": value_rows,
         }
 
         if self._is_console_output():
-            self._print_console(deployment_name, diff_rows, plan_results)
+            self._print_console(deployment_name, diff_rows, plan_results, value_rows)
 
         return True
 
@@ -406,21 +409,83 @@ class PlanBuildCommand(BaseBuildCommand):
 
     _SEP = "─" * 60
 
+    def _build_value_status_rows(self) -> List[Dict[str, Any]]:
+        """Build value status rows from YAML alone — no store access required."""
+        if self._deployment_service is None:
+            return []
+        env_svc = self._deployment_service.get_environment_service()
+        if env_svc is None:
+            return []
+
+        _var_builtins = {"constant", "environment"}
+        _secret_builtins = {"constant", "environment", "github"}
+        _feature_builtins = {"constant", "environment"}
+        rows: List[Dict[str, Any]] = []
+
+        for item in env_svc.get_variables():
+            store = item.store.value
+            if store in _var_builtins:
+                status, detail = "ok", None
+            elif item.default is not None:
+                status, detail = "seeded", f"default: {item.default}"
+            else:
+                status, detail = "required", None
+            rows.append({"type": "variable", "key": item.key, "store": store, "status": status, "detail": detail})
+
+        for item in env_svc.get_secrets():
+            store = item.store.value
+            if store in _secret_builtins:
+                status, detail = "ok", None
+            elif item.generate is not None:
+                status, detail = "generated", f"{item.generate.type.value}/{item.generate.length}"
+            else:
+                status, detail = "required", None
+            rows.append({"type": "secret", "key": item.key, "store": store, "status": status, "detail": detail})
+
+        for item in env_svc.get_features():
+            store = item.store.value
+            if store in _feature_builtins:
+                status, detail = "ok", None
+            elif item.default is not None:
+                status, detail = "seeded", f"default: {item.default}"
+            else:
+                status, detail = "required", None
+            rows.append({"type": "feature", "key": item.key, "store": store, "status": status, "detail": detail})
+
+        return rows
+
     def _print_console(
         self,
         deployment_name: str,
         diff_rows: List[Dict[str, Any]],
         plan_results: List[Dict[str, Any]],
+        value_rows: List[Dict[str, Any]],
     ) -> None:
         click.echo(f"\n📋  Build Plan — {deployment_name}")
         click.echo(f"  {self._SEP}")
 
+        self._print_value_status(value_rows)
         self._print_artifact_diff(diff_rows)
 
         for pr in plan_results:
             self._print_terraform_plan(pr)
 
         self._print_summary(diff_rows, plan_results)
+
+    def _print_value_status(self, rows: List[Dict[str, Any]]) -> None:
+        if not rows:
+            return
+        click.echo("\n  Values:")
+        click.echo(f"  {self._SEP}")
+        type_w = max(len(r["type"]) for r in rows)
+        key_w = max(len(r["key"]) for r in rows)
+        store_w = max(len(r["store"]) for r in rows)
+        for row in rows:
+            tag = f"[{row['status']}]"
+            detail = f"  {row['detail']}" if row["detail"] else ""
+            click.echo(
+                f"  {row['type']:<{type_w}}  {row['key']:<{key_w}}  {row['store']:<{store_w}}  {tag:<12}{detail}"
+            )
 
     def _print_artifact_diff(self, rows: List[Dict[str, Any]]) -> None:
         click.echo("\n  Artifact changes:")

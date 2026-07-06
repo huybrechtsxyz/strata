@@ -7,6 +7,7 @@ from click.testing import CliRunner
 
 from strata.commands.builders.base_build_command import BaseBuildCommand
 from strata.commands.builders.clean_build_command import CleanBuildCommand
+from strata.commands.builders.plan_build_command import PlanBuildCommand
 from strata.commands.cli_builders import build
 
 
@@ -439,3 +440,185 @@ class TestBuildPlan:
         with patch("strata.commands.builders.plan_build_command.PlanBuildCommand.execute", return_value=False):
             result = runner.invoke(build, ["plan", "--work-path", str(tmp_path)])
         assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# PlanBuildCommand._build_value_status_rows() unit tests
+# ---------------------------------------------------------------------------
+
+
+def _make_plan_cmd(tmp_path):
+    """Return a PlanBuildCommand with minimal state for unit testing."""
+    from unittest.mock import MagicMock
+
+    cmd = PlanBuildCommand.__new__(PlanBuildCommand)
+    cmd._work_path = tmp_path
+    cmd._build_path = tmp_path / "build"
+    cmd._file_path = tmp_path / "deploy.yaml"
+    cmd._stage = None
+    cmd._artifacts_only = False
+    cmd._errors = []
+    cmd._messages = []
+    cmd._output_data = {}
+    cmd._output_format = "console"
+    cmd._output_quiet = False
+    cmd._deployment_service = None
+    cmd._configuration_service = None
+    cmd._solution_controller = MagicMock()
+    cmd.logger = MagicMock()
+    return cmd
+
+
+def _make_variable(key, store, default=None):
+    from unittest.mock import MagicMock
+
+    item = MagicMock()
+    item.key = key
+    item.store = MagicMock()
+    item.store.value = store
+    item.default = default
+    return item
+
+
+def _make_secret(key, store, generate=None):
+    from unittest.mock import MagicMock
+
+    item = MagicMock()
+    item.key = key
+    item.store = MagicMock()
+    item.store.value = store
+    item.generate = generate
+    return item
+
+
+def _make_feature(key, store, default=None):
+    from unittest.mock import MagicMock
+
+    item = MagicMock()
+    item.key = key
+    item.store = MagicMock()
+    item.store.value = store
+    item.default = default
+    return item
+
+
+class TestPlanBuildValueStatus:
+    """Unit tests for PlanBuildCommand._build_value_status_rows()."""
+
+    def _cmd_with_env(self, tmp_path, variables=(), secrets=(), features=()):
+        from unittest.mock import MagicMock
+
+        cmd = _make_plan_cmd(tmp_path)
+        env_svc = MagicMock()
+        env_svc.get_variables.return_value = list(variables)
+        env_svc.get_secrets.return_value = list(secrets)
+        env_svc.get_features.return_value = list(features)
+        svc = MagicMock()
+        svc.get_environment_service.return_value = env_svc
+        cmd._deployment_service = svc
+        return cmd
+
+    def test_returns_empty_when_no_deployment_service(self, tmp_path):
+        cmd = _make_plan_cmd(tmp_path)
+        assert cmd._build_value_status_rows() == []
+
+    def test_returns_empty_when_no_env_service(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        cmd = _make_plan_cmd(tmp_path)
+        svc = MagicMock()
+        svc.get_environment_service.return_value = None
+        cmd._deployment_service = svc
+        assert cmd._build_value_status_rows() == []
+
+    def test_constant_variable_is_ok(self, tmp_path):
+        cmd = self._cmd_with_env(tmp_path, variables=[_make_variable("WORKSPACE", "constant")])
+        rows = cmd._build_value_status_rows()
+        assert len(rows) == 1
+        assert rows[0] == {"type": "variable", "key": "WORKSPACE", "store": "constant", "status": "ok", "detail": None}
+
+    def test_environment_variable_is_ok(self, tmp_path):
+        cmd = self._cmd_with_env(tmp_path, variables=[_make_variable("LOG_LEVEL", "environment")])
+        rows = cmd._build_value_status_rows()
+        assert rows[0]["status"] == "ok"
+
+    def test_integration_variable_with_default_is_seeded(self, tmp_path):
+        cmd = self._cmd_with_env(tmp_path, variables=[_make_variable("LOG_LEVEL", "azure-appconfig", default="info")])
+        rows = cmd._build_value_status_rows()
+        assert rows[0]["status"] == "seeded"
+        assert rows[0]["detail"] == "default: info"
+
+    def test_integration_variable_without_default_is_required(self, tmp_path):
+        cmd = self._cmd_with_env(tmp_path, variables=[_make_variable("API_URL", "consul")])
+        rows = cmd._build_value_status_rows()
+        assert rows[0]["status"] == "required"
+        assert rows[0]["detail"] is None
+
+    def test_github_secret_is_ok(self, tmp_path):
+        cmd = self._cmd_with_env(tmp_path, secrets=[_make_secret("TOKEN", "github")])
+        rows = cmd._build_value_status_rows()
+        assert rows[0]["status"] == "ok"
+
+    def test_secret_with_generate_spec_is_generated(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        gen = MagicMock()
+        gen.type = MagicMock()
+        gen.type.value = "password"
+        gen.length = 32
+        cmd = self._cmd_with_env(tmp_path, secrets=[_make_secret("DB_PASSWORD", "azure-keyvault", generate=gen)])
+        rows = cmd._build_value_status_rows()
+        assert rows[0]["status"] == "generated"
+        assert rows[0]["detail"] == "password/32"
+
+    def test_integration_secret_without_generate_is_required(self, tmp_path):
+        cmd = self._cmd_with_env(tmp_path, secrets=[_make_secret("API_KEY", "vault")])
+        rows = cmd._build_value_status_rows()
+        assert rows[0]["status"] == "required"
+
+    def test_feature_with_default_is_seeded(self, tmp_path):
+        cmd = self._cmd_with_env(tmp_path, features=[_make_feature("DARK_MODE", "flagsmith", default="false")])
+        rows = cmd._build_value_status_rows()
+        assert rows[0]["status"] == "seeded"
+        assert rows[0]["detail"] == "default: false"
+
+    def test_feature_constant_is_ok(self, tmp_path):
+        cmd = self._cmd_with_env(tmp_path, features=[_make_feature("FLAG", "constant")])
+        rows = cmd._build_value_status_rows()
+        assert rows[0]["status"] == "ok"
+
+    def test_mixed_types_all_present(self, tmp_path):
+        cmd = self._cmd_with_env(
+            tmp_path,
+            variables=[_make_variable("WORKSPACE", "constant"), _make_variable("LOG_LEVEL", "consul", default="info")],
+            secrets=[_make_secret("DB_PASS", "vault")],
+            features=[_make_feature("BETA", "flagsmith", default="true")],
+        )
+        rows = cmd._build_value_status_rows()
+        assert len(rows) == 4
+        assert [r["type"] for r in rows] == ["variable", "variable", "secret", "feature"]
+
+    def test_values_key_in_output_data(self, tmp_path):
+        from unittest.mock import MagicMock, patch
+
+        cmd = _make_plan_cmd(tmp_path)
+        env_svc = MagicMock()
+        env_svc.get_variables.return_value = [_make_variable("X", "constant")]
+        env_svc.get_secrets.return_value = []
+        env_svc.get_features.return_value = []
+        svc = MagicMock()
+        svc.model.meta.name = "test-deploy"
+        svc.get_build_path.return_value = tmp_path / "build"
+        svc.get_environment_service.return_value = env_svc
+        cmd._deployment_service = svc
+        cmd._artifacts_only = True
+
+        with (
+            patch.object(cmd, "_build_to_temp", return_value=True),
+            patch.object(cmd, "_compute_artifact_diff", return_value=[]),
+            patch.object(cmd, "_print_console"),
+        ):
+            cmd._run_plan()
+
+        assert "values" in cmd._output_data
+        assert len(cmd._output_data["values"]) == 1
