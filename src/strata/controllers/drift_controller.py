@@ -20,6 +20,7 @@ from strata.logger import get_logger
 from strata.models.drift_model import DriftEntry, DriftReport, DriftSeverity, DriftSummary
 from strata.utils.config import SOLUTION_DIR
 from strata.utils.drift_history import DriftHistoryStore
+from strata.utils.system import get_pkg_data_path
 
 if TYPE_CHECKING:
     from strata.controllers.solution_controller import SolutionController
@@ -29,8 +30,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Path to the built-in drift classification rules (relative to this file)
-_BUILTIN_RULES_PATH = Path(__file__).parent.parent / "data" / "drift_rules.yaml"
+# Path to the built-in drift classification rules
+_BUILTIN_RULES_PATH = get_pkg_data_path() / "drift_rules.yaml"
 _WORKSPACE_RULES_FILE = "drift_rules.yaml"  # optional override in .strata/
 
 

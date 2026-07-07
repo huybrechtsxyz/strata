@@ -5,11 +5,14 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 from strata.integrations.capabilities import (
     CAPABILITY_REGISTRY,
+    IContainerTool,
+    ICveScanner,
     IFeatureStore,
     IInfrastructureTool,
     IKVStore,
     IRepositoryTool,
     ISecretStore,
+    ISiemSink,
     IVariableStore,
     get_capability_name,
 )
@@ -274,6 +277,9 @@ class IntegrationRegistry:
             IKVStore,
             IRepositoryTool,
             IInfrastructureTool,
+            IContainerTool,
+            ISiemSink,
+            ICveScanner,
         ]:
             if isinstance(integration, capability):
                 capabilities.append(get_capability_name(capability))

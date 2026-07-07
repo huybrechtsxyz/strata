@@ -10,7 +10,7 @@ import click
 from strata.commands.base_command import BaseCommand
 from strata.commands.cli_common import click_work_path
 from strata.utils.config import DOCS_URL, SOLUTION_DIR
-from strata.utils.system import resolve_work_path
+from strata.utils.system import get_pkg_help_path, resolve_work_path
 
 # ---------------------------------------------------------------------------
 # Topic registry — name → (description, filename)
@@ -38,7 +38,7 @@ _TOPICS: dict[str, tuple[str, str]] = {
     "hashicorp_vault": ("HashiCorp Vault: secret management and dynamic credentials", "hashicorp_vault.md"),
 }
 
-_HELP_DATA_DIR = Path(__file__).parent.parent / "data" / "help"
+_HELP_DATA_DIR = get_pkg_help_path()
 
 _WORKSPACE_HELP_DIR = "help"  # relative to .strata/
 

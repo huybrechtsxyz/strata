@@ -376,7 +376,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
         """
         if self._workspace_service is None or self._environment_service is None:
             raise ServiceNotValidatedError(
-                "DeploymentService: load_related_services() must be called before apply_environment_overrides()"
+                "DeploymentService",
+                reason="Call load_deploy_services() before apply_environment_overrides()",
             )
 
         errors = []
@@ -775,7 +776,10 @@ class DeploymentService(BaseService["DeploymentModel"]):
     def _ensure_workspace(self) -> WorkspaceService:
         """Return the workspace service, raising if not yet loaded."""
         if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
+            raise ServiceNotValidatedError(
+                "DeploymentService",
+                reason="Workspace service not loaded. Call load_deploy_services() first.",
+            )
         return self._workspace_service
 
     # --- Workspace delegation (infrastructure services) ---
@@ -884,7 +888,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
         """
         if self._workspace_service is None or self._environment_service is None:
             raise ServiceNotValidatedError(
-                "DeploymentService: load_related_services() must be called before validate_related_services()"
+                "DeploymentService",
+                reason="Call load_deploy_services() before validate_related_services()",
             )
 
         errors = []

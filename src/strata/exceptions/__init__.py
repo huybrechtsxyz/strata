@@ -9,10 +9,8 @@ from .base_exception import (
     PlatformValidationError,
 )
 from .model_exception import (
-    DuplicateNameError,
     InvalidReferenceError,
     ModelValidationError,
-    SchemaVersionError,
     UnsupportedKindError,
 )
 from .path_exception import PathValidationError
@@ -37,10 +35,8 @@ __all__ = [
     "PlatformStateError",
     # Model exceptions
     "ModelValidationError",
-    "DuplicateNameError",
     "InvalidReferenceError",
     "UnsupportedKindError",
-    "SchemaVersionError",
     # Service exceptions
     "ServiceNotAvailableError",
     "ServiceNotValidatedError",

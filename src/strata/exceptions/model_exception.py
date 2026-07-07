@@ -30,21 +30,6 @@ class ModelValidationError(PlatformValidationError):
         )
 
 
-class DuplicateNameError(PlatformValidationError):
-    """Raised when duplicate names are found where uniqueness is required."""
-
-    def __init__(self, entity_type: str, name: str, location: Optional[str] = None):
-        msg = f"Duplicate {entity_type} name: '{name}'"
-        if location:
-            msg += f" in {location}"
-
-        super().__init__(
-            message=msg,
-            error_code="DUPLICATE_NAME",
-            details={"entity_type": entity_type, "name": name, "location": location},
-        )
-
-
 class InvalidReferenceError(PlatformValidationError):
     """Raised when a reference to another resource is invalid."""
 
@@ -92,16 +77,4 @@ class UnsupportedKindError(PlatformValidationError):
             message=msg,
             error_code="UNSUPPORTED_KIND",
             details={"kind": kind, "supported_kinds": supported_kinds},
-        )
-
-
-class SchemaVersionError(PlatformValidationError):
-    """Raised when resource schema version is incompatible."""
-
-    def __init__(self, actual_version: str, expected_version: str):
-        msg = f"Schema version mismatch: got '{actual_version}', expected '{expected_version}'"
-        super().__init__(
-            message=msg,
-            error_code="SCHEMA_VERSION_MISMATCH",
-            details={"actual": actual_version, "expected": expected_version},
         )

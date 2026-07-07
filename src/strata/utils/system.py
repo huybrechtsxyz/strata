@@ -228,19 +228,21 @@ def get_pkg_data_path() -> Path:
     return get_pkg_root_path() / "data"
 
 
+# Get the path to the built-in help topics directory
+def get_pkg_help_path() -> Path:
+    """Get the path to the built-in help topics directory."""
+    return get_pkg_data_path() / "help"
+
+
 # Get the path to the default configuration file
-def get_pgk_config_path(data_path: Optional[Path]) -> Path:
+def get_pkg_config_path() -> Path:
     """Get the path to the default configuration file."""
-    if data_path is not None:
-        return data_path / "configuration.yaml"
     return get_pkg_data_path() / "configuration.yaml"
 
 
 # Get the path to the default logging configuration file
-def get_pkg_logging_path(data_path: Optional[Path] = None) -> Path:
+def get_pkg_logging_path() -> Path:
     """Get the path to the default logging configuration file."""
-    if data_path is not None:
-        return data_path / "logging.yaml"
     return get_pkg_data_path() / "logging.yaml"
 
 

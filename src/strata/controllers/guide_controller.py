@@ -21,6 +21,7 @@ from strata.models.workflow_model import (
     WorkflowStep,
     get_default_workflow,
 )
+from strata.utils.system import get_pkg_data_path
 
 
 @dataclass
@@ -189,7 +190,7 @@ class GuideController(BaseController):
 
     def _load_hints(self) -> Dict[str, Any]:
         """Load built-in hints then shallow-merge project overrides from .strata/guide.yaml."""
-        hints_path = Path(__file__).parent.parent / "data" / "guide-hints.yaml"
+        hints_path = get_pkg_data_path() / "guide-hints.yaml"
         if not hints_path.exists():
             raise PlatformFileNotFoundError(str(hints_path), file_type="guide-hints.yaml")
 
@@ -578,7 +579,7 @@ class GuideController(BaseController):
                 self.logger.warning("Could not load workflow.yaml, using built-in default", error=str(e))
 
         # Fall back to built-in data file
-        builtin_path = Path(__file__).parent.parent / "data" / "workflow.yaml"
+        builtin_path = get_pkg_data_path() / "workflow.yaml"
         if builtin_path.exists():
             try:
                 with open(builtin_path, "r", encoding="utf-8") as fh:

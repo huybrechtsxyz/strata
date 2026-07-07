@@ -156,22 +156,30 @@ class SiemBaseIntegration(BaseIntegration):
         return False
 
     def _build_auth_headers(self) -> Dict[str, str]:
-        """Build authentication headers from ``config.authentication``."""
+        """Build authentication headers from ``config.authentication``.
+
+        All fields in ``APIKeyAuthenticationModel`` and ``OAuth2AuthenticationModel``
+        are *env-var name references*, not literal values.  Each field must be
+        resolved via ``_get_env_var`` before use.
+        """
         auth = self.config.authentication
         if not auth:
             return {}
 
         method = getattr(auth, "method", None)
 
-        # api_key method: use APIKeyAuthenticationModel
+        # api_key: resolve the env-var references to get the actual values
         if method == "api_key" and auth.api_key:
-            key = auth.api_key.api_key or ""
-            header_name = auth.api_key.header_name or "X-API-Key"
+            key_ref = auth.api_key.api_key or ""
+            key = self._get_env_var(key_ref) or "" if key_ref else ""
+            header_name_ref = auth.api_key.header_name
+            header_name = (self._get_env_var(header_name_ref) or "X-API-Key") if header_name_ref else "X-API-Key"
             return {header_name: key}
 
-        # oauth2 method with access token (bearer)
+        # oauth2: client_secret is an env-var name reference holding the bearer token
         if method == "oauth2" and auth.oauth2:
-            token = getattr(auth.oauth2, "client_secret", None) or ""
+            secret_ref = getattr(auth.oauth2, "client_secret", None) or ""
+            token = self._get_env_var(secret_ref) or "" if secret_ref else ""
             return {"Authorization": f"Bearer {token}"}
 
         # managed_identity / other methods handled per-integration (e.g. Sentinel gets token from SDK)

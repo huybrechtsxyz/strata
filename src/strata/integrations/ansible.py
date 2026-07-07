@@ -7,6 +7,7 @@ from strata.integrations.base_integration import BaseIntegration
 from strata.integrations.capabilities import IInfrastructureTool
 from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
+from strata.utils.system import CommandResult, run_command
 
 logger = get_logger(__name__)
 
@@ -136,11 +137,12 @@ class AnsibleIntegration(BaseIntegration):
 
         if requirements_file is None:
             # Nothing to install — skip silently
-            return {"returncode": 0, "stdout": "", "stderr": ""}
+            return CommandResult(returncode=0, stdout="", stderr="", command="", duration_ms=0.0)
 
-        args = ["ansible-galaxy", "collection", "install", "-r", requirements_file]
+        # ansible-galaxy is a separate binary, not ansible-playbook; use run_command directly
+        galaxy_cmd = ["ansible-galaxy", "collection", "install", "-r", requirements_file]
         logger.info("Installing Ansible Galaxy dependencies", working_dir=working_dir)
-        return self._run_integration(args, cwd=working_dir, timeout=timeout)
+        return run_command(galaxy_cmd, cwd=working_dir, timeout=timeout)
 
     def plan(
         self,
@@ -168,7 +170,7 @@ class AnsibleIntegration(BaseIntegration):
         if not available:
             raise RuntimeError(f"Ansible not available: {error}")
 
-        args = [self.command, playbook, "--check", "--diff"]
+        args = [playbook, "--check", "--diff"]
         if inventory:
             args.extend(["-i", inventory])
         if private_key_file:
@@ -209,7 +211,7 @@ class AnsibleIntegration(BaseIntegration):
         if not available:
             raise RuntimeError(f"Ansible not available: {error}")
 
-        args = [self.command, playbook]
+        args = [playbook]
         if inventory:
             args.extend(["-i", inventory])
         if private_key_file:
@@ -242,6 +244,6 @@ class AnsibleIntegration(BaseIntegration):
         if not available:
             raise RuntimeError(f"Ansible not available: {error}")
 
-        args = [self.command, playbook, "--syntax-check"]
+        args = [playbook, "--syntax-check"]
         logger.info("Running Ansible syntax check", working_dir=working_dir, playbook=playbook)
         return self._run_integration(args, cwd=working_dir, timeout=timeout)
