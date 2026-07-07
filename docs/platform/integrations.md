@@ -15,14 +15,14 @@ Integrations connect the platform to external tools and services (git, terraform
 | `DockerIntegration`         | `integrations.docker`           | `docker`           | `IContainerTool`                             |
 | `HelmIntegration`           | `integrations.helm`             | `helm`             | `IInfrastructureTool`                        |
 | `BitwardenIntegration`      | `integrations.bitwarden`        | `bitwarden`        | `ISecretStore`                               |
-| `VaultIntegration`          | `integrations.hashicorp_vault`  | `hashicorp_vault`  | `IVariableStore`, `ISecretStore`, `IKVStore` |
-| `OpenBaoIntegration`        | `integrations.openbao`          | `openbao`          | `IVariableStore`, `ISecretStore`, `IKVStore` |
-| `ConsulIntegration`         | `integrations.hashicorp_consul` | `hashicorp_consul` | `IVariableStore`, `IKVStore`                 |
+| `VaultIntegration`          | `integrations.hashicorp_vault`  | `hashicorp_vault`  | `IVariableStore`, `ISecretStore`, `IKVStore`, `IFeatureStore` |
+| `OpenBaoIntegration`        | `integrations.openbao`          | `openbao`          | `IVariableStore`, `ISecretStore`, `IKVStore`                  |
+| `ConsulIntegration`         | `integrations.hashicorp_consul` | `hashicorp_consul` | `IVariableStore`, `IKVStore`, `IFeatureStore`                 |
 | `AzureKeyVaultIntegration`  | `integrations.azure_keyvault`   | `azure_keyvault`   | `ISecretStore`                               |
 | `AzureAppConfigIntegration` | `integrations.azure_appconfig`  | `azure_appconfig`  | `IVariableStore`, `IFeatureStore`            |
 | `InfisicalIntegration`      | `integrations.infisical`        | `infisical`        | `ISecretStore`, `IVariableStore`             |
 | `EtcdIntegration`           | `integrations.etcd`             | `etcd`             | `IVariableStore`, `IKVStore`                 |
-| `FlagsmithIntegration`      | `integrations.flagsmith`        | `flagsmith`        | `IFeatureStore`                              |
+| `FlagsmithIntegration`      | `integrations.flagsmith`        | `flagsmith`        | `IFeatureStore`, `IVariableStore`                             |
 
 **SIEM / audit sink integrations** (implement `ISiemSink`, used by `AuditController`):
 
@@ -141,9 +141,9 @@ if isinstance(integration, ISecretStore):
 
 | YAML capability string | Protocol              | Methods                                          | Covers (examples)                                                                                                           |
 | ---------------------- | --------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `variables`            | `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` | Consul, Azure App Configuration, Vault                                                                                      |
+| `variables`            | `IVariableStore`      | `get_variable`, `set_variable`, `list_variables` | Consul, Azure App Configuration, Vault, Flagsmith (identity traits)                                                         |
 | `secrets`              | `ISecretStore`        | `get_secret`, `set_secret`, `list_secrets`       | Vault, Azure KeyVault, Bitwarden, Infisical — **`github` and `environment` are built-in resolvers, not integrations**       |
-| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    | Azure App Configuration, Flagsmith                                                                                          |
+| `features`             | `IFeatureStore`       | `get_feature`, `set_feature`, `list_features`    | Azure App Configuration, Flagsmith, Vault (KV prefix), Consul (KV prefix)                                                  |
 | `keyvalue`             | `IKVStore`            | `get_kv`, `set_kv`                               | Consul, Vault KV, etcd                                                                                                      |
 | `repository`           | `IRepositoryTool`     | `clone`, `pull`, `get_current_branch`            | Git, Mercurial                                                                                                              |
 | `infrastructure`       | `IInfrastructureTool` | `init`, `plan`, `apply`, `destroy`               | Terraform, OpenTofu, **Ansible**, **Helm**, Pulumi *(umbrella for all IaC + config-management tools — not `configuration`)* |
@@ -153,6 +153,57 @@ if isinstance(integration, ISecretStore):
 `StoreIntegration` (base for all store-type integrations) provides no-op default implementations for all store methods — subclasses override only what they support.
 
 > **Built-in secret resolvers (`constant`, `environment`, `github`)** do not use the integration system at all — they are resolved inline by the `ValueController` without any registered integration. `github` reads environment variables that GitHub Actions injects into the runner before each step. See [configuration.md — Secret Stores](../config/configuration.md#secret-stores) for full details on `store: github`.
+
+### Store-specific notes
+
+#### Vault and Consul — feature flags via KV prefix
+
+Neither Vault nor Consul has a native feature flag concept. `IFeatureStore` is implemented by
+mapping flag names to KV entries under a configurable path prefix (default: `features/`).
+
+| Method | KV path |
+|--------|---------|
+| `get_feature("dark-mode")` | `features/dark-mode` |
+| `set_feature("dark-mode", True)` | writes `"true"` to `features/dark-mode` |
+| `list_features("")` | lists all keys under `features/` |
+
+The prefix is controlled by the `features_path` keyword argument (default `"features"`).
+This separation keeps feature data organised alongside — but distinct from — other KV entries.
+
+`set_feature()` and `set_variable()` both use **create-if-not-exists** semantics: if the key
+already exists the write is skipped and the existing value is returned. This ensures the
+`default:` field in YAML only seeds the store on the very first build.
+
+#### Flagsmith — variables via identity traits
+
+Flagsmith has no native key/value store. `IVariableStore` is implemented using Flagsmith's
+**identity traits** API — key/value pairs attached to a named identity.
+
+| Method | Flagsmith API |
+|--------|--------------|
+| `get_variable("theme")` | `GET /api/v1/identities/?identifier=<identity>` |
+| `set_variable("theme", "light")` | `POST /api/v1/traits/` with `X-Environment-Key` |
+| `list_variables("")` | returns all trait keys for the identity |
+
+The `identity` kwarg (default `"default"`) scopes traits to a specific Flagsmith identity.
+**Required env var:** `FLAGSMITH_ENVIRONMENT_KEY` must be a **server-side** (not client-side)
+key — client-side keys are read-only and will cause `set_variable()` to return `False`.
+
+#### Flagsmith — feature flag seeding limitations
+
+`set_feature()` does **not** create feature flags. Flagsmith flags must be created in the
+Flagsmith dashboard or via their management API before strata can resolve them. When called:
+
+- Returns `True` if the flag exists (verifies presence; does not toggle the flag state).
+- Returns `False` if the flag is not found, with a log message directing the operator to
+  create it in the Flagsmith dashboard.
+
+As a result, a `default:` value on a Flagsmith-backed feature entry cannot seed a missing
+flag — the resolution will fail if the flag was never created externally. The `default:` field
+acts as a fallback value _for the build output_ only, not as a create-and-seed operation.
+
+**Optional:** Set `FLAGSMITH_MANAGEMENT_KEY` to enable future management API operations
+(flag lifecycle management). This is separate from `FLAGSMITH_ENVIRONMENT_KEY`.
 
 ## `IntegrationModel` Configuration
 

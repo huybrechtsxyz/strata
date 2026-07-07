@@ -74,10 +74,28 @@ class BaseBuildCommand(BaseCommand):
         self._file_path = candidate
         self.logger.info("Using deployment file", file=str(self._file_path))
 
+        # config_fetch_before: fires before loading configuration from profile refs.
+        # (Config not loaded yet — hooks defined in the config are silently skipped;
+        # hooks at workspace or environment level can run if already cached.)
+        if not self._run_lifecycle_phase(
+            "config_fetch_before",
+            context={"work_path": str(self._work_path), "file": str(self._file_path)},
+        ):
+            return False
+
         # Load configuration service (always required for build)
         self._configuration_service = self._load_configuration_service()
         if self._configuration_service is None:
             return False
+
+        # config_fetch_after: fires after configuration is loaded and validated.
+        # Scripts defined in the loaded configuration lifecycle block can run here.
+        if not self._run_lifecycle_phase(
+            "config_fetch_after",
+            context={"work_path": str(self._work_path), "file": str(self._file_path)},
+        ):
+            return False
+
         self._build_path = self._get_build_path()
 
         # Phase 1: load + Pydantic-validate the deployment file

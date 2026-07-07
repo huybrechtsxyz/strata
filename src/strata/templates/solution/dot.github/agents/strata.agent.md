@@ -198,4 +198,4 @@ This workspace includes ready-made prompts in `.github/prompts/`. Use them for c
 - Use `strata schema get <kind>` to inspect the full field reference for any kind.
 - Deployment stages use `provisioner:` or `topology:` — never `type:`.
 - All `kind` values are lowercase in the YAML (`deployment`, not `Deployment`).
-- Valid `apiVersion` values: `strata.omp.com/v1` or `strata.huybrechts.xyz/v1`.
+- Valid `apiVersion` values: `strata.huybrechts.xyz/v1`.

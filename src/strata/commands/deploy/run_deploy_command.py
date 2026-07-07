@@ -383,6 +383,35 @@ class RunDeployCommand(BaseDeployCommand):
                 f"{len(resolved.secrets)} secret(s), "
                 f"{len(resolved.features)} feature(s)."
             )
+            seeded = [
+                f"{k}={v[len('default: ') :]}"
+                for k, v in {**resolved.variable_notes, **resolved.feature_notes}.items()
+                if v.startswith("default: ")
+            ]
+            generated = [k for k, v in resolved.secret_notes.items() if v == "generated"]
+            advisories = [
+                f"{k} ({v.split(':', 1)[1]})"
+                for k, v in resolved.secret_notes.items()
+                if v.startswith("rotation_advisory:")
+            ]
+            rotated = [
+                f"{k} ({v.split(':', 1)[1]})" for k, v in resolved.secret_notes.items() if v.startswith("rotated:")
+            ]
+            failed = [
+                f"{k} ({v.split(':', 1)[1]})"
+                for k, v in resolved.secret_notes.items()
+                if v.startswith("rotation_failed:")
+            ]
+            if seeded:
+                click.echo(f"  \u21b3  Seeded on first run: {', '.join(seeded)}")
+            if generated:
+                click.echo(f"  \u21b3  Generated on first run: {', '.join(generated)}")
+            if advisories:
+                click.echo(f"  \u21b3  Rotation advisory: {', '.join(advisories)}")
+            if rotated:
+                click.echo(f"  \u21b3  Rotated: {', '.join(rotated)}")
+            if failed:
+                click.echo(f"  ⚠️  Rotation failed: {', '.join(failed)}")
 
         # Always log STRATA_CONTEXT/STRATA_SENSITIVE at DEBUG; show under --verbose
         self.logger.debug("strata_context_resolved", **resolved.debug_summary())

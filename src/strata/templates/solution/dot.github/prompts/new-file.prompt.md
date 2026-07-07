@@ -43,7 +43,7 @@ strata new <kind> --name <name>
 ```
 
 This creates a template YAML file with:
-- `apiVersion: strata.omp.com/v1` or `strata.huybrechts.xyz/v1`
+- `apiVersion: strata.huybrechts.xyz/v1`
 - `kind: <kind>`
 - `meta.name: <name>`
 - `meta.annotations.description: <description>`

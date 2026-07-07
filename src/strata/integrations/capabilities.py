@@ -2,6 +2,8 @@
 
 from typing import Any, List, Optional, Protocol, runtime_checkable
 
+from strata.utils.secret_metadata import SecretMetadata
+
 __all__ = [
     # Protocol interfaces
     "IVariableStore",
@@ -74,6 +76,14 @@ class ISecretStore(Protocol):
 
     def list_secrets(self, prefix: str = "", **kwargs) -> List[str]:
         """List available secret keys in the store."""
+        ...
+
+    def get_secret_metadata(self, key: str, **kwargs) -> Optional[SecretMetadata]:
+        """Return metadata (timestamps, version) for a secret, or None if unsupported."""
+        ...
+
+    def update_secret(self, key: str, value: str, **kwargs) -> bool:
+        """Replace an existing secret value (rotation only — explicit overwrite)."""
         ...
 
 

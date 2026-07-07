@@ -1,6 +1,6 @@
 # Infrastructure drift detection
 
-- Status: in design
+- Status: deferred
 - Date: 2026-06-16
 - Issue: #122
 

@@ -1,6 +1,6 @@
 # Pluggable provisioner framework
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-07-05
 - Issue: [#169](https://github.com/huybrechtsxyz/strata/issues/169)
 

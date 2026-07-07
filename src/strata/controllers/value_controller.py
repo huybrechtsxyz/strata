@@ -1,6 +1,7 @@
 """Resolves variables, secrets, and feature flags from configured store integrations into concrete runtime values."""
 
 import os
+from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
 from strata.controllers.base_controller import BaseController
@@ -8,6 +9,7 @@ from strata.logger import get_logger
 from strata.models.store_models import (
     FeatureStoreModel,
     FeatureStoreType,
+    SecretRotatePolicy,
     SecretStoreModel,
     SecretStoreType,
     VariableStoreModel,
@@ -230,7 +232,73 @@ class ValueController(BaseController):
                 generator_type=item.generate.type.value,
             )
             return generated, None, "generated"
-        return val, None, None
+        # Existing value found — check rotation policy
+        return self._check_rotation(item, val, integration)
+
+    def _check_rotation(
+        self,
+        item: SecretStoreModel,
+        current_value: str,
+        integration,
+    ) -> Tuple[str, Optional[str], Optional[str]]:
+        """Apply rotation policy to an existing secret.
+
+        Returns (value, error_or_None, note_or_None).  When policy is ``warn``
+        the original value is returned with a ``rotation_advisory`` note.
+        When policy is ``rotate`` a new value is generated and written back.
+        """
+        if item.rotate is None:
+            return current_value, None, None
+
+        meta = integration.get_secret_metadata(str(item.value))
+        if meta is None:
+            logger.debug(
+                "Cannot determine secret age — rotation check skipped",
+                key=item.key,
+                store=item.store.value,
+            )
+            return current_value, None, None
+
+        reference_time = meta.updated_at or meta.created_at
+        if reference_time is None:
+            return current_value, None, None
+
+        age_days = (datetime.now(timezone.utc) - reference_time).days
+        if age_days < item.rotate.max_age:
+            return current_value, None, None
+
+        # Secret is overdue
+        if item.rotate.policy == SecretRotatePolicy.WARN:
+            logger.warning(
+                "Secret exceeds max age — rotation advisory",
+                key=item.key,
+                store=item.store.value,
+                age_days=age_days,
+                max_age=item.rotate.max_age,
+            )
+            return current_value, None, f"rotation_advisory:{age_days}d/{item.rotate.max_age}d"
+
+        # policy == ROTATE — requires generate spec (enforced by model validator)
+        assert item.generate is not None  # guaranteed by validate_rotate_policy_requires_generate
+        new_value = generate_secret(item.generate.type.value, item.generate.length)
+        ok = integration.update_secret(str(item.value), new_value)
+        if not ok:
+            logger.error(
+                "Auto-rotation failed — store write rejected",
+                key=item.key,
+                store=item.store.value,
+            )
+            return current_value, None, f"rotation_failed:{age_days}d/{item.rotate.max_age}d"
+
+        logger.info(
+            "Secret auto-rotated",
+            action="secret_rotated",
+            key=str(item.value),
+            store=item.store.value,
+            age_days=age_days,
+            max_age=item.rotate.max_age,
+        )
+        return new_value, None, f"rotated:{age_days}d/{item.rotate.max_age}d"
 
     def _resolve_feature(self, item: FeatureStoreModel) -> Tuple[Optional[bool], Optional[str], Optional[str]]:
         """Resolve a single feature flag.  Returns (value, error_or_None, note_or_None)."""

@@ -4,12 +4,14 @@ import json
 import re
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.integrations.capabilities import ISecretStore
 from strata.integrations.store_integration import StoreIntegration
 from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
+from strata.utils.secret_metadata import SecretMetadata
 
 logger = get_logger(__name__)
 
@@ -532,6 +534,115 @@ class AzureKeyVaultIntegration(StoreIntegration):
             logger.info("Secret written to Azure Key Vault via API", name=self.integration_name, secret_name=key)
         else:
             logger.warning("Failed to write secret to Azure Key Vault", name=self.integration_name, secret_name=key)
+        return ok
+
+    def get_secret_metadata(self, key: str, **kwargs) -> Optional[SecretMetadata]:
+        """Return creation/update timestamps for a Key Vault secret."""
+        prefer_cli = kwargs.get("prefer_cli", True)
+        timeout = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            return None
+
+        data = None
+        if prefer_cli:
+            result = self._run_integration(
+                args=[
+                    "keyvault",
+                    "secret",
+                    "show",
+                    "--vault-name",
+                    self._vault_name(),
+                    "--name",
+                    key,
+                    "--output",
+                    "json",
+                ],
+                timeout=timeout,
+            )
+            if result.returncode == 0 and result.stdout:
+                try:
+                    data = json.loads(result.stdout)
+                except (json.JSONDecodeError, ValueError):
+                    return None
+
+        if data is None:
+            # API fallback
+            token = self._get_access_token_via_cli() or self._get_access_token_via_api()
+            if not token:
+                return None
+            try:
+                url = f"{self.keyvault_url.rstrip('/')}secrets/{urllib.parse.quote(key, safe='')}?api-version=7.4"
+                req = urllib.request.Request(url, method="GET")
+                req.add_header("Authorization", f"Bearer {token}")
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+            except Exception:
+                return None
+
+        if data is None:
+            return None
+
+        attrs = data.get("attributes") or {}
+        meta = SecretMetadata()
+        if attrs.get("created"):
+            meta.created_at = datetime.fromtimestamp(attrs["created"], tz=timezone.utc)
+        if attrs.get("updated"):
+            meta.updated_at = datetime.fromtimestamp(attrs["updated"], tz=timezone.utc)
+        if attrs.get("expires"):
+            meta.expires_on = datetime.fromtimestamp(attrs["expires"], tz=timezone.utc)
+        # Extract version from the id URL (last segment)
+        secret_id = data.get("id", "")
+        if "/" in secret_id:
+            meta.version = secret_id.rsplit("/", 1)[-1]
+        return meta
+
+    def update_secret(self, key: str, value: str, **kwargs) -> bool:
+        """Overwrite an existing secret in Key Vault (rotation only).
+
+        Unlike set_secret() this skips the existence check and writes unconditionally.
+        Key Vault creates a new version automatically.
+        """
+        prefer_cli = kwargs.get("prefer_cli", True)
+        timeout = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot update secret in Azure Key Vault", name=self.integration_name, error=error)
+            return False
+
+        if prefer_cli:
+            result = self._run_integration(
+                args=[
+                    "keyvault",
+                    "secret",
+                    "set",
+                    "--vault-name",
+                    self._vault_name(),
+                    "--name",
+                    key,
+                    "--value",
+                    value,
+                    "--output",
+                    "none",
+                ],
+                timeout=timeout,
+            )
+            if result.returncode == 0:
+                logger.info("Secret updated in Azure Key Vault via CLI", name=self.integration_name, secret_name=key)
+                return True
+            logger.warning(
+                "Failed to update secret via CLI — trying API",
+                name=self.integration_name,
+                secret_name=key,
+            )
+
+        ok = self._set_secret_via_api(key, value, use_cli_token=True)
+        if not ok:
+            ok = self._set_secret_via_api(key, value, use_cli_token=False)
+        if ok:
+            logger.info("Secret updated in Azure Key Vault via API", name=self.integration_name, secret_name=key)
         return ok
 
     def _vault_name(self) -> str:

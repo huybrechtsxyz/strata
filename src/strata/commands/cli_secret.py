@@ -7,9 +7,19 @@ from typing import Optional
 
 import click
 
-from strata.commands.cli_common import click_output_format
+from strata.commands.cli_common import (
+    click_file,
+    click_output_format,
+    click_work_path,
+    handle_command_exit,
+)
 from strata.commands.secret.generate_secret_command import generate_secret
+from strata.commands.secret.get_secret_command import GetSecretCommand
+from strata.commands.secret.list_secret_command import ListSecretCommand
 from strata.commands.secret.mask_secret_command import mask_secret
+from strata.commands.secret.put_secret_command import PutSecretCommand
+from strata.commands.secret.rotate_secret_command import RotateSecretCommand
+from strata.commands.secret.status_secret_command import StatusSecretCommand
 
 _FORMAT_HELP = (
     "Output encoding.  "
@@ -111,3 +121,112 @@ def mask_secret_command(
         return
 
     click.echo(masked)
+
+
+# ---------- Deployment-aware commands (require --file / -f) ----------
+
+
+@secret_group.command(name="list", help="List all secrets defined in the deployment environment.")
+@click_output_format
+@click_work_path
+@click_file
+@click.pass_context
+def list_secret_command(
+    ctx: click.Context, output: Optional[str], work_path: Optional[str], file: Optional[str]
+) -> None:
+    """List secrets declared in the deployment YAML (no store access)."""
+    cmd = ListSecretCommand(work_path=work_path or ctx.obj.get("work_path"), output=output, file=file)
+    success = cmd.execute()
+    handle_command_exit(cmd, success)
+
+
+@secret_group.command(name="get", help="Read a secret value from its configured store.")
+@click_output_format
+@click_work_path
+@click_file
+@click.argument("key")
+@click.option("--unmask", is_flag=True, default=False, help="Show the full secret value (default: masked).")
+@click.pass_context
+def get_secret_cmd(
+    ctx: click.Context,
+    output: Optional[str],
+    work_path: Optional[str],
+    file: Optional[str],
+    key: str,
+    unmask: bool,
+) -> None:
+    """Read KEY from the configured store backend."""
+    cmd = GetSecretCommand(
+        work_path=work_path or ctx.obj.get("work_path"), output=output, file=file, key=key, unmask=unmask
+    )
+    success = cmd.execute()
+    handle_command_exit(cmd, success)
+
+
+@secret_group.command(name="status", help="Check rotation health for secrets with a rotate policy.")
+@click_output_format
+@click_work_path
+@click_file
+@click.pass_context
+def status_secret_command(
+    ctx: click.Context, output: Optional[str], work_path: Optional[str], file: Optional[str]
+) -> None:
+    """Report age and rotation status for all secrets that have a rotate: spec."""
+    cmd = StatusSecretCommand(work_path=work_path or ctx.obj.get("work_path"), output=output, file=file)
+    success = cmd.execute()
+    handle_command_exit(cmd, success)
+
+
+@secret_group.command(name="put", help="Write a secret to the configured store (create-if-not-exists).")
+@click_output_format
+@click_work_path
+@click_file
+@click.argument("key")
+@click.option("--value", default=None, help="Explicit secret value to write.")
+@click.option(
+    "--generate", "do_generate", is_flag=True, default=False, help="Generate a value using the YAML generate spec."
+)
+@click.pass_context
+def put_secret_command(
+    ctx: click.Context,
+    output: Optional[str],
+    work_path: Optional[str],
+    file: Optional[str],
+    key: str,
+    value: Optional[str],
+    do_generate: bool,
+) -> None:
+    """Write KEY to the configured store backend."""
+    cmd = PutSecretCommand(
+        work_path=work_path or ctx.obj.get("work_path"),
+        output=output,
+        file=file,
+        key=key,
+        value=value,
+        generate=do_generate,
+    )
+    success = cmd.execute()
+    handle_command_exit(cmd, success)
+
+
+@secret_group.command(name="rotate", help="Rotate a secret by generating a new value and overwriting the store.")
+@click_output_format
+@click_work_path
+@click_file
+@click.argument("key")
+@click.option("--force", is_flag=True, default=False, help="Skip confirmation prompt.")
+@click.pass_context
+def rotate_secret_command(
+    ctx: click.Context,
+    output: Optional[str],
+    work_path: Optional[str],
+    file: Optional[str],
+    key: str,
+    force: bool,
+) -> None:
+    """Rotate KEY using its generate spec and overwrite the value in the store."""
+    cmd = RotateSecretCommand(
+        work_path=work_path or ctx.obj.get("work_path"), output=output, file=file, key=key, force=force
+    )
+    success = cmd.execute()
+    handle_command_exit(cmd, success)

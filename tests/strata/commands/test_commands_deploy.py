@@ -1139,3 +1139,258 @@ class TestDestroyLocking:
 
         assert result is False
         assert len(cmd._errors) > 0
+
+
+# ---------------------------------------------------------------------------
+# deploy drift CLI routing tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeployDrift:
+    """CLI routing tests for `strata deploy drift` subgroup."""
+
+    def test_drift_run_basic(self, tmp_path):
+        """drift run with --file routes to DriftDeployCommand and exits 0."""
+        runner = CliRunner()
+        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
+            result = runner.invoke(deploy, ["drift", "run", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+
+    def test_drift_run_stage_option(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
+            result = runner.invoke(
+                deploy,
+                ["drift", "run", "--file", "deploy.yaml", "--stage", "networking", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_drift_run_severity_option(self, tmp_path):
+        runner = CliRunner()
+        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
+            result = runner.invoke(
+                deploy,
+                ["drift", "run", "--file", "deploy.yaml", "--severity", "high", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_drift_run_baseline_flag(self, tmp_path):
+        """--baseline flag is accepted."""
+        runner = CliRunner()
+        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=True):
+            result = runner.invoke(
+                deploy,
+                ["drift", "run", "--file", "deploy.yaml", "--baseline", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_drift_run_invalid_severity_exits_2(self, tmp_path):
+        """Passing an invalid severity value should return Click usage error (exit 2)."""
+        runner = CliRunner()
+        result = runner.invoke(
+            deploy,
+            ["drift", "run", "--file", "deploy.yaml", "--severity", "badvalue", "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 2
+
+    def test_drift_run_execute_false_returns_nonzero(self, tmp_path):
+        """When DriftDeployCommand.execute() returns False the CLI exits non-zero."""
+        runner = CliRunner()
+        with patch("strata.commands.deploy.drift_deploy_command.DriftDeployCommand.execute", return_value=False):
+            result = runner.invoke(deploy, ["drift", "run", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
+        assert result.exit_code != 0
+
+    def test_drift_run_file_required(self, tmp_path):
+        """Omitting --file should return Click usage error (exit 2)."""
+        runner = CliRunner()
+        result = runner.invoke(deploy, ["drift", "run", "--work-path", str(tmp_path)])
+        assert result.exit_code == 2
+
+    def test_drift_acknowledge_basic(self, tmp_path):
+        """drift acknowledge routes to AcknowledgeDriftDeployCommand."""
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.acknowledge_drift_deploy_command.AcknowledgeDriftDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(
+                deploy,
+                [
+                    "drift",
+                    "acknowledge",
+                    "--file",
+                    "deploy.yaml",
+                    "--address",
+                    "azurerm_autoscale_setting.web",
+                    "--reason",
+                    "auto-scaler",
+                    "--work-path",
+                    str(tmp_path),
+                ],
+            )
+        assert result.exit_code == 0
+
+    def test_drift_acknowledge_remove_flag(self, tmp_path):
+        """--remove flag is accepted."""
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.acknowledge_drift_deploy_command.AcknowledgeDriftDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(
+                deploy,
+                [
+                    "drift",
+                    "acknowledge",
+                    "--file",
+                    "deploy.yaml",
+                    "--address",
+                    "azurerm_autoscale_setting.web",
+                    "--remove",
+                    "--work-path",
+                    str(tmp_path),
+                ],
+            )
+        assert result.exit_code == 0
+
+    def test_drift_acknowledge_address_required(self, tmp_path):
+        """Omitting --address should return Click usage error (exit 2)."""
+        runner = CliRunner()
+        result = runner.invoke(deploy, ["drift", "acknowledge", "--file", "deploy.yaml", "--work-path", str(tmp_path)])
+        assert result.exit_code == 2
+
+    def test_drift_history_basic(self, tmp_path):
+        """drift history routes to DriftHistoryDeployCommand."""
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.drift_history_deploy_command.DriftHistoryDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(
+                deploy,
+                ["drift", "history", "--file", "deploy.yaml", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+    def test_drift_history_last_option(self, tmp_path):
+        """--last N is accepted."""
+        runner = CliRunner()
+        with patch(
+            "strata.commands.deploy.drift_history_deploy_command.DriftHistoryDeployCommand.execute",
+            return_value=True,
+        ):
+            result = runner.invoke(
+                deploy,
+                ["drift", "history", "--file", "deploy.yaml", "--last", "5", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# RunDeployCommand._resolve_values() seeded/generated note output tests
+# ---------------------------------------------------------------------------
+
+
+def _make_run_cmd(tmp_path):
+    from unittest.mock import MagicMock
+
+    from strata.commands.deploy.run_deploy_command import RunDeployCommand
+
+    cmd = RunDeployCommand.__new__(RunDeployCommand)
+    cmd._work_path = tmp_path
+    cmd._file_path = tmp_path / "deploy.yaml"
+    cmd._stage = None
+    cmd._dry_run = False
+    cmd._force = False
+    cmd._errors = []
+    cmd._messages = []
+    cmd._output_data = {}
+    cmd._output_format = "console"
+    cmd._output_quiet = False
+    cmd._output_verbose = False
+    cmd._resolved_values = None
+    cmd._deployment_service = None
+    cmd._configuration_service = None
+    cmd._solution_controller = MagicMock()
+    cmd.logger = MagicMock()
+    return cmd
+
+
+class TestDeployRunSeedNotes:
+    """Unit tests for seeded/generated note output in RunDeployCommand._resolve_values()."""
+
+    def _run_resolve(
+        self,
+        tmp_path,
+        variable_notes=None,
+        secret_notes=None,
+        feature_notes=None,
+        variables=None,
+        secrets=None,
+        features=None,
+    ):
+        from unittest.mock import MagicMock, patch
+
+        from strata.utils.resolved_values import ResolvedValues
+
+        cmd = _make_run_cmd(tmp_path)
+        resolved = ResolvedValues(
+            variables=variables or {"X": "1"},
+            secrets=secrets or {},
+            features=features or {},
+            variable_notes=variable_notes or {},
+            secret_notes=secret_notes or {},
+            feature_notes=feature_notes or {},
+        )
+        value_ctrl = MagicMock()
+        value_ctrl.resolve_values.return_value = (True, resolved, [])
+        with patch("strata.commands.deploy.run_deploy_command.ValueController", return_value=value_ctrl):
+            output = []
+            with patch("click.echo", side_effect=output.append):
+                cmd._resolve_values()
+        return output
+
+    def test_seeded_variable_shown_in_output(self, tmp_path):
+        output = self._run_resolve(
+            tmp_path,
+            variables={"LOG_LEVEL": "info"},
+            variable_notes={"LOG_LEVEL": "default: info"},
+        )
+        seeded_lines = [line for line in output if "Seeded on first run" in str(line)]
+        assert len(seeded_lines) == 1
+        assert "LOG_LEVEL=info" in seeded_lines[0]
+
+    def test_seeded_feature_shown_in_output(self, tmp_path):
+        output = self._run_resolve(
+            tmp_path,
+            variables={"X": "1"},
+            features={"DARK_MODE": False},
+            feature_notes={"DARK_MODE": "default: false"},
+        )
+        seeded_lines = [line for line in output if "Seeded on first run" in str(line)]
+        assert len(seeded_lines) == 1
+        assert "DARK_MODE=false" in seeded_lines[0]
+
+    def test_generated_secret_shown_in_output(self, tmp_path):
+        output = self._run_resolve(
+            tmp_path,
+            variables={"X": "1"},
+            secrets={"DB_PASSWORD": "s3cr3t"},
+            secret_notes={"DB_PASSWORD": "generated"},
+        )
+        gen_lines = [line for line in output if "Generated on first run" in str(line)]
+        assert len(gen_lines) == 1
+        assert "DB_PASSWORD" in gen_lines[0]
+
+    def test_no_extra_lines_when_notes_empty(self, tmp_path):
+        output = self._run_resolve(tmp_path)
+        assert not any("Seeded on first run" in str(line) for line in output)
+        assert not any("Generated on first run" in str(line) for line in output)
+
+    def test_non_default_variable_note_not_shown(self, tmp_path):
+        output = self._run_resolve(
+            tmp_path,
+            variables={"X": "1"},
+            variable_notes={"X": "some-other-note"},
+        )
+        assert not any("Seeded on first run" in str(line) for line in output)

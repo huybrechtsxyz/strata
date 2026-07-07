@@ -53,10 +53,15 @@ def schema_group():
 @click_output_format
 def schema_list(output: Optional[str] = None) -> None:
     """List all supported platform document kinds."""
+    from strata.models.common_models import INTERNAL_KINDS
+
     kinds = sorted(k.value for k in _KIND_TO_MODEL)
 
     if output == "json":
-        click.echo(json.dumps({"kinds": kinds}, indent=2))
+        items = [
+            {"kind": k.value, "model": m.__name__, "internal": k in INTERNAL_KINDS} for k, m in _KIND_TO_MODEL.items()
+        ]
+        click.echo(json.dumps({"kinds": sorted(items, key=lambda x: x["kind"])}, indent=2))
         return
 
     if output == "text":
@@ -66,12 +71,13 @@ def schema_list(output: Optional[str] = None) -> None:
 
     # Console mode — simple table
     click.echo("")
-    click.echo(f"  {'KIND':<20}  MODEL CLASS")
-    click.echo(f"  {'─' * 20}  {'─' * 30}")
+    click.echo(f"  {'KIND':<24}  MODEL CLASS")
+    click.echo(f"  {'─' * 24}  {'─' * 30}")
     for kind in PlatformKind:
         model_cls = _KIND_TO_MODEL.get(kind)
         if model_cls:
-            click.echo(f"  {kind.value:<20}  {model_cls.__name__}")
+            suffix = "  (internal)" if kind in INTERNAL_KINDS else ""
+            click.echo(f"  {kind.value:<24}  {model_cls.__name__}{suffix}")
     click.echo("")
 
 

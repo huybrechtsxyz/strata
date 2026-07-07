@@ -42,6 +42,20 @@ The native engine handles the 80% case (zone enforcement, required tags, naming 
 - Bad: Policy context varies by phase — policies must be written for a specific phase.
 - Bad: Script-type policies have subprocess overhead and error handling complexity.
 
+## Implementation Status
+
+Fully implemented as of v1.0. All components in the detailed design are present:
+
+- `PolicyModel` in `models/policy_model.py`
+- `BasePolicy`, `PolicyContext`, `PolicyResult` in `validators/policies/base_policy.py`
+- `PolicyEngine` with `evaluate()`, `has_denials()`, and `register_type()` (plugin hook) in `validators/policies/policy_engine.py`
+- 12 built-in policy types (6 more than designed: ref_convention, resource_type_restrictions, 5 SBOM/CVE policies)
+- `configuration.spec.policies` field wired into `ConfigurationSpecModel`
+- `ManifestPolicyResultModel` in `deployment_manifest_model.py` — policy results recorded per deployment
+- Policy evaluation called from `run_validate_command`, `run_build_command`, and `run_deploy_command` at the appropriate phases
+- `strata policy list` and `strata policy check` CLI commands implemented
+- 13+ dedicated test files in `tests/strata/validators/`
+
 ## Detailed Design
 
 ### Architecture
@@ -50,19 +64,30 @@ Policies follow the same layered pattern as the rest of strata:
 
 ```
 models/
-  policy_model.py              ← PolicyModel (YAML config), PolicyResult
+  policy_model.py              ← PolicyModel (YAML config)
 validators/
   policies/
-    base_policy.py             ← BasePolicy ABC
-    customer_zone_policy.py    ← Built-in: zone enforcement
+    base_policy.py             ← BasePolicy ABC, PolicyContext, PolicyResult
+    policy_engine.py           ← PolicyEngine orchestrator (+ plugin registry)
+    tenant_zone_policy.py      ← Built-in: zone enforcement
     required_tags_policy.py    ← Built-in: tag enforcement
     naming_policy.py           ← Built-in: naming conventions
+    ref_convention_policy.py   ← Built-in: ref/variable naming
+    resource_type_restrictions_policy.py ← Built-in: forbidden resource types
     script_policy.py           ← Escape hatch: external command
+    sbom_pinned_versions_policy.py       ← Built-in: SBOM version pinning
+    sbom_allowed_registries_policy.py    ← Built-in: SBOM registry allowlist
+    sbom_denied_packages_policy.py       ← Built-in: SBOM package denylist
+    sbom_max_components_policy.py        ← Built-in: SBOM component count
+    sbom_license_policy.py               ← Built-in: SBOM license compliance
+    cve_max_severity_policy.py           ← Built-in: CVE severity gate
 ```
 
 Policies are **not** integrations. Integrations wrap external tools with singleton lifecycle and availability checks. Policies are stateless evaluators — instantiated per-evaluation, no singleton, no availability dance. They sit in the `validators/` layer because that's where validation logic lives.
 
 ### YAML Declaration
+
+> **Note:** The `customer_zone` type in the original design was renamed `tenant_zone` following ADR-0012 (customer → tenant rename).
 
 Policies are declared in `configuration.spec.policies`:
 

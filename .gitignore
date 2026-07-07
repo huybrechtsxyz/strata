@@ -558,3 +558,4 @@ ipython_config.py
 
 # Temporary until uv.lock is cleaned of internal ProGet URLs (dev-machine only)
 uv.lock
+docs/intdev.md

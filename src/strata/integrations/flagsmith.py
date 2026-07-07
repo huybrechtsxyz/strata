@@ -6,7 +6,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
-from strata.integrations.capabilities import IFeatureStore
+from strata.integrations.capabilities import IFeatureStore, IVariableStore
 from strata.integrations.store_integration import StoreIntegration
 from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
@@ -32,7 +32,7 @@ class FlagsmithIntegration(StoreIntegration):
     COMMAND = "flagsmith"
 
     # Declare supported capabilities
-    CAPABILITIES = [IFeatureStore]
+    CAPABILITIES = [IFeatureStore, IVariableStore]
 
     @classmethod
     def _get_instance_key_static(cls, class_ref, *args, **kwargs) -> str:
@@ -62,6 +62,9 @@ class FlagsmithIntegration(StoreIntegration):
         # Auth: environment API key
         self.env_key = self._get_env_var(self._get_env_key_var_name())
 
+        # Optional: management API key for write operations (feature flag creation/toggle)
+        self.management_key = self._get_env_var(self._get_management_key_var_name())
+
         # Per-instance flag cache (refreshed each call to _fetch_flags)
         self._flags_cache: Optional[List[Dict[str, Any]]] = None
 
@@ -80,6 +83,10 @@ class FlagsmithIntegration(StoreIntegration):
         if auth and auth.method == "api_key" and auth.api_key:
             return auth.api_key.api_key or "FLAGSMITH_ENVIRONMENT_KEY"
         return "FLAGSMITH_ENVIRONMENT_KEY"
+
+    def _get_management_key_var_name(self) -> str:
+        """Return the env-var name holding the optional Flagsmith management API key."""
+        return "FLAGSMITH_MANAGEMENT_KEY"
 
     # Base integration overrides
 
@@ -130,6 +137,11 @@ class FlagsmithIntegration(StoreIntegration):
                     "purpose": "Environment API key (X-Environment-Key header)",
                     "required": True,
                 },
+                {
+                    "name": "FLAGSMITH_MANAGEMENT_KEY",
+                    "purpose": "Management API key for write operations (optional)",
+                    "required": False,
+                },
             ],
             "auth_methods": [
                 {
@@ -171,6 +183,7 @@ class FlagsmithIntegration(StoreIntegration):
         info = super().get_info()
         info["flagsmith_addr"] = self.flagsmith_addr
         info["has_env_key"] = bool(self.env_key)
+        info["has_management_key"] = bool(self.management_key)
         return info
 
     # Unified Store Interface Implementation (IFeatureStore)
@@ -215,27 +228,42 @@ class FlagsmithIntegration(StoreIntegration):
 
     def set_feature(self, key: str, value: Any, **kwargs) -> bool:
         """
-        Set a feature flag value in Flagsmith.
+        Create or verify a feature flag in Flagsmith (create-if-not-exists semantics).
 
         Implements IFeatureStore interface.
 
-        Note:
-            Environment API keys are read-only for remote evaluation.
-            Modifying flags requires a server-side key and the management API.
-            This method logs a warning and returns False.
+        Feature flags that do not yet exist in Flagsmith must be created manually in
+        the Flagsmith dashboard or via the management API.  This method returns
+        ``True`` when the flag already exists (the intended "seed-on-missing" contract
+        for Flagsmith is to verify presence, not to toggle state) and ``False`` when
+        the flag is absent.
 
         Args:
             key: Feature flag name
-            value: Feature flag value
+            value: Ignored — existing flags are never modified
 
         Returns:
-            Always False (not supported via environment key)
+            True if the flag exists in Flagsmith, False if not found or on error
         """
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot set feature in Flagsmith", error=error, name=self.integration_name)
+            return False
+
+        flags = self._fetch_flags(refresh=True)
+        for flag in flags:
+            if flag.get("feature", {}).get("name") == key:
+                logger.info(
+                    "Feature flag already exists in Flagsmith — skipping write",
+                    name=self.integration_name,
+                    key=key,
+                )
+                return True
+
         logger.warning(
-            "Flagsmith does not support setting feature flags via the environment API key. "
-            "Use the management API with a server-side key.",
-            key=key,
+            "Feature flag not found in Flagsmith — create it in the Flagsmith dashboard first",
             name=self.integration_name,
+            key=key,
         )
         return False
 
@@ -270,6 +298,172 @@ class FlagsmithIntegration(StoreIntegration):
             "X-Environment-Key": self.env_key or "",
             "Content-Type": "application/json",
         }
+
+    def _management_headers(self) -> Dict[str, str]:
+        return {
+            "Authorization": f"Api-Key {self.management_key}",
+            "Content-Type": "application/json",
+        }
+
+    # Unified Store Interface Implementation (IVariableStore)
+
+    def get_variable(self, key: str, **kwargs) -> Optional[Any]:
+        """
+        Get a trait value for a Flagsmith identity.
+
+        Implements IVariableStore interface.  Flagsmith traits are per-identity
+        key-value pairs used for remote configuration.
+
+        Args:
+            key: Trait key
+            **kwargs: identity (Flagsmith identity identifier, defaults to ``"default"``),
+                      refresh (bool)
+
+        Returns:
+            Trait value, or None if not found
+        """
+        identity = kwargs.get("identity", "default")
+        refresh = kwargs.get("refresh", False)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot retrieve variable from Flagsmith", error=error, name=self.integration_name)
+            return None
+
+        traits = self._fetch_traits(identity=identity, refresh=refresh)
+        for trait in traits:
+            if trait.get("trait_key") == key:
+                return trait.get("trait_value")
+
+        logger.debug("Trait not found in Flagsmith", key=key, identity=identity, name=self.integration_name)
+        return None
+
+    def set_variable(self, key: str, value: Any, **kwargs) -> bool:
+        """
+        Set a trait for a Flagsmith identity (create-if-not-exists semantics).
+
+        Implements IVariableStore interface.  Writes identity traits via the Flagsmith
+        traits API.  Requires a server-side (not client-side) environment API key.
+        Never overwrites an existing trait — if the key already exists the method
+        returns ``True`` without writing.
+
+        Args:
+            key: Trait key
+            value: Trait value (coerced to str)
+            **kwargs: identity (Flagsmith identity identifier, defaults to ``"default"``)
+
+        Returns:
+            True if the trait exists (created now or already present), False on failure
+        """
+        identity = kwargs.get("identity", "default")
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot write variable to Flagsmith", error=error, name=self.integration_name)
+            return False
+
+        # Check existence first — never overwrite
+        existing = self.get_variable(key, identity=identity, refresh=True)
+        if existing is not None:
+            logger.info(
+                "Trait already exists in Flagsmith — skipping write",
+                name=self.integration_name,
+                key=key,
+                identity=identity,
+            )
+            return True
+
+        logger.debug("Writing trait to Flagsmith", name=self.integration_name, key=key, identity=identity)
+
+        ok = self._set_trait_via_api(identity, key, str(value))
+        if ok:
+            logger.info("Trait written to Flagsmith", name=self.integration_name, key=key, identity=identity)
+        else:
+            logger.warning("Failed to write trait to Flagsmith", name=self.integration_name, key=key, identity=identity)
+        return ok
+
+    def list_variables(self, prefix: str = "", **kwargs) -> List[str]:
+        """
+        List trait keys for a Flagsmith identity.
+
+        Implements IVariableStore interface.
+
+        Args:
+            prefix: Optional key prefix filter
+            **kwargs: identity (Flagsmith identity identifier, defaults to ``"default"``),
+                      refresh (bool)
+
+        Returns:
+            List of trait keys
+        """
+        identity = kwargs.get("identity", "default")
+        refresh = kwargs.get("refresh", False)
+
+        available, _ = self.ensure_available()
+        if not available:
+            return []
+
+        traits = self._fetch_traits(identity=identity, refresh=refresh)
+        keys = [t.get("trait_key", "") for t in traits if "trait_key" in t]
+        return [k for k in keys if k.startswith(prefix)] if prefix else keys
+
+    def _fetch_traits(self, identity: str = "default", refresh: bool = False) -> List[Dict[str, Any]]:
+        """
+        Fetch all traits for a Flagsmith identity.
+
+        Args:
+            identity: Flagsmith identity identifier
+            refresh: If True, bypass any internal cache
+
+        Returns:
+            List of trait objects (each has ``trait_key`` and ``trait_value``)
+        """
+        try:
+            url = f"{self.flagsmith_addr}/api/v1/identities/?identifier={urllib.parse.quote(identity)}"
+            req = urllib.request.Request(url, method="GET")
+            for k, v in self._api_headers().items():
+                req.add_header(k, v)
+
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+
+            return data.get("traits", []) if isinstance(data, dict) else []
+        except Exception as e:
+            logger.debug(
+                "Flagsmith API trait fetch failed",
+                error_type=type(e).__name__,
+                name=self.integration_name,
+            )
+            return []
+
+    def _set_trait_via_api(self, identity: str, key: str, value: str) -> bool:
+        """
+        Write a trait for a Flagsmith identity via the traits API.
+
+        Requires a server-side environment API key; client-side (browser) keys
+        are read-only for trait writes.
+
+        Args:
+            identity: Flagsmith identity identifier
+            key: Trait key
+            value: Trait value string
+
+        Returns:
+            True on HTTP 200/201, False on any error
+        """
+        try:
+            url = f"{self.flagsmith_addr}/api/v1/traits/"
+            body = json.dumps({"identity": {"identifier": identity}, "trait_key": key, "trait_value": value}).encode(
+                "utf-8"
+            )
+            req = urllib.request.Request(url, data=body, method="POST")
+            for k, v in self._api_headers().items():
+                req.add_header(k, v)
+
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return resp.status in (200, 201)
+        except Exception:
+            return False
 
     def _fetch_flags(self, identity: Optional[str] = None, refresh: bool = False) -> List[Dict[str, Any]]:
         """

@@ -205,6 +205,31 @@ This pattern applies consistently to all new and existing phases.
 - **ADR 0003 (Layered Architecture)** — LifecycleController sits in the controllers layer; services provide lifecycle models.
 - **ADR 0004 (Exit Code Convention)** — Exit code 1 for system failures in lifecycle hooks; exit code 3 for validation errors if a pre-validate hook fails.
 
+## Post-v1.0 Deferred Work
+
+ADR-0020 specifies 27 lifecycle phases. **v1.0 ships with 25 complete.** The following 2 phases are **explicitly post-v1.0:**
+
+| Phase | Trigger | Why Deferred |
+|-------|---------|-------------|
+| `config_fetch` | Before config files are loaded from remote sources | Designed but not implemented. Use case: validate remote config URLs or add pre-caching hooks. Deferred pending clear user demand. |
+| `config_clean` | After config cleanup (opposite of config_fetch) | Designed but not implemented. Companion to `config_fetch`; deferred with same rationale. |
+
+### Why These Don't Block v1
+
+- Current workflow is: resolve refs → load config → validate → build → deploy
+- `config_fetch` and `config_clean` would enable: pre-fetch hooks, caching, remote validation
+- These are enhancement hooks, not core orchestration phases
+- No deployed infrastructure depends on them; they're UX/performance optimizations
+
+### Effort Estimate
+
+Post-v1.0 backlog for ADR-0020:
+- `config_fetch` and `config_clean` phases: 2–3 hours each (design already complete, just needs CLI wiring)
+
+**Total: ~4–6 hours** (low priority enhancement).
+
+---
+
 ## References
 
 - Current implementation: [src/strata/controllers/lifecycle_controller.py](src/strata/controllers/lifecycle_controller.py)

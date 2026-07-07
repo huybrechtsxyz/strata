@@ -11,14 +11,19 @@ When something breaks, run through these steps in order:
 ### 1. Check current drift
 
 ```bash
-strata build plan --file deploy/deploy-prd.yaml
+strata deploy drift -f deploy/deploy-prd.yaml
 ```
 
-This compares the current configuration against the last-applied state. If there's drift, you'll see exactly which resources differ and how.
+This runs a non-destructive `terraform plan` for each stage and classifies any changes
+by severity (critical → info). Resources that changed since the last deploy are listed
+with the attributes that differ.
 
 **No drift?** The issue isn't a configuration change — look at application logs, external dependencies, or upstream provider outages.
 
 **Drift found?** Continue to step 2 to find out who/what caused it.
+
+> See [Detecting Infrastructure Drift](detecting-infrastructure-drift.md) for full details
+> on severity levels, thresholds, and CI integration.
 
 ### 2. Check execution history
 

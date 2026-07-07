@@ -101,6 +101,34 @@ class SecretGenerateSpec(BaseModel):
         return v
 
 
+# Rotation policy enum.
+class SecretRotatePolicy(str, Enum):
+    """Rotation policy: warn (advisory only) or rotate (auto-regenerate)."""
+
+    WARN = "warn"
+    ROTATE = "rotate"
+
+
+# Spec for age-based secret rotation.
+class SecretRotateSpec(BaseModel):
+    """Rotation policy for a secret — advisory warning or automatic regeneration."""
+
+    max_age: int = Field(
+        description="Maximum secret age in days before the policy triggers. Must be >= 1.",
+    )
+    policy: SecretRotatePolicy = Field(
+        default=SecretRotatePolicy.WARN,
+        description="Rotation policy: 'warn' emits an advisory, 'rotate' auto-regenerates (requires generate: spec).",
+    )
+
+    @field_validator("max_age")
+    @classmethod
+    def validate_max_age(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("max_age must be >= 1 (days)")
+        return v
+
+
 # Enumeration of supported feature flag store types.
 class FeatureStoreType(str, Enum):
     """
@@ -148,6 +176,10 @@ class SecretStoreModel(BaseModel):
         None,
         description="Auto-generate the secret when the store key is missing (integration-backed stores only)",
     )
+    rotate: Optional[SecretRotateSpec] = Field(
+        None,
+        description="Rotation policy: age-based advisory or automatic regeneration (integration-backed stores only)",
+    )
 
     @model_validator(mode="after")
     def validate_generate_not_on_builtin(self) -> "SecretStoreModel":
@@ -156,6 +188,25 @@ class SecretStoreModel(BaseModel):
             raise ValueError(
                 f"Secret '{self.key}': 'generate' is not valid on built-in store type '{self.store.value}'. "
                 "Use an integration-backed store (azure-keyvault, vault, bitwarden, infisical)."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_rotate_not_on_builtin(self) -> "SecretStoreModel":
+        builtin = {SecretStoreType.CONSTANT, SecretStoreType.ENVIRONMENT, SecretStoreType.GITHUB}
+        if self.rotate is not None and self.store in builtin:
+            raise ValueError(
+                f"Secret '{self.key}': 'rotate' is not valid on built-in store type '{self.store.value}'. "
+                "Use an integration-backed store (azure-keyvault, vault, bitwarden, infisical)."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_rotate_policy_requires_generate(self) -> "SecretStoreModel":
+        if self.rotate is not None and self.rotate.policy == SecretRotatePolicy.ROTATE and self.generate is None:
+            raise ValueError(
+                f"Secret '{self.key}': rotate policy 'rotate' requires a 'generate' spec — "
+                "strata cannot auto-regenerate a manually-placed secret. Use policy 'warn' instead."
             )
         return self
 

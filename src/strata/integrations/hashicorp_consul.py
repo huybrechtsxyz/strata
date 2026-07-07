@@ -7,7 +7,7 @@ import re
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
-from strata.integrations.capabilities import IKVStore, IVariableStore
+from strata.integrations.capabilities import IFeatureStore, IKVStore, IVariableStore
 from strata.integrations.store_integration import StoreIntegration
 from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
@@ -34,7 +34,7 @@ class ConsulIntegration(StoreIntegration):
     COMMAND = "consul"
 
     # Declare supported capabilities
-    CAPABILITIES = [IVariableStore, IKVStore]
+    CAPABILITIES = [IVariableStore, IKVStore, IFeatureStore]
 
     # Singleton instance keying based on endpoint
 
@@ -300,6 +300,68 @@ class ConsulIntegration(StoreIntegration):
         else:
             logger.warning("Failed to write variable to HashiCorp Consul", name=self.integration_name, key=key)
         return ok
+
+    # IFeatureStore implementation — feature flags stored as Consul KV entries
+
+    def get_feature(self, key: str, **kwargs) -> Optional[Any]:
+        """
+        Get a feature flag value from HashiCorp Consul KV.
+
+        Feature flags are stored as Consul KV entries under a configurable prefix
+        (default: ``features/``).  Returns the flag's enabled state as bool, or
+        ``None`` if the flag does not exist.
+
+        Args:
+            key: Feature flag name
+            **kwargs: features_path (default ``"features"``), prefer_cli, timeout
+
+        Returns:
+            True/False for the enabled state, or None if not found
+        """
+        features_path = kwargs.get("features_path", "features")
+        raw = self.get_variable(f"{features_path}/{key}", **kwargs)
+        if raw is None:
+            return None
+        return str(raw).lower() == "true"
+
+    def set_feature(self, key: str, value: Any, **kwargs) -> bool:
+        """
+        Set a feature flag in HashiCorp Consul KV (create-if-not-exists semantics).
+
+        Feature flags are stored as Consul KV entries under a configurable prefix
+        (default: ``features/``).  Never overwrites an existing entry — if the key
+        already exists the method returns ``True`` without writing.
+
+        Args:
+            key: Feature flag name
+            value: Initial enabled state (truthy/falsy)
+            **kwargs: features_path (default ``"features"``), prefer_cli, timeout
+
+        Returns:
+            True if the feature exists (created now or already present), False on failure
+        """
+        features_path = kwargs.get("features_path", "features")
+        return self.set_variable(f"{features_path}/{key}", "true" if value else "false", **kwargs)
+
+    def list_features(self, prefix: str = "", **kwargs) -> List[str]:
+        """
+        List feature flag names from HashiCorp Consul KV.
+
+        Feature flags are stored as Consul KV entries under a configurable prefix
+        (default: ``features/``).  The prefix is stripped from the returned names.
+
+        Args:
+            prefix: Optional name prefix filter
+            **kwargs: features_path (default ``"features"``), prefer_cli, timeout
+
+        Returns:
+            List of feature flag names (without the ``features/`` path prefix)
+        """
+        features_path = kwargs.get("features_path", "features")
+        path = f"{features_path}/{prefix}" if prefix else f"{features_path}/"
+        keys = self.list_variables(path, **kwargs)
+        strip = f"{features_path}/"
+        return [k[len(strip) :] if k.startswith(strip) else k for k in keys]
 
     def _put_keyvalue(self, key: str, value: str, prefer_cli: bool = True, timeout: int = 60) -> bool:
         """Write a key-value to Consul KV store."""

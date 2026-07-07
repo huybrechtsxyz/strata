@@ -13,6 +13,7 @@ strata
    :caption: Getting Started:
 
    README
+   INDEX
 
 .. toctree::
    :maxdepth: 2
@@ -57,6 +58,7 @@ strata
    platform/manifest-cli
    platform/manifest-schema
    platform/sbom-plugin-api
+   platform/provisioner-plugin-api
 
 .. toctree::
    :maxdepth: 2
@@ -164,6 +166,8 @@ strata
    guides/cve-vulnerability-scanning
    guides/at-scale
    guides/using-console
+   guides/building-a-provisioner-plugin
+   guides/detecting-infrastructure-drift
 
 .. toctree::
    :maxdepth: 1

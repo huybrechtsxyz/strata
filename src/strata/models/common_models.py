@@ -66,7 +66,14 @@ class PlatformVersion(str, Enum):
     """Enumeration of supported platform versions."""
 
     v1 = "strata.huybrechts.xyz/v1"
-    v1_omp = "strata.omp.com/v1"
+    v1_omp = "strata.omp.com/v1"  # Hidden alias — accepted in validation, not advertised
+
+
+# The canonical apiVersion for all new YAML documents.
+CANONICAL_API_VERSION = PlatformVersion.v1
+
+# Kinds that are internal build/deploy artifacts, not user-authored YAML documents.
+INTERNAL_KINDS: frozenset = frozenset({PlatformKind.PLATFORM_MODEL, PlatformKind.DEPLOYMENT_MANIFEST})
 
 
 # Enumeration of supported provisioner names.

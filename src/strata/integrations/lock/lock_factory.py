@@ -6,7 +6,9 @@ from typing import Optional
 from strata.integrations.lock.base_lock_backend import BaseLockBackend
 from strata.integrations.lock.lock_azurerm import AzurermLockBackend
 from strata.integrations.lock.lock_consul import ConsulLockBackend
+from strata.integrations.lock.lock_gcs import GcsLockBackend
 from strata.integrations.lock.lock_local import LocalLockBackend
+from strata.integrations.lock.lock_s3 import S3LockBackend
 from strata.integrations.lock.lock_tfc import TfcLockBackend
 from strata.models.workspace_model import WorkspaceIacBackendModel
 
@@ -14,9 +16,8 @@ from strata.models.workspace_model import WorkspaceIacBackendModel
 class LockFactory:
     """Selects and instantiates a lock backend from a provisioner's backend config.
 
-    **Phase 2:** ``azurerm``, ``terraform_cloud`` / ``remote``, and ``consul``
-    are implemented.  ``s3`` and ``gcs`` remain Phase 3 stubs that raise
-    ``NotImplementedError``.
+    **Phase 2:** ``azurerm``, ``terraform_cloud`` / ``remote``, ``consul``,
+    ``s3``, and ``gcs`` are all implemented.
 
     Usage::
 
@@ -44,8 +45,7 @@ class LockFactory:
             A concrete ``BaseLockBackend`` ready for use.
 
         Raises:
-            NotImplementedError: When a remote backend type is requested but its
-                Phase 2 implementation is not yet available.
+            PlatformConfigurationError: When an unknown backend type is configured.
         """
         if backend_model is None:
             return LocalLockBackend(work_path)
@@ -63,19 +63,13 @@ class LockFactory:
                 return TfcLockBackend(backend_model.configuration, work_path)
 
             case "s3":
-                raise NotImplementedError(
-                    "S3LockBackend is not yet implemented (Phase 3). "
-                    "Set spec.locking.enabled: false or use a local backend."
-                )
+                return S3LockBackend(backend_model.configuration, work_path)
 
             case "consul":
                 return ConsulLockBackend(backend_model.configuration, work_path)
 
             case "gcs":
-                raise NotImplementedError(
-                    "GcsLockBackend is not yet implemented (Phase 3). "
-                    "Set spec.locking.enabled: false or use a local backend."
-                )
+                return GcsLockBackend(backend_model.configuration, work_path)
 
             case _:
                 # Unknown type — fall back to local rather than hard-failing,
