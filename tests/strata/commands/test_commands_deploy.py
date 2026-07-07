@@ -1295,6 +1295,7 @@ def _make_run_cmd(tmp_path):
     from unittest.mock import MagicMock
 
     from strata.commands.deploy.run_deploy_command import RunDeployCommand
+
     cmd = RunDeployCommand.__new__(RunDeployCommand)
     cmd._work_path = tmp_path
     cmd._file_path = tmp_path / "deploy.yaml"
@@ -1318,11 +1319,20 @@ def _make_run_cmd(tmp_path):
 class TestDeployRunSeedNotes:
     """Unit tests for seeded/generated note output in RunDeployCommand._resolve_values()."""
 
-    def _run_resolve(self, tmp_path, variable_notes=None, secret_notes=None, feature_notes=None,
-                     variables=None, secrets=None, features=None):
+    def _run_resolve(
+        self,
+        tmp_path,
+        variable_notes=None,
+        secret_notes=None,
+        feature_notes=None,
+        variables=None,
+        secrets=None,
+        features=None,
+    ):
         from unittest.mock import MagicMock, patch
 
         from strata.utils.resolved_values import ResolvedValues
+
         cmd = _make_run_cmd(tmp_path)
         resolved = ResolvedValues(
             variables=variables or {"X": "1"},
@@ -1346,7 +1356,7 @@ class TestDeployRunSeedNotes:
             variables={"LOG_LEVEL": "info"},
             variable_notes={"LOG_LEVEL": "default: info"},
         )
-        seeded_lines = [l for l in output if "Seeded on first run" in str(l)]
+        seeded_lines = [line for line in output if "Seeded on first run" in str(line)]
         assert len(seeded_lines) == 1
         assert "LOG_LEVEL=info" in seeded_lines[0]
 
@@ -1357,7 +1367,7 @@ class TestDeployRunSeedNotes:
             features={"DARK_MODE": False},
             feature_notes={"DARK_MODE": "default: false"},
         )
-        seeded_lines = [l for l in output if "Seeded on first run" in str(l)]
+        seeded_lines = [line for line in output if "Seeded on first run" in str(line)]
         assert len(seeded_lines) == 1
         assert "DARK_MODE=false" in seeded_lines[0]
 
@@ -1368,14 +1378,14 @@ class TestDeployRunSeedNotes:
             secrets={"DB_PASSWORD": "s3cr3t"},
             secret_notes={"DB_PASSWORD": "generated"},
         )
-        gen_lines = [l for l in output if "Generated on first run" in str(l)]
+        gen_lines = [line for line in output if "Generated on first run" in str(line)]
         assert len(gen_lines) == 1
         assert "DB_PASSWORD" in gen_lines[0]
 
     def test_no_extra_lines_when_notes_empty(self, tmp_path):
         output = self._run_resolve(tmp_path)
-        assert not any("Seeded on first run" in str(l) for l in output)
-        assert not any("Generated on first run" in str(l) for l in output)
+        assert not any("Seeded on first run" in str(line) for line in output)
+        assert not any("Generated on first run" in str(line) for line in output)
 
     def test_non_default_variable_note_not_shown(self, tmp_path):
         output = self._run_resolve(
@@ -1383,4 +1393,4 @@ class TestDeployRunSeedNotes:
             variables={"X": "1"},
             variable_notes={"X": "some-other-note"},
         )
-        assert not any("Seeded on first run" in str(l) for l in output)
+        assert not any("Seeded on first run" in str(line) for line in output)

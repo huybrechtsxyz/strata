@@ -33,8 +33,8 @@ class StatusSecretCommand(BaseCommand):
         super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
         self._file = file
 
-    def get_required_integrations(self) -> List[str]:
-        return []
+    def get_required_integrations(self) -> Dict[str, str]:
+        return {}
 
     def execute(self) -> bool:
         ok, _ = self._initialize()

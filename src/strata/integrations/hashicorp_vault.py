@@ -1,11 +1,16 @@
 """HashiCorp Vault integration for secrets management and key-value storage."""
 
+from __future__ import annotations
+
 import json
 import os
 import re
 import urllib.request
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from strata.utils.secret_metadata import SecretMetadata
 
 from strata.integrations.capabilities import (
     IFeatureStore,
@@ -363,7 +368,7 @@ class VaultIntegration(StoreIntegration):
         """Set a variable in HashiCorp Vault (delegates to set_secret)."""
         return self.set_secret(key, str(value), **kwargs)
 
-    def get_secret_metadata(self, key: str, **kwargs) -> Optional["SecretMetadata"]:
+    def get_secret_metadata(self, key: str, **kwargs) -> Optional[SecretMetadata]:
         """Return creation/update timestamps for a Vault KV v2 secret."""
         from strata.utils.secret_metadata import SecretMetadata
 

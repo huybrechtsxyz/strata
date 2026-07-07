@@ -153,9 +153,7 @@ class TestCheckRotation:
     @patch("strata.controllers.value_controller.ValueController._ensure_integrations_initialized")
     def test_no_rotate_spec_returns_value_unchanged(self, _mock_init):
         ctrl = self._make_controller()
-        item = SecretStoreModel(
-            key="X", store=SecretStoreType.AZURE_KEYVAULT, value="x"
-        )
+        item = SecretStoreModel(key="X", store=SecretStoreType.AZURE_KEYVAULT, value="x")
         integration = MagicMock()
         val, err, note = ctrl._check_rotation(item, "current-value", integration)
         assert val == "current-value"
@@ -167,9 +165,7 @@ class TestCheckRotation:
         ctrl = self._make_controller()
         integration = MagicMock()
         integration.get_secret_metadata.return_value = None
-        val, err, note = ctrl._check_rotation(
-            self._make_item(), "current-value", integration
-        )
+        val, err, note = ctrl._check_rotation(self._make_item(), "current-value", integration)
         assert val == "current-value"
         assert note is None
 
@@ -180,9 +176,7 @@ class TestCheckRotation:
         integration.get_secret_metadata.return_value = SecretMetadata(
             updated_at=datetime.now(timezone.utc) - timedelta(days=10)
         )
-        val, err, note = ctrl._check_rotation(
-            self._make_item(max_age=90), "current-value", integration
-        )
+        val, err, note = ctrl._check_rotation(self._make_item(max_age=90), "current-value", integration)
         assert val == "current-value"
         assert note is None
 
@@ -193,9 +187,7 @@ class TestCheckRotation:
         integration.get_secret_metadata.return_value = SecretMetadata(
             updated_at=datetime.now(timezone.utc) - timedelta(days=100)
         )
-        val, err, note = ctrl._check_rotation(
-            self._make_item(max_age=90, policy="warn"), "current-value", integration
-        )
+        val, err, note = ctrl._check_rotation(self._make_item(max_age=90, policy="warn"), "current-value", integration)
         assert val == "current-value"
         assert err is None
         assert note is not None
@@ -210,9 +202,7 @@ class TestCheckRotation:
             updated_at=datetime.now(timezone.utc) - timedelta(days=100)
         )
         integration.update_secret.return_value = True
-        val, err, note = ctrl._check_rotation(
-            self._make_item(max_age=90, policy="rotate"), "old-value", integration
-        )
+        val, err, note = ctrl._check_rotation(self._make_item(max_age=90, policy="rotate"), "old-value", integration)
         assert val != "old-value"
         assert err is None
         assert note is not None
@@ -227,9 +217,7 @@ class TestCheckRotation:
             updated_at=datetime.now(timezone.utc) - timedelta(days=100)
         )
         integration.update_secret.return_value = False
-        val, err, note = ctrl._check_rotation(
-            self._make_item(max_age=90, policy="rotate"), "old-value", integration
-        )
+        val, err, note = ctrl._check_rotation(self._make_item(max_age=90, policy="rotate"), "old-value", integration)
         assert val == "old-value"
         assert "rotation_failed" in note
 
@@ -240,9 +228,7 @@ class TestCheckRotation:
         integration.get_secret_metadata.return_value = SecretMetadata(
             created_at=datetime.now(timezone.utc) - timedelta(days=100)
         )
-        val, err, note = ctrl._check_rotation(
-            self._make_item(max_age=90, policy="warn"), "current-value", integration
-        )
+        val, err, note = ctrl._check_rotation(self._make_item(max_age=90, policy="warn"), "current-value", integration)
         assert "rotation_advisory" in note
 
 
@@ -287,9 +273,7 @@ class TestResolveSecretWithRotation:
         mock_integration.get_secret.return_value = "existing-value"
         mock_get_int.return_value = mock_integration
 
-        item = SecretStoreModel(
-            key="X", store=SecretStoreType.AZURE_KEYVAULT, value="x"
-        )
+        item = SecretStoreModel(key="X", store=SecretStoreType.AZURE_KEYVAULT, value="x")
         ctrl = ValueController()
         val, err, note = ctrl._resolve_secret(item)
         assert val == "existing-value"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import click
 
@@ -39,8 +39,8 @@ class PutSecretCommand(BaseCommand):
         self._value = value
         self._generate = generate
 
-    def get_required_integrations(self) -> List[str]:
-        return []
+    def get_required_integrations(self) -> Dict[str, str]:
+        return {}
 
     def execute(self) -> bool:
         ok, _ = self._initialize()

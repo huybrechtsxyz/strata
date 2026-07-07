@@ -131,7 +131,9 @@ def mask_secret_command(
 @click_work_path
 @click_file
 @click.pass_context
-def list_secret_command(ctx: click.Context, output: Optional[str], work_path: Optional[str], file: Optional[str]) -> None:
+def list_secret_command(
+    ctx: click.Context, output: Optional[str], work_path: Optional[str], file: Optional[str]
+) -> None:
     """List secrets declared in the deployment YAML (no store access)."""
     cmd = ListSecretCommand(work_path=work_path or ctx.obj.get("work_path"), output=output, file=file)
     success = cmd.execute()
@@ -166,7 +168,9 @@ def get_secret_cmd(
 @click_work_path
 @click_file
 @click.pass_context
-def status_secret_command(ctx: click.Context, output: Optional[str], work_path: Optional[str], file: Optional[str]) -> None:
+def status_secret_command(
+    ctx: click.Context, output: Optional[str], work_path: Optional[str], file: Optional[str]
+) -> None:
     """Report age and rotation status for all secrets that have a rotate: spec."""
     cmd = StatusSecretCommand(work_path=work_path or ctx.obj.get("work_path"), output=output, file=file)
     success = cmd.execute()
@@ -179,7 +183,9 @@ def status_secret_command(ctx: click.Context, output: Optional[str], work_path: 
 @click_file
 @click.argument("key")
 @click.option("--value", default=None, help="Explicit secret value to write.")
-@click.option("--generate", "do_generate", is_flag=True, default=False, help="Generate a value using the YAML generate spec.")
+@click.option(
+    "--generate", "do_generate", is_flag=True, default=False, help="Generate a value using the YAML generate spec."
+)
 @click.pass_context
 def put_secret_command(
     ctx: click.Context,

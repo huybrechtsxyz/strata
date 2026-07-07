@@ -33,8 +33,8 @@ class ListSecretCommand(BaseCommand):
         self._file = file
         self._deployment_service: Optional[DeploymentService] = None
 
-    def get_required_integrations(self) -> List[str]:
-        return []
+    def get_required_integrations(self) -> Dict[str, str]:
+        return {}
 
     def execute(self) -> bool:
         ok, _ = self._initialize()

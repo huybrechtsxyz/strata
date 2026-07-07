@@ -395,9 +395,7 @@ class RunDeployCommand(BaseDeployCommand):
                 if v.startswith("rotation_advisory:")
             ]
             rotated = [
-                f"{k} ({v.split(':', 1)[1]})"
-                for k, v in resolved.secret_notes.items()
-                if v.startswith("rotated:")
+                f"{k} ({v.split(':', 1)[1]})" for k, v in resolved.secret_notes.items() if v.startswith("rotated:")
             ]
             failed = [
                 f"{k} ({v.split(':', 1)[1]})"
