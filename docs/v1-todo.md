@@ -244,7 +244,7 @@ Each issue includes enough implementation context for a session to proceed witho
 
 ### ADR-0013: Auto-generated Secrets
 
-- [ ] **#XXX** — [ADR-0013] Implement secret rotation (Phase 3)
+- [x] **#XXX** — [ADR-0013] Implement secret rotation (Phase 3)
 
   > Age-based advisory + opt-in regeneration for auto-generated secrets.
   > `strata secret rotate --key X --deployment Y` for explicit on-demand rotation (generated secrets only).
@@ -467,29 +467,20 @@ Each issue includes enough implementation context for a session to proceed witho
 
 ### ADR-0018: Deployment Audit Traceability
 
-- [ ] **#XXX** — [ADR-0018 Layer 4] Extend SIEM integrations — ELK (Elasticsearch) and OpenTelemetry exporters
+- [x] **#XXX** — [ADR-0018 Layer 4] Extend SIEM integrations — ELK (Elasticsearch) and OpenTelemetry exporters ✅ **DONE**
 
   > Layer 4 of ADR-0018. Splunk HEC integration ships in v1.0. This issue adds ELK (Elasticsearch bulk index API) and OpenTelemetry (OTLP gRPC/HTTP) SIEM sinks for `strata audit export --siem <name>`.
   > ADR: `docs/decisions/0018-deployment-audit-traceability.md` (Layer 4 section)
   > Effort: 16–24h
 
-  **New files:**
-  - `src/strata/integrations/siem/elk_integration.py` — `ElkSiemIntegration` extends `SiemBaseIntegration`; uses Elasticsearch bulk index API (`POST /_bulk`); authentication via API key (`ELASTICSEARCH_API_KEY`) or username/password; index name configurable (default: `strata-audit-{date}`)
-  - `src/strata/integrations/siem/otel_integration.py` — `OtelSiemIntegration` extends `SiemBaseIntegration`; exports as OTLP logs (gRPC or HTTP/JSON); uses `opentelemetry-sdk` + `opentelemetry-exporter-otlp`; endpoint from `OTEL_EXPORTER_OTLP_ENDPOINT`
+  **Implementation note:** The final design uses integration references (`integration: <name>`) in `AuditSinkModel` rather than adding `"elk"`/`"otel"` as built-in `type` values. SIEM backends are declared in `configuration.spec.integrations` and referenced by name in `spec.audit.sinks`. No `opentelemetry-sdk` package dependency needed — `OtelSiemIntegration` uses `requests` to POST OTLP/HTTP JSON directly.
 
-  **Modified files:**
-  - `src/strata/integrations/siem/__init__.py` — export both new classes
-  - `src/strata/integrations/factory.py` — register `"elk"` and `"otel"` sink types
-  - `src/strata/models/audit_config_model.py` — add `"elk"` and `"otel"` as valid sink type values
-  - `pyproject.toml` — add `opentelemetry-sdk` and `opentelemetry-exporter-otlp` as optional deps (e.g. `strata[otel]` extra)
-
-  **Existing pattern:** See `src/strata/integrations/siem/splunk_siem_integration.py` for reference implementation of `ISiemSink.send_event()` and `send_batch()`.
-
-  **Acceptance criteria:**
-  - `strata audit export --siem elk --output json` forwards deploy-log entries to Elasticsearch
-  - `strata audit export --siem otel` exports as OTLP log records
-  - Non-blocking: SIEM delivery failure logs warning and continues (never fails deployment)
-  - Tests in `tests/strata/integrations/siem/`
+  **Completed:**
+  - `src/strata/integrations/siem/elk_siem_integration.py` — `ElkSiemIntegration`: TCP (Logstash) + HTTP (Elasticsearch bulk) dual-protocol
+  - `src/strata/integrations/siem/otel_siem_integration.py` — `OtelSiemIntegration`: OTLP/HTTP JSON, no SDK dependency
+  - `src/strata/integrations/siem/__init__.py` — both classes exported
+  - `src/strata/integrations/factory.py` — `"elk"` and `"otel"` registered
+  - Tests in `tests/strata/integrations/siem/test_elk_siem_integration.py` and `test_otel_siem_integration.py`
 
 ---
 
@@ -502,37 +493,17 @@ Each issue includes enough implementation context for a session to proceed witho
 
 ### ADR-0022: SIEM Integration (Splunk)
 
-- [ ] **#XXX** — [ADR-0022] Implement CEF syslog format for SIEM (`format: cef` on syslog sink)
+- [x] **#XXX** — [ADR-0022] Implement CEF syslog format for SIEM (`format: cef` on syslog sink) ✅ **DONE**
 
   > Splunk HEC ships in v1.0. This issue adds CEF (Common Event Format) encoding as an alternative format on existing syslog sinks. CEF is required by SIEM tools that ingest syslog streams (not HEC). Format is transport-identical to `syslog_json` — only payload encoding changes.
   > ADR: `docs/decisions/0022-siem-integration-splunk-hec-cef.md` (Phase 2 section)
   > Effort: 6–8h
 
-  **Modified files:**
-  - `src/strata/models/audit_config_model.py` — add `format: Literal["json", "cef"] = "json"` to the syslog sink model
-  - `src/strata/controllers/audit_controller.py` — add `_format_cef(event: dict) → str` method:
-    - CEF header: `CEF:0|huybrechts|strata|{version}|{event_type}|{event_name}|{severity}|`
-    - Severity: `3` (Low) on success, `7` (High) on failure
-    - Extension fields: `shost`, `duser`, `cs1` (deployment), `cs2` (stage), `msg`
-    - In `_send_syslog()`: check `sink.format`, call `_format_cef()` when `"cef"` instead of JSON serialization
-  - `src/strata/commands/cli_audit.py` — add `--siem <name>` flag to `strata audit export` subcommand; resolves integration by name from `AuditSinkModel`, verifies it implements `ISiemSink`, calls `send_batch()`
-
-  **Configuration example:**
-  ```yaml
-  spec:
-    audit:
-      sinks:
-        - name: my-siem
-          type: syslog
-          format: cef                 # new field
-          endpoint: syslog.example.com:514
-  ```
-
-  **Acceptance criteria:**
-  - `strata audit export --siem my-siem` forwards entries in CEF format when `format: cef`
-  - CEF string validates against CEF 0 specification (header + at least 5 extension fields)
-  - `format: json` (default) behavior unchanged
-  - Tests in `tests/strata/controllers/test_audit_controller.py`
+  **Completed:**
+  - `src/strata/models/audit_config_model.py` — `format: Optional[str]` on `AuditSinkModel`; syslog validator accepts `"json"` or `"cef"`, rejects anything else
+  - `src/strata/controllers/audit_controller.py` — `_format_cef(data)` static method (CEF:0 header, 6-field extension: rt/src/dst/act/externalId/msg, severity 3 on success / 7 on failure); `_send_syslog(data, address, fmt)` routes to `_format_cef()` when `fmt == "cef"`; `forward_to_siem()` passes `sink.format or "json"` to `_send_syslog()`
+  - `src/strata/commands/cli_audit.py` — `--siem <name>` flag on `audit export`; `_forward_entries_to_siem()` scans configuration for integration by name, creates via `IntegrationFactory`, verifies `ISiemSink`, calls `send_batch()`
+  - Tests in `tests/strata/controllers/test_controllers_audit_layer4.py`: `test_syslog_sink_passes_cef_format`, `TestFormatCef` class (header structure, severity low/high, extension fields, escape)
 
 ---
 
