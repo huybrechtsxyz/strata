@@ -31,6 +31,10 @@ class BaseService(ABC, Generic[ModelT]):
     def load(cls, path: str, validate: bool = True):
         """Load a service from file with caching.
 
+        Only successfully validated services are cached. Invalid services are
+        always re-created on the next call so that transient issues (e.g. a
+        file being written concurrently) do not poison the cache.
+
         Args:
             path: Path to service file
             validate: Whether to validate after loading
@@ -38,34 +42,34 @@ class BaseService(ABC, Generic[ModelT]):
         Returns:
             Service instance (cached or new)
         """
-        from strata.utils.service_cache import get_cache_key, get_or_cache
+        from strata.utils.service_cache import cache_service, get_cache_key, get_cached_service
 
-        # Generate cache key
         cache_key = get_cache_key(cls, path)
 
-        # Factory function for creating service
-        def create_service():
-            logger = get_logger(cls.__module__)
-            logger.debug("Creating new service", service_class=cls.__name__, path=path)
+        cached = get_cached_service(cls, path)
+        if cached is not None:
+            return cached
 
-            service = cls(path=path)
+        logger = get_logger(cls.__module__)
+        logger.debug("Creating new service", service_class=cls.__name__, path=path)
 
-            if validate:
-                is_valid, errors = service.validate()
-                if not is_valid:
-                    logger.warning(
-                        "Service validation failed",
-                        service_class=cls.__name__,
-                        error_count=len(errors),
-                        path=path,
-                    )
-                    # Note: Still return service even if invalid (don't cache)
-                    # Caller can check service.is_validated()
-                    service._errors.extend(errors)
+        service = cls(path=path)
 
-            return service
+        if validate:
+            is_valid, errors = service.validate()
+            if not is_valid:
+                logger.warning(
+                    "Service validation failed",
+                    service_class=cls.__name__,
+                    error_count=len(errors),
+                    path=path,
+                )
+                service._errors.extend(errors)
+                # Return without caching so the next load() retries
+                return service
 
-        return get_or_cache(cache_key, create_service)
+        cache_service(cls, service, path)
+        return service
 
     def __init__(self, path: Optional[str] = None, data: Optional[dict] = None):
         self._errors: List[str] = []

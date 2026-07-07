@@ -772,175 +772,53 @@ class DeploymentService(BaseService["DeploymentModel"]):
             self._workspace_service = None
         return success
 
-    def get_firewall_services(self) -> Optional[Dict[str, Any]]:
-        """
-        Get a specific firewall service by name (delegates to workspace).
-
-        Args:
-            firewall_name: Name of the firewall
-
-        Returns:
-            FirewallService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
+    def _ensure_workspace(self) -> WorkspaceService:
+        """Return the workspace service, raising if not yet loaded."""
         if self._workspace_service is None:
             raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_firewall_services()
+        return self._workspace_service
+
+    # --- Workspace delegation (infrastructure services) ---
+
+    def get_firewall_services(self) -> Optional[Dict[str, Any]]:
+        """Get all firewall services keyed by name (delegates to workspace)."""
+        return self._ensure_workspace().get_firewall_services()
 
     def get_firewall_service(self, firewall_name: str) -> Optional[BaseService]:
-        """
-        Get a specific firewall service by name (delegates to workspace).
-
-        Args:
-            firewall_name: Name of the firewall
-
-        Returns:
-            FirewallService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
-        if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_firewall_service(firewall_name)
+        """Get a specific firewall service by name (delegates to workspace)."""
+        return self._ensure_workspace().get_firewall_service(firewall_name)
 
     def get_module_services(self) -> Optional[Dict[str, Any]]:
-        """
-        Get a specific module service by name (delegates to workspace).
-
-        Args:
-            module_name: Name of the module
-
-        Returns:
-            ModuleService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
-        if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_module_services()
+        """Get all module services keyed by name (delegates to workspace)."""
+        return self._ensure_workspace().get_module_services()
 
     def get_module_service(self, resource_name: str, module_name: str) -> Optional[BaseService]:
-        """
-        Get a specific module service by name (delegates to workspace).
-
-        Args:
-            module_name: Name of the module
-
-        Returns:
-            ModuleService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
-        if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_module_service(resource_name=resource_name, module_name=module_name)
+        """Get a specific module service by resource and module name (delegates to workspace)."""
+        return self._ensure_workspace().get_module_service(resource_name=resource_name, module_name=module_name)
 
     def get_namespace_services(self) -> Optional[Dict[str, Any]]:
-        """
-        Get a specific namespace service by name (delegates to workspace).
-
-        Args:
-            namespace_name: Name of the namespace
-
-        Returns:
-            NamespaceService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
-        if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_namespace_services()
+        """Get all namespace services keyed by name (delegates to workspace)."""
+        return self._ensure_workspace().get_namespace_services()
 
     def get_namespace_service(self, namespace_name: str) -> Optional[Union[BaseService, Dict[str, BaseService]]]:
-        """
-        Get a specific namespace service by name (delegates to workspace).
-
-        Args:
-            namespace_name: Name of the namespace
-
-        Returns:
-            NamespaceService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
-        if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_namespace_service(namespace_name)
+        """Get a specific namespace service by name (delegates to workspace)."""
+        return self._ensure_workspace().get_namespace_service(namespace_name)
 
     def get_provider_services(self) -> Optional[Dict[str, Any]]:
-        """
-        Get a specific provider service by name (delegates to workspace).
-
-        Args:
-            provider_name: Name of the provider
-
-        Returns:
-            ProviderService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
-        if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_provider_services()
+        """Get all provider services keyed by name (delegates to workspace)."""
+        return self._ensure_workspace().get_provider_services()
 
     def get_provider_service(self, provider_name: str) -> Optional[BaseService]:
-        """
-        Get a specific provider service by name (delegates to workspace).
-
-        Args:
-            provider_name: Name of the provider
-
-        Returns:
-            ProviderService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
-        if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_provider_service(provider_name)
+        """Get a specific provider service by name (delegates to workspace)."""
+        return self._ensure_workspace().get_provider_service(provider_name)
 
     def get_resource_services(self) -> Optional[Dict[str, Any]]:
-        """
-        Get a specific resource service by name (delegates to workspace).
-
-        Args:
-            resource_name: Name of the resource
-
-        Returns:
-            ResourceService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
-        if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_resource_services()
+        """Get all resource services keyed by name (delegates to workspace)."""
+        return self._ensure_workspace().get_resource_services()
 
     def get_resource_service(self, resource_name: str) -> Optional[BaseService]:
-        """
-        Get a specific resource service by name (delegates to workspace).
-
-        Args:
-            resource_name: Name of the resource
-
-        Returns:
-            ResourceService instance or None if not found
-
-        Raises:
-            ServiceNotValidatedError: If load_related_services() hasn't been called
-        """
-        if self._workspace_service is None:
-            raise ServiceNotValidatedError("Workspace service not loaded. Call load_deploy_services() first.")
-        return self._workspace_service.get_resource_service(resource_name)
+        """Get a specific resource service by name (delegates to workspace)."""
+        return self._ensure_workspace().get_resource_service(resource_name)
 
     def get_environment_service(self) -> Optional[EnvironmentService]:
         """

@@ -13,6 +13,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    check_unique_names,
 )
 from strata.models.integration_model import IntegrationModel
 from strata.models.policy_model import PolicyModel
@@ -91,10 +92,7 @@ class ConfigurationTopologyModel(PlatformBaseModel):
     def validate_unique_component_roles(self) -> "ConfigurationTopologyModel":
         """Validate that all component roles are unique within this topology."""
         if self.components:
-            roles = [comp.role for comp in self.components]
-            duplicates = [role for role in roles if roles.count(role) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate component roles in topology '{self.type}': {', '.join(set(duplicates))}")
+            check_unique_names([comp.role for comp in self.components], f"component roles in topology '{self.type}'")
         return self
 
 
@@ -170,16 +168,11 @@ class ConfigurationProviderModel(PlatformBaseModel):
                     region_names.append(region["name"])
                 elif isinstance(region, str):
                     region_names.append(region)
-            duplicates = [name for name in region_names if region_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate regions in provider '{self.name}': {', '.join(set(duplicates))}")
+            check_unique_names(region_names, f"regions in provider '{self.name}'")
 
         # Validate unique resource names
         if self.resources:
-            resource_names = [res.name for res in self.resources]
-            duplicates = [name for name in resource_names if resource_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate resources in provider '{self.name}': {', '.join(set(duplicates))}")
+            check_unique_names([res.name for res in self.resources], f"resources in provider '{self.name}'")
 
         return self
 
@@ -454,9 +447,7 @@ class ConfigurationSpecModel(PlatformBaseModel):
 
         # Unique zone names
         zone_names = [z.name for z in self.zones]
-        duplicates = [n for n in zone_names if zone_names.count(n) > 1]
-        if duplicates:
-            raise ValueError(f"Duplicate zone names in configuration: {', '.join(set(duplicates))}")
+        check_unique_names(zone_names, "zone names in configuration")
 
         # Each region must appear in at most one zone
         seen: dict[str, str] = {}
@@ -475,20 +466,14 @@ class ConfigurationSpecModel(PlatformBaseModel):
     def validate_unique_providers(self) -> "ConfigurationSpecModel":
         """Validate that all provider names are unique."""
         if self.providers:
-            provider_names = [provider.name for provider in self.providers]
-            duplicates = [name for name in provider_names if provider_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate provider names in configuration: {', '.join(set(duplicates))}")
+            check_unique_names([provider.name for provider in self.providers], "provider names in configuration")
         return self
 
     @model_validator(mode="after")
     def validate_unique_topologies(self) -> "ConfigurationSpecModel":
         """Validate that all topology types are unique."""
         if self.topologies:
-            topology_types = [topo.type for topo in self.topologies]
-            duplicates = [ttype for ttype in topology_types if topology_types.count(ttype) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate topology types in configuration: {', '.join(set(duplicates))}")
+            check_unique_names([topo.type for topo in self.topologies], "topology types in configuration")
         return self
 
     @model_validator(mode="after")
@@ -496,9 +481,7 @@ class ConfigurationSpecModel(PlatformBaseModel):
         """Validate that layer names are unique and last layer is 'environment'."""
         if self.layering:
             layer_names = [layer.name for layer in self.layering]
-            if len(layer_names) != len(set(layer_names)):
-                duplicates = [name for name in layer_names if layer_names.count(name) > 1]
-                raise ValueError(f"Duplicate layer names found: {set(duplicates)}")
+            check_unique_names(layer_names, "layer names")
 
             # CRITICAL: Last layer must be named "environment"
             if layer_names[-1] != "environment":

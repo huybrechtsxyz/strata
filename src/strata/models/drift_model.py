@@ -6,7 +6,11 @@ from typing import Any, Dict, List, Optional
 
 
 class DriftSeverity(str, Enum):
-    """Severity classification for a drift entry."""
+    """Severity classification for a drift entry.
+
+    Comparison operators follow natural severity ordering:
+    ``CRITICAL > HIGH > MEDIUM > LOW > INFO``.
+    """
 
     CRITICAL = "critical"  # Security-sensitive changes: NSG, IAM, firewall rules
     HIGH = "high"  # Core infrastructure: VM size, disk, network topology
@@ -19,21 +23,28 @@ class DriftSeverity(str, Enum):
         """Return severities from highest to lowest."""
         return [cls.CRITICAL, cls.HIGH, cls.MEDIUM, cls.LOW, cls.INFO]
 
+    @property
+    def _weight(self) -> int:
+        """Numeric weight: higher value = more severe."""
+        return {
+            "critical": 4,
+            "high": 3,
+            "medium": 2,
+            "low": 1,
+            "info": 0,
+        }[self.value]
+
     def __le__(self, other: "DriftSeverity") -> bool:  # type: ignore[override]
-        order = self.ordered()
-        return order.index(self) >= order.index(other)
+        return self._weight <= other._weight
 
     def __lt__(self, other: "DriftSeverity") -> bool:  # type: ignore[override]
-        order = self.ordered()
-        return order.index(self) > order.index(other)
+        return self._weight < other._weight
 
     def __ge__(self, other: "DriftSeverity") -> bool:  # type: ignore[override]
-        order = self.ordered()
-        return order.index(self) <= order.index(other)
+        return self._weight >= other._weight
 
     def __gt__(self, other: "DriftSeverity") -> bool:  # type: ignore[override]
-        order = self.ordered()
-        return order.index(self) < order.index(other)
+        return self._weight > other._weight
 
 
 @dataclass

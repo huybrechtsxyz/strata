@@ -21,6 +21,7 @@ from strata.models.common_models import (
     PlatformVersion,
     SecretRefs,
     VariableRefs,
+    check_unique_names,
 )
 
 
@@ -184,31 +185,24 @@ class ResourceStorageModel(PlatformBaseModel):
         """Validate unique disk/volume names and volume-disk mount relationships."""
         errors = []
 
-        # Validate unique disk names
+        # Validate unique disk names, labels, mount points
         if self.disks:
-            disk_names = [disk.name for disk in self.disks if disk.name]
-            if len(disk_names) != len(set(disk_names)):
-                duplicates = [name for name in disk_names if disk_names.count(name) > 1]
-                errors.append(f"Duplicate disk names found: {set(duplicates)}")
-
-            # Validate unique disk labels
-            disk_labels = [disk.label for disk in self.disks]
-            if len(disk_labels) != len(set(disk_labels)):
-                duplicates = [label for label in disk_labels if disk_labels.count(label) > 1]
-                errors.append(f"Duplicate disk labels found: {set(duplicates)}")
-
-            # Validate unique disk mount points
-            disk_mounts = [disk.mount for disk in self.disks]
-            if len(disk_mounts) != len(set(disk_mounts)):
-                duplicates = [mount for mount in disk_mounts if disk_mounts.count(mount) > 1]
-                errors.append(f"Duplicate disk mount points found: {set(duplicates)}")
+            for label, items in [
+                ("disk names", [disk.name for disk in self.disks if disk.name]),
+                ("disk labels", [disk.label for disk in self.disks]),
+                ("disk mount points", [disk.mount for disk in self.disks]),
+            ]:
+                try:
+                    check_unique_names(items, label)
+                except ValueError as e:
+                    errors.append(str(e))
 
         # Validate unique volume names
         if self.volumes:
-            volume_names = [vol.name for vol in self.volumes if vol.name is not None]
-            if len(volume_names) != len(set(volume_names)):
-                duplicates = [name for name in volume_names if volume_names.count(name) > 1]
-                errors.append(f"Duplicate volume names found: {set(duplicates)}")
+            try:
+                check_unique_names([vol.name for vol in self.volumes if vol.name is not None], "volume names")
+            except ValueError as e:
+                errors.append(str(e))
 
             # Validate volumes are mounted under disk mount points
             if self.disks:

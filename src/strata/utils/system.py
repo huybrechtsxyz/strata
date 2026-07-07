@@ -30,18 +30,55 @@ def generate_uuid() -> str:
     Returns:
         str: UUID formatted string
     """
-    # if hasattr(uuid, "uuid7"):
-    #    return str(uuid.uuid7())
+    if hasattr(uuid, "uuid7"):
+        return str(uuid.uuid7())
     return str(uuid.uuid4())
 
 
 # Get the normalized path
-def normalize_path(path: str) -> str:
-    """Normalize a file path to an absolute path."""
-    # Remove or replace invalid characters for Windows and Linux paths
-    # Invalid chars: < > : " / \ | ? * and control characters (0-31)
-    path = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", path)
-    return path.strip(". ")
+def sanitize_filename(name: str) -> str:
+    """Sanitize a string into a valid filename component matching PlatformName rules.
+
+    Converts arbitrary text into a lowercase, alphanumeric-plus-hyphens-underscores
+    string safe for use as a filename. Applies the same constraints as
+    ``PlatformName``: ``^[a-z][a-z0-9_-]*$``, max 64 chars.
+
+    Steps:
+    1. Lowercase the input
+    2. Replace path separators and invalid chars with underscores
+    3. Collapse consecutive underscores
+    4. Strip leading/trailing underscores, dots, and spaces
+    5. If the result doesn't start with a letter, prefix with ``f``
+    6. Truncate to 64 characters
+
+    .. note::
+        Currently unused in production — ``PlatformName`` validation on
+        Pydantic models handles this at the boundary. Kept as a utility
+        for future use where raw user input needs filename conversion
+        without model validation (e.g. CLI scaffolding, export paths).
+
+    Args:
+        name: Arbitrary string to sanitize.
+
+    Returns:
+        A PlatformName-compatible filename string, or empty string if
+        input is empty/whitespace-only.
+    """
+    if not name or not name.strip():
+        return ""
+    # Lowercase
+    name = name.lower()
+    # Replace anything not alphanumeric, underscore, or hyphen with underscore
+    name = re.sub(r"[^a-z0-9_-]", "_", name)
+    # Collapse consecutive underscores/hyphens
+    name = re.sub(r"[_-]{2,}", "_", name)
+    # Strip leading/trailing underscores, hyphens, dots, spaces
+    name = name.strip("_-. ")
+    # Must start with a letter
+    if name and not name[0].isalpha():
+        name = f"f{name}"
+    # Truncate to PlatformName max length
+    return name[:64]
 
 
 # Join multiple paths
@@ -340,9 +377,20 @@ def run_command(
                 t_out.start()
                 t_err.start()
                 try:
-                    t_out.join(timeout=timeout)
-                    t_err.join(timeout=timeout)
-                    returncode = proc.wait(timeout=timeout)
+                    if timeout is not None:
+                        deadline = time.monotonic() + timeout
+                        remaining = deadline - time.monotonic()
+                        t_out.join(timeout=max(0, remaining))
+                        remaining = deadline - time.monotonic()
+                        t_err.join(timeout=max(0, remaining))
+                        remaining = deadline - time.monotonic()
+                        if remaining < 0 or t_out.is_alive() or t_err.is_alive():
+                            raise subprocess.TimeoutExpired(cmd_display, timeout)
+                        returncode = proc.wait(timeout=max(0, remaining))
+                    else:
+                        t_out.join()
+                        t_err.join()
+                        returncode = proc.wait()
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     t_out.join()

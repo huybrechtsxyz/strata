@@ -14,6 +14,7 @@ from strata.models.common_models import (
     PlatformVersion,
     SecretRefs,
     VariableRefs,
+    check_unique_names,
 )
 
 
@@ -97,9 +98,7 @@ class TenantSpecModel(PlatformBaseModel):
     @model_validator(mode="after")
     def validate_unique_zones(self) -> "TenantSpecModel":
         """Validate that the zones list contains no duplicates."""
-        duplicates = [z for z in self.zones if self.zones.count(z) > 1]
-        if duplicates:
-            raise ValueError(f"Duplicate zone entries in tenant spec: {', '.join(set(duplicates))}")
+        check_unique_names(self.zones, "zone entries in tenant spec")
         return self
 
 

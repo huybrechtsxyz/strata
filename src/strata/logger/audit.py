@@ -135,7 +135,9 @@ def is_audit_configured() -> bool:
 
 def shutdown_audit() -> None:
     """Flush and close the audit logger handlers."""
+    global _audit_logger
     if _audit_logger is not None:
         for handler in _audit_logger.handlers[:]:
             handler.flush()
             handler.close()
+        _audit_logger = None

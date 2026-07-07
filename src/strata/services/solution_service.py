@@ -65,6 +65,15 @@ class SolutionService(BaseService["SolutionModel"]):
         return cls()
 
     @classmethod
+    def load(cls, path: str, validate: bool = True) -> "SolutionService":
+        """Return the singleton instance.
+
+        SolutionService is a singleton that loads via ``load_from_json``.
+        The inherited ``BaseService.load()`` single-file pattern does not apply.
+        """
+        return cls.get_instance()
+
+    @classmethod
     def reset(cls):
         """Reset all singleton instances (useful for testing)."""
         with cls._lock:

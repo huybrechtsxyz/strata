@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Pydantic models for solution file validation."""
+"""Pydantic models for solution file validation.
+
+Solution models intentionally extend ``BaseModel`` instead of ``PlatformBaseModel``.
+The solution file (``.strata/solution.json``) is a CLI-managed state file — not a
+user-authored YAML document — so ``extra="forbid"`` would break forward compatibility
+when older CLIs encounter fields added by newer versions.
+"""
 
 from typing import Any, Dict, List, Optional
 

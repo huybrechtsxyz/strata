@@ -20,13 +20,9 @@ from strata.logger.audit import (
 @pytest.fixture(autouse=True)
 def _reset_audit_logger():
     """Reset the audit logger state between tests."""
-    # Shutdown any existing handlers before resetting
     shutdown_audit()
-    _audit_mod._audit_logger = None
     yield
-    # Cleanup after test
     shutdown_audit()
-    _audit_mod._audit_logger = None
 
 
 class TestConfigureAuditLog:
@@ -45,8 +41,8 @@ class TestConfigureAuditLog:
         assert log_path.exists()
 
     def test_is_audit_configured_reflects_state(self, tmp_path):
-        # Force unconfigured state
-        _audit_mod._audit_logger = None
+        # After shutdown, should be unconfigured
+        shutdown_audit()
         assert not is_audit_configured()
         # After configure, should be configured
         configure_audit_log(log_path=str(tmp_path / "audit.log"))

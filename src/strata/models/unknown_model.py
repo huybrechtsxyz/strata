@@ -3,6 +3,10 @@
 
 Used for forward compatibility, debugging malformed configurations,
 or parsing YAML that doesn't match any known PlatformKind.
+
+Intentionally extends ``BaseModel`` instead of ``PlatformBaseModel`` so that
+``extra="forbid"`` does not reject unexpected fields — the whole point of this
+model is to accept arbitrary YAML structures.
 """
 
 from typing import Any, Dict, List, Optional

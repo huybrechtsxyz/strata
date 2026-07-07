@@ -1,6 +1,6 @@
 """Service for loading and validating workspace configurations."""
 
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union, cast
 
 from strata.exceptions import InvalidReferenceError
 from strata.models.configuration_model import ConfigurationModel
@@ -479,108 +479,56 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         config_repo_map: Dict[str, str] = ConfigurationService.get_instance().get_remote_map()
         repo_map = {**config_repo_map, **(repo_map or {})}
 
-        # Load DNS zone services from workspace spec dns_zones
-        if workspace.spec.dns_zones:
-            self.logger.debug("Loading DNS zones", count=len(workspace.spec.dns_zones))
-            for dns_ref in workspace.spec.dns_zones:
-                dns_path = self._resolve_file_path(dns_ref.file, objects_path, repo_map)
-                dns_key = dns_ref.name
+        def _load_simple_services(
+            refs: Optional[list],
+            service_cls: Type[BaseService],
+            bucket_key: str,
+            label: str,
+        ) -> None:
+            """Load a list of file-referenced services into *services[bucket_key]*.
+
+            Handles the common try / validate / log / error pattern used for
+            DNS zones, firewalls, providers, and namespaces.
+            """
+            nonlocal success
+            if not refs:
+                return
+            self.logger.debug(f"Loading {label}", count=len(refs))
+            for ref in refs:
+                ref_path = self._resolve_file_path(ref.file, objects_path, repo_map)
                 try:
-                    dns_service = cast(DnsService, DnsService.load(dns_path, validate=True))
-                    if dns_service.is_validated():
-                        services["dns_zones"][dns_key] = dns_service
-                        self.logger.debug("Loaded DNS zone", name=dns_key, path=dns_path)
+                    svc = service_cls.load(ref_path, validate=True)
+                    if svc.is_validated():
+                        services[bucket_key][ref.name] = svc
+                        self.logger.debug(f"Loaded {label.rstrip('s')}", name=ref.name, path=ref_path)
                     else:
                         success = False
-                        errors = dns_service.get_validation_errors()
-                        self._validation_errors.append(f"DNS zone '{dns_ref.name}' validation failed")
-                        self._validation_errors.extend(errors)
+                        errs = svc.get_validation_errors()
+                        self._validation_errors.append(f"{label.rstrip('s').title()} '{ref.name}' validation failed")
+                        self._validation_errors.extend(errs)
                         self.logger.warning(
-                            "DNS zone validation failed",
-                            name=dns_ref.name,
-                            path=dns_path,
-                            error_count=len(errors),
+                            f"{label.rstrip('s').title()} validation failed",
+                            name=ref.name,
+                            path=ref_path,
+                            error_count=len(errs),
                         )
                 except Exception as e:
                     success = False
                     self._validation_errors.append(
-                        f"Failed to load DNS zone '{dns_ref.name}' from {dns_path}: {str(e)}"
+                        f"Failed to load {label.rstrip('s')} '{ref.name}' from {ref_path}: {str(e)}"
                     )
                     self.logger.error(
-                        "Failed to load DNS zone",
-                        name=dns_ref.name,
-                        path=dns_path,
+                        f"Failed to load {label.rstrip('s')}",
+                        name=ref.name,
+                        path=ref_path,
                         exc_info=True,
                     )
 
-        # Load firewall services from workspace spec firewalls
-        if workspace.spec.firewalls:
-            self.logger.debug("Loading firewalls", count=len(workspace.spec.firewalls))
-            for firewall_ref in workspace.spec.firewalls:
-                firewall_path = self._resolve_file_path(firewall_ref.file, objects_path, repo_map)
-                firewall_key = firewall_ref.name
-                try:
-                    # Use service cache to avoid re-parsing same files
-                    fw_service = cast(FirewallService, FirewallService.load(firewall_path, validate=True))
-                    if fw_service.is_validated():
-                        services["firewalls"][firewall_key] = fw_service
-                        self.logger.debug("Loaded firewall", name=firewall_key, path=firewall_path)
-                    else:
-                        success = False
-                        errors = fw_service.get_validation_errors()
-                        self._validation_errors.append(f"Firewall '{firewall_ref.name}' validation failed")
-                        self._validation_errors.extend(errors)
-                        self.logger.warning(
-                            "Firewall validation failed",
-                            name=firewall_ref.name,
-                            path=firewall_path,
-                            error_count=len(errors),
-                        )
-                except Exception as e:
-                    success = False
-                    self._validation_errors.append(
-                        f"Failed to load firewall '{firewall_ref.name}' from {firewall_path}: {str(e)}"
-                    )
-                    self.logger.error(
-                        "Failed to load firewall",
-                        name=firewall_ref.name,
-                        path=firewall_path,
-                        exc_info=True,
-                    )
-
-        # Load provider services
-        if workspace.spec.providers:
-            self.logger.debug("Loading providers", count=len(workspace.spec.providers))
-            for provider_ref in workspace.spec.providers:
-                provider_path = self._resolve_file_path(provider_ref.file, objects_path, repo_map)
-                try:
-                    # Use service cache to avoid re-parsing same files
-                    pv_service: ProviderService = ProviderService.load(provider_path, validate=True)
-                    if pv_service.is_validated():
-                        services["providers"][provider_ref.name] = pv_service
-                        self.logger.debug("Loaded provider", name=provider_ref.name, path=provider_path)
-                    else:
-                        success = False
-                        errors = pv_service.get_validation_errors()
-                        self._validation_errors.append(f"Provider '{provider_ref.name}' validation failed")
-                        self._validation_errors.extend(errors)
-                        self.logger.warning(
-                            "Provider validation failed",
-                            name=provider_ref.name,
-                            path=provider_path,
-                            error_count=len(errors),
-                        )
-                except Exception as e:
-                    success = False
-                    self._validation_errors.append(
-                        f"Failed to load provider '{provider_ref.name}' from {provider_path}: {str(e)}"
-                    )
-                    self.logger.error(
-                        "Failed to load provider",
-                        name=provider_ref.name,
-                        path=provider_path,
-                        exc_info=True,
-                    )
+        # Load simple file-referenced services
+        _load_simple_services(workspace.spec.dns_zones, DnsService, "dns_zones", "DNS zones")
+        _load_simple_services(workspace.spec.firewalls, FirewallService, "firewalls", "firewalls")
+        _load_simple_services(workspace.spec.providers, ProviderService, "providers", "providers")
+        _load_simple_services(workspace.spec.namespaces, NamespaceService, "namespaces", "namespaces")
 
         # Load resource services from workspace resources section
         # Resources are defined in workspace.spec.resources with file references
@@ -709,40 +657,6 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
                                 exc_info=True,
                             )
 
-        # Load namespace services
-        if workspace.spec.namespaces:
-            self.logger.debug("Loading namespaces", count=len(workspace.spec.namespaces))
-            for namespace_ref in workspace.spec.namespaces:
-                namespace_path = self._resolve_file_path(namespace_ref.file, objects_path, repo_map)
-                try:
-                    # Use service cache to avoid re-parsing same files
-                    ns_service: NamespaceService = NamespaceService.load(namespace_path, validate=True)
-                    if ns_service.is_validated():
-                        services["namespaces"][namespace_ref.name] = ns_service
-                        self.logger.debug("Loaded namespace", name=namespace_ref.name, path=namespace_path)
-                    else:
-                        success = False
-                        errors = ns_service.get_validation_errors()
-                        self._validation_errors.append(f"Namespace '{namespace_ref.name}' validation failed")
-                        self._validation_errors.extend(errors)
-                        self.logger.warning(
-                            "Namespace validation failed",
-                            name=namespace_ref.name,
-                            path=namespace_path,
-                            error_count=len(errors),
-                        )
-                except Exception as e:
-                    success = False
-                    self._validation_errors.append(
-                        f"Failed to load namespace '{namespace_ref.name}' from {namespace_path}: {str(e)}"
-                    )
-                    self.logger.error(
-                        "Failed to load namespace",
-                        name=namespace_ref.name,
-                        path=namespace_path,
-                        exc_info=True,
-                    )
-
         # Load module services referenced by namespaces
         if workspace.spec.namespaces:
             for namespace_ref in workspace.spec.namespaces:
@@ -836,7 +750,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         return None
 
     def get_firewall_services(self) -> Optional[Dict[str, FirewallService]]:
-        """Get a specific firewall service by name."""
+        """Get all firewall services keyed by name."""
         value = self._get_workspace_related_services("firewalls", None)
         if value is not None and isinstance(value, dict):
             casted = {k: cast(FirewallService, v) for k, v in value.items() if isinstance(v, FirewallService)}
@@ -851,7 +765,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         return None
 
     def get_module_services(self) -> Optional[Dict[str, ModuleService]]:
-        """Get a specific module service by resource and module name."""
+        """Get all module services keyed by resource:module name."""
         value = self._get_workspace_related_services("modules", None)
         if value is not None and isinstance(value, dict):
             casted = {k: cast(ModuleService, v) for k, v in value.items() if isinstance(v, ModuleService)}
@@ -869,7 +783,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
     def get_namespace_services(
         self,
     ) -> Optional[Dict[str, NamespaceService]]:
-        """Get a specific namespace service by name."""
+        """Get all namespace services keyed by name."""
         value = self._get_workspace_related_services("namespaces", None)
         if value is not None and isinstance(value, dict):
             casted = {k: cast(NamespaceService, v) for k, v in value.items() if isinstance(v, NamespaceService)}
@@ -884,7 +798,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
         return None
 
     def get_provider_services(self) -> Optional[Dict[str, ProviderService]]:
-        """Get a specific provider service by name."""
+        """Get all provider services keyed by name."""
         value = self._get_workspace_related_services("providers", None)
         if value is not None and isinstance(value, dict):
             casted = {k: cast(ProviderService, v) for k, v in value.items() if isinstance(v, ProviderService)}
@@ -901,7 +815,7 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
     def get_resource_services(
         self,
     ) -> Optional[Dict[str, ResourceService]]:
-        """Get a specific resource service by name."""
+        """Get all resource services keyed by name."""
         value = self._get_workspace_related_services("resources", None)
         if value is not None and isinstance(value, dict):
             casted = {k: cast(ResourceService, v) for k, v in value.items() if isinstance(v, ResourceService)}

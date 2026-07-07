@@ -6,9 +6,9 @@ import pytest
 
 from strata.utils.system import (
     generate_uuid,
-    normalize_path,
     resolve_path,
     resolve_work_path,
+    sanitize_filename,
 )
 
 # ---------------------------------------------------------------------------
@@ -163,29 +163,54 @@ class TestResolvePathBackslashGuard:
 # ---------------------------------------------------------------------------
 
 
-class TestNormalizePath:
-    """normalize_path strips characters invalid in file paths."""
+class TestSanitizeFilename:
+    """sanitize_filename converts arbitrary text to PlatformName-compatible filenames."""
 
-    def test_valid_path_unchanged(self):
-        """A simple valid path passes through unchanged."""
-        assert normalize_path("some_dir") == "some_dir"
+    def test_valid_name_unchanged(self):
+        """A simple valid name passes through unchanged."""
+        assert sanitize_filename("some_dir") == "some_dir"
 
-    def test_removes_invalid_characters(self):
-        """Characters like < > : " | ? * are replaced with _."""
-        result = normalize_path("a<b>c:d")
-        assert "<" not in result
-        assert ">" not in result
-        assert ":" not in result
+    def test_lowercases(self):
+        """Mixed-case input is lowercased."""
+        assert sanitize_filename("MyDeployment") == "mydeployment"
 
-    def test_strips_leading_and_trailing_dots_and_spaces(self):
-        """Leading and trailing dots/spaces are stripped."""
-        result = normalize_path("  .filename.  ")
-        assert not result.startswith((" ", "."))
-        assert not result.endswith((" ", "."))
+    def test_replaces_invalid_characters(self):
+        """Characters like < > : " | ? * and spaces become underscores."""
+        result = sanitize_filename("a<b>c:d")
+        assert result == "a_b_c_d"
+
+    def test_replaces_path_separators(self):
+        """Path separators are replaced (this is a filename sanitizer, not a path sanitizer)."""
+        assert sanitize_filename("config/deploy/main") == "config_deploy_main"
+
+    def test_collapses_consecutive_underscores(self):
+        """Multiple consecutive underscores collapse to one."""
+        assert sanitize_filename("a___b") == "a_b"
+
+    def test_strips_leading_trailing_junk(self):
+        """Leading/trailing underscores, dots, and spaces are stripped."""
+        assert sanitize_filename("  .filename.  ") == "filename"
+
+    def test_prefixes_non_alpha_start(self):
+        """Names starting with a digit get an 'f' prefix."""
+        assert sanitize_filename("123test") == "f123test"
+
+    def test_truncates_to_64(self):
+        """Output is truncated to 64 characters."""
+        result = sanitize_filename("a" * 100)
+        assert len(result) == 64
 
     def test_empty_string(self):
         """Empty string produces empty string."""
-        assert normalize_path("") == ""
+        assert sanitize_filename("") == ""
+
+    def test_whitespace_only(self):
+        """Whitespace-only input produces empty string."""
+        assert sanitize_filename("   ") == ""
+
+    def test_hyphens_preserved(self):
+        """Hyphens are valid in PlatformName and kept."""
+        assert sanitize_filename("my-deploy") == "my-deploy"
 
 
 # ---------------------------------------------------------------------------
