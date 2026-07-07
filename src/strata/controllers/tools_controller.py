@@ -6,9 +6,6 @@ from typing import Optional
 
 from strata.controllers.base_controller import BaseController
 from strata.integrations.factory import IntegrationFactory
-from strata.logger import get_logger
-
-logger = get_logger(__name__)
 
 # Store enum value → integration type name (None-valued stores need no integration)
 _STORE_TO_INTEGRATION: dict[str, str] = {
@@ -77,7 +74,7 @@ class ToolsController(BaseController):
                     }
                 )
             except Exception as exc:
-                logger.warning("Failed to probe integration", integration=type_str, error=str(exc))
+                self.logger.warning("Failed to probe integration", integration=type_str, error=str(exc))
                 rows.append(
                     {
                         "name": type_str,

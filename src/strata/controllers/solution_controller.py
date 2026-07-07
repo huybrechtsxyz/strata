@@ -1342,14 +1342,6 @@ class SolutionController(BaseController):
     def _solution_path(self) -> Path:
         return SolutionController.get_solution_json_path(self._work_path)
 
-    def _add_error(self, message: str) -> None:
-        self.logger.error(message)
-        self._errors.append(message)
-
-    def _add_message(self, message: str) -> None:
-        self.logger.info(message)
-        self._messages.append(message)
-
     def _resolve_log_file(self, work_path: Path) -> Optional[Path]:
         """
         Resolve the active log file for a session.

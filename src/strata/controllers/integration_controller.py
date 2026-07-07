@@ -90,9 +90,6 @@ class IntegrationController(BaseController):
             - version: Version string or None
             - info: Additional info string
         """
-        self._errors.clear()
-        self._messages.clear()
-
         try:
             integration = self._registry.get_integration(name)
 
@@ -184,13 +181,7 @@ class IntegrationController(BaseController):
                     if success:
                         status[name] = integration_status
                     else:
-                        # Add placeholder for failed integrations
-                        status[name] = {
-                            "name": name,
-                            "available": False,
-                            "version": None,
-                            "info": f"Failed to get status: {self._errors[-1] if self._errors else 'Unknown error'}",
-                        }
+                        status[name] = integration_status
                         errors.extend(self._errors)
 
                 except Exception as e:

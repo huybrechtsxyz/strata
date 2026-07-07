@@ -26,7 +26,7 @@ class ContextController(BaseController):
         if not ok:
             self._errors.extend(errors)
             return False, None
-        solution = self._solution_controller._solution
+        solution = self._solution_controller.solution
         if solution is None:
             self._errors.append("No solution loaded.")
             return False, None
