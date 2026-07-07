@@ -13,6 +13,7 @@ strata
    :caption: Getting Started:
 
    README
+   INDEX
 
 .. toctree::
    :maxdepth: 2
