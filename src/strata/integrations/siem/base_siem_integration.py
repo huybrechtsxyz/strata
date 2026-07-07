@@ -168,12 +168,10 @@ class SiemBaseIntegration(BaseIntegration):
 
         method = getattr(auth, "method", None)
 
-        # api_key: resolve the env-var references to get the actual values
+        # api_key: use values directly; header_name is a literal header name, not an env-var ref
         if method == "api_key" and auth.api_key:
-            key_ref = auth.api_key.api_key or ""
-            key = self._get_env_var(key_ref) or "" if key_ref else ""
-            header_name_ref = auth.api_key.header_name
-            header_name = (self._get_env_var(header_name_ref) or "X-API-Key") if header_name_ref else "X-API-Key"
+            key = auth.api_key.api_key or ""
+            header_name = auth.api_key.header_name or "X-API-Key"
             return {header_name: key}
 
         # oauth2: client_secret is an env-var name reference holding the bearer token

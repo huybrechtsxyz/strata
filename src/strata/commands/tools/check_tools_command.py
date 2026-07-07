@@ -8,6 +8,7 @@ from typing import ClassVar, Dict, Optional
 import click
 
 from strata.commands.base_command import BaseCommand
+from strata.controllers.tools_controller import ToolsController
 from strata.logger import get_logger
 
 
@@ -34,8 +35,6 @@ class CheckToolsCommand(BaseCommand):
         return {}
 
     def _run(self) -> bool:
-        from strata.controllers.tools_controller import ToolsController
-
         controller = ToolsController()
         success, detail, errors = controller.check(self._name)
         for err in errors:

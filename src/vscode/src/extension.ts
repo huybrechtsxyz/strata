@@ -214,8 +214,8 @@ export function activate(context: vscode.ExtensionContext): void {
             const yamlUris = await vscode.workspace.findFiles('**/*.yaml', '**/.strata/**');
 
             await vscode.window.withProgress(
-                { location: vscode.ProgressLocation.Notification, title: 'Strata: validating workspace files', cancellable: false },
-                async (progress) => {
+                { location: vscode.ProgressLocation.Notification, title: 'Strata: validating workspace files', cancellable: true },
+                async (progress, token) => {
                     // Pre-filter to strata documents only (fast text scan, no CLI call)
                     const strataUris: vscode.Uri[] = [];
                     for (const uri of yamlUris) {
@@ -235,6 +235,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     let totalErrors = 0;
                     let idx = 0;
                     for (const uri of strataUris) {
+                        if (token.isCancellationRequested) break;
                         idx++;
                         progress.report({ message: `${idx}/${strataUris.length} — ${vscode.workspace.asRelativePath(uri)}` });
                         const doc = await vscode.workspace.openTextDocument(uri);
@@ -349,7 +350,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 _client?.runInTerminal(['audit', 'changes'], 'strata audit changes');
                 return;
             }
-            _client?.runInTerminal(['audit', 'changes'], 'strata audit changes');
+            _client?.runInTerminal(['audit', 'changes', '-f', target], 'strata audit changes');
         }),
 
         vscode.commands.registerCommand('strata.auditResend', () => {
@@ -573,6 +574,7 @@ export function activate(context: vscode.ExtensionContext): void {
         _statusBar, _workspaceView, _filesView, _reposView, _toolsView,
         _diagnostics, _codeLens, _guideView, _crossRef, _snippets, _depGraph,
         _taskProvider, _fileDecorations, _chatParticipant, solutionWatcher,
+        _envView!, _auditView!,
     );
 
     // ── Set context key so menus can use it ────────────────────────────────────

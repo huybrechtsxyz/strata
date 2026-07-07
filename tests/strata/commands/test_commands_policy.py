@@ -122,7 +122,7 @@ class TestListPolicyCommandOutputData:
 
         sample = self._SAMPLE_OUTPUT_DATA
 
-        def fake_initialize(self_cmd):
+        def fake_initialize(self_cmd, show_header: bool = True):
             self_cmd._start_time = datetime.now()
             return True
 
