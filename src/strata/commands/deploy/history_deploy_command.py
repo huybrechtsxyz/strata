@@ -51,8 +51,8 @@ class HistoryDeployCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self._lines = lines
         self._operation_filter = _resolve_operation_filter(operation)

@@ -57,8 +57,8 @@ class BaseDeployCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self._raw_file: Optional[str] = file
         self._file_path: Optional[Path] = Path(file) if file else None

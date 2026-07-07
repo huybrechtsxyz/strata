@@ -85,8 +85,8 @@ class DoctorEnvCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self._file = file
         self._category = category

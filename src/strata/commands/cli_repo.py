@@ -197,8 +197,8 @@ def repo_status(
         name=name,
         work_path=work_path,
         output=output,
-        verbose=verbose or False,
-        quiet=quiet or False,
+        verbose=verbose,
+        quiet=quiet,
     )
     success = command.execute()
     handle_command_exit(command, success)

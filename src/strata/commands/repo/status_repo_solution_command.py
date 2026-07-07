@@ -35,8 +35,8 @@ class StatusRepoSolutionCommand(BaseCommand):
         name: Optional[str] = None,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
-        verbose: bool = False,
-        quiet: bool = False,
+        verbose: Optional[bool] = None,
+        quiet: Optional[bool] = None,
     ) -> None:
         super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
         self._filter_name = name

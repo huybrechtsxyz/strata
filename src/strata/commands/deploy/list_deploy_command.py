@@ -87,8 +87,8 @@ class ListDeployCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self.logger = get_logger(self.__class__.__module__)
         self._scan_path: Path = Path(path).resolve() if path else Path(os.getcwd()).resolve()

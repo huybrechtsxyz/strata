@@ -30,8 +30,8 @@ class BaseCommand(ABC):
         self,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
-        verbose: bool = False,
-        quiet: bool = False,
+        verbose: Optional[bool] = None,
+        quiet: Optional[bool] = None,
     ) -> None:
         """Initialize the base command."""
         # Timer attributes

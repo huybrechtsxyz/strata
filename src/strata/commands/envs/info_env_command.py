@@ -37,8 +37,8 @@ class InfoEnvCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
 
     def get_required_integrations(self) -> Dict[str, str]:
