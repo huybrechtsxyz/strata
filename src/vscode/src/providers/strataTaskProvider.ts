@@ -67,7 +67,7 @@ export class StrataTaskProvider implements vscode.TaskProvider, vscode.Disposabl
 
     /**
      * Auto-discover tasks by scanning the workspace for deployment YAML files.
-     * For each deployment file, create validate + build dry-run + deploy dry-run tasks.
+     * For each deployment file, create validate + build dry-run + deploy dry-run + sbom tasks.
      */
     async provideTasks(): Promise<vscode.Task[]> {
         const tasks: vscode.Task[] = [];
@@ -102,10 +102,27 @@ export class StrataTaskProvider implements vscode.TaskProvider, vscode.Disposabl
             tasks.push(
                 this._createTask({
                     type: TASK_TYPE,
+                    command: 'build',
+                    file: relPath,
+                    dryRun: false,
+                }, `strata: build ${baseName}`),
+            );
+
+            tasks.push(
+                this._createTask({
+                    type: TASK_TYPE,
                     command: 'deploy',
                     file: relPath,
                     dryRun: true,
                 }, `strata: deploy (dry run) ${baseName}`),
+            );
+
+            tasks.push(
+                this._createTask({
+                    type: TASK_TYPE,
+                    command: 'sbom',
+                    file: relPath,
+                }, `strata: sbom ${baseName}`),
             );
         }
 
@@ -180,6 +197,11 @@ export class StrataTaskProvider implements vscode.TaskProvider, vscode.Disposabl
                 if (def.dryRun) args.push('--dry-run');
                 if (!def.dryRun) args.push('--force');
                 if (def.stage) args.push('--stage', def.stage);
+                break;
+
+            case 'sbom':
+                args.push('build', 'sbom');
+                if (def.file) args.push('-f', def.file);
                 break;
 
             default:
