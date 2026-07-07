@@ -1,6 +1,5 @@
 """Base class for build commands."""
 
-from abc import abstractmethod
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -38,10 +37,6 @@ class BaseBuildCommand(BaseCommand):
         self._configuration_service: Optional[ConfigurationService] = None
         self._build_path: Path = self._work_path / "build"
         self._resolved_remote_refs: Dict[str, str] = {}
-
-    @abstractmethod
-    def execute(self) -> bool:
-        raise NotImplementedError
 
     def get_required_integrations(self):
         return {}

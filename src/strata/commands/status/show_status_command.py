@@ -33,47 +33,11 @@ class StatusCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_execution():
-                if self._is_console_output():
-                    click.echo("\n❌  Execution failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution processing failed")
-                self._finalize(success=False)
-                return False
-
-            self._finalize(success=True)
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to show status: {e}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            self._finalize(success=False)
-            return False
-
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def _run_execution(self) -> bool:
+    def _run(self) -> bool:
         initialized = self._solution_controller.solution is not None
 
         # ── Solution identity ─────────────────────────────────────────

@@ -376,7 +376,7 @@ class TestAddRepoCommandLocalPath:
             patch.object(cmd._solution_controller, "save", return_value=(True, [])),
             patch.object(cmd._solution_controller, "generate_workspace", return_value=(True, [])),
         ):
-            result = cmd._run_execution()
+            result = cmd._run()
 
         assert result is True
         assert cmd._added_repo["type"] == "local"
@@ -394,7 +394,7 @@ class TestAddRepoCommandLocalPath:
             patch.object(cmd._solution_controller, "save", return_value=(True, [])),
             patch.object(cmd._solution_controller, "generate_workspace", return_value=(True, [])),
         ):
-            result = cmd._run_execution()
+            result = cmd._run()
 
         assert result is True
         assert cmd._added_repo["type"] == "local"
@@ -403,7 +403,7 @@ class TestAddRepoCommandLocalPath:
         nonexistent = str(tmp_path / "no_such_dir")
         cmd = self._make_command(nonexistent, tmp_path)
 
-        result = cmd._run_execution()
+        result = cmd._run()
 
         assert result is False
         assert any("does not exist" in e for e in cmd._errors)
@@ -413,7 +413,7 @@ class TestAddRepoCommandLocalPath:
         local_file.write_text("content")
         cmd = self._make_command(str(local_file), tmp_path)
 
-        result = cmd._run_execution()
+        result = cmd._run()
 
         assert result is False
         assert any("not a directory" in e for e in cmd._errors)
@@ -427,7 +427,7 @@ class TestAddRepoCommandLocalPath:
             patch.object(cmd._solution_controller, "save", return_value=(True, [])),
             patch.object(cmd._solution_controller, "generate_workspace", return_value=(True, [])),
         ):
-            result = cmd._run_execution()
+            result = cmd._run()
 
         assert result is True
         assert cmd._added_repo["type"] == "gitops"
@@ -442,7 +442,7 @@ class TestAddRepoCommandLocalPath:
             patch.object(cmd._solution_controller, "save", return_value=(True, [])),
             patch.object(cmd._solution_controller, "generate_workspace", return_value=(True, [])),
         ):
-            result = cmd._run_execution()
+            result = cmd._run()
 
         assert result is True
         assert cmd._added_repo["type"] == "gitops"
@@ -456,7 +456,7 @@ class TestAddRepoCommandLocalPath:
             patch.object(cmd._solution_controller, "save", return_value=(True, [])),
             patch.object(cmd._solution_controller, "generate_workspace", return_value=(True, [])),
         ):
-            result = cmd._run_execution()
+            result = cmd._run()
 
         assert result is True
         assert cmd._added_repo["path"] == "custom/mount"
@@ -470,7 +470,7 @@ class TestAddRepoCommandLocalPath:
             patch.object(cmd._solution_controller, "save", return_value=(True, [])),
             patch.object(cmd._solution_controller, "generate_workspace", return_value=(True, [])),
         ):
-            result = cmd._run_execution()
+            result = cmd._run()
 
         assert result is True
         assert cmd._added_repo["path"] == "repos/myrepo"
@@ -496,7 +496,7 @@ class TestAddRepoCommandWorkspaceRegen:
             patch.object(cmd._solution_controller, "save", return_value=(True, [])),
             patch.object(cmd._solution_controller, "generate_workspace", mock_generate),
         ):
-            result = cmd._run_execution()
+            result = cmd._run()
 
         assert result is True
         mock_generate.assert_called_once()

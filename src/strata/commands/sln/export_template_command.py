@@ -94,37 +94,11 @@ class SolutionExportCommand(BaseCommand):
     def get_required_integrations(self):
         return {}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            success = self._run_export()
-
-            self._finalize(success=success)
-            return success
-
-        except Exception as e:
-            error_msg = f"Failed to export template: {e}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            self._finalize(success=False)
-            return False
-
     # ------------------------------------------------------------------
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run_export(self) -> bool:
+    def _run(self) -> bool:
         solution = self._solution_controller.solution
         if solution is None:
             self._errors.append("No solution loaded.")

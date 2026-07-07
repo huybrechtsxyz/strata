@@ -49,43 +49,16 @@ class StatusDeployCommand(BaseDeployCommand):
         self._show_plan = show_plan
 
     # -------------------------------------------------------------------------
-    # Entry point
+    # Core logic
     # -------------------------------------------------------------------------
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if self._show_plan:
-                click.echo(
-                    "⚠  DEPRECATED: 'strata deploy status --plan' is deprecated. "
-                    "Use 'strata deploy plan -f FILE' instead.",
-                    err=True,
-                )
-            ok = self._run_plan_status() if self._show_plan else self._run_live_outputs()
-
-            if not self._after_execute():
-                self._finalize(success=False)
-                return False
-
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_status: {exc}")
-            self.logger.exception("deploy_status failed")
-            self._finalize(success=False)
-            return False
+    def _run(self) -> bool:
+        if self._show_plan:
+            click.echo(
+                "⚠  DEPRECATED: 'strata deploy status --plan' is deprecated. Use 'strata deploy plan -f FILE' instead.",
+                err=True,
+            )
+        return self._run_plan_status() if self._show_plan else self._run_live_outputs()
 
     # -------------------------------------------------------------------------
     # Mode: live outputs

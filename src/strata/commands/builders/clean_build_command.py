@@ -34,95 +34,64 @@ class CleanBuildCommand(BaseBuildCommand):
     def get_required_integrations(self):
         return {}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_lifecycle_phase(
-                "build_clean_before",
-                context={"file": str(self._file_path), "dry_run": self._dry_run},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-clean lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._clean_build_output():
-                if self._is_console_output():
-                    click.echo("\n❌  Build cleanup failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_lifecycle_phase(
-                "build_clean_after",
-                context={"file": str(self._file_path), "dry_run": self._dry_run},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Post-clean lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            # config_clean_before: fires before the configuration service cache is reset.
-            # Scripts can still read resolved config values at this point.
-            if not self._run_lifecycle_phase(
-                "config_clean_before",
-                context={"work_path": str(self._work_path), "dry_run": self._dry_run},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-config-clean lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            # Reset the in-process configuration service cache so subsequent commands
-            # pick up a fresh config load rather than stale state from this build.
-            if not self._dry_run:
-                from strata.services.configuration_service import ConfigurationService
-
-                ConfigurationService.reset()
-                self.logger.debug("Configuration service cache reset after build clean")
-
-            # config_clean_after: fires after the configuration service is reset.
-            if not self._run_lifecycle_phase(
-                "config_clean_after",
-                context={"work_path": str(self._work_path), "dry_run": self._dry_run},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Post-config-clean lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution hook failed")
-                self._finalize(success=False)
-                return False
-
-            self._output_data.update(
-                {
-                    "file": str(self._file_path),
-                    "build_path": str(self._build_path),
-                    "dry_run": self._dry_run,
-                }
-            )
-
-            self._finalize(success=True)
-            return True
-
-        except Exception as exc:
-            self._errors.append(f"Failed to clean build artifacts: {exc}")
-            self.logger.exception("build_clean failed")
-            self._finalize(success=False)
+    def _run(self) -> bool:
+        if not self._run_lifecycle_phase(
+            "build_clean_before",
+            context={"file": str(self._file_path), "dry_run": self._dry_run},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Pre-clean lifecycle hook failed")
             return False
+
+        if not self._clean_build_output():
+            if self._is_console_output():
+                click.echo("\n❌  Build cleanup failed")
+            return False
+
+        if not self._run_lifecycle_phase(
+            "build_clean_after",
+            context={"file": str(self._file_path), "dry_run": self._dry_run},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Post-clean lifecycle hook failed")
+            return False
+
+        # config_clean_before: fires before the configuration service cache is reset.
+        # Scripts can still read resolved config values at this point.
+        if not self._run_lifecycle_phase(
+            "config_clean_before",
+            context={"work_path": str(self._work_path), "dry_run": self._dry_run},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Pre-config-clean lifecycle hook failed")
+            return False
+
+        # Reset the in-process configuration service cache so subsequent commands
+        # pick up a fresh config load rather than stale state from this build.
+        if not self._dry_run:
+            from strata.services.configuration_service import ConfigurationService
+
+            ConfigurationService.reset()
+            self.logger.debug("Configuration service cache reset after build clean")
+
+        # config_clean_after: fires after the configuration service is reset.
+        if not self._run_lifecycle_phase(
+            "config_clean_after",
+            context={"work_path": str(self._work_path), "dry_run": self._dry_run},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Post-config-clean lifecycle hook failed")
+            return False
+
+        self._output_data.update(
+            {
+                "file": str(self._file_path),
+                "build_path": str(self._build_path),
+                "dry_run": self._dry_run,
+            }
+        )
+
+        return True
 
     def _clean_build_output(self) -> bool:
         if self._deployment_service is None:

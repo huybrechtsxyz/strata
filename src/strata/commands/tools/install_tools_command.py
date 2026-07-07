@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-from typing import Dict, Optional
+from typing import ClassVar, Dict, Optional
 
 import click
 
 from strata.commands.base_command import BaseCommand
-from strata.controllers.tools_controller import ToolsController
 from strata.logger import get_logger
 
 
@@ -20,6 +19,7 @@ class InstallToolsCommand(BaseCommand):
 
     OPERATION = "tools_install"
     INIT_REQUIRED = False
+    SHOW_CHROME: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -38,38 +38,21 @@ class InstallToolsCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize(show_header=False):
-                self._finalize(success=False, show_footer=False)
-                return False
+    def _run(self) -> bool:
+        from strata.controllers.tools_controller import ToolsController
 
-            controller = ToolsController()
-            success, info, errors = controller.install_info(self._name)
-
-            for err in errors:
-                self._errors.append(err)
-
-            if not success:
-                self._finalize(success=False, show_footer=False)
-                return False
-
-            if self._env_file:
-                self._write_env_file(info)
-
-            if self._is_console_output():
-                self._print_guide(info)
-
-            self._output_data["integration"] = info
-            self._finalize(success=True, show_footer=False)
-            return True
-
-        except Exception as exc:
-            error_msg = f"Failed to get install info for '{self._name}': {exc}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            self._finalize(success=False, show_footer=False)
+        controller = ToolsController()
+        success, info, errors = controller.install_info(self._name)
+        for err in errors:
+            self._errors.append(err)
+        if not success:
             return False
+        if self._env_file:
+            self._write_env_file(info)
+        if self._is_console_output():
+            self._print_guide(info)
+        self._output_data["integration"] = info
+        return True
 
     # ------------------------------------------------------------------
     # Console output

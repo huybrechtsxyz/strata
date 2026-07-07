@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 import socket
-from abc import abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -73,10 +72,6 @@ class BaseDeployCommand(BaseCommand):
         # Subclasses override these before calling _execute_provisioning.
         self._dry_run: bool = False
         self._force_lock: bool = False
-
-    @abstractmethod
-    def execute(self) -> bool:
-        raise NotImplementedError
 
     def get_required_integrations(self):
         return {}

@@ -1,6 +1,6 @@
 """Base class for service commands."""
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -21,7 +21,7 @@ class ServiceTarget:
     build_path: Path
 
 
-class BaseServiceCommand(BaseCommand):
+class BaseServiceCommand(BaseCommand, ABC):
     """Base class for service command implementations.
 
     Handles deployment file loading and service name resolution.

@@ -104,29 +104,6 @@ class DoctorEnvCommand(BaseCommand):
     # Entry point
     # ------------------------------------------------------------------
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                self._finalize(success=False)
-                return False
-
-            ok = self._run()
-            self._after_execute()
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute env_doctor: {exc}")
-            self.logger.exception("env_doctor failed")
-            self._finalize(success=False)
-            return False
-
     # ------------------------------------------------------------------
     # Core logic
     # ------------------------------------------------------------------

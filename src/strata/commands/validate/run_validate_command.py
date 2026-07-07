@@ -56,50 +56,19 @@ class ValidateCommand(BaseCommand):
         validator_errors = self._validator.has_errors() if self._validator else False
         return validator_errors or self._validate_policy_denied
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_execution():
-                if self._is_console_output():
-                    click.echo("\n❌  Execution failed")
-                self._finalize(success=False)
-                return False
-            # Evaluate validate-phase policies — failures are validation errors
-            # (exit code 3), not system failures (exit code 1).
-            self._evaluate_validate_policies()
-            if not self._after_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution processing failed")
-                self._finalize(success=False)
-                return False
-
-            # Finalize as success even when there are validation errors —
-            # system-level execution succeeded; exit code difference is handled
-            # by handle_command_exit() via has_validation_errors().
-            self._finalize(success=True)
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to validate file: {e}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            self._finalize(success=False)
-            return False
-
     # ------------------------------------------------------------------
     # Lifecycle overrides
     # ------------------------------------------------------------------
+
+    def _run(self) -> bool:
+        if not self._run_execution():
+            if self._is_console_output():
+                click.echo("\n❌  Execution failed")
+            return False
+        # Evaluate validate-phase policies — failures are validation errors
+        # (exit code 3), not system failures (exit code 1).
+        self._evaluate_validate_policies()
+        return True
 
     def _before_execute(self) -> bool:
         """Resolve file/path and verify preconditions."""

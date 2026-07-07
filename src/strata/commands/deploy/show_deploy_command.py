@@ -37,40 +37,14 @@ class ShowDeployCommand(BaseDeployCommand):
         self._resolved_remotes: List[Dict[str, str]] = []
 
     # -------------------------------------------------------------------------
-    # Entry point
+    # Core logic
     # -------------------------------------------------------------------------
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._collect()
-
-            if not self._after_execute():
-                self._finalize(success=False)
-                return False
-
-            if self._is_console_output():
-                self._print_output()
-
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_show: {exc}")
-            self.logger.exception("deploy_show failed")
-            self._finalize(success=False)
-            return False
+    def _run(self) -> bool:
+        ok = self._collect()
+        if self._is_console_output():
+            self._print_output()
+        return ok
 
     # -------------------------------------------------------------------------
     # Implementation
