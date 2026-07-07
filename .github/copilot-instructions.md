@@ -192,3 +192,11 @@ stages:
 - `test-python` action: runs lint, format-check, type-check, and pytest.
 - Package is built with `uv build` (wheel + sdist); `dist/` is uploaded as a GitHub artifact.
 - `Dockerfile.cli` — production CLI image. `Dockerfile.docs` — documentation site image.
+
+---
+
+## Github Files
+
+All GitHub-specific files live in `.github/`. This includes workflows, actions, issue templates, PR templates, and other metadata:
+
+- `CHANGELOG.md` — release notes and version history
