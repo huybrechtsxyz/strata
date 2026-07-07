@@ -17,7 +17,7 @@ Working directory: build_path/{deployment_name}/{namespace}/docker-compose.yml
 """
 
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -39,6 +39,9 @@ from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 from strata.utils.resolved_values import ResolvedValues, inject_compose_env
 
+if TYPE_CHECKING:
+    from strata.controllers.solution_controller import SolutionController
+
 
 class ComposeDeployer(BaseDeployer):
     """Runs a deployment stage using Docker Compose/Stack.
@@ -58,7 +61,7 @@ class ComposeDeployer(BaseDeployer):
         verbose: bool = False,
         force: bool = False,
         resolved_values: Optional[ResolvedValues] = None,
-        solution_controller=None,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> None:
         super().__init__(
             stage=stage,

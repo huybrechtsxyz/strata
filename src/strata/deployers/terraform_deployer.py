@@ -25,7 +25,7 @@ import json
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from strata.deployers.base_deployer import (
     STEP_APPLY,
@@ -46,6 +46,9 @@ from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 from strata.utils.resolved_values import ResolvedValues, inject_tf_vars
 
+if TYPE_CHECKING:
+    from strata.controllers.solution_controller import SolutionController
+
 
 class TerraformDeployer(BaseDeployer):
     """Runs a deployment stage using Terraform (init → validate → plan → apply).
@@ -64,7 +67,7 @@ class TerraformDeployer(BaseDeployer):
         verbose: bool = False,
         force: bool = False,
         resolved_values: Optional[ResolvedValues] = None,
-        solution_controller=None,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> None:
         super().__init__(
             stage=stage,

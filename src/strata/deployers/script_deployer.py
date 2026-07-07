@@ -34,7 +34,7 @@ Environment variables injected into every script subprocess:
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from strata.deployers.base_deployer import (
     STEP_APPLY,
@@ -51,6 +51,9 @@ from strata.models.deployment_model import DeploymentStageModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
 from strata.utils.resolved_values import ResolvedValues
+
+if TYPE_CHECKING:
+    from strata.controllers.solution_controller import SolutionController
 
 # Lifecycle phase names that correspond to each deployer step.
 _STEP_TO_PHASE: Dict[str, str] = {
@@ -107,7 +110,7 @@ class ScriptDeployer(BaseDeployer):
         verbose: bool = False,
         force: bool = False,
         resolved_values: Optional[ResolvedValues] = None,
-        solution_controller=None,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> None:
         super().__init__(
             stage=stage,
@@ -207,7 +210,7 @@ class ScriptDeployer(BaseDeployer):
 
     def plan_destroy(self) -> Tuple[bool, List[str]]:
         return self._run_phase(
-            STEP_PLAN_DESTROY, self._get_timeout(STEP_PLAN, _STEP_TIMEOUT_DEFAULTS[STEP_PLAN_DESTROY])
+            STEP_PLAN_DESTROY, self._get_timeout(STEP_PLAN_DESTROY, _STEP_TIMEOUT_DEFAULTS[STEP_PLAN_DESTROY])
         )
 
     def show_plan(self) -> Tuple[bool, Dict[str, Any], List[str]]:

@@ -24,7 +24,7 @@ Chart source resolution:
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -48,6 +48,9 @@ from strata.services.deployment_service import DeploymentService
 from strata.services.module_service import ModuleService
 from strata.utils.resolved_values import ResolvedValues, inject_compose_env
 from strata.utils.system import resolve_path
+
+if TYPE_CHECKING:
+    from strata.controllers.solution_controller import SolutionController
 
 
 @dataclass
@@ -96,7 +99,7 @@ class HelmDeployer(BaseDeployer):
         verbose: bool = False,
         force: bool = False,
         resolved_values: Optional[ResolvedValues] = None,
-        solution_controller=None,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> None:
         super().__init__(
             stage=stage,
