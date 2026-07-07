@@ -117,7 +117,7 @@ if (-not $smokeOk) { $failed += "smoke test" }
 Write-Host ""
 # ── 5. Docs index coverage ──────────────────────────────────────────────────────────
 # Verify every .md file under docs/ is referenced in index.rst.
-# Excludes _build/ and _static/ which are never user-authored pages.
+# Excludes _build/, _static/, and underscore-prefixed files (temp/scratch docs).
 Write-Host "[*] Docs index coverage..." -ForegroundColor Blue
 $indexContent = Get-Content "$projectRoot\docs\index.rst" -Raw
 $docsRoot = Join-Path $projectRoot "docs"
@@ -128,6 +128,9 @@ Get-ChildItem -Path $docsRoot -Recurse -Filter "*.md" | ForEach-Object {
     $rel = $_.FullName.Substring($docsRoot.Length + 1)   # e.g. guides\setup-azure-oidc.md
     $topDir = $rel.Split([IO.Path]::DirectorySeparatorChar)[0]
     if ($excludeTopDirs -contains $topDir) { return }
+
+    # Skip underscore-prefixed files at any depth (temp/scratch docs)
+    if ($_.Name -like '_*') { return }
 
     # Toctree entry format: forward slashes, no extension
     $entry = $rel.Replace('\', '/').Replace('.md', '')       # e.g. guides/setup-azure-oidc
