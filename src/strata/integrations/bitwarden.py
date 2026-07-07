@@ -3,12 +3,14 @@
 import json
 import os
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.integrations.capabilities import ISecretStore
 from strata.integrations.store_integration import StoreIntegration
 from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
+from strata.utils.secret_metadata import SecretMetadata
 
 logger = get_logger(__name__)
 
@@ -408,5 +410,85 @@ class BitwardenIntegration(StoreIntegration):
         except Exception as e:
             logger.warning(
                 "Error writing secret to Bitwarden", name=self.integration_name, secret_key=key, error=str(e)
+            )
+            return False
+
+    def _find_secret_by_key(self, key: str, timeout: int = 60) -> Optional[Dict[str, Any]]:
+        """Find a Bitwarden secret object by its human-readable key name."""
+        secrets = self._list_secrets_full(timeout=timeout) or []
+        for s in secrets:
+            if s.get("key") == key:
+                return s
+        return None
+
+    def get_secret_metadata(self, key: str, **kwargs) -> Optional[SecretMetadata]:
+        """Return creation/revision timestamps for a Bitwarden secret."""
+        timeout = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            return None
+
+        secret_obj = self._find_secret_by_key(key, timeout=timeout)
+        if secret_obj is None:
+            return None
+
+        meta = SecretMetadata()
+        if secret_obj.get("creationDate"):
+            try:
+                meta.created_at = datetime.fromisoformat(secret_obj["creationDate"].replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+        if secret_obj.get("revisionDate"):
+            try:
+                meta.updated_at = datetime.fromisoformat(secret_obj["revisionDate"].replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+        if secret_obj.get("id"):
+            meta.version = secret_obj["id"]
+        return meta
+
+    def update_secret(self, key: str, value: str, **kwargs) -> bool:
+        """Overwrite an existing secret in Bitwarden (rotation only).
+
+        Unlike set_secret() this edits the existing entry rather than creating a new one.
+        Bitwarden requires the secret UUID for edits, so we look it up by key name.
+        """
+        timeout = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot update secret in Bitwarden", name=self.integration_name, error=error)
+            return False
+
+        secret_obj = self._find_secret_by_key(key, timeout=timeout)
+        if secret_obj is None:
+            logger.warning("Cannot update secret — not found in Bitwarden", name=self.integration_name, secret_key=key)
+            return False
+
+        secret_id = secret_obj.get("id")
+        if not secret_id:
+            return False
+
+        env = {**os.environ}
+        if self.access_token:
+            env[self._get_token_var_name()] = self.access_token
+
+        try:
+            result = self._run_integration(
+                args=["secret", "edit", secret_id, "--value", value],
+                timeout=timeout,
+                env=env,
+            )
+            if result.returncode == 0:
+                logger.info("Secret updated in Bitwarden", name=self.integration_name, secret_key=key)
+                return True
+            logger.warning(
+                "Failed to update secret in Bitwarden", name=self.integration_name, secret_key=key, stderr=result.stderr
+            )
+            return False
+        except Exception as e:
+            logger.warning(
+                "Error updating secret in Bitwarden", name=self.integration_name, secret_key=key, error=str(e)
             )
             return False

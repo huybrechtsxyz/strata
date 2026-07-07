@@ -440,6 +440,9 @@ class PlanBuildCommand(BaseBuildCommand):
                 status, detail = "generated", f"{item.generate.type.value}/{item.generate.length}"
             else:
                 status, detail = "required", None
+            if item.rotate is not None:
+                rotation_tag = f"[rotation: {item.rotate.max_age}d / {item.rotate.policy.value}]"
+                detail = f"{detail}  {rotation_tag}" if detail else rotation_tag
             rows.append({"type": "secret", "key": item.key, "store": store, "status": status, "detail": detail})
 
         for item in env_svc.get_features():

@@ -480,7 +480,7 @@ def _make_variable(key, store, default=None):
     return item
 
 
-def _make_secret(key, store, generate=None):
+def _make_secret(key, store, generate=None, rotate=None):
     from unittest.mock import MagicMock
 
     item = MagicMock()
@@ -488,6 +488,7 @@ def _make_secret(key, store, generate=None):
     item.store = MagicMock()
     item.store.value = store
     item.generate = generate
+    item.rotate = rotate
     return item
 
 

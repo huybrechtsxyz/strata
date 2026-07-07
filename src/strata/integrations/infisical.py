@@ -4,12 +4,14 @@ import json
 import re
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.integrations.capabilities import ISecretStore, IVariableStore
 from strata.integrations.store_integration import StoreIntegration
 from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
+from strata.utils.secret_metadata import SecretMetadata
 
 logger = get_logger(__name__)
 
@@ -344,6 +346,72 @@ class InfisicalIntegration(StoreIntegration):
     def list_variables(self, prefix: str = "", **kwargs) -> List[str]:
         """List variable names from Infisical (delegates to list_secrets)."""
         return self.list_secrets(prefix=prefix, **kwargs)
+
+    def get_secret_metadata(self, key: str, **kwargs) -> Optional[SecretMetadata]:
+        """Return creation/update timestamps for an Infisical secret."""
+        project_id: str = kwargs.get("project_id") or self.project_id or ""
+        environment: str = kwargs.get("environment") or self.environment or ""
+        secret_path: str = kwargs.get("secret_path") or "/"
+
+        available, _ = self.ensure_available()
+        if not available:
+            return None
+
+        token = self._get_access_token()
+        if not token:
+            return None
+
+        try:
+            params: Dict[str, str] = {"environment": environment, "secretPath": secret_path}
+            if project_id:
+                params["workspaceId"] = project_id
+            query = urllib.parse.urlencode(params)
+            url = f"{self.infisical_addr}/api/v3/secrets/raw/{urllib.parse.quote(key)}?{query}"
+            req = urllib.request.Request(url, method="GET")
+            req.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            return None
+
+        secret = data.get("secret", {})
+        if not secret:
+            return None
+
+        meta = SecretMetadata()
+        if secret.get("createdAt"):
+            try:
+                meta.created_at = datetime.fromisoformat(secret["createdAt"].replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+        if secret.get("updatedAt"):
+            try:
+                meta.updated_at = datetime.fromisoformat(secret["updatedAt"].replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+        if secret.get("version"):
+            meta.version = str(secret["version"])
+        return meta
+
+    def update_secret(self, key: str, value: str, **kwargs) -> bool:
+        """Overwrite an existing secret in Infisical (rotation only).
+
+        Delegates to the same PATCH API used by set_secret — Infisical's PATCH
+        endpoint is inherently an upsert, so this just calls through.
+        """
+        project_id: str = kwargs.get("project_id") or self.project_id or ""
+        environment: str = kwargs.get("environment") or self.environment or ""
+        secret_path: str = kwargs.get("secret_path") or "/"
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot update secret in Infisical", name=self.integration_name, error=error)
+            return False
+
+        ok = self._set_secret_via_api(key, value, project_id, environment, secret_path)
+        if ok:
+            logger.info("Secret updated in Infisical", name=self.integration_name, secret_key=key)
+        return ok
 
     # CLI implementations
 

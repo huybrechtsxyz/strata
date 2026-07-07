@@ -4,6 +4,7 @@ import json
 import os
 import re
 import urllib.request
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.integrations.capabilities import (
@@ -361,6 +362,104 @@ class VaultIntegration(StoreIntegration):
     def set_variable(self, key: str, value: Any, **kwargs) -> bool:
         """Set a variable in HashiCorp Vault (delegates to set_secret)."""
         return self.set_secret(key, str(value), **kwargs)
+
+    def get_secret_metadata(self, key: str, **kwargs) -> Optional["SecretMetadata"]:
+        """Return creation/update timestamps for a Vault KV v2 secret."""
+        from strata.utils.secret_metadata import SecretMetadata
+
+        prefer_cli = kwargs.get("prefer_cli", True)
+        timeout = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            return None
+
+        data = None
+        if prefer_cli:
+            # KV v2 metadata: vault kv metadata get -format=json <path>
+            result = self._run_integration_with_env(
+                args=["kv", "metadata", "get", "-format=json", key],
+                timeout=timeout,
+            )
+            if result.returncode == 0 and result.stdout:
+                try:
+                    data = json.loads(result.stdout)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        if data is None:
+            # API fallback — GET /v1/<mount>/metadata/<path>
+            try:
+                token = self._get_token()
+                if not token:
+                    return None
+                meta_path = key
+                if "/metadata/" not in meta_path:
+                    parts = meta_path.split("/", 1)
+                    if len(parts) == 2:
+                        meta_path = f"{parts[0]}/metadata/{parts[1]}"
+                url = f"{self.vault_addr}/v1/{meta_path}"
+                req = urllib.request.Request(url, method="GET")
+                req.add_header("X-Vault-Token", token)
+                if self.vault_namespace:
+                    req.add_header("X-Vault-Namespace", self.vault_namespace)
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+            except Exception:
+                return None
+
+        if data is None:
+            return None
+
+        md = data.get("data", {})
+        meta = SecretMetadata()
+        if md.get("created_time"):
+            try:
+                meta.created_at = datetime.fromisoformat(md["created_time"].replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+        if md.get("updated_time"):
+            try:
+                meta.updated_at = datetime.fromisoformat(md["updated_time"].replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+        if md.get("current_version"):
+            meta.version = str(md["current_version"])
+        return meta
+
+    def update_secret(self, key: str, value: str, **kwargs) -> bool:
+        """Overwrite an existing secret in Vault (rotation only).
+
+        Unlike set_secret() this skips the existence check.
+        Vault KV v2 auto-creates a new version.
+        """
+        field = kwargs.get("field", "value")
+        prefer_cli = kwargs.get("prefer_cli", True)
+        timeout = kwargs.get("timeout", 60)
+
+        available, error = self.ensure_available()
+        if not available:
+            logger.warning("Cannot update secret in HashiCorp Vault", name=self.integration_name, error=error)
+            return False
+
+        if prefer_cli:
+            result = self._run_integration_with_env(
+                args=["kv", "put", key, f"{field}={value}"],
+                timeout=timeout,
+            )
+            if result.returncode == 0:
+                logger.info("Secret updated in HashiCorp Vault via CLI", name=self.integration_name, secret_path=key)
+                return True
+            logger.warning(
+                "Failed to update secret via CLI — trying API",
+                name=self.integration_name,
+                secret_path=key,
+            )
+
+        ok = self._set_secret_via_api(key, field, value)
+        if ok:
+            logger.info("Secret updated in HashiCorp Vault via API", name=self.integration_name, secret_path=key)
+        return ok
 
     # IFeatureStore implementation — feature flags stored as Vault KV secrets
 

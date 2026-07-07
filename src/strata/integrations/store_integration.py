@@ -5,6 +5,7 @@ from typing import Any, List, Optional
 from strata.integrations.base_integration import BaseIntegration
 from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
+from strata.utils.secret_metadata import SecretMetadata
 
 logger = get_logger(__name__)
 
@@ -172,6 +173,29 @@ class StoreIntegration(BaseIntegration):
             prefix=prefix,
         )
         return []
+
+    def get_secret_metadata(self, key: str, **kwargs) -> Optional[SecretMetadata]:
+        """Return metadata (timestamps, version) for a secret, or None if unsupported.
+
+        Override this method in subclasses that expose secret age information.
+        Integrations that do not support timestamps should return None (default).
+        """
+        return None
+
+    def update_secret(self, key: str, value: str, **kwargs) -> bool:
+        """Replace an existing secret value. Phase 3 rotation ONLY.
+
+        Unlike set_secret() (create-if-not-exists), this method explicitly
+        overwrites the current value. Must only be called from the rotation
+        flow when policy=rotate and age exceeds max_age, or from secret rotate command.
+        """
+        logger.debug(
+            "Store does not support secret update",
+            name=self.integration_name,
+            operation="update_secret",
+            key=key,
+        )
+        return False
 
     # Feature flag operations
 
