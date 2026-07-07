@@ -43,29 +43,29 @@ class PutSecretCommand(BaseCommand):
         return {}
 
     def execute(self) -> bool:
-        ok, _ = self._initialize()
+        ok = self._initialize()
         if not ok:
             return False
 
         if not self._file:
-            self._add_error("--file / -f is required.")
+            self._errors.append("--file / -f is required.")
             return False
         if not self._key:
-            self._add_error("KEY argument is required.")
+            self._errors.append("KEY argument is required.")
             return False
         if self._value and self._generate:
-            self._add_error("--value and --generate are mutually exclusive.")
+            self._errors.append("--value and --generate are mutually exclusive.")
             return False
 
         file_path = resolve_path(str(self._work_path), self._file)
         dep_svc = DeploymentService.load(str(file_path))
         if dep_svc is None or not dep_svc.is_valid:
-            self._add_error(f"Cannot load deployment file: {self._file}")
+            self._errors.append(f"Cannot load deployment file: {self._file}")
             return False
 
         env_svc = dep_svc.get_environment_service()
         if env_svc is None:
-            self._add_error("No environment defined in deployment.")
+            self._errors.append("No environment defined in deployment.")
             return False
 
         item = None
@@ -74,7 +74,7 @@ class PutSecretCommand(BaseCommand):
                 item = s
                 break
         if item is None:
-            self._add_error(f"Secret '{self._key}' not found in environment definition.")
+            self._errors.append(f"Secret '{self._key}' not found in environment definition.")
             return False
 
         # Determine the value to write
@@ -83,7 +83,7 @@ class PutSecretCommand(BaseCommand):
             source = "provided"
         elif self._generate:
             if item.generate is None:
-                self._add_error(
+                self._errors.append(
                     f"Secret '{self._key}' has no generate spec. "
                     "Use --value to provide a value, or add a generate: block to the YAML."
                 )
@@ -91,16 +91,16 @@ class PutSecretCommand(BaseCommand):
             secret_value = generate_secret(item.generate.type.value, item.generate.length)
             source = "generated"
         else:
-            self._add_error("Either --value or --generate is required.")
+            self._errors.append("Either --value or --generate is required.")
             return False
 
         # Write to store (create-if-not-exists via set_secret)
         from strata.controllers.value_controller import ValueController
 
-        vc = ValueController(work_path=str(self._work_path))
+        vc = ValueController()
         integration = vc._get_integration_by_type(item.store.value)
         if integration is None:
-            self._add_error(f"No integration registered for store type '{item.store.value}'.")
+            self._errors.append(f"No integration registered for store type '{item.store.value}'.")
             return False
 
         written = integration.set_secret(str(item.value), secret_value)
@@ -113,7 +113,7 @@ class PutSecretCommand(BaseCommand):
         }
         self._output_data = result
 
-        if self._is_json_output():
+        if self._output_format == "json":
             click.echo(json.dumps(result, indent=2))
         elif self._is_console_output() and not self._output_quiet:
             if written:

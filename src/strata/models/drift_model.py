@@ -23,7 +23,7 @@ class DriftSeverity(str, Enum):
         order = self.ordered()
         return order.index(self) >= order.index(other)
 
-    def __lt__(self, other: "DriftSeverity") -> bool:
+    def __lt__(self, other: "DriftSeverity") -> bool:  # type: ignore[override]
         order = self.ordered()
         return order.index(self) > order.index(other)
 
@@ -31,7 +31,7 @@ class DriftSeverity(str, Enum):
         order = self.ordered()
         return order.index(self) <= order.index(other)
 
-    def __gt__(self, other: "DriftSeverity") -> bool:
+    def __gt__(self, other: "DriftSeverity") -> bool:  # type: ignore[override]
         order = self.ordered()
         return order.index(self) < order.index(other)
 

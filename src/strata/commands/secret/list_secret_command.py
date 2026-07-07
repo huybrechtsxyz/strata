@@ -37,24 +37,24 @@ class ListSecretCommand(BaseCommand):
         return {}
 
     def execute(self) -> bool:
-        ok, _ = self._initialize()
+        ok = self._initialize()
         if not ok:
             return False
 
         if not self._file:
-            self._add_error("--file / -f is required.")
+            self._errors.append("--file / -f is required.")
             return False
 
         file_path = resolve_path(str(self._work_path), self._file)
         dep_svc = DeploymentService.load(str(file_path))
         if dep_svc is None or not dep_svc.is_valid:
-            self._add_error(f"Cannot load deployment file: {self._file}")
+            self._errors.append(f"Cannot load deployment file: {self._file}")
             return False
         self._deployment_service = dep_svc
 
         env_svc = dep_svc.get_environment_service()
         if env_svc is None:
-            self._add_error("No environment defined in deployment.")
+            self._errors.append("No environment defined in deployment.")
             return False
 
         secrets = env_svc.get_secrets()
@@ -73,7 +73,7 @@ class ListSecretCommand(BaseCommand):
 
         self._output_data = {"secrets": rows, "count": len(rows)}
 
-        if self._is_json_output():
+        if self._output_format == "json":
             click.echo(json.dumps(self._output_data, indent=2))
         elif self._is_console_output() and not self._output_quiet:
             if not rows:

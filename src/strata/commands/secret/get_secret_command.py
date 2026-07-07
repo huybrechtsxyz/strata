@@ -41,26 +41,26 @@ class GetSecretCommand(BaseCommand):
         return {}
 
     def execute(self) -> bool:
-        ok, _ = self._initialize()
+        ok = self._initialize()
         if not ok:
             return False
 
         if not self._file:
-            self._add_error("--file / -f is required.")
+            self._errors.append("--file / -f is required.")
             return False
         if not self._key:
-            self._add_error("KEY argument is required.")
+            self._errors.append("KEY argument is required.")
             return False
 
         file_path = resolve_path(str(self._work_path), self._file)
         dep_svc = DeploymentService.load(str(file_path))
         if dep_svc is None or not dep_svc.is_valid:
-            self._add_error(f"Cannot load deployment file: {self._file}")
+            self._errors.append(f"Cannot load deployment file: {self._file}")
             return False
 
         env_svc = dep_svc.get_environment_service()
         if env_svc is None:
-            self._add_error("No environment defined in deployment.")
+            self._errors.append("No environment defined in deployment.")
             return False
 
         item = None
@@ -69,16 +69,16 @@ class GetSecretCommand(BaseCommand):
                 item = s
                 break
         if item is None:
-            self._add_error(f"Secret '{self._key}' not found in environment definition.")
+            self._errors.append(f"Secret '{self._key}' not found in environment definition.")
             return False
 
         # Resolve the value from the store
         from strata.controllers.value_controller import ValueController
 
-        vc = ValueController(work_path=str(self._work_path))
+        vc = ValueController()
         val, err, note = vc._resolve_secret(item)
         if err:
-            self._add_error(err)
+            self._errors.append(err)
             return False
 
         display = str(val) if self._unmask else mask_secret(str(val))
@@ -96,7 +96,7 @@ class GetSecretCommand(BaseCommand):
 
         self._output_data = result
 
-        if self._is_json_output():
+        if self._output_format == "json":
             click.echo(json.dumps(result, indent=2))
         elif self._is_console_output():
             click.echo(display if val is not None else "(not found)")
