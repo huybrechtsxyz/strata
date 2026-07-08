@@ -14,8 +14,12 @@
  *   /status   — show workspace readiness, profile, and health
  *   /validate — validate the current file or a named file
  *   /guide    — show the 8-phase readiness checklist
- *   /build    — explain how to build the current deployment
- *   /deploy   — explain how to deploy the current deployment
+ *   /build    — run or dry-run a build via terminal
+ *   /deploy   — run or dry-run a deploy via terminal
+ *   /stage    — deploy a specific stage: /stage deploy/main.yaml networking
+ *   /values   — inspect resolved deployment values
+ *   /drift    — run drift detection on a deployment
+ *   /repos    — show repository status with release/quality-gate tags
  */
 
 import * as vscode from 'vscode';
@@ -24,7 +28,7 @@ import type { StrataClient, WorkspaceStatus, ValidationResult } from '../strataC
 const PARTICIPANT_ID = 'strata.chat';
 
 /** Slash-command metadata registered in package.json `chatParticipants[].commands`. */
-type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'repos';
+type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'stage' | 'values' | 'drift' | 'repos';
 
 export class StrataChatParticipant implements vscode.Disposable {
     private _participant: vscode.ChatParticipant | undefined;
@@ -80,9 +84,15 @@ export class StrataChatParticipant implements vscode.Disposable {
                 case 'guide':
                     return await this._handleGuide(response, token);
                 case 'build':
-                    return await this._handleBuildOrDeploy('build', response);
+                    return await this._handleBuild(request, response);
                 case 'deploy':
-                    return await this._handleBuildOrDeploy('deploy', response);
+                    return await this._handleDeploy(request, response);
+                case 'stage':
+                    return await this._handleStage(request, response);
+                case 'values':
+                    return await this._handleValues(request, response, token);
+                case 'drift':
+                    return await this._handleDrift(request, response);
                 case 'repos':
                     return await this._handleRepos(response, token);
                 default:
@@ -201,36 +211,189 @@ export class StrataChatParticipant implements vscode.Disposable {
         return { metadata: { command: 'guide' } };
     }
 
-    // ── /build and /deploy ─────────────────────────────────────────────────────
+    // ── /build ─────────────────────────────────────────────────────────────────
 
-    private async _handleBuildOrDeploy(
-        action: 'build' | 'deploy',
+    private async _handleBuild(
+        request: vscode.ChatRequest,
         response: vscode.ChatResponseStream,
     ): Promise<vscode.ChatResult> {
-        const status = await this._getStatus();
-        const profile = status.profiles.active ?? '*(no profile)*';
-
-        // Find deployment files from the status
-        const deployFiles = status.profiles.paths?.['deployment'] ?? [];
-
-        response.markdown(`## ${action === 'build' ? 'Build' : 'Deploy'} Guide\n\n`);
-        response.markdown(`**Active profile:** ${profile}\n\n`);
-
-        if (deployFiles.length === 0) {
-            response.markdown(`No deployment files found. Create one with:\n\n\`\`\`sh\nstrata new deployment\n\`\`\`\n`);
-        } else {
-            response.markdown(`**Available deployment files:**\n\n`);
-            for (const df of deployFiles) {
-                const rel = vscode.workspace.asRelativePath(df.path);
-                if (action === 'build') {
-                    response.markdown(`- \`${rel}\`\n  \`\`\`sh\n  strata build run -f ${rel} --dry-run\n  strata build run -f ${rel}\n  \`\`\`\n\n`);
-                } else {
-                    response.markdown(`- \`${rel}\`\n  \`\`\`sh\n  strata deploy run -f ${rel} --dry-run\n  strata deploy run -f ${rel} --force\n  \`\`\`\n\n`);
-                }
-            }
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
         }
 
-        return { metadata: { command: action } };
+        // Resolve target file: from prompt or active editor
+        let filePath = request.prompt.trim();
+        if (!filePath) filePath = vscode.window.activeTextEditor?.document.uri.fsPath ?? '';
+
+        if (!filePath) {
+            response.markdown('No deployment file specified. Open a deployment YAML or type: `/build path/to/deploy.yaml`');
+            return { errorDetails: { message: 'No file' } };
+        }
+
+        const rel = vscode.workspace.asRelativePath(filePath);
+        response.markdown(`**Build target:** \`${rel}\`\n\n`);
+        response.button({ title: '▶ Dry Run', command: 'strata.buildDryRun', arguments: [filePath] });
+        response.button({ title: '⚡ Full Build', command: 'strata.buildRun', arguments: [filePath] });
+        response.markdown(`\nDry-run shows what would change without applying. Full build generates Terraform artifacts.\n`);
+
+        return { metadata: { command: 'build', filePath } };
+    }
+
+    // ── /deploy ────────────────────────────────────────────────────────────────
+
+    private async _handleDeploy(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        let filePath = request.prompt.trim();
+        if (!filePath) filePath = vscode.window.activeTextEditor?.document.uri.fsPath ?? '';
+
+        if (!filePath) {
+            response.markdown('No deployment file specified. Open a deployment YAML or type: `/deploy path/to/deploy.yaml`');
+            return { errorDetails: { message: 'No file' } };
+        }
+
+        const rel = vscode.workspace.asRelativePath(filePath);
+        response.markdown(`**Deploy target:** \`${rel}\`\n\n`);
+        response.button({ title: '▶ Dry Run', command: 'strata.deployDryRun', arguments: [filePath] });
+        response.button({ title: '🚀 Full Deploy', command: 'strata.deployRun', arguments: [filePath] });
+        response.markdown(`\nDry-run shows the plan without applying. Full deploy requires confirmation.\n`);
+
+        return { metadata: { command: 'deploy', filePath } };
+    }
+
+    // ── /stage ─────────────────────────────────────────────────────────────────
+
+    private async _handleStage(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        // Syntax: /stage [file] [stage-name]
+        // e.g. /stage deploy/main.yaml infrastructure
+        //      /stage infrastructure   (uses active editor for file)
+        const parts = request.prompt.trim().split(/\s+/).filter(Boolean);
+        let filePath: string | undefined;
+        let stageName: string | undefined;
+
+        if (parts.length >= 2) {
+            [filePath, stageName] = parts;
+        } else if (parts.length === 1) {
+            stageName = parts[0];
+            filePath = vscode.window.activeTextEditor?.document.uri.fsPath;
+        } else {
+            filePath = vscode.window.activeTextEditor?.document.uri.fsPath;
+        }
+
+        if (!filePath) {
+            response.markdown('Usage: `/stage [file] <stage-name>`\n\nExample: `/stage deploy/main.yaml networking`\n\nOr open a deployment YAML and type: `/stage networking`');
+            return { errorDetails: { message: 'No file or stage specified' } };
+        }
+
+        if (!stageName) {
+            response.markdown(`**File:** \`${vscode.workspace.asRelativePath(filePath)}\`\n\nSpecify a stage name: \`/stage networking\``);
+            return { errorDetails: { message: 'No stage name' } };
+        }
+
+        const rel = vscode.workspace.asRelativePath(filePath);
+        response.markdown(`**Stage deploy:** \`${stageName}\` in \`${rel}\`\n\n`);
+        response.button({ title: '▶ Dry Run', command: 'strata.deployStage', arguments: [filePath, stageName, true] });
+        response.button({ title: '🚀 Deploy Stage', command: 'strata.deployStage', arguments: [filePath, stageName, false] });
+
+        return { metadata: { command: 'stage', filePath, stageName } };
+    }
+
+    // ── /values ────────────────────────────────────────────────────────────────
+
+    private async _handleValues(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+        _token: vscode.CancellationToken,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        let filePath = request.prompt.trim();
+        if (!filePath) filePath = vscode.window.activeTextEditor?.document.uri.fsPath ?? '';
+
+        if (!filePath) {
+            response.markdown('Open a deployment YAML or type: `/values path/to/deploy.yaml`');
+            return { errorDetails: { message: 'No file' } };
+        }
+
+        response.markdown(`Loading values for **${vscode.workspace.asRelativePath(filePath)}**…\n\n`);
+
+        try {
+            const data = await this._client.getValues(filePath);
+            const resolved = data.entries.filter((e) => e.resolved).length;
+            const secrets = data.entries.filter((e) => e.secret).length;
+            const unresolved = data.entries.filter((e) => !e.resolved).length;
+
+            response.markdown(`| Property | Count |\n|---|---|\n`);
+            response.markdown(`| **Total values** | ${data.count} |\n`);
+            response.markdown(`| **Resolved** | ${resolved} |\n`);
+            response.markdown(`| **Secrets** | ${secrets} |\n`);
+            if (unresolved > 0) response.markdown(`| **⚠ Unresolved** | ${unresolved} |\n`);
+
+            // Show non-secret values in a table
+            const visible = data.entries.filter((e) => !e.secret).slice(0, 20);
+            if (visible.length > 0) {
+                response.markdown(`\n### Configuration Values\n\n| Key | Value | Source |\n|---|---|---|\n`);
+                for (const v of visible) {
+                    const val = v.value !== null ? `\`${v.value}\`` : '*null*';
+                    response.markdown(`| \`${v.key}\` | ${val} | ${v.source} |\n`);
+                }
+            }
+
+            if (secrets > 0) {
+                response.markdown(`\n> 🔑 ${secrets} secret value${secrets !== 1 ? 's' : ''} are masked. Use the Values view to inspect.\n`);
+            }
+        } catch (err) {
+            response.markdown(`**Failed to load values:** ${err instanceof Error ? err.message : String(err)}`);
+            return { errorDetails: { message: String(err) } };
+        }
+
+        response.button({ title: 'Open Values View', command: 'strata.showValues', arguments: [filePath] });
+        return { metadata: { command: 'values', filePath } };
+    }
+
+    // ── /drift ─────────────────────────────────────────────────────────────────
+
+    private async _handleDrift(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        let filePath = request.prompt.trim();
+        if (!filePath) filePath = vscode.window.activeTextEditor?.document.uri.fsPath ?? '';
+
+        if (!filePath) {
+            response.markdown('Open a deployment YAML or type: `/drift path/to/deploy.yaml`');
+            return { errorDetails: { message: 'No file' } };
+        }
+
+        const rel = vscode.workspace.asRelativePath(filePath);
+        response.markdown(`Running drift detection on **${rel}**…\n\n⏳ This runs \`terraform plan\` — may take a moment.\n\n`);
+        response.button({ title: '🔍 Run Drift Detection', command: 'strata.envDrift', arguments: [filePath] });
+        response.markdown(`\nDrift detection compares your deployed infrastructure against the current configuration.\n`);
+
+        return { metadata: { command: 'drift', filePath } };
     }
 
     // ── /repos ─────────────────────────────────────────────────────────────────
@@ -352,11 +515,12 @@ export class StrataChatParticipant implements vscode.Disposable {
                 return [
                     { prompt: '', label: 'Show readiness guide', command: 'guide' },
                     { prompt: '', label: 'Check repositories', command: 'repos' },
+                    { prompt: '', label: 'Inspect values', command: 'values' },
                 ];
             case 'validate':
                 return [
+                    { prompt: '', label: 'Build deployment', command: 'build' },
                     { prompt: '', label: 'Show workspace status', command: 'status' },
-                    { prompt: '', label: 'Check repositories', command: 'repos' },
                 ];
             case 'guide':
                 return [
@@ -366,12 +530,29 @@ export class StrataChatParticipant implements vscode.Disposable {
             case 'build':
                 return [
                     { prompt: '', label: 'Deploy now', command: 'deploy' },
-                    { prompt: '', label: 'Check repositories', command: 'repos' },
+                    { prompt: '', label: 'Check values', command: 'values' },
+                    { prompt: '', label: 'Detect drift', command: 'drift' },
                 ];
             case 'deploy':
                 return [
                     { prompt: '', label: 'Check status', command: 'status' },
-                    { prompt: '', label: 'Check repositories', command: 'repos' },
+                    { prompt: '', label: 'Detect drift', command: 'drift' },
+                    { prompt: '', label: 'Inspect values', command: 'values' },
+                ];
+            case 'stage':
+                return [
+                    { prompt: '', label: 'Full deploy', command: 'deploy' },
+                    { prompt: '', label: 'Detect drift', command: 'drift' },
+                ];
+            case 'values':
+                return [
+                    { prompt: '', label: 'Deploy', command: 'deploy' },
+                    { prompt: '', label: 'Detect drift', command: 'drift' },
+                ];
+            case 'drift':
+                return [
+                    { prompt: '', label: 'Deploy', command: 'deploy' },
+                    { prompt: '', label: 'Check status', command: 'status' },
                 ];
             case 'repos':
                 return [

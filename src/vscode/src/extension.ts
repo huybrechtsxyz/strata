@@ -26,6 +26,7 @@ import { FileDecorationProvider } from './providers/fileDecorationProvider';
 import { StrataChatParticipant } from './providers/strataChatParticipant';
 import { EnvViewProvider } from './providers/envViewProvider';
 import { AuditViewProvider } from './providers/auditViewProvider';
+import { ValuesViewProvider } from './providers/valuesViewProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -48,6 +49,7 @@ let _fileDecorations: FileDecorationProvider | undefined;
 let _chatParticipant: StrataChatParticipant | undefined;
 let _envView: EnvViewProvider | undefined;
 let _auditView: AuditViewProvider | undefined;
+let _valuesView: ValuesViewProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,8 @@ export function activate(context: vscode.ExtensionContext): void {
     _envView.setClient(_client);
     _auditView = new AuditViewProvider();
     _auditView.setClient(_client);
+    _valuesView = new ValuesViewProvider();
+    _valuesView.setClient(_client);
 
     // ── Register the 4 tree views ──────────────────────────────────────────────
 
@@ -165,6 +169,10 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.createTreeView('strataAudit', {
             treeDataProvider: _auditView!,
             showCollapseAll: true,
+        }),
+        vscode.window.createTreeView('strataValues', {
+            treeDataProvider: _valuesView!,
+            showCollapseAll: false,
         }),
     );
 
@@ -214,8 +222,8 @@ export function activate(context: vscode.ExtensionContext): void {
             const yamlUris = await vscode.workspace.findFiles('**/*.yaml', '**/.strata/**');
 
             await vscode.window.withProgress(
-                { location: vscode.ProgressLocation.Notification, title: 'Strata: validating workspace files', cancellable: false },
-                async (progress) => {
+                { location: vscode.ProgressLocation.Notification, title: 'Strata: validating workspace files', cancellable: true },
+                async (progress, token) => {
                     // Pre-filter to strata documents only (fast text scan, no CLI call)
                     const strataUris: vscode.Uri[] = [];
                     for (const uri of yamlUris) {
@@ -235,6 +243,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     let totalErrors = 0;
                     let idx = 0;
                     for (const uri of strataUris) {
+                        if (token.isCancellationRequested) break;
                         idx++;
                         progress.report({ message: `${idx}/${strataUris.length} — ${vscode.workspace.asRelativePath(uri)}` });
                         const doc = await vscode.workspace.openTextDocument(uri);
@@ -349,7 +358,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 _client?.runInTerminal(['audit', 'changes'], 'strata audit changes');
                 return;
             }
-            _client?.runInTerminal(['audit', 'changes'], 'strata audit changes');
+            _client?.runInTerminal(['audit', 'changes', '-f', target], 'strata audit changes');
         }),
 
         vscode.commands.registerCommand('strata.auditResend', () => {
@@ -476,6 +485,147 @@ export function activate(context: vscode.ExtensionContext): void {
             void _depGraph?.show(_lastStatus);
         }),
 
+        vscode.commands.registerCommand('strata.deployStage', async (filePath?: string, stageName?: string, dryRun = false) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            if (!stageName) {
+                stageName = await vscode.window.showInputBox({ prompt: 'Stage name', placeHolder: 'e.g. infrastructure' });
+                if (!stageName) return;
+            }
+            if (!dryRun) {
+                const confirmed = await vscode.window.showWarningMessage(
+                    `Deploy stage "${stageName}"? This will apply infrastructure changes.`,
+                    { modal: true }, 'Deploy',
+                );
+                if (confirmed !== 'Deploy') return;
+            }
+            const args = ['deploy', 'run', '-f', target, '--stage', stageName];
+            if (dryRun) args.push('--dry-run'); else args.push('--force');
+            _client?.runInTerminal(args, `strata deploy ${stageName}${dryRun ? ' (dry run)' : ''}`);
+        }),
+
+        vscode.commands.registerCommand('strata.lockStatus', async (filePath?: string) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target || !_client) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            try {
+                const lock = await _client.getLockStatus(target);
+                if (lock.locked) {
+                    const pick = await vscode.window.showWarningMessage(
+                        `🔒 Locked by "${lock.holder ?? 'unknown'}" since ${lock.acquired_at ?? 'unknown'}`,
+                        'Force Release',
+                    );
+                    if (pick === 'Force Release') {
+                        void vscode.commands.executeCommand('strata.releaseLock', target);
+                    }
+                } else {
+                    void vscode.window.showInformationMessage('🔓 No deployment lock held.');
+                }
+                _envView?.refreshLock(target);
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Lock status failed: ${String(err)}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.releaseLock', async (filePath?: string) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target || !_client) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            const confirmed = await vscode.window.showWarningMessage(
+                'Force-release the deployment lock? Only do this if a deploy crashed and left a stale lock.',
+                { modal: true }, 'Release Lock',
+            );
+            if (confirmed !== 'Release Lock') return;
+            try {
+                await _client.releaseLock(target);
+                void vscode.window.showInformationMessage('Strata: deployment lock released.');
+                _envView?.refreshLock(target);
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Lock release failed: ${String(err)}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.showValues', (filePath?: string) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            _valuesView?.loadFile(target);
+            void vscode.commands.executeCommand('strataValues.focus');
+        }),
+
+        vscode.commands.registerCommand('strata.copyValueKey', async (key: string) => {
+            await vscode.env.clipboard.writeText(key);
+            void vscode.window.showInformationMessage(`Copied "${key}" to clipboard.`);
+        }),
+
+        vscode.commands.registerCommand('strata.buildSbom', async (filePath?: string) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            try {
+                void vscode.window.withProgress(
+                    { location: vscode.ProgressLocation.Notification, title: 'Strata: generating SBOM…', cancellable: false },
+                    async () => {
+                        if (!_client) return;
+                        const sbom = await _client.generateSbom(target);
+                        const parts: string[] = [`${sbom.component_count} components`];
+                        if (sbom.critical_count > 0) parts.push(`${sbom.critical_count} critical CVEs`);
+                        if (sbom.high_count > 0) parts.push(`${sbom.high_count} high CVEs`);
+                        const label = sbom.vulnerabilities_found ? `⚠️ ${parts.join(' · ')}` : `✅ ${parts.join(' · ')} — no vulnerabilities`;
+                        const actions = sbom.output_file ? ['Open SBOM'] : [];
+                        void vscode.window.showInformationMessage(`Strata SBOM: ${label}`, ...actions).then((v) => {
+                            if (v === 'Open SBOM' && sbom.output_file) {
+                                void vscode.window.showTextDocument(vscode.Uri.file(sbom.output_file));
+                            }
+                        });
+                    },
+                );
+            } catch (err) {
+                _client?.runInTerminal(['build', 'sbom', '-f', target], 'strata build sbom');
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.syncRepo', async (item?: { repoName?: string }) => {
+            const name = item?.repoName;
+            if (!_reposView) return;
+            await _reposView.syncRepo(name);
+            void _refreshAll();
+        }),
+
+        vscode.commands.registerCommand('strata.addRepo', async () => {
+            const name = await vscode.window.showInputBox({ prompt: 'Repository name', placeHolder: 'e.g. my-infra' });
+            if (!name) return;
+            const repoPath = await vscode.window.showInputBox({ prompt: 'Repository path (local folder)', placeHolder: '/path/to/repo or ../relative/path' });
+            if (!repoPath || !_client) return;
+            try {
+                await _client.addRepo(name, repoPath);
+                void vscode.window.showInformationMessage(`Strata: repository "${name}" added.`);
+                void _refreshAll();
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Add repository failed: ${String(err)}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.removeRepo', async (item?: { repoName?: string }) => {
+            const name = item?.repoName ?? await vscode.window.showInputBox({ prompt: 'Repository name to remove' });
+            if (!name || !_reposView) return;
+            await _reposView.removeRepo(name);
+            void _refreshAll();
+        }),
+
+        vscode.commands.registerCommand('strata.auditFilter', () => {
+            _auditView?.cycleFilter();
+        }),
+
+        vscode.commands.registerCommand('strata.auditSetLimit', async () => {
+            const input = await vscode.window.showInputBox({
+                prompt: 'Number of audit entries to show (5–200)',
+                value: '20',
+                validateInput: (v) => {
+                    const n = parseInt(v, 10);
+                    return isNaN(n) || n < 5 || n > 200 ? 'Enter a number between 5 and 200' : null;
+                },
+            });
+            if (!input) return;
+            _auditView?.setLimit(parseInt(input, 10));
+        }),
+
         vscode.commands.registerCommand('strata.refreshTreeView', () => {
             void _refreshAll();
         }),
@@ -497,6 +647,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 _diagnostics?.setClient(_client);
                 _envView?.setClient(_client);
                 _auditView?.setClient(_client);
+                _valuesView?.setClient(_client);
                 void _refreshAll();
             }
         }),
@@ -573,6 +724,7 @@ export function activate(context: vscode.ExtensionContext): void {
         _statusBar, _workspaceView, _filesView, _reposView, _toolsView,
         _diagnostics, _codeLens, _guideView, _crossRef, _snippets, _depGraph,
         _taskProvider, _fileDecorations, _chatParticipant, solutionWatcher,
+        _envView!, _auditView!, _valuesView!,
     );
 
     // ── Set context key so menus can use it ────────────────────────────────────

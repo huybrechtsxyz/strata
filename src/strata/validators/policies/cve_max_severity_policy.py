@@ -41,14 +41,13 @@ from strata.validators.policies.base_policy import BasePolicy, PolicyContext, Po
 
 _SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
 
-logger = get_logger(__name__)
-
 
 class CveMaxSeverityPolicy(BasePolicy):
     """Deny (or warn/audit) builds whose CVE findings exceed the configured threshold."""
 
     def __init__(self, policy_model: PolicyModel) -> None:
         super().__init__(policy_model)
+        self.logger = get_logger(__name__)
 
     def evaluate(self, context: PolicyContext) -> PolicyResult:
         configuration: Dict[str, Any] = self.policy.configuration or {}
@@ -145,13 +144,13 @@ class CveMaxSeverityPolicy(BasePolicy):
 
         available, reason = scanner.ensure_available()
         if not available:
-            logger.debug("CVE policy: scanner not available, skipping", reason=reason)
+            self.logger.debug("CVE policy: scanner not available, skipping", reason=reason)
             return None
 
         try:
             return scanner.scan_sbom(sbom_path, severity_threshold=severity_threshold)
         except RuntimeError as exc:
-            logger.warning("CVE policy: scan failed", error=str(exc))
+            self.logger.warning("CVE policy: scan failed", error=str(exc))
             return None
 
     @staticmethod

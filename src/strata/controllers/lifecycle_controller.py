@@ -245,7 +245,7 @@ class LifecycleController(BaseController):
             if progress_callback:
                 progress_callback(str(script_file), idx, total)
 
-            success = self._execute_script(
+            self._execute_script(
                 phase_name=phase_name,
                 script_file=script_file,
                 script_desc=script_desc,

@@ -1,7 +1,12 @@
 """Platform file validator — resolves kind and delegates to the appropriate service."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from strata.services.configuration_service import ConfigurationService
 
 import yaml
 
@@ -51,7 +56,7 @@ class PlatformValidator(BaseValidator):
     def __init__(
         self,
         file_path: Path,
-        configuration_service=None,
+        configuration_service: Optional[ConfigurationService] = None,
         repo_map: Optional[Dict[str, str]] = None,
     ) -> None:
         super().__init__()

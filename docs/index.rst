@@ -142,6 +142,7 @@ strata
    decisions/0022-siem-integration-splunk-hec-cef
    decisions/0023-pluggable-provisioner-framework
    decisions/0024-environment-composition-flat-merge-fix
+   decisions/0025-ai-agent-integration-for-build-and-deploy
 
 .. toctree::
    :maxdepth: 2

@@ -38,8 +38,8 @@ class ListPolicyCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self._raw_file: Optional[str] = file
         self._file_path: Optional[Path] = Path(file) if file else None
@@ -52,47 +52,11 @@ class ListPolicyCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_execution():
-                if self._is_console_output():
-                    click.echo("\n❌  Execution failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution processing failed")
-                self._finalize(success=False)
-                return False
-
-            self._finalize(success=True)
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to list policies: {e}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            self._finalize(success=False)
-            return False
-
     # ------------------------------------------------------------------
     # Lifecycle overrides
     # ------------------------------------------------------------------
 
-    def _run_execution(self) -> bool:
+    def _run(self) -> bool:
         """Load services and extract policies."""
         controller = PolicyController()
 

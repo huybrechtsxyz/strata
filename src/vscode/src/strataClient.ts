@@ -206,6 +206,89 @@ export interface AuditChangesData {
     count: number;
 }
 
+// ---------------------------------------------------------------------------
+// Lock types
+// ---------------------------------------------------------------------------
+
+/** Matches `deploy lock status --output json` data */
+export interface DeployLockStatus {
+    locked: boolean;
+    holder: string | null;
+    acquired_at: string | null;
+    ttl_seconds: number | null;
+    backend: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Drift types
+// ---------------------------------------------------------------------------
+
+/** A single drifted resource */
+export interface DriftResource {
+    address: string;
+    change_type: 'change' | 'delete' | 'create';
+    attributes: string[];
+}
+
+/** Per-stage drift result */
+export interface DriftStageResult {
+    stage: string;
+    provisioner: string;
+    drifted: boolean;
+    resources: DriftResource[];
+}
+
+/** Matches `deploy drift run --output json` data */
+export interface DriftData {
+    drifted: boolean;
+    stages: DriftStageResult[];
+    acknowledged_count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Values types
+// ---------------------------------------------------------------------------
+
+/** A single resolved value entry */
+export interface ValueEntry {
+    key: string;
+    value: string | null;
+    source: string;
+    secret: boolean;
+    resolved: boolean;
+}
+
+/** Matches `values list --output json` data */
+export interface ValuesData {
+    deployment: string;
+    file: string;
+    entries: ValueEntry[];
+    count: number;
+}
+
+// ---------------------------------------------------------------------------
+// SBOM types
+// ---------------------------------------------------------------------------
+
+/** A dependency in the SBOM */
+export interface SbomComponent {
+    name: string;
+    version: string | null;
+    type: string;
+    purl: string | null;
+}
+
+/** Matches `build sbom --output json` data */
+export interface SbomData {
+    deployment: string;
+    component_count: number;
+    output_file: string | null;
+    components: SbomComponent[];
+    vulnerabilities_found: boolean;
+    critical_count: number;
+    high_count: number;
+}
+
 /** Matches status_env_command._output_data stage entry (multi-deployment mode) */
 export interface EnvStageStatus {
     name: string;
@@ -363,16 +446,104 @@ export class StrataClient {
         return resp.data;
     }
 
+    // ── Repositories ─────────────────────────────────────────────────────────
+
+    /** Run `strata repo sync [--name <name>] --output json`. */
+    async syncRepo(name?: string): Promise<void> {
+        const args: string[] = ['repo', 'sync', '--output', 'json'];
+        if (name) args.push('--name', name);
+        await this._run<Record<string, unknown>>(args);
+    }
+
+    /** Run `strata repo add --name <name> --path <repoPath> --output json`. */
+    async addRepo(name: string, repoPath: string): Promise<void> {
+        await this._run<Record<string, unknown>>([
+            'repo', 'add', '--name', name, '--path', repoPath, '--output', 'json',
+        ]);
+    }
+
+    /** Run `strata repo remove --name <name> --output json`. */
+    async removeRepo(name: string): Promise<void> {
+        await this._run<Record<string, unknown>>([
+            'repo', 'remove', '--name', name, '--output', 'json',
+        ]);
+    }
+
+    // ── Lock ──────────────────────────────────────────────────────────────────
+
+    /** Run `strata deploy lock status -f <filePath> --output json`. */
+    async getLockStatus(filePath: string): Promise<DeployLockStatus> {
+        try {
+            const resp = await this._run<DeployLockStatus>([
+                'deploy', 'lock', 'status', '-f', filePath, '--output', 'json',
+            ]);
+            return resp.data;
+        } catch (err: unknown) {
+            const cliErr = err as { response?: CliResponse<DeployLockStatus> };
+            if (cliErr?.response?.data) return cliErr.response.data;
+            throw err;
+        }
+    }
+
+    /** Run `strata deploy lock release -f <filePath> --force-lock --output json`. */
+    async releaseLock(filePath: string): Promise<void> {
+        await this._run<Record<string, unknown>>([
+            'deploy', 'lock', 'release', '-f', filePath, '--force-lock', '--output', 'json',
+        ]);
+    }
+
+    // ── Drift ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Run `strata deploy drift run -f <filePath> --output json`.
+     * Returns drift detection results.  May be slow (runs terraform plan).
+     */
+    async runDrift(filePath: string): Promise<DriftData> {
+        try {
+            const resp = await this._run<DriftData>([
+                'deploy', 'drift', 'run', '-f', filePath, '--output', 'json',
+            ]);
+            return resp.data;
+        } catch (err: unknown) {
+            const cliErr = err as { response?: CliResponse<DriftData> };
+            if (cliErr?.response?.data) return cliErr.response.data;
+            throw err;
+        }
+    }
+
+    // ── Values ────────────────────────────────────────────────────────────────
+
+    /** Run `strata values list -f <filePath> --output json`. */
+    async getValues(filePath: string): Promise<ValuesData> {
+        const resp = await this._run<ValuesData>([
+            'values', 'list', '-f', filePath, '--output', 'json',
+        ]);
+        return resp.data;
+    }
+
+    // ── SBOM ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Run `strata build sbom -f <filePath> --output json`.
+     * Optionally pass `report: 'inventory'` for a human-readable inventory.
+     */
+    async generateSbom(filePath: string): Promise<SbomData> {
+        const resp = await this._run<SbomData>([
+            'build', 'sbom', '-f', filePath, '--output', 'json',
+        ]);
+        return resp.data;
+    }
+
     // ── Audit ─────────────────────────────────────────────────────────────────
 
     /**
-     * Run `strata audit changes --last N --output json` and return deploy-log
-     * entries.  Fast — reads local JSON files only.
+     * Run `strata audit changes --last N [--stage S] --output json` and return
+     * deploy-log entries.  Fast — reads local JSON files only.
      */
-    async getAuditChanges(last: number = 20): Promise<AuditEntry[]> {
-        const resp = await this._run<AuditChangesData>([
-            'audit', 'changes', '--last', String(last), '--output', 'json',
-        ]);
+    async getAuditChanges(last: number = 20, stage?: string): Promise<AuditEntry[]> {
+        const args: string[] = ['audit', 'changes', '--last', String(last), '--output', 'json'];
+        if (stage) args.push('--stage', stage);
+        const resp = await this._run<AuditChangesData>(args);
         return resp.data.entries;
     }
 

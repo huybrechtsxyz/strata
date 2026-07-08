@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Strata Platform Configuration",
+  "description": "Dispatches to the kind-specific schema based on the 'kind' field value. Supported kinds: configuration, deployment, dns, environment, firewall, module, namespace, network, provider, resource, tenant, workspace",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    }
+  },
+  "if": {
+    "properties": {
+      "kind": {
+        "const": "configuration"
+      }
+    },
+    "required": [
+      "kind"
+    ]
+  },
+  "then": {
+    "$ref": "configuration.json"
+  },
+  "else": {
+    "if": {
+      "properties": {
+        "kind": {
+          "const": "deployment"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "then": {
+      "$ref": "deployment.json"
+    },
+    "else": {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "dns"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "$ref": "dns.json"
+      },
+      "else": {
+        "if": {
+          "properties": {
+            "kind": {
+              "const": "environment"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        "then": {
+          "$ref": "environment.json"
+        },
+        "else": {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "firewall"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "$ref": "firewall.json"
+          },
+          "else": {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "module"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "$ref": "module.json"
+            },
+            "else": {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "namespace"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              "then": {
+                "$ref": "namespace.json"
+              },
+              "else": {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "network"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                "then": {
+                  "$ref": "network.json"
+                },
+                "else": {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "provider"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "$ref": "provider.json"
+                  },
+                  "else": {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "resource"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    "then": {
+                      "$ref": "resource.json"
+                    },
+                    "else": {
+                      "if": {
+                        "properties": {
+                          "kind": {
+                            "const": "tenant"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      "then": {
+                        "$ref": "tenant.json"
+                      },
+                      "else": {
+                        "if": {
+                          "properties": {
+                            "kind": {
+                              "const": "workspace"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ]
+                        },
+                        "then": {
+                          "$ref": "workspace.json"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

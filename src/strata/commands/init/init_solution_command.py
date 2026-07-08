@@ -55,63 +55,27 @@ class InitSolutionCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                self.logger.error(f"Initialization failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                self.logger.error(f"Pre-execution validation failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_lifecycle_phase(
-                "solution_init_before",
-                context={"solution_name": self._solution_name, "work_path": str(self._work_path)},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-init lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_execution():
-                self.logger.error(f"Execution failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Execution failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_lifecycle_phase(
-                "solution_init_after",
-                context={"solution_name": self._solution_name, "work_path": str(self._work_path)},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Post-init lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                self.logger.error(f"Post-execution processing failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution processing failed")
-                self._finalize(success=False)
-                return False
-
-            self._finalize(success=True)
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to initialize solution workspace: {e}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            self._finalize(success=False)
+    def _run(self) -> bool:
+        if not self._run_lifecycle_phase(
+            "solution_init_before",
+            context={"solution_name": self._solution_name, "work_path": str(self._work_path)},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Pre-init lifecycle hook failed")
             return False
+
+        if not self._run_execution():
+            return False
+
+        if not self._run_lifecycle_phase(
+            "solution_init_after",
+            context={"solution_name": self._solution_name, "work_path": str(self._work_path)},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Post-init lifecycle hook failed")
+            return False
+
+        return True
 
     # ------------------------------------------------------------------
     # Lifecycle hooks

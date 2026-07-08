@@ -54,82 +54,37 @@ class CleanSolutionCommand(BaseCommand):
         """
         return {}
 
-    def execute(self) -> bool:
-        """
-        Execute the clean command.
-
-        Returns:
-            bool: Success status (errors stored in self._errors)
-        """
-        try:
-            if not self._initialize():
-                self.logger.error(f"Initialization failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                self.logger.error(f"Pre-execution validation failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_lifecycle_phase(
-                "solution_clean_before",
-                context={"work_path": str(self._work_path), "dry_run": self._dry_run},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-clean lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            success, self._clean_stats = self._solution_controller.clean_solution(
-                work_path=self._work_path,
-                dry_run=self._dry_run,
-            )
-
-            self._messages.extend(self._solution_controller.get_messages())
-            self._errors.extend(self._solution_controller.get_errors())
-
-            if not success:
-                self.logger.error(f"Clean failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Clean failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_lifecycle_phase(
-                "solution_clean_after",
-                context={"work_path": str(self._work_path), "dry_run": self._dry_run},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Post-clean lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                self.logger.error(f"Post-execution hook failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution hook failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._finalize(success=True):
-                self.logger.error(f"Finalization failed in {self.__class__.__name__}")
-                if self._is_console_output():
-                    click.echo("\n❌  Finalization failed")
-                return False
-
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to clean solution: {str(e)}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            self._finalize(success=False)
+    def _run(self) -> bool:
+        if not self._run_lifecycle_phase(
+            "solution_clean_before",
+            context={"work_path": str(self._work_path), "dry_run": self._dry_run},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Pre-clean lifecycle hook failed")
             return False
+
+        success, self._clean_stats = self._solution_controller.clean_solution(
+            work_path=self._work_path,
+            dry_run=self._dry_run,
+        )
+
+        self._messages.extend(self._solution_controller.get_messages())
+        self._errors.extend(self._solution_controller.get_errors())
+
+        if not success:
+            if self._is_console_output():
+                click.echo("\n❌  Clean failed")
+            return False
+
+        if not self._run_lifecycle_phase(
+            "solution_clean_after",
+            context={"work_path": str(self._work_path), "dry_run": self._dry_run},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Post-clean lifecycle hook failed")
+            return False
+
+        return True
 
     def _initialize(self, show_header: bool = True) -> bool:
         """

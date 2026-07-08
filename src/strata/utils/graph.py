@@ -201,15 +201,8 @@ def compute_deployment_order(result: GraphResult) -> list[list[str]]:
             all_nodes.add(edge.source)
             all_nodes.add(edge.target)
 
-    # Kahn's algorithm — compute in-degree
+    # Kahn's algorithm — compute in-degree (count how many things each node depends on)
     in_degree: dict[str, int] = {n: 0 for n in all_nodes}
-    for src, src_deps in deps.items():
-        for dep in src_deps:
-            if dep in in_degree:
-                in_degree[src] = in_degree.get(src, 0) + 1
-
-    # Re-compute in-degree properly (count how many things each node depends on)
-    in_degree = {n: 0 for n in all_nodes}
     for src, src_deps in deps.items():
         for dep in src_deps:
             if dep in in_degree:

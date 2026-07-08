@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from strata.exceptions.base_exception import PlatformError
+
 
 @dataclass
 class LockEntry:
@@ -120,9 +122,6 @@ class BaseLockBackend(ABC):
         Returns:
             A list of ``LockEntry`` objects, most recent first.
         """
-
-
-from strata.exceptions.base_exception import PlatformError
 
 
 class LockTimeoutError(PlatformError):

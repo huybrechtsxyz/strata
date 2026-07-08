@@ -53,40 +53,22 @@ class GraphCommand(BaseCommand):
         problem_statuses = {"missing", "invalid", "dangling"}
         return any(n.status in problem_statuses for n in self._result.nodes)
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                self._finalize(success=False)
-                return False
-
-            controller = GraphController(
-                work_path=self._work_path,
-                entry=self._entry,
-                no_validate=self._no_validate,
-            )
-
-            if self._mode == "resources":
-                self._result = controller.build_resource_graph()
-            else:
-                self._result = controller.build_file_graph()
-
-            if controller.has_errors():
-                for err in controller.get_errors():
-                    self._errors.append(err)
-                self._finalize(success=False)
-                return False
-
-            # Render output
-            self._render_output(self._result)
-
-            self._finalize(success=True)
-            return True
-
-        except Exception as e:
-            self.logger.exception("Failed to build graph", error=str(e))
-            self._errors.append(f"Failed to build graph: {e}")
-            self._finalize(success=False)
+    def _run(self) -> bool:
+        controller = GraphController(
+            work_path=self._work_path,
+            entry=self._entry,
+            no_validate=self._no_validate,
+        )
+        if self._mode == "resources":
+            self._result = controller.build_resource_graph()
+        else:
+            self._result = controller.build_file_graph()
+        if controller.has_errors():
+            for err in controller.get_errors():
+                self._errors.append(err)
             return False
+        self._render_output(self._result)
+        return True
 
     def _render_output(self, result: GraphResult) -> None:
         """Render the graph based on output format."""

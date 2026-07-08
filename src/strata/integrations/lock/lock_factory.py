@@ -10,7 +10,10 @@ from strata.integrations.lock.lock_gcs import GcsLockBackend
 from strata.integrations.lock.lock_local import LocalLockBackend
 from strata.integrations.lock.lock_s3 import S3LockBackend
 from strata.integrations.lock.lock_tfc import TfcLockBackend
+from strata.logger import get_logger
 from strata.models.workspace_model import WorkspaceIacBackendModel
+
+logger = get_logger(__name__)
 
 
 class LockFactory:
@@ -73,5 +76,9 @@ class LockFactory:
 
             case _:
                 # Unknown type — fall back to local rather than hard-failing,
-                # so new Terraform backend types don't break the pipeline.
+                # so new Terraform backend types don’t break the pipeline.
+                logger.warning(
+                    "Unknown lock backend type; falling back to local file lock.",
+                    backend_type=backend_type,
+                )
                 return LocalLockBackend(work_path)

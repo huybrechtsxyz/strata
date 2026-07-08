@@ -198,11 +198,17 @@ def scaffold_file(
     raw = tpl_file.read_text(encoding="utf-8")
     content = TemplateProcessor.render(raw, variables)
 
+    _plural = {
+        "dns": "dns",
+        "configuration": "config",
+        "workspace": "workspaces",
+    }
+    folder = _plural.get(kind, f"{kind}s")
     return {
         "kind": kind,
         "name": name,
         "content": content,
-        "suggested_path": f"{kind}s/{name}.yaml",
+        "suggested_path": f"{folder}/{name}.yaml",
     }
 
 
@@ -215,19 +221,24 @@ def scaffold_file(
 def build_plan(
     file: str,
     work_path: Optional[str] = None,
+    stage: Optional[str] = None,
+    artifacts_only: bool = False,
 ) -> Dict[str, Any]:
-    """Show what a build would produce without writing any artifacts (dry-run).
+    """Show what a build would produce: artifact diff + per-stage terraform plan.
 
     Args:
         file: Path to the deployment YAML file.
         work_path: Workspace root. Defaults to CWD.
+        stage: Limit plan to a specific deployment stage name.
+        artifacts_only: Skip terraform plan and show only artifact diffs.
     """
-    from strata.commands.builders.run_build_command import RunBuildCommand
+    from strata.commands.builders.plan_build_command import PlanBuildCommand
 
-    cmd = RunBuildCommand(
+    cmd = PlanBuildCommand(
         file=file,
         work_path=_work_path(work_path),
-        dry_run=True,
+        stage=stage,
+        artifacts_only=artifacts_only,
         output="json",
         quiet=True,
     )
@@ -325,14 +336,17 @@ def audit_query(
 
     wp = Path(_work_path(work_path))
     base_path = wp / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
-    controller = AuditController(work_path=wp)
-    entries = controller.query_deploy_logs(
-        base_path=base_path,
-        since=since,
-        stage=stage,
-        last=last,
-    )
-    entries_data = [e.model_dump(exclude_none=True) for e in entries]
+    try:
+        controller = AuditController(work_path=wp)
+        entries = controller.query_deploy_logs(
+            base_path=base_path,
+            since=since,
+            stage=stage,
+            last=last,
+        )
+        entries_data = [e.model_dump(exclude_none=True) for e in entries]
+    except Exception as exc:
+        return {"success": False, "entries": [], "count": 0, "errors": [str(exc)]}
     return {"success": True, "entries": entries_data, "count": len(entries_data)}
 
 

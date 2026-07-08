@@ -45,62 +45,34 @@ class SbomIgnoreValidateCommand(BaseCommand):
     def has_validation_errors(self) -> bool:
         return bool(self.get_errors())
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                self._finalize(success=False)
-                return False
+    def _run(self) -> bool:
+        from strata.controllers.solution_controller import SolutionController
 
-            # ------------------------------------------------------------------
-            # Phase 1: Schema validation
-            # ------------------------------------------------------------------
-            from strata.controllers.solution_controller import SolutionController
-
-            ignore_path = SolutionController.get_sbom_ignore_path(self._work_path)
-
-            if not ignore_path.exists():
-                self._messages.append(f"sbom-ignore.yaml not found at {ignore_path} — nothing to validate.")
-                self._finalize(success=True)
-                return True
-
-            try:
-                import yaml
-
-                with ignore_path.open("r", encoding="utf-8") as fh:
-                    raw = yaml.safe_load(fh)
-
-                if not isinstance(raw, dict):
-                    self._errors.append("sbom-ignore.yaml must be a YAML mapping at the top level.")
-                    self._finalize(success=False)
-                    return False
-
-                self._config = SbomIgnoreConfigModel.model_validate(raw)
-
-            except Exception as exc:
-                self._errors.append(f"sbom-ignore.yaml validation failed: {exc}")
-                self._finalize(success=False)
-                return False
-
-            self._messages.append("sbom-ignore.yaml schema is valid.")
-            self._messages.append(
-                f"Rules loaded: {len(self._config.ignore_paths)} path(s), "
-                f"{len(self._config.ignore_files)} file(s), "
-                f"{len(self._config.ignore_packages)} package(s), "
-                f"{len(self._config.ignore_dependency_types)} dep-type(s)."
-            )
-
-            # ------------------------------------------------------------------
-            # Phase 2: Orphan detection
-            # ------------------------------------------------------------------
-            self._detect_orphans()
-
-            self._finalize(success=True)
+        ignore_path = SolutionController.get_sbom_ignore_path(self._work_path)
+        if not ignore_path.exists():
+            self._messages.append(f"sbom-ignore.yaml not found at {ignore_path} — nothing to validate.")
             return True
+        try:
+            import yaml
 
+            with ignore_path.open("r", encoding="utf-8") as fh:
+                raw = yaml.safe_load(fh)
+            if not isinstance(raw, dict):
+                self._errors.append("sbom-ignore.yaml must be a YAML mapping at the top level.")
+                return False
+            self._config = SbomIgnoreConfigModel.model_validate(raw)
         except Exception as exc:
-            self._errors.append(f"Unexpected error during sbom-ignore validation: {exc}")
-            self._finalize(success=False)
+            self._errors.append(f"sbom-ignore.yaml validation failed: {exc}")
             return False
+        self._messages.append("sbom-ignore.yaml schema is valid.")
+        self._messages.append(
+            f"Rules loaded: {len(self._config.ignore_paths)} path(s), "
+            f"{len(self._config.ignore_files)} file(s), "
+            f"{len(self._config.ignore_packages)} package(s), "
+            f"{len(self._config.ignore_dependency_types)} dep-type(s)."
+        )
+        self._detect_orphans()
+        return True
 
     # ------------------------------------------------------------------
     # Orphan detection

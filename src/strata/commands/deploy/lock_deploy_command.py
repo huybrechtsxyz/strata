@@ -69,39 +69,10 @@ class LockStatusCommand(BaseDeployCommand):
         )
 
     # -------------------------------------------------------------------------
-    # Entry point
-    # -------------------------------------------------------------------------
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._run_status()
-
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_lock_status: {exc}")
-            self.logger.exception("deploy_lock_status failed")
-            self._finalize(success=False)
-            return False
-
-    # -------------------------------------------------------------------------
     # Status logic
     # -------------------------------------------------------------------------
 
-    def _run_status(self) -> bool:
+    def _run(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False
@@ -206,39 +177,10 @@ class LockReleaseCommand(BaseDeployCommand):
         return self._contention
 
     # -------------------------------------------------------------------------
-    # Entry point
-    # -------------------------------------------------------------------------
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._run_release()
-
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_lock_release: {exc}")
-            self.logger.exception("deploy_lock_release failed")
-            self._finalize(success=False)
-            return False
-
-    # -------------------------------------------------------------------------
     # Release logic
     # -------------------------------------------------------------------------
 
-    def _run_release(self) -> bool:
+    def _run(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False
@@ -344,39 +286,10 @@ class LockHistoryCommand(BaseDeployCommand):
         self._last = last
 
     # -------------------------------------------------------------------------
-    # Entry point
-    # -------------------------------------------------------------------------
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._run_history()
-
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_lock_history: {exc}")
-            self.logger.exception("deploy_lock_history failed")
-            self._finalize(success=False)
-            return False
-
-    # -------------------------------------------------------------------------
     # History logic
     # -------------------------------------------------------------------------
 
-    def _run_history(self) -> bool:
+    def _run(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False

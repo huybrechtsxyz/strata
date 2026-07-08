@@ -11,6 +11,7 @@ from strata.builders.base_builder import BaseBuilder
 
 if TYPE_CHECKING:
     from strata.controllers.solution_controller import SolutionController
+    from strata.services.configuration_service import ConfigurationService
 from strata.models.platform_artifact_model import (
     PlatformArtifactModel,
     PlatformComponentModel,
@@ -42,7 +43,7 @@ class PlatformBuilder(BaseBuilder):
     """Builder that assembles a PlatformModel artifact from a fully-loaded
     DeploymentService and persists it as platform.json / platform.yaml."""
 
-    def __init__(self, verbose: bool = False, configuration_service=None) -> None:
+    def __init__(self, verbose: bool = False, configuration_service: Optional["ConfigurationService"] = None) -> None:
         super().__init__(verbose=verbose)
         self.configuration_service = configuration_service
         self._last_platform_model: Optional[PlatformArtifactModel] = None
@@ -230,9 +231,7 @@ class PlatformBuilder(BaseBuilder):
             meta = PlatformMetaModel.from_deployment_meta(deployment_model.meta, environment_service)
 
             # Build spec
-            configuration_model = (
-                getattr(self.configuration_service, "model", None) if self.configuration_service else None
-            )
+            configuration_model = self.configuration_service.model if self.configuration_service else None
             spec = self._build_spec(deployment_service, configuration_model=configuration_model, work_path=work_path)
 
             platform = PlatformArtifactModel(meta=meta, spec=spec)

@@ -9,6 +9,7 @@ from strata.controllers.base_controller import BaseController
 from strata.logger import get_logger
 from strata.models.common_models import ProvisionerType
 from strata.models.namespace_model import NamespaceType
+from strata.services.configuration_service import ConfigurationService
 from strata.services.namespace_service import NamespaceService
 from strata.services.workspace_service import WorkspaceService
 
@@ -44,7 +45,7 @@ class OverlapController(BaseController):
         warnings = controller.get_overlap_warnings()
     """
 
-    def __init__(self, configuration_service, repo_map: dict, work_path: Path) -> None:
+    def __init__(self, configuration_service: Optional[ConfigurationService], repo_map: dict, work_path: Path) -> None:
         super().__init__()
         self._configuration_service = configuration_service
         self._repo_map = repo_map

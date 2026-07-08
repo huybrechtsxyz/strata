@@ -51,29 +51,11 @@ class HistoryDeployCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self._lines = lines
         self._operation_filter = _resolve_operation_filter(operation)
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._run()
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_history: {exc}")
-            self.logger.exception("deploy_history failed")
-            self._finalize(success=False)
-            return False
 
     def get_required_integrations(self):
         return {}

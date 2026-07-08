@@ -49,10 +49,11 @@ Graceful degradation
 import re
 from typing import Any, Dict, List, Optional
 
+from strata.logger import get_logger
 from strata.models.policy_model import PolicyModel
 from strata.validators.policies.base_policy import BasePolicy, PolicyContext, PolicyResult
 
-logger = None  # Will be lazily imported to avoid circular dependency
+logger = get_logger(__name__)
 
 
 class RefConventionPolicy(BasePolicy):
@@ -62,12 +63,6 @@ class RefConventionPolicy(BasePolicy):
         super().__init__(policy_model)
 
     def evaluate(self, context: PolicyContext) -> PolicyResult:
-        global logger
-        if logger is None:
-            from strata.logger import get_logger
-
-            logger = get_logger(__name__)
-
         # --- Guard: services required ---
         if context.deployment_service is None or context.configuration_service is None:
             return PolicyResult(
@@ -146,7 +141,7 @@ class RefConventionPolicy(BasePolicy):
                     )
 
         except Exception as e:
-            logger.debug(
+            logger.warning(
                 "Failed to check ref conventions",
                 error=str(e),
                 exc_info=True,

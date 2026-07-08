@@ -60,6 +60,7 @@ class BaseBuilder(ABC):
         deployment_service: DeploymentService,
         work_path: Path,
         build_path: Path,
+        dry_run: bool = False,
         solution_controller: Optional["SolutionController"] = None,
     ) -> bool:
         """Hook executed before the build process starts."""

@@ -1,82 +1,48 @@
 {
-    "image": "omhqproget.domain.ompartners.com/coder-docker/python-development:5cbfbe6",
-    "name": "strata",
-    "containerUser": "coder",
-    "features": {
-        "omhqproget.domain.ompartners.com/external-images/devcontainers/features/node:20": {
-            "version": "20"
-        },
-        "omhqproget.domain.ompartners.com/external-images/devcontainers/features/git:latest": {}
+  "name": "dev",
+  "image": "mcr.microsoft.com/devcontainers/python:3.13",
+  "features": {
+    "ghcr.io/devcontainers/features/azure-cli:1": {
+      "version": "latest"
     },
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "ms-python.python",
-                "ms-python.vscode-pylance",
-                "ms-python.debugpy",
-                "charliermarsh.ruff",
-                "ms-vscode.makefile-tools",
-                "ms-typescript.typescript-vue-plugin",
-                "dbaeumer.vscode-eslint",
-                "esbenp.prettier-vscode",
-                "ms-vscode.vscode-typescript-next",
-                "redhat.vscode-yaml",
-                "GitHub.copilot",
-                "GitHub.copilot-chat"
-            ],
-            "settings": {
-                "python.defaultInterpreterPath": "/home/coder/.venv/bin/python",
-                "python.linting.enabled": true,
-                "python.linting.ruffEnabled": true,
-                "[python]": {
-                    "editor.defaultFormatter": "charliermarsh.ruff",
-                    "editor.formatOnSave": true,
-                    "editor.codeActionsOnSave": {
-                        "source.fixAll": true,
-                        "source.organizeImports": true
-                    }
-                },
-                "[typescript]": {
-                    "editor.defaultFormatter": "esbenp.prettier-vscode",
-                    "editor.formatOnSave": true
-                },
-                "[json]": {
-                    "editor.defaultFormatter": "esbenp.prettier-vscode",
-                    "editor.formatOnSave": true
-                },
-                "files.watcherExclude": {
-                    "**/.venv/**": true,
-                    "**/node_modules/**": true,
-                    "**/.git/**": true,
-                    "**/dist/**": true,
-                    "**/.pytest_cache/**": true,
-                    "**/.mypy_cache/**": true,
-                    "**/.ruff_cache/**": true
-                }
-            }
-        }
+    "ghcr.io/devcontainers/features/terraform:1": {
+      "version": "latest"
     },
-    "forwardPorts": [
-        8000,
-        5000,
-        3000
-    ],
-    "portsAttributes": {
-        "8000": {
-            "label": "strata API",
-            "onAutoForward": "notify"
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "version": "latest",
+      "helm": "latest",
+      "minikube": "none"
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "redhat.vscode-yaml",
+        "hashicorp.terraform",
+        "ms-azure-devops.azure-pipelines",
+        "ms-vscode-remote.remote-containers",
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint",
+        "eamodio.gitlens",
+        "vscode-icons-team.vscode-icons"
+      ],
+      "settings": {
+        "[yaml]": {
+          "editor.insertSpaces": true,
+          "editor.tabSize": 2,
+          "editor.defaultFormatter": "redhat.vscode-yaml",
+          "editor.formatOnSave": true
         },
-        "5000": {
-            "label": "Flask/Debug",
-            "onAutoForward": "notify"
+        "[terraform]": {
+          "editor.formatOnSave": true
         },
-        "3000": {
-            "label": "Extension Dev",
-            "onAutoForward": "notify"
-        }
-    },
-    "mounts": [],
-    "postCreateCommand": "/bin/bash .devcontainer/post-create.sh",
-    "updateContentCommand": "uv sync --all-extras && cd src/vscode && npm install",
-    "remoteUser": "coder"
+        "editor.formatOnSave": true,
+        "files.eol": "\n"
+      }
+    }
+  },
+  "remoteEnv": {
+    "STRATA_WORK_PATH": "{{ containerWorkspaceFolder }}"
+  }
 }

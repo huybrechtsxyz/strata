@@ -87,8 +87,8 @@ class ListDeployCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self.logger = get_logger(self.__class__.__module__)
         self._scan_path: Path = Path(path).resolve() if path else Path(os.getcwd()).resolve()
@@ -97,37 +97,10 @@ class ListDeployCommand(BaseCommand):
         return {}
 
     # -------------------------------------------------------------------------
-    # Entry point
-    # -------------------------------------------------------------------------
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._run_execution()
-
-            if not self._after_execute():
-                self._finalize(success=False)
-                return False
-
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_list: {exc}")
-            self.logger.exception("deploy_list failed")
-            self._finalize(success=False)
-            return False
-
-    # -------------------------------------------------------------------------
     # Implementation
     # -------------------------------------------------------------------------
 
-    def _run_execution(self) -> bool:
+    def _run(self) -> bool:
         if not self._scan_path.exists() or not self._scan_path.is_dir():
             self._errors.append(f"Path does not exist or is not a directory: {self._scan_path}")
             return False

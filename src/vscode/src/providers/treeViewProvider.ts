@@ -69,10 +69,16 @@ export class TreeViewProvider
 
     /**
      * Re-query workspace and refresh the tree.
-     * TODO: call this._client.getStatus(), store result, fire event.
      */
     async refresh(): Promise<void> {
-        // TODO: if (this._client) { this._status = await this._client.getStatus(); }
+        if (this._client) {
+            try {
+                this._status = await this._client.getStatus();
+            } catch {
+                // status unavailable — clear so tree shows loading until next call
+                this._status = undefined;
+            }
+        }
         this._onDidChangeTreeData.fire();
     }
 
@@ -84,7 +90,6 @@ export class TreeViewProvider
 
     /**
      * Build tree nodes for a given parent.
-     * TODO: implement each section using this._status once refresh() populates it.
      */
     getChildren(element?: StrataTreeItem): StrataTreeItem[] {
         if (!this._client) {
@@ -121,7 +126,6 @@ export class TreeViewProvider
         if (!this._status) {
             return [this._makeLoading()];
         }
-        // TODO: build Solution, Repositories, Documents, Tools sections from this._status
         return [
             this._makeSection('Solution'),
             this._makeSection('Repositories'),
@@ -140,10 +144,7 @@ export class TreeViewProvider
     }
 
     private _makeSectionChildren(section: string): StrataTreeItem[] {
-        if (!this._status) {
-            return [];
-        }
-        // TODO: implement per section using this._status
+        if (!this._status) return [];
         switch (section) {
             case 'Solution': return this._buildProfileNodes();
             case 'Repositories': return this._buildRepositoryNodes();
@@ -153,23 +154,97 @@ export class TreeViewProvider
         }
     }
 
-    /** TODO: build profile items from this._status.profiles */
     private _buildProfileNodes(): StrataTreeItem[] {
-        return [];
+        const profiles = this._status!.profiles;
+        if (!profiles.all?.length) {
+            const empty = new StrataTreeItem('No profiles', 'profile', undefined, vscode.TreeItemCollapsibleState.None);
+            empty.iconPath = new vscode.ThemeIcon('dash');
+            return [empty];
+        }
+        return profiles.all.map((name) => {
+            const active = name === profiles.active;
+            const item = new StrataTreeItem(name, 'profile', undefined, vscode.TreeItemCollapsibleState.None);
+            item.description = active ? '(active)' : undefined;
+            item.iconPath = new vscode.ThemeIcon(active ? 'account' : 'circle-outline');
+            item.tooltip = active ? `Profile: ${name} — currently active` : `Profile: ${name}`;
+            if (!active) {
+                item.command = {
+                    command: 'strata.switchProfile',
+                    title: 'Switch to Profile',
+                };
+            }
+            return item;
+        });
     }
 
-    /** TODO: build repository items from this._status.repositories */
     private _buildRepositoryNodes(): StrataTreeItem[] {
-        return [];
+        const repos = this._status!.repositories ?? [];
+        if (!repos.length) {
+            const empty = new StrataTreeItem('No repositories configured', 'repository', undefined, vscode.TreeItemCollapsibleState.None);
+            empty.iconPath = new vscode.ThemeIcon('info');
+            return [empty];
+        }
+        return repos.map((r) => {
+            const item = new StrataTreeItem(r.name, 'repository', undefined, vscode.TreeItemCollapsibleState.None);
+            item.description = `(${r.branch})`;
+            item.iconPath = new vscode.ThemeIcon(
+                r.cloned ? 'source-control' : 'cloud-download',
+                r.cloned
+                    ? new vscode.ThemeColor('testing.iconPassed')
+                    : new vscode.ThemeColor('list.warningForeground'),
+            );
+            item.tooltip = `${r.name} — ${r.cloned ? 'cloned' : 'not cloned'}\n${r.url}`;
+            return item;
+        });
     }
 
-    /** TODO: build document items from this._status.profiles.paths */
     private _buildDocumentNodes(): StrataTreeItem[] {
-        return [];
+        const paths = this._status!.profiles.paths;
+        if (!paths || Object.keys(paths).length === 0) {
+            const empty = new StrataTreeItem('No documents found', 'document', undefined, vscode.TreeItemCollapsibleState.None);
+            empty.iconPath = new vscode.ThemeIcon('info');
+            return [empty];
+        }
+        const items: StrataTreeItem[] = [];
+        for (const [kind, files] of Object.entries(paths)) {
+            for (const f of files) {
+                const item = new StrataTreeItem(
+                    f.name || f.path.split(/[\\/]/).pop() || f.path,
+                    'document',
+                    f.path,
+                    vscode.TreeItemCollapsibleState.None,
+                );
+                item.description = kind;
+                item.iconPath = new vscode.ThemeIcon('file-code');
+                item.tooltip = f.path;
+                item.command = {
+                    command: 'strata.openFile',
+                    title: 'Open File',
+                    arguments: [{ filePath: f.path }],
+                };
+                items.push(item);
+            }
+        }
+        return items;
     }
 
-    /** TODO: build tool items from this._status.integrations */
     private _buildToolNodes(): StrataTreeItem[] {
-        return [];
+        const integrations = this._status!.integrations ?? {};
+        const entries = Object.values(integrations);
+        if (!entries.length) {
+            const empty = new StrataTreeItem('No tools detected', 'tool', undefined, vscode.TreeItemCollapsibleState.None);
+            empty.iconPath = new vscode.ThemeIcon('dash');
+            return [empty];
+        }
+        return entries.map((tool) => {
+            const item = new StrataTreeItem(tool.name, 'tool', undefined, vscode.TreeItemCollapsibleState.None);
+            item.description = tool.version ?? (tool.available ? 'available' : 'not found');
+            item.iconPath = new vscode.ThemeIcon(
+                tool.available ? 'check' : 'close',
+                new vscode.ThemeColor(tool.available ? 'testing.iconPassed' : 'testing.iconFailed'),
+            );
+            item.tooltip = tool.info ?? (tool.available ? `${tool.name} is available` : `${tool.name} is not installed`);
+            return item;
+        });
     }
 }

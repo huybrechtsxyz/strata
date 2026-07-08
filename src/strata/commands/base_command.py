@@ -3,10 +3,9 @@
 import json
 import os
 import sys
-from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, ClassVar, Dict, List, Optional
 
 import click
 
@@ -20,18 +19,19 @@ from strata.utils.system import generate_uuid, resolve_path, resolve_work_path
 from strata.utils.version import get_version
 
 
-class BaseCommand(ABC):
+class BaseCommand:
     """Base command class for Strata CLI commands."""
 
     OPERATION = "base_command"
     INIT_REQUIRED = True  # By default, commands require an initialized solution (solution.json)
+    SHOW_CHROME: ClassVar[bool] = True  # Set False on commands that suppress header/footer (e.g. tools commands)
 
     def __init__(
         self,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
-        verbose: bool = False,
-        quiet: bool = False,
+        verbose: Optional[bool] = None,
+        quiet: Optional[bool] = None,
     ) -> None:
         """Initialize the base command."""
         # Timer attributes
@@ -64,10 +64,55 @@ class BaseCommand(ABC):
         self._messages: List[str] = []
         self._errors: List[str] = []
 
-    @abstractmethod
-    def execute(self, *args, **kwargs):
-        """Execute the command. To be implemented by subclasses."""
-        raise NotImplementedError("Subclasses must implement the execute method.")
+    def execute(self) -> bool:
+        """Execute the command using the standard lifecycle template.
+
+        Override ``_run()`` to provide command-specific logic.
+        Override ``execute()`` directly for non-standard lifecycles.
+        """
+        try:
+            if not self._initialize(show_header=self.SHOW_CHROME):
+                if self._is_console_output():
+                    click.echo("\n\u274c  Initialization failed")
+                self._finalize(success=False, show_footer=self.SHOW_CHROME)
+                return False
+
+            if not self._before_execute():
+                if self._is_console_output():
+                    click.echo("\n\u274c  Pre-execution validation failed")
+                self._finalize(success=False, show_footer=self.SHOW_CHROME)
+                return False
+
+            if not self._run():
+                self._finalize(success=False, show_footer=self.SHOW_CHROME)
+                return False
+
+            if not self._after_execute():
+                self._finalize(success=False, show_footer=self.SHOW_CHROME)
+                return False
+
+            self._finalize(success=True, show_footer=self.SHOW_CHROME)
+            return True
+
+        except Exception as e:
+            error_msg = f"Unexpected error in {self.__class__.__name__}: {e}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            self._finalize(success=False, show_footer=self.SHOW_CHROME)
+            return False
+
+    def _run(self) -> bool:
+        """Perform the command's core work.
+
+        Called by the ``execute()`` template between ``_before_execute()`` and
+        ``_after_execute()``. Return ``True`` on success, ``False`` on failure
+        (store details in ``self._errors``).
+
+        Commands that override ``execute()`` directly do not call this method.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _run() when using the default execute() template."
+        )
 
     def _get_build_path(self) -> Path:
         """Return the resolved build output path.

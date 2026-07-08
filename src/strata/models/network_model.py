@@ -13,6 +13,7 @@ from strata.models.common_models import (
     PlatformVersion,
     SecretRefs,
     VariableRefs,
+    check_unique_names,
 )
 
 
@@ -75,10 +76,7 @@ class NetworkDefinitionModel(PlatformBaseModel):
     @model_validator(mode="after")
     def validate_unique_subnet_names(self) -> "NetworkDefinitionModel":
         """Validate that all subnet names are unique within this network."""
-        subnet_names = [s.name for s in self.subnets]
-        duplicates = [n for n in subnet_names if subnet_names.count(n) > 1]
-        if duplicates:
-            raise ValueError(f"Duplicate subnet names in network '{self.name}': {', '.join(set(duplicates))}")
+        check_unique_names([s.name for s in self.subnets], f"subnet names in network '{self.name}'")
         return self
 
     @model_validator(mode="after")
@@ -94,10 +92,7 @@ class NetworkDefinitionModel(PlatformBaseModel):
     def validate_unique_peering_names(self) -> "NetworkDefinitionModel":
         """Validate that all peering names are unique within this network."""
         if self.peerings:
-            peering_names = [p.name for p in self.peerings]
-            duplicates = [n for n in peering_names if peering_names.count(n) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate peering names in network '{self.name}': {', '.join(set(duplicates))}")
+            check_unique_names([p.name for p in self.peerings], f"peering names in network '{self.name}'")
         return self
 
     @model_validator(mode="after")
@@ -165,10 +160,7 @@ class NetworkSpecModel(PlatformBaseModel):
     @model_validator(mode="after")
     def validate_unique_network_names(self) -> "NetworkSpecModel":
         """Validate that all network names are unique."""
-        network_names = [n.name for n in self.networks]
-        duplicates = [name for name in network_names if network_names.count(name) > 1]
-        if duplicates:
-            raise ValueError(f"Duplicate network names found: {', '.join(set(duplicates))}")
+        check_unique_names([n.name for n in self.networks], "network names")
         return self
 
     @model_validator(mode="after")

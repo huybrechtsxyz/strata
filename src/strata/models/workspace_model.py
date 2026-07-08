@@ -18,6 +18,7 @@ from strata.models.common_models import (
     PlatformVersion,
     ProvisionerType,
     SourceModel,
+    check_unique_names,
     validate_slot_type,
 )
 
@@ -258,26 +259,27 @@ class WorkspaceTopologyModel(PlatformBaseModel):
         """Validate unique component, namespace, and volume names within this topology."""
         errors = []
 
-        # Validate unique resource references within topology
         if self.components:
-            resource_refs = [comp.resource for comp in self.components]
-            if len(resource_refs) != len(set(resource_refs)):
-                duplicates = [ref for ref in resource_refs if resource_refs.count(ref) > 1]
-                errors.append(f"Duplicate resource references in topology '{self.name}': {set(duplicates)}")
+            try:
+                check_unique_names(
+                    [comp.resource for comp in self.components], f"resource references in topology '{self.name}'"
+                )
+            except ValueError as e:
+                errors.append(str(e))
 
-        # Validate unique namespace references within topology
         if self.namespaces:
-            namespace_refs = [ns.namespace for ns in self.namespaces]
-            if len(namespace_refs) != len(set(namespace_refs)):
-                duplicates = [ref for ref in namespace_refs if namespace_refs.count(ref) > 1]
-                errors.append(f"Duplicate namespace references in topology '{self.name}': {set(duplicates)}")
+            try:
+                check_unique_names(
+                    [ns.namespace for ns in self.namespaces], f"namespace references in topology '{self.name}'"
+                )
+            except ValueError as e:
+                errors.append(str(e))
 
-        # Validate unique volume names within topology
         if self.volumes:
-            volume_names = [vol.name for vol in self.volumes]
-            if len(volume_names) != len(set(volume_names)):
-                duplicates = [name for name in volume_names if volume_names.count(name) > 1]
-                errors.append(f"Duplicate volume names in topology '{self.name}': {set(duplicates)}")
+            try:
+                check_unique_names([vol.name for vol in self.volumes], f"volume names in topology '{self.name}'")
+            except ValueError as e:
+                errors.append(str(e))
 
         if errors:
             raise ValueError("; ".join(errors))
@@ -488,10 +490,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
     def validate_unique_providers(self) -> "WorkspaceSpecModel":
         """Validate that all provider names are unique."""
         if self.providers:
-            provider_names = [provider.name for provider in self.providers]
-            duplicates = [name for name in provider_names if provider_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate provider names found: {', '.join(set(duplicates))}")
+            check_unique_names([provider.name for provider in self.providers], "provider names")
         return self
 
     # Validate unique provisioner names
@@ -499,22 +498,15 @@ class WorkspaceSpecModel(PlatformBaseModel):
     def validate_unique_provisioners(self) -> "WorkspaceSpecModel":
         """Validate that all provisioner names are unique."""
         if self.provisioners:
-            provisioner_names = [prov.name for prov in self.provisioners]
-            duplicates = [name for name in provisioner_names if provisioner_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate provisioner names found: {', '.join(set(duplicates))}")
+            check_unique_names([prov.name for prov in self.provisioners], "provisioner names")
         return self
 
     # Validate unique topology names
     @model_validator(mode="after")
     def validate_unique_topologies(self) -> "WorkspaceSpecModel":
         """Validate that all topology names are unique."""
-        # Validate if topology names are unique
         if self.topology:
-            topology_names = [topo.name for topo in self.topology]
-            duplicates = [name for name in topology_names if topology_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate topology names found: {', '.join(set(duplicates))}")
+            check_unique_names([topo.name for topo in self.topology], "topology names")
         return self
 
     # Validate unique namespace names
@@ -522,10 +514,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
     def validate_unique_namespaces(self) -> "WorkspaceSpecModel":
         """Validate that all namespace names are unique."""
         if self.namespaces:
-            namespace_names = [ns.name for ns in self.namespaces]
-            duplicates = [name for name in namespace_names if namespace_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate namespace names found: {', '.join(set(duplicates))}")
+            check_unique_names([ns.name for ns in self.namespaces], "namespace names")
         return self
 
     # Validate unique firewall names
@@ -533,10 +522,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
     def validate_unique_firewalls(self) -> "WorkspaceSpecModel":
         """Validate that all firewall names are unique."""
         if self.firewalls:
-            firewall_names = [fw.name for fw in self.firewalls]
-            duplicates = [name for name in firewall_names if firewall_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate firewall names found: {', '.join(set(duplicates))}")
+            check_unique_names([fw.name for fw in self.firewalls], "firewall names")
         return self
 
     # Validate unique DNS zone names
@@ -544,10 +530,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
     def validate_unique_dns_zones(self) -> "WorkspaceSpecModel":
         """Validate that all DNS zone configuration names are unique."""
         if self.dns_zones:
-            dns_names = [dz.name for dz in self.dns_zones]
-            duplicates = [name for name in dns_names if dns_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate DNS zone names found: {', '.join(set(duplicates))}")
+            check_unique_names([dz.name for dz in self.dns_zones], "DNS zone names")
         return self
 
     # Validate unique network names
@@ -555,10 +538,7 @@ class WorkspaceSpecModel(PlatformBaseModel):
     def validate_unique_networks(self) -> "WorkspaceSpecModel":
         """Validate that all network configuration names are unique."""
         if self.networks:
-            network_names = [n.name for n in self.networks]
-            duplicates = [name for name in network_names if network_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate network names found: {', '.join(set(duplicates))}")
+            check_unique_names([n.name for n in self.networks], "network names")
         return self
 
     # Validate unique resource names
@@ -566,19 +546,19 @@ class WorkspaceSpecModel(PlatformBaseModel):
     def validate_unique_resources(self) -> "WorkspaceSpecModel":
         """Validate that all resource names are unique."""
         if self.resources:
-            resource_names = [res.name for res in self.resources]
-            duplicates = [name for name in resource_names if resource_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate resource names found: {', '.join(set(duplicates))}")
+            check_unique_names([res.name for res in self.resources], "resource names")
 
             # Validate unique module names within each resource
             errors = []
             for resource in self.resources:
                 if resource.modules:
-                    module_names = [mod.name for mod in resource.modules]
-                    if len(module_names) != len(set(module_names)):
-                        duplicates = [name for name in module_names if module_names.count(name) > 1]
-                        errors.append(f"Duplicate module names in resource '{resource.name}': {set(duplicates)}")
+                    try:
+                        check_unique_names(
+                            [mod.name for mod in resource.modules],
+                            f"module names in resource '{resource.name}'",
+                        )
+                    except ValueError as e:
+                        errors.append(str(e))
 
                     # Validate slot types: at least one 'main' if multiple modules
                     if len(resource.modules) > 1:

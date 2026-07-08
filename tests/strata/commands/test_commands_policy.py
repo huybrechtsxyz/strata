@@ -122,7 +122,7 @@ class TestListPolicyCommandOutputData:
 
         sample = self._SAMPLE_OUTPUT_DATA
 
-        def fake_initialize(self_cmd):
+        def fake_initialize(self_cmd, show_header: bool = True):
             self_cmd._start_time = datetime.now()
             return True
 
@@ -144,7 +144,7 @@ class TestListPolicyCommandOutputData:
             return True
 
         runner = CliRunner()
-        with patch.object(ListPolicyCommand, "_run_execution", fake_run_execution):
+        with patch.object(ListPolicyCommand, "_run", fake_run_execution):
             with patch.object(ListPolicyCommand, "_initialize", fake_initialize):
                 with patch.object(ListPolicyCommand, "_before_execute", return_value=True):
                     result = runner.invoke(

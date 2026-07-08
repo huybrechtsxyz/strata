@@ -1,6 +1,5 @@
 """Base class for build commands."""
 
-from abc import abstractmethod
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -29,8 +28,8 @@ class BaseBuildCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self._raw_file: Optional[str] = file
         self._file_path: Optional[Path] = Path(file) if file else None
@@ -38,10 +37,6 @@ class BaseBuildCommand(BaseCommand):
         self._configuration_service: Optional[ConfigurationService] = None
         self._build_path: Path = self._work_path / "build"
         self._resolved_remote_refs: Dict[str, str] = {}
-
-    @abstractmethod
-    def execute(self) -> bool:
-        raise NotImplementedError
 
     def get_required_integrations(self):
         return {}

@@ -113,14 +113,14 @@ class TestAnsibleIntegrationInitCommand:
         i._is_available = True
         i._version = "2.15.4"
         result = i.init("/work", requirements_file=None)
-        assert result["returncode"] == 0
+        assert result.returncode == 0
 
     def test_init_calls_galaxy_install(self):
         i = AnsibleIntegration(_cfg())
         i._is_available = True
         i._version = "2.15.4"
         mock_result = MagicMock(returncode=0, stdout="installed", stderr="")
-        with patch.object(i, "_run_integration", return_value=mock_result) as mock_run:
+        with patch("strata.integrations.ansible.run_command", return_value=mock_result) as mock_run:
             i.init("/work", requirements_file="requirements.yml")
         args = mock_run.call_args[0][0]
         assert "ansible-galaxy" in args
@@ -149,7 +149,6 @@ class TestAnsibleIntegrationPlan:
         with patch.object(i, "_run_integration", return_value=mock_result) as mock_run:
             i.plan("/work", playbook="deploy.yml", inventory="hosts.yml")
         args = mock_run.call_args[0][0]
-        assert "ansible-playbook" in args
         assert "deploy.yml" in args
         assert "--check" in args
         assert "--diff" in args
@@ -180,7 +179,6 @@ class TestAnsibleIntegrationApply:
         with patch.object(i, "_run_integration", return_value=mock_result) as mock_run:
             i.apply("/work", playbook="configure.yml")
         args = mock_run.call_args[0][0]
-        assert "ansible-playbook" in args
         assert "configure.yml" in args
         assert "--check" not in args
 

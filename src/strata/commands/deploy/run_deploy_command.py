@@ -1,4 +1,3 @@
-import uuid
 from datetime import datetime as _dt
 from datetime import timezone as _tz
 from typing import Callable, List, Optional
@@ -56,7 +55,6 @@ class RunDeployCommand(BaseDeployCommand):
         self._dry_run = dry_run
         self._force_lock = force_lock
         self._resolved_values: Optional[ResolvedValues] = None
-        self._execution_id: str = str(uuid.uuid4())
 
     # -------------------------------------------------------------------------
     # Finalize override — writes deploy-log before standard finalization

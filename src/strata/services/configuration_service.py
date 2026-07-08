@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from strata.exceptions import PlatformFileNotFoundError
 from strata.logger import get_logger
+from strata.models.common_models import check_unique_names
 from strata.models.configuration_model import ConfigurationModel
 from strata.models.repository_model import RemoteModel
 from strata.services.base_service import BaseService
@@ -64,6 +65,16 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
         return cls()
 
     @classmethod
+    def load(cls, path: str, validate: bool = True) -> "ConfigurationService":
+        """Return the singleton instance.
+
+        ConfigurationService is a singleton that aggregates multiple config
+        files via ``load_from_paths`` / ``add_configuration``.  The inherited
+        ``BaseService.load()`` single-file pattern does not apply.
+        """
+        return cls.get_instance()
+
+    @classmethod
     def reset(cls):
         """Reset all singleton instances (useful for testing)."""
         with cls._lock:
@@ -107,47 +118,46 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
 
         # Validate unique provider names across merged configuration
         if self.model.spec.providers:
-            provider_names = [p.name for p in self.model.spec.providers]
-            duplicates = [name for name in provider_names if provider_names.count(name) > 1]
-            if duplicates:
-                errors.append(f"Duplicate provider names in merged configuration: {', '.join(set(duplicates))}")
+            try:
+                check_unique_names([p.name for p in self.model.spec.providers], "provider names (merged config)")
+            except ValueError as e:
+                errors.append(str(e))
 
             # Validate unique regions and resources within each provider
             for provider in self.model.spec.providers:
-                # Check unique regions
                 if provider.regions:
                     region_names = [r if isinstance(r, str) else r.get("name", str(r)) for r in provider.regions]
-                    duplicates = [name for name in region_names if region_names.count(name) > 1]
-                    if duplicates:
-                        errors.append(
-                            f"Duplicate regions in provider '{provider.name}' (merged config): {', '.join(set(duplicates))}"
-                        )
+                    try:
+                        check_unique_names(region_names, f"regions in provider '{provider.name}' (merged config)")
+                    except ValueError as e:
+                        errors.append(str(e))
 
-                # Check unique resources
                 if provider.resources:
-                    resource_names = [res.name for res in provider.resources]
-                    duplicates = [name for name in resource_names if resource_names.count(name) > 1]
-                    if duplicates:
-                        errors.append(
-                            f"Duplicate resources in provider '{provider.name}' (merged config): {', '.join(set(duplicates))}"
+                    try:
+                        check_unique_names(
+                            [res.name for res in provider.resources],
+                            f"resources in provider '{provider.name}' (merged config)",
                         )
+                    except ValueError as e:
+                        errors.append(str(e))
 
         # Validate unique topology types across merged configuration
         if self.model.spec.topologies:
-            topology_types = [t.type for t in self.model.spec.topologies]
-            duplicates = [ttype for ttype in topology_types if topology_types.count(ttype) > 1]
-            if duplicates:
-                errors.append(f"Duplicate topology types in merged configuration: {', '.join(set(duplicates))}")
+            try:
+                check_unique_names([t.type for t in self.model.spec.topologies], "topology types (merged config)")
+            except ValueError as e:
+                errors.append(str(e))
 
             # Validate unique component roles within each topology
             for topology in self.model.spec.topologies:
                 if topology.components:
-                    roles = [comp.role for comp in topology.components]
-                    duplicates = [role for role in roles if roles.count(role) > 1]
-                    if duplicates:
-                        errors.append(
-                            f"Duplicate component roles in topology '{topology.type}' (merged config): {', '.join(set(duplicates))}"
+                    try:
+                        check_unique_names(
+                            [comp.role for comp in topology.components],
+                            f"component roles in topology '{topology.type}' (merged config)",
                         )
+                    except ValueError as e:
+                        errors.append(str(e))
 
         # Validate zones: each region in providers must exist in a zone (if zones are defined)
         if self.model.spec.zones and self.model.spec.providers:

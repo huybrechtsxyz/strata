@@ -19,6 +19,7 @@ from strata.models.common_models import (
     ServiceDeployerType,
     SourceModel,
     VariableRefs,
+    check_unique_names,
 )
 
 
@@ -340,13 +341,10 @@ class ModuleSpecModel(PlatformBaseModel):
     def validate_service_names_unique(self) -> "ModuleSpecModel":
         """Service names must be unique within a module."""
         if self.services:
-            names = [s.name for s in self.services]
-            duplicates = [n for n in names if names.count(n) > 1]
-            if duplicates:
-                raise ValueError(
-                    f"Duplicate service names in module: {', '.join(set(duplicates))}. "
-                    "Each service must have a unique name within the module."
-                )
+            check_unique_names(
+                [s.name for s in self.services],
+                "service names in module",
+            )
         return self
 
     @model_validator(mode="after")

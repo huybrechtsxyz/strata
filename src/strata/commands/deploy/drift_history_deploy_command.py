@@ -45,32 +45,10 @@ class DriftHistoryDeployCommand(BaseDeployCommand):
         self._last = last
 
     # -------------------------------------------------------------------------
-    # Entry point
-    # -------------------------------------------------------------------------
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._run_history()
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_drift_history: {exc}")
-            self.logger.exception("deploy_drift_history failed")
-            self._finalize(success=False)
-            return False
-
-    # -------------------------------------------------------------------------
     # Core
     # -------------------------------------------------------------------------
 
-    def _run_history(self) -> bool:
+    def _run(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False

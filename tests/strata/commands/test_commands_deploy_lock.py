@@ -149,7 +149,7 @@ class TestLockStatusCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_status()
+            result = cmd._run()
 
         assert result is True
         backend.status.assert_called_once_with("prod")
@@ -165,7 +165,7 @@ class TestLockStatusCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_status()
+            result = cmd._run()
 
         assert result is True
 
@@ -179,7 +179,7 @@ class TestLockStatusCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_status()
+            result = cmd._run()
 
         assert result is False
         assert len(cmd._errors) == 1
@@ -188,7 +188,7 @@ class TestLockStatusCommand:
         cmd = _make_status_command(tmp_path)
         cmd._deployment_service = None
 
-        result = cmd._run_status()
+        result = cmd._run()
 
         assert result is False
         assert len(cmd._errors) == 1
@@ -203,7 +203,7 @@ class TestLockStatusCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            cmd._run_status()
+            cmd._run()
 
         assert cmd._output_data.get("locked") is False
         assert cmd._output_data.get("deployment") == "staging"
@@ -219,7 +219,7 @@ class TestLockStatusCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            cmd._run_status()
+            cmd._run()
 
         assert cmd._output_data.get("locked") is True
         assert cmd._output_data.get("lock_id") == entry.lock_id
@@ -241,7 +241,7 @@ class TestLockReleaseCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_release()
+            result = cmd._run()
 
         assert result is True
         backend.force_release.assert_not_called()
@@ -260,7 +260,7 @@ class TestLockReleaseCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_release()
+            result = cmd._run()
 
         assert result is True
         backend.force_release.assert_called_once_with("prod")
@@ -280,7 +280,7 @@ class TestLockReleaseCommand:
             ),
             patch.dict("os.environ", {"GITHUB_ACTOR": "", "USER": "alice", "USERNAME": "alice"}),
         ):
-            result = cmd._run_release()
+            result = cmd._run()
 
         assert result is False
         assert cmd._contention is True
@@ -302,7 +302,7 @@ class TestLockReleaseCommand:
             ),
             patch.dict("os.environ", {"GITHUB_ACTOR": "", "USER": "alice", "USERNAME": "alice"}),
         ):
-            result = cmd._run_release()
+            result = cmd._run()
 
         assert result is True
         assert cmd._contention is False
@@ -318,7 +318,7 @@ class TestLockReleaseCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_release()
+            result = cmd._run()
 
         assert result is False
         assert len(cmd._errors) == 1
@@ -338,7 +338,7 @@ class TestLockReleaseCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_release()
+            result = cmd._run()
 
         assert result is False
         assert len(cmd._errors) == 1
@@ -361,7 +361,7 @@ class TestLockReleaseCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            cmd._run_release()
+            cmd._run()
 
         assert cmd._output_data.get("released") is True
         assert cmd._output_data.get("deployment") == "prod"
@@ -441,7 +441,7 @@ class TestLockHistoryCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_history()
+            result = cmd._run()
 
         assert result is True
         assert cmd._output_data.get("entries") == []
@@ -460,7 +460,7 @@ class TestLockHistoryCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_history()
+            result = cmd._run()
 
         assert result is True
         assert len(cmd._output_data["entries"]) == 2
@@ -475,7 +475,7 @@ class TestLockHistoryCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            cmd._run_history()
+            cmd._run()
 
         entry = cmd._output_data["entries"][0]
         for key in ("lock_id", "holder", "hostname", "pid", "acquired_at", "reason"):
@@ -491,7 +491,7 @@ class TestLockHistoryCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            cmd._run_history()
+            cmd._run()
 
         backend.history.assert_called_once_with("prod", limit=3)
 
@@ -499,7 +499,7 @@ class TestLockHistoryCommand:
         cmd = _make_history_command(tmp_path)
         cmd._deployment_service = None
 
-        result = cmd._run_history()
+        result = cmd._run()
 
         assert result is False
         assert len(cmd._errors) == 1
@@ -514,7 +514,7 @@ class TestLockHistoryCommand:
             "strata.commands.deploy.lock_deploy_command._resolve_lock_backend",
             return_value=backend,
         ):
-            result = cmd._run_history()
+            result = cmd._run()
 
         assert result is False
         assert len(cmd._errors) == 1

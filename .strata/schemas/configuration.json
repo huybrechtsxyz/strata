@@ -295,6 +295,19 @@
           "default": null,
           "description": "HTTP headers (webhook only)",
           "title": "Headers"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Payload format for syslog sink: 'json' (default) or 'cef' (Common Event Format)",
+          "title": "Format"
         }
       },
       "required": [
@@ -1934,7 +1947,7 @@
           "type": "string"
         },
         "type": {
-          "description": "Policy type: tenant_zone | required_tags | naming_pattern | script",
+          "description": "Policy type: tenant_zone | required_tags | naming_pattern | resource_type_restrictions | script | cve_max_severity",
           "title": "Type",
           "type": "string"
         },

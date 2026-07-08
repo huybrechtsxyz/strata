@@ -74,26 +74,6 @@ class OutputDeployCommand(BaseDeployCommand):
     # Entry point
     # -------------------------------------------------------------------------
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                self._finalize(success=False)
-                return False
-
-            ok = self._run()
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_output: {exc}")
-            self.logger.exception("deploy_output failed")
-            self._finalize(success=False)
-            return False
-
     # -------------------------------------------------------------------------
     # Core logic
     # -------------------------------------------------------------------------

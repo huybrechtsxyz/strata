@@ -56,55 +56,29 @@ class PlanBuildCommand(BaseBuildCommand):
         self._artifacts_only = artifacts_only
 
     # ------------------------------------------------------------------
-    # Entry point
-    # ------------------------------------------------------------------
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_lifecycle_phase(
-                "build_plan_before",
-                context={"file": str(self._file_path)},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-plan lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            success = self._run_plan()
-
-            if success and not self._run_lifecycle_phase(
-                "build_plan_after",
-                context={"file": str(self._file_path)},
-            ):
-                if self._is_console_output():
-                    click.echo("\n❌  Post-plan lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            self._finalize(success=success)
-            return success
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute build_plan: {exc}")
-            self.logger.exception("build_plan failed")
-            self._finalize(success=False)
-            return False
-
-    # ------------------------------------------------------------------
     # Core logic
     # ------------------------------------------------------------------
+
+    def _run(self) -> bool:
+        if not self._run_lifecycle_phase(
+            "build_plan_before",
+            context={"file": str(self._file_path)},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Pre-plan lifecycle hook failed")
+            return False
+
+        success = self._run_plan()
+
+        if success and not self._run_lifecycle_phase(
+            "build_plan_after",
+            context={"file": str(self._file_path)},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Post-plan lifecycle hook failed")
+            return False
+
+        return success
 
     def _run_plan(self) -> bool:
         if self._deployment_service is None:

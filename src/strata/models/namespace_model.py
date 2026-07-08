@@ -20,6 +20,7 @@ from strata.models.common_models import (
     PlatformVersion,
     SecretRefs,
     VariableRefs,
+    check_unique_names,
 )
 
 
@@ -100,10 +101,7 @@ class NamespaceSpecModel(PlatformBaseModel):
 
         # Validate unique module names
         if self.modules:
-            module_names = [m.name for m in self.modules]
-            duplicates = [name for name in module_names if module_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate module names found: {', '.join(set(duplicates))}")
+            check_unique_names([m.name for m in self.modules], "module names")
 
         return self
 

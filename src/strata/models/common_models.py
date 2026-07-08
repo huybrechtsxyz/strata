@@ -5,7 +5,7 @@ import re
 import warnings
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Dict, List, Optional
+from typing import Annotated, Dict, List, Optional, Sequence
 
 from pydantic import (
     BaseModel,
@@ -130,12 +130,12 @@ class ScriptPathModel(PlatformBaseModel):
     @field_validator("file")
     @classmethod
     def validate_script_path(cls, v):
-        """Validate script file exists and has valid extension."""
+        """Validate script file has a valid extension.
+
+        Filesystem existence checks are deferred to Phase 2 (service layer)
+        because the file may live in a remote repo not yet synced to disk.
+        """
         path = Path(v)
-        if not path.exists():
-            raise ValueError(f"Script does not exist: {v}")
-        if not path.is_file():
-            raise ValueError(f"Script path is not a file: {v}")
         if path.suffix not in SCRIPT_EXTENSIONS:
             raise ValueError(
                 f"Script must have a valid extension (.sh, .bash, .py, .ps1, .js, .mjs, .go), got: {path.suffix}"
@@ -153,18 +153,18 @@ class ScriptsModel(PlatformBaseModel):
     @field_validator("scripts")
     @classmethod
     def validate_and_normalize_scripts(cls, v):
-        """Validate scripts and normalize simple paths to ScriptModel."""
+        """Validate scripts have valid extensions and normalize simple paths.
+
+        Filesystem existence checks are deferred to Phase 2 (service layer)
+        because files may live in remote repos not yet synced to disk.
+        """
         if v is None:
             return v
         normalized = []
         for item in v:
             if isinstance(item, (str, Path)):
-                # Simple path - validate it exists and has valid extension
+                # Simple path - validate extension only (existence checked in Phase 2)
                 path = Path(item)
-                if not path.exists():
-                    raise ValueError(f"Script does not exist: {item}")
-                if not path.is_file():
-                    raise ValueError(f"Script path is not a file: {item}")
                 if path.suffix not in SCRIPT_EXTENSIONS:
                     raise ValueError(
                         f"Script must have a valid extension (.sh, .bash, .py, .ps1, .js, .mjs, .go), got: {path.suffix}"
@@ -308,16 +308,32 @@ class SourceModel(PlatformBaseModel):
 STANDARD_SLOT_TYPES = {"main", "staging", "canary", "sidecar", "init"}
 
 
+def check_unique_names(items: Sequence[str], label: str) -> None:
+    """Raise ``ValueError`` if *items* contains duplicate values.
+
+    Uses O(n) set-based detection instead of the O(n²) ``.count()`` pattern.
+    The error message lists duplicates in sorted order for deterministic output.
+    """
+    seen: set[str] = set()
+    dupes: set[str] = set()
+    for item in items:
+        if item in seen:
+            dupes.add(item)
+        seen.add(item)
+    if dupes:
+        raise ValueError(f"Duplicate {label}: {', '.join(sorted(dupes))}")
+
+
 # Resource name validator function
 def validate_platform_name(value: str) -> str:
     """
-    Validate resource names to be lowercase alphanumeric with underscores.
-    Must start with a letter. Safe for Terraform, Ansible, shell scripts, etc.
+    Validate resource names to be lowercase alphanumeric with underscores and hyphens.
+    Must start with a letter. Matches the PlatformName regex: ``^[a-z][a-z0-9_-]*$``.
     """
-    if not re.match(r"^[a-z][a-z0-9_]*$", value):
+    if not re.match(r"^[a-z][a-z0-9_-]*$", value):
         raise ValueError(
             f"Name '{value}' must contain only lowercase letters, numbers, "
-            f"and underscores, and must start with a letter"
+            f"underscores, and hyphens, and must start with a letter"
         )
     return value
 

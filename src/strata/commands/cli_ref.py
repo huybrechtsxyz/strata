@@ -213,8 +213,8 @@ class _ListSingleTypeCommand(ListProfilePathCommand):
 
         return super()._before_execute()
 
-    def _run_execution(self) -> bool:
-        ok = super()._run_execution()
+    def _run(self) -> bool:
+        ok = super()._run()
         if not ok:
             return False
         # Narrow to the single requested type

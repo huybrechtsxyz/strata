@@ -28,9 +28,10 @@ class ServiceNotAvailableError(PlatformError):
 class ServiceNotValidatedError(PlatformStateError):
     """Raised when attempting to use a service before validation."""
 
-    def __init__(self, service_name: str):
+    def __init__(self, service_name: str, reason: Optional[str] = None):
+        msg = reason or f"Service '{service_name}' must be validated before use. Call validate() first."
         super().__init__(
-            message=f"Service '{service_name}' must be validated before use. Call validate() first.",
+            message=msg,
             error_code="SERVICE_NOT_VALIDATED",
             details={"service": service_name},
         )

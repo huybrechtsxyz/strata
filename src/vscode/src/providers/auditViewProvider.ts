@@ -46,6 +46,10 @@ export class AuditViewProvider
     private _error: string | undefined;
     private _loading = false;
     private _loaded = false;
+    /** How many entries to fetch. Adjustable via `strata.auditSetLimit`. */
+    private _limit = 20;
+    /** Status filter: undefined = all, true = success only, false = failures only */
+    private _filterSuccess: boolean | undefined;
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -69,6 +73,30 @@ export class AuditViewProvider
         this._error = message;
         this._loading = false;
         this._onChange.fire();
+    }
+
+    /** Cycle through filter states: all → success only → failures only → all */
+    cycleFilter(): void {
+        if (this._filterSuccess === undefined) {
+            this._filterSuccess = true;
+        } else if (this._filterSuccess === true) {
+            this._filterSuccess = false;
+        } else {
+            this._filterSuccess = undefined;
+        }
+        void this._load();
+    }
+
+    /** Set limit from the command palette */
+    setLimit(limit: number): void {
+        this._limit = Math.max(5, Math.min(200, limit));
+        void this._load();
+    }
+
+    get filterLabel(): string {
+        if (this._filterSuccess === true) return 'Success only';
+        if (this._filterSuccess === false) return 'Failures only';
+        return 'All entries';
     }
 
     dispose(): void {
@@ -115,7 +143,11 @@ export class AuditViewProvider
         this._onChange.fire();
 
         try {
-            this._entries = await this._client.getAuditChanges(20);
+            const all = await this._client.getAuditChanges(this._limit);
+            // Apply client-side filter (CLI doesn't support --status filter yet)
+            this._entries = this._filterSuccess === undefined
+                ? all
+                : all.filter((e) => e.success === this._filterSuccess);
             this._loading = false;
             this._loaded = true;
         } catch (err) {
@@ -133,10 +165,20 @@ export class AuditViewProvider
         if (this._entries.length === 0) {
             const item = new AuditTreeItem('No deploy-log entries found', 'empty');
             item.iconPath = new vscode.ThemeIcon('info');
+            item.description = this._filterSuccess !== undefined ? `(filter: ${this.filterLabel})` : undefined;
             return [item];
         }
 
-        return this._entries.map((e) => {
+        // Summary header item
+        const header = new AuditTreeItem(
+            `${this._entries.length} entries`,
+            'empty',
+        );
+        header.description = this.filterLabel !== 'All entries' ? this.filterLabel : `last ${this._limit}`;
+        header.iconPath = new vscode.ThemeIcon('list-ordered');
+        header.tooltip = `Showing ${this._entries.length} entries. Use "Strata: Set Audit Limit" or "Strata: Filter Audit" to adjust.`;
+
+        return [header, ...this._entries.map((e) => {
             const ts = this._formatTimestamp(e.timestamp);
             const dur = this._formatDuration(e.duration_seconds);
             const label = e.deployment;
@@ -165,7 +207,7 @@ export class AuditViewProvider
                 };
             }
             return item;
-        });
+        })];
     }
 
     private _buildEntryChildren(entry: AuditEntry): AuditTreeItem[] {

@@ -37,37 +37,12 @@ class InfoEnvCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._run()
-            self._after_execute()
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute env_info: {exc}")
-            self.logger.exception("env_info failed")
-            self._finalize(success=False)
-            return False
 
     # ------------------------------------------------------------------
     # Core logic

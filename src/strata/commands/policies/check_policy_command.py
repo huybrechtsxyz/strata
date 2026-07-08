@@ -47,8 +47,8 @@ class CheckPolicyCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self._raw_file: Optional[str] = file
         self._file_path: Optional[Path] = Path(file) if file else None
@@ -66,44 +66,16 @@ class CheckPolicyCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_execution():
-                if self._is_console_output():
-                    click.echo("\n❌  Execution failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution processing failed")
-                self._finalize(success=False)
-                return False
-
-            self._finalize(success=not self._denied)
-            return not self._denied
-
-        except Exception as exc:
-            self._errors.append(f"Failed to check policies: {exc}")
-            self.logger.exception("policy_check failed")
-            self._finalize(success=False)
-            return False
-
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
+
+    def _run(self) -> bool:
+        if not self._run_execution():
+            if self._is_console_output():
+                click.echo("\n❌  Execution failed")
+            return False
+        return not self._denied
 
     def _run_execution(self) -> bool:
         from strata.validators.policies.base_policy import PolicyContext

@@ -12,7 +12,7 @@ Ask the user for:
 4. **Stages** — ordered deployment stages with provisioner name (e.g. `platform_iac`, `platform_compose`, `platform_helm`) and any dependencies
 
 Then generate the file at `deploy/<name>.yaml` with:
-- `apiVersion: strata.omp.com/v1` (or `strata.huybrechts.xyz/v1`) and `kind: deployment`
+- `apiVersion: strata.huybrechts.xyz/v1` and `kind: deployment`
 - Each namespace as a `spec.namespaces` entry with `name` and `file`
 - Each stage as a `spec.stages` entry with `name`, `provisioner`, and optional `depends_on`
 - Do NOT use a `type` field on stages — it does not exist and will fail validation

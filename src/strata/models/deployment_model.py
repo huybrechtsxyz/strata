@@ -18,6 +18,7 @@ from strata.models.common_models import (
     PlatformName,
     PlatformVersion,
     ScriptsModel,
+    check_unique_names,
 )
 
 
@@ -368,18 +369,11 @@ class DeploymentSpecModel(PlatformBaseModel):
     @model_validator(mode="after")
     def validate_unique_names(self) -> "DeploymentSpecModel":
         """Validate that stage and configuration names are unique."""
-        # Validate unique stage names
         if self.stages:
-            stage_names = [stage.name for stage in self.stages]
-            if len(stage_names) != len(set(stage_names)):
-                duplicates = [name for name in stage_names if stage_names.count(name) > 1]
-                raise ValueError(f"Duplicate stage names found: {set(duplicates)}")
+            check_unique_names([stage.name for stage in self.stages], "stage names")
 
         if self.configurations:
-            config_names = [config.name for config in self.configurations]
-            if len(config_names) != len(set(config_names)):
-                duplicates = [name for name in config_names if config_names.count(name) > 1]
-                raise ValueError(f"Duplicate configuration names found: {set(duplicates)}")
+            check_unique_names([config.name for config in self.configurations], "configuration names")
 
         return self
 

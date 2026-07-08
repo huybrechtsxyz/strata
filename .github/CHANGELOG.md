@@ -7,6 +7,46 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Design & ADR Progress
+
+#### ADR-0013: Auto-generated Secrets — Model Acceptance Criteria Updates
+- [x] **Model field**: `SecretStoreModel.rotate: Optional[SecretRotateSpec]` (sibling of `generate:`)
+- [x] **Validator 1**: `policy: rotate` without `generate:` → Pydantic validation error
+- [x] **Validator 2**: `max_age` is `int` (days, >= 1) with field_validator enforcing range
+- [ ] **YAML examples**: All docs examples using integer `max_age` (audit of docs still needed)
+
+**Status**: Model layer 100% complete. Remaining: documentation consistency sweep across ADR-0013 and companion docs.
+
+#### ADR-0011: Promotion Strategies — Phase 3 Design Gaps Identified
+Five blocking issues identified for Phase 3 (automation: `start`, `rollback`, `history`):
+
+- **#11** — Phase 1 `status`/`matrix` wrongly describe reading `spec.version`; should read `spec.overrides.remotes[].reference` (correct field)
+- **#12** — No deployment discovery mechanism for `promote start --to production`; three options proposed (explicit flags, directory scan, solution registry)
+- **#13** — Wave-to-file mapping ambiguous; conflation of `kind: tenant` vs `kind: environment`; three resolution options
+- **#14** — Rollback depends on gitignored `.strata/promotions/` activity log; three recovery options proposed
+- **#15** — Single-layer configs (`scope: tenant` matches 0 deployments); needs explicit graceful degradation behavior
+
+**Status**: Phase 1 (read-only) and Phase 2 (model + validation) unblocked. Phase 3 deferred pending resolution of #11–#15.
+
+#### ADR-0018: SIEM Integrations — Layer 4 Completed
+- [x] **ELK Syslog Integration** (`ElkSiemIntegration`) — dual-protocol: TCP (Logstash) + HTTP (Elasticsearch bulk)
+- [x] **OpenTelemetry Integration** (`OtelSiemIntegration`) — OTLP/HTTP JSON; no SDK dependency needed
+- [x] **Factory registration** — both types registered as `"elk"` and `"otel"`
+- [x] **Tests** — full coverage in `test_elk_siem_integration.py` and `test_otel_siem_integration.py`
+
+**Design note**: Uses integration-reference model (`integration: <name>` in `AuditSinkModel`) rather than built-in sink types. Both can forward to same ELK stack independently of `LogstashHandler` (operational logs via TCP vs. compliance audit events via HTTP).
+
+#### ADR-0022: CEF Syslog Format — Implementation Complete
+- [x] **Model field**: `AuditSinkModel.format: Optional[str]` — syslog sink accepts `"json"` (default) or `"cef"`
+- [x] **CEF encoder** — `AuditController._format_cef(data)` → CEF:0 header + 6-field extension (rt/src/dst/act/externalId/msg)
+  - Severity: `3` (Low) on success, `7` (High) on failure
+  - Proper escaping of pipes/backslashes per CEF spec
+- [x] **Syslog routing** — `_send_syslog(data, address, fmt)` routes to formatter based on `fmt` parameter
+- [x] **CLI flag** — `--siem <name>` on `strata audit export` for on-demand SIEM forwarding by integration name
+- [x] **Tests** — `test_syslog_sink_passes_cef_format`, `TestFormatCef` class (header, severity, escaping, extension fields)
+
+**Status**: Ready for v1.0. CEF output validated against CEF 0 specification.
+
 ---
 
 ## [0.16.1] — 2026-07-06

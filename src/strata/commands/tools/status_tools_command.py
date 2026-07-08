@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import ClassVar, Dict, Optional
 
 import click
 
@@ -16,6 +16,7 @@ class StatusToolsCommand(BaseCommand):
 
     OPERATION = "tools_status"
     INIT_REQUIRED = False
+    SHOW_CHROME: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -44,68 +45,55 @@ class StatusToolsCommand(BaseCommand):
     def has_validation_errors(self) -> bool:
         return self._has_missing_required
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize(show_header=False):
-                self._finalize(success=False, show_footer=False)
-                return False
+    def _run(self) -> bool:
+        controller = ToolsController()
+        success, rows, errors = controller.status(
+            deployment_file=self._deployment_file,
+            work_path=str(self._work_path) if self._work_path else None,
+        )
 
-            controller = ToolsController()
-            success, rows, errors = controller.status(
-                deployment_file=self._deployment_file,
-                work_path=str(self._work_path) if self._work_path else None,
+        for err in errors:
+            self._errors.append(err)
+
+        # Warn when requirement filters are used without --file context
+        if (self._filter_required or self._filter_optional) and not self._deployment_file:
+            click.echo(
+                "Warning: --required/--optional require --file to have any effect. "
+                "No deployment context — all integrations have no requirement level.",
+                err=True,
             )
 
-            for err in errors:
-                self._errors.append(err)
+        # Apply filters
+        if self._deployment_file and not self._filter_required and not self._filter_optional:
+            # --file given with no requirement filter: show only configured integrations
+            rows = [r for r in rows if r.get("requirement") is not None]
+        elif self._filter_required or self._filter_optional:
+            # Requirement filter(s): show union of selected levels (combinable)
+            allowed = set()
+            if self._filter_required:
+                allowed.add("required")
+            if self._filter_optional:
+                allowed.add("optional")
+            rows = [r for r in rows if r.get("requirement") in allowed]
+        if self._filter_available:
+            rows = [r for r in rows if r["available"]]
+        if self._filter_missing:
+            rows = [r for r in rows if not r["available"]]
 
-            # Warn when requirement filters are used without --file context
-            if (self._filter_required or self._filter_optional) and not self._deployment_file:
-                click.echo(
-                    "Warning: --required/--optional require --file to have any effect. "
-                    "No deployment context — all integrations have no requirement level.",
-                    err=True,
-                )
+        if self._is_console_output():
+            self._print_table(rows, deployment_mode=bool(self._deployment_file))
 
-            # Apply filters
-            if self._deployment_file and not self._filter_required and not self._filter_optional:
-                # --file given with no requirement filter: show only configured integrations
-                rows = [r for r in rows if r.get("requirement") is not None]
-            elif self._filter_required or self._filter_optional:
-                # Requirement filter(s): show union of selected levels (combinable)
-                allowed = set()
-                if self._filter_required:
-                    allowed.add("required")
-                if self._filter_optional:
-                    allowed.add("optional")
-                rows = [r for r in rows if r.get("requirement") in allowed]
-            if self._filter_available:
-                rows = [r for r in rows if r["available"]]
-            if self._filter_missing:
-                rows = [r for r in rows if not r["available"]]
+        self._output_data["integrations"] = rows
 
-            if self._is_console_output():
-                self._print_table(rows, deployment_mode=bool(self._deployment_file))
+        # Treat as validation failure (exit 3) when filtering for missing
+        # required integrations and any were found
+        if self._filter_missing and rows and any(r.get("requirement") == "required" for r in rows):
+            missing_names = [r["name"] for r in rows if r.get("requirement") == "required"]
+            self._errors.append(f"Required integrations not available: {', '.join(missing_names)}")
+            self._has_missing_required = True
+            success = False
 
-            self._output_data["integrations"] = rows
-
-            # Treat as validation failure (exit 3) when filtering for missing
-            # required integrations and any were found
-            if self._filter_missing and rows and any(r.get("requirement") == "required" for r in rows):
-                missing_names = [r["name"] for r in rows if r.get("requirement") == "required"]
-                self._errors.append(f"Required integrations not available: {', '.join(missing_names)}")
-                self._has_missing_required = True
-                success = False
-
-            self._finalize(success=success, show_footer=False)
-            return success
-
-        except Exception as exc:
-            error_msg = f"Failed to list tool integrations: {exc}"
-            self.logger.exception(error_msg)
-            self._errors.append(error_msg)
-            self._finalize(success=False, show_footer=False)
-            return False
+        return success
 
     def _print_table(self, rows: list, deployment_mode: bool = False) -> None:
         col_name = 22

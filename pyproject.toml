@@ -55,7 +55,7 @@ index-strategy = "unsafe-best-match"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"strata.data" = ["*.yaml", "*.txt"]
+"strata.data" = ["*.yaml", "*.txt", "help/*.md"]
 "strata.templates" = [
     "*.yaml",
     "*.json",
@@ -63,6 +63,8 @@ where = ["src"]
     "*.txt",
     "solution/**/*",
     "solution/**",
+    "examples/**/*",
+    "examples/**",
 ]
 
 [dependency-groups]

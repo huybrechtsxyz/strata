@@ -25,7 +25,7 @@ import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Dict, Generator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Generator, List, Optional, Tuple
 
 from strata.deployers.base_deployer import (
     STEP_APPLY,
@@ -39,7 +39,6 @@ from strata.deployers.base_deployer import (
     BaseDeployer,
 )
 from strata.integrations.ansible import AnsibleIntegration
-from strata.logger import get_logger
 from strata.models.integration_model import IntegrationModel
 from strata.models.workspace_model import WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
@@ -47,15 +46,12 @@ from strata.services.deployment_service import DeploymentService
 from strata.utils.ansible_utils import find_ansible_requirements_file
 from strata.utils.resolved_values import ResolvedValues, inject_compose_env
 
+if TYPE_CHECKING:
+    from strata.controllers.solution_controller import SolutionController
+    from strata.models.deployment_model import DeploymentStageModel
+
 # Prefix used by AnsibleBuilder for generated variable files.
 STRATA_VARS_PREFIX = "strata_"
-
-try:
-    from strata.models.deployment_model import DeploymentStageModel
-except ImportError:  # pragma: no cover
-    pass
-
-logger = get_logger(__name__)
 
 
 class AnsibleDeployer(BaseDeployer):
@@ -76,7 +72,7 @@ class AnsibleDeployer(BaseDeployer):
         verbose: bool = False,
         force: bool = False,
         resolved_values: Optional[ResolvedValues] = None,
-        solution_controller=None,
+        solution_controller: Optional["SolutionController"] = None,
     ) -> None:
         super().__init__(
             stage=stage,
@@ -358,7 +354,9 @@ class AnsibleDeployer(BaseDeployer):
                                 os.environ["SSH_AGENT_PID"] = old_pid
                         return
                     else:
-                        logger.warning("ssh-add failed — falling back to tempfile", stderr=add_result.stderr.strip())
+                        self.logger.warning(
+                            "ssh-add failed — falling back to tempfile", stderr=add_result.stderr.strip()
+                        )
                         subprocess.run(
                             ["ssh-agent", "-k"],
                             capture_output=True,
@@ -366,7 +364,7 @@ class AnsibleDeployer(BaseDeployer):
                             timeout=5,
                         )
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            logger.warning("ssh-agent unavailable — falling back to tempfile for SSH key")
+            self.logger.warning("ssh-agent unavailable — falling back to tempfile for SSH key")
 
         # --- Fallback: tempfile with chmod 600 ---
         fd, key_path = tempfile.mkstemp(suffix=".pem", prefix="ansible_ssh_")

@@ -13,6 +13,7 @@ from strata.models.common_models import (
     PlatformVersion,
     SecretRefs,
     VariableRefs,
+    check_unique_names,
 )
 
 
@@ -99,10 +100,7 @@ class DnsSpecModel(PlatformBaseModel):
     def validate_unique_zone_names(self) -> "DnsSpecModel":
         """Validate that all zone names are unique."""
         if self.zones:
-            zone_names = [zone.name for zone in self.zones]
-            duplicates = [name for name in zone_names if zone_names.count(name) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate zone names found: {', '.join(set(duplicates))}")
+            check_unique_names([zone.name for zone in self.zones], "zone names")
         return self
 
     @model_validator(mode="after")

@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 import socket
-from abc import abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -57,8 +56,8 @@ class BaseDeployCommand(BaseCommand):
         super().__init__(
             work_path=work_path,
             output=output,
-            verbose=verbose or False,
-            quiet=quiet or False,
+            verbose=verbose,
+            quiet=quiet,
         )
         self._raw_file: Optional[str] = file
         self._file_path: Optional[Path] = Path(file) if file else None
@@ -73,10 +72,6 @@ class BaseDeployCommand(BaseCommand):
         # Subclasses override these before calling _execute_provisioning.
         self._dry_run: bool = False
         self._force_lock: bool = False
-
-    @abstractmethod
-    def execute(self) -> bool:
-        raise NotImplementedError
 
     def get_required_integrations(self):
         return {}

@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+        "strata": {
+            "command": "uv",
+            "args": [
+                "run",
+                "strata",
+                "mcp",
+                "serve"
+            ],
+            "cwd": "${workspaceFolder}"
+        }
+    }
+}

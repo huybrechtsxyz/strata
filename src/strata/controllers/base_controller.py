@@ -32,3 +32,13 @@ class BaseController:
 
     def clear_messages(self) -> None:
         self._messages.clear()
+
+    def _add_error(self, message: str) -> None:
+        """Log *message* at ERROR level and append it to the error list."""
+        self.logger.error(message)
+        self._errors.append(message)
+
+    def _add_message(self, message: str) -> None:
+        """Log *message* at INFO level and append it to the message list."""
+        self.logger.info(message)
+        self._messages.append(message)

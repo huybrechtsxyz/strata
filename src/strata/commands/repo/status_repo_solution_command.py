@@ -35,8 +35,8 @@ class StatusRepoSolutionCommand(BaseCommand):
         name: Optional[str] = None,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
-        verbose: bool = False,
-        quiet: bool = False,
+        verbose: Optional[bool] = None,
+        quiet: Optional[bool] = None,
     ) -> None:
         super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
         self._filter_name = name
@@ -44,44 +44,11 @@ class StatusRepoSolutionCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {"git": "repository status"}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._run_execution():
-                if self._is_console_output():
-                    click.echo("\n❌  Execution failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                self._finalize(success=False)
-                return False
-
-            self._finalize(success=True)
-            return True
-
-        except Exception as exc:
-            self._errors.append(f"Failed to get repo status: {exc}")
-            self.logger.exception("repo status failed")
-            self._finalize(success=False)
-            return False
-
     # -------------------------------------------------------------------------
     # Execution
     # -------------------------------------------------------------------------
 
-    def _run_execution(self) -> bool:
+    def _run(self) -> bool:
         repos, errors = self._solution_controller.get_repositories(self._filter_name)
         if errors:
             self._errors.extend(errors)

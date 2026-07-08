@@ -40,10 +40,10 @@ class TestMakeConsoleFormatterNoColor:
         assert captured.get("colors") is False
 
     def test_colors_enabled_when_no_color_absent(self, monkeypatch):
-        """When NO_COLOR is not set and stdout is a TTY, colors=True."""
+        """When NO_COLOR is not set and stderr is a TTY, colors=True."""
         monkeypatch.delenv("NO_COLOR", raising=False)
-        # Pretend stdout is a TTY so the isatty() branch resolves to True.
-        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+        # Pretend stderr is a TTY so the isatty() branch resolves to True.
+        monkeypatch.setattr("sys.stderr.isatty", lambda: True)
         import structlog.dev
 
         captured = {}

@@ -22,6 +22,7 @@ were considered, and why. They exist so the rationale survives beyond the author
 | [0010](0010-rename-configuration-repositories-to-remotes.md) | Rename configuration spec.repositories to spec.remotes           | Accepted |
 | [0011](0011-promotion-strategies-for-version-progression.md) | Promotion strategies for version progression across environments | Proposed |
 | [0018](0018-deployment-audit-traceability.md)                | Deployment audit and traceability for compliance                 | Proposed |
+| [0025](0025-ai-agent-integration-for-build-and-deploy.md)    | AI agent integration for build and deploy workflows              | Proposed |
 
 ## Adding a new ADR
 

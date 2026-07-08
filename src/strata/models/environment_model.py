@@ -18,6 +18,7 @@ from strata.models.common_models import (
     PlatformKind,
     PlatformName,
     PlatformVersion,
+    check_unique_names,
     validate_slot_type,
 )
 from strata.models.store_models import (
@@ -203,10 +204,7 @@ class EnvironmentModuleOverrideModel(PlatformBaseModel):
     def validate_unique_service_names(self) -> "EnvironmentModuleOverrideModel":
         """Ensure service override names are unique within this module override."""
         if self.services:
-            names = [s.name for s in self.services]
-            duplicates = [n for n in names if names.count(n) > 1]
-            if duplicates:
-                raise ValueError(f"Duplicate service overrides: {', '.join(set(duplicates))}")
+            check_unique_names([s.name for s in self.services], "service overrides")
         return self
 
 
@@ -284,33 +282,34 @@ class EnvironmentOverridesModel(PlatformBaseModel):
 
         # Validate unique resource override names
         if self.resources:
-            resource_names = [res.resource for res in self.resources]
-            duplicates = [name for name in resource_names if resource_names.count(name) > 1]
-            if duplicates:
-                errors.append(f"Duplicate resource overrides found: {', '.join(set(duplicates))}")
+            try:
+                check_unique_names([res.resource for res in self.resources], "resource overrides")
+            except ValueError as e:
+                errors.append(str(e))
 
         # Validate unique module overrides (module+resource+namespace+slot_type combination)
         if self.modules:
             module_keys = [
                 f"{mod.module}:{mod.resource or ''}:{mod.namespace or ''}:{mod.slot_type or ''}" for mod in self.modules
             ]
-            duplicates = [key for key in module_keys if module_keys.count(key) > 1]
-            if duplicates:
-                errors.append(f"Duplicate module overrides found: {', '.join(set(duplicates))}")
+            try:
+                check_unique_names(module_keys, "module overrides")
+            except ValueError as e:
+                errors.append(str(e))
 
         # Validate unique provider override names
         if self.providers:
-            provider_names = [prov.provider for prov in self.providers]
-            duplicates = [name for name in provider_names if provider_names.count(name) > 1]
-            if duplicates:
-                errors.append(f"Duplicate provider overrides found: {', '.join(set(duplicates))}")
+            try:
+                check_unique_names([prov.provider for prov in self.providers], "provider overrides")
+            except ValueError as e:
+                errors.append(str(e))
 
         # Validate unique remote override names
         if self.remotes:
-            remote_names = [str(rem.remote) for rem in self.remotes]
-            duplicates = [name for name in remote_names if remote_names.count(name) > 1]
-            if duplicates:
-                errors.append(f"Duplicate remote overrides found: {', '.join(set(duplicates))}")
+            try:
+                check_unique_names([str(rem.remote) for rem in self.remotes], "remote overrides")
+            except ValueError as e:
+                errors.append(str(e))
 
         if errors:
             raise ValueError("; ".join(errors))
@@ -364,6 +363,7 @@ class EnvironmentMetaModel(PlatformBaseModel):
         None, description="Optional annotations (key-value pairs for documentation)"
     )
     labels: Optional[Dict[str, Any]] = Field(
+        None,
         description="Labels for classification/filtering",
     )
     tags: Optional[List[Any]] = Field(None, description="Optional tags (list of values for categorization)")

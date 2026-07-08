@@ -237,7 +237,7 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
         )
 
         if meta is None:
-            meta = EnvironmentMetaModel(name="Unknown", annotations=None, labels=None, tags=None)
+            meta = EnvironmentMetaModel(name="environment", annotations=None, labels=None, tags=None)
 
         merged_model = EnvironmentModel(
             meta=meta,

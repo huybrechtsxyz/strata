@@ -96,17 +96,33 @@ class IntegrationFactory:
 
         logger.debug("Creating integration", name=config.name, type=integration_type)
 
-        # Check if type is registered
+        # Check if type is registered; JIT-load from built-in class map if not
         if integration_type not in cls._type_mapping:
-            logger.error(
-                "Unknown integration type",
-                type=integration_type,
-                available=list(cls._type_mapping.keys()),
-            )
-            raise ValueError(
-                f"Integration type '{integration_type}' is not registered. "
-                f"Available types: {', '.join(cls._type_mapping.keys())}"
-            )
+            if integration_type in cls._BUILTIN_CLASS_MAP:
+                import importlib as _importlib
+
+                module_path, class_name = cls._BUILTIN_CLASS_MAP[integration_type]
+                try:
+                    module = _importlib.import_module(module_path)
+                    cls.register_type(integration_type, getattr(module, class_name))
+                except Exception as _e:
+                    logger.error(
+                        "Failed to load built-in integration",
+                        type=integration_type,
+                        error=str(_e),
+                        exc_info=True,
+                    )
+                    raise ValueError(f"Integration type '{integration_type}' could not be loaded: {_e}") from _e
+            else:
+                logger.error(
+                    "Unknown integration type",
+                    type=integration_type,
+                    available=list(cls._type_mapping.keys()),
+                )
+                raise ValueError(
+                    f"Integration type '{integration_type}' is not registered. "
+                    f"Available types: {', '.join(cls.get_known_types())}"
+                )
 
         # Get integration class
         integration_class = cls._type_mapping[integration_type]
@@ -226,48 +242,22 @@ def _auto_register_builtin_integrations():
     """
     Auto-register built-in integration types.
 
-    This function attempts to import and register standard integrations.
-    Failures are logged but don't prevent platform startup.
+    Derives the registration list directly from ``_BUILTIN_CLASS_MAP`` so the
+    two data structures can never diverge.  After registering canonical names,
+    registers backwards-compatible aliases so existing YAML configs that use
+    short or hyphenated names (e.g. ``type: vault``) continue to work.
+
+    Failures are logged but don’t prevent platform startup.
     """
-    builtin_integrations = [
-        ("git", "strata.integrations.git", "GitIntegration"),
-        ("docker", "strata.integrations.docker", "DockerIntegration"),
-        ("terraform", "strata.integrations.terraform", "TerraformIntegration"),
-        ("opentofu", "strata.integrations.opentofu", "OpenTofuIntegration"),
-        ("ansible", "strata.integrations.ansible", "AnsibleIntegration"),
-        ("bitwarden", "strata.integrations.bitwarden", "BitwardenIntegration"),
-        (
-            "azure-keyvault",
-            "strata.integrations.azure_keyvault",
-            "AzureKeyVaultIntegration",
-        ),
-        (
-            "azure-appconfig",
-            "strata.integrations.azure_appconfig",
-            "AzureAppConfigIntegration",
-        ),
-        ("consul", "strata.integrations.hashicorp_consul", "ConsulIntegration"),
-        ("vault", "strata.integrations.hashicorp_vault", "VaultIntegration"),
-        ("openbao", "strata.integrations.openbao", "OpenBaoIntegration"),
-        ("infisical", "strata.integrations.infisical", "InfisicalIntegration"),
-        ("etcd", "strata.integrations.etcd", "EtcdIntegration"),
-        ("flagsmith", "strata.integrations.flagsmith", "FlagsmithIntegration"),
-        # Add more as they are implemented
-    ]
+    import importlib as _importlib
 
-    for integration_type, module_path, class_name in builtin_integrations:
+    # Register every canonical built-in type
+    for integration_type, (module_path, class_name) in IntegrationFactory._BUILTIN_CLASS_MAP.items():
         try:
-            # Dynamic import
-            import importlib
-
-            module = importlib.import_module(module_path)
+            module = _importlib.import_module(module_path)
             integration_class = getattr(module, class_name)
-
-            # Register type
             IntegrationFactory.register_type(integration_type, integration_class)
-
             logger.debug("Built-in integration auto-registered", type=integration_type, cls=class_name)
-
         except ImportError as e:
             logger.debug(
                 "Built-in integration not available (not yet implemented)", type=integration_type, error=str(e)
@@ -276,6 +266,18 @@ def _auto_register_builtin_integrations():
             logger.warning(
                 "Failed to auto-register built-in integration", type=integration_type, error=str(e), exc_info=True
             )
+
+    # Register backwards-compatible aliases (hyphenated/short names used in older YAML configs)
+    _aliases = {
+        "azure-keyvault": "azure_keyvault",
+        "azure-appconfig": "azure_appconfig",
+        "consul": "hashicorp_consul",
+        "vault": "hashicorp_vault",
+    }
+    for alias, canonical in _aliases.items():
+        if canonical in IntegrationFactory._type_mapping:
+            IntegrationFactory._type_mapping[alias] = IntegrationFactory._type_mapping[canonical]
+            logger.debug("Integration alias registered", alias=alias, canonical=canonical)
 
 
 # Run auto-registration on module import

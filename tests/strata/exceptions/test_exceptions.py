@@ -5,7 +5,6 @@ import pytest
 from strata.exceptions import (
     ConfigurationNotFoundError,
     DeploymentNotFoundError,
-    DuplicateNameError,
     InvalidReferenceError,
     ModelValidationError,
     PathValidationError,
@@ -17,7 +16,6 @@ from strata.exceptions import (
     PlatformValidationError,
     ProviderNotFoundError,
     ResourceTypeNotFoundError,
-    SchemaVersionError,
     ServiceLoadError,
     ServiceNotAvailableError,
     ServiceNotValidatedError,
@@ -176,29 +174,6 @@ class TestModelValidationError:
 
 
 # ---------------------------------------------------------------------------
-# DuplicateNameError
-# ---------------------------------------------------------------------------
-
-
-class TestDuplicateNameError:
-    def test_message_includes_name(self):
-        e = DuplicateNameError("stage", "prod")
-        assert "prod" in e.message
-
-    def test_message_includes_location(self):
-        e = DuplicateNameError("stage", "prod", location="deployment.yaml")
-        assert "deployment.yaml" in e.message
-
-    def test_no_location(self):
-        e = DuplicateNameError("stage", "prod")
-        assert e.details["location"] is None
-
-    def test_error_code(self):
-        e = DuplicateNameError("stage", "prod")
-        assert e.error_code == "DUPLICATE_NAME"
-
-
-# ---------------------------------------------------------------------------
 # InvalidReferenceError
 # ---------------------------------------------------------------------------
 
@@ -291,27 +266,6 @@ class TestUnsupportedKindError:
     def test_error_code(self):
         e = UnsupportedKindError("bad")
         assert e.error_code == "UNSUPPORTED_KIND"
-
-
-# ---------------------------------------------------------------------------
-# SchemaVersionError
-# ---------------------------------------------------------------------------
-
-
-class TestSchemaVersionError:
-    def test_message_contains_both_versions(self):
-        e = SchemaVersionError("v2", "v1")
-        assert "v2" in e.message
-        assert "v1" in e.message
-
-    def test_error_code(self):
-        e = SchemaVersionError("v2", "v1")
-        assert e.error_code == "SCHEMA_VERSION_MISMATCH"
-
-    def test_details(self):
-        e = SchemaVersionError("v2", "v1")
-        assert e.details["actual"] == "v2"
-        assert e.details["expected"] == "v1"
 
 
 # ---------------------------------------------------------------------------
@@ -520,7 +474,7 @@ class TestRaiseCatch:
 
     def test_catch_as_platform_validation_error(self):
         with pytest.raises(PlatformValidationError):
-            raise DuplicateNameError("stage", "prod")
+            raise ModelValidationError("M", [])
 
     def test_catch_as_platform_not_found(self):
         with pytest.raises(PlatformNotFoundError):
