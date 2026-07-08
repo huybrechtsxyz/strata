@@ -107,6 +107,7 @@ class PlanBuildCommand(BaseBuildCommand):
                 plan_results = self._run_terraform_plan(tmp_build_path, resolved)
 
         value_rows = self._build_value_status_rows()
+        provider_rows = self._build_provider_rows()
 
         self._output_data = {
             "file": str(self._file_path),
@@ -114,10 +115,11 @@ class PlanBuildCommand(BaseBuildCommand):
             "artifact_diff": diff_rows,
             "terraform_plan": plan_results,
             "values": value_rows,
+            "providers": provider_rows,
         }
 
         if self._is_console_output():
-            self._print_console(deployment_name, diff_rows, plan_results, value_rows)
+            self._print_console(deployment_name, diff_rows, plan_results, value_rows, provider_rows)
 
         return True
 
@@ -431,16 +433,47 @@ class PlanBuildCommand(BaseBuildCommand):
 
         return rows
 
+    def _build_provider_rows(self) -> List[Dict[str, Any]]:
+        """Build provider resolution rows: resolved file + whether an env override was applied."""
+        if self._deployment_service is None:
+            return []
+        workspace = self._deployment_service.get_workspace_service()
+        if workspace is None or workspace.model is None or workspace.model.spec is None:
+            return []
+
+        env_svc = self._deployment_service.get_environment_service()
+        overridden_names = env_svc.get_overridden_provider_names() if env_svc else set()
+
+        rows: List[Dict[str, Any]] = []
+        for wp in workspace.model.spec.providers:
+            name = str(wp.name)
+            file = str(wp.file)
+            # Check if this provider had a *file* override specifically (not just description/configuration)
+            file_overridden = False
+            if env_svc and name in overridden_names:
+                pov = env_svc.get_provider_override(name)
+                file_overridden = pov is not None and pov.file is not None
+            rows.append(
+                {
+                    "name": name,
+                    "file": file,
+                    "source": "env-override" if file_overridden else "workspace",
+                }
+            )
+        return rows
+
     def _print_console(
         self,
         deployment_name: str,
         diff_rows: List[Dict[str, Any]],
         plan_results: List[Dict[str, Any]],
         value_rows: List[Dict[str, Any]],
+        provider_rows: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         click.echo(f"\n📋  Build Plan — {deployment_name}")
         click.echo(f"  {self._SEP}")
 
+        self._print_provider_resolution(provider_rows or [])
         self._print_value_status(value_rows)
         self._print_artifact_diff(diff_rows)
 
@@ -448,6 +481,16 @@ class PlanBuildCommand(BaseBuildCommand):
             self._print_terraform_plan(pr)
 
         self._print_summary(diff_rows, plan_results)
+
+    def _print_provider_resolution(self, rows: List[Dict[str, Any]]) -> None:
+        if not rows:
+            return
+        click.echo("\n  Providers:")
+        click.echo(f"  {self._SEP}")
+        name_w = max(len(r["name"]) for r in rows)
+        for row in rows:
+            tag = "  [env override]" if row["source"] == "env-override" else ""
+            click.echo(f"  {row['name']:<{name_w}}  {row['file']}{tag}")
 
     def _print_value_status(self, rows: List[Dict[str, Any]]) -> None:
         if not rows:
