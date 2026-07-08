@@ -16,6 +16,7 @@ import yaml
 from pydantic import ValidationError
 
 from strata.models.tenant_model import TenantModel, TenantReferencesModel
+from strata.models.platform_artifact_model import PlatformTenantModel
 
 
 @pytest.fixture(autouse=True)
@@ -178,3 +179,41 @@ class TestTenantModel:
         assert ref.variables == ["domain"]
         assert ref.secrets is None
         assert ref.features is None
+
+
+class TestPlatformTenantModel:
+    """Unit tests for PlatformTenantModel.from_tenant_model()."""
+
+    def _tenant_model(self, **spec_overrides):
+        spec = {"code": "acme", "name": "ACME Corporation", "zones": ["eu-west"]}
+        spec.update(spec_overrides)
+        return TenantModel.model_validate(
+            {
+                "apiVersion": "strata.huybrechts.xyz/v1",
+                "kind": "tenant",
+                "meta": {"name": "acme"},
+                "spec": spec,
+            }
+        )
+
+    def test_from_tenant_model_basic_fields(self):
+        """from_tenant_model copies code, name, zones, onboarded, configuration."""
+        model = self._tenant_model(onboarded="2025-01-01", configuration={"crm_id": "42"})
+        pt = PlatformTenantModel.from_tenant_model(model)
+        assert pt.code == "acme"
+        assert pt.name == "ACME Corporation"
+        assert pt.zones == ["eu-west"]
+        assert str(pt.onboarded) == "2025-01-01"
+        assert pt.configuration == {"crm_id": "42"}
+
+    def test_from_tenant_model_environments_propagated(self):
+        """from_tenant_model copies spec.environments into the platform artifact."""
+        model = self._tenant_model(environments=["environments/tiers/enterprise.yaml"])
+        pt = PlatformTenantModel.from_tenant_model(model)
+        assert pt.environments == ["environments/tiers/enterprise.yaml"]
+
+    def test_from_tenant_model_environments_none_when_absent(self):
+        """from_tenant_model sets environments=None when spec.environments is absent."""
+        model = self._tenant_model()
+        pt = PlatformTenantModel.from_tenant_model(model)
+        assert pt.environments is None

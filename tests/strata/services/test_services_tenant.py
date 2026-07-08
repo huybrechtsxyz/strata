@@ -112,6 +112,7 @@ class TestTenantService:
         service.validate()
         envs = service.get_environments()
         assert isinstance(envs, list)
+        assert envs == ["environments/tiers/standard.yaml"]
 
     def test_get_configuration(self, service):
         service.validate()

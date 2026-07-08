@@ -771,7 +771,29 @@ class DeploymentService(BaseService["DeploymentModel"]):
             )
 
             # Step 3: Load and merge environment files
-            env_paths = [
+            # Tenant environments are prepended so deployment environments take precedence.
+            tenant_env_paths: List[str] = []
+            if self.model.spec.tenant:
+                from strata.services.tenant_service import TenantService as _TenantService
+
+                tenant_file = Path(objects_path) / "tenants" / f"{self.model.spec.tenant}.yaml"
+                if tenant_file.exists():
+                    tenant_svc = _TenantService(str(tenant_file))
+                    is_valid_t, _ = tenant_svc.validate()
+                    if is_valid_t and tenant_svc.model:
+                        tenant_env_paths = [
+                            self._resolve_file_path(env_path, objects_path, repo_map)
+                            for env_path in tenant_svc.get_environments()
+                        ]
+                        if tenant_env_paths:
+                            self.logger.debug(
+                                "Prepending tenant environments",
+                                tenant=self.model.spec.tenant,
+                                count=len(tenant_env_paths),
+                                paths=tenant_env_paths,
+                            )
+
+            env_paths = tenant_env_paths + [
                 self._resolve_file_path(env_ref.file, objects_path, repo_map)
                 for env_ref in self.model.spec.environments
             ]
