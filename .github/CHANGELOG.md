@@ -7,6 +7,45 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+---
+
+## [1.0.0] — 2026-07-08
+
+### Added
+
+- **S3 Lock Backend (ADR 0007)**
+  - `S3LockBackend` — distributed deployment lock using AWS S3 object conditional writes; supports TTL, lock metadata (holder, acquired_at), force-release
+  - Full test suite covering acquire, release, status, force-release, TTL expiry, and concurrent contention scenarios
+
+- **VS Code Extension — Complete Feature Parity with CLI**
+  - **Values Inspector** (`strataValues` tree view) — new panel showing all resolved deployment values with secret masking, source tracking, resolved/unresolved indicators, and copy-to-clipboard
+  - **Lock Status & Release** — `strata.lockStatus` shows live lock holder and TTL; `strata.releaseLock` force-releases with confirmation dialog; lock badge (🔒) shown on deployment items in Environments panel
+  - **Drift Detection** — `strata.envDrift` runs `deploy drift run`; ⚠ drift badge shown on deployment items after detection
+  - **SBOM Generation** — `strata.buildSbom` runs `build sbom` with progress notification; offers to open the generated `sbom.json`
+  - **Stage-targeted Deploy** — `strata.deployStage` prompts for stage name, supports dry-run; right-click on stage items in Environments panel
+  - **Repository Write Operations** — sync (with spinner), remove (with confirmation), add (input boxes for name + path) from the Repositories panel
+  - **Audit Filter & Limit** — `strata.auditFilter` cycles all/success/failures; `strata.auditSetLimit` sets entry count (5–200)
+  - **Workspace Panel** — `strataWorkspace` tree view fully implemented: active profile, repositories, document paths, tool availability (was entirely stubbed)
+  - **Chat Participant** — `/build` and `/deploy` now execute via action buttons (▶ Dry Run / ⚡ Full Build / 🚀 Full Deploy); new `/stage`, `/values`, `/drift` slash commands
+  - **Task Provider** — SBOM task added to auto-discovered VS Code tasks per deployment manifest
+  - **Editor context menus** — Show Values, Generate SBOM, Lock Status available on `.yaml` files
+  - **13 new commands** registered: `deployStage`, `lockStatus`, `releaseLock`, `showValues`, `copyValueKey`, `buildSbom`, `syncRepo`, `addRepo`, `removeRepo`, `auditFilter`, `auditSetLimit`
+
+- **Umbrella JSON Schema (`strata.json`)**
+  - `_generate_schemas()` now produces `.strata/schemas/strata.json` alongside per-kind schemas
+  - Single `if/then/else` discriminated-union schema routes to the correct per-kind schema based on the `kind:` field value
+  - `yaml.schemas` in workspace settings and solution template reduced from 12 separate entries to one `strata.json` entry — kind-based validation regardless of file location
+  - Generated automatically on `strata sln init` and `strata sln update`
+
+- **MCP Server** — `_run_command` envelope now derives `success` from `not cmd.has_errors()` instead of `cmd.execute()` return value — fixes `None` success on commands that don't explicitly return a bool
+
+### Changed
+
+- **Exception handling & logging refactor (#187)** — unified exception capture, structured logging, and command execution methods across all BaseCommand subclasses
+- `.gitignore` replaced 561-line Visual Studio template with a lean Python/infra-focused file; adds `*.egg-info/`, `src/vscode/out/`, `docs/_build/`, `.coverage*`, `htmlcov/`, `**/.strata/cli.yaml`, `**/.strata/audit.log`, `**/.strata/solution.json`
+- `config/azure-aks/.strata/cli.yaml` removed from git tracking (runtime-written file)
+- Workspace `yaml.schemas` uses the new umbrella `strata.json` — one entry replaces twelve
+
 ### Design & ADR Progress
 
 #### ADR-0013: Auto-generated Secrets — Model Acceptance Criteria Updates
