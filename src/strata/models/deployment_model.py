@@ -45,6 +45,48 @@ class DeploymentEnvironmentModel(DeploymentFileReference):
     pass
 
 
+class DeploymentEnvironmentRef(PlatformBaseModel):
+    """Entry in a deployment's ``spec.environments`` list.
+
+    Supports both shorthand (bare string path) and full object form.
+    A bare string is automatically coerced to ``DeploymentEnvironmentRef(file=<path>)``.
+
+    The optional ``scope`` annotation is used by the promotion system to identify
+    which file to edit during wave execution:
+
+    - ``"shared"`` — the environment file covers all deployments for this environment
+      (typically the shared ``environments/<name>.yaml``).  This is the file edited by
+      the final (all) wave.
+    - A layer name (e.g. ``"tenant"``) — the file is a per-layer override specific to
+      this deployment.  Promotion edits this file for canary/early waves.
+    - ``None`` (default) — no scope annotation; the promotion system treats this entry
+      as a regular environment file without wave-specific targeting.
+
+    Example — shorthand (backward-compatible)::
+
+        environments:
+          - environments/production.yaml
+
+    Example — full object with scope::
+
+        environments:
+          - file: environments/production.yaml
+            scope: shared
+          - file: environments/tenants/acme.yaml
+            scope: tenant
+    """
+
+    file: str = Field(description="Path to the environment YAML file")
+    scope: Optional[str] = Field(
+        None,
+        description=(
+            "Promotion scope annotation. Use 'shared' for the shared environment file, "
+            "or a layer name (e.g. 'tenant') for per-layer override files. "
+            "Omit for unannotated entries."
+        ),
+    )
+
+
 class DeploymentWorkspaceModel(DeploymentFileReference):
     """Model for deployment workspace file reference."""
 
@@ -351,12 +393,21 @@ class DeploymentSpecModel(PlatformBaseModel):
     )
     workspace: DeploymentWorkspaceModel = Field(description="Name of the associated workspace for this deployment")
     environments: Annotated[
-        List[str],
+        List[DeploymentEnvironmentRef],
         Field(
             min_length=1,
-            description="List of environment file paths for this deployment (later files override earlier ones)",
+            description="List of environment file paths (or scoped refs) for this deployment (later files override earlier ones)",
         ),
     ]
+
+    @field_validator("environments", mode="before")
+    @classmethod
+    def coerce_environment_strings(cls, v: Any) -> Any:
+        """Coerce bare strings to DeploymentEnvironmentRef dicts for backward compatibility."""
+        if isinstance(v, list):
+            return [{"file": item} if isinstance(item, str) else item for item in v]
+        return v
+
     approvals: Optional[DeploymentApprovalModel] = Field(None, description="Approval configuration for this deployment")
     locking: Optional[DeploymentLockingModel] = Field(
         None, description="Pipeline locking behaviour for concurrent deploy protection"

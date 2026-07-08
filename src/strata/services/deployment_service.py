@@ -88,8 +88,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
             config_repo_map = configuration_model.get_remote_map() if configuration_model else {}
             repo_map = {**config_repo_map, **(self._repo_map or {})}
             file_refs = []
-            for i, env_path in enumerate(self.model.spec.environments or []):
-                file_refs.append((f"Environment[{i}]", env_path))
+            for i, env_ref in enumerate(self.model.spec.environments or []):
+                file_refs.append((f"Environment[{i}]", env_ref.file))
             for cfg in self.model.spec.configurations or []:
                 file_refs.append((f"Configuration '{cfg.name}'", cfg.file))
             if self.model.spec.tenant:
@@ -699,8 +699,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
             # Step 3: Load and merge environment files
             env_paths = [
-                self._resolve_file_path(str(env_path), objects_path, repo_map)
-                for env_path in self.model.spec.environments
+                self._resolve_file_path(env_ref.file, objects_path, repo_map)
+                for env_ref in self.model.spec.environments
             ]
 
             self.logger.debug("Loading deployment environments", count=len(env_paths), paths=env_paths)

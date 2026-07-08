@@ -124,9 +124,9 @@ class ToolsController(BaseController):
                 requirements[integration_type] = "required" if is_required else "optional"
 
         # Environments: store usage implies a required integration
-        for env_path in dep.spec.environments:
+        for env_ref in dep.spec.environments:
             try:
-                env_svc = EnvironmentService.load(str(base / env_path))
+                env_svc = EnvironmentService.load(str(base / env_ref.file))
                 if not env_svc.is_validated() or env_svc.model is None:
                     continue
                 env = env_svc.model

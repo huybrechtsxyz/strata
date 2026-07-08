@@ -63,6 +63,20 @@ class SolutionSpecRepositoryModel(BaseModel):
     created: Optional[str] = Field(None, description="Creation timestamp of the repository")
 
 
+class SolutionSpecDeploymentModel(BaseModel):
+    """
+    Model for a registered deployment file entry in the solution specification.
+
+    Deployment files are registered via ``strata sln deployment add`` so that
+    commands like ``strata promote`` can enumerate all deployments without
+    requiring an explicit ``-f`` flag on every invocation.
+    """
+
+    name: str = Field(..., description="Deployment name (from meta.name in the deployment YAML)")
+    path: str = Field(..., description="Path to the deployment YAML file (relative to work-path or absolute)")
+    created: Optional[str] = Field(None, description="Registration timestamp (ISO 8601)")
+
+
 class SolutionSpecModel(BaseModel):
     """
     Specification model for solution resource types.
@@ -71,6 +85,9 @@ class SolutionSpecModel(BaseModel):
     solution_id: str = Field(..., description="Unique identifier for the solution")
     repositories: Optional[List[SolutionSpecRepositoryModel]] = Field(
         None, description="List of repositories associated with the solution"
+    )
+    deployments: Optional[List[SolutionSpecDeploymentModel]] = Field(
+        None, description="List of deployment files registered in this solution"
     )
     profiles: Optional[List[SolutionSpecProfileModel]] = Field(
         None, description="List of profiles associated with the solution"
