@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-echo ">>> Installing strata..."
-pip install --quiet git+https://github.com/huybrechtsxzy/strata.git
+echo ">>> Installing strata (editable from local source)..."
+pip install --quiet -e .
 
 echo ">>> Installing shell completion..."
 strata --install-completion bash 2>/dev/null || true

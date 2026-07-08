@@ -1260,8 +1260,12 @@ class SolutionController(BaseController):
                 continue
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
+                from strata import __version__
+
                 content = src.read_text(encoding="utf-8")
-                content = TemplateProcessor.render(content, {"SOLUTION_NAME": solution_name})
+                content = TemplateProcessor.render(
+                    content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
+                )
                 if dest.name == SOLUTION_LOGGING_FILE:
                     log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
                     content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)
@@ -1344,8 +1348,12 @@ class SolutionController(BaseController):
 
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
+                from strata import __version__
+
                 content = src.read_text(encoding="utf-8")
-                content = TemplateProcessor.render(content, {"SOLUTION_NAME": solution_name})
+                content = TemplateProcessor.render(
+                    content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
+                )
                 if dest.name == SOLUTION_LOGGING_FILE:
                     log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
                     content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)
