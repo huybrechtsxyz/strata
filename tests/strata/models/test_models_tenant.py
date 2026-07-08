@@ -15,8 +15,8 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from strata.models.tenant_model import TenantModel, TenantReferencesModel
 from strata.models.platform_artifact_model import PlatformTenantModel
+from strata.models.tenant_model import TenantModel, TenantReferencesModel
 
 
 @pytest.fixture(autouse=True)
@@ -99,6 +99,8 @@ class TestTenantModel:
         model = TenantModel.model_validate(self._valid_data())
         assert model.spec.onboarded is None
         assert model.spec.environments is None
+        assert model.spec.properties is None
+        assert model.spec.custom is None
         assert model.spec.configuration is None
         assert model.spec.references is None
 
@@ -107,6 +109,8 @@ class TestTenantModel:
         data = self._valid_data(
             onboarded="2025-06-01",
             environments=["environments/tiers/enterprise.yaml"],
+            properties={"tier": "enterprise", "billing": "monthly"},
+            custom={"owner": "Platform Team"},
             configuration={"crm_id": "1001", "support_level": "premium"},
             references={
                 "variables": ["company_domain"],
@@ -117,11 +121,25 @@ class TestTenantModel:
         model = TenantModel.model_validate(data)
         assert model.spec.onboarded is not None
         assert model.spec.environments == ["environments/tiers/enterprise.yaml"]
+        assert model.spec.properties == {"tier": "enterprise", "billing": "monthly"}
+        assert model.spec.custom == {"owner": "Platform Team"}
         assert model.spec.configuration == {"crm_id": "1001", "support_level": "premium"}
         assert model.spec.references is not None
         assert model.spec.references.variables == ["company_domain"]
         assert model.spec.references.secrets == ["api_key"]
         assert model.spec.references.features == ["sso_enabled"]
+
+    def test_properties_arbitrary_dict(self):
+        """properties block accepts arbitrary key/value pairs."""
+        props = {"tier": "enterprise", "billing": "monthly", "max_users": 1000}
+        model = TenantModel.model_validate(self._valid_data(properties=props))
+        assert model.spec.properties == props
+
+    def test_custom_arbitrary_dict(self):
+        """custom block accepts arbitrary key/value pairs."""
+        custom = {"owner": "Platform Team", "costcenter": "INFRA-001"}
+        model = TenantModel.model_validate(self._valid_data(custom=custom))
+        assert model.spec.custom == custom
 
     def test_zones_required_non_empty(self):
         """zones must contain at least one entry."""
@@ -217,3 +235,27 @@ class TestPlatformTenantModel:
         model = self._tenant_model()
         pt = PlatformTenantModel.from_tenant_model(model)
         assert pt.environments is None
+
+    def test_from_tenant_model_properties_propagated(self):
+        """from_tenant_model copies spec.properties into the platform artifact."""
+        model = self._tenant_model(properties={"tier": "enterprise"})
+        pt = PlatformTenantModel.from_tenant_model(model)
+        assert pt.properties == {"tier": "enterprise"}
+
+    def test_from_tenant_model_custom_propagated(self):
+        """from_tenant_model copies spec.custom into the platform artifact."""
+        model = self._tenant_model(custom={"feature_x": True})
+        pt = PlatformTenantModel.from_tenant_model(model)
+        assert pt.custom == {"feature_x": True}
+
+    def test_from_tenant_model_properties_none_when_absent(self):
+        """from_tenant_model sets properties=None when spec.properties is absent."""
+        model = self._tenant_model()
+        pt = PlatformTenantModel.from_tenant_model(model)
+        assert pt.properties is None
+
+    def test_from_tenant_model_custom_none_when_absent(self):
+        """from_tenant_model sets custom=None when spec.custom is absent."""
+        model = self._tenant_model()
+        pt = PlatformTenantModel.from_tenant_model(model)
+        assert pt.custom is None

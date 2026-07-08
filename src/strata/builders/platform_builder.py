@@ -514,8 +514,16 @@ class PlatformBuilder(BaseBuilder):
             stages=deployment_model.spec.stages,
             approvals=deployment_model.spec.approvals,
             lifecycle=lifecycle_model,
-            properties=deployment_model.spec.properties,
-            custom=deployment_model.spec.custom,
+            properties={
+                **(platform_tenant.properties or {} if platform_tenant and platform_tenant.properties else {}),
+                **(deployment_model.spec.properties or {}),
+            }
+            or None,
+            custom={
+                **(platform_tenant.custom or {} if platform_tenant and platform_tenant.custom else {}),
+                **(deployment_model.spec.custom or {}),
+            }
+            or None,
             features=all_features,
             variables=all_variables,
             secrets=all_secrets,

@@ -119,6 +119,40 @@ class TestTenantService:
         cfg = service.get_configuration()
         assert isinstance(cfg, dict)
 
+    def test_get_properties(self, service):
+        service.validate()
+        props = service.get_properties()
+        assert isinstance(props, dict)
+
+    def test_get_custom(self, service):
+        service.validate()
+        custom = service.get_custom()
+        assert isinstance(custom, dict)
+
+    def test_get_properties_empty_when_unset(self):
+        """get_properties returns {} when properties block is absent."""
+        svc = TenantService(data=_make_tenant_data())
+        svc.validate()
+        assert svc.get_properties() == {}
+
+    def test_get_custom_empty_when_unset(self):
+        """get_custom returns {} when custom block is absent."""
+        svc = TenantService(data=_make_tenant_data())
+        svc.validate()
+        assert svc.get_custom() == {}
+
+    def test_get_properties_returns_values(self):
+        """get_properties returns the configured key/value pairs."""
+        svc = TenantService(data=_make_tenant_data(properties={"tier": "enterprise"}))
+        svc.validate()
+        assert svc.get_properties() == {"tier": "enterprise"}
+
+    def test_get_custom_returns_values(self):
+        """get_custom returns the configured key/value pairs."""
+        svc = TenantService(data=_make_tenant_data(custom={"owner": "Platform Team"}))
+        svc.validate()
+        assert svc.get_custom() == {"owner": "Platform Team"}
+
     def test_get_code_before_validate_raises(self):
         svc = TenantService(data=_make_tenant_data())
         with pytest.raises(ServiceNotValidatedError):

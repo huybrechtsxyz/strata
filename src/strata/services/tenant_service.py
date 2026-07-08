@@ -107,3 +107,15 @@ class TenantService(BaseService["TenantModel"]):
         self._ensure_validated()
         assert self.model is not None
         return dict(self.model.spec.configuration or {})
+
+    def get_properties(self) -> dict:
+        """Return tenant-wide deployment properties (empty dict if unset)."""
+        self._ensure_validated()
+        assert self.model is not None
+        return dict(self.model.spec.properties or {})
+
+    def get_custom(self) -> dict:
+        """Return tenant-wide custom data (empty dict if unset)."""
+        self._ensure_validated()
+        assert self.model is not None
+        return dict(self.model.spec.custom or {})

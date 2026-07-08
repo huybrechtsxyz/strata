@@ -604,6 +604,14 @@ class PlatformTenantModel(BaseModel):
         None,
         description="Ordered list of environment file paths applied before the deployment's own environments",
     )
+    properties: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Tenant-wide deployment properties merged as base layer into each deployment's spec.properties",
+    )
+    custom: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Tenant-wide custom data merged as base layer into each deployment's spec.custom",
+    )
     configuration: Optional[Dict[str, Any]] = Field(
         None,
         description="tenant-specific key/value settings injected at slot generation time",
@@ -618,6 +626,8 @@ class PlatformTenantModel(BaseModel):
             zones=list(model.spec.zones),
             onboarded=model.spec.onboarded,
             environments=list(model.spec.environments) if model.spec.environments else None,
+            properties=dict(model.spec.properties) if model.spec.properties else None,
+            custom=dict(model.spec.custom) if model.spec.custom else None,
             configuration=model.spec.configuration,
         )
 

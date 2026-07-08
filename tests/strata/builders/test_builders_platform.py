@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from strata.builders.platform_builder import PlatformBuilder
+from strata.models.platform_artifact_model import PlatformTenantModel
 
 
 def _mock_deployment_service(validated=True, workspace_service=None, build_path=None):
@@ -196,3 +197,74 @@ class TestPlatformBuilderAfterBuild:
 
         builder.after_build(svc, tmp_path, tmp_path, dry_run=False)
         assert builder.has_messages()
+
+
+# ---------------------------------------------------------------------------
+# Tenant properties/custom merge logic
+# ---------------------------------------------------------------------------
+
+
+def _make_platform_tenant(properties=None, custom=None) -> PlatformTenantModel:
+    """Build a minimal PlatformTenantModel with optional properties/custom."""
+    return PlatformTenantModel(
+        code="acme",
+        name="ACME Corporation",
+        zones=["eu-west"],
+        properties=properties,
+        custom=custom,
+    )
+
+
+def _merge(tenant_values, deployment_values):
+    """Replicate the builder's base-layer merge: tenant first, deployment overrides."""
+    return {**(tenant_values or {}), **(deployment_values or {})} or None
+
+
+class TestTenantPropertiesMerge:
+    """Tests for the tenant properties/custom base-layer merge formula used in _build_spec.
+
+    The formula is: {**tenant, **deployment} — tenant provides the base,
+    deployment keys take precedence for any overlap.
+    """
+
+    def test_tenant_only_properties(self):
+        result = _merge({"tier": "enterprise"}, None)
+        assert result == {"tier": "enterprise"}
+
+    def test_deployment_only_properties(self):
+        result = _merge(None, {"region": "eu-west"})
+        assert result == {"region": "eu-west"}
+
+    def test_deployment_overrides_tenant_on_overlap(self):
+        result = _merge({"tier": "enterprise", "billing": "monthly"}, {"tier": "standard", "region": "eu"})
+        assert result["tier"] == "standard"  # deployment wins
+        assert result["billing"] == "monthly"  # tenant-only key preserved
+        assert result["region"] == "eu"  # deployment-only key present
+
+    def test_both_none_returns_none(self):
+        assert _merge(None, None) is None
+
+    def test_both_empty_returns_none(self):
+        assert _merge({}, {}) is None
+
+    def test_platform_tenant_model_carries_properties(self):
+        """PlatformTenantModel.from_tenant_model propagates properties and custom."""
+        from strata.models.tenant_model import TenantModel
+
+        model = TenantModel.model_validate(
+            {
+                "apiVersion": "strata.huybrechts.xyz/v1",
+                "kind": "tenant",
+                "meta": {"name": "acme"},
+                "spec": {
+                    "code": "acme",
+                    "name": "ACME Corporation",
+                    "zones": ["eu-west"],
+                    "properties": {"tier": "enterprise"},
+                    "custom": {"feature_x": True},
+                },
+            }
+        )
+        pt = PlatformTenantModel.from_tenant_model(model)
+        assert pt.properties == {"tier": "enterprise"}
+        assert pt.custom == {"feature_x": True}
