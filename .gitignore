@@ -61,3 +61,8 @@ src/vscode/out/
 
 # Temporary until uv.lock is cleaned of internal ProGet URLs (dev-machine only)
 uv.lock
+
+# Runtime-written workspace state — never commit
+**/.strata/cli.yaml
+**/.strata/audit.log
+**/.strata/solution.json
