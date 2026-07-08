@@ -59,7 +59,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../README.html#ai-integration-via-mcp">AI Integration via MCP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#deployment-workflow">Deployment Workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#testing">Testing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../README.html#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../README.html#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../README.html#inspecting-resolved-values-before-deploy">Inspecting Resolved Values Before Deploy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../README.html#using-dry-run-to-validate-deployment">Using Dry-Run to Validate Deployment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../README.html#debugging-a-failed-deployment">Debugging a Failed Deployment</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#contributing">Contributing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#security">Security</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#license">License</a></li>
@@ -73,6 +78,49 @@
 <li class="toctree-l3"><a class="reference internal" href="../README.html#audit-trail">Audit Trail</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../INDEX.html">Documentation Index</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#getting-started">🚀 <strong>Getting Started</strong></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#user-guides">📖 <strong>User Guides</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#core-concepts">Core Concepts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#operational-guides">Operational Guides</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#advanced-topics">Advanced Topics</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#architecture-design-decisions">🏗️ <strong>Architecture &amp; Design Decisions</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#decision-records-adrs">Decision Records (ADRs)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#developer-documentation">💻 <strong>Developer Documentation</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#extension-vs-code">Extension (VS Code)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#cli-python">CLI (Python)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#contributing">Contributing</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#examples-tutorials">📚 <strong>Examples &amp; Tutorials</strong></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#external-resources">🔗 <strong>External Resources</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#related-technologies">Related Technologies</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#community-support">Community &amp; Support</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#version-specific-documentation">📋 <strong>Version-Specific Documentation</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#current-version-v0-16-1">Current Version (v0.16.1)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#previous-versions">Previous Versions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#quick-navigation-by-use-case">🎯 <strong>Quick Navigation by Use Case</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-m-new-to-strata">“I’m new to strata”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-m-using-the-cli">“I’m using the CLI”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-m-using-the-vs-code-extension">“I’m using the VS Code Extension”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-want-to-contribute">“I want to contribute”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-have-a-question-or-issue">“I have a question or issue”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-need-to-integrate-with-strata">“I need to integrate with strata”</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#file-structure">📄 <strong>File Structure</strong></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#search-tips">🔍 <strong>Search Tips</strong></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#support-feedback">📞 <strong>Support &amp; Feedback</strong></a></li>
 </ul>
 </li>
 </ul>
@@ -651,7 +699,21 @@
 <li class="toctree-l3"><a class="reference internal" href="#siem-sink-configuration">SIEM sink configuration</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#values"><code class="docutils literal notranslate"><span class="pre">values</span></code></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#service"><code class="docutils literal notranslate"><span class="pre">service</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#service-list"><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#service-status"><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#service-deploy"><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">deploy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#service-destroy"><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">destroy</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#manifest"><code class="docutils literal notranslate"><span class="pre">manifest</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#manifest-list"><code class="docutils literal notranslate"><span class="pre">manifest</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#manifest-show"><code class="docutils literal notranslate"><span class="pre">manifest</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#manifest-export"><code class="docutils literal notranslate"><span class="pre">manifest</span> <span class="pre">export</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#mcp"><code class="docutils literal notranslate"><span class="pre">mcp</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#mcp-serve"><code class="docutils literal notranslate"><span class="pre">mcp</span> <span class="pre">serve</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#values-list"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">list</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#values-get"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#values-set"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span></code></a></li>
@@ -991,6 +1053,54 @@
 <li class="toctree-l2"><a class="reference internal" href="sbom-plugin-api.html#see-also">See Also</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="provisioner-plugin-api.html">Provisioner Plugin API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="provisioner-plugin-api.html#basedeployer"><code class="docutils literal notranslate"><span class="pre">BaseDeployer</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#constructor">Constructor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#step-name-constants">Step Name Constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#abstract-methods">Abstract Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#get-deployer-name-str"><code class="docutils literal notranslate"><span class="pre">get_deployer_name()</span> <span class="pre">→</span> <span class="pre">str</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#get-supported-steps-list-str"><code class="docutils literal notranslate"><span class="pre">get_supported_steps()</span> <span class="pre">→</span> <span class="pre">List[str]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#validate-workspace-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">validate_workspace()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#validate-environment-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">validate_environment()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#setup-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">setup()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#check-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">check()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#plan-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">plan()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#apply-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">apply()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#destroy-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">destroy()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#plan-destroy-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">plan_destroy()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#show-plan-tuple-bool-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">show_plan()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#output-tuple-bool-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">output()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#non-abstract-methods-override-as-needed">Non-Abstract Methods (override as needed)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#status-tuple-bool-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">status()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#health-tuple-bool-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">health()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#collect-outputs-tuple-bool-dict-str-any-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">collect_outputs()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#describe-plan-list-str"><code class="docutils literal notranslate"><span class="pre">describe_plan()</span> <span class="pre">→</span> <span class="pre">List[str]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#save-plan-json-tuple-bool-optional-path-list-str"><code class="docutils literal notranslate"><span class="pre">save_plan_json()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Optional[Path],</span> <span class="pre">List[str]]</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#protected-helpers">Protected Helpers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#get-timeout-step-str-default-int-int"><code class="docutils literal notranslate"><span class="pre">_get_timeout(step:</span> <span class="pre">str,</span> <span class="pre">default:</span> <span class="pre">int)</span> <span class="pre">→</span> <span class="pre">int</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="provisioner-plugin-api.html#resolve-iac-model-optional-workspaceiacmodel"><code class="docutils literal notranslate"><span class="pre">_resolve_iac_model()</span> <span class="pre">→</span> <span class="pre">Optional[WorkspaceIacModel]</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="provisioner-plugin-api.html#deployerfactory"><code class="docutils literal notranslate"><span class="pre">DeployerFactory</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#deployerfactory-create-provisioner-type-stage-deployment-service-configuration-service-build-path-work-path-verbose-force-resolved-values-solution-controller-basedeployer"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.create(provisioner_type,</span> <span class="pre">*,</span> <span class="pre">stage,</span> <span class="pre">deployment_service,</span> <span class="pre">configuration_service,</span> <span class="pre">build_path,</span> <span class="pre">work_path,</span> <span class="pre">verbose,</span> <span class="pre">force,</span> <span class="pre">resolved_values,</span> <span class="pre">solution_controller)</span> <span class="pre">→</span> <span class="pre">BaseDeployer</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#deployerfactory-resolve-type-stage-deployment-service-tuple-optional-str-list-str"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.resolve_type(stage,</span> <span class="pre">deployment_service)</span> <span class="pre">→</span> <span class="pre">Tuple[Optional[str],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#deployerfactory-register-name-deployer-class"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.register(name,</span> <span class="pre">deployer_class)</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#deployerfactory-load-plugins-work-path"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.load_plugins(work_path)</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#deployerfactory-is-known-type-type-str-bool"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.is_known_type(type_str)</span> <span class="pre">→</span> <span class="pre">bool</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#deployerfactory-get-known-types-list-str"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.get_known_types()</span> <span class="pre">→</span> <span class="pre">List[str]</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="provisioner-plugin-api.html#deployerfactory-reset"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.reset()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="provisioner-plugin-api.html#built-in-provisioner-types">Built-in Provisioner Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="provisioner-plugin-api.html#see-also">See Also</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Internals:</span></p>
 <ul>
@@ -1031,7 +1141,15 @@
 <li class="toctree-l2"><a class="reference internal" href="integrations.html#singleton-pattern">Singleton Pattern</a></li>
 <li class="toctree-l2"><a class="reference internal" href="integrations.html#baseintegration-api"><code class="docutils literal notranslate"><span class="pre">BaseIntegration</span></code> API</a></li>
 <li class="toctree-l2"><a class="reference internal" href="integrations.html#integrationregistry"><code class="docutils literal notranslate"><span class="pre">IntegrationRegistry</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="integrations.html#capability-protocols">Capability Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="integrations.html#capability-protocols">Capability Protocols</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="integrations.html#store-specific-notes">Store-specific notes</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="integrations.html#vault-and-consul-feature-flags-via-kv-prefix">Vault and Consul — feature flags via KV prefix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="integrations.html#flagsmith-variables-via-identity-traits">Flagsmith — variables via identity traits</a></li>
+<li class="toctree-l4"><a class="reference internal" href="integrations.html#flagsmith-feature-flag-seeding-limitations">Flagsmith — feature flag seeding limitations</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="integrations.html#integrationmodel-configuration"><code class="docutils literal notranslate"><span class="pre">IntegrationModel</span></code> Configuration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="integrations.html#runtime-inspection">Runtime inspection</a></li>
 <li class="toctree-l2"><a class="reference internal" href="integrations.html#workspace-drop-ins">Workspace drop-ins</a></li>
@@ -1998,6 +2116,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0006-policy-engine-for-deployment-guardrails.html#consequences">Consequences</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0006-policy-engine-for-deployment-guardrails.html#implementation-status">Implementation Status</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0006-policy-engine-for-deployment-guardrails.html#detailed-design">Detailed Design</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0006-policy-engine-for-deployment-guardrails.html#architecture">Architecture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0006-policy-engine-for-deployment-guardrails.html#yaml-declaration">YAML Declaration</a></li>
@@ -2332,6 +2451,10 @@
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#rotation-dependency-chain-downstream-consumers">9. ~~Rotation dependency chain — downstream consumers~~</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#no-rollback-if-set-secret-succeeds-but-the-build-fails-later">8. ~~No rollback if <code class="docutils literal notranslate"><span class="pre">set_secret()</span></code> succeeds but the build fails later~~</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#spec-drift-generate-spec-changed-but-value-already-exists">10. ~~Spec drift — generate spec changed but value already exists~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#rotate-field-placement-sibling-of-generate-not-nested-inside-it">11. <code class="docutils literal notranslate"><span class="pre">rotate:</span></code> field placement — sibling of <code class="docutils literal notranslate"><span class="pre">generate:</span></code>, not nested inside it</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#max-age-type-int-days-not-a-duration-string">12. <code class="docutils literal notranslate"><span class="pre">max_age</span></code> type — int (days), not a duration string</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#strata-build-plan-cannot-show-rotation-overdue-status">13. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span></code> cannot show rotation-overdue status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#strata-secret-rotate-command-scope-for-manually-placed-secrets">14. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">rotate</span></code> command — scope for manually-placed secrets</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#detailed-design">Detailed Design</a><ul>
@@ -2404,6 +2527,31 @@
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#file-change-summary">10. File Change Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#post-v1-0-gaps-future-work">Post-v1.0 Gaps &amp; Future Work</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-1-build-plan-seed-status-display">Gap 1: Build Plan Seed Status Display</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-2-missing-integration-implementations">Gap 2: Missing Integration Implementations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-3-secret-rotation-phase-3">Gap 3: Secret Rotation (Phase 3)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-4-secretrotatespec-rotate-placement-and-model-validator-issue-11">Gap 4: <code class="docutils literal notranslate"><span class="pre">SecretRotateSpec</span></code> — <code class="docutils literal notranslate"><span class="pre">rotate:</span></code> placement and model validator (Issue #11)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-5-max-age-type-int-days-in-secretrotatespec-issue-12">Gap 5: <code class="docutils literal notranslate"><span class="pre">max_age</span></code> type — <code class="docutils literal notranslate"><span class="pre">int</span></code> (days) in <code class="docutils literal notranslate"><span class="pre">SecretRotateSpec</span></code> (Issue #12)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-6-rotation-status-strata-secret-status-a-dedicated-read-only-command-issue-13">Gap 6: Rotation status — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">status</span></code>, a dedicated read-only command (Issue #13)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-7-strata-secret-rotate-command-add-to-existing-secret-group-issue-14">Gap 7: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">rotate</span></code> command — add to existing <code class="docutils literal notranslate"><span class="pre">secret</span></code> group (Issue #14)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-8-strata-secret-put-command-explicit-write-pre-seed">Gap 8: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">put</span></code> command — explicit write / pre-seed</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-9-strata-secret-get-command-direct-store-read">Gap 9: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">get</span></code> command — direct store read</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#gap-10-strata-secret-list-command-yaml-inventory-no-store">Gap 10: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">list</span></code> command — YAML inventory (no store)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#intentionally-excluded-strata-secret-delete">Intentionally Excluded: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">delete</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#summary-v1-0-vs-post-v1-0">Summary: v1.0 vs Post-v1.0</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#final-design">Final Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#the-strata-secret-command-group">The <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span></code> Command Group</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#yaml-model-shape">YAML Model Shape</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#value-resolution-lifecycle">Value Resolution Lifecycle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#the-rotation-surface-4-tiers">The Rotation Surface (4 Tiers)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#integration-contract">Integration Contract</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#implementation-sequence">Implementation Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0013-auto-generated-secrets.html#acceptance-criteria-full-feature">Acceptance Criteria (full feature)</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../decisions/0014-onboarding-experience.html">Guided onboarding and cold-start experience</a><ul>
@@ -2431,6 +2579,11 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#decision-outcome">Decision Outcome</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#post-v1-0-deferred-work">Post-v1.0 Deferred Work</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#why-these-don-t-block-v1">Why These Don’t Block v1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0014-onboarding-experience.html#effort-estimate">Effort Estimate</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../decisions/0015-flow-command-dependency-graph.html"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">graph</span></code> — Workspace Dependency Graph</a><ul>
@@ -2790,6 +2943,11 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#implementation-plan">Implementation Plan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#related-decisions">Related Decisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#post-v1-0-deferred-work">Post-v1.0 Deferred Work</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#why-these-don-t-block-v1">Why These Don’t Block v1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#effort-estimate">Effort Estimate</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0020-lifecycle-phases-and-environment-variables.html#references">References</a></li>
 </ul>
 </li>
@@ -2962,6 +3120,53 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0024-environment-composition-flat-merge-fix.html#links">Links</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html">AI agent integration for build and deploy workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#context-and-problem-statement">Context and Problem Statement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#concrete-use-cases">Concrete Use Cases</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#why-not-just-use-the-mcp-server">Why Not Just Use the MCP Server?</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#option-a-ai-agent-as-an-integration-recommended">Option A — AI Agent as an Integration (recommended)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#option-b-ai-agent-as-a-deployer">Option B — AI Agent as a Deployer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#option-c-ai-agent-as-a-policy">Option C — AI Agent as a Policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#option-d-external-webhook-event-system">Option D — External Webhook / Event System</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#detailed-design">Detailed Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#architecture-position">1. Architecture Position</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#configuration-model">2. Configuration Model</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#provider-interface">3. Provider Interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#aiagentintegration">4. AiAgentIntegration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#lifecycle-hook-points">5. Lifecycle Hook Points</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#prompt-engineering">6. Prompt Engineering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#audit-trail">7. Audit Trail</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#caching-strategy">8. Caching Strategy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#cost-control">9. Cost Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#security-considerations">10. Security Considerations</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#implementation-phases">Implementation Phases</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#phase-1-foundation-mvp">Phase 1 — Foundation (MVP)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#phase-2-provider-expansion">Phase 2 — Provider Expansion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#phase-3-full-lifecycle-coverage">Phase 3 — Full Lifecycle Coverage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#phase-4-gating-and-policy-integration">Phase 4 — Gating and Policy Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#phase-5-interactive-prompt-mode">Phase 5 — Interactive Prompt Mode</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#repl-extension">REPL extension</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#custom-prompt-files">Custom prompt files</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#behaviour-rules">Behaviour rules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0025-ai-agent-integration-for-build-and-deploy.html#references">References</a></li>
 </ul>
 </li>
 </ul>
@@ -3607,6 +3812,58 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#non-interactive-use">Non-interactive use</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html">Building a Provisioner Plugin</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#quick-start">Quick Start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#discovery-mechanism">Discovery Mechanism</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#the-basedeployer-contract">The <code class="docutils literal notranslate"><span class="pre">BaseDeployer</span></code> Contract</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#optional-overrides">Optional overrides</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#constructor-and-instance-variables">Constructor and Instance Variables</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#accessing-secrets-and-variables">Accessing secrets and variables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#accessing-the-workspace-model">Accessing the workspace model</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#step-name-constants">Step Name Constants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#return-value-conventions">Return Value Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#timeout-helpers">Timeout Helpers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#testing-your-plugin">Testing Your Plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#complete-examples">Complete Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#checklist">Checklist</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html">Detecting Infrastructure Drift</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#what-is-drift">What is drift?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#quick-start">Quick start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#severity-levels">Severity levels</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#command-reference">Command reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#drift-run-flags"><code class="docutils literal notranslate"><span class="pre">drift</span> <span class="pre">run</span></code> flags</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#using-severity-thresholds">Using severity thresholds</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#checking-one-stage">Checking one stage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#setting-a-baseline">Setting a baseline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#acknowledging-expected-drift">Acknowledging expected drift</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#drift-acknowledge-flags"><code class="docutils literal notranslate"><span class="pre">drift</span> <span class="pre">acknowledge</span></code> flags</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#viewing-drift-history">Viewing drift history</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#drift-history-flags"><code class="docutils literal notranslate"><span class="pre">drift</span> <span class="pre">history</span></code> flags</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#json-output-for-ci">JSON output for CI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#drift-history">Drift history</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#customising-severity-rules">Customising severity rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#using-drift-in-ci">Using drift in CI</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#nightly-scheduled-drift-check">Nightly scheduled drift check</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#exit-codes">Exit codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#related">Related</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Skills:</span></p>
 <ul>
@@ -3765,36 +4022,60 @@
 <td><p>Manage repositories in the solution</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">build</span></code> †</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">run</span></code> <code class="docutils literal notranslate"><span class="pre">plan</span></code> <code class="docutils literal notranslate"><span class="pre">clean</span></code></p></td>
-<td><p>Build platform and Terraform artifacts</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run</span></code> <code class="docutils literal notranslate"><span class="pre">plan</span></code> <code class="docutils literal notranslate"><span class="pre">clean</span></code> <code class="docutils literal notranslate"><span class="pre">sbom</span></code></p></td>
+<td><p>Build platform and Terraform artifacts; generate SBOMs</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">validate</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">run</span></code> <code class="docutils literal notranslate"><span class="pre">graph</span></code></p></td>
 <td><p>Validate YAML files and visualize workspace dependencies</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">guide</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">env</span></code> †</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">info</span></code> <code class="docutils literal notranslate"><span class="pre">output</span></code> <code class="docutils literal notranslate"><span class="pre">show</span></code> <code class="docutils literal notranslate"><span class="pre">status</span></code> <code class="docutils literal notranslate"><span class="pre">drift</span></code> <code class="docutils literal notranslate"><span class="pre">doctor</span></code></p></td>
+<td><p>Inspect environment configuration and infrastructure</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">guide</span></code></p></td>
 <td><p>—</p></td>
 <td><p>Show workspace setup progress and suggest the next action</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">console</span></code> †</p></td>
+<td><p>—</p></td>
+<td><p>Interactive workspace REPL</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">schema</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">get</span></code></p></td>
 <td><p>Inspect JSON schemas for platform YAML kinds</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">secret</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">policy</span></code> †</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">check</span></code></p></td>
+<td><p>Inspect and evaluate deployment guardrails</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">secret</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">generate</span></code> <code class="docutils literal notranslate"><span class="pre">mask</span></code></p></td>
 <td><p>Generate and manage secret values</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">audit</span></code> †</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">audit</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">changes</span></code> <code class="docutils literal notranslate"><span class="pre">resend</span></code> <code class="docutils literal notranslate"><span class="pre">export</span></code></p></td>
 <td><p>Query deploy-log evidence and forward to audit sinks</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">deploy</span></code> †</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">run</span></code> <code class="docutils literal notranslate"><span class="pre">destroy</span></code> <code class="docutils literal notranslate"><span class="pre">show</span></code> <code class="docutils literal notranslate"><span class="pre">status</span></code> <code class="docutils literal notranslate"><span class="pre">history</span></code> <code class="docutils literal notranslate"><span class="pre">health</span></code> <code class="docutils literal notranslate"><span class="pre">output</span></code> <code class="docutils literal notranslate"><span class="pre">outputs</span></code> <code class="docutils literal notranslate"><span class="pre">lock</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">deploy</span></code> †</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run</span></code> <code class="docutils literal notranslate"><span class="pre">destroy</span></code> <code class="docutils literal notranslate"><span class="pre">show</span></code> <code class="docutils literal notranslate"><span class="pre">status</span></code> <code class="docutils literal notranslate"><span class="pre">history</span></code> <code class="docutils literal notranslate"><span class="pre">health</span></code> <code class="docutils literal notranslate"><span class="pre">drift</span></code> <code class="docutils literal notranslate"><span class="pre">output</span></code> <code class="docutils literal notranslate"><span class="pre">outputs</span></code> <code class="docutils literal notranslate"><span class="pre">lock</span> <span class="pre">*</span></code></p></td>
 <td><p>Deploy platform using provisioners</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">service</span></code> †</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">status</span></code> <code class="docutils literal notranslate"><span class="pre">deploy</span></code> <code class="docutils literal notranslate"><span class="pre">destroy</span></code></p></td>
+<td><p>Deploy and manage individual services</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">manifest</span></code> †</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">show</span></code> <code class="docutils literal notranslate"><span class="pre">export</span></code></p></td>
+<td><p>Query and export deployment manifests</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mcp</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">serve</span></code></p></td>
+<td><p>Model Context Protocol server for AI integration</p></td>
+</tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">values</span></code> †</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">get</span></code></p></td>
-<td><p>Inspect resolved deployment values</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list</span></code> <code class="docutils literal notranslate"><span class="pre">get</span></code> <code class="docutils literal notranslate"><span class="pre">set</span></code> <code class="docutils literal notranslate"><span class="pre">resolve</span></code></p></td>
+<td><p>Inspect and manage resolved deployment values</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vars</span></code> †</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">set</span></code> <code class="docutils literal notranslate"><span class="pre">unset</span></code> <code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
@@ -4652,6 +4933,7 @@ strata<span class="w"> </span>build<span class="w"> </span>run<span class="w"> <
 </pre></div>
 </div>
 <p>Builds into a temp directory, diffs against existing artifacts, then runs <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">init</span> <span class="pre">→</span> <span class="pre">validate</span> <span class="pre">→</span> <span class="pre">plan</span></code> per stage. Nothing is written to the real build path.</p>
+<p>Also shows a <strong>value status table</strong> derived from YAML alone (no store access required) — useful for verifying that all required values have a source before deploying.</p>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
@@ -4664,6 +4946,28 @@ strata<span class="w"> </span>build<span class="w"> </span>run<span class="w"> <
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--artifacts-only</span></code></p></td>
 <td><p>Skip terraform plan — show artifact diff only</p></td>
+</tr>
+</tbody>
+</table>
+<p>Value status column values:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Status</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ok</span></code></p></td>
+<td><p>Built-in store (<code class="docutils literal notranslate"><span class="pre">constant</span></code>, <code class="docutils literal notranslate"><span class="pre">environment</span></code>, <code class="docutils literal notranslate"><span class="pre">github</span></code>) — always available</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">seeded</span></code></p></td>
+<td><p>Integration-backed with <code class="docutils literal notranslate"><span class="pre">default:</span></code> — seeded on first run</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">generated</span></code></p></td>
+<td><p>Secret with <code class="docutils literal notranslate"><span class="pre">generate:</span></code> spec — auto-generated on first run</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">required</span></code></p></td>
+<td><p>Integration-backed with no <code class="docutils literal notranslate"><span class="pre">default:</span></code> or <code class="docutils literal notranslate"><span class="pre">generate:</span></code> — must exist in store</p></td>
 </tr>
 </tbody>
 </table>
@@ -5548,6 +5852,13 @@ my########
 </tr>
 </tbody>
 </table>
+<p>After resolving values, the command prints a summary of any values that were seeded or generated for the first time:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>  ✓  Resolved 3 variable(s), 2 secret(s), 1 feature(s).
+  ↳  Seeded on first run: LOG_LEVEL=info, DARK_MODE=false
+  ↳  Generated on first run: DB_PASSWORD
+</pre></div>
+</div>
+<p>These lines only appear when values were actually seeded or auto-generated (i.e., on the first deploy against a new store). Subsequent runs are silent.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml
 strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>--stage<span class="w"> </span>production<span class="w"> </span>--dry-run
 strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>--force
@@ -6311,9 +6622,318 @@ strata<span class="w"> </span>audit<span class="w"> </span><span class="nb">expo
 </section>
 </section>
 <hr class="docutils" />
-<section id="values">
-<h2><code class="docutils literal notranslate"><span class="pre">values</span></code><a class="headerlink" href="#values" title="Link to this heading"></a></h2>
+<section id="service">
+<h2><code class="docutils literal notranslate"><span class="pre">service</span></code><a class="headerlink" href="#service" title="Link to this heading"></a></h2>
+<p>Deploy and manage individual services (namespaces or modules). Useful for selective deployments, health checks, and targeted updates to specific services without deploying the entire deployment.</p>
+<section id="service-list">
+<h3><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">list</span></code><a class="headerlink" href="#service-list" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">service</span> <span class="nb">list</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>List all services declared in a deployment definition. Shows namespace and module names.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-f</span> <span class="pre">FILE</span></code></p></td>
+<td><p>✅ Required. Path to the deployment YAML file</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>service<span class="w"> </span>list<span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml
+strata<span class="w"> </span>service<span class="w"> </span>list<span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>--output<span class="w"> </span>json
+</pre></div>
+</div>
+<p><strong>JSON output keys:</strong> <code class="docutils literal notranslate"><span class="pre">deployment</span></code>, <code class="docutils literal notranslate"><span class="pre">services[]</span></code> (each with <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">type</span></code> — namespace or module, <code class="docutils literal notranslate"><span class="pre">provisioner</span></code>, <code class="docutils literal notranslate"><span class="pre">configured_replicas</span></code>).</p>
+</section>
+<section id="service-status">
+<h3><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">status</span></code><a class="headerlink" href="#service-status" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">service</span> <span class="n">status</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="n">NAME</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Show runtime status of a specific service by name (live query against the provisioner backend).</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-f</span> <span class="pre">FILE</span></code></p></td>
+<td><p>✅ Required. Path to the deployment YAML file</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NAME</span></code></p></td>
+<td><p>✅ Required. Service name as shown in <code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">list</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>service<span class="w"> </span>status<span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>core-services
+strata<span class="w"> </span>service<span class="w"> </span>status<span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>my-namespace<span class="w"> </span>--output<span class="w"> </span>json
+</pre></div>
+</div>
+<p><strong>JSON output keys:</strong> <code class="docutils literal notranslate"><span class="pre">service</span></code>, <code class="docutils literal notranslate"><span class="pre">type</span></code>, <code class="docutils literal notranslate"><span class="pre">status</span></code>, <code class="docutils literal notranslate"><span class="pre">replicas_ready</span></code>, <code class="docutils literal notranslate"><span class="pre">replicas_total</span></code>, <code class="docutils literal notranslate"><span class="pre">events[]</span></code>, <code class="docutils literal notranslate"><span class="pre">resources[]</span></code>.</p>
+</section>
+<section id="service-deploy">
+<h3><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">deploy</span></code><a class="headerlink" href="#service-deploy" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">service</span> <span class="n">deploy</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="n">NAME</span> <span class="p">[</span><span class="o">--</span><span class="n">force</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">dry</span><span class="o">-</span><span class="n">run</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Deploy or update a single service by name. Runs the provisioner only for that service’s stages.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-f</span> <span class="pre">FILE</span></code></p></td>
+<td><p>✅ Required. Path to the deployment YAML file</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NAME</span></code></p></td>
+<td><p>✅ Required. Service name to deploy</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--force</span></code></p></td>
+<td><p>Continue even if health check fails</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></p></td>
+<td><p>Validate and plan only — no provisioners run</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>service<span class="w"> </span>deploy<span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>core-services
+strata<span class="w"> </span>service<span class="w"> </span>deploy<span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>my-namespace<span class="w"> </span>--dry-run
+strata<span class="w"> </span>service<span class="w"> </span>deploy<span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>my-namespace<span class="w"> </span>--force<span class="w"> </span>--output<span class="w"> </span>json
+</pre></div>
+</div>
+<p><strong>Exit codes:</strong> <code class="docutils literal notranslate"><span class="pre">0</span></code> success · <code class="docutils literal notranslate"><span class="pre">1</span></code> execution error · <code class="docutils literal notranslate"><span class="pre">3</span></code> service not found or health check failed (without <code class="docutils literal notranslate"><span class="pre">--force</span></code>).</p>
+</section>
+<section id="service-destroy">
+<h3><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">destroy</span></code><a class="headerlink" href="#service-destroy" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">service</span> <span class="n">destroy</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="n">NAME</span> <span class="p">[</span><span class="o">--</span><span class="n">force</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Tear down a single service by name. Runs destroy provisioners for that service only.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">-f</span> <span class="pre">FILE</span></code></p></td>
+<td><p>✅ Required. Path to the deployment file</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NAME</span></code></p></td>
+<td><p>✅ Required. Service name to destroy</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--force</span></code></p></td>
+<td><p>Required. Non-interactive destroy.</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>service<span class="w"> </span>destroy<span class="w"> </span>-f<span class="w"> </span>xyz-deploy-prd.yaml<span class="w"> </span>core-services<span class="w"> </span>--force
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="manifest">
+<h2><code class="docutils literal notranslate"><span class="pre">manifest</span></code><a class="headerlink" href="#manifest" title="Link to this heading"></a></h2>
+<p>Query and export deployment manifests. Build and deploy manifests are first-class records captured at artifact generation and deployment execution time. They contain configuration snapshots, SBOM data, policy results, and deployment outcomes.</p>
+<section id="manifest-list">
+<h3><code class="docutils literal notranslate"><span class="pre">manifest</span> <span class="pre">list</span></code><a class="headerlink" href="#manifest-list" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">manifest</span> <span class="nb">list</span> <span class="p">[</span><span class="o">--</span><span class="n">deployment</span> <span class="n">NAME</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">last</span> <span class="n">N</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">work</span><span class="o">-</span><span class="n">path</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>List all deployment manifests in the workspace. Manifests are stored in <code class="docutils literal notranslate"><span class="pre">.strata/build/{deployment_name}/manifest.json</span></code> (build manifests) and <code class="docutils literal notranslate"><span class="pre">.strata/deploy/{deployment_name}_{timestamp}.json</span></code> (deploy manifests).</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--deployment</span> <span class="pre">NAME</span></code></p></td>
+<td><p>Filter by deployment name (optional)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--last</span> <span class="pre">N</span></code></p></td>
+<td><p>Show only the last N manifests (default: all)</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>manifest<span class="w"> </span>list
+strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--deployment<span class="w"> </span>xyz-deploy-prd
+strata<span class="w"> </span>manifest<span class="w"> </span>list<span class="w"> </span>--last<span class="w"> </span><span class="m">20</span><span class="w"> </span>--output<span class="w"> </span>json
+</pre></div>
+</div>
+<p><strong>JSON output keys:</strong> <code class="docutils literal notranslate"><span class="pre">manifests[]</span></code> — each with <code class="docutils literal notranslate"><span class="pre">path</span></code>, <code class="docutils literal notranslate"><span class="pre">deployment</span></code>, <code class="docutils literal notranslate"><span class="pre">action</span></code>, <code class="docutils literal notranslate"><span class="pre">status</span></code>, <code class="docutils literal notranslate"><span class="pre">started_at</span></code>, <code class="docutils literal notranslate"><span class="pre">deployed_by</span></code>.</p>
+</section>
+<section id="manifest-show">
+<h3><code class="docutils literal notranslate"><span class="pre">manifest</span> <span class="pre">show</span></code><a class="headerlink" href="#manifest-show" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">manifest</span> <span class="n">show</span> <span class="p">[</span><span class="o">--</span><span class="n">deployment</span> <span class="n">NAME</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">last</span> <span class="mi">1</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Display the full content of a deployment manifest (build or deploy). By default shows the most recent manifest; use <code class="docutils literal notranslate"><span class="pre">--deployment</span></code> and <code class="docutils literal notranslate"><span class="pre">--last</span></code> to select a specific one.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--deployment</span> <span class="pre">NAME</span></code></p></td>
+<td><p>Show manifest for this deployment (required)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--last</span> <span class="pre">N</span></code></p></td>
+<td><p>Show the Nth most recent manifest (default: <code class="docutils literal notranslate"><span class="pre">1</span></code>)</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>--deployment<span class="w"> </span>xyz-deploy-prd
+strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>--deployment<span class="w"> </span>xyz-deploy-prd<span class="w"> </span>--last<span class="w"> </span><span class="m">5</span>
+strata<span class="w"> </span>manifest<span class="w"> </span>show<span class="w"> </span>--deployment<span class="w"> </span>xyz-deploy-prd<span class="w"> </span>--output<span class="w"> </span>json
+</pre></div>
+</div>
+<p><strong>Displayed fields:</strong> <code class="docutils literal notranslate"><span class="pre">kind</span></code>, <code class="docutils literal notranslate"><span class="pre">apiVersion</span></code>, <code class="docutils literal notranslate"><span class="pre">meta</span></code> (name, timestamp), <code class="docutils literal notranslate"><span class="pre">spec</span></code> (deployment name, action, status, configuration snapshot, SBOM, policy results, stages, commit hash).</p>
+</section>
+<section id="manifest-export">
+<h3><code class="docutils literal notranslate"><span class="pre">manifest</span> <span class="pre">export</span></code><a class="headerlink" href="#manifest-export" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">manifest</span> <span class="n">export</span> <span class="p">[</span><span class="o">--</span><span class="n">deployment</span> <span class="n">NAME</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">last</span> <span class="n">N</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="nb">format</span> <span class="n">json</span><span class="o">|</span><span class="n">csv</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">out</span> <span class="n">PATH</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Export manifests to a file for compliance, audit, or external tooling. Supports JSON and CSV formats.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--deployment</span> <span class="pre">NAME</span></code></p></td>
+<td><p>Export manifests for this deployment (required)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--last</span> <span class="pre">N</span></code></p></td>
+<td><p>Export only the last N manifests</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--format</span></code></p></td>
+<td><p>Output format: <code class="docutils literal notranslate"><span class="pre">json</span></code> (default) or <code class="docutils literal notranslate"><span class="pre">csv</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--out</span> <span class="pre">PATH</span></code></p></td>
+<td><p>Write to this file (default: stdout)</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>manifest<span class="w"> </span><span class="nb">export</span><span class="w"> </span>--deployment<span class="w"> </span>xyz-deploy-prd
+strata<span class="w"> </span>manifest<span class="w"> </span><span class="nb">export</span><span class="w"> </span>--deployment<span class="w"> </span>xyz-deploy-prd<span class="w"> </span>--last<span class="w"> </span><span class="m">30</span><span class="w"> </span>--format<span class="w"> </span>csv<span class="w"> </span>--out<span class="w"> </span>manifests.csv
+strata<span class="w"> </span>manifest<span class="w"> </span><span class="nb">export</span><span class="w"> </span>--deployment<span class="w"> </span>xyz-deploy-prd<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>--out<span class="w"> </span>manifests.json
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="mcp">
+<h2><code class="docutils literal notranslate"><span class="pre">mcp</span></code><a class="headerlink" href="#mcp" title="Link to this heading"></a></h2>
+<p>Model Context Protocol server for AI agent integration. Start an MCP server that exposes strata workspace operations as tools, allowing AI assistants (Claude, GitHub Copilot, custom agents) to validate, plan, and query infrastructure without parsing CLI output.</p>
+<section id="mcp-serve">
+<h3><code class="docutils literal notranslate"><span class="pre">mcp</span> <span class="pre">serve</span></code><a class="headerlink" href="#mcp-serve" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">mcp</span> <span class="n">serve</span> <span class="p">[</span><span class="o">--</span><span class="n">transport</span> <span class="n">stdio</span><span class="o">|</span><span class="n">sse</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Start the strata MCP server. The server exposes the following tools to connected AI clients:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Action</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">validate_file</span></code></p></td>
+<td><p>Validate a single YAML file</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">validate_glob</span></code></p></td>
+<td><p>Validate files matching a glob pattern</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">build_plan</span></code></p></td>
+<td><p>Preview a build (platform, Terraform, SBOM)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">deploy_plan</span></code></p></td>
+<td><p>Preview a deploy (what would run, stages, changes)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">deploy_status</span></code></p></td>
+<td><p>Query live infrastructure state and drift</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">audit_query</span></code></p></td>
+<td><p>Query deployment history and audit logs</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scaffold_file</span></code></p></td>
+<td><p>Generate a new YAML file from a template</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">resolve_values</span></code></p></td>
+<td><p>Resolve variables, secrets, features for a deploy</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">policy_check</span></code></p></td>
+<td><p>Evaluate deployment policies</p></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--transport</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stdio</span></code> | <code class="docutils literal notranslate"><span class="pre">sse</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stdio</span></code></p></td>
+<td><p>Transport protocol. Use <code class="docutils literal notranslate"><span class="pre">stdio</span></code> for VS Code; <code class="docutils literal notranslate"><span class="pre">sse</span></code> for web clients.</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Setup (VS Code):</strong></p>
+<p>Add to <code class="docutils literal notranslate"><span class="pre">.vscode/settings.json</span></code> or user settings:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;mcp-servers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;strata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;strata&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;mcp&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;serve&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--transport&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;stdio&quot;</span><span class="p">],</span>
+<span class="w">      </span><span class="nt">&quot;cwd&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;${workspaceFolder}&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Then restart VS Code and Copilot Chat will gain access to strata workspace operations.</p>
+<p><strong>Setup (Claude Desktop):</strong></p>
+<p>Add to <code class="docutils literal notranslate"><span class="pre">~/.config/claude/claude.json</span></code> (macOS) or <code class="docutils literal notranslate"><span class="pre">%APPDATA%\Claude\claude.json</span></code> (Windows):</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;mcpServers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;strata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uv&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;run&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;strata&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;mcp&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;serve&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--transport&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;stdio&quot;</span><span class="p">],</span>
+<span class="w">      </span><span class="nt">&quot;cwd&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/path/to/workspace&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Restart Claude Desktop and the server will be available.</p>
+<p><strong>Requires the optional mcp dependency:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>xyz-strata<span class="o">[</span>mcp<span class="o">]</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>mcp<span class="w"> </span>serve
+strata<span class="w"> </span>mcp<span class="w"> </span>serve<span class="w"> </span>--transport<span class="w"> </span>sse
+</pre></div>
+</div>
+<hr class="docutils" />
 <p>Inspect resolved deployment values (variables, secrets, feature flags).</p>
+</section>
 <section id="values-list">
 <h3><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">list</span></code><a class="headerlink" href="#values-list" title="Link to this heading"></a></h3>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">values</span> <span class="nb">list</span> <span class="o">-</span><span class="n">f</span> <span class="n">FILE</span> <span class="p">[</span><span class="o">--</span><span class="n">stage</span> <span class="n">NAME</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="nb">type</span> <span class="n">TYPE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">show</span><span class="o">-</span><span class="n">store</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">unresolved</span><span class="p">]</span> <span class="p">[</span><span class="n">standard</span> <span class="n">options</span><span class="p">]</span>

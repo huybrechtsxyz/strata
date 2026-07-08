@@ -121,10 +121,7 @@ These can be slower because they involve file I/O and profile state.
 
 Only **strata YAML documents** are validated. The extension identifies them by checking for `apiVersion: strata.*` in the first 20 lines.
 
-**Valid strata prefixes:**
-
-- `strata.omp.com/v1`
-- `strata.huybrechts.xyz/v1`
+**Valid strata prefixe:** `strata.huybrechts.xyz/v1`
 
 If a YAML file doesn't have one of these prefixes, it's not validated by strata (though the YAML extension may still check it).
 

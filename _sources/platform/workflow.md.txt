@@ -441,6 +441,14 @@ Sample output:
 ```
 📋  Build Plan — xyz-deploy-prd
   ────────────────────────────────────────────────────────────
+  Values:
+  ────────────────────────────────────────────────────────────
+  variable  WORKSPACE        constant         ok
+  variable  LOG_LEVEL        azure-appconfig  seeded       default: info
+  secret    DB_PASSWORD      azure-keyvault   generated    password/32
+  secret    API_KEY          vault            required
+  feature   DARK_MODE        flagsmith        seeded       default: false
+
   Artifact changes:
   ────────────────────────────────────────────────────────────
   ~  terraform/xyz-dc-eu-fr.tfvars.json    3 line(s) changed

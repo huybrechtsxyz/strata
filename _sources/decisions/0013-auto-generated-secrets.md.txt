@@ -1,6 +1,6 @@
 # Auto-generated store values (secrets, variables, features)
 
-- Status: accepted
+- Status: implemented
 - Date: 2025-06-23
 
 ## Context and Problem Statement
@@ -258,24 +258,42 @@ Rotation applies to secrets only — variables and feature flags don't have a ro
 
 ### Approach: Age-Based Advisory + Opt-In Regeneration
 
-Rotation has two levels, both opt-in via the `generate` spec:
+Rotation has two levels, both opt-in via a `rotate:` field on `SecretStoreModel`.
+`rotate:` is a **sibling of `generate:`**, not nested inside it. This separates the
+creation concern (`generate:`) from the lifecycle concern (`rotate:`) and allows
+advisory rotation on manually-placed secrets (see Design Issue #11).
 
 ```yaml
 secrets:
+  # Auto-generated secret with automatic rotation
   - key: DB_PASSWORD
     store: azure-keyvault
     value: myapp-db-password
     generate:
       type: password
       length: 32
-      rotate:
-        max_age: 90d                    # warn/rotate after 90 days
-        policy: warn                    # warn | rotate
+    rotate:
+      max_age: 90                     # days (integer, not a duration string)
+      policy: warn                    # warn | rotate
+
+  # Manually-placed secret with advisory rotation only
+  - key: VENDOR_API_KEY
+    store: azure-keyvault
+    value: myapp-vendor-api-key
+    # no generate: — strata cannot regenerate this
+    rotate:
+      max_age: 180
+      policy: warn                    # warn only; policy: rotate is invalid without generate:
 ```
 
-**`policy: warn`** (default, safe) — during `strata build run`, if the secret's age exceeds `max_age`, emit a warning:
+**Validation rules:**
+- `rotate.policy: rotate` requires `generate:` to be present — Pydantic `model_validator` raises a validation error if `generate:` is absent.
+- `rotate.policy: warn` is valid with or without `generate:`.
+- `rotate:` is rejected on `constant`/`environment`/`github` stores (same rule as `generate:`).
+
+**`policy: warn`** (default, safe) — during `strata deploy run`, if the secret's age exceeds `max_age`, emit a warning:
 ```
-⚠ Secret 'myapp-db-password' is 112 days old (max_age: 90d). Consider rotating.
+⚠ Secret 'myapp-db-password' is 112 days old (max_age: 90 days). Consider rotating.
 ```
 No action taken. The operator decides when to rotate.
 
@@ -290,16 +308,29 @@ No action taken. The operator decides when to rotate.
 Strata does NOT maintain its own state for secret age. It relies entirely on the store:
 
 - **If the store exposes creation/modification dates or expiry** (Azure Key Vault: `created`, `updated`, `expires_on`; HashiCorp Vault: `metadata.created_time`; Bitwarden: `revisionDate`) → rotation is supported for that store.
-- **If the store does NOT expose timestamps** → rotation is not available. Strata skips the age check silently. No fallback, no strata-side metadata files, no tags.
+- **If the store does NOT expose timestamps** → rotation is not available. Strata emits a `WARNING` log the first time a rotation check is skipped for a given key (not on every build — deduplicated per key per session). The operator is never silently unaware that their `rotate:` spec is a no-op.
+
+```
+⚠ Secret 'myapp-vendor-api-key': store 'bitwarden' does not expose creation
+  timestamps — rotation age check skipped. Manage this secret's rotation manually.
+```
 
 This keeps the design simple: rotation support is a capability of the store integration, not a strata concern. The integration interface exposes:
 
 ```python
+@dataclass
+class SecretMetadata:
+    created: Optional[datetime] = None
+    updated: Optional[datetime] = None
+    expires_on: Optional[datetime] = None
+
 def get_secret_metadata(self, key: str) -> Optional[SecretMetadata]:
     """Return creation/update/expiry info, or None if the store doesn't support it."""
 ```
 
-If the integration returns `None`, the `rotate` spec is a no-op (with a one-time INFO log: "Rotation not supported by store '{store}' — skipping age check for '{key}'").
+Age is computed as `now() - (metadata.updated or metadata.created)`. Using `SecretMetadata` rather than a bare `timedelta` lets `strata deploy run` surface richer detail (e.g. exact last-updated date) without a second round-trip to the store.
+
+If the integration returns `None`, the `rotate` spec emits the warning above and is otherwise a no-op.
 
 ### Interaction with Overwrite Protection
 
@@ -307,7 +338,8 @@ Rotation is the **only** scenario where strata overwrites an existing value. Thi
 
 - Only triggered when `rotate.policy` is `rotate` AND age exceeds `max_age`.
 - Always emits an audit entry with `action=secret_rotated` (distinct from `secret_generated`).
-- `strata build plan` reports `[will rotate — N days old, max_age: Md]` without performing the rotation.
+- `strata deploy run` checks age from the store and reports the warning or performs rotation.
+- `strata build plan` is **store-free** — it cannot check actual age. It reports `[rotation configured: Nd / warn]` or `[rotation configured: Nd / rotate]` from YAML only, with no age annotation (see Design Issue #13).
 - If `rotate.policy` is `warn` or absent, overwrite protection remains absolute.
 
 ### Deployment Coordination
@@ -364,13 +396,16 @@ Rotation generates a new secret, but consumers of that secret (databases, APIs, 
 
 ### Phase 3 Implementation Steps
 
-1. Add `SecretRotateSpec` model (`max_age`, `policy`) to `store_models.py`.
-2. Add optional `rotate: SecretRotateSpec` field to `SecretGenerateSpec`.
-3. Add `get_secret_age(key)` to `ISecretStore` protocol (optional, returns `None` if unsupported).
-4. Implement age detection in Key Vault and Vault integrations (store-native metadata).
-5. Add `strata-generated-at` tag writing to `set_secret()` for stores that support tags.
-6. Extend `ValueController._resolve_secret()`: after step 2 (found), check rotate policy + age → warn or rotate.
-7. Tests for age detection, warn-only, auto-rotate, and audit log emission.
+1. Add `SecretMetadata` dataclass (`created`, `updated`, `expires_on`) to `src/strata/utils/secret_metadata.py`.
+2. Add `SecretRotateSpec` model (`max_age: int` (days), `policy: Literal["warn", "rotate"]`) to `store_models.py`.
+3. Add optional `rotate: SecretRotateSpec` field to **`SecretStoreModel`** (sibling of `generate:`, NOT inside `SecretGenerateSpec`).
+4. Add `model_validator(mode="after")` on `SecretStoreModel`: if `rotate.policy == "rotate"` and `generate` is `None` → validation error.
+5. Add `get_secret_metadata(key: str) → Optional[SecretMetadata]` to `ISecretStore` protocol (optional capability — integrations that don't support it return `None`).
+6. Implement `get_secret_metadata()` in Key Vault (reads `properties.created_on`, `properties.updated_on`, `properties.expires_on`) and HashiCorp Vault (reads `metadata.created_time`).
+7. Extend `ValueController._resolve_secret()`: after a successful read (value found), if `item.rotate` is set → call `integration.get_secret_metadata()` → compute age → check vs `max_age` → warn or rotate.
+8. Add `update_secret(key, value)` to `ISecretStore` protocol and implement in Key Vault and Vault integrations (explicit overwrite — distinct from `set_secret()`).
+9. Add `strata secret rotate` command (new CLI group `secret`; subcommand `rotate --key K --deployment FILE [--force]`): loads deployment → environment → finds secret by key → requires `generate:` or errors → generates new value → calls `update_secret()` → audit log. `--force` skips the age check and always rotates.
+10. Tests for: model validation (policy:rotate without generate: → error), age detection, warn-only path, auto-rotate path, update_secret called not set_secret, audit log emission, rotate command happy path and error paths.
 
 ## Open Questions & Design Issues
 
@@ -482,6 +517,54 @@ Similarly for variables/features: the `default` in YAML changed, but the store s
 - **Secrets:** `deploy plan` warns: *"Secret 'X' exists in store — generate spec will not be applied. Delete the secret and re-run to regenerate with the new spec."*
 - **Variables/features:** `deploy plan` warns when the YAML `default` differs from the store value: *"Variable 'X' in store is '{stored}', YAML default is '{declared}' — store value takes precedence."*
 - Strata doesn't track what spec produced the current value — only the store holds the value, not the generation parameters. The warning is informational; overwrite protection remains absolute.
+
+### 11. `rotate:` field placement — sibling of `generate:`, not nested inside it
+
+The original Phase 3 design sketch placed `rotate:` inside `SecretGenerateSpec`:
+```yaml
+generate:
+  type: password
+  length: 32
+  rotate:           # ← original design
+    max_age: 90d
+    policy: warn
+```
+
+**Problem A:** This makes advisory rotation (`policy: warn`) impossible for manually-placed secrets that have no `generate:` spec. An operator wanting strata to warn them when a vendor API key is 180 days old has no way to express this.
+
+**Problem B:** `generate:` describes *how to create* a secret. `rotate:` describes *when to replace* it. These are separate concerns with different lifecycles — coupling them in the model conflates creation spec with lifecycle policy.
+
+**Decision:** Move `rotate: Optional[SecretRotateSpec]` to be a field on `SecretStoreModel` (sibling of `generate:`). Enforce at the model level: `policy: rotate` requires `generate:` to be present (model validator); `policy: warn` is valid with or without `generate:`. See the updated YAML example above.
+
+### 12. `max_age` type — int (days), not a duration string
+
+The original design used `max_age: 90d` (a duration string like `"90d"`).
+
+**Problem:** Pydantic has no built-in duration string parser. A custom validator is needed to parse `"90d"`, `"30d"`, `"1y"`, etc. This adds complexity and potential edge cases (months? years? weeks?).
+
+**Decision:** `max_age: int` representing days. Simple, unambiguous, no custom validator required. The CLI and plan display can render it as `"90 days"`. Value must be >= 1.
+
+### 13. `strata build plan` cannot show rotation-overdue status
+
+The acceptance criterion in v1-todo.md states: *"`strata build plan` shows `[rotation overdue]` annotation when `max_age` exceeded."*
+
+**Problem:** `strata build plan` is explicitly store-free (Design Issue #3, resolved). It never contacts the store. Age information requires reading store-native metadata at runtime — which is a network operation.
+
+**Decision:** `strata build plan` shows rotation *configuration* from YAML only:
+- Secret with `rotate:` → `[rotation: Nd / warn]` or `[rotation: Nd / rotate]`
+- No age annotation — the plan phase does not know how old the secret is
+
+Actual age checking and the `[rotation overdue]` annotation happen only in `strata deploy run` (which already has store connectivity for value resolution). The v1-todo.md acceptance criterion must be updated to reflect this.
+
+### 14. `strata secret rotate` command — scope for manually-placed secrets
+
+The `strata secret rotate --key K --deployment F` command needs to handle two cases:
+
+1. **Secret has `generate:` spec** → generate new value using current YAML spec → `update_secret()` → audit log. `--force` bypasses the `max_age` check and always rotates.
+
+2. **Secret has no `generate:` spec** (manually placed) → strata cannot auto-generate a replacement → command exits with an error: *"Secret 'K' has no `generate:` spec — strata cannot regenerate it. Update the secret manually in your store."*
+
+**Decision:** `strata secret rotate` is only for strata-managed (generated) secrets. Manually-placed secrets are the operator's responsibility. The command fails explicitly rather than silently doing nothing.
 
 ---
 
@@ -1279,3 +1362,657 @@ Complete matrix of what each integration needs to implement across all phases:
 | `tests/strata/models/test_store_models.py`              | 1+2   | Model validation tests                                    |
 | `tests/strata/controllers/test_value_controller.py`     | 1+2   | Seed-on-missing flow tests                                |
 | `tests/strata/integrations/test_*`                      | 1+2+3 | Per-integration `set_*` tests                             |
+
+---
+
+## Post-v1.0 Gaps & Future Work
+
+This section documents features designed but not implemented in v1.0, explicitly scoped for future releases.
+
+### Gap 1: Build Plan Seed Status Display
+
+**Status:** ✅ DONE
+
+`strata build plan` now shows a **Values** table derived from YAML alone (no store access) with a `status` column: `ok` (built-in store), `seeded` (has `default:`), `generated` (has `generate:` spec), `required` (integration-backed, no default/generate).
+
+`strata deploy run` shows `↳ Seeded on first run: KEY=value` and `↳ Generated on first run: KEY` lines after value resolution, sourced from `ResolvedValues.*_notes`.
+
+**Modified files:** `src/strata/commands/builders/plan_build_command.py`, `src/strata/commands/deploy/run_deploy_command.py`
+
+**Tests:** `TestPlanBuildValueStatus` (13 tests) in `tests/strata/commands/test_commands_build.py`; `TestDeployRunSeedNotes` (5 tests) in `tests/strata/commands/test_commands_deploy.py`.
+
+---
+
+### Gap 2: Missing Integration Implementations
+
+**Status:** ✅ DONE (all 7 integrations implemented)
+
+All Phase 1+2 `set_*` methods are now implemented across every integration:
+
+- ✅ Azure Key Vault (`set_secret()`)
+- ✅ Azure App Config (`set_variable()`, `set_feature()`)
+- ✅ Bitwarden (`set_secret()`)
+- ✅ Infisical (`set_secret()`, `set_variable()`)
+- ✅ etcd (`set_variable()`)
+- ✅ HashiCorp Vault (`set_variable()`, `set_feature()` via KV prefix)
+- ✅ HashiCorp Consul (`set_variable()`, `set_feature()` via KV prefix)
+- ✅ Flagsmith (`set_variable()` via identity traits API, `set_feature()` via flag toggle)
+
+All implementations use create-if-not-exists semantics and write structured audit log entries on successful writes.
+
+---
+
+### Gap 3: Secret Rotation (Phase 3)
+
+**Status:** ❌ NOT STARTED (design complete, code not implemented)
+
+The design sketch for rotation (age-based advisory + opt-in regeneration) is documented in this ADR under "Secret Rotation (Phase 3 — Design Sketch)".
+
+**What's missing — the entire Phase 3 implementation:**
+1. `SecretRotateSpec` model (`max_age`, `policy` enum) — designed, not coded
+2. `get_secret_metadata()` protocol method — designed, not coded
+3. `update_secret()` method (distinct from `set_secret()` to preserve overwrite protection) — designed, not coded
+4. Age-check logic in `_resolve_secret()` (warn vs. rotate policy) — designed, not coded
+5. Affected module detection and reporting — designed, not coded
+6. Integration implementations for metadata fetching (Azure Key Vault, Vault, Bitwarden, Infisical) — designed, not coded
+7. Integration implementations for `update_secret()` (replacement writes) — designed, not coded
+8. Comprehensive test suite for rotation scenarios — designed, not coded
+9. `strata build plan` reporting of rotation intent (age warnings) — designed, not coded
+10. `strata deploy plan` reporting of affected modules — designed, not coded
+
+**Impact:** High for long-lived deployments with security rotation policies. Low for initial deployments.
+
+Rotation is **opt-in via `generate.rotate` spec** — if not present, Phase 1 behavior (seed-once, never touch again) is standard. Phase 3 is additive; v1 deployments are not affected by its absence.
+
+**Post-v1 action:**
+```
+Epic: "Secret Rotation — Age-based advisory and automatic rotation"
+Phase 3a: Core infrastructure (models, metadata protocol, update methods)
+  - Define SecretRotateSpec + enums
+  - Add get_secret_metadata() + SecretMetadata dataclass
+  - Add update_secret() to store integration base
+  - Test model validation, protocol stubs
+  - Estimated effort: 6-8 hours
+
+Phase 3b: Integration implementations
+  - Azure Key Vault: metadata fetch + update
+  - HashiCorp Vault: metadata fetch + update
+  - Bitwarden: metadata fetch + update
+  - Infisical: metadata fetch + update
+  - Estimated effort: 12-16 hours
+
+Phase 3c: Controller logic + reporting
+  - Age check in _resolve_secret()
+  - Warn vs. rotate logic
+  - Affected module detection
+  - Audit logging for rotations
+  - Estimated effort: 8-10 hours
+
+Phase 3d: Plan and test coverage
+  - build plan rotation intent reporting
+  - deploy plan affected modules display
+  - Comprehensive test suite (age detection, warn, auto-rotate)
+  - Estimated effort: 10-12 hours
+
+Total estimated effort for Phase 3: 36-46 hours
+```
+
+---
+
+### Gap 4: `SecretRotateSpec` — `rotate:` placement and model validator (Issue #11)
+
+**Status:** ❌ NOT STARTED (design decision made, implementation pending)
+
+The original design nested `rotate:` inside `SecretGenerateSpec`. This was rejected because it makes advisory rotation impossible for manually-placed secrets that have no `generate:` spec.
+
+**Decision:** `rotate: Optional[SecretRotateSpec]` is a field on `SecretStoreModel` — sibling of `generate:`, not nested inside it. A model validator on `SecretStoreModel` enforces: `policy: rotate` requires `generate:` to be present; `policy: warn` is valid with or without `generate:`.
+
+**Implementation required:**
+- Move `rotate` field from `SecretGenerateSpec` to `SecretStoreModel`
+- Add `model_validator(mode="after")` on `SecretStoreModel` enforcing the `rotate+generate` constraint
+- Update YAML schema and any existing tests that reference the old nesting
+
+**Impact:** Any Phase 3 implementation must use the correct model shape — implementing with the old design would silently block advisory rotation on manually-placed secrets.
+
+**Estimated effort:** 2–3 hours (model + validator + tests)
+
+---
+
+### Gap 5: `max_age` type — `int` (days) in `SecretRotateSpec` (Issue #12)
+
+**Status:** ❌ NOT STARTED (design decision made, implementation pending)
+
+The original design used a duration string (`max_age: "90d"`). The decision is `max_age: int` representing days — no custom parser, no ambiguity.
+
+**Decision:** `max_age: int` (days, `>= 1`). The CLI and plan output render it as `"N days"`.
+
+**The code change is one line. The documentation is the real work:**
+- This ADR's YAML examples, the Phase 3 design sketch, and `SecretRotateSpec` model docs must all use `max_age: 90` (integer), never `max_age: "90d"` (string)
+- `docs/config/workspace.md` (or equivalent store model reference) must document `max_age` as an integer with units clearly stated as days
+- `strata schema get` output for the workspace kind must reflect `"type": "integer"` for `max_age`
+- All YAML examples in guides, decisions, and inline code comments must be consistent — a single stray `"90d"` example will confuse operators
+
+**Implementation required:**
+- `field_validator` on `max_age` ensuring `>= 1` (bundled with Gap 4 model work)
+- Audit every YAML example in this ADR and in `docs/` for the old string syntax and update to `int`
+- Update JSON schema output to reflect `"type": "integer", "minimum": 1, "description": "Maximum secret age in days"`
+
+**Estimated effort:** 1–2 hours (model: 15 min; documentation sweep: the rest)
+
+---
+
+### Gap 6: Rotation status — `strata secret status`, a dedicated read-only command (Issue #13)
+
+**Status:** ❌ NOT STARTED (design decision made, implementation pending)
+
+The v1-todo.md acceptance criterion stated "`strata build plan` shows `[rotation overdue]` annotation when `max_age` exceeded." This is impossible: `strata build plan` is explicitly store-free (Design Issue #3).
+
+The obvious fallback — `strata deploy plan --rotation` — also doesn't fit: the existing `deploy plan` command reads a saved Terraform `.tfplan` file offline and never contacts a store. Rotation age checking is a store read (calls `get_secret_metadata()`), which is a completely different operation.
+
+**Decision:** Add `strata secret status -f FILE` as a dedicated subcommand in the existing `secret` group. This completes the group's lifecycle story:
+
+```
+strata secret generate                       # generate a standalone value (no deployment file)
+strata secret status -f deploy.yaml          # check rotation status for all secrets (read-only)
+strata secret rotate -f deploy.yaml --key K  # rotate a specific key (write)
+```
+
+`strata secret plan` contacts the store, reads `get_secret_metadata()` for every secret that has a `rotate:` spec, and reports:
+
+```
+strata secret status -f deploy/deploy-prd.yaml
+
+Secret rotation status:
+  DB_PASSWORD     azure-keyvault   90 days / warn    age: 112 days  ⚠ overdue
+  SESSION_SECRET  azure-keyvault   90 days / rotate  age: 34 days   ok
+  VENDOR_API_KEY  azure-keyvault   180 days / warn   age: unknown   (store has no timestamp)
+  API_KEY         azure-keyvault   (no rotate spec)  —
+```
+
+Secrets with no `rotate:` spec are listed but show `—` in the rotation column. Operators can see what's tracked vs. what isn't. Exit code `0` = all ok or no rotation specs; exit code `3` = one or more secrets overdue (useful in CI).
+
+**`strata build plan` (Tier 1 — YAML only, no store):**
+Still shows rotation *config* from YAML in the values detail column: `[rotation: 90d / warn]`. No age. Purely declarative — unchanged from today.
+
+**`strata deploy run` (Tier 3 — in-band, CI/CD visible):**
+During value resolution, `deploy run` already has store connectivity and emits the seeded/generated notes inline. Rotation warnings follow the same pattern — they appear in the same output block, directly in CI/CD logs:
+
+```
+✓ Resolved 14 values (3 secrets, 8 variables, 3 features)
+  ↳ Generated on first run: DB_PASSWORD
+  ↳ Seeded on first run: LOG_LEVEL=info, MAX_REPLICAS=3
+  ↳ Rotation advisory: SESSION_SECRET is 112 days old (max: 90 days) — consider rotating
+  ↳ Rotated: ENCRYPTION_KEY (was 97 days old, policy: rotate)
+```
+
+- `policy: warn`, overdue → emit `↳ Rotation advisory: KEY is N days old (max: M days) — consider rotating`. Deploy continues normally.
+- `policy: rotate`, overdue → call `update_secret()`, emit `↳ Rotated: KEY (was N days old, policy: rotate)`. This is the only write path for automatic rotation.
+- Both are visible in stdout and structured audit log — no extra flags needed.
+
+**The key principle:** age checking = read-only store access = `strata secret status`, never gated behind a write/apply.
+
+**Implementation required:**
+- New `src/strata/commands/secret/status_secret_command.py` extending `BaseCommand`
+- Register as `@secret_group.command(name="status")` in `src/strata/commands/cli_secret.py`
+- Required options: `--deployment` / `-f`, `--work-path`, `--stage` (optional, limit to one stage's environment)
+- Logic: load deployment → resolve environment → for each secret with `rotate:` → call `get_secret_metadata()` → compute age → compare to `max_age` → build status table
+- Exit 3 if any secret is overdue (allows `strata secret status -f FILE || alert`)
+- `run_deploy_command.py`: after value resolution, collect rotation outcomes from `ResolvedValues` and emit `↳ Rotation advisory` / `↳ Rotated` lines (same block as seeded/generated notes)
+- `plan_build_command.py`: update `_build_value_status_rows()` to show `[rotation: Nd / policy]` in detail column from YAML (no store access)
+- Update v1-todo.md acceptance criterion for this item
+
+**Estimated effort:** 5–7 hours
+
+---
+
+### Gap 7: `strata secret rotate` command — add to existing `secret` group (Issue #14)
+
+**Status:** ❌ NOT STARTED (design decision made, implementation pending)
+
+**Command home:** The `secret` group already exists with `generate` and `mask` subcommands (`src/strata/commands/cli_secret.py`, `commands/secret/`). `rotate` is a natural peer alongside `status` (Gap 6) — no new group needed.
+
+```
+strata secret generate   ← already exists (standalone, no deployment file)
+strata secret mask       ← already exists (standalone)
+strata secret get        ← new (Gap 9): direct store read
+strata secret status     ← new (Gap 6): read-only rotation status check
+strata secret put        ← new (Gap 8): create / explicit seed
+strata secret rotate     ← new (Gap 7): update / cycle
+```
+
+**Two use cases for `strata secret rotate --key K --deployment F`:**
+
+1. **Secret has `generate:` spec** — strata can auto-generate a replacement:
+   - Generate new value using the current YAML spec
+   - Call `update_secret()` (not `set_secret()` — explicit overwrite, see Issue #7)
+   - Write audit log entry (`action=secret_rotated`, affected modules list)
+
+2. **No `generate:` spec** (manually placed) — strata cannot produce a replacement:
+   - Exit with explicit error: *"Secret 'K' has no `generate:` spec — strata cannot regenerate it. Update the secret manually in your store."*
+   - Clear failure, not a silent no-op
+
+**Relationship to Gap 6:**
+`strata secret rotate` is the **on-demand write** path. The full rotation surface is:
+- `strata build plan` → YAML config only (Tier 1, Gap 6)
+- `strata secret status -f FILE` → read-only age check, exit 3 if overdue (Tier 2, Gap 6)
+- `strata deploy run` → emits advisory/rotation notes inline in CI/CD output (Tier 3, Gap 6)
+- `strata secret rotate -f FILE --key K` → explicit on-demand rotation outside a build cycle (Gap 7)
+
+Typical workflow:
+```
+strata secret status -f deploy.yaml                                  # check ages (read-only)
+strata secret rotate --key DB_PASSWORD --deployment deploy.yaml      # act on it
+strata secret rotate --key DB_PASSWORD --deployment deploy.yaml --force  # ignore max_age, always rotate
+```
+
+**`--force`** bypasses the `max_age` guard entirely and always rotates, regardless of current age. Useful for emergency rotation or after a suspected compromise.
+
+**Implementation required:**
+- New `src/strata/commands/secret/rotate_secret_command.py` extending `BaseCommand`
+- Register as `@secret_group.command(name="rotate")` in `src/strata/commands/cli_secret.py`
+- Required options: `--key` (secret key name), `--deployment` / `-f` (deployment YAML path), `--work-path`, `--force`
+- Logic: load deployment → resolve environment → find `SecretStoreModel` by `key` → require `generate:` or fail → call `update_secret()` → audit log → report affected modules
+- Tests: rotate with spec, rotate without spec (expect exit 3), rotate with `--force` skips age check
+
+**Estimated effort:** 6–8 hours
+
+---
+
+### Gap 8: `strata secret put` command — explicit write / pre-seed
+
+**Status:** ❌ NOT STARTED (design decision made, implementation pending)
+
+The current `secret` group has no write path for manually-placed secrets and no way to explicitly pre-seed a generated secret before a `deploy run`. Today:
+
+- **Manually-placed secrets** (no `generate:` spec) must be written via the store UI — no `strata` CLI command exists for it.
+- **Generated secrets** are seeded automatically on first `deploy run` (seed-on-missing). An operator bootstrapping a new environment must trigger a full deploy; there is no way to pre-seed explicitly.
+- `strata secret rotate` does not cover either case — it requires the secret to already exist and only works for `generate:` secrets.
+
+**Decision:** Add `strata secret put -f FILE --key K` as a new subcommand in the existing `secret` group. This completes the CRUD story for the group:
+
+```
+strata secret generate   ← generate, no store (standalone)
+strata secret mask       ← standalone
+strata secret get        ← direct store read (Gap 9)
+strata secret status     ← rotation status (live store check) (Gap 6)
+strata secret put        ← create / explicit seed (Gap 8)
+strata secret rotate     ← update / cycle (Gap 7)
+```
+
+**Command interface:**
+
+```
+strata secret put -f FILE --key K --value VALUE    # write a literal value (manually-placed secrets)
+strata secret put -f FILE --key K --generate       # generate using spec + write (generated secrets)
+```
+
+- `--value` and `--generate` are mutually exclusive; exactly one is required.
+- `--generate` requires the secret to have a `generate:` spec in the YAML; fails explicitly otherwise.
+- If the secret **already exists** in the store: fail by default — `put` is a create/seed operation, not a rotation.
+- `--force` overrides the existence check and writes regardless (upsert). Useful for importing an externally generated value or overriding a generated secret with a known value.
+
+**Semantic separation from `secret rotate`:**
+
+| Command         | Semantic           | Requires existing?                    | Write path               |
+| --------------- | ------------------ | ------------------------------------- | ------------------------ |
+| `secret put`    | seed / bootstrap   | no (fails if exists unless `--force`) | any secret               |
+| `secret rotate` | cycle to new value | yes (fails if missing)                | `generate:` secrets only |
+
+The one overlap — `secret put --generate --force` on an existing secret — is functionally identical to `secret rotate --force`. This duplication is acceptable: `put` expresses bootstrap intent; `rotate` expresses maintenance/compliance intent. Operators pick whichever matches their mental model.
+
+**Implementation required:**
+- New `src/strata/commands/secret/put_secret_command.py` extending `BaseCommand`
+- Register as `@secret_group.command(name="put")` in `src/strata/commands/cli_secret.py`
+- Required options: `--key` (secret key name), `--deployment` / `-f` (deployment YAML path), `--value VALUE` or `--generate` (mutually exclusive, use Click's `cls=MutuallyExclusiveOption` or manual validation), `--work-path`, `--force`
+- Logic: load deployment → resolve environment → find `SecretStoreModel` by `key` → validate `--generate` requires `generate:` spec → check existence (`get_secret_metadata()`) → fail if exists and no `--force` → generate value or use `--value` → call `set_secret()` (create) or `update_secret()` (overwrite when `--force`) → audit log
+- Tests: put with `--value` (missing → created), put with `--generate` (missing → generated + created), fail when exists without `--force`, succeed with `--force`, `--generate` without spec → exit 3
+
+**Estimated effort:** 4–6 hours
+
+---
+
+### Gap 9: `strata secret get` command — direct store read
+
+**Status:** ❌ NOT STARTED (design decision made, implementation pending)
+
+`strata values get` resolves a value through the full deployment chain — YAML → store → seed-on-missing. It is deployment-scoped, covers all value types, and can trigger a write as a side effect.
+
+`strata secret get` is store-scoped: it reads the raw value directly from the store without going through value resolution and without triggering seeding. The key use cases are:
+
+- **Verify after `secret put`** — confirm the value actually landed in the store before running a deploy
+- **Debug a specific key** — inspect the raw store value without running the full resolution chain
+- **Read without side effects** — a guaranteed non-mutating read, useful in audit or read-only CI contexts
+
+**Command interface:**
+
+```
+strata secret get -f FILE --key K            # read the raw store value for secret K
+strata secret get -f FILE --key K --masked   # print the value masked (for safe logging)
+```
+
+- `--key K` is the deployment YAML key name (e.g., `DB_PASSWORD`), not the store key name. The command resolves the store reference from the YAML and reads directly.
+- If the secret does not exist in the store: exit 3 with a clear message. No seeding.
+- `--masked` prints the value as `****` — useful for confirming a value is present without exposing it in terminal history.
+- Output: the raw store value to stdout (or masked form). Structured JSON output with `--output json`.
+
+**Distinction from `strata values get`:**
+
+|                   | `strata values get`          | `strata secret get`          |
+| ----------------- | ---------------------------- | ---------------------------- |
+| Scope             | deployment (all value types) | store (secrets only)         |
+| Triggers seeding? | yes, if missing + spec       | no — pure read               |
+| Returns           | resolved value (post-chain)  | raw store value              |
+| Use case          | deployment verification      | store inspection / debugging |
+
+**Implementation required:**
+- New `src/strata/commands/secret/get_secret_command.py` extending `BaseCommand`
+- Register as `@secret_group.command(name="get")` in `src/strata/commands/cli_secret.py`
+- Required options: `--key` (deployment YAML key name), `--deployment` / `-f`, `--work-path`, `--masked`
+- Logic: load deployment → resolve environment → find `SecretStoreModel` by `key` → initialize store integration → call `integration.get_secret(item.value)` directly (no resolution chain, no seeding) → print value or masked form → exit 3 if not found
+- Tests: key exists → value printed, key missing → exit 3, `--masked` → value masked, store unavailable → exit 1
+
+**Estimated effort:** 3–5 hours
+
+---
+
+### Gap 10: `strata secret list` command — YAML inventory (no store)
+
+**Status:** ❌ NOT STARTED (design decision made, implementation pending)
+
+`strata secret status -f FILE` (Gap 6) contacts the store to check live rotation ages. There is no store-free command that answers the simpler question: *"what secrets does this deployment declare?"* That gap belongs to `secret list`.
+
+`strata secret list -f FILE` reads only the YAML — no store credentials, no network I/O — and renders a table of every secret in the deployment:
+
+```
+strata secret list -f deploy/deploy-prd.yaml
+
+Secrets in deploy/deploy-prd.yaml (environment: production):
+  KEY              STORE             STORE KEY                  GENERATE          ROTATE
+  DB_PASSWORD      azure-keyvault    myapp-db-password          password / 32     90d / warn
+  ENCRYPTION_KEY   azure-keyvault    myapp-encryption-key       hex / 64          90d / rotate
+  SESSION_SECRET   azure-keyvault    myapp-session-secret       urlsafe / 48      —
+  VENDOR_API_KEY   azure-keyvault    myapp-vendor-api-key       —                 180d / warn
+  API_KEY          azure-keyvault    myapp-api-key              —                 —
+```
+
+**Distinction from `secret status`:**
+
+|                    | `strata secret list`         | `strata secret status`          |
+| ------------------ | ---------------------------- | ------------------------------- |
+| Store access       | ❌ none                       | ✅ reads metadata                |
+| Shows              | YAML declaration             | live age + overdue status       |
+| Exit 3?            | no                           | yes (if overdue)                |
+| Needs credentials? | no                           | yes                             |
+| Use case           | audit, scripting, no-cred CI | rotation health check, alerting |
+
+This command is also useful as a complement to `secret put` and `secret get` — operators can run `secret list` first to see all key names before targeting one with `get` or `put`.
+
+**Completes the full `secret` group:**
+
+```
+strata secret generate   ← generate value, no store (standalone)
+strata secret mask       ← mask for safe display (standalone)
+strata secret list       ← YAML inventory, no store (Gap 10)
+strata secret get        ← direct store read, no seeding (Gap 9)
+strata secret status     ← live rotation health check (Gap 6)
+strata secret put        ← create / bootstrap (Gap 8)
+strata secret rotate     ← cycle to new value (Gap 7)
+```
+
+**Implementation required:**
+- New `src/strata/commands/secret/list_secret_command.py` extending `BaseCommand`
+- Register as `@secret_group.command(name="list")` in `src/strata/commands/cli_secret.py`
+- Required options: `--deployment` / `-f`, `--work-path`, `--stage` (optional, limit to one stage)
+- Logic: load deployment → resolve environment → iterate `env.spec.secrets` → build table rows from YAML fields only (`key`, `store`, `value`, `generate`, `rotate`) → render table
+- No integration initialization, no network calls
+- Tests: deployment with mixed secrets (generate, rotate, neither) → correct columns; `--stage` filters correctly
+
+**Estimated effort:** 2–3 hours
+
+---
+
+### Intentionally Excluded: `strata secret delete`
+
+`secret delete` was considered during design review and explicitly excluded. This decision is recorded here so it is not re-litigated.
+
+**1. The force-regeneration flow already exists.**
+Delete the key in the store manually, re-run `strata deploy run` — strata seeds a fresh generated value via seed-on-missing. That friction is intentional: a human hand on the delete operation is the right guard before dropping a live database password or encryption key.
+
+**2. Store UIs provide the right safety rails.**
+Azure Key Vault mandates a 90-day soft-delete recovery window (since API 2021-10-01) with optional Purge Protection. HashiCorp Vault has three explicit tiers — `kv delete` (soft, reversible), `kv destroy` (permanent version data), `kv metadata delete` (permanent all versions) — with deliberately different permission requirements at each tier. These UIs and their friction exist specifically because deletion is dangerous. A `--force` flag does not replicate them.
+
+**3. Integration complexity makes a safe implementation non-trivial.**
+Bitwarden Secrets Manager identifies secrets by UUID, not key name: deletion requires a two-step `bws secret list → find UUID → bws secret delete <uuid>` call chain with no recovery. Azure Key Vault soft-delete **reserves the deleted name** for the entire retention window — you cannot create a new secret with the same name until purged, which directly breaks the `delete + re-seed` workflow. Infisical and etcd have permanent deletion with a 404-on-mismatch that is indistinguishable from a successful delete.
+
+**4. Environment teardown belongs in `strata deploy destroy`.**
+If an operator is decommissioning an environment, that operation belongs in `deploy destroy`, which already carries appropriate lifecycle guardrails. A standalone `secret delete` operating outside the deployment lifecycle is a footgun with no natural scope boundary.
+
+**If `secret delete` is revisited in the future**, Basher’s integration analysis provides the non-negotiable guardrails: soft-delete defaults for AKV (never call `purge` by default), `kv delete` only for Vault (never `kv metadata delete` without an explicit flag), UUID lookup for Bitwarden, existence check before all operations, and `--force` required for any permanently destructive path.
+
+**Note on the `plan` → `status` rename (related):** The `plan` verb in strata has a strict contract: store-free, YAML-only, no network I/O (Design Issue #3). The original `secret plan` violated that contract by calling `get_secret_metadata()` over the wire. Renamed to `secret status` — consistent with `deploy status` — to make the live-store-read semantics explicit and preserve `plan`’s meaning across the codebase.
+
+---
+
+### Summary: v1.0 vs Post-v1.0
+
+| Feature                                                        | v1.0 Status   | Gap Impact | Post-v1 Effort  |
+| -------------------------------------------------------------- | ------------- | ---------- | --------------- |
+| Secret generation                                              | ✅ Implemented | None       | —               |
+| Variable defaults                                              | ✅ Implemented | None       | —               |
+| Feature flag defaults                                          | ✅ Implemented | None       | —               |
+| Build plan seed display                                        | ✅ Done        | None       | —               |
+| Vault `set_*` methods                                          | ✅ Done        | None       | —               |
+| Consul `set_*` methods                                         | ✅ Done        | None       | —               |
+| Flagsmith `set_*` methods                                      | ✅ Done        | None       | —               |
+| Rotation core (Phase 3 — Gap 3)                                | ❌ Not started | High       | 36–46h          |
+| `SecretRotateSpec` model shape (Gap 4 + 5)                     | ❌ Not started | High       | 2–4h            |
+| `build plan` / `secret status` / `deploy run` rotation (Gap 6) | ❌ Not started | Low        | 5–7h            |
+| `strata secret rotate` command (Gap 7)                         | ❌ Not started | Medium     | 6–8h            |
+| `strata secret put` command (Gap 8)                            | ❌ Not started | Low        | 4–6h            |
+| `strata secret get` command (Gap 9)                            | ❌ Not started | Low        | 3–5h            |
+| `strata secret list` command (Gap 10)                          | ❌ Not started | Low        | 2–3h            |
+| **Total post-v1.0 backlog**                                    |               |            | **58–79 hours** |
+
+**v1.0 is production-ready** for seed-on-missing across all supported integrations. Secret rotation and its supporting model/command work are the only remaining gaps, explicitly deferred to post-v1.0 releases.
+
+## Final Design
+
+This section is the authoritative summary of all design decisions made across the ADR and the post-v1.0 gap reviews. It describes the complete intended state of the feature — the target all implementation phases are building toward.
+
+---
+
+### The `strata secret` Command Group
+
+The `secret` group manages the full lifecycle of secrets declared in a deployment YAML. Commands are ordered by store access level — from no store contact to write operations:
+
+| Command                                 | Store access | Write?      | Purpose                                                                   | Gap      |
+| --------------------------------------- | ------------ | ----------- | ------------------------------------------------------------------------- | -------- |
+| `secret generate`                       | ❌ none       | —           | Generate a cryptographically secure value standalone (no deployment file) | existing |
+| `secret mask`                           | ❌ none       | —           | Mask a value for safe display or logging                                  | existing |
+| `secret list -f FILE`                   | ❌ none       | —           | YAML inventory — what secrets does this deployment declare?               | Gap 10   |
+| `secret get -f FILE --key K`            | ✅ read       | —           | Direct store read without triggering seeding                              | Gap 9    |
+| `secret status -f FILE`                 | ✅ read       | —           | Live rotation health check — age vs `max_age`, exit 3 if overdue          | Gap 6    |
+| `secret put -f FILE --key K`            | ✅ write      | ✅ create    | Explicit seed: write a literal value or generate + write a new secret     | Gap 8    |
+| `secret put -f FILE --key K --generate` | ✅ write      | ✅ create    | Explicit seed: generate + write a new secret                              | Gap 8    |
+| `secret rotate -f FILE --key K`         | ✅ write      | ✅ overwrite | On-demand rotation: re-generate a `generate:`-spec secret                 | Gap 7    |
+
+**`secret delete` is intentionally excluded** — see "Intentionally Excluded: `strata secret delete`".
+
+**The `plan` verb contract** is preserved throughout: any `strata * plan` command is store-free, YAML-only, and never contacts an integration. `secret status` (live store read) was explicitly named to avoid violating this contract.
+
+---
+
+### YAML Model Shape
+
+The final `SecretStoreModel` has `generate:` and `rotate:` as **siblings** — separate concerns with separate lifecycles:
+
+```yaml
+secrets:
+  # Auto-generated secret with rotation policy
+  - key: DB_PASSWORD
+    store: azure-keyvault
+    value: myapp-db-password
+    generate:
+      type: password
+      length: 32
+    rotate:
+      max_age: 90        # days (integer >= 1)
+      policy: warn       # warn | rotate
+
+  # Manually-placed secret with advisory rotation only
+  - key: VENDOR_API_KEY
+    store: azure-keyvault
+    value: myapp-vendor-api-key
+    # no generate: — strata cannot regenerate this
+    rotate:
+      max_age: 180
+      policy: warn       # policy: rotate is invalid without generate:
+
+  # Secret with generation, no rotation policy
+  - key: SESSION_SECRET
+    store: azure-keyvault
+    value: myapp-session-secret
+    generate:
+      type: urlsafe
+      length: 48
+
+  # Plain secret — manually placed, no strata lifecycle management
+  - key: THIRD_PARTY_KEY
+    store: azure-keyvault
+    value: myapp-third-party-key
+```
+
+**Model invariants (enforced by Pydantic validators):**
+- `rotate.policy: rotate` requires `generate:` to be present — validation error otherwise
+- `rotate.policy: warn` is valid with or without `generate:`
+- Both `generate:` and `rotate:` are rejected on built-in store types (`constant`, `environment`, `github`)
+- `max_age` is an `int` (days, `>= 1`) — never a duration string like `"90d"`
+
+---
+
+### Value Resolution Lifecycle
+
+The complete flow for a secret, from declaration to resolved value:
+
+```
+strata deploy run
+│
+├── 1. Read from store
+│   ├── Found → return value
+│   │   └── rotate: spec present?
+│   │       ├── No → done
+│   │       └── Yes → get_secret_metadata()
+│   │           ├── age <= max_age → done
+│   │           ├── age > max_age, policy: warn
+│   │           │   └── emit ↳ Rotation advisory (stdout + audit log) → done
+│   │           └── age > max_age, policy: rotate
+│   │               └── update_secret() → emit ↳ Rotated (stdout + audit log) → return new value
+│   │
+│   └── Not found
+│       ├── No generate: spec → error (missing required secret)
+│       └── generate: spec present
+│           └── generate_secret() → set_secret() → emit ↳ Generated on first run → return value
+│
+└── All values resolved → continue deploy
+```
+
+**Key invariants in the flow:**
+- `set_secret()` = create-if-not-exists — NEVER overwrites
+- `update_secret()` = explicit overwrite — Phase 3 rotation ONLY
+- Secret values are never logged at any level
+- Every store write emits a structured audit log entry
+
+---
+
+### The Rotation Surface (4 Tiers)
+
+Rotation information is surfaced at four levels, each with different store access and scope:
+
+| Tier | Command                                | Store access          | What it shows                                              | Exit 3?                     |
+| ---- | -------------------------------------- | --------------------- | ---------------------------------------------------------- | --------------------------- |
+| 1    | `strata build plan`                    | ❌ YAML only           | `[rotation: 90d / warn]` — declarative config              | no                          |
+| 2    | `strata secret status -f FILE`         | ✅ read-only           | Live age table, marks overdue secrets                      | yes                         |
+| 3    | `strata deploy run`                    | ✅ (already connected) | `↳ Rotation advisory` / `↳ Rotated` inline in CI/CD output | no (warn) / writes (rotate) |
+| 4    | `strata secret rotate -f FILE --key K` | ✅ write               | On-demand rotation outside a deploy cycle                  | —                           |
+
+---
+
+### Integration Contract
+
+Two methods, explicitly different semantics — the overwrite boundary is enforced at the method level:
+
+| Method                      | Semantics                                                                  | When called                                   | Policy  |
+| --------------------------- | -------------------------------------------------------------------------- | --------------------------------------------- | ------- |
+| `set_secret(key, value)`    | Create-if-not-exists. If key exists, re-read and return. NEVER overwrites. | Seed-on-missing (deploy run, secret put)      | Phase 1 |
+| `update_secret(key, value)` | Explicit overwrite. Replaces current value unconditionally.                | Rotation only (policy: rotate, secret rotate) | Phase 3 |
+
+Calling `set_secret()` from rotation code is a bug — the create-if-not-exists semantics would silently no-op the rotation. The distinct method names make this impossible to do accidentally.
+
+---
+
+### Implementation Sequence
+
+Gaps must be implemented in this order due to dependencies:
+
+```
+Phase 0 — Prerequisites (implement first, everything else depends on these)
+  Gap 4: SecretRotateSpec model + rotate: field on SecretStoreModel
+  Gap 5: max_age: int validator + documentation sweep
+
+Phase 1 — Core rotation infrastructure
+  Gap 3a: SecretMetadata dataclass + get_secret_metadata() protocol
+  Gap 3b: Integration implementations (AKV, Vault, Bitwarden, Infisical)
+  Gap 3c: Age-check logic in _resolve_secret() + update_secret() method + audit logging
+  Gap 3d: build plan / deploy plan rotation reporting + test suite
+
+Phase 2 — CLI commands (parallel, no inter-dependencies after Phase 0)
+  Gap 6:  secret status command + deploy run rotation advisory output
+  Gap 7:  secret rotate command
+  Gap 8:  secret put command
+  Gap 9:  secret get command
+  Gap 10: secret list command   ← simplest, can be done anytime after Phase 0
+```
+
+Gap 10 (`secret list`) only requires the model fields from Phase 0 — it can be implemented before Phase 1 as a low-risk warm-up. Gap 6 (`secret status`) depends on Phase 1 (`get_secret_metadata()` must exist). Gaps 7–9 depend on `update_secret()` (Gap 7) or store integrations already existing (Gaps 8, 9).
+
+---
+
+### Acceptance Criteria (full feature)
+
+The feature is complete when all of the following are true:
+
+**Model:**
+- [x] `SecretStoreModel` has `rotate: Optional[SecretRotateSpec]` as a sibling of `generate:`
+- [x] `rotate.policy: rotate` without `generate:` → Pydantic validation error
+- [x] `max_age` is `int` (days, `>= 1`) with a `field_validator`
+- [x] All YAML examples in this ADR and `docs/` use integer `max_age`
+
+**Integration contract:**
+- [x] `set_secret()` on all integrations uses create-if-not-exists semantics
+- [x] `update_secret()` exists as a distinct method from `set_secret()`
+- [x] `get_secret_metadata()` implemented on AKV, HashiCorp Vault, Bitwarden, Infisical
+
+**Rotation logic:**
+- [x] `deploy run` checks rotation age after a successful value read
+- [x] `policy: warn`, overdue → emits `↳ Rotation advisory` line, deploy continues
+- [x] `policy: rotate`, overdue → calls `update_secret()`, emits `↳ Rotated` line
+- [x] Store with no timestamp support → skips rotation check gracefully, no error
+
+**Commands (all exit codes verified):**
+- [x] `secret list -f FILE` → YAML table, no store contact, exit 0
+- [x] `secret get -f FILE KEY` → raw value or `--unmask`, exit 1 if missing
+- [x] `secret status -f FILE` → age table, exit 3 if any overdue
+- [x] `secret put -f FILE KEY --value V` → creates via `set_secret()` (create-if-not-exists)
+- [x] `secret put -f FILE KEY --generate` → generates from spec + creates
+- [x] `secret rotate -f FILE KEY` → rotates via `update_secret()`, requires `generate:` spec, `--force` skips confirmation
+- [x] `secret rotate` on manually-placed secret → explicit error, exit 1
+
+**Plan commands:**
+- [x] `build plan` shows `[rotation: Nd / policy]` from YAML (no store access)
+- ~~`deploy plan` shows affected modules for secrets that will rotate~~ — removed: `deploy plan` is store-free by contract (Design Issue #3). Affected module tracing belongs in `deploy run` output or `secret status` if needed in the future.
+
+**Tests:**
+- [x] All model validation invariants covered (26 tests in `test_secret_rotation.py`)
+- [x] Rotation warn path: advisory emitted, value unchanged
+- [x] Rotation rotate path: `update_secret()` called (not `set_secret()`), failure returns old value
+- [x] All 7 `secret` commands: happy path + error paths + exit code assertions

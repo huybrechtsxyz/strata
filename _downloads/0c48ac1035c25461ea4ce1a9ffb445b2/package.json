@@ -2,7 +2,7 @@
   "name": "xyz-strata",
   "displayName": "Strata",
   "description": "Strata infrastructure workspace integration — validate YAML, explore workspace, build and deploy.",
-  "version": "0.16.1",
+  "version": "1.0.0",
   "publisher": "huybrechts-xyz",
   "icon": "resources/icon.png",
   "license": "AGPL-3.0-or-later",
@@ -51,11 +51,23 @@
           },
           {
             "name": "build",
-            "description": "Show how to build your deployment"
+            "description": "Run or dry-run a build on the current deployment"
           },
           {
             "name": "deploy",
-            "description": "Show how to deploy your deployment"
+            "description": "Run or dry-run a deploy on the current deployment"
+          },
+          {
+            "name": "stage",
+            "description": "Deploy a specific stage: /stage [file] <stage-name>"
+          },
+          {
+            "name": "values",
+            "description": "Inspect resolved values for the current deployment"
+          },
+          {
+            "name": "drift",
+            "description": "Run drift detection on the current deployment"
           },
           {
             "name": "repos",
@@ -164,6 +176,61 @@
         "command": "strata.openFile",
         "title": "Open File",
         "icon": "$(go-to-file)"
+      },
+      {
+        "command": "strata.deployStage",
+        "title": "Strata: Deploy Stage",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "strata.lockStatus",
+        "title": "Strata: Show Lock Status",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "strata.releaseLock",
+        "title": "Strata: Force Release Lock",
+        "icon": "$(unlock)"
+      },
+      {
+        "command": "strata.showValues",
+        "title": "Strata: Inspect Values",
+        "icon": "$(symbol-variable)"
+      },
+      {
+        "command": "strata.copyValueKey",
+        "title": "Copy Key",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "strata.buildSbom",
+        "title": "Strata: Generate SBOM",
+        "icon": "$(package)"
+      },
+      {
+        "command": "strata.syncRepo",
+        "title": "Strata: Sync Repository",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "strata.addRepo",
+        "title": "Strata: Add Repository",
+        "icon": "$(add)"
+      },
+      {
+        "command": "strata.removeRepo",
+        "title": "Strata: Remove Repository",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "strata.auditFilter",
+        "title": "Strata: Filter Audit Trail",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "strata.auditSetLimit",
+        "title": "Strata: Set Audit Entry Limit",
+        "icon": "$(list-ordered)"
       }
     ],
     "viewsContainers": {
@@ -206,6 +273,11 @@
           "id": "strataAudit",
           "name": "Audit Trail",
           "contextualTitle": "Strata Audit Trail"
+        },
+        {
+          "id": "strataValues",
+          "name": "Values",
+          "contextualTitle": "Strata Values"
         }
       ]
     },
@@ -213,7 +285,7 @@
       "view/title": [
         {
           "command": "strata.refreshTreeView",
-          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools || view == strataEnvironment || view == strataAudit",
+          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools || view == strataEnvironment || view == strataAudit || view == strataValues",
           "group": "navigation"
         },
         {
@@ -227,8 +299,23 @@
           "group": "navigation"
         },
         {
+          "command": "strata.auditFilter",
+          "when": "view == strataAudit",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.auditSetLimit",
+          "when": "view == strataAudit",
+          "group": "navigation"
+        },
+        {
           "command": "strata.showGuide",
           "when": "view == strataWorkspace",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.addRepo",
+          "when": "view == strataRepositories",
           "group": "navigation"
         }
       ],
@@ -256,6 +343,46 @@
         {
           "command": "strata.auditResend",
           "when": "view == strataAudit && viewItem == entry",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.deployStage",
+          "when": "view == strataEnvironment && viewItem == stage",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.lockStatus",
+          "when": "view == strataEnvironment && viewItem == deployment",
+          "group": "strata@3"
+        },
+        {
+          "command": "strata.releaseLock",
+          "when": "view == strataEnvironment && viewItem == deployment",
+          "group": "strata@4"
+        },
+        {
+          "command": "strata.showValues",
+          "when": "view == strataEnvironment && viewItem == deployment",
+          "group": "strata@5"
+        },
+        {
+          "command": "strata.buildSbom",
+          "when": "view == strataEnvironment && viewItem == deployment",
+          "group": "strata@6"
+        },
+        {
+          "command": "strata.syncRepo",
+          "when": "view == strataRepositories && viewItem == repository",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.removeRepo",
+          "when": "view == strataRepositories && viewItem == repository",
+          "group": "strata@2"
+        },
+        {
+          "command": "strata.copyValueKey",
+          "when": "view == strataValues && viewItem == value",
           "group": "strata@1"
         }
       ],
@@ -286,6 +413,21 @@
           "command": "strata.auditChanges",
           "when": "resourceExtname == .yaml && strata.workspaceActive",
           "group": "strata@4"
+        },
+        {
+          "command": "strata.showValues",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@5"
+        },
+        {
+          "command": "strata.buildSbom",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@6"
+        },
+        {
+          "command": "strata.lockStatus",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@7"
         }
       ]
     },
@@ -346,7 +488,8 @@
             "enum": [
               "validate",
               "build",
-              "deploy"
+              "deploy",
+              "sbom"
             ],
             "description": "Strata operation to run."
           },

@@ -59,7 +59,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../README.html#ai-integration-via-mcp">AI Integration via MCP</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#deployment-workflow">Deployment Workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#testing">Testing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../README.html#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../README.html#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../README.html#inspecting-resolved-values-before-deploy">Inspecting Resolved Values Before Deploy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../README.html#using-dry-run-to-validate-deployment">Using Dry-Run to Validate Deployment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../README.html#debugging-a-failed-deployment">Debugging a Failed Deployment</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#contributing">Contributing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#security">Security</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../README.html#license">License</a></li>
@@ -73,6 +78,49 @@
 <li class="toctree-l3"><a class="reference internal" href="../README.html#audit-trail">Audit Trail</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../INDEX.html">Documentation Index</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#getting-started">🚀 <strong>Getting Started</strong></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#user-guides">📖 <strong>User Guides</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#core-concepts">Core Concepts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#operational-guides">Operational Guides</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#advanced-topics">Advanced Topics</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#architecture-design-decisions">🏗️ <strong>Architecture &amp; Design Decisions</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#decision-records-adrs">Decision Records (ADRs)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#developer-documentation">💻 <strong>Developer Documentation</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#extension-vs-code">Extension (VS Code)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#cli-python">CLI (Python)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#contributing">Contributing</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#examples-tutorials">📚 <strong>Examples &amp; Tutorials</strong></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#external-resources">🔗 <strong>External Resources</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#related-technologies">Related Technologies</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#community-support">Community &amp; Support</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#version-specific-documentation">📋 <strong>Version-Specific Documentation</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#current-version-v0-16-1">Current Version (v0.16.1)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#previous-versions">Previous Versions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#quick-navigation-by-use-case">🎯 <strong>Quick Navigation by Use Case</strong></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-m-new-to-strata">“I’m new to strata”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-m-using-the-cli">“I’m using the CLI”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-m-using-the-vs-code-extension">“I’m using the VS Code Extension”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-want-to-contribute">“I want to contribute”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-have-a-question-or-issue">“I have a question or issue”</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../INDEX.html#i-need-to-integrate-with-strata">“I need to integrate with strata”</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#file-structure">📄 <strong>File Structure</strong></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#search-tips">🔍 <strong>Search Tips</strong></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../INDEX.html#support-feedback">📞 <strong>Support &amp; Feedback</strong></a></li>
 </ul>
 </li>
 </ul>
@@ -651,7 +699,21 @@
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#siem-sink-configuration">SIEM sink configuration</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#values"><code class="docutils literal notranslate"><span class="pre">values</span></code></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#service"><code class="docutils literal notranslate"><span class="pre">service</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#service-list"><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#service-status"><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#service-deploy"><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">deploy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#service-destroy"><code class="docutils literal notranslate"><span class="pre">service</span> <span class="pre">destroy</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#manifest"><code class="docutils literal notranslate"><span class="pre">manifest</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#manifest-list"><code class="docutils literal notranslate"><span class="pre">manifest</span> <span class="pre">list</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#manifest-show"><code class="docutils literal notranslate"><span class="pre">manifest</span> <span class="pre">show</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#manifest-export"><code class="docutils literal notranslate"><span class="pre">manifest</span> <span class="pre">export</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/commands.html#mcp"><code class="docutils literal notranslate"><span class="pre">mcp</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#mcp-serve"><code class="docutils literal notranslate"><span class="pre">mcp</span> <span class="pre">serve</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#values-list"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">list</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#values-get"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">get</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../platform/commands.html#values-set"><code class="docutils literal notranslate"><span class="pre">values</span> <span class="pre">set</span></code></a></li>
@@ -991,6 +1053,54 @@
 <li class="toctree-l2"><a class="reference internal" href="../platform/sbom-plugin-api.html#see-also">See Also</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../platform/provisioner-plugin-api.html">Provisioner Plugin API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../platform/provisioner-plugin-api.html#basedeployer"><code class="docutils literal notranslate"><span class="pre">BaseDeployer</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#constructor">Constructor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#step-name-constants">Step Name Constants</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#abstract-methods">Abstract Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#get-deployer-name-str"><code class="docutils literal notranslate"><span class="pre">get_deployer_name()</span> <span class="pre">→</span> <span class="pre">str</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#get-supported-steps-list-str"><code class="docutils literal notranslate"><span class="pre">get_supported_steps()</span> <span class="pre">→</span> <span class="pre">List[str]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#validate-workspace-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">validate_workspace()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#validate-environment-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">validate_environment()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#setup-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">setup()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#check-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">check()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#plan-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">plan()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#apply-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">apply()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#destroy-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">destroy()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#plan-destroy-tuple-bool-list-str"><code class="docutils literal notranslate"><span class="pre">plan_destroy()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#show-plan-tuple-bool-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">show_plan()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#output-tuple-bool-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">output()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#non-abstract-methods-override-as-needed">Non-Abstract Methods (override as needed)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#status-tuple-bool-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">status()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#health-tuple-bool-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">health()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#collect-outputs-tuple-bool-dict-str-any-dict-str-any-list-str"><code class="docutils literal notranslate"><span class="pre">collect_outputs()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">Dict[str,</span> <span class="pre">Any],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#describe-plan-list-str"><code class="docutils literal notranslate"><span class="pre">describe_plan()</span> <span class="pre">→</span> <span class="pre">List[str]</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#save-plan-json-tuple-bool-optional-path-list-str"><code class="docutils literal notranslate"><span class="pre">save_plan_json()</span> <span class="pre">→</span> <span class="pre">Tuple[bool,</span> <span class="pre">Optional[Path],</span> <span class="pre">List[str]]</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#protected-helpers">Protected Helpers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#get-timeout-step-str-default-int-int"><code class="docutils literal notranslate"><span class="pre">_get_timeout(step:</span> <span class="pre">str,</span> <span class="pre">default:</span> <span class="pre">int)</span> <span class="pre">→</span> <span class="pre">int</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/provisioner-plugin-api.html#resolve-iac-model-optional-workspaceiacmodel"><code class="docutils literal notranslate"><span class="pre">_resolve_iac_model()</span> <span class="pre">→</span> <span class="pre">Optional[WorkspaceIacModel]</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/provisioner-plugin-api.html#deployerfactory"><code class="docutils literal notranslate"><span class="pre">DeployerFactory</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#deployerfactory-create-provisioner-type-stage-deployment-service-configuration-service-build-path-work-path-verbose-force-resolved-values-solution-controller-basedeployer"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.create(provisioner_type,</span> <span class="pre">*,</span> <span class="pre">stage,</span> <span class="pre">deployment_service,</span> <span class="pre">configuration_service,</span> <span class="pre">build_path,</span> <span class="pre">work_path,</span> <span class="pre">verbose,</span> <span class="pre">force,</span> <span class="pre">resolved_values,</span> <span class="pre">solution_controller)</span> <span class="pre">→</span> <span class="pre">BaseDeployer</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#deployerfactory-resolve-type-stage-deployment-service-tuple-optional-str-list-str"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.resolve_type(stage,</span> <span class="pre">deployment_service)</span> <span class="pre">→</span> <span class="pre">Tuple[Optional[str],</span> <span class="pre">List[str]]</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#deployerfactory-register-name-deployer-class"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.register(name,</span> <span class="pre">deployer_class)</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#deployerfactory-load-plugins-work-path"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.load_plugins(work_path)</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#deployerfactory-is-known-type-type-str-bool"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.is_known_type(type_str)</span> <span class="pre">→</span> <span class="pre">bool</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#deployerfactory-get-known-types-list-str"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.get_known_types()</span> <span class="pre">→</span> <span class="pre">List[str]</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../platform/provisioner-plugin-api.html#deployerfactory-reset"><code class="docutils literal notranslate"><span class="pre">DeployerFactory.reset()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/provisioner-plugin-api.html#built-in-provisioner-types">Built-in Provisioner Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/provisioner-plugin-api.html#see-also">See Also</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Internals:</span></p>
 <ul>
@@ -1031,7 +1141,15 @@
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#singleton-pattern">Singleton Pattern</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#baseintegration-api"><code class="docutils literal notranslate"><span class="pre">BaseIntegration</span></code> API</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#integrationregistry"><code class="docutils literal notranslate"><span class="pre">IntegrationRegistry</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#capability-protocols">Capability Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#capability-protocols">Capability Protocols</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../platform/integrations.html#store-specific-notes">Store-specific notes</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../platform/integrations.html#vault-and-consul-feature-flags-via-kv-prefix">Vault and Consul — feature flags via KV prefix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/integrations.html#flagsmith-variables-via-identity-traits">Flagsmith — variables via identity traits</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../platform/integrations.html#flagsmith-feature-flag-seeding-limitations">Flagsmith — feature flag seeding limitations</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#integrationmodel-configuration"><code class="docutils literal notranslate"><span class="pre">IntegrationModel</span></code> Configuration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#runtime-inspection">Runtime inspection</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../platform/integrations.html#workspace-drop-ins">Workspace drop-ins</a></li>
@@ -1998,6 +2116,7 @@
 <li class="toctree-l3"><a class="reference internal" href="0006-policy-engine-for-deployment-guardrails.html#consequences">Consequences</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="0006-policy-engine-for-deployment-guardrails.html#implementation-status">Implementation Status</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0006-policy-engine-for-deployment-guardrails.html#detailed-design">Detailed Design</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="0006-policy-engine-for-deployment-guardrails.html#architecture">Architecture</a></li>
 <li class="toctree-l3"><a class="reference internal" href="0006-policy-engine-for-deployment-guardrails.html#yaml-declaration">YAML Declaration</a></li>
@@ -2332,6 +2451,10 @@
 <li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#rotation-dependency-chain-downstream-consumers">9. ~~Rotation dependency chain — downstream consumers~~</a></li>
 <li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#no-rollback-if-set-secret-succeeds-but-the-build-fails-later">8. ~~No rollback if <code class="docutils literal notranslate"><span class="pre">set_secret()</span></code> succeeds but the build fails later~~</a></li>
 <li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#spec-drift-generate-spec-changed-but-value-already-exists">10. ~~Spec drift — generate spec changed but value already exists~~</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#rotate-field-placement-sibling-of-generate-not-nested-inside-it">11. <code class="docutils literal notranslate"><span class="pre">rotate:</span></code> field placement — sibling of <code class="docutils literal notranslate"><span class="pre">generate:</span></code>, not nested inside it</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#max-age-type-int-days-not-a-duration-string">12. <code class="docutils literal notranslate"><span class="pre">max_age</span></code> type — int (days), not a duration string</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#strata-build-plan-cannot-show-rotation-overdue-status">13. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span></code> cannot show rotation-overdue status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#strata-secret-rotate-command-scope-for-manually-placed-secrets">14. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">rotate</span></code> command — scope for manually-placed secrets</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0013-auto-generated-secrets.html#detailed-design">Detailed Design</a><ul>
@@ -2404,6 +2527,31 @@
 <li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#file-change-summary">10. File Change Summary</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="0013-auto-generated-secrets.html#post-v1-0-gaps-future-work">Post-v1.0 Gaps &amp; Future Work</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-1-build-plan-seed-status-display">Gap 1: Build Plan Seed Status Display</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-2-missing-integration-implementations">Gap 2: Missing Integration Implementations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-3-secret-rotation-phase-3">Gap 3: Secret Rotation (Phase 3)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-4-secretrotatespec-rotate-placement-and-model-validator-issue-11">Gap 4: <code class="docutils literal notranslate"><span class="pre">SecretRotateSpec</span></code> — <code class="docutils literal notranslate"><span class="pre">rotate:</span></code> placement and model validator (Issue #11)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-5-max-age-type-int-days-in-secretrotatespec-issue-12">Gap 5: <code class="docutils literal notranslate"><span class="pre">max_age</span></code> type — <code class="docutils literal notranslate"><span class="pre">int</span></code> (days) in <code class="docutils literal notranslate"><span class="pre">SecretRotateSpec</span></code> (Issue #12)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-6-rotation-status-strata-secret-status-a-dedicated-read-only-command-issue-13">Gap 6: Rotation status — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">status</span></code>, a dedicated read-only command (Issue #13)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-7-strata-secret-rotate-command-add-to-existing-secret-group-issue-14">Gap 7: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">rotate</span></code> command — add to existing <code class="docutils literal notranslate"><span class="pre">secret</span></code> group (Issue #14)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-8-strata-secret-put-command-explicit-write-pre-seed">Gap 8: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">put</span></code> command — explicit write / pre-seed</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-9-strata-secret-get-command-direct-store-read">Gap 9: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">get</span></code> command — direct store read</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#gap-10-strata-secret-list-command-yaml-inventory-no-store">Gap 10: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">list</span></code> command — YAML inventory (no store)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#intentionally-excluded-strata-secret-delete">Intentionally Excluded: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span> <span class="pre">delete</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#summary-v1-0-vs-post-v1-0">Summary: v1.0 vs Post-v1.0</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0013-auto-generated-secrets.html#final-design">Final Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#the-strata-secret-command-group">The <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">secret</span></code> Command Group</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#yaml-model-shape">YAML Model Shape</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#value-resolution-lifecycle">Value Resolution Lifecycle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#the-rotation-surface-4-tiers">The Rotation Surface (4 Tiers)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#integration-contract">Integration Contract</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#implementation-sequence">Implementation Sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0013-auto-generated-secrets.html#acceptance-criteria-full-feature">Acceptance Criteria (full feature)</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0014-onboarding-experience.html">Guided onboarding and cold-start experience</a><ul>
@@ -2431,6 +2579,11 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0014-onboarding-experience.html#decision-outcome">Decision Outcome</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0014-onboarding-experience.html#post-v1-0-deferred-work">Post-v1.0 Deferred Work</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0014-onboarding-experience.html#why-these-don-t-block-v1">Why These Don’t Block v1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0014-onboarding-experience.html#effort-estimate">Effort Estimate</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0015-flow-command-dependency-graph.html"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">graph</span></code> — Workspace Dependency Graph</a><ul>
@@ -2790,6 +2943,11 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0020-lifecycle-phases-and-environment-variables.html#implementation-plan">Implementation Plan</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0020-lifecycle-phases-and-environment-variables.html#related-decisions">Related Decisions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0020-lifecycle-phases-and-environment-variables.html#post-v1-0-deferred-work">Post-v1.0 Deferred Work</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0020-lifecycle-phases-and-environment-variables.html#why-these-don-t-block-v1">Why These Don’t Block v1</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0020-lifecycle-phases-and-environment-variables.html#effort-estimate">Effort Estimate</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="0020-lifecycle-phases-and-environment-variables.html#references">References</a></li>
 </ul>
 </li>
@@ -2962,6 +3120,53 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0024-environment-composition-flat-merge-fix.html#links">Links</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html">AI agent integration for build and deploy workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#context-and-problem-statement">Context and Problem Statement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#concrete-use-cases">Concrete Use Cases</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#why-not-just-use-the-mcp-server">Why Not Just Use the MCP Server?</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#option-a-ai-agent-as-an-integration-recommended">Option A — AI Agent as an Integration (recommended)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#option-b-ai-agent-as-a-deployer">Option B — AI Agent as a Deployer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#option-c-ai-agent-as-a-policy">Option C — AI Agent as a Policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#option-d-external-webhook-event-system">Option D — External Webhook / Event System</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#detailed-design">Detailed Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#architecture-position">1. Architecture Position</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#configuration-model">2. Configuration Model</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#provider-interface">3. Provider Interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#aiagentintegration">4. AiAgentIntegration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#lifecycle-hook-points">5. Lifecycle Hook Points</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#prompt-engineering">6. Prompt Engineering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#audit-trail">7. Audit Trail</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#caching-strategy">8. Caching Strategy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#cost-control">9. Cost Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#security-considerations">10. Security Considerations</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#implementation-phases">Implementation Phases</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#phase-1-foundation-mvp">Phase 1 — Foundation (MVP)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#phase-2-provider-expansion">Phase 2 — Provider Expansion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#phase-3-full-lifecycle-coverage">Phase 3 — Full Lifecycle Coverage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#phase-4-gating-and-policy-integration">Phase 4 — Gating and Policy Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#phase-5-interactive-prompt-mode">Phase 5 — Interactive Prompt Mode</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#repl-extension">REPL extension</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#custom-prompt-files">Custom prompt files</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#behaviour-rules">Behaviour rules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0025-ai-agent-integration-for-build-and-deploy.html#references">References</a></li>
 </ul>
 </li>
 </ul>
@@ -3607,6 +3812,58 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/using-console.html#non-interactive-use">Non-interactive use</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html">Building a Provisioner Plugin</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#quick-start">Quick Start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#discovery-mechanism">Discovery Mechanism</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#the-basedeployer-contract">The <code class="docutils literal notranslate"><span class="pre">BaseDeployer</span></code> Contract</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#optional-overrides">Optional overrides</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#constructor-and-instance-variables">Constructor and Instance Variables</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#accessing-secrets-and-variables">Accessing secrets and variables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#accessing-the-workspace-model">Accessing the workspace model</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#step-name-constants">Step Name Constants</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#return-value-conventions">Return Value Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#timeout-helpers">Timeout Helpers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#testing-your-plugin">Testing Your Plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#complete-examples">Complete Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/building-a-provisioner-plugin.html#checklist">Checklist</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html">Detecting Infrastructure Drift</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#what-is-drift">What is drift?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#quick-start">Quick start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#severity-levels">Severity levels</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#command-reference">Command reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#drift-run-flags"><code class="docutils literal notranslate"><span class="pre">drift</span> <span class="pre">run</span></code> flags</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#using-severity-thresholds">Using severity thresholds</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#checking-one-stage">Checking one stage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#setting-a-baseline">Setting a baseline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#acknowledging-expected-drift">Acknowledging expected drift</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#drift-acknowledge-flags"><code class="docutils literal notranslate"><span class="pre">drift</span> <span class="pre">acknowledge</span></code> flags</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#viewing-drift-history">Viewing drift history</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#drift-history-flags"><code class="docutils literal notranslate"><span class="pre">drift</span> <span class="pre">history</span></code> flags</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#json-output-for-ci">JSON output for CI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#drift-history">Drift history</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#customising-severity-rules">Customising severity rules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#using-drift-in-ci">Using drift in CI</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#nightly-scheduled-drift-check">Nightly scheduled drift check</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#exit-codes">Exit codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/detecting-infrastructure-drift.html#related">Related</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Skills:</span></p>
 <ul>
@@ -3659,7 +3916,7 @@
   <section id="pluggable-provisioner-framework">
 <h1>Pluggable provisioner framework<a class="headerlink" href="#pluggable-provisioner-framework" title="Link to this heading"></a></h1>
 <ul class="simple">
-<li><p>Status: proposed</p></li>
+<li><p>Status: accepted</p></li>
 <li><p>Date: 2026-07-05</p></li>
 <li><p>Issue: <a class="reference external" href="https://github.com/huybrechtsxyz/strata/issues/169">#169</a></p></li>
 </ul>

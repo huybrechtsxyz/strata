@@ -1,6 +1,6 @@
 # Promotion strategies for version progression across environments
 
-- Status: proposed
+- Status: In design
 - Date: 2026-06-23
 
 ## Context and Problem Statement
@@ -444,6 +444,61 @@ The promotion system should be a first-class strata concept because:
     Need to decide: where do these live? Options: `meta.labels` (free-form key-value),
     dedicated `spec` fields, or a `spec.properties` dict. This affects `match_labels` in
     wave assignment — what label namespace does it match against?
+
+11. **Phase 1 reads a field that doesn't exist:** The Phase 1 implementation description
+    says "scan environment files, parse `spec.version` fields". There is no `spec.version`
+    field on `kind: environment`. The actual promotion target is
+    `spec.overrides.remotes[name].reference`. Phase 1 `status` and `matrix` commands must
+    scan `spec.overrides.remotes[]` in the merged environment model — not a top-level
+    version field. This requires loading the full environment model per environment file,
+    not a lightweight YAML parse.
+
+12. **No deployment discovery mechanism for `promote start`:** The command
+    `strata promote start --to production` needs to enumerate all deployments targeting
+    that environment. There is no registry of deployment files; `DeploymentService` loads
+    one file at a time. Options to resolve:
+    - Require an explicit `--deployment-files <glob>` or repeated `-f` flag (operator
+      provides the list)
+    - Scan a conventional directory (e.g. `deployments/**/*.yaml`) for `kind: deployment`
+      matching the target environment name in `spec.environments`
+    - Read from the solution registry (`.strata/solution.json`) if deployment paths are
+      tracked there
+    This must be decided before Phase 3 can be implemented. The discovery strategy also
+    affects `strata promote status` (Phase 1) and `strata promote matrix` (Phase 1).
+
+13. **Wave-to-file mapping is ambiguous:** When wave 1 fires, the promotion must edit
+    "the per-tenant environment override file" for each wave-1 deployment. But a deployment
+    has a `spec.environments` list with multiple files — the controller cannot tell which
+    file is the "per-tenant" one vs. the "shared" one without additional metadata.
+    Options to resolve:
+    - Tag environment files with a label convention (e.g. `meta.labels.scope: tenant`)
+      so the controller can identify the correct file to edit
+    - Add an explicit `spec.promotion.source_file` field to the environment model pointing
+      to the file that owns the remote reference being promoted
+    - Require the operator to pass `--source-file` to `promote start` explicitly
+    Note: this also conflates `kind: tenant` files (structural, loaded via `spec.tenant`)
+    with `kind: environment` files (configuration, in `spec.environments`). The field being
+    edited — `spec.overrides.remotes[].reference` — lives in `kind: environment`, not
+    `kind: tenant`. The ADR currently uses "tenant file" loosely to mean both.
+
+14. **Rollback depends on a local-only file:** `strata promote rollback` reads
+    `previous_version` from the activity log at `.strata/promotions/`. This file is
+    gitignored and machine-local. On a different machine, in CI, or after workspace
+    reset, the activity log may not exist. Rollback must either:
+    - Derive `previous_version` from git history (inspect the last commit that changed
+      the relevant field before the current promotion branch)
+    - Store `previous_version` in the promotion branch itself (e.g. in a commit message
+      trailer or a tracked file)
+    - Require `--from-version` as an explicit flag when the activity log is absent
+    The current design silently depends on a file that is explicitly excluded from version
+    control.
+
+15. **`scope` + single-layer configurations:** All current real configurations use only
+    a single `environment` layer. For these, `scope: tenant` matches zero deployments
+    and the only valid path is `scope: null` (all-at-once). Phase 3 automation is
+    effectively a no-op for single-layer users unless the ADR explicitly documents the
+    single-layer behavior and ensures `promote start` degrades gracefully rather than
+    silently doing nothing.
 
 ## Appendix: How `spec.tenant` Works on Deployments
 

@@ -234,6 +234,61 @@ Common issues:
 | `@repo-name/...` reference not found | Repo not registered or not cloned | `strata repo add` + `strata repo sync`      |
 | Terraform not found                  | `terraform` not on PATH           | Install Terraform 1.5+                      |
 
+### Inspecting Resolved Values Before Deploy
+
+Before deploying, inspect all variables, secrets, and features that will be used:
+
+```bash
+# List all resolved values for a deployment
+strata values list -f xyz-deploy-prd.yaml
+
+# Show store references (where each secret/variable comes from)
+strata values list -f xyz-deploy-prd.yaml --show-store
+
+# Find entries that failed to resolve (exit code 3)
+strata values list -f xyz-deploy-prd.yaml --unresolved
+
+# Inspect a single key
+strata values get -f xyz-deploy-prd.yaml DB_PASSWORD
+```
+
+Use this **before** running `strata deploy run` to catch missing credentials or typos early.
+
+### Using Dry-Run to Validate Deployment
+
+Always dry-run before a real deployment. The dry-run step validates configuration, builds artifacts, and plans (without applying):
+
+```bash
+# Plan without applying anything
+strata deploy run -f xyz-deploy-prd.yaml --dry-run
+
+# If successful, run the real deploy
+strata deploy run -f xyz-deploy-prd.yaml
+
+# Inspect what a specific stage would do
+strata deploy run -f xyz-deploy-prd.yaml --stage production --dry-run
+```
+
+### Debugging a Failed Deployment
+
+If a deploy fails, query the audit log to see what happened:
+
+```bash
+# Show the most recent deployment
+strata audit changes --last 1
+
+# Show all deployments in the last 24 hours
+strata audit changes --since 2026-07-05T00:00:00Z
+
+# Query which stage failed
+strata audit changes --stage infrastructure
+
+# Export audit log for analysis
+strata audit changes --last 50 --output json > audit.json
+```
+
+For more details, see the [audit traceability guide](guides/deployment-manifests.md).
+
 ---
 
 ## Contributing

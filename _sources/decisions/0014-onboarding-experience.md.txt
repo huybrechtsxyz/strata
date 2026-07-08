@@ -1,6 +1,6 @@
 # Guided onboarding and cold-start experience
 
-- Status: accepted
+- Status: implemented
 - Date: 2026-06-24
 
 ## Summary
@@ -408,3 +408,35 @@ Key differences:
 **Chosen approach:** Rework `strata guide` from single-shot to interactive REPL, folding guided init, doctor, and next-steps into a single stateful session. Phase 1 is pure hygiene (discovery + template fixes). Phase 2 is the REPL rework. Phase 3 adds guided init inside the REPL.
 
 Status: **accepted** — proceeding with Phase 1, then Phase 2.
+
+---
+
+## Post-v1.0 Deferred Work
+
+ADR-0014 has 21 items across 5 phases. **v1.0 ships with 18 complete** (Phases 1–4 + core Phase 3). The following items are **explicitly post-v1.0:**
+
+| Item | Name | Phase | Why Deferred |
+|------|------|-------|-------------|
+| 10 | `init` wizard inside guide REPL | 3 | Interactive guided initialization is convenient but not blocking. Users can manually scaffold via `strata new` (slower but works). Priority post-v1. |
+| 15 | Interactive `strata new` in REPL | 3 | Adds conversational UX to scaffolding (`new module --interactive`). Non-essential — single-shot `strata new` is CI-safe and works. |
+| 17 | `strata env doctor` — health check | 3 | Designed but not implemented. Useful for diagnosing workspace issues, but not part of cold-start path. Can ship as a separate enhancement. |
+| 19 | Progressive dependency scaffolding | 5 | When scaffolding a deployment, auto-scaffold missing referenced files. Complex dependency resolution — deferred pending demand. |
+| 20 | Auto-refresh mode (`--auto`) | 5 | REPL with live polling on file changes. Experimental UX feature; v1 doesn't need it. |
+| 21 | Template marketplace | 5 | Community templates via URL/registry. Infrastructure work; built-in templates are sufficient for v1. |
+
+### Why These Don't Block v1
+
+- **Item 10 (init wizard):** Users already have `strata new` + templates + `strata guide` checklist. The wizard automates this but the manual path works. Post-v1 nice-to-have.
+- **Item 15 (interactive new):** `strata new <template>` is non-interactive and CI-safe by design. Interactive mode is UX polish for the REPL only.
+- **Item 17 (env doctor):** Health-check tool for troubleshooting. Useful but not part of onboarding.
+- **Items 19–21:** Speculative future enhancements based on user feedback.
+
+### Effort Estimate
+
+Post-v1.0 backlog for ADR-0014:
+- Item 10: 4–6 hours (Q&A wizard flow, user preferences, template selection)
+- Item 15: 2–3 hours (conversational prompts in REPL)
+- Item 17: 3–4 hours (health checks, integration tests)
+- Items 19–21: 8–12 hours (each speculative based on demand)
+
+**Total: ~20–30 hours** (not urgent).
