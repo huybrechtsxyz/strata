@@ -8,26 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+---
+
+## [1.0.0] — 2026-07-08
+
 ### Added
 
-- New `@strata` chat participant commands: `status`, `validate`, `guide`, `build`, `deploy`, `repos`
-- Enhanced **Environments** view with drift detection and status monitoring
-- Enhanced **Audit Trail** view with SIEM resend functionality
-- New `strata.autoExportSchemas` setting for automatic schema wiring on workspace open
-- Support for per-stage deployment (deploy a single stage at a time)
-- Deployment freshness check: warns if build artifacts are stale
+- **Values Inspector** (`strataValues` tree view) — new sidebar panel showing all resolved deployment values with secret masking (`***`), source tracking, resolved/unresolved indicators, and copy-key-to-clipboard
+- **Lock Status & Release** — `strata.lockStatus` command shows live lock holder, TTL, and backend; `strata.releaseLock` force-releases with confirmation; 🔒 badge on locked deployments in Environments panel
+- **Drift Detection** — `strata.envDrift` runs drift analysis; ⚠ drift badge shown on deployment items after detection; `/drift` chat command with action button
+- **SBOM Generation** — `strata.buildSbom` generates CycloneDX SBOM with progress notification and offers to open `sbom.json`; SBOM task added to auto-discovered VS Code tasks
+- **Stage-targeted Deploy** — `strata.deployStage` deploys a single named stage with optional dry-run; right-click context menu on stage items in Environments panel; `/stage` chat command
+- **Repository Write Operations** — sync repo (spinner during operation), remove repo (confirmation dialog), add repo (name + path input); right-click context menus on repository items
+- **Audit Filter & Limit** — `strata.auditFilter` cycles all / success-only / failures-only; `strata.auditSetLimit` configures entry count (5–200, default 20); summary header shows current filter state
+- **Workspace Panel fully implemented** — `strataWorkspace` tree view now shows: active profile with indicator, all repositories with clone status, document paths (click to open), tool availability with pass/fail icons (was entirely stubbed with TODO comments)
+- **Chat Participant (`@strata`) action buttons** — `/build` and `/deploy` now render clickable ▶ Dry Run / ⚡ Full Build / 🚀 Full Deploy buttons that execute the corresponding commands; `/stage [file] <name>` for stage-targeted deploys; `/values` displays resolved values table inline; `/drift` renders drift detection button
+- **Editor context menus** — Show Values, Generate SBOM, Lock Status actions on `.yaml` files
+- **13 new commands**: `strata.deployStage`, `strata.lockStatus`, `strata.releaseLock`, `strata.showValues`, `strata.copyValueKey`, `strata.buildSbom`, `strata.syncRepo`, `strata.addRepo`, `strata.removeRepo`, `strata.auditFilter`, `strata.auditSetLimit`
+- **`StrataClient`** — 9 new CLI wrapper methods: `syncRepo`, `addRepo`, `removeRepo`, `getLockStatus`, `releaseLock`, `runDrift`, `getValues`, `generateSbom`; `getAuditChanges` enhanced with optional `stage` filter
 
 ### Changed
 
-- Improved error diagnostics with fix suggestions
-- Better handling of circular dependencies
-- More granular control over validation timing (on-save, on-type)
-
-### Fixed
-
-- Schema wiring now works correctly for all 15 model types
-- Cross-reference resolution (@repo/path) now works in deeply nested files
-- Fixed issue where environment-specific secrets were not shown in values lists
+- Environments panel — deployment items show lock (🔒) and drift (⚠ drift) badges; stage items carry `filePath` and `stageName` for context menu targeting
+- Repositories panel — items now have sync/remove context menus; spinner badge during sync; open-folder command on local path
+- Audit panel — entries limited by configurable count; filter state shown in summary header item
+- `yaml.schemas` workspace setting now uses a single `strata.json` umbrella schema (kind-dispatched) instead of 12 folder-path-based entries
 
 ---
 
