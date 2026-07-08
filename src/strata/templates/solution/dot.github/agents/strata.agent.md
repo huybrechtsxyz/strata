@@ -51,6 +51,7 @@ A strata workspace always contains a `.strata/` directory at its root. The solut
 Standard workspace structure:
 ```
 .strata/          ← state directory (solution.json, cli.yaml, platform.json)
+.strata/temp/     ← temporary files generated during build/deploy (never commit)
 config/           ← workspace YAML config files (kind: configuration)
 deploy/           ← deployment YAML files (kind: deployment)
 modules/          ← module YAML files (kind: module)
@@ -192,6 +193,7 @@ This workspace includes ready-made prompts in `.github/prompts/`. Use them for c
 ## Rules
 
 - Never write resolved secret values into YAML files — use `secret:` refs.
+- All temporary files (scripts, key files, rendered templates, etc.) must be written to `.strata/temp/`, never to the workspace root or any other directory.
 - Always validate before building. Always dry-run before deploying.
 - When scaffolding new files, run `strata validate <file>` immediately after writing.
 - Prefer `strata new <kind>` to scaffold boilerplate when available.
