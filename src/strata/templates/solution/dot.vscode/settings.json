@@ -56,42 +56,20 @@
     ".coverage": true
   },
   "yaml.schemas": {
-    "{{ workspaceFolder }}/.strata/schemas/configuration.json": [
-      "config/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/deployment.json": [
-      "deploy/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/environment.json": [
-      "envs/**/*.yaml",
-      "environments/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/module.json": [
-      "modules/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/namespace.json": [
-      "namespaces/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/provider.json": [
-      "providers/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/resource.json": [
-      "resources/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/firewall.json": [
-      "firewalls/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/network.json": [
-      "networks/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/dns.json": [
-      "dns/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/tenant.json": [
-      "tenants/**/*.yaml"
-    ],
-    "{{ workspaceFolder }}/.strata/schemas/workspace.json": [
-      "stack/**/*.yaml"
+    "{{ workspaceFolder }}/.strata/schemas/strata.json": [
+      "**/config/*.yaml",
+      "**/deploy/*.yaml",
+      "**/envs/*.yaml",
+      "**/environments/**/*.yaml",
+      "**/modules/*.yaml",
+      "**/namespaces/*.yaml",
+      "**/providers/*.yaml",
+      "**/resources/*.yaml",
+      "**/firewalls/*.yaml",
+      "**/networks/*.yaml",
+      "**/dns/*.yaml",
+      "**/tenants/*.yaml",
+      "**/stack/*.yaml"
     ]
   }
 }

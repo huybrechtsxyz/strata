@@ -2250,6 +2250,228 @@
       "title": "OAuth2AuthenticationModel",
       "type": "object"
     },
+    "OutputFileModel": {
+      "additionalProperties": false,
+      "description": "Single custom output file produced by the Terraform builder.",
+      "properties": {
+        "name": {
+          "description": "Output filename (e.g. environment_info.auto.tfvars.json)",
+          "title": "Name",
+          "type": "string"
+        },
+        "variable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Top-level TF variable name to wrap the data in",
+          "title": "Variable"
+        },
+        "type": {
+          "default": "object",
+          "enum": [
+            "object",
+            "map",
+            "list",
+            "flat",
+            "script"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "enum": [
+                "properties",
+                "custom"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key within the source dict to extract",
+          "title": "Key"
+        },
+        "sources": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/OutputFileSourceModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Multiple variable sources merged into one file",
+          "title": "Sources"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to script (required when type=script)",
+          "title": "Script"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "OutputFileModel",
+      "type": "object"
+    },
+    "OutputFileSourceModel": {
+      "additionalProperties": false,
+      "description": "One variable entry within a multi-source file definition (sources[]).",
+      "properties": {
+        "variable": {
+          "description": "Top-level TF variable name for this entry",
+          "title": "Variable",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source dict to look in",
+          "enum": [
+            "properties",
+            "custom"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "key": {
+          "description": "Key within the source dict to extract",
+          "title": "Key",
+          "type": "string"
+        },
+        "type": {
+          "default": "object",
+          "enum": [
+            "object",
+            "map",
+            "list"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "variable",
+        "source",
+        "key"
+      ],
+      "title": "OutputFileSourceModel",
+      "type": "object"
+    },
+    "OutputProfileModel": {
+      "additionalProperties": false,
+      "description": "Build output profile for a Terraform provisioner.\n\nControls what tfvars files are emitted by ``strata build run``.\nDefaults to ``format: strata`` (current behaviour) when absent.",
+      "properties": {
+        "format": {
+          "default": "strata",
+          "description": "strata=emit all built-in files (default); custom=emit only emits[]+files[]; script=one user script owns all output; none=source files copied, no tfvars",
+          "enum": [
+            "strata",
+            "custom",
+            "script",
+            "none"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to build script (required when format=script). Supports @repo_name/path.",
+          "title": "Script"
+        },
+        "emits": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "features",
+                  "variables",
+                  "properties",
+                  "custom",
+                  "workspace",
+                  "providers",
+                  "topologies",
+                  "modules",
+                  "namespaces",
+                  "firewalls",
+                  "dns",
+                  "networks",
+                  "resources",
+                  "tenant"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Explicit list of categories to emit. Omit to use format defaults: strata=all, custom/script/none=none.",
+          "title": "Emits"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/OutputFileModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Custom file definitions",
+          "title": "Files"
+        }
+      },
+      "title": "OutputProfileModel",
+      "type": "object"
+    },
     "PeeringReferenceModel": {
       "additionalProperties": false,
       "description": "Lightweight peering reference \u2014 name + target network only.",
@@ -3129,8 +3351,9 @@
           "title": "Description"
         },
         "provisioner": {
-          "$ref": "#/$defs/ProvisionerType",
-          "description": "IaC tool used for provisioning"
+          "description": "IaC tool used for provisioning. Built-in types: terraform, ansible, compose, helm, script. Custom provisioner plugins are also accepted.",
+          "title": "Provisioner",
+          "type": "string"
         },
         "source": {
           "$ref": "#/$defs/SourceModel",
@@ -3173,6 +3396,18 @@
           "default": null,
           "description": "Tool-specific configuration (e.g. playbook, inventory, ssh_private_key_secret for Ansible; backend overrides for Terraform).",
           "title": "Configuration"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputProfileModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Build output profile for Terraform provisioners. Controls what tfvars files are emitted by 'strata build run'. Defaults to format=strata (current behaviour) when absent."
         }
       },
       "required": [
@@ -4049,7 +4284,7 @@
           "type": "string"
         },
         "type": {
-          "description": "Policy type: tenant_zone | required_tags | naming_pattern | script",
+          "description": "Policy type: tenant_zone | required_tags | naming_pattern | resource_type_restrictions | script | cve_max_severity",
           "title": "Type",
           "type": "string"
         },
@@ -4241,18 +4476,6 @@
       },
       "title": "ProviderReferencesModel",
       "type": "object"
-    },
-    "ProvisionerType": {
-      "description": "Enumeration of supported provisioner names.",
-      "enum": [
-        "terraform",
-        "ansible",
-        "script",
-        "compose",
-        "helm"
-      ],
-      "title": "ProvisionerType",
-      "type": "string"
     },
     "ResourceDependencyModel": {
       "additionalProperties": false,
@@ -4765,6 +4988,35 @@
       "title": "SecretGenerateType",
       "type": "string"
     },
+    "SecretRotatePolicy": {
+      "description": "Rotation policy: warn (advisory only) or rotate (auto-regenerate).",
+      "enum": [
+        "warn",
+        "rotate"
+      ],
+      "title": "SecretRotatePolicy",
+      "type": "string"
+    },
+    "SecretRotateSpec": {
+      "description": "Rotation policy for a secret \u2014 advisory warning or automatic regeneration.",
+      "properties": {
+        "max_age": {
+          "description": "Maximum secret age in days before the policy triggers. Must be >= 1.",
+          "title": "Max Age",
+          "type": "integer"
+        },
+        "policy": {
+          "$ref": "#/$defs/SecretRotatePolicy",
+          "default": "warn",
+          "description": "Rotation policy: 'warn' emits an advisory, 'rotate' auto-regenerates (requires generate: spec)."
+        }
+      },
+      "required": [
+        "max_age"
+      ],
+      "title": "SecretRotateSpec",
+      "type": "object"
+    },
     "SecretStoreModel": {
       "description": "Model for secret definitions.\n\nSecrets can be sourced from various backends using registered integrations.\nThe 'store' field specifies the integration type, and the 'value' field\nspecifies the secret identifier within that store.",
       "properties": {
@@ -4819,6 +5071,18 @@
           ],
           "default": null,
           "description": "Auto-generate the secret when the store key is missing (integration-backed stores only)"
+        },
+        "rotate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretRotateSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Rotation policy: age-based advisory or automatic regeneration (integration-backed stores only)"
         }
       },
       "required": [

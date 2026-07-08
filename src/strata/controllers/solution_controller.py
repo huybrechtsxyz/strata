@@ -1329,11 +1329,52 @@ class SolutionController(BaseController):
                     self.logger.debug("Schema written", kind=kind_name)
                 except Exception as schema_exc:
                     self.logger.warning("Failed to write schema", kind=kind_name, error=str(schema_exc))
+            # Generate umbrella schema — dispatches to per-kind schema via if/then/else on `kind:`
+            try:
+                user_kinds = [k for k in _schema_map if k != "platform"]
+                umbrella = SolutionController._build_umbrella_schema(user_kinds)
+                umbrella_file = schemas_dir / "strata.json"
+                umbrella_file.write_text(json.dumps(umbrella, indent=2), encoding="utf-8")
+                self.logger.debug("Umbrella schema written", file="strata.json")
+            except Exception as umbrella_exc:
+                self.logger.warning("Failed to write umbrella schema", error=str(umbrella_exc))
             self._add_message(f"Updated: {SOLUTION_DIR}/{SOLUTION_SCHEMAS_DIR}/ (JSON Schemas for all kinds)")
         except Exception as e:
             self.logger.warning("Schema generation skipped", error=str(e))
 
         return True, []
+
+    @staticmethod
+    def _build_umbrella_schema(kinds: list) -> dict:
+        """Build an if/then/else discriminated-union schema that routes to the
+        per-kind schema file based on the ``kind:`` field value.
+
+        The result is written as ``strata.json`` alongside the per-kind schemas
+        so that a single ``yaml.schemas`` entry can cover all strata YAML files.
+        """
+        current: dict = {}
+        for kind in reversed(kinds):
+            branch: dict = {
+                "if": {"properties": {"kind": {"const": kind}}, "required": ["kind"]},
+                "then": {"$ref": f"{kind}.json"},
+            }
+            if current:
+                branch["else"] = current
+            current = branch
+        return {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Strata Platform Configuration",
+            "description": (
+                "Dispatches to the kind-specific schema based on the 'kind' field value. "
+                "Supported kinds: " + ", ".join(kinds)
+            ),
+            "type": "object",
+            "properties": {
+                "apiVersion": {"type": "string"},
+                "kind": {"type": "string"},
+            },
+            **current,
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers

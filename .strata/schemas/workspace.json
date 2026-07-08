@@ -52,6 +52,228 @@
       "title": "CommonLifecyclePhaseModel",
       "type": "object"
     },
+    "OutputFileModel": {
+      "additionalProperties": false,
+      "description": "Single custom output file produced by the Terraform builder.",
+      "properties": {
+        "name": {
+          "description": "Output filename (e.g. environment_info.auto.tfvars.json)",
+          "title": "Name",
+          "type": "string"
+        },
+        "variable": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Top-level TF variable name to wrap the data in",
+          "title": "Variable"
+        },
+        "type": {
+          "default": "object",
+          "enum": [
+            "object",
+            "map",
+            "list",
+            "flat",
+            "script"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "enum": [
+                "properties",
+                "custom"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Key within the source dict to extract",
+          "title": "Key"
+        },
+        "sources": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/OutputFileSourceModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Multiple variable sources merged into one file",
+          "title": "Sources"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to script (required when type=script)",
+          "title": "Script"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "OutputFileModel",
+      "type": "object"
+    },
+    "OutputFileSourceModel": {
+      "additionalProperties": false,
+      "description": "One variable entry within a multi-source file definition (sources[]).",
+      "properties": {
+        "variable": {
+          "description": "Top-level TF variable name for this entry",
+          "title": "Variable",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source dict to look in",
+          "enum": [
+            "properties",
+            "custom"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "key": {
+          "description": "Key within the source dict to extract",
+          "title": "Key",
+          "type": "string"
+        },
+        "type": {
+          "default": "object",
+          "enum": [
+            "object",
+            "map",
+            "list"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "variable",
+        "source",
+        "key"
+      ],
+      "title": "OutputFileSourceModel",
+      "type": "object"
+    },
+    "OutputProfileModel": {
+      "additionalProperties": false,
+      "description": "Build output profile for a Terraform provisioner.\n\nControls what tfvars files are emitted by ``strata build run``.\nDefaults to ``format: strata`` (current behaviour) when absent.",
+      "properties": {
+        "format": {
+          "default": "strata",
+          "description": "strata=emit all built-in files (default); custom=emit only emits[]+files[]; script=one user script owns all output; none=source files copied, no tfvars",
+          "enum": [
+            "strata",
+            "custom",
+            "script",
+            "none"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to build script (required when format=script). Supports @repo_name/path.",
+          "title": "Script"
+        },
+        "emits": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "features",
+                  "variables",
+                  "properties",
+                  "custom",
+                  "workspace",
+                  "providers",
+                  "topologies",
+                  "modules",
+                  "namespaces",
+                  "firewalls",
+                  "dns",
+                  "networks",
+                  "resources",
+                  "tenant"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Explicit list of categories to emit. Omit to use format defaults: strata=all, custom/script/none=none.",
+          "title": "Emits"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/OutputFileModel"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Custom file definitions",
+          "title": "Files"
+        }
+      },
+      "title": "OutputProfileModel",
+      "type": "object"
+    },
     "PlatformKind": {
       "description": "Enumeration of supported platform kinds.",
       "enum": [
@@ -80,18 +302,6 @@
         "strata.omp.com/v1"
       ],
       "title": "PlatformVersion",
-      "type": "string"
-    },
-    "ProvisionerType": {
-      "description": "Enumeration of supported provisioner names.",
-      "enum": [
-        "terraform",
-        "ansible",
-        "script",
-        "compose",
-        "helm"
-      ],
-      "title": "ProvisionerType",
       "type": "string"
     },
     "ScriptPathModel": {
@@ -431,8 +641,9 @@
           "title": "Description"
         },
         "provisioner": {
-          "$ref": "#/$defs/ProvisionerType",
-          "description": "IaC tool used for provisioning"
+          "description": "IaC tool used for provisioning. Built-in types: terraform, ansible, compose, helm, script. Custom provisioner plugins are also accepted.",
+          "title": "Provisioner",
+          "type": "string"
         },
         "source": {
           "$ref": "#/$defs/SourceModel",
@@ -475,6 +686,18 @@
           "default": null,
           "description": "Tool-specific configuration (e.g. playbook, inventory, ssh_private_key_secret for Ansible; backend overrides for Terraform).",
           "title": "Configuration"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputProfileModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Build output profile for Terraform provisioners. Controls what tfvars files are emitted by 'strata build run'. Defaults to format=strata (current behaviour) when absent."
         }
       },
       "required": [
