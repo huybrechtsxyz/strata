@@ -55,9 +55,9 @@ def _run_command(cmd: Any) -> Dict[str, Any]:
     Always returns ``{success, data, errors, messages}`` so MCP callers can
     inspect ``success`` and read ``errors`` without extra logic.
     """
-    success = cmd.execute()
+    cmd.execute()
     return {
-        "success": success,  # type: ignore[attr-defined]
+        "success": not cmd.has_errors(),  # type: ignore[attr-defined]
         "data": cmd._output_data,  # type: ignore[attr-defined]
         "errors": cmd.get_errors(),  # type: ignore[attr-defined]
         "messages": cmd.get_messages(),  # type: ignore[attr-defined]
