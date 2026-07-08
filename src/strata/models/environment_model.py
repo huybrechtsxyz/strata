@@ -218,13 +218,28 @@ class EnvironmentProviderOverrideModel(PlatformBaseModel):
     """
 
     provider: PlatformName = Field(description="Provider name to override (must match a provider in the workspace)")
+    file: Optional[str] = Field(
+        None,
+        description=(
+            "Replace the provider file binding for this environment. "
+            "Supports the same path formats as workspace provider file references "
+            "(@repo/path, relative, absolute). "
+            "When set, the workspace's default provider file is ignored and this file "
+            "is loaded instead, enabling the same workspace to target different regions "
+            "or cloud accounts per deployment."
+        ),
+    )
     description: Optional[str] = Field(
         None,
         description="Override provider description",
     )
     configuration: Optional[Dict[str, Any]] = Field(
         None,
-        description="Environment-specific provider configuration overrides (merged with workspace provider config)",
+        description=(
+            "Override individual properties in the loaded provider file's spec.properties "
+            "(e.g. region, engine, version). Applied after file resolution. "
+            "Keys that do not correspond to known spec.properties fields are logged and skipped."
+        ),
     )
 
 

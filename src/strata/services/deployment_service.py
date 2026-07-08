@@ -26,6 +26,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
         self._merge_provenance: Optional[MergeProvenance] = None
         self._validation_errors: List[str] = []
         self._structured_errors: List = []
+        self._objects_path: Optional[str] = None
+        self._load_repo_map: Optional[Dict[str, str]] = None
 
     def on_init(self) -> None:
         """Lifecycle hook: called after __init__ completes."""
@@ -529,13 +531,13 @@ class DeploymentService(BaseService["DeploymentModel"]):
                     namespace=override_namespace,
                 )
 
-        # Apply provider overrides (minimal - providers mostly configured in provider files)
+        # Apply provider overrides — description on workspace ref; file swap and configuration on the loaded service
         for provider_name in environment.get_overridden_provider_names():
             provider_override = environment.get_provider_override(provider_name)
             if not provider_override:
                 continue
 
-            # Get the workspace provider model
+            # Get the workspace provider model (the reference entry, not the loaded file)
             workspace_provider = None
             if workspace.model and workspace.model.spec and workspace.model.spec.providers:
                 workspace_provider = next(
@@ -547,9 +549,78 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 self.logger.warning("Skipping override for non-existent provider", provider=provider_name)
                 continue
 
-            # Apply provider overrides
+            # Apply description on the workspace reference
             if provider_override.description is not None:
                 workspace_provider.description = provider_override.description
+
+            # Apply file override — swap the entire provider binding and reload
+            if provider_override.file is not None:
+                if self._objects_path and self._load_repo_map is not None:
+                    from strata.services.provider_service import ProviderService as _ProviderService
+
+                    new_file = provider_override.file
+                    resolved_path = self._resolve_file_path(new_file, self._objects_path, self._load_repo_map)
+                    try:
+                        new_provider_svc = _ProviderService.load(resolved_path, validate=True)
+                        if new_provider_svc.is_validated():
+                            workspace.replace_provider_service(provider_name, new_provider_svc)
+                            workspace_provider.file = new_file
+                            self.logger.info(
+                                "Provider file override applied",
+                                provider=provider_name,
+                                file=new_file,
+                                resolved=resolved_path,
+                            )
+                        else:
+                            errs = new_provider_svc.get_validation_errors()
+                            errors.append(
+                                f"Provider '{provider_name}' file override '{new_file}' failed validation: "
+                                + "; ".join(errs)
+                            )
+                            self.logger.error(
+                                "Provider file override validation failed",
+                                provider=provider_name,
+                                file=new_file,
+                            )
+                    except Exception as exc:
+                        errors.append(
+                            f"Provider '{provider_name}' file override '{new_file}' could not be loaded: {exc}"
+                        )
+                        self.logger.error(
+                            "Failed to load provider file override",
+                            provider=provider_name,
+                            file=new_file,
+                            exc_info=True,
+                        )
+                else:
+                    errors.append(
+                        f"Provider '{provider_name}' file override cannot be applied: "
+                        "objects_path not available (call load_deploy_services first)"
+                    )
+
+            # Apply configuration (property overrides) to the loaded provider service
+            # Applied AFTER file override so configuration can further tweak the replacement file
+            if provider_override.configuration:
+                provider_service = workspace.get_provider_service(provider_name)
+                if provider_service and provider_service.model and provider_service.model.spec:
+                    props = provider_service.model.spec.properties
+                    known_fields = set(props.model_fields.keys())
+                    for key, value in provider_override.configuration.items():
+                        if key in known_fields:
+                            setattr(props, key, value)
+                            self.logger.debug(
+                                "Applied provider property override",
+                                provider=provider_name,
+                                field=key,
+                                value=value,
+                            )
+                        else:
+                            self.logger.warning(
+                                "Provider configuration override key is not a known property — skipped",
+                                provider=provider_name,
+                                key=key,
+                                known=sorted(known_fields),
+                            )
 
             self.logger.debug("Applied provider override", provider=provider_name)
 
@@ -689,6 +760,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
             # Store workspace service (infrastructure accessed via delegation)
             self._workspace_service = workspace_service
+            self._objects_path = objects_path
+            self._load_repo_map = repo_map
             self.logger.debug(
                 "Workspace loaded with infrastructure services",
                 providers=len(related_services.get("providers", {})),
@@ -970,6 +1043,18 @@ class DeploymentService(BaseService["DeploymentModel"]):
                             errors.append(
                                 f"Resource '{resource_name}' references non-existent firewall '{firewall_ref}'"
                             )
+
+        # Validation N: Provider region/type check against configuration.spec.providers
+        # ProviderService._validate_dynamic() has this logic but is never called during
+        # normal load (load() runs Phase 1 only). Run it here so region constraints from
+        # configuration are enforced — including after a file override has been applied.
+        config_svc = ConfigurationService.get_instance()
+        config_model = config_svc.model if config_svc else None
+        if config_model and providers:
+            for prov_name, prov_service in providers.items():
+                prov_valid, prov_errors = prov_service._validate_dynamic(configuration_model=config_model)
+                if not prov_valid:
+                    errors.extend([f"Provider '{prov_name}': {e}" for e in prov_errors])
 
         success = len(errors) == 0
 
