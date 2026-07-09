@@ -1,6 +1,6 @@
 # Guided onboarding and cold-start experience
 
-- Status: implemented
+- Status: completed
 - Date: 2026-06-24
 
 ## Summary
