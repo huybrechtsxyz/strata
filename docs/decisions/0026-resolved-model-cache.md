@@ -527,3 +527,121 @@ runs `promote matrix` in the terminal, the cache is already warm from the last s
    of environment files), `strata cache status --verbose` will show per-entry sizes.
    The operator can use `--no-cache` for that specific deployment if latency matters more
    than convenience.
+
+4. **Store value caching (variables, secrets, feature flags)**
+
+   The model cache stores the resolved *structure* of a deployment — YAML files merged
+   into a `PlatformArtifactModel`. It does not store the *values* resolved from external
+   stores (Bitwarden, HashiCorp Vault, environment variables). The question is whether
+   those resolved values should also be cached locally.
+
+   **Primary driver:** offline / degraded availability. If Bitwarden or Vault is
+   unreachable, a warm value cache lets `build run` succeed using last-known values
+   rather than failing. Secondary driver: CI pipelines that resolve the same secrets
+   across multiple steps currently hit the store on every step.
+
+   **Benefits in full:**
+
+   | Benefit | Description |
+   |---|---|
+   | **Resilience to store outages** | `build run` and `deploy run` succeed even when Bitwarden / Vault is unreachable. Without a value cache, an unavailable secret store blocks every deployment, including ones whose secrets haven't changed. |
+   | **CI pipeline speed** | A pipeline that runs validate → build → deploy → policy check resolves the same secrets four times. With a warm value cache, each step after the first is a local read. On a fleet of 50 deployments running in a matrix this compounds: 50 × 4 = 200 store round-trips reduced to 50. |
+   | **Rate-limit protection** | Bitwarden, Azure Key Vault, and Vault all have API rate limits. Fleet-wide commands (`promote matrix`, `drift run --all`) that resolve values for every deployment can hit these limits on larger fleets. A value cache collapses N resolutions to 1 per TTL window. |
+   | **Predictable build times** | External store latency is variable (network conditions, Vault lease renewal, MFA prompts). Caching removes the store from the critical path of routine builds, making CI timings consistent. |
+   | **Air-gapped / offline deploys** | Once values are cached, a deployment can be built and applied without any network path to the secret store. Useful for regulated environments where the deployment target is network-isolated but the operator has previously fetched the required values. |
+   | **Audit snapshot** | A cached value entry records *what value was used at what time* — a lightweight audit trail for variables and features that complements the build artifact. Useful for drift analysis: "did this variable's effective value change between the last two builds?" |
+
+   The benefits are real and meaningful. The reason store value caching is deferred is
+   not that the benefits are weak — it is that **the two problems below make a correct
+   implementation significantly harder than model caching**, and a wrong implementation
+   (stale secrets used silently, or secrets stored in plaintext) is worse than no cache.
+
+   **Two hard problems distinguish this from model caching:**
+
+   **Problem 1 — Cache validity cannot be determined by file hash.**
+
+   The model cache uses a SHA-256 of the input YAML file contents. If no file changed,
+   the model is fresh. Store values have no equivalent signal — a secret can rotate in
+   Bitwarden without any YAML file changing. The only validity mechanism available is a
+   **TTL**. This changes the entire correctness contract:
+
+   - Model cache: *provably fresh* (hash matches → identical result guaranteed)
+   - Store value cache: *probably fresh* (TTL not expired → value *likely* unchanged)
+
+   A stale model cache entry is detected and auto-refreshed before use. A stale store
+   value cache entry is *silently used* — there is no way to detect that the upstream
+   value changed without querying the store, which defeats the purpose of caching.
+
+   The acceptable TTL depends on the store type:
+
+   | Source | Typical rotation cadence | Suggested max TTL |
+   |---|---|---|
+   | `constant` | Never | Indefinite (but YAML hash covers it — no store cache needed) |
+   | `env` | Session / pipeline | 0 — do not cache; always resolve live |
+   | `bitwarden` | Hours–weeks | 1–4 hours |
+   | `vault` | Minutes–hours (lease-based) | Match Vault lease TTL; do not exceed |
+   | `azure_keyvault` | Hours–days | 1–4 hours |
+
+   `env` source values must never be cached: they are pipeline-scoped and can differ
+   between invocations of the same deployment in the same build system.
+
+   **Problem 2 — Secrets stored at rest require encryption or access controls.**
+
+   The model cache (`cache.db`) stores no sensitive data — resolved model structure is
+   safe to write in compressed-JSON form. Secret values are a different category.
+   Storing them in the same `cache.db` file means a read of `.strata/cache.db` yields
+   plaintext-equivalent secret values. Options:
+
+   - **Separate file with `chmod 600`** — `cache_secrets.db` with filesystem-level
+     access control. Provides OS-level protection on Linux/macOS; weaker on Windows.
+     Simple, no new dependencies. Does not protect against an attacker with filesystem
+     access (same risk as the secrets being on disk at all).
+   - **Encryption at rest with an auto-generated ephemeral key** — strata generates a
+     random key on first use (`os.urandom(32)`) and writes it to
+     `.strata/.cache.key` (chmod 600, gitignored). The `STRATA_CACHE_KEY` env var
+     overrides the file (useful in CI: generate once at pipeline start, export for the
+     run, discard at the end). Encryption uses that key; decryption requires it.
+     **Key lost → cache undecryptable → cold start → resolve live.** This is not a
+     problem: the store value cache is a performance optimisation, not an authoritative
+     source. Losing the key costs one round-trip to the store, not data loss. No key
+     management infrastructure is needed; no root secret is required beyond what the OS
+     filesystem already provides. The `cryptography` package (`Fernet`) handles
+     encrypt/decrypt; it is not stdlib but is already a likely transitive dependency.
+   - **Cache non-secrets only** — cache `variable` and `feature` values freely
+     (non-sensitive). Never cache `secret` values; always resolve them live. This is
+     the safest default — it eliminates the at-rest risk entirely and still provides
+     offline capability for the non-sensitive majority of values.
+
+   **Operator responsibility model:**
+
+   Unlike the model cache — where staleness is *detectable* (hash mismatch) and
+   auto-refresh is *safe* (re-reading YAML costs nothing) — the store value cache places
+   responsibility on the engineer or DevOps profile to keep values fresh. The cache is
+   valid for as long as the operator accepts the TTL risk. This is a deliberate trade-off:
+   the system does not silently use a stale secret, but it also does not force a live
+   fetch on every command. The operator chooses the freshness window.
+
+   The VS Code extension and a manual CLI trigger carry this responsibility in practice:
+
+   | Mechanism | How it works |
+   |---|---|
+   | **Extension background refresh** | The extension's background job (already warming the model cache on save) also refreshes store values on a TTL-aware schedule. Each source type has a configured refresh interval (see TTL table above). The extension calls `strata cache warm --values` in the background; the operator sees a status indicator (green = fresh, yellow = expiring soon, grey = stale/cold). |
+   | **Manual refresh trigger** | A VS Code command palette action (`Strata: Refresh store values`) and `strata cache warm --values [-f deployment]` let the operator force a live fetch at any time — before a deploy, after a secret rotation, or when the extension indicator shows stale. |
+   | **Key auto-generation** | On first use, strata generates `.strata/.cache.key`. As long as this file exists and `STRATA_CACHE_KEY` is not overridden, the same key is used across sessions. The operator does not need to manage the key manually. |
+
+   In CI the pattern is the same as the model cache (OQ-1 Pattern B/C): warm values
+   explicitly at pipeline start, use them across steps. The pipeline is responsible for
+   having a valid `STRATA_CACHE_KEY` or a pre-populated `.strata/.cache.key`.
+
+   **Proposed position (not yet decided):**
+
+   Store value caching is a distinct feature from model caching. It should be designed
+   and implemented as a separate ADR. The model cache (this ADR) is not extended with
+   store values. The remaining blocking questions before a store value cache ADR:
+
+   - What is the acceptable TTL policy per store type? (draft table above is a starting point)
+   - Is caching secret values in scope, or is the scope limited to variables and features?
+   - How does `--refresh-cache` interact with store TTLs — does it force a live store
+     fetch, or only re-warm the model?
+   - What happens when the store is unreachable and no cached value exists (hard error
+     vs deployment blocked vs degraded mode)?
