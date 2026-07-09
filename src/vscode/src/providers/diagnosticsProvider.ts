@@ -12,7 +12,7 @@
 
 import * as vscode from 'vscode';
 import { StrataCLIError } from '../strataClient';
-import type { StrataClient, ValidationError } from '../strataClient';
+import type { StrataClient, ValidationError, PolicyCheckData } from '../strataClient';
 
 /** Strata apiVersion prefixes that identify a strata YAML document. */
 const STRATA_API_PREFIXES = ['strata.omp.com/v1', 'strata.huybrechts.xyz/v1'];
@@ -141,6 +141,44 @@ export class DiagnosticsProvider implements vscode.Disposable {
     /** Clear all diagnostics (call from deactivate). */
     clearAll(): void {
         this._collection.clear();
+    }
+
+    /**
+     * Run `strata policy check` for a deployment file and push violations to
+     * the Problems panel as Error (enforcement=deny) or Warning (enforcement=warn).
+     *
+     * Returns the raw result so callers can gate the deploy confirmation dialog.
+     * Returns null if the CLI is unavailable or the deployment has no policies.
+     */
+    async checkPolicyDiagnostics(deploymentUri: vscode.Uri): Promise<PolicyCheckData | null> {
+        if (!this._client) return null;
+        try {
+            const result = await this._client.checkPolicy(deploymentUri.fsPath);
+            const policyDiags: vscode.Diagnostic[] = [];
+            for (const r of result.results) {
+                if (r.passed) continue;
+                const severity = r.enforcement === 'deny'
+                    ? vscode.DiagnosticSeverity.Error
+                    : vscode.DiagnosticSeverity.Warning;
+                for (const violation of r.violations) {
+                    const diag = new vscode.Diagnostic(
+                        new vscode.Range(0, 0, 0, 0),
+                        `Policy "${r.policy}" [${r.phase}] (${r.enforcement}): ${violation}`,
+                        severity,
+                    );
+                    diag.source = 'strata-policy';
+                    diag.code = r.policy;
+                    policyDiags.push(diag);
+                }
+            }
+            // Keep existing validation diagnostics, replace only policy ones
+            const existing = [...(this._collection.get(deploymentUri) ?? [])];
+            const validationDiags = existing.filter(d => d.source !== 'strata-policy');
+            this._collection.set(deploymentUri, [...validationDiags, ...policyDiags]);
+            return result;
+        } catch {
+            return null; // no policies defined or CLI unavailable — don't block
+        }
     }
 
     dispose(): void {

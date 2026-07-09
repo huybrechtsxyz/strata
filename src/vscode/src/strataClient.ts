@@ -313,6 +313,177 @@ export interface EnvStatusData {
 }
 
 // ---------------------------------------------------------------------------
+// Env Output types
+// ---------------------------------------------------------------------------
+
+/** Per-stage output data from `env output --output json` */
+export interface EnvOutputStage {
+    provisioner: string;
+    outputs: Record<string, string | null>; // null = sensitive/masked value
+    ok: boolean;
+    error: string | null;
+}
+
+/** Matches `env output --output json` data */
+export interface EnvOutputData {
+    file: string;
+    stages: Record<string, EnvOutputStage>;
+}
+
+// ---------------------------------------------------------------------------
+// Deploy Health types
+// ---------------------------------------------------------------------------
+
+/** A single health probe result */
+export interface DeployHealthCheck {
+    name: string;
+    type: 'http' | 'tcp';
+    passed: boolean;
+    url?: string;
+    status_code?: number;
+    expected?: number;
+    host?: string;
+    port?: number;
+    error?: string | null;
+}
+
+/** Per-stage health result */
+export interface DeployHealthStage {
+    passed: boolean;
+    checks: DeployHealthCheck[];
+}
+
+/** Matches `deploy health --output json` data */
+export interface DeployHealthData {
+    mode: string;
+    stages: Record<string, DeployHealthStage>;
+    summary: { total_stages: number; passed: number; failed: number } | 'no_checks_defined';
+}
+
+// ---------------------------------------------------------------------------
+// Build Plan types
+// ---------------------------------------------------------------------------
+
+/** A single artifact file in the build plan diff */
+export interface BuildPlanArtifact {
+    status: 'new' | 'changed' | 'unchanged';
+    path: string;
+    lines_changed: number;
+}
+
+/** Per-stage Terraform plan result */
+export interface BuildPlanTfStage {
+    stage: string;
+    ok: boolean;
+    messages: string[];
+    error: string | null;
+}
+
+/** A resolved value entry shown in the build plan */
+export interface BuildPlanValue {
+    type: 'variable' | 'secret' | 'feature';
+    key: string;
+    store: string;
+    status: 'ok' | 'required' | 'seeded' | 'generated';
+    detail: string | null;
+}
+
+/** Matches `build plan --output json` data */
+export interface BuildPlanData {
+    file: string;
+    deployment: string;
+    artifact_diff: BuildPlanArtifact[];
+    terraform_plan: BuildPlanTfStage[];
+    values: BuildPlanValue[];
+    providers: Array<{ name: string; file: string; source: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// Policy types
+// ---------------------------------------------------------------------------
+
+/** A single policy check result */
+export interface PolicyResult {
+    policy: string;
+    type: string;
+    phase: string;
+    enforcement: 'deny' | 'warn';
+    passed: boolean;
+    violations: string[];
+}
+
+/** Matches `policy check --output json` data */
+export interface PolicyCheckData {
+    deployment: string;
+    phases: string[];
+    policies_checked: number;
+    passed: number;
+    failed: number;
+    denied: number;
+    notes: Array<{ phase: string; message: string }>;
+    results: PolicyResult[];
+}
+
+/** A policy definition entry */
+export interface PolicyEntry {
+    name: string;
+    type: string;
+    phase: string;
+    enforcement: 'deny' | 'warn';
+    enabled: boolean;
+    description: string;
+}
+
+/** Matches `policy list --output json` data */
+export interface PolicyListData {
+    deployment: string;
+    policy_count: number;
+    enabled_count: number;
+    policies: PolicyEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Deploy History types
+// ---------------------------------------------------------------------------
+
+/** A single entry in the deploy history */
+export interface DeployHistoryEntry {
+    when: string;
+    operation: string;
+    operation_key: string;
+    execution_id: string;
+    success: boolean;
+    file: string;
+    stage: string;
+}
+
+/** Matches `deploy history --output json` data */
+export interface DeployHistoryData {
+    mode: string;
+    total: number;
+    filter: string;
+    entries: DeployHistoryEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Ref types
+// ---------------------------------------------------------------------------
+
+/** A single profile reference entry */
+export interface RefEntry {
+    name: string;
+    path: string;
+    type: string;
+    created: string;
+}
+
+/** Matches `ref <type> list --output json` data */
+export interface RefListData {
+    profile: string;
+    paths: Record<string, RefEntry[]>;
+}
+
+// ---------------------------------------------------------------------------
 // CLI response envelope
 // ---------------------------------------------------------------------------
 
@@ -547,6 +718,115 @@ export class StrataClient {
         return resp.data.entries;
     }
 
+    // ── Env Output ────────────────────────────────────────────────────────────
+
+    /** Run `strata env output -f <filePath> --output json`. */
+    async getEnvOutput(filePath: string): Promise<EnvOutputData> {
+        const resp = await this._run<EnvOutputData>([
+            'env', 'output', '-f', filePath, '--output', 'json',
+        ]);
+        return resp.data;
+    }
+
+    // ── Deploy Health ─────────────────────────────────────────────────────────
+
+    /** Run `strata deploy health -f <filePath> --output json`. */
+    async getDeployHealth(filePath: string): Promise<DeployHealthData> {
+        try {
+            const resp = await this._run<DeployHealthData>([
+                'deploy', 'health', '-f', filePath, '--output', 'json',
+            ]);
+            return resp.data;
+        } catch (err: unknown) {
+            const cliErr = err as { response?: CliResponse<DeployHealthData> };
+            if (cliErr?.response?.data) return cliErr.response.data;
+            throw err;
+        }
+    }
+
+    // ── Build Plan ────────────────────────────────────────────────────────────
+
+    /**
+     * Run `strata build plan -f <filePath> --output json`.
+     * May be slow — runs terraform plan behind the scenes.
+     */
+    async getBuildPlan(filePath: string): Promise<BuildPlanData> {
+        const resp = await this._run<BuildPlanData>([
+            'build', 'plan', '-f', filePath, '--output', 'json',
+        ], 120_000);
+        return resp.data;
+    }
+
+    // ── Policy ────────────────────────────────────────────────────────────────
+
+    /** Run `strata policy check -f <filePath> --output json`. */
+    async checkPolicy(filePath: string): Promise<PolicyCheckData> {
+        try {
+            const resp = await this._run<PolicyCheckData>([
+                'policy', 'check', '-f', filePath, '--output', 'json',
+            ]);
+            return resp.data;
+        } catch (err: unknown) {
+            const cliErr = err as { response?: CliResponse<PolicyCheckData> };
+            if (cliErr?.response?.data) return cliErr.response.data;
+            throw err;
+        }
+    }
+
+    /** Run `strata policy list -f <filePath> --output json`. */
+    async listPolicies(filePath: string): Promise<PolicyListData> {
+        const resp = await this._run<PolicyListData>([
+            'policy', 'list', '-f', filePath, '--output', 'json',
+        ]);
+        return resp.data;
+    }
+
+    // ── Deploy History ────────────────────────────────────────────────────────
+
+    /** Run `strata deploy history -f <filePath> --last <n> --output json`. */
+    async getDeployHistory(filePath: string, last = 10): Promise<DeployHistoryData> {
+        const resp = await this._run<DeployHistoryData>([
+            'deploy', 'history', '-f', filePath, '--last', String(last), '--output', 'json',
+        ]);
+        return resp.data;
+    }
+
+    // ── Refs ──────────────────────────────────────────────────────────────────
+
+    /** Run `strata ref <type> list --profile <profile> --output json`. */
+    async listRefs(
+        profile: string,
+        type: 'env' | 'config' | 'data' | 'secret',
+    ): Promise<RefEntry[]> {
+        const resp = await this._run<RefListData>([
+            'ref', type, 'list', '--profile', profile, '--output', 'json',
+        ]);
+        return resp.data.paths[`${type}file`] ?? [];
+    }
+
+    /** Run `strata ref <type> add --profile <profile> --name <name> --path <path> --output json`. */
+    async addRef(
+        profile: string,
+        type: 'env' | 'config' | 'data' | 'secret',
+        name: string,
+        path: string,
+    ): Promise<void> {
+        await this._run<Record<string, unknown>>([
+            'ref', type, 'add', '--profile', profile, '--name', name, '--path', path, '--output', 'json',
+        ]);
+    }
+
+    /** Run `strata ref <type> remove --profile <profile> --name <name> --output json`. */
+    async removeRef(
+        profile: string,
+        type: 'env' | 'config' | 'data' | 'secret',
+        name: string,
+    ): Promise<void> {
+        await this._run<Record<string, unknown>>([
+            'ref', type, 'remove', '--profile', profile, '--name', name, '--output', 'json',
+        ]);
+    }
+
     // ── Build / Deploy — run in terminal so user sees streaming output ─────────
 
     /**
@@ -571,7 +851,7 @@ export class StrataClient {
      *   contains the valid envelope with validation_passed:false in data.
      * - Exit code 'ENOENT' means the CLI binary is not installed.
      */
-    private async _run<T>(args: string[]): Promise<CliResponse<T>> {
+    private async _run<T>(args: string[], timeoutMs = 30_000): Promise<CliResponse<T>> {
         // Support compound CLI paths like "uv run strata"
         const parts = this.cliPath.trim().split(/\s+/);
         const executable = parts[0];
@@ -588,7 +868,7 @@ export class StrataClient {
 
         try {
             const result = await execFileAsync(executable, fullArgs, {
-                timeout: 30_000,
+                timeout: timeoutMs,
                 maxBuffer: 10 * 1024 * 1024, // 10 MB
                 windowsHide: true,
             });

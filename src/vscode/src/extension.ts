@@ -27,6 +27,7 @@ import { StrataChatParticipant } from './providers/strataChatParticipant';
 import { EnvViewProvider } from './providers/envViewProvider';
 import { AuditViewProvider } from './providers/auditViewProvider';
 import { ValuesViewProvider } from './providers/valuesViewProvider';
+import { BuildPlanProvider } from './providers/buildPlanProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -291,6 +292,12 @@ export function activate(context: vscode.ExtensionContext): void {
             _client?.runInTerminal(['build', 'run', '-f', target], 'strata build');
         }),
 
+        vscode.commands.registerCommand('strata.buildPlan', async (filePath?: string) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target || !_client) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            await BuildPlanProvider.show(target, _client);
+        }),
+
         vscode.commands.registerCommand('strata.deployDryRun', (filePath?: string) => {
             const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
             if (!target) { void vscode.window.showWarningMessage('No file selected for deploy.'); return; }
@@ -300,11 +307,47 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('strata.deployRun', async (filePath?: string) => {
             const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
             if (!target) { void vscode.window.showWarningMessage('No file selected for deploy.'); return; }
-            const confirmed = await vscode.window.showWarningMessage(
-                'Run a full strata deploy? This will apply infrastructure changes.',
-                { modal: true }, 'Deploy',
-            );
-            if (confirmed !== 'Deploy') return;
+
+            // ── Policy gate ────────────────────────────────────────────────
+            let policyNote = '';
+            let policyBlocked = false;
+            if (_client && _diagnostics) {
+                try {
+                    const result = await vscode.window.withProgress(
+                        { location: vscode.ProgressLocation.Window, title: 'Strata: checking policies…' },
+                        () => _diagnostics!.checkPolicyDiagnostics(vscode.Uri.file(target)),
+                    );
+                    if (result) {
+                        if (result.denied > 0) {
+                            policyNote = `⛔ ${result.denied} policy violation(s) with enforcement=deny`;
+                            policyBlocked = true;
+                        } else if (result.failed > 0) {
+                            policyNote = `⚠️ ${result.failed} policy warning(s)`;
+                        } else if (result.policies_checked > 0) {
+                            policyNote = `✅ ${result.policies_checked} policies passed`;
+                        }
+                    }
+                } catch { /* policy check unavailable — don't block */ }
+            }
+
+            if (policyBlocked) {
+                const pick = await vscode.window.showErrorMessage(
+                    `Deploy blocked: ${policyNote}`,
+                    { modal: true }, 'Deploy Anyway', 'View Violations',
+                );
+                if (pick === 'View Violations') {
+                    void vscode.commands.executeCommand('workbench.actions.view.problems');
+                    return;
+                }
+                if (pick !== 'Deploy Anyway') return;
+            } else {
+                const msg = policyNote
+                    ? `Run a full strata deploy? ${policyNote}. This will apply infrastructure changes.`
+                    : 'Run a full strata deploy? This will apply infrastructure changes.';
+                const confirmed = await vscode.window.showWarningMessage(msg, { modal: true }, 'Deploy');
+                if (confirmed !== 'Deploy') return;
+            }
+
             _lastDeployTarget = target;
             _client?.runInTerminal(['deploy', 'run', '-f', target, '--force'], 'strata deploy');
         }),
@@ -561,6 +604,124 @@ export function activate(context: vscode.ExtensionContext): void {
             void vscode.window.showInformationMessage(`Copied "${key}" to clipboard.`);
         }),
 
+        vscode.commands.registerCommand('strata.copyOutputValue', async (key: string, value: string | null) => {
+            if (value === null) {
+                void vscode.window.showWarningMessage(`"${key}" is a sensitive output — value not available in UI.`);
+                return;
+            }
+            await vscode.env.clipboard.writeText(value);
+            void vscode.window.showInformationMessage(`Copied "${key}" to clipboard.`);
+        }),
+
+        vscode.commands.registerCommand('strata.checkPolicy', async (filePath?: string) => {
+            const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!target || !_diagnostics) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            try {
+                const result = await vscode.window.withProgress(
+                    { location: vscode.ProgressLocation.Notification, title: 'Strata: checking policies…', cancellable: false },
+                    () => _diagnostics!.checkPolicyDiagnostics(vscode.Uri.file(target)),
+                );
+                if (!result) {
+                    void vscode.window.showInformationMessage('Strata: no policies defined for this deployment.');
+                    return;
+                }
+                if (result.denied > 0) {
+                    void vscode.window.showErrorMessage(
+                        `Policy check: ${result.denied} deny violation(s), ${result.failed - result.denied} warning(s) — see Problems panel`,
+                        'Open Problems',
+                    ).then(v => { if (v) void vscode.commands.executeCommand('workbench.actions.view.problems'); });
+                } else if (result.failed > 0) {
+                    void vscode.window.showWarningMessage(
+                        `Policy check: ${result.failed} warning(s) — see Problems panel`,
+                        'Open Problems',
+                    ).then(v => { if (v) void vscode.commands.executeCommand('workbench.actions.view.problems'); });
+                } else {
+                    void vscode.window.showInformationMessage(
+                        `Policy check: ${result.policies_checked} policies passed ✅`,
+                    );
+                }
+            } catch (err) {
+                void vscode.window.showErrorMessage(`Policy check failed: ${String(err)}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('strata.manageRefs', async () => {
+            if (!_client) return;
+            const profiles = _lastStatus?.profiles;
+            if (!profiles?.all.length) {
+                void vscode.window.showWarningMessage('No profiles found. Create a profile first.');
+                return;
+            }
+
+            // 1. Pick profile
+            const profilePick = await vscode.window.showQuickPick(
+                profiles.all.map(p => ({ label: p, description: p === profiles.active ? '(active)' : '' })),
+                { title: 'Manage Refs — select profile' },
+            );
+            if (!profilePick) return;
+            const profile = profilePick.label;
+
+            // 2. Pick ref type
+            const typePick = await vscode.window.showQuickPick(
+                [
+                    { label: 'env', description: 'Environment variable files (.env)' },
+                    { label: 'config', description: 'Configuration files' },
+                    { label: 'data', description: 'Data files' },
+                    { label: 'secret', description: 'Secret references' },
+                ],
+                { title: `Manage Refs — ${profile} — select type` },
+            );
+            if (!typePick) return;
+            const refType = typePick.label as 'env' | 'config' | 'data' | 'secret';
+
+            // 3. Load existing refs
+            let existing: import('./strataClient').RefEntry[] = [];
+            try {
+                existing = await _client.listRefs(profile, refType);
+            } catch { /* none yet */ }
+
+            // 4. Action menu: list existing + Add new
+            const actions = [
+                ...existing.map(r => ({
+                    label: `$(trash) Remove: ${r.name}`,
+                    description: r.path,
+                    action: 'remove' as const,
+                    name: r.name,
+                })),
+                { label: '$(add) Add new reference…', description: '', action: 'add' as const, name: '' },
+            ];
+
+            const actionPick = await vscode.window.showQuickPick(actions, {
+                title: `Refs: ${profile} / ${refType} — ${existing.length} configured`,
+            });
+            if (!actionPick) return;
+
+            if (actionPick.action === 'remove') {
+                const confirm = await vscode.window.showWarningMessage(
+                    `Remove ref "${actionPick.name}" from profile "${profile}"?`,
+                    { modal: true }, 'Remove',
+                );
+                if (confirm !== 'Remove') return;
+                try {
+                    await _client.removeRef(profile, refType, actionPick.name);
+                    void vscode.window.showInformationMessage(`Removed ref "${actionPick.name}" from ${profile}.`);
+                } catch (err) {
+                    void vscode.window.showErrorMessage(`Remove ref failed: ${String(err)}`);
+                }
+            } else {
+                const name = await vscode.window.showInputBox({ prompt: 'Reference name', placeHolder: 'e.g. base' });
+                if (!name) return;
+                const path = await vscode.window.showInputBox({ prompt: 'File path', placeHolder: 'e.g. config/base.env' });
+                if (!path) return;
+                try {
+                    await _client.addRef(profile, refType, name, path);
+                    void vscode.window.showInformationMessage(`Added ref "${name}" → ${path} to profile ${profile}.`);
+                } catch (err) {
+                    void vscode.window.showErrorMessage(`Add ref failed: ${String(err)}`);
+                }
+            }
+        }),
+
         vscode.commands.registerCommand('strata.buildSbom', async (filePath?: string) => {
             const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
             if (!target) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
@@ -698,13 +859,19 @@ export function activate(context: vscode.ExtensionContext): void {
 
                 if (exitCode === 0) {
                     if (action === 'Deploy' && deployTarget) {
+                        // Auto-run health check silently and update badge
+                        void (async () => {
+                            try {
+                                const health = await _client!.getDeployHealth(deployTarget);
+                                _envView?.updateHealth(deployTarget, health);
+                                _envView?.invalidateDeployment(deployTarget);
+                            } catch { /* health check unavailable — no badge */ }
+                        })();
                         void vscode.window.showInformationMessage(
                             'Strata: Deploy completed successfully.',
-                            'Check Health', 'View Outputs',
+                            'View Outputs',
                         ).then((v) => {
-                            if (v === 'Check Health') {
-                                _client?.runInTerminal(['deploy', 'health', '-f', deployTarget], 'strata deploy health');
-                            } else if (v === 'View Outputs') {
+                            if (v === 'View Outputs') {
                                 _client?.runInTerminal(['env', 'output', '-f', deployTarget], 'strata env output');
                             }
                         });
