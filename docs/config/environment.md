@@ -164,14 +164,14 @@ spec:
   overrides:
     providers:
       - provider: azure
-        file: @config/providers/azure-westeurope.yaml   # replaces workspace binding for this env
+        file: "@config/providers/azure-westeurope.yaml"   # replaces workspace binding for this env
 
 # env-dev-us.yaml
 spec:
   overrides:
     providers:
       - provider: azure
-        file: @config/providers/azure-eastus.yaml
+        file: "@config/providers/azure-eastus.yaml"
 ```
 
 **Override individual properties** (`configuration`) — applied on top of whichever provider
