@@ -7,6 +7,35 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **Tenant — `spec.environments` now applied at build time**
+  - `DeploymentService.load_deploy_services` prepends `tenant.spec.environments` to the deployment's own environment list before merging, so tenant tier files (e.g. `environments/tiers/enterprise.yaml`) are applied as a base layer that deployments can override
+  - `PlatformTenantModel` now carries an `environments` field so the build artifact records which base files were applied
+
+- **Tenant — `spec.properties` and `spec.custom`**
+  - New optional fields on `TenantSpecModel`; merged as base layers into every deployment's `spec.properties` / `spec.custom` — deployment values take precedence on any overlapping key
+  - `PlatformTenantModel` carries both fields for artifact traceability
+  - `TenantService` exposes `get_properties()` and `get_custom()` accessors
+
+- **`sln deployment` subcommand group**
+  - `sln deployment add <path>` — register a deployment YAML file in the solution
+  - `sln deployment remove <name>` — remove a registered deployment by name
+  - `sln deployment list [--name]` — list registered deployments (JSON output supported)
+  - `sln deployment scan [path]` — recursively discover and register `kind: deployment` files
+
+- **`docs/config/tenant.md`** — new reference doc covering schema, field descriptions, `properties`/`custom` vs `configuration` distinction, environment layering order, phase validation rules, and zone policy behaviour
+
+### Fixed
+
+- **Tenant `spec.environments` was declared and validated but never applied** — the field existed in the schema since the initial tenant model, paths were checked on disk during Phase 2, but the files were never actually merged into the build pipeline (`get_environments()` was defined but never called)
+
+### Changed
+
+- **Tenant `spec.environments` field description** — clarified to explicitly state these are *base environment files merged before the deployment's own environments* (not a list of environments the tenant belongs to); both the model docstring and the scaffolding templates updated
+- **`sln` subcommand set** — `deployment` group added; `test_sln_subcommands_registered` updated accordingly
+- **Strata Workspace Agent** — rule added: all temporary files must be written to `.strata/temp/`, not the workspace root; `.strata/temp/` documented in the workspace layout
+
 ---
 
 ## [1.0.0] — 2026-07-08

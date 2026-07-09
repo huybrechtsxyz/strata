@@ -15,6 +15,7 @@ from strata.logger.logger import get_active_log_file
 from strata.models.common_models import PlatformVersion
 from strata.models.solution_model import (
     SolutionModel,
+    SolutionSpecDeploymentModel,
     SolutionSpecProfileConfigModel,
     SolutionSpecProfileModel,
     SolutionSpecRepositoryModel,
@@ -411,6 +412,80 @@ class SolutionController(BaseController):
                 # git repo: cloned into work_path / r.path
                 repo_map[str(r.name)] = str(self._work_path / r.path)
         return repo_map
+
+    # ------------------------------------------------------------------
+    # Deployment registry helpers
+    # ------------------------------------------------------------------
+
+    def add_deployment(self, deployment: SolutionSpecDeploymentModel) -> Tuple[bool, List[str]]:
+        """Register a deployment file entry in the solution.
+
+        Args:
+            deployment: Deployment model to register.
+
+        Returns:
+            (success, errors)
+        """
+        if self._solution is None:
+            self._add_error("No solution loaded.")
+            return False, self.get_errors()
+
+        if self._solution.spec.deployments is None:
+            self._solution.spec.deployments = []
+
+        existing = [d.name for d in self._solution.spec.deployments]
+        if deployment.name in existing:
+            self._add_error(f"Deployment '{deployment.name}' already registered in solution.")
+            return False, self.get_errors()
+
+        self._solution.spec.deployments.append(deployment)
+        self.logger.info("Deployment registered in solution", deployment=deployment.name)
+        return True, []
+
+    def remove_deployment(self, name: str) -> Tuple[bool, List[str]]:
+        """Remove a registered deployment from the solution by name.
+
+        Args:
+            name: Deployment name to remove.
+
+        Returns:
+            (success, errors)
+        """
+        if self._solution is None:
+            self._add_error("No solution loaded.")
+            return False, self.get_errors()
+
+        deployments = self._solution.spec.deployments or []
+        updated = [d for d in deployments if d.name != name]
+
+        if len(updated) == len(deployments):
+            self._add_error(f"Deployment '{name}' not found in solution.")
+            return False, self.get_errors()
+
+        self._solution.spec.deployments = updated
+        self.logger.info("Deployment removed from solution", deployment=name)
+        return True, []
+
+    def get_deployments(self, name: Optional[str] = None) -> Tuple[List[SolutionSpecDeploymentModel], List[str]]:
+        """Return registered deployments from the solution, optionally filtered by name.
+
+        Args:
+            name: If given, return only the deployment with this name.
+
+        Returns:
+            ``(deployments, errors)``
+        """
+        if self._solution is None:
+            return [], ["No solution loaded."]
+
+        deployments = self._solution.spec.deployments or []
+
+        if name:
+            deployments = [d for d in deployments if d.name == name]
+            if not deployments:
+                return [], [f"Deployment '{name}' not found in solution."]
+
+        return list(deployments), []
 
     # ------------------------------------------------------------------
     # Canonical build path helpers
@@ -1185,8 +1260,12 @@ class SolutionController(BaseController):
                 continue
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
+                from strata import __version__
+
                 content = src.read_text(encoding="utf-8")
-                content = TemplateProcessor.render(content, {"SOLUTION_NAME": solution_name})
+                content = TemplateProcessor.render(
+                    content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
+                )
                 if dest.name == SOLUTION_LOGGING_FILE:
                     log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
                     content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)
@@ -1269,8 +1348,12 @@ class SolutionController(BaseController):
 
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
+                from strata import __version__
+
                 content = src.read_text(encoding="utf-8")
-                content = TemplateProcessor.render(content, {"SOLUTION_NAME": solution_name})
+                content = TemplateProcessor.render(
+                    content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
+                )
                 if dest.name == SOLUTION_LOGGING_FILE:
                     log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
                     content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)

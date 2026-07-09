@@ -45,3 +45,7 @@ build/
 
 # Node (if tooling is ever added)
 node_modules/
+
+# Local repository checkouts (managed by strata repo add --clone / strata repo sync)
+# Each entry is a git repo in its own right — do not commit their contents here.
+repos/

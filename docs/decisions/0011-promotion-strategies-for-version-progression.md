@@ -1,6 +1,6 @@
 # Promotion strategies for version progression across environments
 
-- Status: In design
+- Status: Accepted
 - Date: 2026-06-23
 
 ## Context and Problem Statement
@@ -100,7 +100,9 @@ spec:
       - name: infra-cautious
         type: remote                          # promotes spec.overrides.remotes[].reference
         progression: standard
-        waves: [1, 100]                       # canary first, then all
+        waves:
+          - name: canary                      # first: deployments with iteration: 1
+          - name: all                         # last: everyone else
         scope: tenant                         # only tenant-layer deployments are waved
         gates:
           require_progression_order: true     # previous env in progression must have this version
@@ -108,7 +110,10 @@ spec:
       - name: app-wave
         type: module                          # promotes chart_version / image tags
         progression: standard
-        waves: [1, 25, 100]                   # 1 tenant, 25% of tenants, then all
+        waves:
+          - name: canary                      # first: explicit iteration: 1 deployments
+          - name: early                       # middle: match_labels tier: standard
+          - name: all                         # last: everyone else
         scope: tenant                         # only tenant-layer deployments are waved
         gates:
           require_progression_order: true     # previous env in progression must have this version
@@ -130,15 +135,15 @@ Deployments without a `wave` block default to the last wave (the "everyone else"
 Resolution order: `iteration` wins over `match_labels`.
 
 ```yaml
-# tenants/acme.yaml — explicit wave assignment
+# deploy/acme-production.yaml — explicit wave assignment  (kind: deployment)
 spec:
   promotion:
     wave:
-      iteration: 1                            # acme is always the canary
+      iteration: 1                            # acme is always the canary in production
 ```
 
 ```yaml
-# tenants/contoso.yaml — label-based wave assignment
+# deploy/contoso-production.yaml — label-based wave assignment  (kind: deployment)
 # (matches against this deployment's resolved meta.labels)
 spec:
   promotion:
@@ -164,7 +169,7 @@ strata promote start --remote tf_landscape --version v2.4.0 --to production --wa
 strata promote status
 
 # Roll back (reverse promotion, same strategy applies)
-strata promote rollback --id prom-20260623-001
+strata promote rollback --remote tf_landscape --to production
 
 # Show version matrix across environments
 strata promote matrix
@@ -202,7 +207,7 @@ events:
     initiated_by: brady
     deployments: [acme]
     files_modified:
-      - tenants/acme.yaml
+      - environments/tenants/acme.yaml        # scope: tenant — env file edited for this wave
   - timestamp: 2026-06-23T10:01:12Z
     action: gate_passed
     gate: require_progression_order
@@ -219,7 +224,7 @@ events:
     files_modified:
       - environments/production.yaml
     fields_removed:
-      - tenants/acme.yaml → spec.overrides.remotes[tf_landscape]
+      - environments/tenants/acme.yaml → spec.overrides.remotes[tf_landscape]
   - timestamp: 2026-06-24T15:10:00Z
     action: completed
     outcome: completed
@@ -337,7 +342,7 @@ delivery, Flux + Flagger). Strata just deploys whatever version is in the YAML f
 
 ## Decision Outcome
 
-**Proposed: Option A** — Configuration-defined strategies with `strata promote` automation.
+**Decision: Option A** — Configuration-defined strategies with `strata promote` automation.
 
 The promotion system should be a first-class strata concept because:
 
@@ -356,21 +361,17 @@ The promotion system should be a first-class strata concept because:
 
 ### Implementation approach
 
-**Phase 1 — Visibility (read-only, no automation):**
-- `strata promote status` / `strata promote matrix` — scan environment files and deployment
-  manifests to show the version matrix across all environments
-- No new models, no state files, no git automation
-- Validates the concept and surfaces the data operators need
-
-**Phase 2 — Strategy model + validation:**
-- `configuration.spec.promotions` model (progressions, strategies)
+**Phase 1 — Strategy model + validation:**
+- `configuration.spec.promotions` model (progressions, strategies, named waves)
 - `environment.spec.promotion` reference (which strategy applies)
+- `deployment.spec.promotion.wave` model (`iteration`, `match_labels`) — opt-in wave assignment
 - `strata validate` checks: warn if a version jump skips a progression step
 - Still no automation — strategies are advisory guardrails
 
-**Phase 3 — Promotion automation:**
+**Phase 2 — Promotion automation:**
 - `strata promote start` — creates branch, makes YAML edits, commits (explicit `--wave` for each wave)
 - `strata promote rollback` — reverse promotion using the same strategy
+- `strata promote status` — shows in-flight promotions by reading `.strata/promotions/` activity log
 - `.strata/promotions/` activity log (diagnostic trace, gitignored, kept locally)
 - `kind: promotion-record` written to artifact store on completion/rollback
 - `strata promote history` — query completed records from artifact store
@@ -378,19 +379,31 @@ The promotion system should be a first-class strata concept because:
   (pure YAML inspection, no external tool integration needed)
 - Future gates added incrementally: `require_plan_clean`, `require_healthy`, `require_no_drift`
 
+**Deferred — `strata promote matrix`:**
+`promote matrix` requires loading the full merged environment model for every registered
+deployment to read effective versions — a fleet-wide `EnvironmentService` traversal that
+is expensive without a resolved-model cache. This command is deferred until a `.strata/`
+caching strategy is in place (see OQ-17). When implemented, `promote matrix` will read
+from the cache rather than re-resolving every environment file on every invocation.
+
+The same caching mechanism would benefit other fleet-wide operations: bulk validation,
+drift detection, and any future command that needs a resolved view of all deployments
+without a full re-load. That design belongs in a separate ADR.
+
 ### Consequences
 
 - Good: Unified promotion model for both infrastructure and application changes.
 - Good: Strategies are configuration-as-code — auditable, versioned, team-shared.
-- Good: Phased implementation means visibility ships first, automation ships when the model is proven.
+- Good: Phased implementation means model + validation ships before automation; matrix deferred until caching lands.
 - Good: Git remains the source of truth — strata automates the edits but the PR/merge flow is unchanged.
 - Good: Unpromotion uses the same strategy, preventing unsafe shortcuts under pressure.
 - Good: Completed promotion records stored in the same artifact remote as deployment manifests — no new infrastructure for audit storage. Reuses existing `spec.remotes` configuration.
 - Good: `kind: promotion-record` follows the Kubernetes-style schema, consistent with all other strata documents.
 - Good: No required runtime state — all promotion state derived from environment files and git. Activity log is diagnostic-only.
-- Good: Terraform landscapes benefit equally — remote reference versions progress through environments via the same progression gate. Zone-layer infra uses `waves: [100]` (all-at-once per env, still gated by `require_progression_order`). Tenant-layer infra can canary via `scope: tenant`.
+- Good: Terraform landscapes benefit equally — remote reference versions progress through environments via the same progression gate. Zone-layer infra uses a single `all` wave (all-at-once per env, still gated by `require_progression_order`). Tenant-layer infra can canary via `scope: tenant`.
 - Neutral: Zone-layer infrastructure is structurally shared per environment — canary within a single env is not possible. This is inherent to shared infra, not a system limitation. The `scope` field makes this explicit.
 - Neutral: Multi-promotion of the same target to the same environment (e.g., v2.4.0 and v2.5.0 both in flight) produces a git merge conflict on the second PR. This is correct behavior — git is the conflict detector. `strata promote start` can warn if a competing branch exists, but enforcement is via the normal PR process.
+- Neutral: Rollback after a partially-merged promotion (wave 1 PR merged, wave 2 PR still open) requires two actions: discard the open wave 2 branch, then create a new rollback branch that reverses the already-merged wave 1 change. `strata promote rollback` detects this via the activity log and generates the correct reverse edit, but the operator must close the open wave 2 PR manually. No silent partial states.
 
 ## Open Questions
 
@@ -438,67 +451,117 @@ The promotion system should be a first-class strata concept because:
 9. ~~**"Percentage waves" table in Key Observations is stale:**~~ Fixed — renamed to
    "Multi-wave" with wave count instead of percentages. Membership is always deliberate.
 
-10. **Deployment properties beyond layering:** Deployments have attributes like `tenant`,
-    `costcenter`, `region`, `project` that aren't all layers (layers define artifact path
-    structure). Some are metadata for filtering, billing, or organizational purposes.
-    Need to decide: where do these live? Options: `meta.labels` (free-form key-value),
-    dedicated `spec` fields, or a `spec.properties` dict. This affects `match_labels` in
-    wave assignment — what label namespace does it match against?
+10. ~~**Deployment properties beyond layering:**~~ Resolved — informational properties
+    (`costcenter`, `region`, `project`, etc.) belong in `spec.properties` (already a
+    `Dict[str, Any]` on both deployment and environment models) or `meta.labels` for
+    filtering/matching. `match_labels` in wave assignment matches against `meta.labels`.
+    `spec.tenant` is structural (drives file resolution) and is not used by `match_labels`
+    directly. See Appendix.
 
-11. **Phase 1 reads a field that doesn't exist:** The Phase 1 implementation description
-    says "scan environment files, parse `spec.version` fields". There is no `spec.version`
-    field on `kind: environment`. The actual promotion target is
-    `spec.overrides.remotes[name].reference`. Phase 1 `status` and `matrix` commands must
-    scan `spec.overrides.remotes[]` in the merged environment model — not a top-level
-    version field. This requires loading the full environment model per environment file,
-    not a lightweight YAML parse.
+11. ~~**Phase 1 reads a field that doesn't exist:**~~ Resolved — there is no `spec.version`
+    field on `kind: environment`. Phase 1 `status` and `matrix` commands scan
+    `spec.overrides.remotes[]` in the merged environment model. This requires loading
+    the full environment model per environment file via `EnvironmentService`, not a
+    lightweight YAML parse.
 
-12. **No deployment discovery mechanism for `promote start`:** The command
-    `strata promote start --to production` needs to enumerate all deployments targeting
-    that environment. There is no registry of deployment files; `DeploymentService` loads
-    one file at a time. Options to resolve:
-    - Require an explicit `--deployment-files <glob>` or repeated `-f` flag (operator
-      provides the list)
-    - Scan a conventional directory (e.g. `deployments/**/*.yaml`) for `kind: deployment`
-      matching the target environment name in `spec.environments`
-    - Read from the solution registry (`.strata/solution.json`) if deployment paths are
-      tracked there
-    This must be decided before Phase 3 can be implemented. The discovery strategy also
-    affects `strata promote status` (Phase 1) and `strata promote matrix` (Phase 1).
+12. ~~**No deployment discovery mechanism for `promote start`:**~~ Resolved — deployment
+    files are registered in `solution.json` via `strata sln deployment add <path>` or
+    discovered in bulk via `strata sln deployment scan [directory]`. The solution registry
+    (`spec.deployments[]`) is the source of truth for enumeration. `promote start --to
+    production` loads all registered deployments and filters by `spec.environments`
+    containing the target environment name. This also enables the VS Code extension to
+    display all managed deployments.
 
-13. **Wave-to-file mapping is ambiguous:** When wave 1 fires, the promotion must edit
-    "the per-tenant environment override file" for each wave-1 deployment. But a deployment
-    has a `spec.environments` list with multiple files — the controller cannot tell which
-    file is the "per-tenant" one vs. the "shared" one without additional metadata.
-    Options to resolve:
-    - Tag environment files with a label convention (e.g. `meta.labels.scope: tenant`)
-      so the controller can identify the correct file to edit
-    - Add an explicit `spec.promotion.source_file` field to the environment model pointing
-      to the file that owns the remote reference being promoted
-    - Require the operator to pass `--source-file` to `promote start` explicitly
-    Note: this also conflates `kind: tenant` files (structural, loaded via `spec.tenant`)
-    with `kind: environment` files (configuration, in `spec.environments`). The field being
-    edited — `spec.overrides.remotes[].reference` — lives in `kind: environment`, not
-    `kind: tenant`. The ADR currently uses "tenant file" loosely to mean both.
+    **CLI:**
+    ```bash
+    strata sln deployment add deploy/myapp.yaml     # register one file
+    strata sln deployment scan deploy/              # scan + register all in directory
+    strata sln deployment list                      # show registered deployments
+    strata sln deployment remove myapp             # unregister by name
+    ```
 
-14. **Rollback depends on a local-only file:** `strata promote rollback` reads
-    `previous_version` from the activity log at `.strata/promotions/`. This file is
-    gitignored and machine-local. On a different machine, in CI, or after workspace
-    reset, the activity log may not exist. Rollback must either:
-    - Derive `previous_version` from git history (inspect the last commit that changed
-      the relevant field before the current promotion branch)
-    - Store `previous_version` in the promotion branch itself (e.g. in a commit message
-      trailer or a tracked file)
-    - Require `--from-version` as an explicit flag when the activity log is absent
-    The current design silently depends on a file that is explicitly excluded from version
-    control.
+13. ~~**Wave-to-file mapping is ambiguous:**~~ Resolved — the `spec.environments` list on
+    `kind: deployment` is extended from `List[str]` to `List[DeploymentEnvironmentRef]`,
+    where each entry has a `file` path and an optional `scope` annotation. Bare strings
+    are auto-coerced at parse time for full backward compatibility.
 
-15. **`scope` + single-layer configurations:** All current real configurations use only
-    a single `environment` layer. For these, `scope: tenant` matches zero deployments
-    and the only valid path is `scope: null` (all-at-once). Phase 3 automation is
-    effectively a no-op for single-layer users unless the ADR explicitly documents the
-    single-layer behavior and ensures `promote start` degrades gracefully rather than
-    silently doing nothing.
+    The promotion controller identifies which file to edit per wave by matching
+    `entry.scope` against the strategy's `scope` field:
+    - `scope: "tenant"` entry → edited for canary/early waves (per-deployment override)
+    - `scope: "shared"` entry → edited for the final wave (shared environment file)
+    - `scope: null` entries → not targeted for wave-specific edits
+
+    Deployments that don't annotate `scope` on any entry behave as today (all-at-once
+    only). The field is optional — existing YAML without `scope` continues to work.
+
+    ```yaml
+    # deployment with scoped environment refs
+    spec:
+      environments:
+        - file: environments/production.yaml
+          scope: shared
+        - file: environments/tenants/acme.yaml
+          scope: tenant
+
+    # backward-compatible shorthand (scope: null)
+    spec:
+      environments:
+        - environments/production.yaml
+    ```
+
+14. ~~**Rollback depends on a local-only file:**~~ Resolved — `previous_version` is derived
+    via a three-tier fallback that requires no special infrastructure:
+
+    **Tier 1 — Activity log** (`.strata/promotions/{target}-{version}-{env}.yaml`): if
+    present locally, read `previous_version` directly. Fast path, always preferred.
+
+    **Tier 2 — Git history** (robust, always available): the pre-promotion value is always
+    readable at the merge base between the promotion branch and `main`:
+    ```bash
+    git merge-base HEAD main          # → <base-commit>
+    git show <base-commit>:<env-file> # → YAML before promotion started
+    ```
+    Parse `spec.overrides.remotes[{name}].reference` from that YAML — that is the
+    previous version. This works on any machine, in CI, after workspace reset.
+    The branch name (`promote/{target}-{version}-{environment}`) encodes enough context
+    to locate the correct files without the activity log.
+
+    **Tier 3 — Explicit flag** (escape hatch): `--from-version v2.3.0` — required only
+    when Tier 1 and Tier 2 both fail (shallow clone, detached HEAD, etc.).
+
+    This is consistent with the ADR's stated principle: "all promotion state can be derived
+    from environment files and git history." The activity log is a local convenience, not
+    a dependency.
+
+15. ~~**`scope` + single-layer configurations:**~~ Resolved — when a strategy has
+    `scope: tenant` but no registered deployment has the `tenant` layer key,
+    `promote start` degrades to all-at-once mode automatically: it edits the
+    `scope: "shared"` environment file directly (or the only environment file if none
+    are annotated), logs a notice `"No scoped deployments found — falling back to
+    all-at-once"`, and proceeds. No error, no silent no-op — the promotion still
+    happens, just without canary waving.
+
+    Single-layer operators who never annotate `scope` on their environment refs get
+    the same behavior as today: all environment changes go to the shared file in a
+    single wave. Waving is opt-in via `spec.environments[].scope` annotations.
+
+16. ~~**Wave config placement: `kind: deployment` vs `kind: tenant`:**~~ Resolved —
+    `spec.promotion.wave` belongs on `kind: deployment`, not `kind: tenant`.
+    A deployment file already represents "this entity deployed to this environment"
+    (e.g., `deploy/acme-production.yaml`). Wave assignment is per deployment-environment
+    pairing: acme can be canary in production but all-at-once in acceptance (if that
+    environment's strategy uses a single wave). Placing wave config on the tenant file
+    would couple promotion strategy into entity identity and prevent per-environment
+    wave variation. The deployment file is the correct owner because it is already
+    environment-specific and is the unit enumerated by `solution.json`.
+
+17. ~~**`promote matrix` implementation cost — deferred:**~~ Resolved — `promote matrix`
+    requires a full `EnvironmentService` load per registered deployment to read effective
+    versions. Without a resolved-model cache this is expensive for large fleets. The
+    command is deferred until a `.strata/` caching ADR defines the cache format and
+    invalidation strategy. `promote matrix` will read from that cache. The caching
+    mechanism will also benefit bulk validation, drift detection, and other fleet-wide
+    commands. Design tracked in **[ADR-0026](0026-resolved-model-cache.md)**.
 
 ## Appendix: How `spec.tenant` Works on Deployments
 
@@ -636,21 +699,67 @@ spec:
 Each environment references which strategy applies. Environments without a `promotion`
 block have no promotion guardrails (useful for dev/sandbox — versions can be set freely).
 
-#### Wave assignment on deployments
+#### `deployment.spec.environments` — scoped refs
 
-Wave membership is declared on the deployment (or tenant file) — decentralized, not
-centrally managed in the strategy.
+The `spec.environments` field on `kind: deployment` accepts either bare strings (backward
+compatible) or scoped ref objects. The `scope` annotation tells the promotion controller
+which file to target for each wave:
 
 ```yaml
-# tenants/acme.yaml
+# deploy/acme-production.yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: acme-production
 spec:
-  promotion:
-    wave:
-      iteration: 1                # always in the first wave (canary)
+  environments:
+    - file: "@config/environments/production.yaml"
+      scope: shared          # edited by the final wave (all)
+    - file: "@config/environments/tenants/acme.yaml"
+      scope: tenant          # edited by canary/early waves
 ```
 
 ```yaml
-# tenants/contoso.yaml
+# deploy/zone-production.yaml — zone infra, no waving
+spec:
+  environments:
+    - file: "@config/environments/production.yaml"
+      scope: shared
+```
+
+Bare strings (`- environments/production.yaml`) are auto-coerced to `{file: ..., scope: null}`
+at parse time. Deployments with no `scope` annotations are treated as all-at-once only.
+
+**Scope naming contract:** `spec.environments[].scope` values and `strategy.scope` use the
+same names by convention — a strategy with `scope: "tenant"` targets env entries annotated
+`scope: "tenant"`. These are complementary, not identical in semantics: the strategy field
+is a layer predicate (which deployments participate in waving); the entry annotation is a
+role label (which file gets edited for which wave). An implementer should not assume
+`strategy.scope == entry.scope` is a direct equality check — it is a naming convention.
+
+Deployment files must be **registered in the solution** to be visible to `promote start`:
+
+```bash
+strata sln deployment add deploy/acme-production.yaml
+strata sln deployment scan deploy/         # register all in directory
+strata sln deployment list                 # verify
+```
+
+#### Wave assignment on deployments
+
+Wave membership is declared on the deployment — decentralized, not centrally managed
+in the strategy.
+
+```yaml
+# deploy/acme-production.yaml  (kind: deployment — specific to production)
+spec:
+  promotion:
+    wave:
+      iteration: 1                # canary in production; may differ per environment
+```
+
+```yaml
+# deploy/contoso-production.yaml  (kind: deployment)
 spec:
   promotion:
     wave:
@@ -659,7 +768,7 @@ spec:
 ```
 
 ```yaml
-# tenants/fabrikam.yaml
+# deploy/fabrikam-production.yaml  (kind: deployment)
 # No spec.promotion.wave — defaults to last wave ("all")
 ```
 
@@ -712,21 +821,26 @@ strata promote start \
 
 1. Loads strategy from the target environment's `spec.promotion.strategy`
 2. Validates gates (progression order, etc.)
-3. Resolves deployments in the target environment
-4. Filters by scope (layer predicate)
-5. Assigns deployments to waves (iteration → match_labels → default)
-6. For the specified wave: determines which files to edit
-7. Creates branch `promote/{target}-{version}-{environment}`
-8. Makes YAML edits, commits
-9. Appends to activity log (`.strata/promotions/`)
-10. Outputs: files modified, branch name, suggested PR command
+3. Loads all deployments registered in `solution.json` (`spec.deployments[]`), loads each
+   deployment's merged environment model, and filters to deployments where any resolved
+   environment has `meta.name == target_environment`
+4. Filters by scope: only deployments where `strategy.scope in deployment.spec.layers`
+   participate in waving; others are all-at-once
+5. Assigns deployments to waves (iteration → match_labels → default last wave)
+6. For single-layer / no scoped entries: degrades to all-at-once with a console notice
+7. For the specified wave: identifies files via `spec.environments[].scope` matching
+8. Creates branch `promote/{target}-{version}-{environment}`
+9. Makes YAML edits, commits
+10. Appends to activity log (`.strata/promotions/`)
+11. Outputs: files modified, branch name, suggested PR command
 
 **Wave mechanics — what gets edited:**
 
-| Wave position                | Action                                                                                                                                                   |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| First/middle wave (not last) | Edit each wave-member's tenant file: add `spec.overrides.remotes[{name}].reference: {version}`                                                           |
-| Last wave (`all`)            | Edit shared environment file: set `spec.overrides.remotes[{name}].reference: {version}`. Remove per-tenant overrides from previous waves (now redundant) |
+| Wave position                | Action                                                                                                                                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First/middle wave (not last) | For each wave-member deployment: edit the `spec.environments` entry where `scope == strategy.scope` (e.g. `scope: "tenant"`). Set `spec.overrides.remotes[{name}].reference: {version}` in that file. |
+| Last wave (`all`)            | Edit the `scope: "shared"` environment file: set `spec.overrides.remotes[{name}].reference: {version}`. Remove scoped overrides written by earlier waves (they are now covered by the shared file).   |
+| No scoped entries found      | Degrade to all-at-once: edit the `scope: "shared"` file (or the only env file if none are annotated). Log notice: `"No scoped deployments — falling back to all-at-once"`                             |
 
 #### `strata promote rollback`
 
@@ -734,12 +848,25 @@ strata promote start \
 strata promote rollback \
   --remote tf_landscape \
   --to production
+
+# explicit previous version when git derivation is unavailable (shallow clone, CI, etc.)
+strata promote rollback \
+  --remote tf_landscape \
+  --to production \
+  --from-version v2.3.0
 ```
 
-- Reads `previous_version` from the active promotion's activity log
-- Applies the reverse using the **same strategy** (if production requires canary-first
-  going forward, it requires canary-first going backward)
-- Writes `outcome: rolled-back` to the promotion record
+**`previous_version` resolution — three-tier fallback:**
+
+| Tier | Source                                                                    | When available                       |
+| ---- | ------------------------------------------------------------------------- | ------------------------------------ |
+| 1    | Activity log (`.strata/promotions/{target}-{version}-{env}.yaml`)         | Local machine, log present           |
+| 2    | Git merge base: `git merge-base HEAD main` → read env file at that commit | Always, unless shallow clone         |
+| 3    | `--from-version` explicit flag                                            | Escape hatch for CI / shallow clones |
+
+Rollback applies the reverse edit using the **same strategy** — if production required
+canary-first going forward, it requires canary-first going backward. Writes
+`outcome: rolled-back` to the promotion record.
 
 #### `strata promote matrix`
 
@@ -838,16 +965,17 @@ approval). There is no auto-advance — strata is a config tool, not a runtime s
 
 ### Interaction with Existing Systems
 
-| System                   | Interaction                                                                                         |
-| ------------------------ | --------------------------------------------------------------------------------------------------- |
-| `strata validate`        | Phase 2+: warns if a version jump skips a progression step                                          |
-| `strata deploy list`     | Already resolves effective config through the merge chain — sees promotion overrides natively       |
-| `strata build`           | Unchanged — builds whatever version is in the resolved config                                       |
-| CI/CD pipeline           | Unchanged — deploys on merge to main. Strata creates the branch and edits, CI validates and deploys |
-| `spec.overrides.remotes` | The exact field being edited by promotions. Existing override merge chain handles layering          |
-| `spec.tenant`            | Drives file resolution for wave-1 edits (which tenant file to edit). Not read by `match_labels`     |
-| `meta.labels`            | Matched by `match_labels` for wave assignment. Informational labels live here                       |
-| `spec.layers`            | Used by `scope` predicate to filter which deployments participate in waving                         |
+| System                      | Interaction                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `strata validate`           | Phase 2+: warns if a version jump skips a progression step                                              |
+| `strata deploy list`        | Already resolves effective config through the merge chain — sees promotion overrides natively           |
+| `strata build`              | Unchanged — builds whatever version is in the resolved config                                           |
+| CI/CD pipeline              | Unchanged — deploys on merge to main. Strata creates the branch and edits, CI validates and deploys     |
+| `spec.overrides.remotes`    | The exact field being edited by promotions. Existing override merge chain handles layering              |
+| `spec.tenant`               | Drives file resolution for wave-1 edits (which tenant file to edit). Not read by `match_labels`         |
+| `meta.labels`               | Matched by `match_labels` for wave assignment. Informational labels live here                           |
+| `spec.layers`               | Used by `scope` predicate to filter which deployments participate in waving                             |
+| `spec.environments[].scope` | Identifies which environment file to edit per wave (`"shared"` = final wave, layer name = canary waves) |
 
 ### Constraints and Non-Goals
 

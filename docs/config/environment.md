@@ -152,16 +152,53 @@ spec:
 
 ### Provider Overrides
 
-Override provider descriptions or configuration:
+Override the provider file binding or individual provider properties per environment.
+
+**Swap the entire provider file** (`file`) — the provider's `spec.properties`, `spec.references`,
+and all other settings come from the replacement file. This is the recommended approach for
+targeting different regions or cloud accounts:
+
+```yaml
+# env-dev-eu.yaml
+spec:
+  overrides:
+    providers:
+      - provider: azure
+        file: "@config/providers/azure-westeurope.yaml"   # replaces workspace binding for this env
+
+# env-dev-us.yaml
+spec:
+  overrides:
+    providers:
+      - provider: azure
+        file: "@config/providers/azure-eastus.yaml"
+```
+
+**Override individual properties** (`configuration`) — applied on top of whichever provider
+file is loaded (after `file` resolution if both are set). Useful for minor per-environment
+tweaks without maintaining separate provider files:
 
 ```yaml
 spec:
   overrides:
     providers:
-      - provider: kamatera_europe
+      - provider: azure
         configuration:
-          region: "eu-west-1"
+          region: westeurope    # overrides spec.properties.region in the loaded provider file
+          engine: azurerm       # overrides spec.properties.engine
 ```
+
+Configuration keys that do not match known `spec.properties` fields are logged and skipped.
+
+| Field           | Required | Description                                                                  |
+| --------------- | -------- | ---------------------------------------------------------------------------- |
+| `provider`      | Yes      | Must match a provider `name` in the workspace                                |
+| `file`          | No       | Replace the workspace's provider file binding for this environment           |
+| `description`   | No       | Overrides the description on the workspace provider reference                |
+| `configuration` | No       | Key-value overrides applied to `spec.properties` in the loaded provider file |
+
+The provider YAML file defines which variable/secret keys are required; the actual credential
+values are supplied via deployment `variables` and `secrets` — which can differ per deployment.
 
 ### Remote Reference Overrides
 

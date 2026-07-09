@@ -131,7 +131,13 @@ class TestMainGroup:
         from strata.commands.cli_sln import sln_group
 
         sln_cmds = set(sln_group.commands.keys())
-        assert {"init", "update", "clean", "status", "export"} == sln_cmds
+        assert {"init", "update", "clean", "status", "export", "deployment"} == sln_cmds
+
+    def test_sln_deployment_subcommands_registered(self):
+        from strata.commands.cli_sln import deployment_group
+
+        dep_cmds = set(deployment_group.commands.keys())
+        assert {"add", "remove", "list", "scan"} == dep_cmds
 
 
 # ---------------------------------------------------------------------------

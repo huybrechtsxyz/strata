@@ -6,21 +6,39 @@
 apiVersion: strata.huybrechts.xyz/v1
 kind: tenant
 meta:
-  name: {{ code }}
+  name: { { code } }
   annotations:
     description: "{{ name }} - Tenant configuration"
   labels:
     tier: standard
 spec:
-  code: {{ code }}
-  name: {{ name }}
+  code: { { code } }
+  name: { { name } }
   zones:
-    - {{ zone }} # Must match a zone name from configuration.spec.zones
-  onboarded: {{ onboarded }} # ISO 8601 date (YYYY-MM-DD)
+    - { { zone } } # Must match a zone name from configuration.spec.zones
+  onboarded: { { onboarded } } # ISO 8601 date (YYYY-MM-DD)
+
+  # Base environment files merged BEFORE each deployment's own environments.
+  # Use this for tenant-wide defaults (tier variables, feature flags, secrets).
+  # Deployment environment files take precedence over these.
   environments:
-    - environments/{{ code }}.yaml # Path to tenant environment file
+    - environments/tiers/standard.yaml # tier-level defaults for this tenant
+
+  # Tenant-wide deployment properties — merged as a base layer into spec.properties
+  # of every deployment that references this tenant.
+  # Deployment properties take precedence.
+  properties:
+    tier: "standard" # standard | premium | enterprise
+
+  # Tenant-wide custom data — merged as a base layer into spec.custom
+  # of every deployment that references this tenant.
+  # Deployment custom values take precedence.
+  # custom:
+  #   some_key: some_value
+
+  # Tenant identity metadata emitted verbatim inside the strata_tenant tfvar object.
+  # Use for CRM IDs, billing codes, or other metadata consumed by Terraform/Ansible.
   configuration:
-    # Arbitrary key/value pairs specific to this tenant
     crm_id: "{{ crm_id }}"
     support_level: "standard" # standard | premium | enterprise
   references:

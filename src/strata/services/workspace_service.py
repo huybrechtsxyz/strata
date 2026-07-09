@@ -812,6 +812,17 @@ class WorkspaceService(BaseService["WorkspaceModel"]):
             return cast(ProviderService, value)
         return None
 
+    def replace_provider_service(self, provider_name: str, service: ProviderService) -> None:
+        """Replace a loaded provider service.
+
+        Called by DeploymentService during environment override application when an
+        environment declares ``overrides.providers[].file`` to swap the provider binding.
+        """
+        if self._related_services is not None:
+            if "providers" not in self._related_services:
+                self._related_services["providers"] = {}
+            self._related_services["providers"][provider_name] = service
+
     def get_resource_services(
         self,
     ) -> Optional[Dict[str, ResourceService]]:

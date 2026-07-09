@@ -29,7 +29,7 @@ Strata resolves `@repo/path` references from named repositories. Register this d
 
 ```bash
 # Local directory (path relative to where you run strata)
-strata repo add {{ SOLUTION_NAME }} . --type local
+strata repo add {{ SOLUTION_NAME }} .
 
 # — OR — a remote git repository (cloned into the workspace)
 strata repo add {{ SOLUTION_NAME }} <git-url> --branch main --clone
@@ -60,7 +60,7 @@ strata sln status
 ### Validate — lint and check all YAML files
 
 ```bash
-strata validate --file deploy/deploy-prd.yaml
+strata validate run -f deploy/deploy-prd.yaml
 ```
 
 Runs structural and cross-reference checks on the deployment and all files it pulls in.
@@ -68,7 +68,7 @@ Runs structural and cross-reference checks on the deployment and all files it pu
 ### Build — generate deployment artifacts
 
 ```bash
-strata build run --file deploy/deploy-prd.yaml
+strata build run -f deploy/deploy-prd.yaml
 ```
 
 Produces a build artifact (e.g. rendered Helm values, Terraform state, compose files) in `.strata/build/`.
@@ -76,7 +76,7 @@ Produces a build artifact (e.g. rendered Helm values, Terraform state, compose f
 ### Deploy — provision and apply
 
 ```bash
-strata deploy run --file deploy/deploy-prd.yaml
+strata deploy run -f deploy/deploy-prd.yaml
 ```
 
 Runs the provisioner (Terraform, Helm, Compose, …) for each stage defined in the deployment.
@@ -84,25 +84,25 @@ Runs the provisioner (Terraform, Helm, Compose, …) for each stage defined in t
 ### Destroy — tear down
 
 ```bash
-strata deploy destroy --file deploy/deploy-prd.yaml
+strata deploy destroy -f deploy/deploy-prd.yaml
 ```
 
 ---
 
 ## Common commands
 
-| Task               | Command                           |
-| ------------------ | --------------------------------- |
-| Workspace overview | `strata sln status`               |
-| List repositories  | `strata repo list`                |
-| List profiles      | `strata profile list`             |
-| Show config values | `strata config list`              |
-| Show resolved vars | `strata vars list`                |
-| Validate a file    | `strata validate --file <path>`   |
-| Build              | `strata build run --file <path>`  |
-| Deploy             | `strata deploy run --file <path>` |
-| View recent logs   | `strata log show`                 |
-| CLI help           | `strata --help`                   |
+| Task               | Command                         |
+| ------------------ | ------------------------------- |
+| Workspace overview | `strata sln status`             |
+| List repositories  | `strata repo list`              |
+| List profiles      | `strata profile list`           |
+| Show config values | `strata config list`            |
+| Show resolved vars | `strata vars list`              |
+| Validate a file    | `strata validate run -f <path>` |
+| Build              | `strata build run -f <path>`    |
+| Deploy             | `strata deploy run -f <path>`   |
+| View recent logs   | `strata log list`               |
+| CLI help           | `strata --help`                 |
 
 ---
 
@@ -110,5 +110,5 @@ strata deploy destroy --file deploy/deploy-prd.yaml
 
 - Edit `config/{{ SOLUTION_NAME }}-config.yaml` to add your provider credentials and repository settings.
 - Edit `envs/env-prd.yaml` to declare variables, secrets, and feature flags for the `prd` environment.
-- Run `strata validate --file deploy/deploy-prd.yaml` to confirm everything is wired up correctly.
+- Run `strata validate run -f deploy/deploy-prd.yaml` to confirm everything is wired up correctly.
 - See the template-specific `README.md` for provisioner-specific prerequisites and notes.

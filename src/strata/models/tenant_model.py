@@ -66,18 +66,42 @@ class TenantSpecModel(PlatformBaseModel):
     environments: Optional[List[str]] = Field(
         None,
         description=(
-            "Ordered list of environment file paths applied before deployment environments. "
-            "Typically points to a tier file, e.g. ['environments/tiers/enterprise.yaml']. "
+            "Base environment files merged in BEFORE the deployment's own environments, "
+            "so deployment values take precedence. "
+            "Use this to inject tenant-wide defaults (e.g. a tier file with shared variables, "
+            "feature flags, or secrets) without repeating them in every deployment. "
+            "Example: ['environments/tiers/enterprise.yaml']. "
             "Validated against the filesystem during Phase 2."
         ),
     )
 
-    # --- Custom key/value configuration ---
+    # --- Tenant-level deployment defaults ---
+    properties: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Tenant-wide deployment properties merged as a base layer into spec.properties "
+            "of every deployment that references this tenant. "
+            "Deployment properties take precedence over tenant properties. "
+            "Example: {'tier': 'enterprise', 'region_preference': 'eu'}"
+        ),
+    )
+    custom: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Tenant-wide custom data merged as a base layer into spec.custom "
+            "of every deployment that references this tenant. "
+            "Deployment custom values take precedence over tenant custom values."
+        ),
+    )
+
+    # --- Tenant identity configuration ---
     configuration: Optional[Dict[str, Any]] = Field(
         None,
         description=(
-            "Arbitrary key/value pairs for tenant-specific settings. "
-            "Injected as deployment properties at slot generation time. "
+            "Arbitrary key/value pairs for tenant-specific settings emitted verbatim "
+            "inside the strata_tenant tfvar object (not merged into deployment properties). "
+            "Use this for CRM IDs, billing codes, or other tenant metadata consumed "
+            "directly by Terraform/Ansible modules. "
             "Example: {'crm_id': '42', 'invoice_prefix': 'ACM'}"
         ),
     )
