@@ -16,7 +16,8 @@ and no visibility into what version is running where across the fleet.
 
 The platform needs a structured promotion system that:
 
-- Defines allowed progressions (dev → test → acc → prd)
+- Defines allowed progressions through ordered **rings** (dev → test → qas → prd), where each ring
+  can contain multiple environments (e.g., `prd` = prod-be, prod-us, prod-sg)
 - Supports gradual rollout strategies (single tenant first, waves, all-at-once)
 - Distinguishes between infrastructure changes (high blast radius) and application changes (lower blast radius)
 - Integrates with the existing git-based workflow (branch, commit YAML edits, PR, merge, deploy)
@@ -30,7 +31,7 @@ The platform needs a structured promotion system that:
 They are complementary:
 
 - **ADR 0017** (Release Lifecycle): Commits → Tests pass → `tested` tag → Release branch → `vX.Y.Z` semantic tag
-- **ADR 0011** (Promotion): Semantic tag → dev environment → test → acceptance → production (with waves and validation)
+- **ADR 0017** (Promotion): Semantic tag → dev ring → test ring → qas ring → prd ring (with ring waves, deployment waves and validation)
 
 Together they provide end-to-end visibility and control over version progression from code to production.
 
@@ -64,7 +65,10 @@ Strata's job is steps 1-2 and providing visibility. Git and CI handle steps 3-5.
 
 ### Canary is a special case of waves
 
-All rollout approaches reduce to a single model:
+Waves operate at two independent levels:
+
+**Deployment waves** — within a single environment, controls which tenants/deployments
+receive the version first. Membership is declared on `kind: deployment`.
 
 | Approach     | Waves | Wave 1 target                                       |
 | ------------ | ----- | --------------------------------------------------- |
@@ -75,6 +79,20 @@ All rollout approaches reduce to a single model:
 The underlying mechanic is always: "which deployments get this version in this wave?"
 Wave membership is determined per-deployment via `spec.promotion.wave` (explicit
 `iteration` or `match_labels`). Deployments without wave config default to the last wave.
+
+**Ring waves** — within a ring, controls which environments receive the version first.
+Membership is declared on the ring's `environments[]` list via a numeric `wave:` field.
+This is distinct from deployment waves: it sequences *environments* (e.g., prod-be before
+prod-us) rather than *deployments* within one environment.
+
+| Approach       | Environments in ring        | Ring waves |
+| -------------- | --------------------------- | ---------- |
+| All-at-once    | prod-be, prod-us, prod-sg   | 1 (all together) |
+| Region-by-region | prod-be → prod-us, prod-sg | 2 (be first, then rest) |
+
+CLI distinction: ring waves use integers (`--wave 1`, `--wave 2`); deployment waves use
+names (`--wave canary`, `--wave all`). The type of the `--wave` argument determines which
+level is targeted.
 
 ## Considered Options
 
@@ -92,9 +110,29 @@ spec:
   promotions:
     progressions:
       - name: standard
-        environments: [dev, test, acceptance, production]
+        rings:
+          - name: dev
+            environments: [dev1, dev2, internal-dev]
+            # first ring — no inbound requirement
+          - name: test
+            environments: [last-test, int-test]
+            require: any_one      # at least one dev env must have the version
+          - name: qas
+            environments: [int-qas, customer-qas]
+            require: any_one
+          - name: prd
+            environments:         # waved within the ring for regional rollout
+              - { name: prod-be, wave: 1 }
+              - { name: prod-us, wave: 2 }
+              - { name: prod-sg, wave: 2 }
+            require: any_one
       - name: hotfix
-        environments: [dev, production]
+        rings:
+          - name: dev
+            environments: [dev1]
+          - name: prd
+            environments: [prod-be, prod-us, prod-sg]
+            require: any_one
 
     strategies:
       - name: infra-cautious
@@ -105,7 +143,7 @@ spec:
           - name: all                         # last: everyone else
         scope: tenant                         # only tenant-layer deployments are waved
         gates:
-          require_progression_order: true     # previous env in progression must have this version
+          require_progression_order: true     # previous ring quorum must be satisfied
 
       - name: app-wave
         type: module                          # promotes chart_version / image tags
@@ -116,16 +154,17 @@ spec:
           - name: all                         # last: everyone else
         scope: tenant                         # only tenant-layer deployments are waved
         gates:
-          require_progression_order: true     # previous env in progression must have this version
+          require_progression_order: true     # previous ring quorum must be satisfied
 ```
 
-**Environment references the strategy:**
+**Environment references the strategy and declares its ring:**
 
 ```yaml
 # environments/production.yaml
 spec:
   promotion:
     strategy: infra-cautious
+    ring: prd                 # which ring this environment belongs to
 ```
 
 **Wave assignment on deployments:**
@@ -159,27 +198,30 @@ rollout.
 **CLI commands:**
 
 ```bash
-# Initiate a promotion (wave 1 by default)
-strata promote start --remote tf_landscape --version v2.4.0 --to production
+# Initiate a promotion to ring prd — ring wave 1 (prod-be only, wave: 1)
+strata promote start --remote tf_landscape --version v2.4.0 --to prd --wave 1
 
-# Advance to wave 2 (explicit — same command, specify wave)
-strata promote start --remote tf_landscape --version v2.4.0 --to production --wave 2
+# Advance to ring wave 2 (prod-us + prod-sg)
+strata promote start --remote tf_landscape --version v2.4.0 --to prd --wave 2
+
+# Within a single environment, target deployment wave by name
+strata promote start --remote tf_landscape --version v2.4.0 --to prd --wave canary
 
 # Check status of all promotions
 strata promote status
 
 # Roll back (reverse promotion, same strategy applies)
-strata promote rollback --remote tf_landscape --to production
+strata promote rollback --remote tf_landscape --to prd
 
-# Show version matrix across environments
+# Show version matrix across all rings and environments
 strata promote matrix
 
 # Show historical promotions from artifact store
-strata promote history --environment production
+strata promote history --ring prd
 strata promote history --remote tf_landscape --last 5
 
 # Show activity log for a promotion (CI/CD diagnostic output)
-strata promote log --remote tf_landscape --to production
+strata promote log --remote tf_landscape --to prd
 ```
 
 **Promotion state tracking:**
@@ -192,18 +234,22 @@ for the promotion to function — strata derives all state from environment file
 DevOps engineers can watch this file to follow what's happening without reading git logs.
 
 ```yaml
-# .strata/promotions/tf_landscape-v2.4.0-production.yaml
+# .strata/promotions/tf_landscape-v2.4.0-prd.yaml
 target: tf_landscape
 version: v2.4.0
 previous_version: v2.3.0
-environment: production
+ring: prd
+environments: [prod-be, prod-us, prod-sg]
 strategy: infra-cautious
-progression: [dev, test, acceptance, production]
-branch: promote/tf_landscape-v2.4.0-production
+progression: standard
+rings: [dev, test, qas, prd]
+branch: promote/tf_landscape-v2.4.0-prd
 events:
   - timestamp: 2026-06-23T10:00:00Z
     action: start
-    wave: 1
+    ring_wave: 1
+    environments: [prod-be]
+    deployment_wave: canary
     initiated_by: brady
     deployments: [acme]
     files_modified:
@@ -211,24 +257,29 @@ events:
   - timestamp: 2026-06-23T10:01:12Z
     action: gate_passed
     gate: require_progression_order
-    detail: "acceptance has v2.4.0 — ok to promote to production"
+    detail: "qas ring satisfied (any_one): int-qas has v2.4.0"
   - timestamp: 2026-06-23T10:01:15Z
     action: branch_created
-    branch: promote/tf_landscape-v2.4.0-production
+    branch: promote/tf_landscape-v2.4.0-prd
     commit: abc123f
   - timestamp: 2026-06-24T14:30:00Z
     action: start
-    wave: 2
+    ring_wave: 2
+    environments: [prod-us, prod-sg]
+    deployment_wave: all
     initiated_by: brady
     deployments: [all]
     files_modified:
-      - environments/production.yaml
+      - environments/prod-us.yaml
+      - environments/prod-sg.yaml
     fields_removed:
       - environments/tenants/acme.yaml → spec.overrides.remotes[tf_landscape]
   - timestamp: 2026-06-24T15:10:00Z
     action: completed
     outcome: completed
 ```
+
+Activity log filename uses the ring name: `.strata/promotions/{target}-{version}-{ring}.yaml`
 
 This file is append-only during the promotion. It is never deleted — `.strata/promotions/`
 is gitignored, so logs accumulate locally without polluting the config repo. The information
@@ -246,7 +297,7 @@ meta:
   name: prom-20260623-001
   labels:
     target: tf_landscape
-    environment: production
+    ring: prd
 spec:
   target:
     type: remote
@@ -254,24 +305,31 @@ spec:
     from_version: v2.3.0
     to_version: v2.4.0
   strategy: infra-cautious
-  progression: [dev, test, acceptance, production]
+  progression: standard
+  rings: [dev, test, qas, prd]
   outcome: completed                          # completed | rolled-back
-  waves:
-    - wave: 1
-      deployments: [acme]
-      started: 2026-06-23T10:00:00Z
-      deployed: 2026-06-23T15:00:00Z
-    - wave: 2
-      deployments: all
-      started: 2026-06-24T14:30:00Z
-      deployed: 2026-06-24T15:10:00Z
+  ring_waves:
+    - ring_wave: 1
+      environments: [prod-be]
+      deployment_waves:
+        - wave: canary
+          deployments: [acme]
+          started: 2026-06-23T10:00:00Z
+          deployed: 2026-06-23T15:00:00Z
+    - ring_wave: 2
+      environments: [prod-us, prod-sg]
+      deployment_waves:
+        - wave: all
+          deployments: all
+          started: 2026-06-24T14:30:00Z
+          deployed: 2026-06-24T15:10:00Z
   initiated_by: brady
   started: 2026-06-23T10:00:00Z
   completed: 2026-06-24T15:10:00Z
-  branch: promote/tf_landscape-v2.4.0-production
+  branch: promote/tf_landscape-v2.4.0-prd
   manifests:                                  # links to deployment manifests produced
-    - acme_eu_production/manifest-20260623.yaml
-    - contoso_eu_production/manifest-20260624.yaml
+    - acme_eu_prod-be/manifest-20260623.yaml
+    - contoso_eu_prod-be/manifest-20260624.yaml
 ```
 
 **Why two artifacts?**
@@ -362,20 +420,22 @@ The promotion system should be a first-class strata concept because:
 ### Implementation approach
 
 **Phase 1 — Strategy model + validation:**
-- `configuration.spec.promotions` model (progressions, strategies, named waves)
-- `environment.spec.promotion` reference (which strategy applies)
-- `deployment.spec.promotion.wave` model (`iteration`, `match_labels`) — opt-in wave assignment
-- `strata validate` checks: warn if a version jump skips a progression step
+- `configuration.spec.promotions` model (progressions with rings, strategies, named deployment waves)
+- `progression.rings[]` with `name`, `environments`, `require` (quorum gate)
+- `progression.rings[].environments[]` supporting both bare strings and `{ name, wave }` objects for intra-ring ordering
+- `environment.spec.promotion` — `strategy` reference and `ring` membership declaration
+- `deployment.spec.promotion.wave` model (`iteration`, `match_labels`) — opt-in deployment wave assignment
+- `strata validate` checks: warn if a version jump skips a ring in the progression
 - Still no automation — strategies are advisory guardrails
 
 **Phase 2 — Promotion automation:**
-- `strata promote start` — creates branch, makes YAML edits, commits (explicit `--wave` for each wave)
+- `strata promote start` — creates branch, makes YAML edits, commits (ring wave via `--wave <int>`, deployment wave via `--wave <name>`)
 - `strata promote rollback` — reverse promotion using the same strategy
 - `strata promote status` — shows in-flight promotions by reading `.strata/promotions/` activity log
 - `.strata/promotions/` activity log (diagnostic trace, gitignored, kept locally)
 - `kind: promotion-record` written to artifact store on completion/rollback
 - `strata promote history` — query completed records from artifact store
-- Gate: `require_progression_order` — refuse if previous env doesn't have this version
+- Gate: `require_progression_order` with `ring.require` quorum — refuse if previous ring quorum is not satisfied
   (pure YAML inspection, no external tool integration needed)
 - Future gates added incrementally: `require_plan_clean`, `require_healthy`, `require_no_drift`
 
@@ -609,11 +669,12 @@ implementation. It supersedes the exploratory examples in Option A above.
 
 | Concept              | Definition                                                                                                                         |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Progression**      | An ordered list of environments that a version must traverse (e.g., `[dev, test, acc, prd]`)                                       |
-| **Strategy**         | A named policy that governs HOW a version moves into a specific environment (wave count, scope, gates)                             |
-| **Wave**             | A subset of deployments that receive the version together. Waves execute sequentially within an environment                        |
-| **Scope**            | A layer name from `configuration.spec.layering[]` that determines which deployments participate in waving                          |
-| **Gate**             | A precondition that must pass before promotion proceeds (e.g., previous env must have the version)                                 |
+| **Ring**             | A named group of environments at the same delivery tier (e.g., `prd` groups `prod-be`, `prod-us`, `prod-sg`). Progressions advance ring-by-ring. |
+| **Progression**      | An ordered list of rings that a version must traverse (e.g., `dev → test → qas → prd`). Each ring can contain multiple environments. |
+| **Strategy**         | A named policy that governs HOW a version moves into a specific ring (wave count, scope, gates)                                    |
+| **Wave**             | An ordering unit. *Deployment wave* (named): a subset of deployments within one environment that receive the version together. *Ring wave* (integer): a subset of environments within a ring that receive the version together. |
+| **Scope**            | A layer name from `configuration.spec.layering[]` that determines which deployments participate in deployment waving               |
+| **Gate**             | A precondition that must pass before promotion proceeds (e.g., quorum of previous ring must have the version)                      |
 | **Promotion target** | The thing being versioned — a remote reference (`spec.overrides.remotes[].reference`) or a module field (`chart_version`, `image`) |
 
 ### Configuration Model
@@ -627,9 +688,29 @@ spec:
   promotions:
     progressions:
       - name: standard
-        environments: [dev, test, acceptance, production]
+        rings:
+          - name: dev
+            environments: [dev1, dev2, internal-dev]
+            # first ring — no inbound requirement
+          - name: test
+            environments: [last-test, int-test]
+            require: any_one      # at least one dev env must have the version
+          - name: qas
+            environments: [int-qas, customer-qas]
+            require: any_one
+          - name: prd
+            environments:         # waved within the ring for regional rollout
+              - { name: prod-be, wave: 1 }
+              - { name: prod-us, wave: 2 }
+              - { name: prod-sg, wave: 2 }
+            require: any_one
       - name: hotfix
-        environments: [dev, production]
+        rings:
+          - name: dev
+            environments: [dev1]
+          - name: prd
+            environments: [prod-be, prod-us, prod-sg]
+            require: any_one
 
     strategies:
       - name: infra-cautious
@@ -663,9 +744,27 @@ spec:
           require_progression_order: true
 ```
 
-**Strategy fields:**
+**Progression fields:**
 
-| Field         | Type           | Required | Description                                                                                                                                  |
+| Field   | Type        | Required | Description                                                      |
+| ------- | ----------- | -------- | ---------------------------------------------------------------- |
+| `name`  | string      | yes      | Unique identifier for the progression                            |
+| `rings` | list[Ring]  | yes      | Ordered list of rings. Position = promotion order                |
+
+**Ring fields:**
+
+| Field          | Type                    | Required | Description                                                                                                        |
+| -------------- | ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `name`         | string                  | yes      | Ring identifier (e.g. `dev`, `test`, `qas`, `prd`)                                                                |
+| `environments` | list[string \| RingEnv] | yes      | Environment names in this ring. Bare strings = `{ name, wave: null }` (all together)                              |
+| `require`      | enum \| null            | no       | Inbound gate quorum: `any_one` (default), `all`, `null` (no gate — first ring). Evaluated only when strategy gate `require_progression_order: true` |
+
+**RingEnv fields (when environments need intra-ring wave ordering):**
+
+| Field  | Type    | Required | Description                                                                           |
+| ------ | ------- | -------- | ------------------------------------------------------------------------------------- |
+| `name` | string  | yes      | Environment name                                                                      |
+| `wave` | integer | no       | Ring wave number (1, 2, 3…). Environments with the same wave number execute together. Omit for all-at-once. |
 | ------------- | -------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`        | string         | yes      | Unique identifier for the strategy                                                                                                           |
 | `type`        | enum           | yes      | `remote` (promotes `spec.overrides.remotes[].reference`) or `module` (promotes `chart_version` / `image`)                                    |
@@ -686,18 +785,36 @@ Waves are implicitly ordered by position in the list. The last wave is always th
 #### `environment.spec.promotion`
 
 ```yaml
-# environments/production.yaml
+# environments/prod-be.yaml
 apiVersion: strata.huybrechts.xyz/v1
 kind: environment
 meta:
-  name: production
+  name: prod-be
 spec:
   promotion:
     strategy: infra-cautious
+    ring: prd                # which ring this environment belongs to
 ```
 
-Each environment references which strategy applies. Environments without a `promotion`
-block have no promotion guardrails (useful for dev/sandbox — versions can be set freely).
+```yaml
+# environments/dev1.yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: dev1
+spec:
+  promotion:
+    strategy: infra-cautious
+    ring: dev
+```
+
+Each environment references which strategy applies and declares its ring membership.
+The `ring` field is used by `promote start` to:
+1. Enumerate which environments belong to the target ring
+2. Evaluate the inbound gate (quorum of the previous ring)
+
+Environments without a `promotion` block have no promotion guardrails (useful for
+dev/sandbox environments where versions can be set freely).
 
 #### `deployment.spec.environments` — scoped refs
 
@@ -804,35 +921,34 @@ strata promote <subcommand>
 strata promote start \
   --remote tf_landscape \
   --version v2.4.0 \
-  --to production \
-  --wave canary
+  --to prd \
+  --wave 1
 ```
 
-| Flag        | Required | Description                                                                                |
-| ----------- | -------- | ------------------------------------------------------------------------------------------ |
-| `--remote`  | yes*     | Remote name being promoted (mutually exclusive with `--module`)                            |
-| `--module`  | yes*     | Module name being promoted (mutually exclusive with `--remote`)                            |
-| `--version` | yes      | Target version                                                                             |
-| `--to`      | yes      | Target environment                                                                         |
-| `--wave`    | no       | Wave name to execute. Defaults to first wave. Use `all` or last wave name for full rollout |
-| `--dry-run` | no       | Show what would be edited without making changes                                           |
+| Flag        | Required | Description                                                                                                                                                                                                                    |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--remote`  | yes*     | Remote name being promoted (mutually exclusive with `--module`)                                                                                                                                                                |
+| `--module`  | yes*     | Module name being promoted (mutually exclusive with `--remote`)                                                                                                                                                                |
+| `--version` | yes      | Target version                                                                                                                                                                                                                 |
+| `--to`      | yes      | Target ring name (e.g. `prd`). All environments in the ring are candidates; wave selection controls which are targeted.                                                                                                        |
+| `--wave`    | no       | Integer = ring wave (which environments in the ring, e.g. `--wave 1`). Named string = deployment wave (which tenants within each environment, e.g. `--wave canary`). Defaults to ring wave 1 when omitted.                    |
+| `--dry-run` | no       | Show what would be edited without making changes                                                                                                                                                                               |
 
 **What `start` does:**
 
-1. Loads strategy from the target environment's `spec.promotion.strategy`
-2. Validates gates (progression order, etc.)
-3. Loads all deployments registered in `solution.json` (`spec.deployments[]`), loads each
-   deployment's merged environment model, and filters to deployments where any resolved
-   environment has `meta.name == target_environment`
-4. Filters by scope: only deployments where `strategy.scope in deployment.spec.layers`
-   participate in waving; others are all-at-once
-5. Assigns deployments to waves (iteration → match_labels → default last wave)
-6. For single-layer / no scoped entries: degrades to all-at-once with a console notice
-7. For the specified wave: identifies files via `spec.environments[].scope` matching
-8. Creates branch `promote/{target}-{version}-{environment}`
-9. Makes YAML edits, commits
-10. Appends to activity log (`.strata/promotions/`)
-11. Outputs: files modified, branch name, suggested PR command
+1. Resolves the target ring from the progression: finds all environments belonging to ring `--to`
+2. If `--wave <int>`: filters to environments with that ring-wave number; if `--wave <name>`: targets all ring-wave-1 environments with that deployment wave
+3. Loads strategy from any resolved environment's `spec.promotion.strategy`
+4. Validates inbound gate: checks the `require` quorum of the previous ring (if `require_progression_order: true`)
+5. Loads all deployments registered in `solution.json`, filters to deployments referencing any of the targeted environments
+6. Filters by scope: only deployments where `strategy.scope in deployment.spec.layers` participate in deployment waving; others are all-at-once
+7. Assigns deployments to deployment waves (iteration → match_labels → default last)
+8. For single-layer / no scoped entries: degrades to all-at-once with a console notice
+9. Identifies which files to edit via `spec.environments[].scope` matching
+10. Creates branch `promote/{target}-{version}-{ring}`
+11. Makes YAML edits, commits
+12. Appends to activity log (`.strata/promotions/`)
+13. Outputs: files modified, branch name, suggested PR command
 
 **Wave mechanics — what gets edited:**
 
@@ -847,12 +963,12 @@ strata promote start \
 ```bash
 strata promote rollback \
   --remote tf_landscape \
-  --to production
+  --to prd
 
 # explicit previous version when git derivation is unavailable (shallow clone, CI, etc.)
 strata promote rollback \
   --remote tf_landscape \
-  --to production \
+  --to prd \
   --from-version v2.3.0
 ```
 
@@ -860,11 +976,11 @@ strata promote rollback \
 
 | Tier | Source                                                                    | When available                       |
 | ---- | ------------------------------------------------------------------------- | ------------------------------------ |
-| 1    | Activity log (`.strata/promotions/{target}-{version}-{env}.yaml`)         | Local machine, log present           |
+| 1    | Activity log (`.strata/promotions/{target}-{version}-{ring}.yaml`)         | Local machine, log present           |
 | 2    | Git merge base: `git merge-base HEAD main` → read env file at that commit | Always, unless shallow clone         |
 | 3    | `--from-version` explicit flag                                            | Escape hatch for CI / shallow clones |
 
-Rollback applies the reverse edit using the **same strategy** — if production required
+Rollback applies the reverse edit using the **same strategy** — if the `prd` ring required
 canary-first going forward, it requires canary-first going backward. Writes
 `outcome: rolled-back` to the promotion record.
 
@@ -875,19 +991,29 @@ strata promote matrix
 strata promote matrix --remote tf_landscape
 ```
 
-Scans environment files and deployment manifests. Outputs a table:
+Scans environment files and deployment manifests. Outputs a table grouped by ring:
 
 ```
 Remote: tf_landscape
-┌─────────────┬─────────┬──────────┬────────────┬────────────┐
-│ Environment │ Shared  │ acme     │ contoso    │ fabrikam   │
-├─────────────┼─────────┼──────────┼────────────┼────────────┤
-│ dev         │ v2.5.0  │ —        │ —          │ —          │
-│ test        │ v2.4.0  │ —        │ —          │ —          │
-│ acceptance  │ v2.4.0  │ —        │ —          │ —          │
-│ production  │ v2.3.0  │ v2.4.0 ⚡│ —          │ —          │
-└─────────────┴─────────┴──────────┴────────────┴────────────┘
-⚡ = per-tenant override (promotion in progress)
+
+Ring: dev
+┌─────────────┬─────────┬──────────┬──────────┐
+│ Environment │ Shared  │ acme     │ contoso  │
+├─────────────┼─────────┼──────────┼──────────┤
+│ dev1        │ v2.5.0  │ —        │ —        │
+│ dev2        │ v2.5.0  │ —        │ —        │
+│ internal-dev│ v2.4.0  │ —        │ —        │
+└─────────────┴─────────┴──────────┴──────────┘
+
+Ring: prd  (require: any_one ← qas ✔)
+┌─────────────┬─────────┬──────────┬──────────┐
+│ Environment │ Shared  │ acme     │ contoso  │
+├─────────────┼─────────┼──────────┼──────────┤
+│ prod-be [1] │ v2.4.0  │ v2.4.0 ⚡ │ v2.4.0   │
+│ prod-us [2] │ v2.3.0  │ —        │ —        │
+│ prod-sg [2] │ v2.3.0  │ —        │ —        │
+└─────────────┴─────────┴──────────┴──────────┘
+[1][2] = ring wave number   ⚡ = per-tenant override (deployment wave in progress)
 ```
 
 #### `strata promote status`
@@ -896,7 +1022,7 @@ Shows active/in-flight promotions from `.strata/promotions/`:
 
 ```
 In-flight promotions:
-  tf_landscape → production  v2.3.0 → v2.4.0  wave: canary (1/2)  started: 2026-06-23
+  tf_landscape → prd  v2.3.0 → v2.4.0  ring-wave: 1/2 (prod-be)  deploy-wave: canary (1/2)  started: 2026-06-23
 ```
 
 #### `strata promote history`
@@ -904,7 +1030,7 @@ In-flight promotions:
 Queries completed `kind: promotion-record` documents from the artifact store:
 
 ```bash
-strata promote history --to production --last 5
+strata promote history --ring prd --last 5
 strata promote history --remote tf_landscape
 ```
 
@@ -914,7 +1040,7 @@ Gates are preconditions evaluated before `strata promote start` proceeds.
 
 | Gate                        | Behavior                                                                                                                                                                    |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `require_progression_order` | Refuses promotion if the previous environment in the progression doesn't have this version. Example: can't promote to production if acceptance is still on an older version |
+| `require_progression_order` | Refuses promotion if the previous ring's quorum is not met. The quorum policy is defined on the ring via `require: any_one` (default) or `require: all`. Example: can't promote to `prd` if the `qas` ring has no environment on this version yet (`any_one`), or if not all qas environments are on this version (`all`) |
 
 **Future gates** (not in Phase 3, added incrementally):
 
