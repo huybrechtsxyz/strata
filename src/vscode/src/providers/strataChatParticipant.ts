@@ -23,7 +23,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { StrataClient, WorkspaceStatus, ValidationResult } from '../strataClient';
+import type { StrataClient, WorkspaceStatus, ValidationResult, DriftData } from '../strataClient';
 
 const PARTICIPANT_ID = 'strata.chat';
 
@@ -389,9 +389,40 @@ export class StrataChatParticipant implements vscode.Disposable {
         }
 
         const rel = vscode.workspace.asRelativePath(filePath);
-        response.markdown(`Running drift detection on **${rel}**…\n\n⏳ This runs \`terraform plan\` — may take a moment.\n\n`);
-        response.button({ title: '🔍 Run Drift Detection', command: 'strata.envDrift', arguments: [filePath] });
-        response.markdown(`\nDrift detection compares your deployed infrastructure against the current configuration.\n`);
+        response.markdown(`Running drift detection on **${rel}**…\n\n⏳ This runs \`terraform plan\` and may take a moment.\n\n`);
+
+        let drift: DriftData;
+        try {
+            drift = await this._client.runDrift(filePath);
+        } catch (err) {
+            response.markdown(`**Drift detection failed:** ${err instanceof Error ? err.message : String(err)}\n\n`);
+            response.markdown('You can run it manually from the terminal:\n');
+            response.button({ title: '🔍 Run in Terminal', command: 'strata.envDrift', arguments: [filePath] });
+            return { errorDetails: { message: String(err) } };
+        }
+
+        const driftedStages = drift.stages.filter((s) => s.drifted);
+
+        if (driftedStages.length === 0) {
+            response.markdown('✅ **No drift detected** — infrastructure matches configuration.\n');
+        } else {
+            response.markdown(`⚠️ **Drift detected in ${driftedStages.length} stage${driftedStages.length !== 1 ? 's' : ''}:**\n\n`);
+            for (const stage of driftedStages) {
+                response.markdown(`### Stage: \`${stage.stage}\`\n\n`);
+                if (stage.resources.length === 0) {
+                    response.markdown('*(no resource details available)*\n\n');
+                } else {
+                    response.markdown(`| Resource | Change |\n|---|---|\n`);
+                    for (const r of stage.resources) {
+                        const badge = r.change_type === 'delete' ? '🗑' : r.change_type === 'create' ? '➕' : '✏️';
+                        const attrs = r.attributes.length > 0 ? ` *(${r.attributes.slice(0, 3).join(', ')})*` : '';
+                        response.markdown(`| \`${r.address}\` | ${badge} ${r.change_type}${attrs} |\n`);
+                    }
+                    response.markdown('\n');
+                }
+            }
+            response.button({ title: '🚀 Re-deploy to fix', command: 'strata.deployRun', arguments: [filePath] });
+        }
 
         return { metadata: { command: 'drift', filePath } };
     }
@@ -461,6 +492,21 @@ export class StrataChatParticipant implements vscode.Disposable {
         // Provide workspace context and let the LLM answer
         const status = await this._getStatus();
 
+        // Fetch env status for richer deployment context (best-effort, non-blocking)
+        let envSummary = '';
+        if (this._client) {
+            try {
+                const envData = await this._client.getEnvStatus();
+                if (envData.deployments.length > 0) {
+                    const lines = envData.deployments.map((d) => {
+                        const totalOutputs = d.stages.reduce((s, st) => s + (st.cache?.output_count ?? 0), 0);
+                        return `${d.name}: ${d.cached_count}/${d.stage_count} stages cached, ${totalOutputs} outputs`;
+                    });
+                    envSummary = `Deployments: ${lines.join('; ')}.`;
+                }
+            } catch { /* non-critical — proceed without env data */ }
+        }
+
         const contextBlock = [
             `The user is working in a strata infrastructure workspace.`,
             `Health: ${status.health.status}. Profile: ${status.profiles.active ?? 'none'}.`,
@@ -469,6 +515,7 @@ export class StrataChatParticipant implements vscode.Disposable {
                 ? `Next step: ${status.readiness.next_step.label} (hint: ${status.readiness.next_step.hint ?? 'none'})`
                 : '',
             `Repositories: ${(status.repositories ?? []).map(r => r.name).join(', ') || 'none'}.`,
+            envSummary,
             `\nUser question: ${request.prompt}`,
         ].filter(Boolean).join('\n');
 

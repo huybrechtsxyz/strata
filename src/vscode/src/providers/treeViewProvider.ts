@@ -15,8 +15,8 @@
  *       ├── terraform (1.9.0) ✅
  *       └── helm ❌
  *
- * TODO: implement getChildren() to call StrataClient.getStatus() and
- *   build the tree nodes from the response.
+ * Populated via refresh() → StrataClient.getStatus(). Sections expand lazily
+ * via getChildren(). Non-active profiles have an inline Switch command.
  */
 
 import * as vscode from 'vscode';

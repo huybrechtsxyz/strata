@@ -51,6 +51,10 @@ let _envView: EnvViewProvider | undefined;
 let _auditView: AuditViewProvider | undefined;
 let _valuesView: ValuesViewProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
+/** File path of the most-recently started drift terminal, cleared on close. */
+let _lastDriftTarget: string | undefined;
+/** File path of the most-recently started (non-dry-run) deploy terminal, cleared on close. */
+let _lastDeployTarget: string | undefined;
 
 // ---------------------------------------------------------------------------
 // Shared refresh — one CLI call, all providers updated
@@ -301,6 +305,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 { modal: true }, 'Deploy',
             );
             if (confirmed !== 'Deploy') return;
+            _lastDeployTarget = target;
             _client?.runInTerminal(['deploy', 'run', '-f', target, '--force'], 'strata deploy');
         }),
 
@@ -316,6 +321,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('strata.envDrift', (filePath?: string) => {
             const target = filePath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
             if (!target) { void vscode.window.showWarningMessage('No deployment file selected.'); return; }
+            _lastDriftTarget = target;
             _client?.runInTerminal(['env', 'drift', '-f', target], 'strata env drift');
         }),
 
@@ -500,7 +506,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (confirmed !== 'Deploy') return;
             }
             const args = ['deploy', 'run', '-f', target, '--stage', stageName];
-            if (dryRun) args.push('--dry-run'); else args.push('--force');
+            if (dryRun) args.push('--dry-run'); else { args.push('--force'); _lastDeployTarget = target; }
             _client?.runInTerminal(args, `strata deploy ${stageName}${dryRun ? ' (dry run)' : ''}`);
         }),
 
@@ -687,11 +693,26 @@ export function activate(context: vscode.ExtensionContext): void {
                 // guide panel reflect the outcome of the build/deploy.
                 const exitCode = terminal.exitStatus?.code;
                 const action = name.startsWith('strata build') ? 'Build' : 'Deploy';
+                const deployTarget = _lastDeployTarget;
+                if (action === 'Deploy') _lastDeployTarget = undefined;
 
                 if (exitCode === 0) {
-                    void vscode.window.showInformationMessage(
-                        `Strata: ${action} completed successfully.`,
-                    );
+                    if (action === 'Deploy' && deployTarget) {
+                        void vscode.window.showInformationMessage(
+                            'Strata: Deploy completed successfully.',
+                            'Check Health', 'View Outputs',
+                        ).then((v) => {
+                            if (v === 'Check Health') {
+                                _client?.runInTerminal(['deploy', 'health', '-f', deployTarget], 'strata deploy health');
+                            } else if (v === 'View Outputs') {
+                                _client?.runInTerminal(['env', 'output', '-f', deployTarget], 'strata env output');
+                            }
+                        });
+                    } else {
+                        void vscode.window.showInformationMessage(
+                            `Strata: ${action} completed successfully.`,
+                        );
+                    }
                 } else if (exitCode !== undefined) {
                     void vscode.window.showWarningMessage(
                         `Strata: ${action} exited with code ${exitCode} — check terminal output.`,
@@ -702,9 +723,13 @@ export function activate(context: vscode.ExtensionContext): void {
             }
             if (name === 'strata env drift') {
                 const exitCode = terminal.exitStatus?.code;
+                const target = _lastDriftTarget;
+                _lastDriftTarget = undefined;
                 if (exitCode === 0) {
+                    if (target) _envView?.markDrift(target, false);
                     void vscode.window.showInformationMessage('Strata: no drift detected ✅');
                 } else if (exitCode === 3) {
+                    if (target) _envView?.markDrift(target, true);
                     void vscode.window.showWarningMessage('Strata: drift detected — review the plan above.');
                 }
             }
