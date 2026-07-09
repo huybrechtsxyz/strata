@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+---
+
+## [1.0.1] — 2026-07-09
+
 ### Added
 
 - **Tenant — `spec.environments` now applied at build time**
@@ -26,6 +30,13 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 - **`docs/config/tenant.md`** — new reference doc covering schema, field descriptions, `properties`/`custom` vs `configuration` distinction, environment layering order, phase validation rules, and zone policy behaviour
 
+- **Environment provider overrides** (`docs/config/environment.md`)
+  - `spec.overrides.providers[].file` — swap the entire provider binding per environment; recommended for targeting different regions or cloud accounts
+  - `spec.overrides.providers[].configuration` — override individual provider properties on top of the resolved provider file, without maintaining separate provider files per environment
+  - Build plan output now includes provider resolution details (which file was loaded and which overrides were applied per stage)
+
+- **ADR 0026 — Resolved-model cache** (proposed) — SQLite-backed cache for fleet-wide command performance; documents cache key computation, invalidation strategies, per-kind TTL, and VS Code extension integration for background cache warming
+
 ### Fixed
 
 - **Tenant `spec.environments` was declared and validated but never applied** — the field existed in the schema since the initial tenant model, paths were checked on disk during Phase 2, but the files were never actually merged into the build pipeline (`get_environments()` was defined but never called)
@@ -35,6 +46,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 - **Tenant `spec.environments` field description** — clarified to explicitly state these are *base environment files merged before the deployment's own environments* (not a list of environments the tenant belongs to); both the model docstring and the scaffolding templates updated
 - **`sln` subcommand set** — `deployment` group added; `test_sln_subcommands_registered` updated accordingly
 - **Strata Workspace Agent** — rule added: all temporary files must be written to `.strata/temp/`, not the workspace root; `.strata/temp/` documented in the workspace layout
+
+### Design & ADR Progress
+
+- **ADR-0013** (Auto-generated secrets) — status updated to `completed`
+- **ADR-0014** (Onboarding experience) — status updated to `completed`
+- **ADR-0026** (Resolved-model cache) — added as `proposed`
 
 ---
 
