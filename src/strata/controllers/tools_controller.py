@@ -143,7 +143,7 @@ class ToolsController(BaseController):
                     if mapped:
                         _mark(mapped, True)
             except Exception as exc:
-                errors.append(f"Environment '{env_path}': {exc}")
+                errors.append(f"Environment '{env_ref.file}': {exc}")
 
         # Workspace: provisioner usage implies a required integration
         try:

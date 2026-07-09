@@ -97,7 +97,9 @@ class TestSlnDeploymentAdd:
     def test_wrong_kind_fails(self, tmp_path):
         work_path = _make_workspace(tmp_path)
         bad_file = work_path / "workspace.yaml"
-        bad_file.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nmeta:\n  name: ws\n", encoding="utf-8")
+        bad_file.write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nmeta:\n  name: ws\n", encoding="utf-8"
+        )
         runner = CliRunner()
         result = runner.invoke(
             sln_group,

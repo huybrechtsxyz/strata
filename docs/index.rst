@@ -95,6 +95,7 @@ strata
    config/dns
    config/network
    config/manifest
+   config/tenant
    config/workflow
 
 .. toctree::
@@ -143,6 +144,7 @@ strata
    decisions/0023-pluggable-provisioner-framework
    decisions/0024-environment-composition-flat-merge-fix
    decisions/0025-ai-agent-integration-for-build-and-deploy
+   decisions/0026-resolved-model-cache
 
 .. toctree::
    :maxdepth: 2
