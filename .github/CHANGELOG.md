@@ -9,7 +9,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
-## [1.1.0] — 2026-07-09
+## [1.0.1] — 2026-07-09
 
 ### Added
 
