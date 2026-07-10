@@ -14,10 +14,19 @@ or a module `chart_version` in an environment YAML file, commits, and deploys. T
 guardrail preventing a direct jump to production, no canary mechanism, no rollback tracking,
 and no visibility into what version is running where across the fleet.
 
+Version truth is also **scattered**: base image/chart versions live in `stack/*.yaml`, git
+refs default in `configuration.spec.remotes[]`, and deviations live in per-environment
+`spec.overrides`. Answering "what version runs in prd?" requires resolving the full merge
+chain, which is why a cheap version matrix is hard. This ADR resolves that by making each
+ring own a single machine-managed **version-lock** (`versions/<ring>.yaml`) — the lock-file
+pattern applied to environments. Promotion becomes advancing the lock, not surgically
+editing scattered override blocks.
+
 The platform needs a structured promotion system that:
 
 - Defines allowed progressions through ordered **rings** (dev → test → qas → prd), where each ring
   can contain multiple environments (e.g., `prd` = prod-be, prod-us, prod-sg)
+- Records the version set per ring in a single, directly-readable **version-lock** file
 - Supports gradual rollout strategies (single tenant first, waves, all-at-once)
 - Distinguishes between infrastructure changes (high blast radius) and application changes (lower blast radius)
 - Integrates with the existing git-based workflow (branch, commit YAML edits, PR, merge, deploy)
@@ -37,31 +46,90 @@ Together they provide end-to-end visibility and control over version progression
 
 ## Key Observations
 
-### Terraform vs Helm: different risk profiles
+### Promotion types and risk profiles
 
-| Dimension               | Terraform (remote ref)                             | Helm (chart version)                                  |
-| ----------------------- | -------------------------------------------------- | ----------------------------------------------------- |
-| What changes            | `spec.overrides.remotes[].reference`               | Module override `chart_version` or `services[].image` |
-| Blast radius            | Infrastructure — add/remove/modify cloud resources | Application — new containers, config values           |
-| Validation before apply | `terraform plan` diff is essential                 | Helm diff is nice-to-have                             |
-| Rollback cost           | High — may require state surgery                   | Low — helm rollback or redeploy previous version      |
-| Canary feasibility      | Hard — infra is usually shared per zone            | Natural — each tenant has own helm release            |
-| Shared vs isolated      | Shared: all tenants in a zone use the same AKS     | Isolated: each tenant has own namespace + release     |
+Four promotion types are supported. Each maps to a specific YAML field and carries a
+different blast radius, which drives which strategy (and how many waves) is appropriate.
+
+| Type | YAML field promoted | Example | Blast radius |
+| ------------ | ------------------------------------------ | --------------------------------------- | ------------ |
+| `remote` | `spec.overrides.remotes[name].reference` | `iac-core v1→v2`, `tf-landscape v2.3→v2.4` | **Very high** — IaC code change; Terraform plan can add, remove, or modify cloud resources |
+| `helm_chart` | `spec.modules[name].chart_version` | `nginx-ingress 4.0→4.1` | **Medium** — chart update may add CRDs, change resource manifests, alter pod specs |
+| `image` | `spec.services[name].image` or `spec.modules[name].image_tag` | `myapp:v1.2→v1.3` | **Low** — application code only; rolling update, no schema change |
+| `tool` *(future)* | Provisioner version constraint | Terraform `1.8→1.9`, Helm CLI `3.14→3.15` | **High** — execution engine change; plan output may differ even with identical config |
+
+**Key distinctions:**
+
+- `remote` is **not Terraform-specific** — it covers any versioned git repository that
+  strata references: Terraform module collections, Ansible role collections, shared config
+  repos. The mechanism is always the same: change a git reference tag on
+  `spec.overrides.remotes[name].reference`. `iac-core v1 → v2` is a `remote` promotion.
+
+- `helm_chart` and `image` are **distinct types** even though both live inside a module.
+  Promoting a chart version (chart structure changes) and promoting an image tag (app code
+  changes) have different blast radii and benefit from different strategies and wave counts.
+
+- `tool` is **deferred** — provisioner tool versions are typically pinned in the remote
+  repo (`.terraform-version`, `required_version` in `versions.tf`, `requirements.yml`),
+  meaning a tool upgrade is usually expressed as a `remote` promotion of the pinning repo.
+  Native `tool` type support (directly targeting a provisioner version field) is a Phase 4
+  addition once strata has a `spec.provisioners[].version` field.
+
+| Dimension | `remote` | `helm_chart` | `image` |
+| ------------------- | ------------------------------------------------- | ----------------------------- | ----------------------------------- |
+| Rollback cost | Very high — may require Terraform state surgery | Medium — helm rollback | Low — redeploy previous tag |
+| Validation required | `terraform plan` diff is essential | Helm diff is nice-to-have | Image scan; smoke test |
+| Canary feasibility | Hard — infra is typically shared per zone | Natural — per-tenant release | Natural — per-tenant release |
+| Shared vs isolated | Shared across all tenants in a zone | Isolated — per-tenant ns | Isolated — per-tenant ns |
 
 This means the promotion strategy must be type-aware — the same progression
-may use different approaches depending on what's being promoted.
+may use different strategies depending on what's being promoted.
 
-### A promotion is a YAML edit
+### A promotion advances a version-lock
+
+Versions do not live scattered across base stack files and hand-written environment
+overrides. Each ring owns a single, machine-managed **version-lock file**
+(`versions/<ring>.yaml`, `kind: version-lock`) that pins every promotable target to an
+exact version. This mirrors the lock-file pattern (`package-lock.json`, `Cargo.lock`,
+`poetry.lock`, `.terraform.lock.hcl`): humans declare loose intent; a purpose-built lock
+records the exact pins; **promotion is advancing the lock**.
 
 The mechanism is always the same:
 
-1. Determine which file to edit and what value to change
-2. Create a branch, make the edit, commit
+1. Determine the target ring's lock file and the pin(s) to set (or copy from the source ring's lock)
+2. Create a branch, edit `versions/<ring>.yaml`, commit
 3. CI validates (plan, lint, overlap check)
 4. PR reviewed and merged
 5. CI deploys
 
 Strata's job is steps 1-2 and providing visibility. Git and CI handle steps 3-5.
+
+**Why a dedicated file and not in-place edits of environment files:**
+
+- **Single source of truth per ring** — `versions/prd.yaml` is the complete, directly
+  readable answer to "what versions run in prd?" No merge-chain resolution required, which
+  makes `strata promote matrix` trivial (read the lock files) instead of expensive.
+- **Clean, auditable diffs** — a promotion diff contains version changes only, never mixed
+  with unrelated config edits. This matters for the ISO 27001 / ISAE 3402 evidence trail.
+- **Strata edits a machine-owned file** — it never rewrites hand-authored, multi-purpose
+  environment YAML, so comments and formatting in those files are never at risk.
+- **Trivial rollback** — `git revert` of the lock commit restores the exact prior version set.
+
+**Two-layer version model** (permanent, not a migration state):
+
+- `stack/*.yaml` — human-authored **defaults**. Written once when defining a module or remote.
+  Apply to any ring that has no lock, and provide backwards compatibility for configs that
+  don't use promotion. Never touched by `strata promote`.
+- `versions/<ring>.yaml` — machine-generated **pins**. Written only by `strata promote start`.
+  Never hand-edited. Wins over any default or inline override for the pinned target.
+
+This is the same separation as `package.json` (human intent, loose defaults) and
+`package-lock.json` (machine-exact pins, authoritative). Having a `chart_version` in a
+stack file alongside a lock pin is not dead code — it remains the default for any ring
+not yet under a lock and for simple one-off deployments that don't go through promotion.
+
+A target pinned in a lock ignores any `spec.overrides` for the same target (lock wins).
+A target absent from the lock resolves normally through the existing merge chain.
 
 ### Canary is a special case of waves
 
@@ -70,15 +138,18 @@ Waves operate at two independent levels:
 **Deployment waves** — within a single environment, controls which tenants/deployments
 receive the version first. Membership is declared on `kind: deployment`.
 
-| Approach     | Waves | Wave 1 target                                       |
-| ------------ | ----- | --------------------------------------------------- |
-| All-at-once  | `1`   | Shared environment file (all deployments)           |
-| Canary-first | `2`   | Deployments matching wave 1, then shared env file   |
-| Multi-wave   | `3`   | Deployments declaring iteration 1, then 2, then all |
+| Approach     | Waves | Wave 1 target                                            |
+| ------------ | ----- | -------------------------------------------------------- |
+| All-at-once  | `1`   | Ring lock `versions/<ring>.yaml` (all deployments)       |
+| Canary-first | `2`   | Scoped lock overlay `versions/<ring>.<scope>.yaml`, then ring lock |
+| Multi-wave   | `3`   | Scope overlay iteration 1, then 2, then ring lock        |
 
 The underlying mechanic is always: "which deployments get this version in this wave?"
 Wave membership is determined per-deployment via `spec.promotion.wave` (explicit
 `iteration` or `match_labels`). Deployments without wave config default to the last wave.
+A canary wave writes a **scoped lock overlay** (`versions/<ring>.<scope>.yaml`) that pins
+only the waved deployments; the final wave folds the pin into the ring lock and deletes
+the overlay.
 
 **Ring waves** — within a ring, controls which environments receive the version first.
 Membership is declared on the ring's `environments[]` list via a numeric `wave:` field.
@@ -137,6 +208,7 @@ spec:
     strategies:
       - name: infra-cautious
         type: remote                          # promotes spec.overrides.remotes[].reference
+        # covers: iac-core v1→v2, tf-landscape v2.3→v2.4, ansible-roles v3→v4
         progression: standard
         waves:
           - name: canary                      # first: deployments with iteration: 1
@@ -147,6 +219,7 @@ spec:
 
       - name: app-wave
         type: module                          # promotes chart_version / image tags
+        # NOTE: prefer type: helm_chart or type: image for new strategies (see Design section)
         progression: standard
         waves:
           - name: canary                      # first: explicit iteration: 1 deployments
@@ -287,67 +360,164 @@ is purely diagnostic — the promotion-record in the artifact store is the autho
 audit trail.
 
 *Completed record* — written to the configured artifact store (same remote as deployment
-manifests) on promotion completion or rollback. This is the audit evidence:
+manifests) when the last wave is committed (or when rollback is committed). This is the
+authoritative audit evidence. It captures what was promoted, how it was authorized, every
+gate that was checked, every file that was edited, and every git commit made.
 
 ```yaml
-# Stored in artifact remote, e.g. manifests/promotions/prom-20260623-001.yaml
+# Stored in artifact remote, e.g. manifests/promotions/prom-20260623-prd-001.yaml
 apiVersion: strata.huybrechts.xyz/v1
 kind: promotion-record
 meta:
-  name: prom-20260623-001
+  name: prom-20260623-prd-001
   labels:
     target: tf_landscape
     ring: prd
+    outcome: completed            # completed | partial | rolled-back
+  annotations:
+    description: "Promote tf_landscape v2.3.0 → v2.4.0 to prd ring"
 spec:
+
+  # ── What was promoted ──────────────────────────────────────────────────
   target:
-    type: remote
+    type: remote                  # remote | helm_chart | image
     name: tf_landscape
-    from_version: v2.3.0
-    to_version: v2.4.0
+    from_version: v2.3.0          # version in the ring before this promotion
+    to_version: v2.4.0            # version set by this promotion
+
+  # ── How it was promoted ────────────────────────────────────────────────
   strategy: infra-cautious
   progression: standard
-  rings: [dev, test, qas, prd]
-  outcome: completed                          # completed | rolled-back
+  rings: [dev, test, qas, prd]   # full ordered ring list from the progression
+
+  # ── Outcome ────────────────────────────────────────────────────────────
+  outcome: completed
+  # completed   — all waves committed; branch exists; awaiting PR/deploy
+  # partial     — some waves committed but promotion was aborted before the last wave
+  # rolled-back — rollback edits committed; rollback_of points to the original record
+  rollback_of: null               # name of the promotion-record this reverses (rollbacks only)
+
+  # ── Identity & timing ──────────────────────────────────────────────────
+  initiated_by: brady             # $USER or $CI_ACTOR who ran strata promote start
+  hostname: workstation-01        # machine that ran strata
+  started_at: 2026-06-23T10:00:00Z    # timestamp of first wave commit
+  completed_at: 2026-06-24T15:10:00Z  # timestamp of last wave commit
+  duration_seconds: 104400            # calendar time first→last commit (not CPU time)
+
+  # ── Git ────────────────────────────────────────────────────────────────
+  branch: promote/tf_landscape-v2.4.0-prd
+  commits:
+    - ring_wave: 1
+      sha: abc123f
+      message: "promote tf_landscape v2.4.0 → prd ring-wave 1 (prod-be) deploy-wave canary"
+      committed_at: 2026-06-23T10:01:15Z
+    - ring_wave: 2
+      sha: def456a
+      message: "promote tf_landscape v2.4.0 → prd ring-wave 2 (prod-us, prod-sg) deploy-wave all"
+      committed_at: 2026-06-24T14:31:00Z
+
+  # ── Gate results (compliance evidence) ────────────────────────────────
+  gates:
+    - gate: require_progression_order
+      ring: prd
+      require: any_one
+      checked_at: 2026-06-23T10:01:12Z
+      passed: true
+      detail: "qas ring quorum satisfied (any_one): int-qas has v2.4.0"
+
+  # ── Wave execution summary ─────────────────────────────────────────────
   ring_waves:
     - ring_wave: 1
       environments: [prod-be]
-      deployment_waves:
-        - wave: canary
-          deployments: [acme]
-          started: 2026-06-23T10:00:00Z
-          deployed: 2026-06-23T15:00:00Z
+      deployment_wave: canary
+      deployments: [acme]
+      files_modified:
+        - environments/tenants/acme.yaml
+      committed_at: 2026-06-23T10:01:15Z
+
     - ring_wave: 2
       environments: [prod-us, prod-sg]
-      deployment_waves:
-        - wave: all
-          deployments: all
-          started: 2026-06-24T14:30:00Z
-          deployed: 2026-06-24T15:10:00Z
-  initiated_by: brady
-  started: 2026-06-23T10:00:00Z
-  completed: 2026-06-24T15:10:00Z
-  branch: promote/tf_landscape-v2.4.0-prd
-  manifests:                                  # links to deployment manifests produced
-    - acme_eu_prod-be/manifest-20260623.yaml
-    - contoso_eu_prod-be/manifest-20260624.yaml
+      deployment_wave: all
+      deployments: all
+      files_modified:
+        - environments/prod-us.yaml
+        - environments/prod-sg.yaml
+      fields_removed:
+        - "environments/tenants/acme.yaml → spec.overrides.remotes[tf_landscape]"
+      committed_at: 2026-06-24T14:31:00Z
+
+  # ── Links to deployment manifests (written later by strata deploy run) ─
+  # Strata does not know when the PR merges or when CI deploys. These links
+  # are populated by strata deploy run when it detects an active promotion
+  # branch for this target+ring combination and writes its deployment manifest.
+  deployment_manifests:
+    - acme_eu_prod-be/manifest-20260623.json
+    - contoso_eu_prod-be/manifest-20260624.json
 ```
+
+**Promotion record field reference:**
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `target.type` | enum | `remote` \| `helm_chart` \| `image` |
+| `target.name` | string | Remote/module/service name |
+| `target.from_version` | string | Version before promotion (read from env file at gate-check time) |
+| `target.to_version` | string | Version set by this promotion |
+| `strategy` | string | Strategy name from `configuration.spec.promotions.strategies[]` |
+| `progression` | string | Progression name |
+| `rings` | list | Ordered ring names from the progression (for lineage) |
+| `outcome` | enum | `completed` \| `partial` \| `rolled-back` |
+| `rollback_of` | string \| null | Name of the original promotion-record (rollbacks only) |
+| `initiated_by` | string | `$USER` or CI actor identity |
+| `hostname` | string | Machine that ran `strata promote` |
+| `started_at` | ISO-8601 | Timestamp of first wave commit |
+| `completed_at` | ISO-8601 | Timestamp of last wave commit |
+| `duration_seconds` | int | Calendar time first→last commit |
+| `branch` | string | Git branch name (`promote/{target}-{version}-{ring}`) |
+| `commits[]` | list | One entry per wave: `ring_wave`, `sha`, `message`, `committed_at` |
+| `gates[]` | list | One entry per gate check: `gate`, `ring`, `require`, `checked_at`, `passed`, `detail` |
+| `ring_waves[]` | list | Summary per ring wave: environments, deployment wave, deployments, files modified/removed |
+| `deployment_manifests` | list \| null | Paths to deployment manifests written by subsequent `strata deploy run` invocations |
+
+**When is it written?**
+
+The promotion record is written by `strata promote start` when the **last ring wave** is
+committed. For rollbacks, written by `strata promote rollback` when the rollback commit is
+made. Neither waits for the PR to merge or CI to deploy — those are git and CI concerns.
+
+For partial promotions (aborted mid-way):
+- `strata promote rollback` writes a new record with `outcome: rolled-back` pointing to the
+  partial one via `rollback_of`
+- The partial record itself is written with `outcome: partial` at rollback time, referencing
+  only the waves that were actually committed
+
+**Relationship to deployment manifests:**
+
+The promotion record and the deployment manifest are complementary, not redundant:
+
+| | Promotion record | Deployment manifest |
+| --- | --- | --- |
+| Written by | `strata promote start/rollback` | `strata deploy run` |
+| Captures | Authorization chain: gates passed, strategy followed, YAML edits made | Execution evidence: stages ran, images deployed, Terraform state backend locked |
+| Timing | At commit time (before PR/deploy) | At deploy completion (after PR merges, CI runs) |
+| Answers | "Was the right process followed to change the version?" | "Did the deployment succeed after the version was changed?" |
+
+Together they form a complete audit chain: the promotion record proves the change was
+authorized and followed the declared strategy; the deployment manifest proves the change
+was actually applied.
 
 **Why two artifacts?**
 
-| Concern      | Activity log (`.strata/promotions/`)                          | Completed record (artifact store)            |
-| ------------ | ------------------------------------------------------------- | -------------------------------------------- |
-| Purpose      | Diagnostic trace — watch what strata is doing, debug failures | Audit evidence — who, when, what, outcome    |
-| Required     | No — promotion works without it (all state derived from git)  | Yes — authoritative audit trail              |
-| Lifetime     | Kept permanently (gitignored — local only)                    | Permanent — never deleted                    |
-| Content      | Timestamped event log: actions, gates, files, commits         | Summary: waves, outcome, manifests produced  |
-| Storage      | Local workspace (`.strata/`), gitignored                      | Same artifact remote as deployment manifests |
-| Queryable by | `strata promote status` (in-flight diagnostics)               | `strata promote history` (historical)        |
-| Retention    | Always kept locally — accumulates for debugging               | Always written                               |
+| Concern      | Activity log (`.strata/promotions/`)                              | Promotion record (artifact store)                         |
+| ------------ | ----------------------------------------------------------------- | --------------------------------------------------------- |
+| Purpose      | Diagnostic trace — watch what strata is doing, debug failures     | Audit evidence — authorization chain, gate results        |
+| Required     | No — promotion works without it (all state derived from git)      | Yes — authoritative audit trail                           |
+| Lifetime     | Local, gitignored, accumulates indefinitely                       | Permanent — never deleted                                 |
+| Content      | Timestamped event log: every action, gate, file, commit           | Structured summary: gates, waves, commits, outcome        |
+| Storage      | Local workspace (`.strata/`), gitignored                          | Same artifact remote as deployment manifests              |
+| Queryable by | `strata promote status` (in-flight diagnostics)                   | `strata promote history` (historical audit)               |
 
-The completed record follows the same pattern as deployment manifests: it uses the
-Kubernetes-style schema (`apiVersion`, `kind`, `meta`, `spec`), is stored in a configured
-`spec.remotes` artifact store, and provides the audit trail showing that version changes
-followed the declared promotion strategy.
+
 
 **Git flow for wave progression:**
 
@@ -356,15 +526,14 @@ Strata resolves all deployments in the target environment, evaluates each deploy
 them into waves defined by the strategy.
 
 Wave 1 (canary — deployments matching wave 1):
-- For each wave-1 deployment, edits the existing tenant file directly:
-  `tenants/acme.yaml` → adds `spec.overrides.remotes[tf_landscape].reference: v2.4.0`
-- Already in the merge chain — no new files, no auto-discovery needed
-- This is exactly what a manual promotion does today, just automated
+- Writes a scoped lock overlay pinning only the waved deployments:
+  `versions/prd.acme.yaml` → `pins: [{ target: {type: remote, name: tf_landscape}, version: v2.4.0 }]`
+- The resolver applies the overlay above the ring lock and merge chain — no hand-authored file touched
 
 Wave N (final — all remaining):
-- Edits the shared environment file:
-  `environments/production.yaml` → `spec.overrides.remotes[tf_landscape].reference: v2.4.0`
-- Removes per-tenant overrides (shared file now covers everyone, tenant-level pin is redundant)
+- Sets the pin in the ring lock:
+  `versions/prd.yaml` → `pins: [{ target: {type: remote, name: tf_landscape}, version: v2.4.0 }]`
+- Deletes the scoped overlays from earlier waves (the ring lock now covers everyone)
 
 **Unpromotion (rollback):**
 - Same mechanism in reverse: `strata promote rollback` reads `previous_version` from state,
@@ -407,10 +576,13 @@ The promotion system should be a first-class strata concept because:
 1. **Both Terraform and Helm need it.** External tools like Flagger only cover Kubernetes.
    Infrastructure version progression is the harder problem and has no off-the-shelf solution.
 
-2. **The YAML edit is the promotion.** Strata already owns the YAML schema, validation, and
-   deployment. Generating the correct YAML edit for a canary vs full rollout is a natural extension.
+2. **A promotion advances a version-lock.** Each ring owns `versions/<ring>.yaml` — a
+   machine-managed lock that pins every promotable target. Strata edits that dedicated file
+   (never hand-authored config), so diffs are version-only and auditable, and "what version
+   is where" is a direct read. Locks are authoritative when present but optional, so adoption
+   is gradual and inline overrides keep working for un-pinned targets.
 
-3. **State tracking enables visibility.** Without tracking, "what version is running where"
+3. **State tracking enables visibility.** With per-ring locks, "what version is running where"
    requires cross-referencing environment files, deployment manifests, and git history.
    A small state file makes this queryable.
 
@@ -425,6 +597,7 @@ The promotion system should be a first-class strata concept because:
 - `progression.rings[].environments[]` supporting both bare strings and `{ name, wave }` objects for intra-ring ordering
 - `environment.spec.promotion` — `strategy` reference and `ring` membership declaration
 - `deployment.spec.promotion.wave` model (`iteration`, `match_labels`) — opt-in deployment wave assignment
+- `kind: version-lock` model (`versions/<ring>.yaml`) — per-ring version pins; resolver applies it as the top layer for pinned targets (authoritative when present, optional otherwise)
 - `strata validate` checks: warn if a version jump skips a ring in the progression
 - Still no automation — strategies are advisory guardrails
 
@@ -439,28 +612,30 @@ The promotion system should be a first-class strata concept because:
   (pure YAML inspection, no external tool integration needed)
 - Future gates added incrementally: `require_plan_clean`, `require_healthy`, `require_no_drift`
 
-**Deferred — `strata promote matrix`:**
-`promote matrix` requires loading the full merged environment model for every registered
-deployment to read effective versions — a fleet-wide `EnvironmentService` traversal that
-is expensive without a resolved-model cache. This command is deferred until a `.strata/`
-caching strategy is in place (see OQ-17). When implemented, `promote matrix` will read
-from the cache rather than re-resolving every environment file on every invocation.
+**Phase 2 — `strata promote matrix` (no longer deferred):**
+With per-ring version-locks, `promote matrix` reads `versions/<ring>.yaml` (plus any scoped
+overlays) directly — no fleet-wide `EnvironmentService` traversal, no resolved-model cache
+required. The lock files *are* the version index. Targets not yet under a lock are shown by
+falling back to the merge chain for that single target only.
 
-The same caching mechanism would benefit other fleet-wide operations: bulk validation,
-drift detection, and any future command that needs a resolved view of all deployments
-without a full re-load. That design belongs in a separate ADR.
+> **Historical note:** Before the version-lock mechanism, `promote matrix` was deferred
+> because reading effective versions required loading the full merged environment model for
+> every registered deployment (see OQ-17). The lock file removes that cost. A general
+> resolved-model cache may still benefit other fleet-wide operations (bulk validation, drift
+> detection); that design belongs in a separate ADR.
 
 ### Consequences
 
 - Good: Unified promotion model for both infrastructure and application changes.
 - Good: Strategies are configuration-as-code — auditable, versioned, team-shared.
-- Good: Phased implementation means model + validation ships before automation; matrix deferred until caching lands.
+- Good: Phased implementation means model + validation ships before automation; `promote matrix` reads lock files directly (no caching dependency).
 - Good: Git remains the source of truth — strata automates the edits but the PR/merge flow is unchanged.
 - Good: Unpromotion uses the same strategy, preventing unsafe shortcuts under pressure.
 - Good: Completed promotion records stored in the same artifact remote as deployment manifests — no new infrastructure for audit storage. Reuses existing `spec.remotes` configuration.
 - Good: `kind: promotion-record` follows the Kubernetes-style schema, consistent with all other strata documents.
-- Good: No required runtime state — all promotion state derived from environment files and git. Activity log is diagnostic-only.
-- Good: Terraform landscapes benefit equally — remote reference versions progress through environments via the same progression gate. Zone-layer infra uses a single `all` wave (all-at-once per env, still gated by `require_progression_order`). Tenant-layer infra can canary via `scope: tenant`.
+- Good: No required runtime state — all promotion state derived from version-lock files and git. Activity log is diagnostic-only.
+- Good: Terraform landscapes benefit equally — `iac-core v1 → v2` and any other versioned remote repo progress through rings via the same `type: remote` strategy and `require_progression_order` gate. Zone-layer infra uses a single `all` wave (all-at-once per env, still gated). Tenant-layer infra can canary via `scope: tenant`.
+- Good: Helm chart versions (`type: helm_chart`) and image tags (`type: image`) are distinct strategy types with appropriate blast-radius defaults, rather than being conflated under a generic `module` bucket.
 - Neutral: Zone-layer infrastructure is structurally shared per environment — canary within a single env is not possible. This is inherent to shared infra, not a system limitation. The `scope` field makes this explicit.
 - Neutral: Multi-promotion of the same target to the same environment (e.g., v2.4.0 and v2.5.0 both in flight) produces a git merge conflict on the second PR. This is correct behavior — git is the conflict detector. `strata promote start` can warn if a competing branch exists, but enforcement is via the normal PR process.
 - Neutral: Rollback after a partially-merged promotion (wave 1 PR merged, wave 2 PR still open) requires two actions: discard the open wave 2 branch, then create a new rollback branch that reverses the already-merged wave 1 change. `strata promote rollback` detects this via the activity log and generates the correct reverse edit, but the operator must close the open wave 2 PR manually. No silent partial states.
@@ -496,11 +671,11 @@ without a full re-load. That design belongs in a separate ADR.
 
 ## Issues to Resolve (Phase 3 Blockers)
 
-7. ~~**Promotion override file not in merge chain:**~~ Resolved — no new files needed.
-   Promotion edits the existing tenant file's `spec.overrides.remotes` field directly
-   (wave 1), then edits the shared environment file and removes the per-tenant override
-   (wave N). Same files, same merge chain, same mechanism as manual promotion.
-   No auto-include or glob needed.
+7. ~~**Promotion override file not in merge chain:**~~ Resolved via version-locks. A
+   promotion writes a scoped overlay `versions/<ring>.<scope>.yaml` (canary wave), then
+   sets the pin in the ring lock `versions/<ring>.yaml` and deletes the overlay (final
+   wave). Lock files slot into the resolver as the top layer for pinned targets; no
+   hand-authored environment file is edited, and no auto-include/glob is needed.
 
 8. ~~**`scope: tenant` has no mechanical definition:**~~ Resolved — `scope` references a
    layer name from `configuration.spec.layering[]`. The predicate is:
@@ -519,10 +694,10 @@ without a full re-load. That design belongs in a separate ADR.
     directly. See Appendix.
 
 11. ~~**Phase 1 reads a field that doesn't exist:**~~ Resolved — there is no `spec.version`
-    field on `kind: environment`. Phase 1 `status` and `matrix` commands scan
-    `spec.overrides.remotes[]` in the merged environment model. This requires loading
-    the full environment model per environment file via `EnvironmentService`, not a
-    lightweight YAML parse.
+    field on `kind: environment`. `status` and `matrix` read `versions/<ring>.yaml` lock
+    files (plus any scoped overlays) directly — a lightweight YAML parse of the lock index,
+    not a full per-environment `EnvironmentService` resolution. Un-pinned targets fall back
+    to the merge chain for that single target only.
 
 12. ~~**No deployment discovery mechanism for `promote start`:**~~ Resolved — deployment
     files are registered in `solution.json` via `strata sln deployment add <path>` or
@@ -545,11 +720,11 @@ without a full re-load. That design belongs in a separate ADR.
     where each entry has a `file` path and an optional `scope` annotation. Bare strings
     are auto-coerced at parse time for full backward compatibility.
 
-    The promotion controller identifies which file to edit per wave by matching
-    `entry.scope` against the strategy's `scope` field:
-    - `scope: "tenant"` entry → edited for canary/early waves (per-deployment override)
-    - `scope: "shared"` entry → edited for the final wave (shared environment file)
-    - `scope: null` entries → not targeted for wave-specific edits
+    The promotion controller identifies whether a wave writes the ring lock or a scoped
+    overlay by matching `entry.scope` against the strategy's `scope` field:
+    - `scope: "tenant"` entry → canary/early waves write `versions/<ring>.tenant.<selector>.yaml`
+    - `scope: "shared"` entry → final wave sets the pin in `versions/<ring>.yaml`
+    - `scope: null` entries → not targeted for wave-specific edits (all-at-once ring lock)
 
     Deployments that don't annotate `scope` on any entry behave as today (all-at-once
     only). The field is optional — existing YAML without `scope` continues to work.
@@ -675,7 +850,8 @@ implementation. It supersedes the exploratory examples in Option A above.
 | **Wave**             | An ordering unit. *Deployment wave* (named): a subset of deployments within one environment that receive the version together. *Ring wave* (integer): a subset of environments within a ring that receive the version together. |
 | **Scope**            | A layer name from `configuration.spec.layering[]` that determines which deployments participate in deployment waving               |
 | **Gate**             | A precondition that must pass before promotion proceeds (e.g., quorum of previous ring must have the version)                      |
-| **Promotion target** | The thing being versioned — a remote reference (`spec.overrides.remotes[].reference`) or a module field (`chart_version`, `image`) |
+| **Promotion target** | The thing being versioned. One of: `remote` (git ref on a versioned repo — IaC modules, Ansible roles), `helm_chart` (Helm chart version), `image` (container image tag), `tool` (provisioner version — future). |
+| **Version-lock**     | A machine-managed file (`versions/<ring>.yaml`, `kind: version-lock`) that pins every promotable target to an exact version for one ring. Authoritative when present, optional otherwise. A promotion advances the lock. A canary wave uses a scoped overlay `versions/<ring>.<scope>.yaml`. |
 
 ### Configuration Model
 
@@ -723,8 +899,19 @@ spec:
         gates:
           require_progression_order: true
 
-      - name: app-gradual
-        type: module
+      - name: chart-gradual
+        type: helm_chart                      # promotes spec.modules[name].chart_version
+        progression: standard
+        waves:
+          - name: canary
+          - name: early-adopters
+          - name: all
+        scope: tenant
+        gates:
+          require_progression_order: true
+
+      - name: image-wave
+        type: image                           # promotes spec.services[name].image / image_tag
         progression: standard
         waves:
           - name: canary
@@ -767,11 +954,21 @@ spec:
 | `wave` | integer | no       | Ring wave number (1, 2, 3…). Environments with the same wave number execute together. Omit for all-at-once. |
 | ------------- | -------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`        | string         | yes      | Unique identifier for the strategy                                                                                                           |
-| `type`        | enum           | yes      | `remote` (promotes `spec.overrides.remotes[].reference`) or `module` (promotes `chart_version` / `image`)                                    |
+| `type`        | enum           | yes      | See promotion types table below. `remote` \| `helm_chart` \| `image` \| `module` (deprecated alias for `helm_chart`) |
 | `progression` | string         | yes      | References a named progression                                                                                                               |
 | `waves`       | list[Wave]     | yes      | Ordered list of wave definitions. Position = execution order                                                                                 |
 | `scope`       | string \| null | no       | Layer name from `configuration.spec.layering[]`. Only deployments with this layer key participate in waving. `null` = all-at-once, no waving |
 | `gates`       | dict           | no       | Named gate conditions (see Gates section)                                                                                                    |
+
+**Promotion types:**
+
+| Type | Field promoted | Notes |
+| ----------- | ------------------------------------------------- | ----- |
+| `remote` | `spec.overrides.remotes[name].reference` | Any versioned git remote: Terraform modules, Ansible roles, IaC packages |
+| `helm_chart` | `spec.modules[name].chart_version` | Helm chart version from registry |
+| `image` | `spec.services[name].image` or `spec.modules[name].image_tag` | OCI image tag |
+| `module` | Same as `helm_chart` | Deprecated alias — use `helm_chart` or `image` |
+| `tool` | `spec.provisioners[name].version` | *Future — deferred to Phase 4* |
 
 **Wave definition:**
 
@@ -854,6 +1051,47 @@ is a layer predicate (which deployments participate in waving); the entry annota
 role label (which file gets edited for which wave). An implementer should not assume
 `strategy.scope == entry.scope` is a direct equality check — it is a naming convention.
 
+#### `deployment.spec.versions` — explicit version file references
+
+Version files are referenced explicitly in the deployment — parallel to `spec.environments`. No
+auto-discovery. No implicit loading. Consistent with strata's principle that everything is declared.
+
+```yaml
+# deploy/prd.yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: acme-production
+spec:
+  environments:
+    - file: "@config/environments/production.yaml"
+      scope: shared
+    - file: "@config/environments/tenants/acme.yaml"
+      scope: tenant
+  versions:
+    - "@config/versions/prd.manifest.yaml"   # human/tool-edited intent — lower precedence
+    - "@config/versions/prd.yaml"            # strata-generated lock — wins
+```
+
+**Resolution rules:**
+- Files are applied in **list order** — later entries win over earlier entries.
+- The convention is manifest first, lock second. The lock always overrides the manifest for any
+  pin it declares. Pins absent from the lock still resolve from the manifest.
+- Either file is optional. A deployment with no `versions:` field resolves versions from the
+  stack modules and environment overrides only — pre-promotion behaviour, unchanged.
+- Bare strings and `@remote/` cross-repo references are both valid, identical to `environments`.
+
+**Separation of concerns — why two lists:**
+
+| List | Changed by | Contains |
+|------|-----------|----------|
+| `environments:` | Operators (endpoints, secrets, sizing) | Runtime config |
+| `versions:` | Operators, CI, renovate-style tools | Software versions |
+
+Keeping them in separate lists means a tool that updates versions never touches environment
+files, and a human editing environment config never touches version files. Different change
+rates, different owners, different tooling.
+
 Deployment files must be **registered in the solution** to be visible to `promote start`:
 
 ```bash
@@ -900,6 +1138,83 @@ filters deployments. Only deployments where `scope_layer_name in deployment.spec
 participate. Zone-level deployments (no tenant layer) are excluded from waving entirely —
 they follow the `scope: null` / all-at-once path.
 
+#### The `version-lock` kind
+
+Each ring owns one lock file. **Generated exclusively by `strata promote start` — never
+hand-edited.** Humans review the diff in a PR before merging, but the file content is
+always strata-owned. Strata advances it ring-by-ring as versions progress through the
+progression.
+
+```yaml
+# versions/prd.yaml — one file per ring, machine-managed
+apiVersion: strata.huybrechts.xyz/v1
+kind: version-lock
+meta:
+  name: prd                       # ring name; matches a ring in the progression
+spec:
+  ring: prd
+  pins:
+    - target: { type: remote,     name: iac_core }   # git ref on a versioned repo
+      version: v2.4.0
+    - target: { type: helm_chart, name: traefik }    # spec.modules[name].chart_version
+      version: "28.1.0"
+    - target: { type: image,      name: app }        # spec.services[name].image tag
+      version: v1.3.0
+```
+
+```yaml
+# versions/prd.acme.yaml — scoped overlay for a canary wave (tenant "acme")
+apiVersion: strata.huybrechts.xyz/v1
+kind: version-lock
+meta:
+  name: prd.acme
+spec:
+  ring: prd
+  scope: tenant
+  scope_selector: acme
+  pins:
+    - target: { type: image, name: app }
+      version: v1.3.0             # only acme gets v1.3.0 during the canary wave
+```
+
+**Pin fields:**
+
+| Field            | Type   | Required | Description                                                              |
+| ---------------- | ------ | -------- | ------------------------------------------------------------------------ |
+| `target.type`    | enum   | yes      | `remote` \| `helm_chart` \| `image` \| `tool`                            |
+| `target.name`    | string | yes      | Name of the remote / chart module / service to pin                       |
+| `version`        | string | yes      | Exact tag, chart version, or image tag                                   |
+
+**Lock spec fields:**
+
+| Field            | Type       | Required | Description                                                          |
+| ---------------- | ---------- | -------- | ------------------------------------------------------------------- |
+| `ring`           | string     | yes      | Ring this lock governs                                              |
+| `scope`          | string     | no       | Layer name when this is a scoped canary overlay                     |
+| `scope_selector` | string     | no       | Which deployment(s) the overlay applies to                         |
+| `pins`           | list[Pin]  | yes      | The pinned targets                                                  |
+
+**Resolution precedence** (versions slot into the existing merge chain above environment overrides):
+
+```
+1. Base stack files (chart_version, image tags, remote reference: main)   ← human-authored defaults
+2. Environment merge chain (spec.overrides.*)                              ← human-authored config
+3. Version manifest (deployment.spec.versions[0])                          ← human/tool-edited intent
+4. Ring version-lock (deployment.spec.versions[1] / versions/<ring>.yaml)  ← machine-generated, wins
+5. Scoped lock overlay (versions/<ring>.<scope>.yaml) during a canary wave ← machine-generated, wins
+```
+
+Layers 3 and 4 correspond to the entries in `spec.versions[]`, applied in list order.
+A deployment with no `spec.versions:` skips layers 3 and 4 entirely — pre-promotion
+behaviour is fully preserved.
+
+- A target present in a lock **ignores** any default or override for the same target.
+- A target **absent** from the lock resolves normally through the merge chain.
+  Stack defaults and hand-written overrides remain valid for un-promoted targets.
+- `strata validate` warns when a hand-written `spec.overrides` entry is shadowed by a
+  lock pin — the override has no effect and can be removed.
+- A ring with no `versions/<ring>.yaml` behaves exactly as before promotion was introduced.
+
 ### CLI Interface
 
 ```
@@ -944,9 +1259,9 @@ strata promote start \
 6. Filters by scope: only deployments where `strategy.scope in deployment.spec.layers` participate in deployment waving; others are all-at-once
 7. Assigns deployments to deployment waves (iteration → match_labels → default last)
 8. For single-layer / no scoped entries: degrades to all-at-once with a console notice
-9. Identifies which files to edit via `spec.environments[].scope` matching
+9. Determines the lock file: the ring lock `versions/{ring}.yaml` for the final wave, or a scoped overlay `versions/{ring}.{scope}.yaml` for a canary/early wave
 10. Creates branch `promote/{target}-{version}-{ring}`
-11. Makes YAML edits, commits
+11. Writes/updates the version-lock pin (and deletes folded overlays on the final wave), commits
 12. Appends to activity log (`.strata/promotions/`)
 13. Outputs: files modified, branch name, suggested PR command
 
@@ -954,9 +1269,81 @@ strata promote start \
 
 | Wave position                | Action                                                                                                                                                                                                |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| First/middle wave (not last) | For each wave-member deployment: edit the `spec.environments` entry where `scope == strategy.scope` (e.g. `scope: "tenant"`). Set `spec.overrides.remotes[{name}].reference: {version}` in that file. |
-| Last wave (`all`)            | Edit the `scope: "shared"` environment file: set `spec.overrides.remotes[{name}].reference: {version}`. Remove scoped overrides written by earlier waves (they are now covered by the shared file).   |
-| No scoped entries found      | Degrade to all-at-once: edit the `scope: "shared"` file (or the only env file if none are annotated). Log notice: `"No scoped deployments — falling back to all-at-once"`                             |
+| First/middle wave (not last) | Write a scoped overlay `versions/{ring}.{scope}.yaml` pinning the target for the wave-member deployments only (e.g. `scope: "tenant"`, `scope_selector: acme`).                                        |
+| Last wave (`all`)            | Set the pin in the ring lock `versions/{ring}.yaml`. Delete the scoped overlays written by earlier waves (they are now covered by the ring lock).                                                     |
+| No scoped entries found      | Degrade to all-at-once: write the pin directly into the ring lock `versions/{ring}.yaml`. Log notice: `"No scoped deployments — falling back to all-at-once"`                                        |
+
+#### Worked examples
+
+**1. Update a version in one ring and redeploy** (single-env bump, no progression):
+
+```bash
+strata promote start --remote iac_core --version v2.5.0 --to dev --wave 1
+# → commits on branch promote/iac_core-v2.5.0-dev, opens PR, CI redeploys dev
+```
+
+Generated / updated file:
+
+```yaml
+# versions/dev.yaml  ← created or updated by strata
+apiVersion: strata.huybrechts.xyz/v1
+kind: version-lock
+meta:
+  name: dev
+spec:
+  ring: dev
+  pins:
+    - target: { type: remote, name: iac_core }
+      version: v2.5.0        # was v2.4.0
+```
+
+---
+
+**2. Advance a proven version set ring-to-ring** (dev → qas → prd with canary):
+
+```bash
+# Step 1 — promote to qas (gate checks dev quorum first)
+strata promote start --remote iac_core --version v2.5.0 --to qas
+```
+
+```yaml
+# versions/qas.yaml  ← created by strata
+spec:
+  ring: qas
+  pins:
+    - target: { type: remote, name: iac_core }
+      version: v2.5.0
+```
+
+```bash
+# Step 2 — canary wave: acme tenant first (ring wave 1, deployment wave canary)
+strata promote start --remote iac_core --version v2.5.0 --to prd --wave canary
+```
+
+```yaml
+# versions/prd.acme.yaml  ← scoped overlay created by strata (temporary)
+spec:
+  ring: prd
+  scope: tenant
+  scope_selector: acme
+  pins:
+    - target: { type: remote, name: iac_core }
+      version: v2.5.0    # only acme; rest of prd still on v2.4.0
+```
+
+```bash
+# Step 3 — final wave: all remaining prd environments
+strata promote start --remote iac_core --version v2.5.0 --to prd --wave all
+```
+
+```yaml
+# versions/prd.yaml  ← ring lock updated; versions/prd.acme.yaml deleted
+spec:
+  ring: prd
+  pins:
+    - target: { type: remote, name: iac_core }
+      version: v2.5.0    # now covers all prd environments
+```
 
 #### `strata promote rollback`
 
@@ -977,7 +1364,7 @@ strata promote rollback \
 | Tier | Source                                                                    | When available                       |
 | ---- | ------------------------------------------------------------------------- | ------------------------------------ |
 | 1    | Activity log (`.strata/promotions/{target}-{version}-{ring}.yaml`)         | Local machine, log present           |
-| 2    | Git merge base: `git merge-base HEAD main` → read env file at that commit | Always, unless shallow clone         |
+| 2    | Git merge base: `git merge-base HEAD main` → read `versions/{ring}.yaml` at that commit | Always, unless shallow clone |
 | 3    | `--from-version` explicit flag                                            | Escape hatch for CI / shallow clones |
 
 Rollback applies the reverse edit using the **same strategy** — if the `prd` ring required
@@ -991,7 +1378,8 @@ strata promote matrix
 strata promote matrix --remote tf_landscape
 ```
 
-Scans environment files and deployment manifests. Outputs a table grouped by ring:
+Reads `versions/<ring>.yaml` lock files (plus any scoped overlays) and deployment
+manifests. Outputs a table grouped by ring:
 
 ```
 Remote: tf_landscape
@@ -1013,7 +1401,7 @@ Ring: prd  (require: any_one ← qas ✔)
 │ prod-us [2] │ v2.3.0  │ —        │ —        │
 │ prod-sg [2] │ v2.3.0  │ —        │ —        │
 └─────────────┴─────────┴──────────┴──────────┘
-[1][2] = ring wave number   ⚡ = per-tenant override (deployment wave in progress)
+[1][2] = ring wave number   ⚡ = scoped lock overlay active (deployment wave in progress)
 ```
 
 #### `strata promote status`
@@ -1060,32 +1448,36 @@ with code 3 (validation failure). No branch is created, no files are edited.
 - One file per active promotion: `{target}-{version}-{environment}.yaml`
 - Append-only event log: timestamped actions, gates, files modified, commits
 - Gitignored — local diagnostic only. Strata does NOT require this file to function
-- All promotion state can be derived from environment files + git history
+- All promotion state can be derived from `versions/<ring>.yaml` lock files + git history
 - Used by `strata promote status` and `strata promote log`
 
 #### Promotion record (audit — artifact store)
 
-- Written on completion or rollback to the configured `spec.remotes` artifact store
-- `kind: promotion-record` — Kubernetes-style schema
-- Contains: target, versions (from/to), strategy used, waves executed, outcome, timestamps,
-  initiated_by, branch, links to produced deployment manifests
-- Used by `strata promote history`
+- Written when the **last ring wave** is committed (`strata promote start`) or when rollback edits are committed (`strata promote rollback`)
+- `kind: promotion-record` — Kubernetes-style schema, stored in the configured `spec.remotes` artifact store
 - Never deleted — permanent audit trail
+- Used by `strata promote history`
+- **Fields captured:** target (type, name, from/to versions), strategy, progression, ring list, outcome (`completed` \| `partial` \| `rolled-back`), `rollback_of` (rollback link), identity (`initiated_by`, `hostname`), timestamps, git branch + per-wave commit SHAs, gate results (each gate: name, ring, quorum, passed, detail), ring wave summary (environments, files modified/removed, committed_at), links to deployment manifests
+- **`outcome: partial`** — written by `strata promote rollback` for a promotion where some waves committed but the last wave never ran
+- **`deployment_manifests`** — populated by `strata deploy run` after the PR merges and CI deploys; may be empty at initial write time
 
 ### Git Flow
 
 ```
-main ─────────────────────────────────────────────────────────────►
-       │                              │
-       │ promote/tf_landscape-v2.4.0-production
-       ├──── wave 1: edit tenants/acme.yaml ──── PR ──── merge ───►
-       │                                                  │
-       │                                                  │
-       ├──── wave 2: edit environments/production.yaml ── PR ── merge ─►
-       │           + remove acme override
+main ─────────────────────────────────────────────────────────────────────────►
+       │
+       │ promote/tf_landscape-v2.4.0-prd
+       ├──── ring-wave 1: write versions/prd.acme.yaml (scoped overlay) ─ PR ─ merge ─►
+       │                                                            │
+       │                                                     (CI runs strata deploy run
+       │                                                      → writes deployment manifest)
+       │
+       ├──── ring-wave 2: set pin in versions/prd.yaml ──────────── PR ──── merge ────►
+       │           + delete versions/prd.acme.yaml overlay
+       │           + write promotion-record ◄── written here (last wave commit)
 ```
 
-Each wave is an explicit `strata promote start --wave {name}` invocation. The operator
+Each wave is an explicit `strata promote start --wave {name|int}` invocation. The operator
 decides when to advance (after observing canary, after CI passes, after stakeholder
 approval). There is no auto-advance — strata is a config tool, not a runtime system.
 
@@ -1093,15 +1485,16 @@ approval). There is no auto-advance — strata is a config tool, not a runtime s
 
 | System                      | Interaction                                                                                             |
 | --------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `strata validate`           | Phase 2+: warns if a version jump skips a progression step                                              |
-| `strata deploy list`        | Already resolves effective config through the merge chain — sees promotion overrides natively           |
+| `strata validate`           | Phase 2+: warns if a version jump skips a progression step; warns if a lock pin shadows a hand override |
+| `strata deploy list`        | Resolves effective config through the merge chain with version-locks applied as the top layer          |
 | `strata build`              | Unchanged — builds whatever version is in the resolved config                                           |
 | CI/CD pipeline              | Unchanged — deploys on merge to main. Strata creates the branch and edits, CI validates and deploys     |
-| `spec.overrides.remotes`    | The exact field being edited by promotions. Existing override merge chain handles layering              |
-| `spec.tenant`               | Drives file resolution for wave-1 edits (which tenant file to edit). Not read by `match_labels`         |
+| `versions/<ring>.yaml`      | The file written by promotions. Authoritative for pinned targets; slots in above the merge chain        |
+| `spec.overrides.remotes`    | Still honored for targets not pinned in a lock. A lock pin shadows the matching override                |
+| `spec.tenant`               | Drives scope-overlay resolution for canary waves (which `versions/<ring>.<scope>.yaml` to write)        |
 | `meta.labels`               | Matched by `match_labels` for wave assignment. Informational labels live here                           |
 | `spec.layers`               | Used by `scope` predicate to filter which deployments participate in waving                             |
-| `spec.environments[].scope` | Identifies which environment file to edit per wave (`"shared"` = final wave, layer name = canary waves) |
+| `spec.environments[].scope` | Identifies whether a wave writes the ring lock (`"shared"` = final wave) or a scoped overlay (canary)   |
 
 ### Constraints and Non-Goals
 
@@ -1111,8 +1504,12 @@ approval). There is no auto-advance — strata is a config tool, not a runtime s
   or label matching). No random selection, no "deploy to 25% of tenants."
 - **No cross-environment atomicity.** Each environment is promoted independently. The
   progression gate ensures ordering but doesn't create atomic multi-env transactions.
-- **No promotion of arbitrary fields.** Only `spec.overrides.remotes[].reference` (type: remote)
-  and module version fields (type: module) are supported promotion targets.
+- **No promotion of arbitrary fields.** Only `remote` (git ref), `helm_chart` (chart version),
+  and `image` (container image tag) targets can be pinned in a version-lock. Type `tool` is
+  deferred to Phase 4.
+- **Lock files are version-only.** A `version-lock` pins versions and nothing else. Config
+  overrides (replica counts, VM sizes, feature flags) stay in environment files — the lock
+  never carries them.
 - **No auto-discovery of what to promote.** The operator specifies the target and version
   explicitly. Strata doesn't scan registries or detect new versions.
 
@@ -1121,3 +1518,586 @@ approval). There is no auto-advance — strata is a config tool, not a runtime s
 - [VCT-INT Architecture](../issues/VCT-INT-architecture.md) — landscape versioning section
 - [Environment Configuration](../config/environment.md) — remote reference overrides
 - [At Scale Guide](../guides/at-scale.md) — variable flow, tenant model, tier environments
+
+---
+
+## Future Directions — Ideas from Package Managers
+
+These concepts are not implemented. They are recorded here as candidates for future ADRs,
+ordered by likely value. All were informed by the patterns in npm, NuGet, and uv/PyPI.
+
+---
+
+### F-1 — Floating versions for CI/CD-driven application rings
+
+**The problem:** Application images on the dev ring are driven by CI/CD at high velocity
+— every merge to `main` produces a new image tag. AKS (and similar) can auto-pull the
+latest image on pod restart (`imagePullPolicy: Always` + a rolling tag like `main` or
+`latest`). Requiring a manual `strata promote start` for every CI build in dev creates
+friction with no safety benefit — dev is intentionally unstable.
+
+**The proposal:** A pin can declare `track: latest` instead of `version: exact`. A
+floating pin records what the cluster is actually running (best-effort, via CI callback)
+but does not block deployment on an explicit promotion step.
+
+```yaml
+# versions/dev.yaml — dev ring uses floating for app images
+spec:
+  ring: dev
+  pins:
+    - target: { type: image, name: app }
+      track: latest                  # float — CI/CD drives this, no promotion step
+      resolved: v1.4.2               # last known resolved value (recorded by CI callback)
+      resolved_at: 2026-07-10T09:14Z # when the resolved value was last recorded
+    - target: { type: remote, name: iac_core }
+      version: v2.5.0                # infra is always pinned, even in dev
+```
+
+**Ring-level default:** A ring can declare `track_by_default: [image]` so image targets
+are floating unless explicitly pinned. Infrastructure targets (`remote`, `helm_chart`)
+remain pinned regardless.
+
+```yaml
+progressions:
+  - name: standard
+    rings:
+      - name: dev
+        track_by_default: [image]   # app images float in dev; infra stays pinned
+        environments: [dev1, dev2]
+      - name: test
+        environments: [test]
+        require: any_one            # test requires dev to have a pin (not just floating)
+```
+
+**The promotion boundary:** When an operator wants to advance the application from dev
+to test, they must choose a specific version — `strata promote start --image app
+--version v1.4.2 --to test`. The gate on `test` requires `any_one` dev environment to
+have that version pinned (not just floating) before proceeding. This creates a deliberate
+checkpoint: floating in dev → operator chooses which CI build to promote → pinned in
+test/qas/prd.
+
+**`promote matrix` display for floating pins:**
+```
+Image: app
+  dev   [floating → v1.4.2 @ 2026-07-10T09:14Z]   ← latest resolved value
+  test  v1.3.0  (pinned)
+  prd   v1.2.0  (pinned)
+```
+
+**Design notes:**
+- `track: latest` only valid on `type: image` and `type: remote` (branch tracking). Not
+  valid on `type: helm_chart` — chart repos don't have a meaningful "latest" concept.
+- The `resolved` field is updated by a CI callback (`strata promote record-resolved`) or
+  by `strata deploy run` after each deployment. It's informational — the lock file remains
+  machine-owned and the floating target is never blocked.
+- Rollback on a floating pin: strata pins the `resolved` value at the time of rollback
+  request (`track: latest` → `version: v1.4.2`), then proceeds with the rollback.
+
+---
+
+### F-2 — Artifact digests for immutability verification
+
+**The problem:** Image tags and git tags are mutable — `v2.4.0` can be moved to a
+different commit or a different image layer. In production, you need proof that what
+deployed is exactly what you approved.
+
+**The proposal:** Strata records the resolved immutable reference alongside the mutable
+tag in the pin. Written by `strata promote start` at pin time by resolving the tag
+against the registry/repo.
+
+```yaml
+pins:
+  - target: { type: remote, name: iac_core }
+    version: v2.5.0
+    resolved_sha: abc123def456    # git commit SHA the tag pointed to at pin time
+
+  - target: { type: image, name: app }
+    version: v1.4.0
+    digest: sha256:a1b2c3...      # OCI content digest — immutable even if tag moves
+
+  - target: { type: helm_chart, name: traefik }
+    version: "28.1.0"
+    digest: sha256:d4e5f6...      # chart archive SHA
+```
+
+`strata validate --deep` verifies that the current tag still resolves to the recorded
+digest. Mismatch = warning (tag was moved after pinning — possible supply chain issue).
+
+**Value:** Tamper detection + immutability proof for compliance evidence, especially for
+prd rings where the audit trail must prove exactly what was deployed.
+
+---
+
+### F-3 — `strata promote outdated`
+
+**The problem:** Without querying registries, operators don't know when a new version is
+available for a pinned target. Discovery is manual today.
+
+**The proposal:** A new command queries each pinned target's source (git tags, Helm repo,
+OCI registry) and reports the gap between current pin and latest available.
+
+```bash
+strata promote outdated
+strata promote outdated --ring prd
+```
+
+```
+Target: iac_core  (type: remote)
+  dev  v2.5.0   latest: v2.6.0  ← newer available
+  qas  v2.4.0
+  prd  v2.3.0
+
+Target: traefik  (type: helm_chart)
+  dev  28.1.0   latest: 28.2.0  ← minor available
+  prd  28.0.0   latest: 28.2.0  ← 2 behind
+
+Target: app  (type: image)
+  dev  [floating → v1.4.2]  latest: v1.4.2  ✔
+  prd  v1.2.0   latest: v1.4.2  ← 2 versions behind
+```
+
+Floating pins always show as current (they track by definition).
+
+---
+
+### F-4 — Strict lock mode (`--require-lock`)
+
+**The problem:** In production CI, an operator could forget to run `strata promote start`
+before deploying, causing the stack default to be used instead of the intended promoted
+version. There's no error today — it silently falls back.
+
+**The proposal:** A flag that fails the build/deploy if any promotable target for the
+current ring lacks a lock pin.
+
+```bash
+strata build run -f deploy/prd.yaml --require-lock
+# → fails with exit 3 if versions/prd.yaml is missing or any expected target has no pin
+```
+
+Can also be declared on the ring itself:
+
+```yaml
+rings:
+  - name: prd
+    require_lock: true   # strata build/deploy fails if lock is absent or incomplete
+```
+
+Equivalent to `npm ci` over `npm install` — enforces "lock must exist before proceeding"
+as a hard CI rule rather than a suggestion.
+
+---
+
+### F-5 — Pre-release channel rules
+
+**The problem:** CI produces `v1.5.0-rc.1` release candidates. An operator could
+accidentally promote a release candidate to production.
+
+**The proposal:** Rings declare which version channels are allowed. Strata parses the
+semver pre-release identifier and blocks promotion if the channel is not allowed.
+
+```yaml
+rings:
+  - name: dev
+    allowed_channels: [alpha, beta, rc, stable]
+  - name: test
+    allowed_channels: [beta, rc, stable]
+  - name: prd
+    allowed_channels: [stable]       # rc and below blocked — gate at promote start
+```
+
+Strata parses the pre-release label from the version string:
+- `v1.5.0` → `stable`
+- `v1.5.0-rc.1` → `rc`
+- `v1.5.0-beta.2` → `beta`
+- `v1.5.0-alpha.1` → `alpha`
+- `v1.5.0-SNAPSHOT` → treated as `alpha` (unrecognized → most restrictive)
+
+**Value:** Prevents release candidate leakage into production without requiring
+manual review to catch pre-release version strings.
+
+---
+
+### F-6 — Central version catalog
+
+**The problem:** Different teams might pin incompatible versions of shared infrastructure
+(e.g., one team pins `iac_core: v2.5.0`, another pins `iac_core: v2.3.0`). There's no
+platform-wide policy on what versions are approved.
+
+**The proposal:** A new `kind: version-catalog` file owned by the platform team that
+declares approved version ranges per target. Individual ring locks must stay within those
+ranges; `strata validate` rejects a lock pin outside the catalog.
+
+```yaml
+# versions/catalog.yaml — platform team owns this, not strata-generated
+apiVersion: strata.huybrechts.xyz/v1
+kind: version-catalog
+meta:
+  name: platform
+spec:
+  targets:
+    - target: { type: remote, name: iac_core }
+      allowed: ">=v2.0.0,<v3.0.0"    # semver range
+      deprecated: ["v2.0.x", "v2.1.x"]   # warn if pinned to these
+    - target: { type: helm_chart, name: traefik }
+      allowed: ">=28.0.0"
+    - target: { type: image, name: app }
+      allowed: "*"                    # no constraint — any version allowed
+```
+
+Separates two responsibilities:
+- **Platform team:** Which versions are approved/supported (`version-catalog`)
+- **Operators:** Which approved version each ring runs (`version-lock`, managed by strata)
+
+This is the NuGet Central Package Management pattern applied to infrastructure.
+
+---
+
+### F-7 — Ring-restricted pins
+
+**The problem:** Some targets should never reach certain rings. For example, a
+monitoring/debugging sidecar should never be pinned in production, or an alpha feature
+flag module should only exist in dev.
+
+**The proposal:** A `rings` constraint on a pin or catalog entry that prevents promotion
+beyond a specified ring.
+
+```yaml
+# In version-catalog or as an annotation on a stack definition:
+- target: { type: helm_chart, name: grafana-debug }
+  rings: [dev, test]     # gate: strata blocks promoting this beyond test
+```
+
+`strata promote start` refuses if the target ring is not in the `rings` allow-list.
+`strata validate` warns if a ring lock contains a pin for a target that is restricted
+from that ring.
+
+---
+
+### F-8 — Version constraints (ranges, not just exact pins)
+
+**The problem:** A lock file holds exact pins. But some version requirements are not
+about an exact version — they are rules that must hold across all future promotions:
+
+- *"This chart must be >= 28.0.0 because 27.x has CVE-2025-1234"*
+- *"This service must be < 2.5.0 because 2.5.0 removed the `/api/v1/health` endpoint
+  that the auth service depends on"*
+- *"Allow any patch update within 1.2.x, but never cross the minor boundary"*
+
+These rules survive promotions. An exact pin doesn't capture the intent — next time
+someone runs `strata promote start` with a version that violates the constraint, nothing
+blocks them without constraints.
+
+**The distinction:**
+
+| Concept | What it is | Where it lives | Who writes it |
+|---------|-----------|----------------|---------------|
+| **Pin** | Exactly this version | `versions/<ring>.yaml` (lock file) | Strata (`promote start`) |
+| **Constraint** | Must satisfy this rule | Stack module, version catalog | Operator / platform team |
+
+**Syntax — Terraform-compatible constraint strings:**
+
+Strata targets infrastructure engineers already familiar with Terraform's provider and
+module version constraints. The same syntax applies here, backed by a standard semver
+parsing library.
+
+```
+>= 28.0.0           # minimum (inclusive)
+< 30.0.0            # maximum (exclusive)
+>= 28.0.0, < 30.0.0 # range — comma = AND
+~> 28.1             # pessimistic: >= 28.1.0, < 29.0.0 (minor + patch)
+~> 28.1.0           # pessimistic: >= 28.1.0, < 28.2.0 (patch only)
+!= 28.1.3           # exclusion — skip a known bad patch
+```
+
+**Two declaration forms — short and expanded:**
+
+```yaml
+# Short form — preferred for simple rules
+spec:
+  source:
+    chart: traefik
+    version: ">= 28.0.0, < 30.0.0"
+```
+
+```yaml
+# Expanded form — when the constraint needs a documented reason
+spec:
+  source:
+    chart: traefik
+    constraints:
+      - rule: ">= 28.0.0"
+        reason: "28.0.0 patches CVE-2025-1234 — do not downgrade"
+      - rule: "< 30.0.0"
+        reason: "30.x removes ingress annotations used by tenant routing"
+```
+
+Both forms resolve to the same validation logic. Expanded form is for constraints that
+operators need to understand when they hit them.
+
+**Where constraints are declared:**
+
+```yaml
+# 1. Stack module file — scope: this deployment only
+# stack/legacy-service-module.yaml
+spec:
+  source:
+    chart: legacy-service
+    version: ">= 1.0.0, < 2.5.0"
+
+# 2. Version catalog — scope: platform-wide (see F-6)
+# versions/catalog.yaml
+spec:
+  targets:
+    - target: { type: helm_chart, name: traefik }
+      version: ">= 28.0.0"
+      constraints:
+        - rule: ">= 28.0.0"
+          reason: "28.0.0 patches CVE-2025-1234"
+
+# 3. Ring config — scope: specific ring only
+progressions:
+  - name: standard
+    rings:
+      - name: prd
+        targets:
+          - name: app
+            version: "~> 1.2"   # prd only allows 1.2.x patch updates
+```
+
+**Validation at `promote start`:**
+
+When an operator runs:
+
+```bash
+strata promote start --helm legacy-service --version 2.5.1 --to prd
+```
+
+Strata checks the proposed pin `2.5.1` against all applicable constraints in order:
+1. Version catalog (hardest limit — cannot be overridden)
+2. Ring config constraints
+3. Stack module constraints
+
+```
+Error: legacy-service version 2.5.1 violates constraint "< 2.5.0"
+       defined in: stack/legacy-service-module.yaml
+       Reason: 2.5.0 removed /api/v1/health — compatibility break with auth-service
+       Allowed range: >= 1.0.0, < 2.5.0
+       Tip: latest version satisfying this constraint is 2.4.9
+```
+
+The exact pin is never written to the lock file if it violates a constraint.
+
+**`strata validate --deep` retroactive check:**
+
+If a constraint is added after a pin was already written, `validate --deep` catches the
+drift:
+
+```
+Warning: prd lock pin legacy-service=2.5.1 violates constraint "< 2.5.0"
+         added to stack/legacy-service-module.yaml on 2026-07-01
+         The pin was valid when written but is now out of constraint.
+         Run: strata promote start --helm legacy-service --to prd
+              to resolve by promoting a compliant version.
+```
+
+**`promote matrix` with constraints:**
+
+```
+Helm: legacy-service   constraint: >= 1.0.0, < 2.5.0
+  dev   v2.4.1  ✔
+  test  v2.4.1  ✔
+  prd   v2.3.0  ✔
+```
+
+If a ring's lock pin violates its constraint, the matrix flags it:
+
+```
+Helm: legacy-service   constraint: >= 1.0.0, < 2.5.0
+  dev   v2.5.1  ✗  violates < 2.5.0
+  test  v2.4.1  ✔
+  prd   v2.3.0  ✔
+```
+
+**Relationship to other future directions:**
+
+- **F-5 (pre-release channels):** Complements constraints — channels filter by stability
+  label (`rc`, `beta`), constraints filter by version range. Both run at `promote start`.
+- **F-6 (version catalog):** The catalog is the natural home for platform-wide
+  constraints. F-8 defines the constraint syntax; F-6 defines the catalog `kind`.
+- **F-4 (strict lock mode):** Orthogonal — strict mode requires a lock to exist;
+  constraints validate what version the lock may contain.
+
+---
+
+### F-9 — Versions manifest: centralized human- and tool-editable versions file
+
+**The problem:** Versions are currently scattered across dozens of stack module files.
+Updating 40 services requires editing 40 files or running 40 `promote start` commands.
+External tools (CI pipelines, renovate-style bots) have no single file to read from and
+write to. There is no human-friendly answer to "what version is everything on right now?"
+
+**The proposal:** A new `kind: version-manifest` — a centralized, flat, human-editable
+file per ring. Strata can generate it as a starting point; humans or tools maintain it;
+strata reads it as a version source.
+
+**Where it fits in the model:**
+
+| Layer | File | Who writes | Wins over |
+|-------|------|-----------|-----------|
+| 1 | Stack module files | Human (structure only) | — |
+| 2 | Environment overrides | Human | Layer 1 |
+| 3 | **Version manifest** ← new | Human or tool | Layers 1–2 |
+| 4 | Lock file (`versions/<ring>.yaml`) | Strata (`promote start`) | All layers |
+
+For dev and test rings the manifest is often sufficient — no formal promotion ceremony
+needed. For qas and prd, `promote start` still runs the full gate and audit process and
+writes the lock file, which wins over the manifest.
+
+**File format — flat and tool-friendly by design:**
+
+```yaml
+# versions/dev.manifest.yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: version-manifest
+meta:
+  name: dev
+spec:
+  ring: dev
+  pins:
+    images:
+      app:                  v2.1.0
+      worker:               v2.1.0
+      frontend:             v1.3.2
+      migrations:           v2.1.0
+
+    charts:
+      traefik:              "28.2.0"
+      cert-manager:         "1.16.0"
+      kube-prometheus-stack: "58.4.0"
+      loki:                 "6.7.0"
+
+    remotes:
+      iac_core:             v2.6.0
+      iac_network:          v1.9.0
+```
+
+The nested-flat structure is intentional. A tool that knows nothing about strata can
+update a single value with standard YAML tooling or simple text replacement:
+
+```bash
+# CI updates one image after a successful build
+yq e '.spec.pins.images.app = "v2.2.0"' -i versions/dev.manifest.yaml
+
+# Renovate-style tool updates multiple charts at once
+yq e '
+  .spec.pins.charts.traefik = "28.3.0" |
+  .spec.pins.charts.cert-manager = "1.17.0"
+' -i versions/dev.manifest.yaml
+```
+
+No strata knowledge required for the update step — the tool only needs to know the
+target name and new version string.
+
+**Strata commands:**
+
+```bash
+# Generate starting point — strata reads all stack modules and collects their versions
+strata versions init --ring dev
+# → writes versions/dev.manifest.yaml
+
+# Export current state for external tool consumption
+strata versions export --ring dev --format json
+# → { "images": { "app": "v2.1.0", ... }, "charts": { ... }, "remotes": { ... } }
+
+# Apply — strata reads the manifest and updates the ring
+strata versions apply -f versions/dev.manifest.yaml
+# → updates versions/dev.yaml (lock) from the manifest, creates PR branch with diff
+```
+
+**The external tool workflow:**
+
+```
+1. CI/tool calls:  strata versions export --ring dev --format json
+   → receives current version state as structured JSON
+
+2. Tool compares against registries, determines what to update
+
+3. Tool writes back:
+   yq / sed / jinja updates versions/dev.manifest.yaml
+
+4. Tool commits the changed manifest file and opens a PR
+   → one PR containing all version changes, however many targets
+
+5. Human reviews and merges (or auto-merge on CI pass for dev)
+
+6. CD pipeline calls: strata versions apply -f versions/dev.manifest.yaml
+   → strata validates constraints, writes lock, deploys
+```
+
+The tool never needs to understand promotions, rings, or strata internals. It reads a
+flat JSON export and writes back to a flat YAML file.
+
+**This also solves the batch problem:**
+
+Updating 40 services is one manifest edit (by a human or a tool), one PR, one review,
+one `strata versions apply`. No `promote start` per service. No 40 commands.
+
+```yaml
+# versions/dev.manifest.yaml after CI rebuilt all services on a new base image
+spec:
+  pins:
+    images:
+      service-a:  v2.1.0   # was v2.0.1
+      service-b:  v2.1.0   # was v2.0.1
+      service-c:  v1.9.0   # was v1.8.3
+      # ... 37 more ...
+```
+
+**Jinja / templating integration:**
+
+For teams that already use templating in their GitOps pipelines, the manifest can be
+generated from a template with CI-injected variables:
+
+```yaml
+# versions/dev.manifest.yaml.j2  (Jinja template, rendered by CI)
+spec:
+  pins:
+    images:
+      app:      {{ APP_VERSION }}      # injected from $APP_VERSION env var
+      worker:   {{ WORKER_VERSION }}
+    charts:
+      traefik:  {{ TRAEFIK_VERSION | default("28.2.0") }}
+```
+
+The rendered file is committed as `versions/dev.manifest.yaml` and strata reads it. The
+template lives in the repo; the values come from CI.
+
+**Relationship to version constraints (F-8):**
+
+`strata versions apply` validates all manifest versions against declared constraints
+before writing the lock file. If a manifest version violates a constraint, the apply
+fails with the same error as `promote start`:
+
+```
+Error: manifest pin traefik=30.1.0 violates constraint "< 30.0.0"
+       defined in stack/traefik-module.yaml
+       Reason: 30.x removes ingress annotations used by tenant routing
+```
+
+The manifest is the human interface. The constraint system is the safety net.
+
+---
+
+### Priority summary
+
+| # | Idea | Value | Effort | Notes |
+|---|------|-------|--------|-------|
+| F-1 | Floating versions (CI/CD auto-pickup) | **High** | Medium | Core to application side automation; extends pin model |
+| F-2 | Artifact digests | **High** | Low | Store at pin time; validate on demand |
+| F-3 | `promote outdated` | **High** | Medium | Needs per-target registry query |
+| F-4 | Strict lock mode | **High** | Low | Flag + optional ring config field |
+| F-5 | Pre-release channels | **Medium** | Medium | Semver parsing + ring config |
+| F-6 | Version catalog | **Medium** | High | New `kind`, new validation pass |
+| F-7 | Ring-restricted pins | **Medium** | Low | Annotation + validation gate |
+| F-8 | Version constraints (ranges) | **High** | Medium | Terraform-compatible syntax; two forms (short + expanded) |
+| F-9 | Versions manifest | **High** | Medium | Centralized human/tool-editable file; solves batch updates and tool integration |

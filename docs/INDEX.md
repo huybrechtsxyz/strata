@@ -15,7 +15,15 @@ This is a comprehensive guide to all Strata documentation and resources. Use thi
 
 ---
 
-## 📖 **User Guides**
+## � **Reference**
+
+| Resource | Purpose |
+|----------|---------|
+| [GLOSSARY.md](./GLOSSARY.md) | Terminology and core concepts used throughout strata |
+
+---
+
+## �📖 **User Guides**
 
 ### Core Concepts
 
@@ -79,7 +87,7 @@ Every significant architectural decision is documented as an ADR. Status indicat
 | [0008](./decisions/0008-infrastructure-drift-detection.md) | Infrastructure drift detection | ⏸️ Deferred | Detecting config vs. state differences |
 | [0009](./decisions/0009-sbom-extended-sources-and-inventory.md) | SBOM extended sources | ✅ Accepted | Supply chain / Bill of materials |
 | [0010](./decisions/0010-rename-configuration-repositories-to-remotes.md) | Rename repositories → remotes | ✅ Accepted | Terminology clarification |
-| [0011](./decisions/0011-promotion-strategies-for-version-progression.md) | Promotion strategies | ⏸️ Deferred | Cross-environment version progression |
+| [0011](./decisions/0011-promotion-strategies-for-version-progression.md) | Promotion strategies | ✅ Accepted | Cross-environment version progression |
 | [0012](./decisions/0012-rename-customer-to-tenant.md) | Rename customer → tenant | ✅ Accepted | Terminology update |
 | [0013](./decisions/0013-auto-generated-secrets.md) | Auto-generated secrets | ✅ Accepted | Automatic secret creation & seeding |
 | [0014](./decisions/0014-onboarding-experience.md) | Onboarding experience | ✅ Accepted | Getting-started walkthrough |
