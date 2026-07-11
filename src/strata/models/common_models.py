@@ -59,6 +59,8 @@ class PlatformKind(str, Enum):
     PROVIDER = "provider"
     RESOURCE = "resource"
     WORKSPACE = "workspace"
+    VERSION_LOCK = "version-lock"
+    VERSION_MANIFEST = "version"
 
 
 # Enumeration of supported workspace versions.

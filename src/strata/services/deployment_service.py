@@ -807,6 +807,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
                     work_path = Path(objects_path)
                     merged_env, merge_provenance = EnvironmentService.merge_envfiles(env_paths, work_path)
                     self._merge_provenance = merge_provenance
+                    # Apply version pins from spec.versions (layer 3 + 4 in resolution chain)
+                    merged_env = self._apply_version_pins(merged_env, objects_path, repo_map)
                     # Create a service from the merged model
                     env_service = EnvironmentService(data=merged_env.model_dump())
                     # Validate the merged environment
@@ -817,6 +819,11 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 else:
                     # Single environment file - load directly
                     env_service = EnvironmentService.load(env_paths[0], validate=True)
+                    # Apply version pins from spec.versions (layer 3 + 4 in resolution chain)
+                    if env_service.model:
+                        patched = self._apply_version_pins(env_service.model, objects_path, repo_map)
+                        env_service = EnvironmentService(data=patched.model_dump())
+                        env_service.validate()
 
                 if not env_service.is_validated():
                     self.logger.warning("Deployment environment validation failed", paths=env_paths)
@@ -918,6 +925,40 @@ class DeploymentService(BaseService["DeploymentModel"]):
     def get_resource_service(self, resource_name: str) -> Optional[BaseService]:
         """Get a specific resource service by name (delegates to workspace)."""
         return self._ensure_workspace().get_resource_service(resource_name)
+
+    def _apply_version_pins(
+        self,
+        env_model: "EnvironmentModel",
+        objects_path: str,
+        repo_map: Optional[Dict[str, str]] = None,
+    ) -> "EnvironmentModel":
+        """Apply version pins from ``spec.versions`` to a merged EnvironmentModel.
+
+        Returns the (possibly modified) model.  If ``spec.versions`` is absent or
+        empty, returns the model unchanged.
+        """
+        if not self.model or not self.model.spec.versions:
+            return env_model
+
+        from strata.services.version_service import VersionService
+
+        _repo_map = repo_map or {}
+
+        def resolve_fn(file_ref: str, base: str) -> str:
+            return self._resolve_file_path(file_ref, base, _repo_map)
+
+        pins = VersionService.load_and_resolve(
+            version_refs=self.model.spec.versions,
+            objects_path=objects_path,
+            resolve_path_fn=resolve_fn,
+        )
+
+        if any(pins.values()):
+            total = sum(len(v) for v in pins.values())
+            self.logger.debug("Applying version pins to environment", pin_count=total)
+            VersionService.apply_to_environment(env_model, pins)
+
+        return env_model
 
     def get_environment_service(self) -> Optional[EnvironmentService]:
         """
