@@ -43,6 +43,10 @@ class VersionManifestPinsModel(PlatformBaseModel):
         None,
         description="Git remote target versions. Key = remote name, value = git ref (tag, branch, SHA).",
     )
+    tools: Optional[Dict[PlatformName, str]] = Field(
+        None,
+        description="Provisioner tool versions. Key = provisioner name (must match workspace.spec.provisioners[].name), value = tool version string.",
+    )
 
 
 class VersionManifestMetaModel(PlatformBaseModel):

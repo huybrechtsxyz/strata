@@ -826,7 +826,9 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 )
 
             # Store workspace service (infrastructure accessed via delegation)
-            self._workspace_service = workspace_service
+            # Apply tool version pins (spec.versions type:tool entries) to provisioner.version fields.
+            # A patched copy is stored so the cached workspace is never mutated.
+            self._workspace_service = self._apply_tool_version_pins(workspace_service, objects_path, repo_map)
             self._objects_path = objects_path
             self._load_repo_map = repo_map
             self.logger.debug(
@@ -1026,6 +1028,54 @@ class DeploymentService(BaseService["DeploymentModel"]):
             VersionService.apply_to_environment(env_model, pins)
 
         return env_model
+
+    def _apply_tool_version_pins(
+        self,
+        workspace_service: "WorkspaceService",
+        objects_path: str,
+        repo_map: Optional[Dict[str, str]] = None,
+    ) -> "WorkspaceService":
+        """Apply ``type: tool`` version pins from ``spec.versions`` to a WorkspaceService.
+
+        Tool pins set ``provisioner.version`` on matching provisioner entries.  A new
+        WorkspaceService is created from the modified data so the cached original is
+        never mutated.
+
+        Returns the original *workspace_service* unchanged when no tool pins exist.
+        """
+        if not self.model or not self.model.spec.versions or not workspace_service.model:
+            return workspace_service
+
+        from strata.models.version_lock_model import VersionPinTargetType
+        from strata.services.version_service import VersionService
+
+        _repo_map = repo_map or {}
+
+        def resolve_fn(file_ref: str, base: str) -> str:
+            return self._resolve_file_path(file_ref, base, _repo_map)
+
+        pins = VersionService.load_and_resolve(
+            version_refs=self.model.spec.versions,
+            objects_path=objects_path,
+            resolve_path_fn=resolve_fn,
+        )
+
+        tool_pins = pins.get(VersionPinTargetType.TOOL, {})
+        if not tool_pins:
+            return workspace_service
+
+        self.logger.debug("Applying tool version pins to workspace provisioners", pin_count=len(tool_pins))
+
+        # Dump to raw dict → patch → re-validate to avoid mutating the cached model
+        patched_data = workspace_service.model.model_dump()
+        for prov in patched_data.get("spec", {}).get("provisioners", []):
+            if prov.get("name") in tool_pins:
+                prov["version"] = tool_pins[prov["name"]]
+                self.logger.debug("Applied tool pin", provisioner=prov["name"], version=prov["version"])
+
+        patched_ws = WorkspaceService(data=patched_data)
+        patched_ws.validate()
+        return patched_ws
 
     def get_environment_service(self) -> Optional[EnvironmentService]:
         """

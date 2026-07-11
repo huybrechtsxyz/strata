@@ -4,6 +4,9 @@
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
+if TYPE_CHECKING:
+    from strata.models.workspace_model import WorkspaceSpecModel
+
 import yaml
 
 from strata.exceptions import PlatformFileNotFoundError
@@ -140,6 +143,9 @@ class VersionService:
                 if manifest_pins.images:
                     for name, version in manifest_pins.images.items():
                         pins[VersionPinTargetType.IMAGE][name] = version
+                if manifest_pins.tools:
+                    for name, version in manifest_pins.tools.items():
+                        pins[VersionPinTargetType.TOOL][name] = version
 
         return pins
 
@@ -256,6 +262,35 @@ class VersionService:
 
         env_model.spec.overrides = new_overrides
         return env_model
+
+    @classmethod
+    def apply_to_workspace(cls, workspace_spec: "WorkspaceSpecModel", pins: PinDict) -> "WorkspaceSpecModel":
+        """Apply resolved ``type: tool`` version pins to a WorkspaceSpecModel.
+
+        Sets ``provisioner.version`` on each provisioner entry whose name matches a
+        ``type: tool`` pin.  The input model is modified in place and returned for
+        chaining.
+
+        All other pin types are ignored — they target the environment model.
+
+        Args:
+            workspace_spec: Parsed WorkspaceSpecModel (from a WorkspaceService).
+            pins: Flat pin dict from ``VersionService.resolve_pins``.
+
+        Returns:
+            The modified WorkspaceSpecModel.
+        """
+        tool_pins = pins.get(VersionPinTargetType.TOOL, {})
+        if not tool_pins or not workspace_spec.provisioners:
+            return workspace_spec
+
+        for i, provisioner in enumerate(workspace_spec.provisioners):
+            if provisioner.name in tool_pins:
+                version = tool_pins[provisioner.name]
+                workspace_spec.provisioners[i] = provisioner.model_copy(update={"version": version})
+                logger.debug("Applied tool pin to provisioner", name=provisioner.name, version=version)
+
+        return workspace_spec
 
     @classmethod
     def find_shadowed_overrides(cls, env_model: EnvironmentModel, pins: PinDict) -> List[str]:

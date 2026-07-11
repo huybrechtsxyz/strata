@@ -434,6 +434,14 @@ class WorkspaceIacModel(PlatformBaseModel):
             "Defaults to format=strata (current behaviour) when absent."
         ),
     )
+    version: Optional[str] = Field(
+        None,
+        description=(
+            "Pinned tool version for this provisioner. "
+            "Set by 'strata versions' when a type:tool pin targets this provisioner's name. "
+            "Used by build/deploy to select the exact tool version (e.g. Terraform, Ansible)."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_properties_provisioner_type(self) -> "WorkspaceIacModel":
