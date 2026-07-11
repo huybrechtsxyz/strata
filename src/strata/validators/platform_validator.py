@@ -27,6 +27,7 @@ from strata.services.platform_artifact_service import PlatformService
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
+from strata.services.promotion_record_service import PromotionRecordService
 from strata.services.version_lock_service import VersionLockService
 from strata.services.version_manifest_service import VersionManifestService
 from strata.services.workspace_service import WorkspaceService
@@ -51,6 +52,7 @@ _KIND_TO_SERVICE: Dict[PlatformKind, Any] = {
     PlatformKind.WORKSPACE: WorkspaceService,
     PlatformKind.VERSION_LOCK: VersionLockService,
     PlatformKind.VERSION_MANIFEST: VersionManifestService,
+    PlatformKind.PROMOTION_RECORD: PromotionRecordService,
 }
 
 

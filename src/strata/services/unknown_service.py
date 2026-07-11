@@ -117,5 +117,10 @@ class UnknownService(BaseService["UnknownModel"]):
 
             return VersionManifestService(self.path)
 
+        elif kind == PlatformKind.PROMOTION_RECORD:
+            from strata.services.promotion_record_service import PromotionRecordService
+
+            return PromotionRecordService(self.path)
+
         # This method should be overridden in subclasses if needed
         raise UnsupportedKindError(str(kind))

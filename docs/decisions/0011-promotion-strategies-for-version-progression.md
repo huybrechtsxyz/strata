@@ -2244,5 +2244,4 @@ the file directly. The `strata versions` CLI and the full promote commands layer
 | 4     | `strata versions` CLI (`init`, `export`, `apply`, `refresh`)                                          | ✅ Done | 2026-07-11 |
 | P-1   | Promote Phase 1 — strategy model + validation (`promotion_model.py`, spec fields, env ring ref check) | ✅ Done | 2026-07-11 |
 | P-2   | Promote Phase 2 — `strata promote` CLI group: start / rollback / status / matrix / history / log      | ✅ Done | 2026-07-11 |
-
-**`strata promote` commands** (P-2 automation: `start`, `rollback`, `status`, `matrix`, `history`) are not yet implemented.
+| P-3   | Promote Phase 3 — validation wiring (`PromotionRecordService`, `platform_validator.py`, `unknown_service.py`) + CLI tests | ✅ Done | 2026-07-11 |

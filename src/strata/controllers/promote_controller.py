@@ -971,7 +971,14 @@ class PromoteController(BaseController):
 
     def get_matrix(self, work_path: Path, target_name: Optional[str] = None) -> dict:
         """Read versions/*.yaml lock files and build a version matrix per ring."""
-        config = self._load_config_model(work_path)
+        # Config is optional for matrix — missing config just means no ring ordering,
+        # but we can still show whatever lock files exist.
+        try:
+            config = self._load_config_model(work_path)
+            # Clear any config-load error — matrix is still useful without config.
+            self._errors.clear()
+        except Exception:
+            config = None
         promotions = config.spec.promotions if config and config.spec else None
         progressions = {p.name: p for p in (promotions.progressions or [])} if promotions else {}
 
@@ -1033,11 +1040,10 @@ class PromoteController(BaseController):
                 continue
             spec = raw.get("spec", {})
             target = spec.get("target", {})
-            if ring and spec.get("rings") and ring not in spec.get("rings", []):
-                if spec.get("target", {}).get("ring_name") != ring:
-                    meta_labels = raw.get("meta", {}).get("labels", {})
-                    if meta_labels.get("ring") != ring:
-                        continue
+            if ring:
+                meta_labels = raw.get("meta", {}).get("labels", {})
+                if meta_labels.get("ring") != ring:
+                    continue
             if target_name and target.get("name") != target_name:
                 continue
             entries.append({
