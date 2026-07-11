@@ -18,7 +18,7 @@ Danny performed a naming gut-check on ADR-0011 (promotion strategies for version
 
 ## Files Touched
 
-| Area          | Modified / New                                              |
-| ------------- | ---------------------------------------------------------- |
-| Agent history | `.squad/agents/danny/history.md` (appended)                |
+| Area          | Modified / New                                                 |
+| ------------- | -------------------------------------------------------------- |
+| Agent history | `.squad/agents/danny/history.md` (appended)                    |
 | Decision      | `.squad/decisions/inbox/danny-adr11-promotion-naming.md` (new) |
