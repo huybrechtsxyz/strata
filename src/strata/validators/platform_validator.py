@@ -262,6 +262,11 @@ class PlatformValidator(BaseValidator):
                 )
                 return False
 
+            # Collect non-fatal warnings from the service (e.g. shadowed overrides)
+            if hasattr(service, "get_validation_warnings"):
+                for msg in service.get_validation_warnings():
+                    self.add_validation_warning(msg)
+
         return True
 
     def _validate_configuration_model(self, work_path: Path) -> bool:

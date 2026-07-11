@@ -14,6 +14,7 @@ class BaseValidator(ABC):
         self._messages: List[str] = []
         self._errors: List[str] = []
         self._structured_errors: List[ValidationError] = []
+        self._warnings: List[str] = []
 
     def has_errors(self) -> bool:
         return len(self._errors) > 0
@@ -21,11 +22,17 @@ class BaseValidator(ABC):
     def has_messages(self) -> bool:
         return len(self._messages) > 0
 
+    def has_warnings(self) -> bool:
+        return len(self._warnings) > 0
+
     def get_messages(self) -> List[str]:
         return self._messages
 
     def get_errors(self) -> List[str]:
         return self._errors
+
+    def get_warnings(self) -> List[str]:
+        return list(self._warnings)
 
     def get_structured_errors(self) -> List[ValidationError]:
         """Return all accumulated structured validation errors."""
@@ -45,6 +52,10 @@ class BaseValidator(ABC):
         self._structured_errors.append(
             ValidationError(code=code, message=message, phase=phase, field=field, value=value, context=context)
         )
+
+    def add_validation_warning(self, message: str) -> None:
+        """Append a non-fatal validation warning (does not affect pass/fail result)."""
+        self._warnings.append(message)
 
     @abstractmethod
     def validate(self, work_path: Path) -> bool:

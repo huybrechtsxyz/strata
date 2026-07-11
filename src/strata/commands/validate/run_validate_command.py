@@ -218,6 +218,13 @@ class ValidateCommand(BaseCommand):
             "errors": [e.to_dict() for e in self._validator.get_structured_errors()],
         }
 
+        # Include non-fatal warnings (e.g. shadowed overrides)
+        if self._validator.has_warnings():
+            self._output_data["warnings"] = self._validator.get_warnings()
+            if self._is_console_output():
+                for w in self._validator.get_warnings():
+                    click.echo(f"  ⚠️   {w}")
+
         # Add explanation and suggestions to output data
         if validation_passed and self._explain:
             explanation = self._generate_explanation()

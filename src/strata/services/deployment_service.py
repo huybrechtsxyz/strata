@@ -25,6 +25,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
         self._workspace_service: Optional[WorkspaceService] = None
         self._merge_provenance: Optional[MergeProvenance] = None
         self._validation_errors: List[str] = []
+        self._validation_warnings: List[str] = []
         self._structured_errors: List = []
         self._objects_path: Optional[str] = None
         self._load_repo_map: Optional[Dict[str, str]] = None
@@ -124,7 +125,65 @@ class DeploymentService(BaseService["DeploymentModel"]):
                                 f"Available zones: {sorted(config_zone_names)}"
                             )
 
+        # Shadowed-override check (non-fatal warnings, not errors)
+        if work_path and self.model and self.model.spec.versions:
+            _repo_map = {**(configuration_model.get_remote_map() if configuration_model else {}), **(self._repo_map or {})}
+            self._validation_warnings = self._check_version_pin_shadows(work_path, _repo_map)
+
         return len(errors) == 0, errors
+
+    def _check_version_pin_shadows(
+        self,
+        work_path: str,
+        repo_map: Optional[Dict[str, str]],
+    ) -> List[str]:
+        """Load env file(s) and version pins, return warning strings for shadowed overrides.
+
+        Never raises — all failures are silently suppressed.  Warnings are non-fatal.
+        """
+        if not self.model or not self.model.spec.versions:
+            return []
+        try:
+            from pathlib import Path as _Path
+
+            from strata.services.environment_service import EnvironmentService
+            from strata.services.version_service import VersionService
+
+            _rm = repo_map or {}
+
+            # Resolve env file paths
+            env_paths = [
+                self._resolve_file_path(env_ref.file, work_path, _rm)
+                for env_ref in (self.model.spec.environments or [])
+            ]
+            valid_paths = [p for p in env_paths if _Path(p).exists()]
+            if not valid_paths:
+                return []
+
+            # Load env model (single or merged)
+            if len(valid_paths) == 1:
+                env_svc = EnvironmentService.load(valid_paths[0], validate=True)
+                if not env_svc.model:
+                    return []
+                env_model = env_svc.model
+            else:
+                env_model, _ = EnvironmentService.merge_envfiles(valid_paths, _Path(work_path))
+
+            # Resolve version pins
+            def _resolve_fn(file_ref: str, base: str) -> str:
+                return self._resolve_file_path(file_ref, base, _rm)
+
+            pins = VersionService.load_and_resolve(
+                version_refs=self.model.spec.versions,
+                objects_path=work_path,
+                resolve_path_fn=_resolve_fn,
+            )
+            if not any(pins.values()):
+                return []
+
+            return VersionService.find_shadowed_overrides(env_model, pins)
+        except Exception:
+            return []  # warnings never abort validation
 
     def _validate_deployment_layers(self, configuration_model: ConfigurationModel) -> List[str]:
         """
@@ -354,6 +413,14 @@ class DeploymentService(BaseService["DeploymentModel"]):
         """Return all validation errors: Phase 1 (Pydantic) errors from _errors plus
         dynamic errors accumulated in _validation_errors."""
         return self._errors + self._validation_errors
+
+    def get_validation_warnings(self) -> List[str]:
+        """Return non-fatal warnings accumulated during Phase 2 validation.
+
+        Currently populated by the shadowed-override check: reports ``spec.overrides``
+        entries that are silently overwritten by ``spec.versions`` pins.
+        """
+        return list(self._validation_warnings)
 
     def apply_environment_overrides(self) -> Tuple[bool, List[str]]:
         """

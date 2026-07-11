@@ -258,6 +258,43 @@ class VersionService:
         return env_model
 
     @classmethod
+    def find_shadowed_overrides(cls, env_model: EnvironmentModel, pins: PinDict) -> List[str]:
+        """Return warning messages for any ``spec.overrides`` entries that are silently
+        shadowed by ``pins`` (i.e., a version pin will overwrite the hand-written override).
+
+        This is a **read-only** inspection — the model is not modified.  Suitable for
+        use during ``strata validate --deep`` where env models must not be mutated.
+
+        Returns:
+            List of human-readable warning strings, one per shadowed override field.
+            Empty list when no shadows are detected.
+        """
+        shadowed: List[str] = []
+        overrides = env_model.spec.overrides if env_model.spec else None
+
+        # Remote overrides shadowed by remote pins
+        for name, version in pins.get(VersionPinTargetType.REMOTE, {}).items():
+            if overrides and overrides.remotes:
+                for r in overrides.remotes:
+                    if r.remote == name and r.reference != version:
+                        shadowed.append(
+                            f"override for remote '{name}' (reference={r.reference!r}) is shadowed "
+                            f"by versions pin reference={version!r} — the override has no effect"
+                        )
+
+        # Module chart_version overrides shadowed by helm_chart pins
+        for name, version in pins.get(VersionPinTargetType.HELM_CHART, {}).items():
+            if overrides and overrides.modules:
+                for m in overrides.modules:
+                    if m.module == name and m.chart_version and m.chart_version != version:
+                        shadowed.append(
+                            f"override for module '{name}' (chart_version={m.chart_version!r}) is shadowed "
+                            f"by versions pin chart_version={version!r} — the override has no effect"
+                        )
+
+        return shadowed
+
+    @classmethod
     def load_and_resolve(
         cls,
         version_refs: "List[DeploymentVersionRef]",
