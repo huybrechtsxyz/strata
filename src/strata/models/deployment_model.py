@@ -20,6 +20,7 @@ from strata.models.common_models import (
     ScriptsModel,
     check_unique_names,
 )
+from strata.models.promotion_model import DeploymentPromotionModel
 
 
 class DeploymentFileReference(PlatformBaseModel):
@@ -454,6 +455,10 @@ class DeploymentSpecModel(PlatformBaseModel):
     approvals: Optional[DeploymentApprovalModel] = Field(None, description="Approval configuration for this deployment")
     locking: Optional[DeploymentLockingModel] = Field(
         None, description="Pipeline locking behaviour for concurrent deploy protection"
+    )
+    promotion: Optional[DeploymentPromotionModel] = Field(
+        None,
+        description="Promotion wave assignment for this deployment (opt-in; defaults to last wave when absent)",
     )
     stages: Optional[List[DeploymentStageModel]] = Field(
         None,

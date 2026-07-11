@@ -21,6 +21,7 @@ from strata.models.common_models import (
     check_unique_names,
     validate_slot_type,
 )
+from strata.models.promotion_model import EnvironmentPromotionModel
 from strata.models.store_models import (
     FeatureStoreModel,
     SecretStoreModel,
@@ -359,6 +360,10 @@ class EnvironmentSpecModel(PlatformBaseModel):
     audit: Optional[AuditConfigModel] = Field(
         None,
         description="Environment-level audit overrides (structure, sinks, retention)",
+    )
+    promotion: Optional[EnvironmentPromotionModel] = Field(
+        None,
+        description="Promotion membership: declares which strategy and ring this environment belongs to",
     )
 
     @model_validator(mode="after")

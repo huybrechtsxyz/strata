@@ -1,6 +1,6 @@
 # Promotion strategies for version progression across environments
 
-- Status: Accepted
+- Status: Accepted (partially implemented — see Implementation Status)
 - Date: 2026-06-23
 
 ## Context and Problem Statement
@@ -2187,27 +2187,33 @@ Runs during `strata validate --deep` on a deployment file.
 `VersionLockService` and `VersionManifestService` respond to `strata validate <file>`
 so version files can be validated directly.
 
-### Phase 4 — `strata versions` CLI
+### Phase 4 — `strata versions` CLI ✅ Implemented (2026-07-11)
 
-Depends on Phases 1–3. Commands: `init`, `export`, `apply`.
+Depends on Phases 1–3. Commands: `init`, `export`, `apply`, `refresh`.
 
-**4.1 Scaffold**
-- `src/strata/commands/cli_versions.py` — Click group `strata versions`
-- `src/strata/commands/versions/` — subcommand modules
-- Register group in `src/strata/cli.py`
+**4.1 Scaffold** ✅
+- `src/strata/commands/cli_versions.py` — Click group `strata versions` (wiring only)
+- `src/strata/commands/versions/` — `BaseVersionsCommand` + four subcommand modules
+- `src/strata/controllers/version_controller.py` — `VersionController` (business logic)
+- Registered in `src/strata/cli.py`
 
-**4.2 `strata versions init`**
-- Walk stack modules, collect current default versions
-- Write `versions/<ring>.manifest.yaml`
+**4.2 `strata versions init`** ✅
+- Scaffolds `versions/<ring>.yaml` with empty pins structure
+- `--out` to specify a custom path; `--force` to overwrite
 
-**4.3 `strata versions export`**
-- Load and resolve current version state for a ring
-- Output flat JSON or YAML to stdout (`--format json|yaml`)
+**4.3 `strata versions export`** ✅
+- Loads a `kind: version` or `kind: version-lock` file via `VersionService`
+- Prints resolved flat pin map; supports `--output json|text|console`
 
-**4.4 `strata versions apply`**
-- Load a manifest file, validate pins against constraints (stub initially)
-- Write/update `versions/<ring>.yaml` (lock file)
-- Optional: create git branch with the diff (`--branch`)
+**4.4 `strata versions apply`** ✅
+- Converts a `kind: version` manifest into a `kind: version-lock` file
+- `--out` for custom lock path; `--force` to overwrite existing lock
+
+**4.5 `strata versions refresh`** ✅ (added beyond original plan)
+- Scans workspace YAML files (`kind: module`, `workspace`, `configuration`, `environment`)
+  and diffs against the manifest's current pins
+- New targets are added with seed versions; stale targets are reported or removed with `--remove-stale`
+- `--dry-run` to preview changes without writing
 
 ### Dependency order
 
@@ -2225,3 +2231,18 @@ Phase 1 (models)  →  Phase 2 (resolution)  →  Phase 3 (validation)
 
 This gives: declare a versions file in a deployment → it applies during build → validate
 the file directly. The `strata versions` CLI and the full promote commands layer on top.
+
+---
+
+## Implementation Status
+
+| Phase | Description                                                                                           | Status | Completed  |
+| ----- | ----------------------------------------------------------------------------------------------------- | ------ | ---------- |
+| 1     | Models and kind registration (`VERSION_LOCK`, `VERSION_MANIFEST`, deployment field)                   | ✅ Done | 2026-07-11 |
+| 2     | Services and resolution layer (`VersionService`, `_apply_version_pins` hook)                          | ✅ Done | 2026-07-11 |
+| 3     | Validation wiring (`platform_validator.py`, `cli_schema.py`)                                          | ✅ Done | 2026-07-11 |
+| 4     | `strata versions` CLI (`init`, `export`, `apply`, `refresh`)                                          | ✅ Done | 2026-07-11 |
+| P-1   | Promote Phase 1 — strategy model + validation (`promotion_model.py`, spec fields, env ring ref check) | ✅ Done | 2026-07-11 |
+| P-2   | Promote Phase 2 — `strata promote` CLI group: start / rollback / status / matrix / history / log      | ✅ Done | 2026-07-11 |
+
+**`strata promote` commands** (P-2 automation: `start`, `rollback`, `status`, `matrix`, `history`) are not yet implemented.

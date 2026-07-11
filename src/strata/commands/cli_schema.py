@@ -21,6 +21,7 @@ from strata.models.platform_artifact_model import PlatformArtifactModel
 from strata.models.provider_model import ProviderModel
 from strata.models.resource_model import ResourceModel
 from strata.models.tenant_model import TenantModel
+from strata.models.promotion_record_model import PromotionRecordModel
 from strata.models.version_lock_model import VersionLockModel
 from strata.models.version_manifest_model import VersionManifestModel
 from strata.models.workspace_model import WorkspaceModel
@@ -44,6 +45,7 @@ _KIND_TO_MODEL = {
     PlatformKind.WORKSPACE: WorkspaceModel,
     PlatformKind.VERSION_LOCK: VersionLockModel,
     PlatformKind.VERSION_MANIFEST: VersionManifestModel,
+    PlatformKind.PROMOTION_RECORD: PromotionRecordModel,
 }
 
 

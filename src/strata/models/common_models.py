@@ -61,6 +61,7 @@ class PlatformKind(str, Enum):
     WORKSPACE = "workspace"
     VERSION_LOCK = "version-lock"
     VERSION_MANIFEST = "version"
+    PROMOTION_RECORD = "promotion-record"
 
 
 # Enumeration of supported workspace versions.

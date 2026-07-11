@@ -7,6 +7,15 @@ User: Vincent Huybrechts. Stack: Python 3.13, uv, Click, Pydantic v2, structlog,
 
 ## Learnings
 
+### 2026-07-11 — Naming: "promotion" verdict + verb/noun asymmetry rule
+
+**Requested by:** Vincent Huybrechts (ADR 0011 name gut-check).
+
+- **"Promotion" is the right noun.** It is the dominant industry term for ring/environment progression (Argo, Spinnaker, Octopus, GitLab environments all use "promote"). Ops readers get it instantly. `strata promote` reads well as a command. Keep it.
+- **Naming rule learned — reverse operations do not have to be the linguistic inverse of the forward operation.** `unpromotion` is a documentation-grade noun but a poor CLI verb: `strata unpromote` is clumsy and not an industry term. For the CLI verb, pick the term ops people already say for the reverse action (`rollback` — it's already used elsewhere in strata's deploy vocabulary and in ADR 0011's own `strata promote rollback` example). It is fine, even preferable, for the ADR to keep "unpromotion" as the conceptual noun while the CLI exposes `strata promote rollback`. Consistency of *user-facing verbs* with industry vocabulary beats internal linguistic symmetry.
+- **No noun collision.** `promote`/`promotion` does not clash with existing strata nouns (build, deploy, release, ref, lock). It sits cleanly beside them as its own command group, same shape as `deploy`.
+- **Avoid `advance`/`propagate`/`rollout` for this concept** — each is either weaker (generic) or overloaded (rollout = intra-env rolling update in k8s land), which would create a *new* collision.
+
 ### 2026-04-22 — Full architecture review
 
 **CLI:** `cli.py` is an empty shell — all 7 command groups commented out, zero active subcommands.

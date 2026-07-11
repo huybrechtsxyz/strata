@@ -127,6 +127,43 @@
 - **Decision 2 — `spec.references` section placed before Zone Fields:** `## spec.references Fields` is inserted immediately after `## Top-level Fields`. Readers see the `spec.references` row in the top-level table and find its expansion on the next scroll — following natural reading order. Zone → Record → References would require readers to skip past two sections.
 - **Decision 3 — Preserve and extend the huybrechts.xyz example:** The existing comprehensive example (A, CNAME, dual MX, DMARC, CAA) is kept; two TXT records are modified to show `var:` and `secret:` in context. Replacing with a minimal example would sacrifice the worked real-world zone structure that operators copy-paste.
 
+### 2026-06-12 — SBOM collector design: APPROVED WITH CONDITIONS
+- **By:** Danny (architecture review)
+- **Decision:** The collector pattern (sub-components of `SbomBuilder`, CycloneDX isolated to the builder, composition over inheritance) is approved subject to 10 implementation constraints. Key constraints: (1) `sbom.json` goes to `{build_path}/{deployment_name}/sbom.json`, NOT `.strata/` (upholds 2026-05-21 build-folder decision); (2) SBOM models extend `PlatformBaseModel` (extra="forbid"), not bare `BaseModel`; (3) `SbomBuilder.build()` accepts optional `platform_model` for dry-run parity with `TerraformBuilder`; (4) drain `collector.get_warnings()` into `self._messages` after each `collect()`; (5) `strata build sbom` is a `SbomBuildCommand(BaseBuildCommand)` class, not inline in `cli_builders.py`; (10) CycloneDX serialization failure is a build failure (append to `self._errors`, return `False`), not a soft warning.
+- **Rationale:** Design fits the existing `BaseBuilder` surface without new layers. The `.strata/` placement was the one item that would have been a rejection if not caught.
+- **Implications:** See constraints 6–9 for de-duplication of `AnsibleDeployer._get_requirements_file()`, `cyclonedx-python-lib` version pinning, `sbom_utils.py` purity (zero `builders/`/`services/` imports), and `deployment_manifest_model.py` `sbom` field typing.
+
+### 2026-06-12 — SBOM integration validation: ISSUES FOUND (blockers before implementation)
+- **By:** Basher (DevOps integrations)
+- **Decision:** Two blockers must be resolved before SBOM implementation proceeds: (1) `cyclonedx-python-lib` and `packageurl-python` are NOT installed — add to `pyproject.toml` `[project.dependencies]` (`cyclonedx-python-lib>=7.0,<9`, `packageurl-python>=0.11,<2`); (2) wrong `Property` import — use `from cyclonedx.model import Property`, NOT `from cyclonedx.model.property import Property` (does not exist in v7/v8).
+- **Verified APIs:** `Bom`/`Component`/`ComponentType` imports OK; `JsonV1Dot6(bom).output_as_string()` confirmed; `hcl2.load()` confirmed with `python-hcl2==8.1.2`.
+- **Non-blocking data-handling issue:** All `hcl2.load()` string values carry embedded surrounding quotes — callers must `.strip('"')` (e.g. `source`, `version` under `required_providers`).
+- **Open question (low priority):** Ansible role PURL scheme has no canonical standard. Recommend dot-notation `pkg:ansible/{author}.{role}@{version}` (Galaxy install-name style) over the proposed slash form.
+
+### 2026-06-15 — Policy Engine Phase 1 implementation decisions
+- **By:** Linus
+- **ADR reference:** `docs/decisions/0006-policy-engine-for-deployment-guardrails.md`
+- **Decision:** (1) `PolicyResult.violations` uses `field(default_factory=list)` — avoids forcing graceful-skip callers to pass an empty list; (2) use `show_plan()` (returns `(bool, Dict, List[str])`, runs `terraform show -json`), NOT the non-existent `load_plan_json()`; policy runs only when `hasattr(deployer, "show_plan")`; (3) `_evaluate_plan_policies` stays inline on `RunDeployCommand` — a policy engine is a validator, not a controller; (4) `ConfigurationSpecModel.policies` is `Optional[List[PolicyModel]] = Field(default_factory=list)` — never `None` when omitted, `Optional` kept for forward-compat explicit `null`; (5) region normalization uses `.lower().replace(" ", "")` on both sides (plan JSON `"West Europe"` vs zone config `"westeurope"`).
+- **Implications:** Policy evaluation wired at the `deploy_plan_after` gate; only runs for Terraform stages.
+
+### 2026-06-15 — Policy docs observations & follow-ups
+- **By:** Reuben (docs)
+- **Decision / notes:** (1) Phase 2 features (`required_tags`, `naming_pattern`, `script`) documented ahead of implementation — pin YAML examples or add `<!-- TODO: update when Phase 2 lands -->` markers to flag drift risk; (2) `customer_zone` policy references `configuration.spec.zones`, which is undocumented — follow-up task to document `spec.zones` and `spec.customers` in `docs/config/configuration.md`; (3) `audit` enforcement records to `spec.policy_results` (Phase 3, not yet implemented) — `docs/config/manifest.md` needs a new section when Phase 3 ships; (4) index placement: `platform/policies` sits after `platform/lifecycles` (readers compare policies vs lifecycle hooks) and after `validators` (lower-level infra policies build on).
+
+### 2026-06-23 — ADR-0011 review: sound, 3 clarifications before Phase 3
+- **By:** Danny (architecture review)
+- **Decision:** ADR-0011 (promotion strategies) is architecturally sound and ready for implementation. Phase 1 (read-only visibility) and Phase 2 (strategy model + validation) may proceed. Phase 3 automation is BLOCKED on two clarifications: (1) **promotion override file discovery** — the deployment model requires explicit `spec.environments` paths (no auto-discovery); the ADR must specify whether `strata promote start` PATCHes the deployment YAML to append the override file or whether a glob/auto-include mechanism is planned (biggest mechanical gap); (2) **`scope: customer` definition** — must be machine-resolvable (a filter predicate); candidates: `spec.customer != null`, a `spec.layers` value, or a label match.
+- **Also required:** (3) the "Percentage waves" `[10, 50, 100]` row in Key Observations is misleading — the resolved design has NO auto-selection; rename to "Multi-wave (3 iterations)" or annotate as wave COUNT.
+- **Advisory (non-blocking):** `strata promote log` reads gitignored local-only `.strata/promotions/` (won't work in CI — doc note); `--id prom-20260623-001` ID generation algorithm is undefined (resolve during implementation).
+
+### 2026-07-11 — ADR-0011 naming: keep "promotion", drop `unpromote` as a CLI verb
+- **By:** Danny (architecture review / naming gut-check)
+- **Requested by:** Vincent Huybrechts
+- **Decision:** Keep **"promotion" / `strata promote`** as the name for the ADR-0011 concept (advancing a version-lock through ordered rings dev→test→qas→prd). It is the dominant industry term (Argo, Spinnaker, Octopus, GitLab all "promote"), reads cleanly as a command (`strata promote start`, `strata promote status`), aligns with the ring/version-lock mental model, and collides with no existing strata noun. **The one change:** the reverse-direction CLI verb must be `strata promote rollback`, NOT `strata promote unpromote` — `unpromote` is not an industry term and reads awkwardly; `rollback` is the reverse vocabulary strata already uses in the deploy surface. "Unpromotion" is allowed only as descriptive ADR prose, never as a command.
+- **Rule:** Reverse operations follow user-facing vocabulary, not linguistic symmetry with the forward verb.
+- **Rejected alternatives:** advance/advancement (generic), rollout (collides with k8s rolling-update), propagate (unfamiliar), release-progression (verbose; "release" already means the ADR-0017 tagging lifecycle).
+- **Action for ADR owner:** No structural change — ensure every CLI example uses `promote` (forward) and `promote rollback` (reverse).
+
 ## Governance
 
 - All meaningful architectural changes require a decision entry here

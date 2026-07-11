@@ -52,6 +52,7 @@ from strata.commands.cli_values import values_group
 from strata.commands.cli_vars import vars_group
 from strata.commands.cli_version import version_command
 from strata.commands.cli_versions import versions_group
+from strata.commands.cli_promote import promote_group
 from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
 from strata.utils.config import SOLUTION_CONFIG_FILE, SOLUTION_DIR
@@ -280,6 +281,7 @@ main.add_command(deploy_group, name="deploy")
 main.add_command(env_group, name="env")
 main.add_command(values_group, name="values")
 main.add_command(versions_group, name="versions")
+main.add_command(promote_group, name="promote")
 main.add_command(tools_group, name="tools")
 main.add_command(secret_group, name="secret")
 main.add_command(service_group, name="service")
