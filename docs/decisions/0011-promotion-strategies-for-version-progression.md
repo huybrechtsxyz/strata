@@ -968,7 +968,7 @@ spec:
 | `helm_chart` | `spec.modules[name].chart_version`                            | Helm chart version from registry                                         |
 | `image`      | `spec.services[name].image` or `spec.modules[name].image_tag` | OCI image tag                                                            |
 | `module`     | Same as `helm_chart`                                          | Deprecated alias — use `helm_chart` or `image`                           |
-| `tool`       | `spec.provisioners[name].version`                             | *Future — deferred to Phase 4*                                           |
+| `tool`       | `spec.provisioners[name].version`                             | Workspace provisioner tool version                                       |
 
 **Wave definition:**
 
@@ -2236,12 +2236,15 @@ the file directly. The `strata versions` CLI and the full promote commands layer
 
 ## Implementation Status
 
-| Phase | Description                                                                                           | Status | Completed  |
-| ----- | ----------------------------------------------------------------------------------------------------- | ------ | ---------- |
-| 1     | Models and kind registration (`VERSION_LOCK`, `VERSION_MANIFEST`, deployment field)                   | ✅ Done | 2026-07-11 |
-| 2     | Services and resolution layer (`VersionService`, `_apply_version_pins` hook)                          | ✅ Done | 2026-07-11 |
-| 3     | Validation wiring (`platform_validator.py`, `cli_schema.py`)                                          | ✅ Done | 2026-07-11 |
-| 4     | `strata versions` CLI (`init`, `export`, `apply`, `refresh`)                                          | ✅ Done | 2026-07-11 |
-| P-1   | Promote Phase 1 — strategy model + validation (`promotion_model.py`, spec fields, env ring ref check) | ✅ Done | 2026-07-11 |
-| P-2   | Promote Phase 2 — `strata promote` CLI group: start / rollback / status / matrix / history / log      | ✅ Done | 2026-07-11 |
-| P-3   | Promote Phase 3 — validation wiring (`PromotionRecordService`, `platform_validator.py`, `unknown_service.py`) + CLI tests | ✅ Done | 2026-07-11 |
+| Phase | Description                                                                                                                                                                                                                                                                                       | Status | Completed  |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
+| 1     | Models and kind registration (`VERSION_LOCK`, `VERSION_MANIFEST`, deployment field)                                                                                                                                                                                                               | ✅ Done | 2026-07-11 |
+| 2     | Services and resolution layer (`VersionService`, `_apply_version_pins` hook)                                                                                                                                                                                                                      | ✅ Done | 2026-07-11 |
+| 3     | Validation wiring (`platform_validator.py`, `cli_schema.py`)                                                                                                                                                                                                                                      | ✅ Done | 2026-07-11 |
+| 4     | `strata versions` CLI (`init`, `export`, `apply`, `refresh`)                                                                                                                                                                                                                                      | ✅ Done | 2026-07-11 |
+| P-1   | Promote Phase 1 — strategy model + validation (`promotion_model.py`, spec fields, env ring ref check)                                                                                                                                                                                             | ✅ Done | 2026-07-11 |
+| P-2   | Promote Phase 2 — `strata promote` CLI group: start / rollback / status / matrix / history / log                                                                                                                                                                                                  | ✅ Done | 2026-07-11 |
+| P-3   | Promote Phase 3 — validation wiring (`PromotionRecordService`, `platform_validator.py`, `unknown_service.py`) + CLI tests                                                                                                                                                                         | ✅ Done | 2026-07-11 |
+| P-4   | Promote Phase 4 — Strict lock mode (F-4): `ProgressionRingModel.require_lock`, `--require-lock` flag on `build run` / `deploy run`, `DeploymentService.check_require_lock_mode`                                                                                                                   | ✅ Done | 2026-07-11 |
+| P-5b  | Promote Phase 5b — Shadowed-override warnings in `strata validate --deep`: `VersionService.find_shadowed_overrides()`, `DeploymentService._check_version_pin_shadows()`, `BaseValidator` warnings infrastructure, `PlatformValidator` warning collection, `ValidateCommand` console + JSON output | ✅ Done | 2026-07-11 |
+| P-5a  | Promote Phase 5a — `type: tool` support: `WorkspaceIacModel.version` field, `VersionManifestPinsModel.tools` field, `VersionService.apply_to_workspace()`, `DeploymentService._apply_tool_version_pins()` wired after workspace load, manifest `tools` dict included in `resolve_pins`            | ✅ Done | 2026-07-11 |
