@@ -64,11 +64,13 @@ class PlatformValidator(BaseValidator):
         file_path: Path,
         configuration_service: Optional[ConfigurationService] = None,
         repo_map: Optional[Dict[str, str]] = None,
+        verify_digests: bool = False,
     ) -> None:
         super().__init__()
         self._file_path = file_path
         self._configuration_service = configuration_service
         self._repo_map = repo_map
+        self._verify_digests = verify_digests
         self._detected_kind: Optional[PlatformKind] = None
         self._service: Optional[BaseService] = None
         self._lifecycle_model: Optional[CommonLifecycleModel] = None
@@ -266,6 +268,20 @@ class PlatformValidator(BaseValidator):
             if hasattr(service, "get_validation_warnings"):
                 for msg in service.get_validation_warnings():
                     self.add_validation_warning(msg)
+
+            # F-2: Digest policy check (require_digests ring policy + --verify-digests format check)
+            if hasattr(service, "check_digest_policy"):
+                d_errors, d_warnings = service.check_digest_policy(
+                    work_path=str(work_path),
+                    config_model=self._configuration_service.model,
+                    verify_digests=self._verify_digests,
+                )
+                for msg in d_errors:
+                    self.add_validation_error("DIGEST_POLICY_ERROR", msg, phase=2)
+                for msg in d_warnings:
+                    self.add_validation_warning(msg)
+                if d_errors:
+                    return False
 
         return True
 

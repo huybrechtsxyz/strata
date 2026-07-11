@@ -1117,6 +1117,121 @@ class DeploymentService(BaseService["DeploymentModel"]):
             raise ServiceNotValidatedError("DeploymentService")
         return self._workspace_service
 
+    def check_digest_policy(
+        self,
+        work_path: str,
+        config_model: Optional["ConfigurationModel"],
+        verify_digests: bool = False,
+    ) -> Tuple[List[str], List[str]]:
+        """Check F-2 digest policy for this deployment's version pins.
+
+        Two independent checks — either or both may be active:
+
+        1. **Ring policy** (always active when ``ring.require_digests: true``):
+           Every pin in ``spec.versions`` lock files must carry a ``resolved_sha``.
+           Missing SHA → error (exit 3).
+
+        2. **Format verification** (active only when ``verify_digests=True``):
+           Pins that DO have ``resolved_sha`` must use a recognised format:
+           - ``remote`` → 7–40 hex characters (git commit SHA)
+           - ``image``/``helm_chart`` → ``sha256:<64 hex>`` (OCI content digest)
+           Invalid format → warning (non-fatal).
+
+        Returns:
+            Tuple ``(errors, warnings)`` — both may be empty lists.
+        """
+        errors: List[str] = []
+        warnings: List[str] = []
+
+        if not self.model or not self.model.spec.versions:
+            return errors, warnings
+
+        try:
+            from pathlib import Path as _Path
+
+            from strata.models.version_lock_model import VersionLockModel, VersionPinTargetType
+            from strata.services.environment_service import EnvironmentService
+            from strata.services.version_service import VersionService
+
+            _rm: Dict[str, str] = {
+                **(config_model.get_remote_map() if config_model else {}),
+                **(self._repo_map or {}),
+            }
+
+            def resolve_fn(f: str, b: str) -> str:
+                return self._resolve_file_path(f, b, _rm)
+
+            # ── Step 1: find the ring name from first loadable environment ──
+            ring_name: Optional[str] = None
+            for env_ref in self.model.spec.environments or []:
+                env_path = resolve_fn(env_ref.file, work_path)
+                if _Path(env_path).exists():
+                    env_svc = EnvironmentService.load(env_path, validate=True)
+                    if env_svc.model and env_svc.model.spec.promotion:
+                        ring_name = env_svc.model.spec.promotion.ring
+                        break
+
+            # ── Step 2: check ring-level require_digests policy ──
+            ring_require_digests = False
+            if ring_name and config_model and config_model.spec.promotions:
+                for progression in config_model.spec.promotions.progressions or []:
+                    for ring in progression.rings:
+                        if ring.name == ring_name and ring.require_digests:
+                            ring_require_digests = True
+                            break
+                    if ring_require_digests:
+                        break
+
+            # Nothing to do if neither policy is active
+            if not ring_require_digests and not verify_digests:
+                return errors, warnings
+
+            # ── Step 3: load version-lock pins (manifests don't carry resolved_sha) ──
+            lock_pins = []
+            for ref in self.model.spec.versions:
+                try:
+                    abs_path = resolve_fn(ref.file, work_path)
+                    model = VersionService.load(abs_path)
+                    if isinstance(model, VersionLockModel):
+                        lock_pins.extend(model.spec.pins)
+                except Exception:
+                    pass
+
+            if not lock_pins and ring_require_digests:
+                # Policy requires digests but no lock files loaded
+                if ring_name:
+                    errors.append(
+                        f"Ring '{ring_name}' requires digests (require_digests: true) but "
+                        f"no version-lock file could be loaded from spec.versions. "
+                        f"Run 'strata promote start' to generate the lock."
+                    )
+                return errors, warnings
+
+            # ── Step 4: inspect each pin ──
+            for pin in lock_pins:
+                sha = pin.resolved_sha
+
+                if ring_require_digests and not sha:
+                    errors.append(
+                        f"Ring '{ring_name}' requires digests (require_digests: true) but "
+                        f"pin '{pin.target.name}' (type: {pin.target.type.value}) has no "
+                        f"resolved_sha. Run 'strata promote start' to record digests."
+                    )
+
+                elif verify_digests and sha:
+                    if not VersionService.validate_sha_format(pin.target.type, sha):
+                        warnings.append(
+                            f"Pin '{pin.target.name}' (type: {pin.target.type.value}) has "
+                            f"resolved_sha '{sha}' with unrecognised format — expected "
+                            f"git SHA (hex) for remote pins or 'sha256:<64hex>' for "
+                            f"image/helm_chart pins."
+                        )
+
+        except Exception:
+            pass  # digest check is never fatal to the validate pipeline
+
+        return errors, warnings
+
     def check_require_lock_mode(
         self,
         work_path: Path,

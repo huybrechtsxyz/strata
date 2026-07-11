@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Service for loading version files and applying version pins to the environment merge chain."""
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
@@ -291,6 +292,33 @@ class VersionService:
                 logger.debug("Applied tool pin to provisioner", name=provisioner.name, version=version)
 
         return workspace_spec
+
+    # Regexes for resolved_sha format validation (F-2)
+    _GIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$", re.IGNORECASE)
+    _OCI_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$", re.IGNORECASE)
+
+    @classmethod
+    def validate_sha_format(cls, target_type: VersionPinTargetType, sha: str) -> bool:
+        """Return True when *sha* has a recognised immutable-reference format for *target_type*.
+
+        Accepted formats:
+            - ``remote``:                7–40 hex characters (git commit SHA / abbreviated SHA)
+            - ``image`` / ``helm_chart``: ``sha256:<64 hex chars>`` (OCI content digest)
+            - ``tool``:                   any non-empty string (no standard format)
+
+        Args:
+            target_type: The pin's target type.
+            sha:         The ``resolved_sha`` value to validate.
+
+        Returns:
+            ``True`` if the format is recognised or the type has no strict format rule.
+        """
+        if target_type == VersionPinTargetType.REMOTE:
+            return bool(cls._GIT_SHA_RE.match(sha))
+        if target_type in (VersionPinTargetType.IMAGE, VersionPinTargetType.HELM_CHART):
+            return bool(cls._OCI_DIGEST_RE.match(sha))
+        # TOOL and any unknown types: any non-empty string is acceptable
+        return bool(sha)
 
     @classmethod
     def find_shadowed_overrides(cls, env_model: EnvironmentModel, pins: PinDict) -> List[str]:

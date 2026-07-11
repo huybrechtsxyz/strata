@@ -49,6 +49,14 @@ class ProgressionRingModel(PlatformBaseModel):
             "Equivalent to passing --require-lock on the CLI but declared in configuration."
         ),
     )
+    require_digests: Optional[bool] = Field(
+        None,
+        description=(
+            "When true, 'strata validate --deep' will fail (exit 3) if any pin in the ring's lock file "
+            "is missing a resolved_sha value. "
+            "Enforces that all pins carry an immutable artifact reference."
+        ),
+    )
 
     @field_validator("environments", mode="before")
     @classmethod

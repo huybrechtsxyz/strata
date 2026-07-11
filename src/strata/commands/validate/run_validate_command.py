@@ -30,6 +30,7 @@ class ValidateCommand(BaseCommand):
         file: Optional[str] = None,
         path: Optional[str] = None,
         deep: bool = False,
+        verify_digests: bool = False,
         explain: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
@@ -40,6 +41,7 @@ class ValidateCommand(BaseCommand):
         self._file_path_raw: Optional[str] = file
         self._path_glob: Optional[str] = path
         self._deep: bool = deep
+        self._verify_digests: bool = verify_digests
         self._explain: bool = explain
         self._resolved_file: Optional[Path] = None
         self._validator: Optional[PlatformValidator] = None
@@ -175,6 +177,7 @@ class ValidateCommand(BaseCommand):
             file_path=self._resolved_file,
             configuration_service=config_svc,
             repo_map=solution_repo_map,
+            verify_digests=self._verify_digests,
         )
 
         work_path = self._work_path
