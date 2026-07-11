@@ -65,6 +65,16 @@ def deploy():
     default=False,
     help="Force-release any held lock before acquiring. Use to recover from a crashed pipeline.",
 )
+@click.option(
+    "--require-lock",
+    "require_lock",
+    is_flag=True,
+    default=False,
+    help=(
+        "Fail (exit 3) if the target ring has no lock file (versions/<ring>.yaml). "
+        "Also enforced when the ring declares require_lock: true in configuration."
+    ),
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -76,6 +86,7 @@ def deploy_run(
     force: bool = False,
     dry_run: bool = False,
     force_lock: bool = False,
+    require_lock: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -89,6 +100,7 @@ def deploy_run(
         force=force,
         dry_run=dry_run,
         force_lock=force_lock,
+        require_lock=require_lock,
         output=output,
         verbose=verbose,
         quiet=quiet,

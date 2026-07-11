@@ -38,6 +38,7 @@ class RunDeployCommand(BaseDeployCommand):
         force: bool = False,
         dry_run: bool = False,
         force_lock: bool = False,
+        require_lock: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -54,6 +55,7 @@ class RunDeployCommand(BaseDeployCommand):
         self._force = force
         self._dry_run = dry_run
         self._force_lock = force_lock
+        self._require_lock = require_lock
         self._resolved_values: Optional[ResolvedValues] = None
 
     # -------------------------------------------------------------------------
@@ -92,6 +94,20 @@ class RunDeployCommand(BaseDeployCommand):
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
+
+            # Strict lock mode check (--require-lock or ring.require_lock: true)
+            if self._deployment_service is not None:
+                config_model = self._configuration_service.model if self._configuration_service else None
+                lock_error = self._deployment_service.check_require_lock_mode(
+                    self._work_path, config_model, flag=self._require_lock
+                )
+                if lock_error:
+                    self._errors.append(lock_error)
+                    if self._is_console_output():
+                        click.echo(f"\n❌  {lock_error}")
+                    self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
+                    self._finalize(success=False)
+                    return False
 
             if not self._resolve_values():
                 if self._is_console_output():

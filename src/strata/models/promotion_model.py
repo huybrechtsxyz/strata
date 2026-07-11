@@ -41,6 +41,14 @@ class ProgressionRingModel(PlatformBaseModel):
             "Absent on the first ring (no inbound requirement)."
         ),
     )
+    require_lock: Optional[bool] = Field(
+        None,
+        description=(
+            "When true, any 'strata build run' or 'strata deploy run' targeting an environment in this ring "
+            "will fail (exit 3) if the ring's lock file (versions/{ring}.yaml) does not exist. "
+            "Equivalent to passing --require-lock on the CLI but declared in configuration."
+        ),
+    )
 
     @field_validator("environments", mode="before")
     @classmethod

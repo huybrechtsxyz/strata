@@ -34,6 +34,7 @@ class RunBuildCommand(BaseBuildCommand):
         audit_severity: str = "MEDIUM",
         fail_on: Optional[str] = None,
         audit_report: Optional[str] = None,
+        require_lock: bool = False,
     ):
         super().__init__(
             file=file,
@@ -47,6 +48,7 @@ class RunBuildCommand(BaseBuildCommand):
         self._audit_severity = audit_severity
         self._fail_on = fail_on
         self._audit_report = audit_report
+        self._require_lock = require_lock
         self._build_started_at: Optional[str] = None
         self._sbom_reference = None
         self._policy_results: List[Dict[str, Any]] = []
@@ -75,6 +77,19 @@ class RunBuildCommand(BaseBuildCommand):
                     click.echo("\n❌  Failed to load deployment related services")
                 self._finalize(success=False)
                 return False
+
+            # Strict lock mode check (--require-lock or ring.require_lock: true)
+            if self._deployment_service is not None:
+                config_model = self._configuration_service.model if self._configuration_service else None
+                lock_error = self._deployment_service.check_require_lock_mode(
+                    self._work_path, config_model, flag=self._require_lock
+                )
+                if lock_error:
+                    self._errors.append(lock_error)
+                    if self._is_console_output():
+                        click.echo(f"\n❌  {lock_error}")
+                    self._finalize(success=False)
+                    return False
 
             if self._dry_run and self._is_console_output():
                 click.echo("\n[DRY-RUN] Validating and planning build — no files will be written")

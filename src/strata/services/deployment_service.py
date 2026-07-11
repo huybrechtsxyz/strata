@@ -1000,6 +1000,59 @@ class DeploymentService(BaseService["DeploymentModel"]):
             raise ServiceNotValidatedError("DeploymentService")
         return self._workspace_service
 
+    def check_require_lock_mode(
+        self,
+        work_path: Path,
+        config_model: Optional["ConfigurationModel"],
+        flag: bool = False,
+    ) -> Optional[str]:
+        """Check strict lock mode enforcement for build/deploy.
+
+        Returns an error message string if the lock file is missing and
+        enforcement is active, or ``None`` if the check passes (or is not applicable).
+
+        Enforcement is active when either:
+        - ``flag`` is ``True`` (``--require-lock`` CLI flag was passed), or
+        - the resolved ring declares ``require_lock: true`` in the progression config.
+
+        Args:
+            work_path: Workspace root — lock files are at ``work_path/versions/{ring}.yaml``.
+            config_model: Loaded configuration model (may be ``None``).
+            flag: ``True`` when ``--require-lock`` was passed on the CLI.
+        """
+        env_svc = self._environment_service
+        if env_svc is None or env_svc.model is None:
+            return None  # environment not loaded — skip silently
+
+        spec = env_svc.model.spec if env_svc.model else None
+        promotion = spec.promotion if spec else None
+        if not promotion:
+            return None  # no promotion config on this environment — skip silently
+
+        ring_name: str = promotion.ring
+
+        # Check ring-level require_lock from configuration progressions
+        ring_require_lock = False
+        if config_model and config_model.spec and config_model.spec.promotions:
+            for progression in config_model.spec.promotions.progressions or []:
+                for ring in progression.rings:
+                    if ring.name == ring_name and ring.require_lock:
+                        ring_require_lock = True
+                        break
+                if ring_require_lock:
+                    break
+
+        if not flag and not ring_require_lock:
+            return None  # enforcement not active for this ring
+
+        lock_path = Path(work_path) / "versions" / f"{ring_name}.yaml"
+        if not lock_path.exists():
+            return (
+                f"Ring '{ring_name}' has no lock file (versions/{ring_name}.yaml). "
+                f"Run 'strata promote start --to {ring_name}' first, or remove --require-lock."
+            )
+        return None
+
     def validate_related_services(self) -> Tuple[bool, List[str]]:
         """
         Validate cross-service references after all services are loaded.

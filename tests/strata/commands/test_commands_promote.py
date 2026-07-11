@@ -12,6 +12,12 @@ from click.testing import CliRunner
 
 from strata.commands.cli_promote import promote_group
 from strata.models.common_models import PlatformKind
+from strata.models.promotion_model import (
+    ConfigurationPromotionsModel,
+    ProgressionRingModel,
+    ProgressionModel,
+)
+from strata.services.deployment_service import DeploymentService
 
 _API_VERSION = "strata.huybrechts.xyz/v1"
 
@@ -624,3 +630,130 @@ class TestPromoteRollbackDryRun:
         )
         # Tier 1 (no log), Tier 2 (no git), Tier 3 (no flag) → error
         assert result.exit_code != 0
+
+
+# ── strict lock mode ──────────────────────────────────────────────────────────
+
+
+def _make_env_service_mock(ring: str) -> MagicMock:
+    """Return a mock EnvironmentService whose model has spec.promotion.ring = ring."""
+    promotion = MagicMock()
+    promotion.ring = ring
+    spec = MagicMock()
+    spec.promotion = promotion
+    model = MagicMock()
+    model.spec = spec
+    env_svc = MagicMock()
+    env_svc.model = model
+    return env_svc
+
+
+def _make_config_model_with_ring(ring_name: str, require_lock: Optional[bool]) -> MagicMock:
+    """Return a mock ConfigurationModel with a single progression ring."""
+    ring = ProgressionRingModel(
+        name=ring_name,
+        environments=["prod-be"],
+        require_lock=require_lock,
+    )
+    progression = ProgressionModel(name="standard", rings=[ring])
+    promotions = MagicMock()
+    promotions.progressions = [progression]
+    spec = MagicMock()
+    spec.promotions = promotions
+    config_model = MagicMock()
+    config_model.spec = spec
+    return config_model
+
+
+class TestCheckRequireLockMode:
+    """Unit tests for DeploymentService.check_require_lock_mode."""
+
+    def _make_svc(self, ring: str) -> DeploymentService:
+        """Construct a DeploymentService with only _environment_service populated."""
+        svc = DeploymentService.__new__(DeploymentService)
+        svc._environment_service = _make_env_service_mock(ring)
+        svc._workspace_service = None
+        svc.model = None
+        return svc
+
+    # ── no-op paths ───────────────────────────────────────────────────────────
+
+    def test_no_env_service_returns_none(self, tmp_path):
+        svc = DeploymentService.__new__(DeploymentService)
+        svc._environment_service = None
+        result = svc.check_require_lock_mode(tmp_path, None, flag=True)
+        assert result is None
+
+    def test_no_promotion_config_returns_none(self, tmp_path):
+        env_svc = MagicMock()
+        env_svc.model.spec.promotion = None
+        svc = DeploymentService.__new__(DeploymentService)
+        svc._environment_service = env_svc
+        result = svc.check_require_lock_mode(tmp_path, None, flag=True)
+        assert result is None
+
+    def test_flag_false_no_ring_config_returns_none(self, tmp_path):
+        """Enforcement off — neither flag nor ring config → always passes."""
+        svc = self._make_svc("prd")
+        result = svc.check_require_lock_mode(tmp_path, None, flag=False)
+        assert result is None
+
+    # ── flag=True path ────────────────────────────────────────────────────────
+
+    def test_flag_true_lock_exists_returns_none(self, tmp_path):
+        _make_ring_lock(tmp_path, ring="prd")
+        svc = self._make_svc("prd")
+        result = svc.check_require_lock_mode(tmp_path, None, flag=True)
+        assert result is None
+
+    def test_flag_true_lock_missing_returns_error(self, tmp_path):
+        svc = self._make_svc("prd")
+        result = svc.check_require_lock_mode(tmp_path, None, flag=True)
+        assert result is not None
+        assert "prd" in result
+        assert "versions/prd.yaml" in result
+        assert "promote start" in result
+
+    def test_error_message_includes_ring_name(self, tmp_path):
+        svc = self._make_svc("staging")
+        result = svc.check_require_lock_mode(tmp_path, None, flag=True)
+        assert result is not None
+        assert "staging" in result
+        assert "versions/staging.yaml" in result
+
+    # ── ring-level require_lock: true path ────────────────────────────────────
+
+    def test_ring_config_require_lock_true_lock_missing_returns_error(self, tmp_path):
+        svc = self._make_svc("prd")
+        config_model = _make_config_model_with_ring("prd", require_lock=True)
+        result = svc.check_require_lock_mode(tmp_path, config_model, flag=False)
+        assert result is not None
+        assert "prd" in result
+
+    def test_ring_config_require_lock_true_lock_exists_returns_none(self, tmp_path):
+        _make_ring_lock(tmp_path, ring="prd")
+        svc = self._make_svc("prd")
+        config_model = _make_config_model_with_ring("prd", require_lock=True)
+        result = svc.check_require_lock_mode(tmp_path, config_model, flag=False)
+        assert result is None
+
+    def test_ring_config_require_lock_false_no_flag_returns_none(self, tmp_path):
+        """require_lock=False in ring config + no CLI flag → no check."""
+        svc = self._make_svc("prd")
+        config_model = _make_config_model_with_ring("prd", require_lock=False)
+        result = svc.check_require_lock_mode(tmp_path, config_model, flag=False)
+        assert result is None
+
+    def test_ring_config_require_lock_none_no_flag_returns_none(self, tmp_path):
+        """require_lock absent from ring + no CLI flag → no check."""
+        svc = self._make_svc("prd")
+        config_model = _make_config_model_with_ring("prd", require_lock=None)
+        result = svc.check_require_lock_mode(tmp_path, config_model, flag=False)
+        assert result is None
+
+    def test_different_ring_in_config_does_not_enforce(self, tmp_path):
+        """If the config ring name doesn't match the env ring, no enforcement."""
+        svc = self._make_svc("prd")
+        config_model = _make_config_model_with_ring("dev", require_lock=True)
+        result = svc.check_require_lock_mode(tmp_path, config_model, flag=False)
+        assert result is None  # ring name mismatch → no enforcement
