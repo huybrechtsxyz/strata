@@ -636,14 +636,33 @@ class DeploymentService(BaseService["DeploymentModel"]):
                     try:
                         new_provider_svc = _ProviderService.load(resolved_path, validate=True)
                         if new_provider_svc.is_validated():
-                            workspace.replace_provider_service(provider_name, new_provider_svc)
-                            workspace_provider.file = new_file
-                            self.logger.info(
-                                "Provider file override applied",
-                                provider=provider_name,
-                                file=new_file,
-                                resolved=resolved_path,
+                            # Validate meta.name matches the expected workspace provider name (hard error)
+                            loaded_meta_name = (
+                                str(new_provider_svc.model.meta.name)
+                                if new_provider_svc.model and new_provider_svc.model.meta
+                                else None
                             )
+                            if loaded_meta_name != provider_name:
+                                errors.append(
+                                    f"Provider '{provider_name}' file override '{new_file}' has mismatched "
+                                    f"meta.name: expected '{provider_name}', got '{loaded_meta_name}'"
+                                )
+                                self.logger.error(
+                                    "Provider file override meta.name mismatch",
+                                    provider=provider_name,
+                                    expected=provider_name,
+                                    got=loaded_meta_name,
+                                    file=new_file,
+                                )
+                            else:
+                                workspace.replace_provider_service(provider_name, new_provider_svc)
+                                workspace_provider.file = new_file
+                                self.logger.info(
+                                    "Provider file override applied",
+                                    provider=provider_name,
+                                    file=new_file,
+                                    resolved=resolved_path,
+                                )
                         else:
                             errs = new_provider_svc.get_validation_errors()
                             errors.append(

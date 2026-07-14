@@ -223,3 +223,62 @@ class TestMergeEnvfilesProvenance:
         assert isinstance(result, tuple)
         assert len(result) == 2
         assert isinstance(result[1], MergeProvenance)
+
+
+class TestEnvironmentServiceProviderAccessors:
+    """get_overridden_provider_names() and get_provider_override() accessors."""
+
+    def _make_svc_from_file(self, filename: str) -> EnvironmentService:
+        path = str(_data_dir() / "environments" / filename)
+        svc = EnvironmentService(path=path)
+        svc.validate()
+        return svc
+
+    def test_get_overridden_provider_names_single(self):
+        """Returns the set of provider names that have overrides."""
+        svc = self._make_svc_from_file("environment-merge-base.yaml")
+        names = svc.get_overridden_provider_names()
+        assert "cloud_provider" in names
+
+    def test_get_overridden_provider_names_empty_when_no_overrides(self):
+        """Returns empty set when the environment has no overrides."""
+        svc = self._make_svc_from_file("environment-standard.yaml")
+        assert svc.get_overridden_provider_names() == set()
+
+    def test_get_provider_override_returns_correct_model(self):
+        """get_provider_override returns the override model for a known provider."""
+        svc = self._make_svc_from_file("environment-merge-override.yaml")
+        override = svc.get_provider_override("cloud_provider")
+        assert override is not None
+        assert override.configuration is not None
+        assert override.configuration["datacenter"] == "FR"
+
+    def test_get_provider_override_unknown_name_returns_none(self):
+        """get_provider_override returns None for a name with no override."""
+        svc = self._make_svc_from_file("environment-merge-base.yaml")
+        assert svc.get_provider_override("nonexistent_provider") is None
+
+    def test_provider_override_file_field_is_parsed(self):
+        """get_provider_override returns the file field when present in the YAML."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "overrides": {
+                    "providers": [
+                        {
+                            "provider": "azure",
+                            "file": "@config/providers/azure-prod.yaml",
+                            "configuration": {"region": "westeurope"},
+                        }
+                    ]
+                }
+            },
+        }
+        svc = EnvironmentService(data=data)
+        svc.validate()
+        override = svc.get_provider_override("azure")
+        assert override is not None
+        assert override.file == "@config/providers/azure-prod.yaml"
+        assert override.configuration["region"] == "westeurope"
