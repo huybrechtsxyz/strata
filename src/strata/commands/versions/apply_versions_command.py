@@ -73,7 +73,17 @@ class ApplyVersionsCommand(BaseVersionsCommand):
 
     def _render(self) -> None:
         if self._output_format == "json":
-            click.echo(json.dumps({"success": True, "lock_file": self._result["lock_file"], "ring": self._result["ring"], "pins_count": self._result["pins_count"]}, indent=2))
+            click.echo(
+                json.dumps(
+                    {
+                        "success": True,
+                        "lock_file": self._result["lock_file"],
+                        "ring": self._result["ring"],
+                        "pins_count": self._result["pins_count"],
+                    },
+                    indent=2,
+                )
+            )
         elif self._output_format == "text":
             click.echo(self._result["lock_file"])
         elif not self._output_quiet:

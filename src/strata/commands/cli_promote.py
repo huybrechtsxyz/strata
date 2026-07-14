@@ -14,8 +14,6 @@ Subcommands (read-only or old-style):
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Optional
 
 import click
@@ -34,7 +32,6 @@ from strata.commands.promote.rollback_promote_command import RollbackPromoteComm
 from strata.commands.promote.run_promote_command import RunPromoteCommand
 from strata.commands.promote.start_promote_command import StartPromoteCommand
 from strata.commands.promote.status_promote_command import StatusPromoteCommand
-
 
 # ── group (new ADR-0011 interface: strata promote <ring> <file> --promotion <name>) ──
 
@@ -137,6 +134,7 @@ def promote_group(
         quiet=quiet,
     )
     from strata.commands.cli_common import handle_command_exit
+
     success = cmd.execute()
     handle_command_exit(cmd, success)
 
@@ -253,10 +251,7 @@ def promote_rollback(
 
 @promote_group.command(
     name="status",
-    help=(
-        "Show in-flight promotions from the local activity log directory.\n\n"
-        "Exit codes: 0=success, 1=system error."
-    ),
+    help=("Show in-flight promotions from the local activity log directory.\n\nExit codes: 0=success, 1=system error."),
 )
 @click_work_path
 @click_output_format
@@ -320,10 +315,7 @@ def promote_matrix(
 
 @promote_group.command(
     name="history",
-    help=(
-        "Query completed promotion records.\n\n"
-        "Exit codes: 0=success, 1=system error."
-    ),
+    help=("Query completed promotion records.\n\nExit codes: 0=success, 1=system error."),
 )
 @click.option("--ring", metavar="NAME", default=None, help="Filter to this ring.")
 @click.option("--remote", metavar="NAME", default=None, help="Filter to this remote name.")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import yaml
 from click.testing import CliRunner
@@ -13,9 +13,8 @@ from click.testing import CliRunner
 from strata.commands.cli_promote import promote_group
 from strata.models.common_models import PlatformKind
 from strata.models.promotion_model import (
-    ConfigurationPromotionsModel,
-    ProgressionRingModel,
     ProgressionModel,
+    ProgressionRingModel,
 )
 from strata.services.deployment_service import DeploymentService
 
@@ -186,9 +185,7 @@ class TestPromoteStatus:
     def test_json_output(self, tmp_path):
         _make_activity_log(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["status", "--output", "json", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["status", "--output", "json", "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["success"] is True
@@ -200,9 +197,7 @@ class TestPromoteStatus:
     def test_text_output(self, tmp_path):
         _make_activity_log(tmp_path, status="in-progress")
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["status", "--output", "text", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["status", "--output", "text", "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert "iac_core" in result.output
         assert "\t" in result.output  # tab-separated
@@ -211,9 +206,7 @@ class TestPromoteStatus:
         _make_activity_log(tmp_path, target="iac_core", version="v2.5.0", ring="prd")
         _make_activity_log(tmp_path, target="traefik", version="28.2.0", ring="dev")
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["status", "--output", "json", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["status", "--output", "json", "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert len(data["promotions"]) == 2
@@ -240,9 +233,7 @@ class TestPromoteMatrix:
         _make_ring_lock(tmp_path, ring="prd", version="v2.5.0")
         _make_config(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["matrix", "--output", "json", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["matrix", "--output", "json", "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["success"] is True
@@ -253,9 +244,7 @@ class TestPromoteMatrix:
         """Without config, matrix returns empty rings list (no progressions to index from)."""
         _make_ring_lock(tmp_path, ring="prd", version="v2.5.0")
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["matrix", "--output", "json", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["matrix", "--output", "json", "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["matrix"]["rings"] == []
@@ -264,9 +253,7 @@ class TestPromoteMatrix:
         _make_ring_lock(tmp_path, ring="prd", version="v2.5.0")
         _make_config(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["matrix", "--output", "text", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["matrix", "--output", "text", "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
 
     def test_filter_by_remote(self, tmp_path):
@@ -305,9 +292,7 @@ class TestPromoteHistory:
     def test_json_output(self, tmp_path):
         _make_promotion_record(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["history", "--output", "json", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["history", "--output", "json", "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["success"] is True
@@ -319,9 +304,7 @@ class TestPromoteHistory:
     def test_text_output(self, tmp_path):
         _make_promotion_record(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["history", "--output", "text", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["history", "--output", "text", "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert "iac_core" in result.output
 
@@ -384,8 +367,15 @@ class TestPromoteLog:
         result = runner.invoke(
             promote_group,
             [
-                "log", "--remote", "iac_core", "--to", "prd",
-                "--version", "v2.5.0", "--work-path", str(tmp_path),
+                "log",
+                "--remote",
+                "iac_core",
+                "--to",
+                "prd",
+                "--version",
+                "v2.5.0",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -397,8 +387,15 @@ class TestPromoteLog:
         result = runner.invoke(
             promote_group,
             [
-                "log", "--remote", "iac_core", "--to", "prd",
-                "--output", "json", "--work-path", str(tmp_path),
+                "log",
+                "--remote",
+                "iac_core",
+                "--to",
+                "prd",
+                "--output",
+                "json",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -414,8 +411,15 @@ class TestPromoteLog:
         result = runner.invoke(
             promote_group,
             [
-                "log", "--remote", "iac_core", "--to", "prd",
-                "--output", "text", "--work-path", str(tmp_path),
+                "log",
+                "--remote",
+                "iac_core",
+                "--to",
+                "prd",
+                "--output",
+                "text",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -431,9 +435,7 @@ class TestPromoteLog:
 
     def test_requires_remote_or_module(self, tmp_path):
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["log", "--to", "prd", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["log", "--to", "prd", "--work-path", str(tmp_path)])
         assert result.exit_code != 0
 
 
@@ -458,9 +460,18 @@ class TestPromoteStartDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "start", "--remote", "iac_core", "--module", "traefik",
-                "--version", "v2.5.0", "--to", "prd", "--dry-run",
-                "--work-path", str(tmp_path),
+                "start",
+                "--remote",
+                "iac_core",
+                "--module",
+                "traefik",
+                "--version",
+                "v2.5.0",
+                "--to",
+                "prd",
+                "--dry-run",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code != 0
@@ -470,8 +481,16 @@ class TestPromoteStartDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "start", "--remote", "iac_core", "--version", "v2.5.0",
-                "--to", "prd", "--dry-run", "--work-path", str(tmp_path),
+                "start",
+                "--remote",
+                "iac_core",
+                "--version",
+                "v2.5.0",
+                "--to",
+                "prd",
+                "--dry-run",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code != 0
@@ -483,8 +502,16 @@ class TestPromoteStartDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "start", "--remote", "iac_core", "--version", "v2.5.0",
-                "--to", "prd", "--dry-run", "--work-path", str(tmp_path),
+                "start",
+                "--remote",
+                "iac_core",
+                "--version",
+                "v2.5.0",
+                "--to",
+                "prd",
+                "--dry-run",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         # Gate fails: no dev lock → exit code 1 or 3
@@ -497,8 +524,16 @@ class TestPromoteStartDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "start", "--remote", "iac_core", "--version", "v2.5.0",
-                "--to", "dev", "--dry-run", "--work-path", str(tmp_path),
+                "start",
+                "--remote",
+                "iac_core",
+                "--version",
+                "v2.5.0",
+                "--to",
+                "dev",
+                "--dry-run",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -510,9 +545,18 @@ class TestPromoteStartDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "start", "--remote", "iac_core", "--version", "v2.5.0",
-                "--to", "dev", "--dry-run", "--output", "json",
-                "--work-path", str(tmp_path),
+                "start",
+                "--remote",
+                "iac_core",
+                "--version",
+                "v2.5.0",
+                "--to",
+                "dev",
+                "--dry-run",
+                "--output",
+                "json",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -530,9 +574,18 @@ class TestPromoteStartDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "start", "--remote", "iac_core", "--version", "v2.5.0",
-                "--to", "prd", "--dry-run", "--output", "json",
-                "--work-path", str(tmp_path),
+                "start",
+                "--remote",
+                "iac_core",
+                "--version",
+                "v2.5.0",
+                "--to",
+                "prd",
+                "--dry-run",
+                "--output",
+                "json",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -546,9 +599,18 @@ class TestPromoteStartDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "start", "--remote", "iac_core", "--version", "v2.5.0",
-                "--to", "dev", "--dry-run", "--output", "text",
-                "--work-path", str(tmp_path),
+                "start",
+                "--remote",
+                "iac_core",
+                "--version",
+                "v2.5.0",
+                "--to",
+                "dev",
+                "--dry-run",
+                "--output",
+                "text",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -572,8 +634,14 @@ class TestPromoteRollbackDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "rollback", "--remote", "iac_core", "--to", "prd",
-                "--dry-run", "--work-path", str(tmp_path),
+                "rollback",
+                "--remote",
+                "iac_core",
+                "--to",
+                "prd",
+                "--dry-run",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code != 0
@@ -586,9 +654,18 @@ class TestPromoteRollbackDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "rollback", "--remote", "iac_core", "--to", "prd",
-                "--from-version", "v2.4.0", "--dry-run", "--output", "json",
-                "--work-path", str(tmp_path),
+                "rollback",
+                "--remote",
+                "iac_core",
+                "--to",
+                "prd",
+                "--from-version",
+                "v2.4.0",
+                "--dry-run",
+                "--output",
+                "json",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -600,15 +677,21 @@ class TestPromoteRollbackDryRun:
         """previous_version tier-1: activity log present."""
         _make_config(tmp_path)
         _make_ring_lock(tmp_path, ring="prd", target_name="iac_core", version="v2.5.0")
-        _make_activity_log(
-            tmp_path, target="iac_core", version="v2.5.0", ring="prd", status="completed"
-        )
+        _make_activity_log(tmp_path, target="iac_core", version="v2.5.0", ring="prd", status="completed")
         runner = CliRunner()
         result = runner.invoke(
             promote_group,
             [
-                "rollback", "--remote", "iac_core", "--to", "prd",
-                "--dry-run", "--output", "json", "--work-path", str(tmp_path),
+                "rollback",
+                "--remote",
+                "iac_core",
+                "--to",
+                "prd",
+                "--dry-run",
+                "--output",
+                "json",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -624,8 +707,14 @@ class TestPromoteRollbackDryRun:
         result = runner.invoke(
             promote_group,
             [
-                "rollback", "--remote", "iac_core", "--to", "prd",
-                "--dry-run", "--work-path", str(tmp_path),
+                "rollback",
+                "--remote",
+                "iac_core",
+                "--to",
+                "prd",
+                "--dry-run",
+                "--work-path",
+                str(tmp_path),
             ],
         )
         # Tier 1 (no log), Tier 2 (no git), Tier 3 (no flag) → error

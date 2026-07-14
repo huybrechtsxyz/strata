@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
-import pytest
 import yaml
 
 from strata.controllers.promote_controller import PromoteController
-
 
 _CONFIG_YAML = """\
 apiVersion: strata.huybrechts.xyz/v1
@@ -85,7 +81,9 @@ class TestRunPromoteDryRun:
         wp, vf = _make_workspace(tmp_path)
         # Create a wave lock to be "deleted"
         wave_lock = wp / "versions" / "app" / "dev.wave.1.lock.yaml"
-        wave_lock.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: version-lock\nmeta:\n  name: dev\nspec:\n  ring: dev\n  source: v2.1.0.yaml\n")
+        wave_lock.write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: version-lock\nmeta:\n  name: dev\nspec:\n  ring: dev\n  source: v2.1.0.yaml\n"
+        )
         ctrl = PromoteController()
         result = ctrl.run_promote("dev", vf, "app-wave", complete=True, dry_run=True, work_path=wp)
         assert any("dev.lock.yaml" in f for f in result["files_to_write"])
@@ -123,8 +121,12 @@ class TestRunPromoteExecution:
         wp, vf = _make_workspace(tmp_path)
         # Create wave locks first
         app_dir = wp / "versions" / "app"
-        (app_dir / "dev.wave.1.lock.yaml").write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: version-lock\nmeta:\n  name: dev\nspec:\n  ring: dev\n  source: v2.1.0.yaml\n")
-        (app_dir / "dev.wave.2.lock.yaml").write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: version-lock\nmeta:\n  name: dev\nspec:\n  ring: dev\n  source: v2.1.0.yaml\n")
+        (app_dir / "dev.wave.1.lock.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: version-lock\nmeta:\n  name: dev\nspec:\n  ring: dev\n  source: v2.1.0.yaml\n"
+        )
+        (app_dir / "dev.wave.2.lock.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: version-lock\nmeta:\n  name: dev\nspec:\n  ring: dev\n  source: v2.1.0.yaml\n"
+        )
         ctrl = _no_git(PromoteController())
         result = ctrl.run_promote("dev", vf, "app-wave", complete=True, work_path=wp)
         assert not ctrl.has_errors(), ctrl.get_errors()

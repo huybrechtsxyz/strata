@@ -87,7 +87,19 @@ class RefreshVersionsCommand(BaseVersionsCommand):
         total_stale = sum(len(v) for v in stale.values())
 
         if self._output_format == "json":
-            click.echo(json.dumps({"success": True, "dry_run": dry_run, "added": added, "stale": stale, "stale_removed": remove_stale, "file": file_path_str}, indent=2))
+            click.echo(
+                json.dumps(
+                    {
+                        "success": True,
+                        "dry_run": dry_run,
+                        "added": added,
+                        "stale": stale,
+                        "stale_removed": remove_stale,
+                        "file": file_path_str,
+                    },
+                    indent=2,
+                )
+            )
         elif self._output_format == "text":
             for type_key, names in added.items():
                 for name in names:

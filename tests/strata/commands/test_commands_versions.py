@@ -88,9 +88,7 @@ class TestVersionsInit:
     def test_force_overwrites_existing(self, tmp_path):
         runner = CliRunner()
         runner.invoke(versions_group, ["init", "--ring", "dev", "--work-path", str(tmp_path)])
-        result = runner.invoke(
-            versions_group, ["init", "--ring", "dev", "--force", "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["init", "--ring", "dev", "--force", "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
 
 
@@ -101,9 +99,7 @@ class TestVersionsExport:
     def test_console_output(self, tmp_path):
         p = _make_manifest(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["export", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["export", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert "IMAGE" in result.output
         assert "app" in result.output
@@ -153,9 +149,7 @@ class TestVersionsExport:
         p = tmp_path / "dev.yaml"
         p.write_text(yaml.dump(doc))
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["export", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["export", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert "no resolved pins" in result.output
 
@@ -167,9 +161,7 @@ class TestVersionsApply:
     def test_creates_lock_file_alongside_manifest(self, tmp_path):
         p = _make_manifest(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["apply", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["apply", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         lock_path = tmp_path / "dev.lock.yaml"
         assert lock_path.exists()
@@ -227,9 +219,7 @@ class TestVersionsApply:
         p = _make_manifest(tmp_path)
         runner = CliRunner()
         runner.invoke(versions_group, ["apply", "--file", str(p), "--work-path", str(tmp_path)])
-        result = runner.invoke(
-            versions_group, ["apply", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["apply", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 1
 
     def test_force_overwrites_existing_lock(self, tmp_path):
@@ -264,9 +254,7 @@ class TestVersionsApply:
         p = tmp_path / "dev.lock.yaml"
         p.write_text(yaml.dump(doc))
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["apply", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["apply", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 1
 
     def test_lock_has_generated_metadata(self, tmp_path):
@@ -282,7 +270,9 @@ class TestVersionsApply:
 # ── refresh ───────────────────────────────────────────────────────────────────
 
 
-def _write_module(path: Path, name: str, chart_name: str = "", chart_version: str = "", services: list | None = None) -> None:
+def _write_module(
+    path: Path, name: str, chart_name: str = "", chart_version: str = "", services: list | None = None
+) -> None:
     """Write a kind:module YAML file for scanning tests."""
     source: dict
     if chart_name:
@@ -320,7 +310,10 @@ def _write_workspace(path: Path, repos: list[str]) -> None:
 
 def _write_configuration(path: Path, remotes: list[tuple[str, str]]) -> None:
     """Write a kind:configuration YAML file for scanning tests."""
-    remote_list = [{"name": name, "type": "gitops", "repository": "https://git.example.com/r", "reference": ref} for name, ref in remotes]
+    remote_list = [
+        {"name": name, "type": "gitops", "repository": "https://git.example.com/r", "reference": ref}
+        for name, ref in remotes
+    ]
     doc = {
         "apiVersion": _API_VERSION,
         "kind": "configuration",
@@ -356,9 +349,7 @@ class TestVersionsRefresh:
         _write_module(tmp_path / "nginx.yaml", name="nginx", chart_name="nginx", chart_version="1.27.0")
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         updated = yaml.safe_load(p.read_text())
         assert "nginx" in updated["spec"]["pins"]["charts"]
@@ -373,9 +364,7 @@ class TestVersionsRefresh:
         )
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         updated = yaml.safe_load(p.read_text())
         assert updated["spec"]["pins"]["images"]["api"] == "ghcr.io/org/api:v3.0.0"
@@ -389,9 +378,7 @@ class TestVersionsRefresh:
         _write_workspace(tmp_path / "ws.yaml", repos=["iac_new"])
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         updated = yaml.safe_load(p.read_text())
         assert "iac_new" in updated["spec"]["pins"]["remotes"]
@@ -411,9 +398,7 @@ class TestVersionsRefresh:
         # No module or workspace files → everything in manifest is stale
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert "stale" in result.output.lower() or "⚠" in result.output
         # Stale entries should still be in the file (not removed by default)
@@ -480,9 +465,7 @@ class TestVersionsRefresh:
         p.write_text(yaml.dump(manifest_doc))
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert "up to date" in result.output
 
@@ -499,23 +482,23 @@ class TestVersionsRefresh:
             "kind": "workspace",
             "meta": {"name": "ws"},
             "spec": {
-                "provisioners": [{
-                    "name": "app-chart",
-                    "provisioner": "helm",
-                    "source": {
-                        "chart_repository": "https://charts.example.com",
-                        "chart_name": "myapp",
-                        "chart_version": "5.0.0",
-                    },
-                }]
+                "provisioners": [
+                    {
+                        "name": "app-chart",
+                        "provisioner": "helm",
+                        "source": {
+                            "chart_repository": "https://charts.example.com",
+                            "chart_name": "myapp",
+                            "chart_version": "5.0.0",
+                        },
+                    }
+                ]
             },
         }
         (tmp_path / "ws.yaml").write_text(yaml.dump(ws_doc))
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         updated = yaml.safe_load(p.read_text())
         assert "app-chart" in updated["spec"]["pins"]["charts"]
@@ -531,9 +514,7 @@ class TestVersionsRefresh:
         _write_configuration(tmp_path / "config.yaml", remotes=[("platform_core", "v3.1.0"), ("iac_base", "v1.5.0")])
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         updated = yaml.safe_load(p.read_text())
         assert updated["spec"]["pins"]["remotes"]["platform_core"] == "v3.1.0"
@@ -549,9 +530,7 @@ class TestVersionsRefresh:
         _write_environment(tmp_path / "env.yaml", remote_overrides=[("iac_core", "v2.6.0")])
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         updated = yaml.safe_load(p.read_text())
         assert updated["spec"]["pins"]["remotes"]["iac_core"] == "v2.6.0"
@@ -569,9 +548,7 @@ class TestVersionsRefresh:
         )
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         updated = yaml.safe_load(p.read_text())
         assert updated["spec"]["pins"]["charts"]["traefik"] == "30.0.0"
@@ -582,16 +559,16 @@ class TestVersionsRefresh:
 
         _write_environment(
             tmp_path / "env.yaml",
-            module_overrides=[{
-                "module": "myapp",
-                "services": [{"name": "api", "image": "ghcr.io/org/api:v4.0.0"}],
-            }],
+            module_overrides=[
+                {
+                    "module": "myapp",
+                    "services": [{"name": "api", "image": "ghcr.io/org/api:v4.0.0"}],
+                }
+            ],
         )
 
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         updated = yaml.safe_load(p.read_text())
         assert updated["spec"]["pins"]["images"]["api"] == "ghcr.io/org/api:v4.0.0"
@@ -614,7 +591,5 @@ class TestVersionsRefresh:
         p = tmp_path / "dev.lock.yaml"
         p.write_text(yaml.dump(doc))
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["refresh", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 1

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import tempfile
 from pathlib import Path
 from typing import Optional
 from unittest.mock import MagicMock, patch
@@ -12,8 +11,6 @@ from unittest.mock import MagicMock, patch
 import yaml
 
 from strata.commands.deploy.run_deploy_command import RunDeployCommand
-from strata.models.common_models import PlatformKind
-
 
 _API_VERSION = "strata.huybrechts.xyz/v1"
 
@@ -281,10 +278,13 @@ class TestDeployRunVersionFileOption:
     def test_v_flag_passes_to_command(self, tmp_path):
         """The CLI -v option is wired and passed to RunDeployCommand."""
         from click.testing import CliRunner
+
         from strata.commands.cli_deploy import deploy
 
         runner = CliRunner()
-        with patch("strata.commands.deploy.run_deploy_command.RunDeployCommand.execute", return_value=True) as mock_exec:
+        with patch(
+            "strata.commands.deploy.run_deploy_command.RunDeployCommand.execute", return_value=True
+        ) as mock_exec:
             result = runner.invoke(
                 deploy,
                 ["run", "--version-file", "versions/dev.yaml", "--work-path", str(tmp_path)],
@@ -293,6 +293,7 @@ class TestDeployRunVersionFileOption:
 
     def test_short_v_flag_works(self, tmp_path):
         from click.testing import CliRunner
+
         from strata.commands.cli_deploy import deploy
 
         runner = CliRunner()
@@ -361,7 +362,8 @@ class TestRingOverride:
         vf = tmp_path / "versions" / "app" / "v2.1.0.yaml"
         vf.write_text(_VERSION_YAML_TEMPLATE)
         lock = {
-            "apiVersion": _API_VERSION, "kind": "version-lock",
+            "apiVersion": _API_VERSION,
+            "kind": "version-lock",
             "meta": {"name": "prd"},
             "spec": {"ring": "prd", "source": "v2.1.0.yaml"},
         }
@@ -390,7 +392,8 @@ class TestPromotionOverride:
         vf = tmp_path / "versions" / "other" / "v3.0.0.yaml"
         vf.write_text(_VERSION_YAML_TEMPLATE)
         lock = {
-            "apiVersion": _API_VERSION, "kind": "version-lock",
+            "apiVersion": _API_VERSION,
+            "kind": "version-lock",
             "meta": {"name": "prd"},
             "spec": {"ring": "prd", "source": "v3.0.0.yaml"},
         }
@@ -405,8 +408,12 @@ class TestPromotionOverride:
         cmd._deployment_service = mock_dep
 
         # Config has two strategies; override should pick "other-strat"
-        strat_a = MagicMock(); strat_a.name = "app-wave"; strat_a.versions_path = "versions/app/"
-        strat_b = MagicMock(); strat_b.name = "other-strat"; strat_b.versions_path = "versions/other/"
+        strat_a = MagicMock()
+        strat_a.name = "app-wave"
+        strat_a.versions_path = "versions/app/"
+        strat_b = MagicMock()
+        strat_b.name = "other-strat"
+        strat_b.versions_path = "versions/other/"
         mock_config = MagicMock()
         mock_config.model.spec.promotions.strategies = [strat_a, strat_b]
         cmd._configuration_service = mock_config
@@ -450,14 +457,16 @@ spec:
       app: v2.1.0
 """)
         ring_lock = {
-            "apiVersion": _API_VERSION, "kind": "version-lock",
+            "apiVersion": _API_VERSION,
+            "kind": "version-lock",
             "meta": {"name": ring},
             "spec": {"ring": ring, "source": "v2.0.0.yaml"},
         }
         (d / f"{ring}.lock.yaml").write_text(yaml.dump(ring_lock))
 
         wave_lock = {
-            "apiVersion": _API_VERSION, "kind": "version-lock",
+            "apiVersion": _API_VERSION,
+            "kind": "version-lock",
             "meta": {"name": f"{ring}.wave.1"},
             "spec": {"ring": ring, "source": "v2.1.0.yaml", "wave": 1},
         }
@@ -505,21 +514,31 @@ spec:
         d.mkdir(parents=True)
         vf = d / "v2.0.0.yaml"
         vf.write_text(_VERSION_YAML_TEMPLATE)
-        (d / "prd.lock.yaml").write_text(yaml.dump({
-            "apiVersion": _API_VERSION, "kind": "version-lock",
-            "meta": {"name": "prd"},
-            "spec": {"ring": "prd", "source": "v2.0.0.yaml"},
-        }))
+        (d / "prd.lock.yaml").write_text(
+            yaml.dump(
+                {
+                    "apiVersion": _API_VERSION,
+                    "kind": "version-lock",
+                    "meta": {"name": "prd"},
+                    "spec": {"ring": "prd", "source": "v2.0.0.yaml"},
+                }
+            )
+        )
         # Old-style wave lock with pins (no source)
-        (d / "prd.wave.1.lock.yaml").write_text(yaml.dump({
-            "apiVersion": _API_VERSION, "kind": "version-lock",
-            "meta": {"name": "prd.wave.1"},
-            "spec": {
-                "ring": "prd",
-                "wave": 1,
-                "pins": [{"target": {"type": "image", "name": "app"}, "version": "v2.1.0"}],
-            },
-        }))
+        (d / "prd.wave.1.lock.yaml").write_text(
+            yaml.dump(
+                {
+                    "apiVersion": _API_VERSION,
+                    "kind": "version-lock",
+                    "meta": {"name": "prd.wave.1"},
+                    "spec": {
+                        "ring": "prd",
+                        "wave": 1,
+                        "pins": [{"target": {"type": "image", "name": "app"}, "version": "v2.1.0"}],
+                    },
+                }
+            )
+        )
 
         cmd = _setup_promotion_cmd(tmp_path, ring="prd", wave=1)
         injected: list = []
@@ -536,6 +555,7 @@ class TestDeployRunFilterFlagsCLI:
 
     def test_ring_flag_passed_to_command(self, tmp_path):
         from click.testing import CliRunner
+
         from strata.commands.cli_deploy import deploy
 
         captured = {}
@@ -544,13 +564,16 @@ class TestDeployRunFilterFlagsCLI:
             captured.update(kwargs)
 
         runner = CliRunner()
-        with patch.object(RunDeployCommand, "__init__", side_effect=fake_init, autospec=True), \
-             patch.object(RunDeployCommand, "execute", return_value=True):
+        with (
+            patch.object(RunDeployCommand, "__init__", side_effect=fake_init, autospec=True),
+            patch.object(RunDeployCommand, "execute", return_value=True),
+        ):
             runner.invoke(deploy, ["run", "--ring", "prod", "--work-path", str(tmp_path)])
         assert captured.get("ring_override") == "prod"
 
     def test_wave_flag_passed_to_command(self, tmp_path):
         from click.testing import CliRunner
+
         from strata.commands.cli_deploy import deploy
 
         captured = {}
@@ -559,13 +582,16 @@ class TestDeployRunFilterFlagsCLI:
             captured.update(kwargs)
 
         runner = CliRunner()
-        with patch.object(RunDeployCommand, "__init__", side_effect=fake_init, autospec=True), \
-             patch.object(RunDeployCommand, "execute", return_value=True):
+        with (
+            patch.object(RunDeployCommand, "__init__", side_effect=fake_init, autospec=True),
+            patch.object(RunDeployCommand, "execute", return_value=True),
+        ):
             runner.invoke(deploy, ["run", "--wave", "2", "--work-path", str(tmp_path)])
         assert captured.get("wave") == 2
 
     def test_promotion_flag_passed_to_command(self, tmp_path):
         from click.testing import CliRunner
+
         from strata.commands.cli_deploy import deploy
 
         captured = {}
@@ -574,7 +600,9 @@ class TestDeployRunFilterFlagsCLI:
             captured.update(kwargs)
 
         runner = CliRunner()
-        with patch.object(RunDeployCommand, "__init__", side_effect=fake_init, autospec=True), \
-             patch.object(RunDeployCommand, "execute", return_value=True):
+        with (
+            patch.object(RunDeployCommand, "__init__", side_effect=fake_init, autospec=True),
+            patch.object(RunDeployCommand, "execute", return_value=True),
+        ):
             runner.invoke(deploy, ["run", "--promotion", "customer-apps", "--work-path", str(tmp_path)])
         assert captured.get("promotion_override") == "customer-apps"

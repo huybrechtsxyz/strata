@@ -48,9 +48,7 @@ class StatusPromoteCommand(BasePromoteCommand):
             click.echo(json.dumps({"success": True, "promotions": self._result}, indent=2))
         elif self._output_format == "text":
             for p in self._result:
-                click.echo(
-                    f"{p['target']}\t{p.get('version', '?')}\t{p['ring']}\t{p['status']}"
-                )
+                click.echo(f"{p['target']}\t{p.get('version', '?')}\t{p['ring']}\t{p['status']}")
         elif not self._output_quiet:
             if not self._result:
                 click.echo("No in-flight promotions found.")

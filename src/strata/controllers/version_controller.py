@@ -78,9 +78,7 @@ class VersionController(BaseController):
             return {}
 
         pins = VersionService.resolve_pins([model])
-        flat: dict[str, dict[str, str]] = {
-            pt.value: entries for pt, entries in pins.items() if entries
-        }
+        flat: dict[str, dict[str, str]] = {pt.value: entries for pt, entries in pins.items() if entries}
         return {"pins": flat}
 
     # ── apply ─────────────────────────────────────────────────────────────────

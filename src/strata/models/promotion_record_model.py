@@ -57,9 +57,7 @@ class PromotionRingWaveSummaryModel(PlatformBaseModel):
     ring_wave: int = Field(description="Ring wave number (1-based)")
     environments: List[str] = Field(description="Environment names targeted in this wave")
     deployment_wave: Optional[str] = Field(None, description="Deployment wave name ('canary', 'all', etc.)")
-    deployments: Any = Field(
-        description="Deployment names in this wave, or the string 'all'"
-    )
+    deployments: Any = Field(description="Deployment names in this wave, or the string 'all'")
     files_modified: Optional[List[str]] = Field(None, description="Files written/updated")
     fields_removed: Optional[List[str]] = Field(None, description="Fields/overlays removed (final wave cleanup)")
     committed_at: Optional[str] = Field(None, description="ISO 8601 UTC timestamp of the wave commit")

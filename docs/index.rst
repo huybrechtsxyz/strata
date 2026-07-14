@@ -145,6 +145,17 @@ strata
    decisions/0024-environment-composition-flat-merge-fix
    decisions/0025-ai-agent-integration-for-build-and-deploy
    decisions/0026-resolved-model-cache
+   decisions/0027-command-timeout-for-long-running-operations
+   decisions/0028-sigterm-graceful-shutdown-and-lock-release
+   decisions/0029-realtime-progress-streaming-ndjson
+   decisions/0030-command-lifecycle-explicitness-and-thin-overrides
+   decisions/0031-cost-estimation-and-visibility
+   decisions/0032-approval-workflows-and-gates
+   decisions/0033-github-pull-request-integration
+   decisions/0034-diagram-visualization-in-vscode-extension
+   decisions/0035-enterprise-store
+   decisions/0036-workspace-provider-environment-overrides
+   decisions/0037-mass-wave-deployment
 
 .. toctree::
    :maxdepth: 2

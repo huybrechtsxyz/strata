@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
 import yaml
@@ -97,10 +96,14 @@ class TestVersionsAddCommand:
             versions_group,
             [
                 "add",
-                "--out", str(tmp_path / "v1.0.0.yaml"),
-                "--ring", "dev",
-                "--from", str(tmp_path / "nonexistent.yaml"),
-                "--work-path", str(tmp_path),
+                "--out",
+                str(tmp_path / "v1.0.0.yaml"),
+                "--ring",
+                "dev",
+                "--from",
+                str(tmp_path / "nonexistent.yaml"),
+                "--work-path",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 1
@@ -121,9 +124,7 @@ class TestVersionsLockCommand:
     def test_writes_hash_to_file(self, tmp_path):
         p = _make_version_file(tmp_path, ring="prd")
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["lock", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["lock", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         raw = yaml.safe_load(p.read_text())
         assert "hash" in raw["spec"]
@@ -160,9 +161,7 @@ class TestVersionsLockCommand:
 
     def test_fails_on_wrong_kind(self, tmp_path):
         wrong = tmp_path / "workspace.yaml"
-        wrong.write_text(
-            "apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nmeta:\n  name: test\nspec: {}\n"
-        )
+        wrong.write_text("apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nmeta:\n  name: test\nspec: {}\n")
         runner = CliRunner()
         result = runner.invoke(
             versions_group,
@@ -173,8 +172,6 @@ class TestVersionsLockCommand:
     def test_console_output_shows_hash(self, tmp_path):
         p = _make_version_file(tmp_path, ring="prd")
         runner = CliRunner()
-        result = runner.invoke(
-            versions_group, ["lock", "--file", str(p), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(versions_group, ["lock", "--file", str(p), "--work-path", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert "hash" in result.output.lower() or len([c for c in result.output if c in "abcdef0123456789"]) >= 10

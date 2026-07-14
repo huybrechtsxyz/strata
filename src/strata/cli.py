@@ -40,6 +40,7 @@ from strata.commands.cli_mcp import mcp_group
 from strata.commands.cli_new import new_command
 from strata.commands.cli_policy import policy_group
 from strata.commands.cli_profile import profile_group
+from strata.commands.cli_promote import promote_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
 from strata.commands.cli_schema import schema_group
@@ -52,7 +53,6 @@ from strata.commands.cli_values import values_group
 from strata.commands.cli_vars import vars_group
 from strata.commands.cli_version import version_command
 from strata.commands.cli_versions import versions_group
-from strata.commands.cli_promote import promote_group
 from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
 from strata.utils.config import SOLUTION_CONFIG_FILE, SOLUTION_DIR

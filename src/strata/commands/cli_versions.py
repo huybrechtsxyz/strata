@@ -1,4 +1,4 @@
-﻿"""Click CLI wiring for the ``versions`` command group.
+"""Click CLI wiring for the ``versions`` command group.
 
 Subcommands
 -----------
@@ -29,7 +29,6 @@ from strata.commands.versions.export_versions_command import ExportVersionsComma
 from strata.commands.versions.init_versions_command import InitVersionsCommand
 from strata.commands.versions.lock_versions_command import LockVersionsCommand
 from strata.commands.versions.refresh_versions_command import RefreshVersionsCommand
-
 
 # ── group ─────────────────────────────────────────────────────────────────────
 
@@ -233,6 +232,7 @@ def versions_refresh(
     )
     success = command.execute()
     handle_command_exit(command, success)
+
 
 # ── add ──────────────────────────────────────────────────────────────────────
 

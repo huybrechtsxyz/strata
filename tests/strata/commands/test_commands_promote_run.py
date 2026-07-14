@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-import yaml
 from click.testing import CliRunner
 
 from strata.commands.cli_promote import promote_group
-from strata.models.common_models import PlatformKind
 
 _API_VERSION = "strata.huybrechts.xyz/v1"
 
@@ -122,9 +119,7 @@ class TestPromoteNewInterface:
     def test_missing_promotion_flag_exits_with_usage_error(self, tmp_path):
         _, vf = _make_workspace(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(
-            promote_group, ["--ring", "dev", "--file", str(vf), "--work-path", str(tmp_path)]
-        )
+        result = runner.invoke(promote_group, ["--ring", "dev", "--file", str(vf), "--work-path", str(tmp_path)])
         assert result.exit_code == 2
         assert "--promotion" in result.output
 
@@ -145,8 +140,16 @@ class TestPromoteNewInterface:
             result = runner.invoke(
                 promote_group,
                 [
-                    "--ring", "dev", "--file", str(vf), "--promotion", "app-wave",
-                    "--output", "json", "--work-path", str(tmp_path),
+                    "--ring",
+                    "dev",
+                    "--file",
+                    str(vf),
+                    "--promotion",
+                    "app-wave",
+                    "--output",
+                    "json",
+                    "--work-path",
+                    str(tmp_path),
                 ],
             )
         assert result.exit_code == 0, result.output
@@ -160,8 +163,15 @@ class TestPromoteNewInterface:
             result = runner.invoke(
                 promote_group,
                 [
-                    "--ring", "dev", "--file", str(vf), "--promotion", "app-wave",
-                    "--dry-run", "--work-path", str(tmp_path),
+                    "--ring",
+                    "dev",
+                    "--file",
+                    str(vf),
+                    "--promotion",
+                    "app-wave",
+                    "--dry-run",
+                    "--work-path",
+                    str(tmp_path),
                 ],
             )
         assert result.exit_code == 0, result.output
@@ -174,8 +184,17 @@ class TestPromoteNewInterface:
             result = runner.invoke(
                 promote_group,
                 [
-                    "--ring", "dev", "--file", str(vf), "--promotion", "app-wave",
-                    "--wave", "2", "--dry-run", "--work-path", str(tmp_path),
+                    "--ring",
+                    "dev",
+                    "--file",
+                    str(vf),
+                    "--promotion",
+                    "app-wave",
+                    "--wave",
+                    "2",
+                    "--dry-run",
+                    "--work-path",
+                    str(tmp_path),
                 ],
             )
         assert result.exit_code == 0, result.output
@@ -191,8 +210,15 @@ class TestPromoteNewInterface:
             runner.invoke(
                 promote_group,
                 [
-                    "--ring", "dev", "--file", str(vf), "--promotion", "app-wave",
-                    "--complete", "--work-path", str(tmp_path),
+                    "--ring",
+                    "dev",
+                    "--file",
+                    str(vf),
+                    "--promotion",
+                    "app-wave",
+                    "--complete",
+                    "--work-path",
+                    str(tmp_path),
                 ],
             )
         call_kwargs = mock.return_value.run_promote.call_args[1]
@@ -206,8 +232,15 @@ class TestPromoteNewInterface:
             runner.invoke(
                 promote_group,
                 [
-                    "--ring", "dev", "--file", str(vf), "--promotion", "app-wave",
-                    "--force", "--work-path", str(tmp_path),
+                    "--ring",
+                    "dev",
+                    "--file",
+                    str(vf),
+                    "--promotion",
+                    "app-wave",
+                    "--force",
+                    "--work-path",
+                    str(tmp_path),
                 ],
             )
         call_kwargs = mock.return_value.run_promote.call_args[1]

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import getpass
-import hashlib
 import json
 import os
 import re
@@ -16,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from strata.controllers.base_controller import BaseController
-from strata.models.common_models import PlatformKind, PlatformVersion
+from strata.models.common_models import PlatformKind
 from strata.models.promotion_record_model import (
     ActivityLogEventModel,
     ActivityLogModel,
@@ -138,8 +137,9 @@ class PromoteController(BaseController):
         except Exception:
             return None
 
-    def _write_lock_file(self, path: Path, ring: str, pins: List[dict],
-                          scope: Optional[str] = None, scope_selector: Optional[str] = None) -> None:
+    def _write_lock_file(
+        self, path: Path, ring: str, pins: List[dict], scope: Optional[str] = None, scope_selector: Optional[str] = None
+    ) -> None:
         """Write an old-style (inline pins) version-lock YAML to path."""
         meta_name = f"{ring}.{scope_selector}" if scope_selector else ring
         spec: dict = {"ring": ring, "pins": pins}
@@ -198,11 +198,15 @@ class PromoteController(BaseController):
                     ex_spec = existing_raw.get("spec") or {}
                     ex_source = ex_spec.get("source")
                     if ex_source:
-                        previous = {k: v for k, v in {
-                            "source": ex_source,
-                            "version": ex_spec.get("version"),
-                            "hash": ex_spec.get("hash"),
-                        }.items() if v is not None}
+                        previous = {
+                            k: v
+                            for k, v in {
+                                "source": ex_source,
+                                "version": ex_spec.get("version"),
+                                "hash": ex_spec.get("hash"),
+                            }.items()
+                            if v is not None
+                        }
             except Exception:
                 pass
 
@@ -234,13 +238,14 @@ class PromoteController(BaseController):
             encoding="utf-8",
         )
 
-    def _pin_version_in_lock(self, existing_pins: List[dict], target_type: str,
-                              target_name: str, version: str) -> List[dict]:
+    def _pin_version_in_lock(
+        self, existing_pins: List[dict], target_type: str, target_name: str, version: str
+    ) -> List[dict]:
         """Upsert a pin in an existing pins list. Returns the new list."""
         new_pins = [
-            p for p in existing_pins
-            if not (p.get("target", {}).get("type") == target_type
-                    and p.get("target", {}).get("name") == target_name)
+            p
+            for p in existing_pins
+            if not (p.get("target", {}).get("type") == target_type and p.get("target", {}).get("name") == target_name)
         ]
         new_pins.append({"target": {"type": target_type, "name": target_name}, "version": version})
         return new_pins
@@ -283,8 +288,7 @@ class PromoteController(BaseController):
                 return False, f"Could not create or checkout branch '{branch}': {err}"
         return True, branch
 
-    def _git_add_and_commit(self, files: List[Path], message: str,
-                             work_path: Path) -> Tuple[bool, str]:
+    def _git_add_and_commit(self, files: List[Path], message: str, work_path: Path) -> Tuple[bool, str]:
         """Stage files and commit. Returns (success, sha_or_error)."""
         for f in files:
             ok, _, err = self._run_git(["add", str(f)], work_path)
@@ -341,8 +345,7 @@ class PromoteController(BaseController):
     # ── gate checking ─────────────────────────────────────────────────────────
 
     def _check_progression_order_gate(
-        self, strategy, progression, ring_model, target_type: str, target_name: str,
-        version: str, work_path: Path
+        self, strategy, progression, ring_model, target_type: str, target_name: str, version: str, work_path: Path
     ) -> Tuple[bool, PromotionGateResultModel]:
         """Check that the previous ring's quorum is satisfied."""
         prev_ring = self._get_previous_ring(progression, ring_model.name)
@@ -419,9 +422,7 @@ class PromoteController(BaseController):
                 pass
         return models
 
-    def _filter_deployments_by_environments(
-        self, deployments: List[Any], target_env_names: List[str]
-    ) -> List[Any]:
+    def _filter_deployments_by_environments(self, deployments: List[Any], target_env_names: List[str]) -> List[Any]:
         """Return deployments that reference at least one of the target environments."""
         target_set = set(target_env_names)
         result = []
@@ -528,8 +529,7 @@ class PromoteController(BaseController):
         strategy, progression, ring_model = self._find_strategy_for_ring(config, to_ring)
         if not strategy:
             self._add_error(
-                f"No promotion strategy found for ring '{to_ring}'. "
-                "Ensure configuration.spec.promotions is configured."
+                f"No promotion strategy found for ring '{to_ring}'. Ensure configuration.spec.promotions is configured."
             )
             return {}
 
@@ -602,9 +602,7 @@ class PromoteController(BaseController):
                     sel = self._get_scope_selector(dep)
                     selectors[sel] = True
             for sel in selectors:
-                files_to_write.append(
-                    (self._scoped_lock_file_path(work_path, to_ring, sel), strategy.scope, sel)
-                )
+                files_to_write.append((self._scoped_lock_file_path(work_path, to_ring, sel), strategy.scope, sel))
             if not files_to_write:
                 # Fallback: write ring lock directly
                 self._add_message("No scoped deployments matched — falling back to ring lock (all-at-once)")
@@ -753,22 +751,26 @@ class PromoteController(BaseController):
                 ring=to_ring,
                 outcome=PromotionOutcome.COMPLETED,
                 branch=branch,
-                commits=[PromotionCommitModel(
-                    ring_wave=ring_wave_num,
-                    sha=sha,
-                    message=plan["commit_message"],
-                    committed_at=committed_at,
-                )],
+                commits=[
+                    PromotionCommitModel(
+                        ring_wave=ring_wave_num,
+                        sha=sha,
+                        message=plan["commit_message"],
+                        committed_at=committed_at,
+                    )
+                ],
                 gates=plan["gate_results"],
-                ring_waves=[PromotionRingWaveSummaryModel(
-                    ring_wave=ring_wave_num,
-                    environments=plan["environments"],
-                    deployment_wave=plan["deployment_wave"],
-                    deployments=plan["deployments"],
-                    files_modified=[str(f) for f in written_files],
-                    fields_removed=removed_files or None,
-                    committed_at=committed_at,
-                )],
+                ring_waves=[
+                    PromotionRingWaveSummaryModel(
+                        ring_wave=ring_wave_num,
+                        environments=plan["environments"],
+                        deployment_wave=plan["deployment_wave"],
+                        deployments=plan["deployments"],
+                        files_modified=[str(f) for f in written_files],
+                        fields_removed=removed_files or None,
+                        committed_at=committed_at,
+                    )
+                ],
                 started_at=started_at,
                 completed_at=committed_at,
                 rollback_of=None,
@@ -900,18 +902,18 @@ class PromoteController(BaseController):
             ring=to_ring,
             outcome=PromotionOutcome.ROLLED_BACK,
             branch=branch,
-            commits=[PromotionCommitModel(
-                ring_wave=1, sha=sha, message=commit_message, committed_at=committed_at
-            )],
+            commits=[PromotionCommitModel(ring_wave=1, sha=sha, message=commit_message, committed_at=committed_at)],
             gates=[],
-            ring_waves=[PromotionRingWaveSummaryModel(
-                ring_wave=1,
-                environments=ring_model.environment_names(),
-                deployment_wave=None,
-                deployments="all",
-                files_modified=[str(ring_lock_path)],
-                committed_at=committed_at,
-            )],
+            ring_waves=[
+                PromotionRingWaveSummaryModel(
+                    ring_wave=1,
+                    environments=ring_model.environment_names(),
+                    deployment_wave=None,
+                    deployments="all",
+                    files_modified=[str(ring_lock_path)],
+                    committed_at=committed_at,
+                )
+            ],
             started_at=started_at,
             completed_at=committed_at,
             rollback_of=None,
@@ -928,8 +930,7 @@ class PromoteController(BaseController):
             "commit_sha": sha,
             "promotion_record": record_path,
             "pr_suggestion": (
-                f"gh pr create --head {branch} --title '{commit_message}' "
-                f"--body 'Rollback: {target_name} in {to_ring}'"
+                f"gh pr create --head {branch} --title '{commit_message}' --body 'Rollback: {target_name} in {to_ring}'"
             ),
         }
 
@@ -968,9 +969,7 @@ class PromoteController(BaseController):
             return {}
 
         if not strategy.versions_path:
-            self._add_error(
-                f"Promotion strategy for ring '{ring}' has no versions_path configured."
-            )
+            self._add_error(f"Promotion strategy for ring '{ring}' has no versions_path configured.")
             return {}
 
         vp = self._resolve_versions_path(strategy.versions_path, work_path)
@@ -1015,8 +1014,7 @@ class PromoteController(BaseController):
         prev_file = (ring_lock_path.parent / prev_source).resolve()
         if not prev_file.exists():
             self._add_error(
-                f"Previous version file '{prev_source}' not found at '{prev_file}'. "
-                "Cannot complete rollback."
+                f"Previous version file '{prev_source}' not found at '{prev_file}'. Cannot complete rollback."
             )
             return {}
 
@@ -1060,18 +1058,18 @@ class PromoteController(BaseController):
             ring=ring,
             outcome=PromotionOutcome.ROLLED_BACK,
             branch=branch,
-            commits=[PromotionCommitModel(
-                ring_wave=1, sha=sha, message=commit_message, committed_at=committed_at
-            )],
+            commits=[PromotionCommitModel(ring_wave=1, sha=sha, message=commit_message, committed_at=committed_at)],
             gates=[],
-            ring_waves=[PromotionRingWaveSummaryModel(
-                ring_wave=1,
-                environments=ring_model.environment_names(),
-                deployment_wave=None,
-                deployments="all",
-                files_modified=[str(ring_lock_path)],
-                committed_at=committed_at,
-            )],
+            ring_waves=[
+                PromotionRingWaveSummaryModel(
+                    ring_wave=1,
+                    environments=ring_model.environment_names(),
+                    deployment_wave=None,
+                    deployments="all",
+                    files_modified=[str(ring_lock_path)],
+                    committed_at=committed_at,
+                )
+            ],
             started_at=started_at,
             completed_at=committed_at,
             rollback_of=None,
@@ -1087,8 +1085,7 @@ class PromoteController(BaseController):
             "commit_sha": sha,
             "promotion_record": record_path,
             "pr_suggestion": (
-                f"gh pr create --head {branch} --title '{commit_message}' "
-                f"--body 'Rollback: {ring} → {prev_version}'"
+                f"gh pr create --head {branch} --title '{commit_message}' --body 'Rollback: {ring} → {prev_version}'"
             ),
         }
 
@@ -1185,17 +1182,19 @@ class PromoteController(BaseController):
                 status = last_action
             else:
                 status = "in-progress"
-            results.append({
-                "target": log.target,
-                "version": log.version,
-                "previous_version": log.previous_version,
-                "ring": log.ring,
-                "strategy": log.strategy,
-                "progression": log.progression,
-                "branch": log.branch,
-                "status": status,
-                "event_count": len(log.events),
-            })
+            results.append(
+                {
+                    "target": log.target,
+                    "version": log.version,
+                    "previous_version": log.previous_version,
+                    "ring": log.ring,
+                    "strategy": log.strategy,
+                    "progression": log.progression,
+                    "branch": log.branch,
+                    "status": status,
+                    "event_count": len(log.events),
+                }
+            )
         return results
 
     # ── get_matrix ────────────────────────────────────────────────────────────
@@ -1241,12 +1240,14 @@ class PromoteController(BaseController):
                     if target_name and t.get("name") != target_name:
                         continue
                     version_map[f"{t.get('type', '?')}/{t.get('name', '?')}"] = pin.get("version", "?")
-                matrix_rings.append({
-                    "ring": ring.name,
-                    "environments": ring.environment_names(),
-                    "require": ring.require,
-                    "versions": version_map,
-                })
+                matrix_rings.append(
+                    {
+                        "ring": ring.name,
+                        "environments": ring.environment_names(),
+                        "require": ring.require,
+                        "versions": version_map,
+                    }
+                )
 
         return {"rings": matrix_rings}
 
@@ -1264,7 +1265,7 @@ class PromoteController(BaseController):
         if not records_dir.exists():
             return []
         entries = []
-        for f in sorted(records_dir.glob("*.yaml"), reverse=True)[:last * 3]:
+        for f in sorted(records_dir.glob("*.yaml"), reverse=True)[: last * 3]:
             try:
                 raw = yaml.safe_load(f.read_text(encoding="utf-8"))
             except Exception:
@@ -1277,18 +1278,20 @@ class PromoteController(BaseController):
                     continue
             if target_name and target.get("name") != target_name:
                 continue
-            entries.append({
-                "name": raw.get("meta", {}).get("name"),
-                "target": f"{target.get('type', '?')}/{target.get('name', '?')}",
-                "from_version": target.get("from_version"),
-                "to_version": target.get("to_version"),
-                "ring": raw.get("meta", {}).get("labels", {}).get("ring"),
-                "outcome": spec.get("outcome"),
-                "initiated_by": spec.get("initiated_by"),
-                "started_at": spec.get("started_at"),
-                "completed_at": spec.get("completed_at"),
-                "branch": spec.get("branch"),
-            })
+            entries.append(
+                {
+                    "name": raw.get("meta", {}).get("name"),
+                    "target": f"{target.get('type', '?')}/{target.get('name', '?')}",
+                    "from_version": target.get("from_version"),
+                    "to_version": target.get("to_version"),
+                    "ring": raw.get("meta", {}).get("labels", {}).get("ring"),
+                    "outcome": spec.get("outcome"),
+                    "initiated_by": spec.get("initiated_by"),
+                    "started_at": spec.get("started_at"),
+                    "completed_at": spec.get("completed_at"),
+                    "branch": spec.get("branch"),
+                }
+            )
             if len(entries) >= last:
                 break
         return entries
@@ -1389,9 +1392,7 @@ class PromoteController(BaseController):
 
         strategy, progression = self._find_strategy_by_name(config, promotion_name)
         if not strategy:
-            self._add_error(
-                f"Promotion '{promotion_name}' not found in configuration.spec.promotions.strategies."
-            )
+            self._add_error(f"Promotion '{promotion_name}' not found in configuration.spec.promotions.strategies.")
             return {}
 
         if not strategy.versions_path:
@@ -1416,9 +1417,7 @@ class PromoteController(BaseController):
 
         # ── 3. find ring in progression ─────────────────────────────────────
         if not progression:
-            self._add_error(
-                f"Progression '{strategy.progression}' not found for promotion '{promotion_name}'."
-            )
+            self._add_error(f"Progression '{strategy.progression}' not found for promotion '{promotion_name}'.")
             return {}
 
         ring_model = next((r for r in progression.rings if r.name == ring), None)
@@ -1491,6 +1490,7 @@ class PromoteController(BaseController):
                 files_deleted.append(str(wf))
         elif wave is not None:
             # Write wave lock (ring lock stays pointing at previous version)
+            assert wave_lock_path is not None  # set above when wave is not None
             self._write_pointer_lock(wave_lock_path, ring, version_file_abs, wave=wave)
             files_written.append(wave_lock_path)
         else:
@@ -1520,7 +1520,5 @@ class PromoteController(BaseController):
             "versions_path": str(vp),
             "files_written": [str(f) for f in files_written],
             "files_deleted": files_deleted,
-            "pr_suggestion": (
-                f"gh pr create --head {branch} --title '{commit_message}'"
-            ),
+            "pr_suggestion": (f"gh pr create --head {branch} --title '{commit_message}'"),
         }

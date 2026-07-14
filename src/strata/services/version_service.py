@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Service for loading version files and applying version pins to the environment merge chain."""
 
-import hashlib
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
     from strata.models.workspace_model import WorkspaceSpecModel
@@ -76,11 +75,13 @@ class VersionService:
             lock = VersionLockModel.model_validate(raw)
             if lock.is_pointer:
                 # New-style pointer lock: follow spec.source relative to the lock file's directory
-                source_path = file_path.parent / lock.spec.source
+                source = lock.spec.source
+                assert source is not None  # guaranteed by lock.is_pointer
+                source_path = file_path.parent / source
                 source_path = source_path.resolve()
                 if not source_path.exists():
                     raise PlatformFileNotFoundError(
-                        f"Lock '{file_path.name}' points to '{lock.spec.source}' which does not exist "
+                        f"Lock '{file_path.name}' points to '{source}' which does not exist "
                         f"(resolved to '{source_path}')."
                     )
                 # Hash verification: if the lock recorded spec.hash, the pointed-to version
@@ -135,7 +136,7 @@ class VersionService:
 
         for model in models:
             if isinstance(model, VersionLockModel):
-                for pin in model.spec.pins:
+                for pin in model.spec.pins or []:
                     if pin.track == VersionPinTrack.LATEST:
                         # Floating pin — use resolved value if present
                         version = pin.resolved

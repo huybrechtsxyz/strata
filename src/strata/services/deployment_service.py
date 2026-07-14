@@ -127,7 +127,10 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         # Shadowed-override check (non-fatal warnings, not errors)
         if work_path and self.model and self.model.spec.versions:
-            _repo_map = {**(configuration_model.get_remote_map() if configuration_model else {}), **(self._repo_map or {})}
+            _repo_map = {
+                **(configuration_model.get_remote_map() if configuration_model else {}),
+                **(self._repo_map or {}),
+            }
             self._validation_warnings = self._check_version_pin_shadows(work_path, _repo_map)
 
         return len(errors) == 0, errors
@@ -1149,7 +1152,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
         try:
             from pathlib import Path as _Path
 
-            from strata.models.version_lock_model import VersionLockModel, VersionPinTargetType
+            from strata.models.version_lock_model import VersionLockModel
             from strata.services.environment_service import EnvironmentService
             from strata.services.version_service import VersionService
 
@@ -1285,7 +1288,11 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         # Try new-style lock path first: {versions_path}/{ring}.lock.yaml
         if versions_path_raw:
-            vp_raw = versions_path_raw.lstrip("@").split("/", 1)[-1] if versions_path_raw.startswith("@") else versions_path_raw
+            vp_raw = (
+                versions_path_raw.lstrip("@").split("/", 1)[-1]
+                if versions_path_raw.startswith("@")
+                else versions_path_raw
+            )
             new_lock_path = Path(work_path) / vp_raw / f"{ring_name}.lock.yaml"
             if new_lock_path.exists():
                 return None  # lock exists — check passes

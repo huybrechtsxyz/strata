@@ -6,13 +6,11 @@ import tempfile
 from pathlib import Path
 
 import pytest
-import yaml
 
-from strata.services.version_service import VersionService
-from strata.models.version_manifest_model import VersionManifestModel
-from strata.models.version_lock_model import VersionLockModel
 from strata.exceptions import PlatformFileNotFoundError
-
+from strata.models.version_lock_model import VersionLockModel
+from strata.models.version_manifest_model import VersionManifestModel
+from strata.services.version_service import VersionService
 
 _VERSION_FILE = """\
 apiVersion: strata.huybrechts.xyz/v1
@@ -98,6 +96,7 @@ spec:
         m = VersionService.load(str(self.td / "prd.lock.yaml"))
         pins = VersionService.resolve_pins([m])
         from strata.models.version_lock_model import VersionPinTargetType
+
         assert pins[VersionPinTargetType.IMAGE]["app"] == "v2.1.0"
         assert pins[VersionPinTargetType.IMAGE]["worker"] == "v2.1.0"
 

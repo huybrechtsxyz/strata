@@ -97,7 +97,9 @@ class RollbackPromoteCommand(BasePromoteCommand):
                 click.echo("✅  Rollback committed")
                 click.echo(f"    branch:    {r.get('branch')}")
                 click.echo(f"    commit:    {r.get('commit_sha', 'n/a')}")
-                click.echo(f"    rolled back {r.get('target_name')} {r.get('rolled_back_from')} → {r.get('rolled_back_to')}")
+                click.echo(
+                    f"    rolled back {r.get('target_name')} {r.get('rolled_back_from')} → {r.get('rolled_back_to')}"
+                )
                 if r.get("promotion_record"):
                     click.echo(f"    record:    {r['promotion_record']}")
                 click.echo(f"\n    Next: {r.get('pr_suggestion', '')}")

@@ -231,6 +231,7 @@ class RunDeployCommand(BaseDeployCommand):
         if self._deployment_service is None or self._deployment_service.model is None:
             return
         from strata.models.deployment_model import DeploymentVersionRef
+
         model = self._deployment_service.model
         current = list(model.spec.versions or [])
         current.append(DeploymentVersionRef(file=version_file_path))
@@ -257,9 +258,7 @@ class RunDeployCommand(BaseDeployCommand):
             return f"Version file not found: {vf}"
 
         # Mutual exclusion: -v not allowed when deployment uses spec.promotion
-        dep_model = (
-            self._deployment_service.model if self._deployment_service else None
-        )
+        dep_model = self._deployment_service.model if self._deployment_service else None
         env_svc = (
             self._deployment_service._environment_service
             if self._deployment_service and hasattr(self._deployment_service, "_environment_service")
@@ -296,6 +295,7 @@ class RunDeployCommand(BaseDeployCommand):
             else:
                 # No hash — warn but proceed
                 import warnings
+
                 warnings.warn(
                     f"Version file '{vf.name}' has no spec.hash — integrity cannot be verified. "
                     "Run 'strata versions lock' to add a tamper-evident hash.",
@@ -328,6 +328,7 @@ class RunDeployCommand(BaseDeployCommand):
         Returns an error string on failure, None on success.
         """
         from pathlib import Path
+
         import yaml as _yaml
 
         env_svc = getattr(self._deployment_service, "_environment_service", None)
@@ -348,8 +349,7 @@ class RunDeployCommand(BaseDeployCommand):
         config_svc = self._configuration_service
         if config_svc is None or config_svc.model is None:
             return (
-                f"Environment has spec.promotion but no configuration is loaded. "
-                "Cannot resolve version automatically."
+                "Environment has spec.promotion but no configuration is loaded. Cannot resolve version automatically."
             )
 
         promotions = config_svc.model.spec.promotions if config_svc.model.spec else None
@@ -359,20 +359,12 @@ class RunDeployCommand(BaseDeployCommand):
                 f"Cannot auto-resolve version for ring '{ring_name}'."
             )
 
-        strategy = next(
-            (s for s in (promotions.strategies or []) if s.name == strategy_name), None
-        )
+        strategy = next((s for s in (promotions.strategies or []) if s.name == strategy_name), None)
         if strategy is None:
-            return (
-                f"Promotion strategy '{strategy_name}' not found in configuration. "
-                "Cannot auto-resolve version."
-            )
+            return f"Promotion strategy '{strategy_name}' not found in configuration. Cannot auto-resolve version."
 
         if not strategy.versions_path:
-            return (
-                f"Promotion '{strategy_name}' has no versions_path configured. "
-                "Cannot auto-resolve version."
-            )
+            return f"Promotion '{strategy_name}' has no versions_path configured. Cannot auto-resolve version."
 
         # Resolve versions_path
         vp_raw = strategy.versions_path

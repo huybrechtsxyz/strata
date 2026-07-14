@@ -9,10 +9,8 @@ Covers:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from strata.models.promotion_model import ProgressionRingModel
 from strata.models.version_lock_model import VersionPinTargetType
@@ -54,6 +52,7 @@ def _make_deployment_service(versions: Optional[List[Dict[str, str]]] = None):
     svc.model = model_mock
 
     return svc
+
 
 from strata.models.version_lock_model import VersionLockModel as _VersionLockModel
 
@@ -213,9 +212,14 @@ class TestCheckDigestPolicy:
 
     def test_no_ring_require_digests_no_verify_flag_returns_empty(self):
         """When neither policy is active the method short-circuits."""
-        from strata.services.deployment_service import DeploymentService
 
-        svc = _make_deployment_service(versions=[{"file": "lock.yaml", }])
+        svc = _make_deployment_service(
+            versions=[
+                {
+                    "file": "lock.yaml",
+                }
+            ]
+        )
         svc.model.spec.environments = []  # no environments → ring_name stays None
         svc._resolve_file_path = MagicMock(return_value="/nonexistent/lock.yaml")
 
@@ -227,10 +231,14 @@ class TestCheckDigestPolicy:
 
     def test_ring_require_digests_pin_missing_sha_is_error(self):
         """A pin without resolved_sha under require_digests: true → error."""
-        from strata.models.version_lock_model import VersionLockModel
-        from strata.services.deployment_service import DeploymentService
 
-        svc = _make_deployment_service(versions=[{"file": "lock.yaml", }])
+        svc = _make_deployment_service(
+            versions=[
+                {
+                    "file": "lock.yaml",
+                }
+            ]
+        )
         svc._resolve_file_path = MagicMock(return_value="/fake/lock.yaml")
 
         # Fake environment with ring name
@@ -266,10 +274,14 @@ class TestCheckDigestPolicy:
 
     def test_ring_require_digests_pin_has_sha_no_error(self):
         """A pin WITH a valid resolved_sha satisfies require_digests: true."""
-        from strata.models.version_lock_model import VersionLockModel
-        from strata.services.deployment_service import DeploymentService
 
-        svc = _make_deployment_service(versions=[{"file": "lock.yaml", }])
+        svc = _make_deployment_service(
+            versions=[
+                {
+                    "file": "lock.yaml",
+                }
+            ]
+        )
         svc._resolve_file_path = MagicMock(return_value="/fake/lock.yaml")
 
         env_mock = MagicMock()
@@ -302,9 +314,14 @@ class TestCheckDigestPolicy:
 
     def test_verify_digests_bad_format_emits_warning(self):
         """verify_digests=True + invalid format SHA → warning, no error."""
-        from strata.models.version_lock_model import VersionLockModel
 
-        svc = _make_deployment_service(versions=[{"file": "lock.yaml", }])
+        svc = _make_deployment_service(
+            versions=[
+                {
+                    "file": "lock.yaml",
+                }
+            ]
+        )
         svc._resolve_file_path = MagicMock(return_value="/fake/lock.yaml")
         svc.model.spec.environments = []  # no ring → no require_digests
 
@@ -324,9 +341,14 @@ class TestCheckDigestPolicy:
 
     def test_verify_digests_good_format_no_warning(self):
         """verify_digests=True + valid git SHA → no warning."""
-        from strata.models.version_lock_model import VersionLockModel
 
-        svc = _make_deployment_service(versions=[{"file": "lock.yaml", }])
+        svc = _make_deployment_service(
+            versions=[
+                {
+                    "file": "lock.yaml",
+                }
+            ]
+        )
         svc._resolve_file_path = MagicMock(return_value="/fake/lock.yaml")
         svc.model.spec.environments = []
 
@@ -346,9 +368,14 @@ class TestCheckDigestPolicy:
 
     def test_verify_digests_no_sha_no_warning(self):
         """verify_digests=True + pin has no resolved_sha (and no ring policy) → silent."""
-        from strata.models.version_lock_model import VersionLockModel
 
-        svc = _make_deployment_service(versions=[{"file": "lock.yaml", }])
+        svc = _make_deployment_service(
+            versions=[
+                {
+                    "file": "lock.yaml",
+                }
+            ]
+        )
         svc._resolve_file_path = MagicMock(return_value="/fake/lock.yaml")
         svc.model.spec.environments = []
 
@@ -364,6 +391,3 @@ class TestCheckDigestPolicy:
 
         assert errors == []
         assert warnings == []
-
-
-

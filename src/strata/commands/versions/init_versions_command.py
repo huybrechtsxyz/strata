@@ -68,7 +68,9 @@ class InitVersionsCommand(BaseVersionsCommand):
 
     def _render(self) -> None:
         if self._output_format == "json":
-            click.echo(json.dumps({"success": True, "file": self._result["file"], "ring": self._result["ring"]}, indent=2))
+            click.echo(
+                json.dumps({"success": True, "file": self._result["file"], "ring": self._result["ring"]}, indent=2)
+            )
         elif self._output_format == "text":
             click.echo(self._result["file"])
         elif not self._output_quiet:

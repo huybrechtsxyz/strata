@@ -7,12 +7,9 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
 import yaml
 
 from strata.controllers.version_controller import VersionController
-from strata.models.common_models import PlatformKind
-
 
 _VERSION_YAML = """\
 apiVersion: strata.huybrechts.xyz/v1

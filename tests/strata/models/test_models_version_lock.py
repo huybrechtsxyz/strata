@@ -43,21 +43,25 @@ class TestVersionLockModelIsPointer:
     """VersionLockModel.is_pointer property."""
 
     def test_is_pointer_true_when_source_set(self):
-        model = VersionLockModel.model_validate({
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "version-lock",
-            "meta": {"name": "prd"},
-            "spec": {"ring": "prd", "source": "v2.1.0.yaml"},
-        })
+        model = VersionLockModel.model_validate(
+            {
+                "apiVersion": "strata.huybrechts.xyz/v1",
+                "kind": "version-lock",
+                "meta": {"name": "prd"},
+                "spec": {"ring": "prd", "source": "v2.1.0.yaml"},
+            }
+        )
         assert model.is_pointer is True
 
     def test_is_pointer_false_when_pins_set(self):
-        model = VersionLockModel.model_validate({
-            "apiVersion": "strata.huybrechts.xyz/v1",
-            "kind": "version-lock",
-            "meta": {"name": "prd"},
-            "spec": {"ring": "prd", "pins": []},
-        })
+        model = VersionLockModel.model_validate(
+            {
+                "apiVersion": "strata.huybrechts.xyz/v1",
+                "kind": "version-lock",
+                "meta": {"name": "prd"},
+                "spec": {"ring": "prd", "pins": []},
+            }
+        )
         assert model.is_pointer is False
 
     def test_round_trip_pointer_yaml(self):

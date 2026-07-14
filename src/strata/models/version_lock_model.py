@@ -43,8 +43,7 @@ class VersionPinModel(PlatformBaseModel):
     target: VersionPinTargetModel = Field(description="The target being pinned")
     version: Optional[str] = Field(
         None,
-        description="Exact version string (tag, chart version, image tag). "
-        "Required when track is 'exact' or omitted.",
+        description="Exact version string (tag, chart version, image tag). Required when track is 'exact' or omitted.",
     )
     track: VersionPinTrack = Field(
         default=VersionPinTrack.EXACT,
@@ -84,9 +83,7 @@ class VersionLockPreviousModel(PlatformBaseModel):
     ``strata promote rollback`` can restore to the prior version in one step.
     """
 
-    source: str = Field(
-        description="Relative path to the previous version file (same base directory as the lock)."
-    )
+    source: str = Field(description="Relative path to the previous version file (same base directory as the lock).")
     version: Optional[str] = Field(
         None,
         description="Version identifier from the previous version file's meta.name.",

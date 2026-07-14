@@ -4,20 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict
-from unittest.mock import MagicMock
 
 import yaml
 
 from strata.models.environment_model import (
     EnvironmentModel,
-    EnvironmentModuleOverrideModel,
     EnvironmentOverridesModel,
     EnvironmentRemoteOverrideModel,
 )
 from strata.models.version_lock_model import VersionPinTargetType
 from strata.services.version_service import VersionService
 from strata.validators.base_validator import BaseValidator
-from strata.models.validation_error import ValidationError
 
 _API_VERSION = "strata.huybrechts.xyz/v1"
 
@@ -26,18 +23,12 @@ _API_VERSION = "strata.huybrechts.xyz/v1"
 
 
 def _env_with_remote_override(remote: str, reference: str) -> EnvironmentModel:
-    overrides = EnvironmentOverridesModel(
-        remotes=[EnvironmentRemoteOverrideModel(remote=remote, reference=reference)]
-    )
+    overrides = EnvironmentOverridesModel(remotes=[EnvironmentRemoteOverrideModel(remote=remote, reference=reference)])
     raw = {
         "apiVersion": _API_VERSION,
         "kind": "environment",
         "meta": {"name": "test-env"},
-        "spec": {
-            "overrides": {
-                "remotes": [{"remote": remote, "reference": reference}]
-            }
-        },
+        "spec": {"overrides": {"remotes": [{"remote": remote, "reference": reference}]}},
     }
     return EnvironmentModel.model_validate(raw)
 
@@ -47,11 +38,7 @@ def _env_with_module_override(module: str, chart_version: str) -> EnvironmentMod
         "apiVersion": _API_VERSION,
         "kind": "environment",
         "meta": {"name": "test-env"},
-        "spec": {
-            "overrides": {
-                "modules": [{"module": module, "chart_version": chart_version}]
-            }
-        },
+        "spec": {"overrides": {"modules": [{"module": module, "chart_version": chart_version}]}},
     }
     return EnvironmentModel.model_validate(raw)
 
@@ -213,11 +200,7 @@ class TestCheckVersionPinShadows:
             "apiVersion": _API_VERSION,
             "kind": "environment",
             "meta": {"name": "prod-be"},
-            "spec": {
-                "overrides": {
-                    "remotes": [{"remote": remote, "reference": reference}]
-                }
-            },
+            "spec": {"overrides": {"remotes": [{"remote": remote, "reference": reference}]}},
         }
         p = tmp_path / "environments" / "prod-be.yaml"
         p.parent.mkdir(parents=True, exist_ok=True)

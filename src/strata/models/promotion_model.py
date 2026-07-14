@@ -7,7 +7,6 @@ from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import PlatformBaseModel, PlatformName
 
-
 # ─── Ring-level models ────────────────────────────────────────────────────────
 
 
@@ -143,8 +142,7 @@ class PromotionStrategyModel(PlatformBaseModel):
     progression: str = Field(
         min_length=1,
         description=(
-            "Name of the progression this strategy uses "
-            "(must match a progression name in spec.promotions.progressions)"
+            "Name of the progression this strategy uses (must match a progression name in spec.promotions.progressions)"
         ),
     )
     waves: Optional[List[PromotionWaveModel]] = Field(
@@ -232,8 +230,7 @@ class ConfigurationPromotionsModel(PlatformBaseModel):
     strategies: Optional[List[PromotionStrategyModel]] = Field(
         None,
         description=(
-            "Named promotion strategies. "
-            "Each strategy references a progression and defines deployment wave behaviour."
+            "Named promotion strategies. Each strategy references a progression and defines deployment wave behaviour."
         ),
     )
 
@@ -273,6 +270,7 @@ class ConfigurationPromotionsModel(PlatformBaseModel):
         if errors:
             raise ValueError("; ".join(errors))
         return self
+
     @model_validator(mode="after")
     def validate_unique_versions_paths(self) -> "ConfigurationPromotionsModel":
         """Validate that no two strategies share the same versions_path."""
@@ -295,6 +293,7 @@ class ConfigurationPromotionsModel(PlatformBaseModel):
         if errors:
             raise ValueError("\n".join(errors))
         return self
+
 
 # ─── Environment-level promotion membership ───────────────────────────────────
 
@@ -353,10 +352,7 @@ class DeploymentPromotionWaveModel(PlatformBaseModel):
     iteration: Optional[int] = Field(
         None,
         ge=1,
-        description=(
-            "Explicit wave position (1-based). "
-            "Matches the wave at this index in the strategy's waves list."
-        ),
+        description=("Explicit wave position (1-based). Matches the wave at this index in the strategy's waves list."),
     )
     match_labels: Optional[Dict[str, Any]] = Field(
         None,
