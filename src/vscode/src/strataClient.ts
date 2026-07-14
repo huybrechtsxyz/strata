@@ -484,6 +484,50 @@ export interface RefListData {
 }
 
 // ---------------------------------------------------------------------------
+// Promotion types
+// ---------------------------------------------------------------------------
+
+/** A single in-flight promotion entry from `promote status` */
+export interface PromotionStatusEntry {
+    target: string;
+    version: string;
+    previous_version: string | null;
+    ring: string;
+    strategy: string;
+    progression: string;
+    branch: string | null;
+    status: 'in-progress' | 'completed' | 'rolled_back';
+    event_count: number;
+}
+
+/** A ring entry in the version matrix */
+export interface PromotionMatrixRing {
+    ring: string;
+    environments: string[];
+    require: string | null;
+    versions: Record<string, string>;
+}
+
+/** Matches `promote matrix --output json` data */
+export interface PromotionMatrixData {
+    rings: PromotionMatrixRing[];
+}
+
+/** A single completed promotion record */
+export interface PromotionHistoryEntry {
+    name: string;
+    target: string;
+    from_version: string | null;
+    to_version: string | null;
+    ring: string | null;
+    outcome: string | null;
+    initiated_by: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    branch: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // CLI response envelope
 // ---------------------------------------------------------------------------
 
@@ -825,6 +869,68 @@ export class StrataClient {
         await this._run<Record<string, unknown>>([
             'ref', type, 'remove', '--profile', profile, '--name', name, '--output', 'json',
         ]);
+    }
+
+    // ── Promotions ─────────────────────────────────────────────────────────
+
+    /** Run `strata promote status --output json`. */
+    async getPromotionStatus(): Promise<PromotionStatusEntry[]> {
+        try {
+            const resp = await this._run<{ promotions: PromotionStatusEntry[] }>([
+                'promote', 'status', '--output', 'json',
+            ]);
+            return resp.data.promotions ?? (resp.data as unknown as PromotionStatusEntry[]) ?? [];
+        } catch (err: unknown) {
+            const cliErr = err as { response?: CliResponse<{ promotions?: PromotionStatusEntry[] }> };
+            if (cliErr?.response?.data?.promotions) return cliErr.response.data.promotions;
+            return [];
+        }
+    }
+
+    /** Run `strata promote matrix --output json`. */
+    async getPromotionMatrix(targetName?: string): Promise<PromotionMatrixData> {
+        const args: string[] = ['promote', 'matrix', '--output', 'json'];
+        if (targetName) args.push('--remote', targetName);
+        try {
+            const resp = await this._run<{ matrix: PromotionMatrixData }>([
+                'promote', 'matrix', '--output', 'json',
+            ]);
+            return resp.data.matrix ?? (resp.data as unknown as PromotionMatrixData) ?? { rings: [] };
+        } catch (err: unknown) {
+            const cliErr = err as { response?: CliResponse<{ matrix?: PromotionMatrixData }> };
+            if (cliErr?.response?.data?.matrix) return cliErr.response.data.matrix;
+            return { rings: [] };
+        }
+    }
+
+    /** Run `strata promote history --output json`. */
+    async getPromotionHistory(ring?: string, last = 10): Promise<PromotionHistoryEntry[]> {
+        const args: string[] = ['promote', 'history', '--last', String(last), '--output', 'json'];
+        if (ring) args.push('--ring', ring);
+        try {
+            const resp = await this._run<{ records: PromotionHistoryEntry[] }>(args);
+            return resp.data.records ?? (resp.data as unknown as PromotionHistoryEntry[]) ?? [];
+        } catch (err: unknown) {
+            const cliErr = err as { response?: CliResponse<{ records?: PromotionHistoryEntry[] }> };
+            if (cliErr?.response?.data?.records) return cliErr.response.data.records;
+            return [];
+        }
+    }
+
+    /** Run `strata promote start --ring <ring> --remote <target> --output json` in terminal. */
+    runPromoteStart(ring: string, targetName: string): void {
+        this.runInTerminal(
+            ['promote', 'start', '--ring', ring, '--remote', targetName],
+            `strata promote → ${ring}`,
+        );
+    }
+
+    /** Run `strata promote rollback --ring <ring> --remote <target> --output json` in terminal. */
+    runPromoteRollback(ring: string, targetName: string): void {
+        this.runInTerminal(
+            ['promote', 'rollback', '--ring', ring, '--remote', targetName],
+            `strata rollback → ${ring}`,
+        );
     }
 
     // ── Build / Deploy — run in terminal so user sees streaming output ─────────

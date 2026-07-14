@@ -28,6 +28,7 @@ import { EnvViewProvider } from './providers/envViewProvider';
 import { AuditViewProvider } from './providers/auditViewProvider';
 import { ValuesViewProvider } from './providers/valuesViewProvider';
 import { BuildPlanProvider } from './providers/buildPlanProvider';
+import { PromotionsViewProvider } from './providers/promotionsViewProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -51,6 +52,7 @@ let _chatParticipant: StrataChatParticipant | undefined;
 let _envView: EnvViewProvider | undefined;
 let _auditView: AuditViewProvider | undefined;
 let _valuesView: ValuesViewProvider | undefined;
+let _promotionsView: PromotionsViewProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 /** File path of the most-recently started drift terminal, cleared on close. */
 let _lastDriftTarget: string | undefined;
@@ -72,6 +74,7 @@ async function _refreshAll(): Promise<void> {
     _toolsView?.setLoading();
     _envView?.setLoading();
     _auditView?.setLoading();
+    _promotionsView?.setLoading();
 
     try {
         const status = await _client.getStatus();
@@ -88,6 +91,7 @@ async function _refreshAll(): Promise<void> {
         void _depGraph?.update(status);
         _envView?.refresh();
         _auditView?.refresh();
+        _promotionsView?.refresh();
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         _workspaceView?.setError(message);
@@ -97,6 +101,7 @@ async function _refreshAll(): Promise<void> {
         _statusBar?.setError(err);
         _envView?.setError(message);
         _auditView?.setError(message);
+        _promotionsView?.setError(message);
         if (err instanceof StrataCLINotFoundError) {
             void vscode.window.showErrorMessage(err.message);
         }
@@ -148,6 +153,9 @@ export function activate(context: vscode.ExtensionContext): void {
     _valuesView = new ValuesViewProvider();
     _valuesView.setClient(_client);
 
+    _promotionsView = new PromotionsViewProvider();
+    _promotionsView.setClient(_client);
+
     // ── Register the 4 tree views ──────────────────────────────────────────────
 
     context.subscriptions.push(
@@ -178,6 +186,10 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.createTreeView('strataValues', {
             treeDataProvider: _valuesView!,
             showCollapseAll: false,
+        }),
+        vscode.window.createTreeView('strataPromotions', {
+            treeDataProvider: _promotionsView!,
+            showCollapseAll: true,
         }),
     );
 
@@ -802,6 +814,55 @@ export function activate(context: vscode.ExtensionContext): void {
                 await vscode.window.showTextDocument(vscode.Uri.file(item.filePath));
             }
         }),
+
+        // ── Promotion commands ──────────────────────────────────────────────────
+
+        vscode.commands.registerCommand('strata.promoteStatus', () => {
+            _promotionsView?.refresh();
+            void vscode.commands.executeCommand('strataPromotions.focus');
+        }),
+
+        vscode.commands.registerCommand('strata.promoteMatrix', () => {
+            _promotionsView?.refresh();
+            void vscode.commands.executeCommand('strataPromotions.focus');
+        }),
+
+        vscode.commands.registerCommand('strata.promoteHistory', () => {
+            _promotionsView?.refresh();
+            void vscode.commands.executeCommand('strataPromotions.focus');
+        }),
+
+        vscode.commands.registerCommand('strata.promoteStart', async () => {
+            if (!_client) return;
+            const ring = await vscode.window.showInputBox({ prompt: 'Target ring', placeHolder: 'e.g. staging' });
+            if (!ring) return;
+            const target = await vscode.window.showInputBox({ prompt: 'Target name (remote/module)', placeHolder: 'e.g. myapp' });
+            if (!target) return;
+            const confirmed = await vscode.window.showWarningMessage(
+                `Promote "${target}" to ring "${ring}"?`,
+                { modal: true }, 'Promote',
+            );
+            if (confirmed !== 'Promote') return;
+            _client.runPromoteStart(ring, target);
+        }),
+
+        vscode.commands.registerCommand('strata.promoteRollback', async () => {
+            if (!_client) return;
+            const ring = await vscode.window.showInputBox({ prompt: 'Ring to rollback', placeHolder: 'e.g. staging' });
+            if (!ring) return;
+            const target = await vscode.window.showInputBox({ prompt: 'Target name (remote/module)', placeHolder: 'e.g. myapp' });
+            if (!target) return;
+            const confirmed = await vscode.window.showWarningMessage(
+                `Rollback "${target}" in ring "${ring}"?`,
+                { modal: true }, 'Rollback',
+            );
+            if (confirmed !== 'Rollback') return;
+            _client.runPromoteRollback(ring, target);
+        }),
+
+        vscode.commands.registerCommand('strata.refreshPromotions', () => {
+            _promotionsView?.refresh();
+        }),
     );
 
     // ── Re-create client when CLI path changes ─────────────────────────────────
@@ -815,6 +876,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 _envView?.setClient(_client);
                 _auditView?.setClient(_client);
                 _valuesView?.setClient(_client);
+                _promotionsView?.setClient(_client);
                 void _refreshAll();
             }
         }),

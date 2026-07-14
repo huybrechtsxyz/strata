@@ -119,8 +119,13 @@ export class DiagnosticsProvider implements vscode.Disposable {
         try {
             const result = await this._client.validateFile(document.uri.fsPath);
             const diagnostics = this._toDiagnostics(result.errors, document);
+
+            // Add version-lock-specific hints (informational, not errors)
+            const versionHints = this._getVersionLockHints(document);
+            diagnostics.push(...versionHints);
+
             this._collection.set(document.uri, diagnostics);
-            return { passed: result.validation_passed, errorCount: diagnostics.length };
+            return { passed: result.validation_passed, errorCount: result.errors.length };
         } catch (err) {
             // CLI itself failed (parse error, missing file, etc.) — surface as a
             // single error on line 0 so the user knows validation couldn't run.
@@ -316,5 +321,73 @@ export class DiagnosticsProvider implements vscode.Disposable {
     private _escapeRegex(s: string): string {
         return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
-}
 
+    // ── Version lock hints ────────────────────────────────────────────────────
+
+    /**
+     * Produce informational diagnostics for version-lock documents:
+     * - Pointer lock → shows the source path
+     * - Hash present → notes hash-verified pointer
+     * - Wave lock → shows wave number
+     */
+    private _getVersionLockHints(document: vscode.TextDocument): vscode.Diagnostic[] {
+        const hints: vscode.Diagnostic[] = [];
+
+        let isVersionLock = false;
+        let sourceLine = -1;
+        let sourceValue = '';
+        let hashLine = -1;
+        let hashValue = '';
+        let waveLine = -1;
+        let waveValue = '';
+
+        for (let i = 0; i < Math.min(document.lineCount, 50); i++) {
+            const text = document.lineAt(i).text;
+            if (/^\s*kind:\s*version-lock/i.test(text)) {
+                isVersionLock = true;
+            }
+            const srcMatch = text.match(/^\s*source:\s*(.+)/);
+            if (srcMatch && sourceLine === -1) {
+                sourceLine = i;
+                sourceValue = srcMatch[1].trim().replace(/^["']|["']$/g, '');
+            }
+            const hashMatch = text.match(/^\s*hash:\s*(.+)/);
+            if (hashMatch && hashLine === -1) {
+                hashLine = i;
+                hashValue = hashMatch[1].trim().replace(/^["']|["']$/g, '');
+            }
+            const waveMatch = text.match(/^\s*wave:\s*(\d+)/);
+            if (waveMatch && waveLine === -1) {
+                waveLine = i;
+                waveValue = waveMatch[1];
+            }
+        }
+
+        if (!isVersionLock) return hints;
+
+        // Pointer lock hint
+        if (sourceLine >= 0 && sourceValue) {
+            const range = new vscode.Range(sourceLine, 0, sourceLine, document.lineAt(sourceLine).text.length);
+            const msg = hashValue
+                ? `Pointer lock → ${sourceValue} (hash-verified: ${hashValue.slice(0, 12)}…)`
+                : `Pointer lock → ${sourceValue}`;
+            const hint = new vscode.Diagnostic(range, msg, vscode.DiagnosticSeverity.Information);
+            hint.source = 'strata-version';
+            hints.push(hint);
+        }
+
+        // Wave lock hint
+        if (waveLine >= 0) {
+            const range = new vscode.Range(waveLine, 0, waveLine, document.lineAt(waveLine).text.length);
+            const hint = new vscode.Diagnostic(
+                range,
+                `Wave ${waveValue} lock — partial rollout`,
+                vscode.DiagnosticSeverity.Information,
+            );
+            hint.source = 'strata-version';
+            hints.push(hint);
+        }
+
+        return hints;
+    }
+}
