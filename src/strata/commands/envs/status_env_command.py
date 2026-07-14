@@ -101,7 +101,7 @@ class StatusEnvCommand(BaseDeployCommand):
     # Multi-deployment mode
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         return self._run_single()
 
     def _run_multi(self) -> bool:

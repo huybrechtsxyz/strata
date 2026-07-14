@@ -45,7 +45,7 @@ class LogConfigCommand(BaseCommand):
     def _before_execute(self) -> bool:
         return super()._before_execute()
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         ctrl = LoggingController(self._work_path)
 
         if self._action == "list":

@@ -88,7 +88,7 @@ class AddRepoSolutionCommand(BaseCommand):
         )
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Register the repo in the already-loaded solution and persist."""
         is_local = _is_local_path(self._repo_url)
 

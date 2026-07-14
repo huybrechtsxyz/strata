@@ -65,54 +65,71 @@ class BaseCommand:
         self._errors: List[str] = []
 
     def execute(self) -> bool:
-        """Execute the command using the standard lifecycle template.
+        """Execute the command using the standard lifecycle.
 
-        Override ``_run()`` to provide command-specific logic.
-        Override ``execute()`` directly for non-standard lifecycles.
+        Runs all five phases unconditionally. Each phase is wrapped in try/except;
+        errors accumulate in self._errors. _finalize always runs as the final step.
+
+        Override ``_execute()`` to provide command-specific logic.
+        Override individual phases (``_initialize``, ``_before_execute``, etc.)
+        for customisation. Do not override ``execute()`` itself.
         """
+        success = True
+
+        # Phase 1: workspace, timing, logging, config setup
         try:
             if not self._initialize(show_header=self.SHOW_CHROME):
-                if self._is_console_output():
-                    click.echo("\n\u274c  Initialization failed")
-                self._finalize(success=False, show_footer=self.SHOW_CHROME)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n\u274c  Pre-execution validation failed")
-                self._finalize(success=False, show_footer=self.SHOW_CHROME)
-                return False
-
-            if not self._run():
-                self._finalize(success=False, show_footer=self.SHOW_CHROME)
-                return False
-
-            if not self._after_execute():
-                self._finalize(success=False, show_footer=self.SHOW_CHROME)
-                return False
-
-            self._finalize(success=True, show_footer=self.SHOW_CHROME)
-            return True
-
+                success = False
         except Exception as e:
-            error_msg = f"Unexpected error in {self.__class__.__name__}: {e}"
+            error_msg = f"Initialization failed in {self.__class__.__name__}: {e}"
             self.logger.exception(error_msg)
             self._errors.append(error_msg)
-            self._finalize(success=False, show_footer=self.SHOW_CHROME)
-            return False
+            success = False
 
-    def _run(self) -> bool:
-        """Perform the command's core work.
+        # Phase 2: pre-execution validation and requirement checks
+        try:
+            if success and not self._before_execute():
+                if self._is_console_output():
+                    click.echo("\n\u274c  Pre-execution validation failed")
+                success = False
+        except Exception as e:
+            error_msg = f"Pre-execution failed in {self.__class__.__name__}: {e}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            success = False
 
-        Called by the ``execute()`` template between ``_before_execute()`` and
-        ``_after_execute()``. Return ``True`` on success, ``False`` on failure
-        (store details in ``self._errors``).
+        # Phase 3: core business logic — the subclass override point
+        try:
+            if success and not self._execute():
+                success = False
+        except Exception as e:
+            error_msg = f"Execution failed in {self.__class__.__name__}: {e}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            success = False
 
-        Commands that override ``execute()`` directly do not call this method.
+        # Phase 4: post-execution cleanup
+        try:
+            if not self._after_execute():
+                success = False
+        except Exception as e:
+            error_msg = f"Post-execution failed in {self.__class__.__name__}: {e}"
+            self.logger.exception(error_msg)
+            self._errors.append(error_msg)
+            success = False
+
+        # Phase 5: audit, structured output, footer — always runs
+        self._finalize(success=success, show_footer=self.SHOW_CHROME)
+        return success
+
+    def _execute(self) -> bool:
+        """Phase 3 — core business logic.
+
+        Override in subclasses. Return True on success, False on failure
+        (add details to self._errors). Raise exceptions for unexpected errors —
+        execute() will catch and record them.
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement _run() when using the default execute() template."
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} must implement _execute().")
 
     def _get_build_path(self) -> Path:
         """Return the resolved build output path.

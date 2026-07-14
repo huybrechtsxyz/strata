@@ -98,7 +98,7 @@ class SolutionExportCommand(BaseCommand):
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         solution = self._solution_controller.solution
         if solution is None:
             self._errors.append("No solution loaded.")

@@ -100,7 +100,7 @@ class ListDeployCommand(BaseCommand):
     # Implementation
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._scan_path.exists() or not self._scan_path.is_dir():
             self._errors.append(f"Path does not exist or is not a directory: {self._scan_path}")
             return False

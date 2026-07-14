@@ -52,7 +52,7 @@ class UpdateSolutionCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._run_lifecycle_phase(
             "solution_update_before",
             context={"work_path": str(self._work_path)},

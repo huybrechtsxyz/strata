@@ -58,7 +58,7 @@ class ShowRefCommand(BaseCommand):
 
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Locate the named path entry and display its file content."""
         paths_by_type, errors = self._solution_controller.get_profile_paths(self._resolved_profile)
         if errors:

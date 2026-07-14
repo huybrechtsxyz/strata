@@ -37,7 +37,7 @@ class ListProfileCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Read profiles from the already-loaded solution."""
         profiles, errors = self._solution_controller.get_profiles(self._filter_name)
         if errors:

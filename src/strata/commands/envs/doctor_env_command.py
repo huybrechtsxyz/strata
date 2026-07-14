@@ -108,7 +108,7 @@ class DoctorEnvCommand(BaseCommand):
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         # Validate --category filter
         categories = _CATEGORIES
         if self._category:

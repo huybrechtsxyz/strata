@@ -59,7 +59,7 @@ class PlanBuildCommand(BaseBuildCommand):
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._run_lifecycle_phase(
             "build_plan_before",
             context={"file": str(self._file_path)},

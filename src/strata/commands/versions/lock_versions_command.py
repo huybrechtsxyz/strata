@@ -44,7 +44,7 @@ class LockVersionsCommand(BaseVersionsCommand):
         self._controller = VersionController()
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         assert self._controller is not None
         file_path = Path(self._file)
         if not file_path.is_absolute():

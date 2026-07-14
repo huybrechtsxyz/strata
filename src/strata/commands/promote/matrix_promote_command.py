@@ -45,7 +45,7 @@ class MatrixPromoteCommand(BasePromoteCommand):
         self._controller = PromoteController()
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         assert self._controller is not None
         target_name = self._remote or self._module
         self._result = self._controller.get_matrix(

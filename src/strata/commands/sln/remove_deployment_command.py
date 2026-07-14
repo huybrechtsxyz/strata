@@ -40,7 +40,7 @@ class RemoveDeploymentCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         # Capture metadata before removing
         deployments, errors = self._solution_controller.get_deployments(self._deployment_name)
         if errors:

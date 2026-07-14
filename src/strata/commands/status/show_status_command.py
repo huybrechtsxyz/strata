@@ -37,7 +37,7 @@ class StatusCommand(BaseCommand):
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         initialized = self._solution_controller.solution is not None
 
         # ── Solution identity ─────────────────────────────────────────

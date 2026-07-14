@@ -36,7 +36,7 @@ class RemoveProfileCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Capture profile metadata, remove from solution, persist."""
         profiles, errors = self._solution_controller.get_profiles(self._profile_name)
         if errors:

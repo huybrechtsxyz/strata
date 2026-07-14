@@ -49,7 +49,7 @@ class InitVersionsCommand(BaseVersionsCommand):
         self._controller = VersionController()
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         assert self._controller is not None
         dest_raw = self._out or str(Path(str(self._work_path)) / "versions" / f"{self._ring}.yaml")
         dest = Path(dest_raw)

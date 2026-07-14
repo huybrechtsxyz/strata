@@ -226,7 +226,7 @@ class NewCommand(BaseCommand):
     def _before_execute(self) -> bool:
         return super()._before_execute()
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         # --list: show available templates and exit cleanly
         if self._list_templates:
             templates = _collect_templates_with_descriptions(self._work_path)

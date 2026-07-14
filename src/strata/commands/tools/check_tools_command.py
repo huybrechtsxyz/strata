@@ -34,7 +34,7 @@ class CheckToolsCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         controller = ToolsController()
         success, detail, errors = controller.check(self._name)
         for err in errors:

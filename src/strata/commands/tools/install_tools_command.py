@@ -39,7 +39,7 @@ class InstallToolsCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         controller = ToolsController()
         success, info, errors = controller.install_info(self._name)
         for err in errors:

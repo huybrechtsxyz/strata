@@ -224,7 +224,7 @@ class TestOutputDeployCommandArtifacts:
 
     def test_returns_true_when_outputs_dir_absent(self, tmp_path):
         cmd = self._setup_cmd(tmp_path)
-        result = cmd._run()
+        result = cmd._execute()
         assert result is True
         assert cmd._output_data["artifacts"] == []
 
@@ -236,7 +236,7 @@ class TestOutputDeployCommandArtifacts:
         cmd._configuration_service.model.spec.deployment.outputs = cfg
         # Patch _get_outputs_config
         with patch.object(cmd, "_get_outputs_config", return_value=cfg):
-            result = cmd._run()
+            result = cmd._execute()
         assert result is True
         assert cmd._output_data["artifacts"] == []
 
@@ -252,7 +252,7 @@ class TestOutputDeployCommandArtifacts:
         _write_artifact(ver_dir, "infra", artifact_data)
 
         cmd = self._setup_cmd(tmp_path)
-        result = cmd._run()
+        result = cmd._execute()
 
         assert result is True
         assert len(cmd._output_data["artifacts"]) == 1
@@ -264,7 +264,7 @@ class TestOutputDeployCommandArtifacts:
         _write_artifact(ver_dir, "network", {"outputs": {}})
 
         cmd = self._setup_cmd(tmp_path, stage="infra")
-        cmd._run()
+        cmd._execute()
 
         names = [a["stage"] for a in cmd._output_data.get("artifacts", []) if "stage" in a]
         # Only infra stage (which has the "stage" key set explicitly)
@@ -281,7 +281,7 @@ class TestOutputDeployCommandArtifacts:
             _write_artifact(ver_dir, "infra", {"version": ver, "stage": "infra", "outputs": {}})
 
         cmd = self._setup_cmd(tmp_path, all_versions=True)
-        cmd._run()
+        cmd._execute()
 
         assert len(cmd._output_data["artifacts"]) == 2
 
@@ -292,6 +292,6 @@ class TestOutputDeployCommandArtifacts:
 
         cmd = self._setup_cmd(tmp_path)
         cmd._configuration_service = None
-        cmd._run()
+        cmd._execute()
 
         assert len(cmd._output_data["artifacts"]) == 1

@@ -45,7 +45,7 @@ class StatusToolsCommand(BaseCommand):
     def has_validation_errors(self) -> bool:
         return self._has_missing_required
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         controller = ToolsController()
         success, rows, errors = controller.status(
             deployment_file=self._deployment_file,

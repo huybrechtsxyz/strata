@@ -52,7 +52,7 @@ class StatusDeployCommand(BaseDeployCommand):
     # Core logic
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if self._show_plan:
             click.echo(
                 "⚠  DEPRECATED: 'strata deploy status --plan' is deprecated. Use 'strata deploy plan -f FILE' instead.",

@@ -56,7 +56,7 @@ class ListPolicyCommand(BaseCommand):
     # Lifecycle overrides
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Load services and extract policies."""
         controller = PolicyController()
 

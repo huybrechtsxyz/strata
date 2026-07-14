@@ -56,7 +56,7 @@ class AcknowledgeDriftDeployCommand(BaseDeployCommand):
     # Core
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._address:
             self._errors.append("--address is required")
             return False

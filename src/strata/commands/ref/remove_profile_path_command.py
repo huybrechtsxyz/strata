@@ -47,7 +47,7 @@ class RemoveProfilePathCommand(BaseCommand):
             self._profile_name = str(active.name)
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Remove the path from the profile and persist."""
         ok, errors = self._solution_controller.remove_profile_path(self._profile_name, self._path_type, self._path_name)
         self._messages.extend(self._solution_controller.get_messages())

@@ -32,7 +32,7 @@ class ListDeploymentsCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         deployments, errors = self._solution_controller.get_deployments(self._filter_name)
         if errors:
             self._errors.extend(errors)

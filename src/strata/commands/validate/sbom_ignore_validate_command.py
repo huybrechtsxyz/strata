@@ -45,7 +45,7 @@ class SbomIgnoreValidateCommand(BaseCommand):
     def has_validation_errors(self) -> bool:
         return bool(self.get_errors())
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         from strata.controllers.solution_controller import SolutionController
 
         ignore_path = SolutionController.get_sbom_ignore_path(self._work_path)

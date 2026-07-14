@@ -57,7 +57,7 @@ class GetValuesDeployCommand(BaseDeployCommand):
                 self._finalize(success=False)
                 return False
 
-            ok = self._run()
+            ok = self._execute()
 
             self._after_execute()
             self._finalize(success=ok)
@@ -73,7 +73,7 @@ class GetValuesDeployCommand(BaseDeployCommand):
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._keys:
             self._errors.append("No keys specified. Provide at least one KEY argument.")
             return False

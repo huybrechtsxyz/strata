@@ -72,7 +72,7 @@ class LockStatusCommand(BaseDeployCommand):
     # Status logic
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False
@@ -180,7 +180,7 @@ class LockReleaseCommand(BaseDeployCommand):
     # Release logic
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False
@@ -289,7 +289,7 @@ class LockHistoryCommand(BaseDeployCommand):
     # History logic
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False

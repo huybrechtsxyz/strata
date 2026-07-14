@@ -64,7 +64,7 @@ class HistoryDeployCommand(BaseCommand):
     # Core
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if self._is_console_output():
             click.echo("\n📜  Deploy history (from workspace logs)…\n")
 

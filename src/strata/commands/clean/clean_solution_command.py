@@ -54,7 +54,7 @@ class CleanSolutionCommand(BaseCommand):
         """
         return {}
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._run_lifecycle_phase(
             "solution_clean_before",
             context={"work_path": str(self._work_path), "dry_run": self._dry_run},

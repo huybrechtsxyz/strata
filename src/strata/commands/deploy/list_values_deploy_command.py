@@ -80,7 +80,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
                 self._finalize(success=False)
                 return False
 
-            ok = self._run()
+            ok = self._execute()
 
             self._after_execute()
             self._finalize(success=ok)
@@ -96,7 +96,7 @@ class ListValuesDeployCommand(BaseDeployCommand):
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False

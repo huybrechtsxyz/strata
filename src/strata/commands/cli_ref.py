@@ -213,7 +213,7 @@ class _ListSingleTypeCommand(ListProfilePathCommand):
 
         return super()._before_execute()
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         ok = super()._run()
         if not ok:
             return False
