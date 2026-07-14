@@ -24,9 +24,12 @@ from strata.services.module_service import ModuleService
 from strata.services.namespace_service import NamespaceService
 from strata.services.network_service import NetworkService
 from strata.services.platform_artifact_service import PlatformService
+from strata.services.promotion_record_service import PromotionRecordService
 from strata.services.provider_service import ProviderService
 from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
+from strata.services.version_lock_service import VersionLockService
+from strata.services.version_manifest_service import VersionManifestService
 from strata.services.workspace_service import WorkspaceService
 from strata.validators.base_validator import BaseValidator
 
@@ -47,6 +50,9 @@ _KIND_TO_SERVICE: Dict[PlatformKind, Any] = {
     PlatformKind.PROVIDER: ProviderService,
     PlatformKind.RESOURCE: ResourceService,
     PlatformKind.WORKSPACE: WorkspaceService,
+    PlatformKind.VERSION_LOCK: VersionLockService,
+    PlatformKind.VERSION_MANIFEST: VersionManifestService,
+    PlatformKind.PROMOTION_RECORD: PromotionRecordService,
 }
 
 
@@ -58,11 +64,13 @@ class PlatformValidator(BaseValidator):
         file_path: Path,
         configuration_service: Optional[ConfigurationService] = None,
         repo_map: Optional[Dict[str, str]] = None,
+        verify_digests: bool = False,
     ) -> None:
         super().__init__()
         self._file_path = file_path
         self._configuration_service = configuration_service
         self._repo_map = repo_map
+        self._verify_digests = verify_digests
         self._detected_kind: Optional[PlatformKind] = None
         self._service: Optional[BaseService] = None
         self._lifecycle_model: Optional[CommonLifecycleModel] = None
@@ -255,6 +263,25 @@ class PlatformValidator(BaseValidator):
                     path=str(self._file_path),
                 )
                 return False
+
+            # Collect non-fatal warnings from the service (e.g. shadowed overrides)
+            if hasattr(service, "get_validation_warnings"):
+                for msg in service.get_validation_warnings():
+                    self.add_validation_warning(msg)
+
+            # F-2: Digest policy check (require_digests ring policy + --verify-digests format check)
+            if hasattr(service, "check_digest_policy"):
+                d_errors, d_warnings = service.check_digest_policy(
+                    work_path=str(work_path),
+                    config_model=self._configuration_service.model,
+                    verify_digests=self._verify_digests,
+                )
+                for msg in d_errors:
+                    self.add_validation_error("DIGEST_POLICY_ERROR", msg, phase=2)
+                for msg in d_warnings:
+                    self.add_validation_warning(msg)
+                if d_errors:
+                    return False
 
         return True
 

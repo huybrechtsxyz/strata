@@ -20,6 +20,7 @@ from strata.models.common_models import (
     ScriptsModel,
     check_unique_names,
 )
+from strata.models.promotion_model import DeploymentPromotionModel
 
 
 class DeploymentFileReference(PlatformBaseModel):
@@ -85,6 +86,32 @@ class DeploymentEnvironmentRef(PlatformBaseModel):
             "Omit for unannotated entries."
         ),
     )
+
+
+class DeploymentVersionRef(PlatformBaseModel):
+    """Entry in a deployment's ``spec.versions`` list.
+
+    Supports both shorthand (bare string path) and full object form.
+    A bare string is automatically coerced to ``DeploymentVersionRef(file=<path>)``.
+
+    Files are applied in list order — later entries win over earlier entries.
+    The convention is to list the human-edited manifest first and the machine-generated
+    lock file second, so the lock always takes precedence.
+
+    Example — shorthand::
+
+        versions:
+          - versions/dev.manifest.yaml
+          - versions/dev.yaml
+
+    Example — full object (reserved for future fields)::
+
+        versions:
+          - file: "@config/versions/prd.manifest.yaml"
+          - file: "@config/versions/prd.yaml"
+    """
+
+    file: str = Field(description="Path to the version-manifest or version-lock YAML file")
 
 
 class DeploymentWorkspaceModel(DeploymentFileReference):
@@ -408,9 +435,30 @@ class DeploymentSpecModel(PlatformBaseModel):
             return [{"file": item} if isinstance(item, str) else item for item in v]
         return v
 
+    versions: Optional[List[DeploymentVersionRef]] = Field(
+        None,
+        description=(
+            "Optional list of version file paths (version-manifest or version-lock) for this deployment. "
+            "Applied in list order — later entries win. Convention: manifest first, lock second. "
+            "Omit entirely for deployments that have not adopted the version system."
+        ),
+    )
+
+    @field_validator("versions", mode="before")
+    @classmethod
+    def coerce_version_strings(cls, v: Any) -> Any:
+        """Coerce bare strings to DeploymentVersionRef dicts."""
+        if isinstance(v, list):
+            return [{"file": item} if isinstance(item, str) else item for item in v]
+        return v
+
     approvals: Optional[DeploymentApprovalModel] = Field(None, description="Approval configuration for this deployment")
     locking: Optional[DeploymentLockingModel] = Field(
         None, description="Pipeline locking behaviour for concurrent deploy protection"
+    )
+    promotion: Optional[DeploymentPromotionModel] = Field(
+        None,
+        description="Promotion wave assignment for this deployment (opt-in; defaults to last wave when absent)",
     )
     stages: Optional[List[DeploymentStageModel]] = Field(
         None,

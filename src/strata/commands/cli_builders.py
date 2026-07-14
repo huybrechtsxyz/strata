@@ -61,6 +61,16 @@ def build():
     metavar="FORMATS",
     help="Write audit report files. Comma-separated: vex, sarif (e.g. --audit-report vex,sarif).",
 )
+@click.option(
+    "--require-lock",
+    "require_lock",
+    is_flag=True,
+    default=False,
+    help=(
+        "Fail (exit 3) if the target ring has no lock file (versions/<ring>.yaml). "
+        "Also enforced when the ring declares require_lock: true in configuration."
+    ),
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -72,6 +82,7 @@ def build_run(
     audit_severity: str = "MEDIUM",
     fail_on: Optional[str] = None,
     audit_report: Optional[str] = None,
+    require_lock: bool = False,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -85,6 +96,7 @@ def build_run(
         audit_severity=audit_severity.upper(),
         fail_on=fail_on.upper() if fail_on else None,
         audit_report=audit_report,
+        require_lock=require_lock,
         output=output,
         verbose=verbose,
         quiet=quiet,

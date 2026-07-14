@@ -23,12 +23,12 @@
  */
 
 import * as vscode from 'vscode';
-import type { StrataClient, WorkspaceStatus, ValidationResult } from '../strataClient';
+import type { StrataClient, WorkspaceStatus, ValidationResult, DriftData } from '../strataClient';
 
 const PARTICIPANT_ID = 'strata.chat';
 
 /** Slash-command metadata registered in package.json `chatParticipants[].commands`. */
-type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'stage' | 'values' | 'drift' | 'repos';
+type SlashCommand = 'status' | 'validate' | 'guide' | 'build' | 'deploy' | 'stage' | 'values' | 'drift' | 'repos' | 'promote' | 'versions';
 
 export class StrataChatParticipant implements vscode.Disposable {
     private _participant: vscode.ChatParticipant | undefined;
@@ -95,6 +95,10 @@ export class StrataChatParticipant implements vscode.Disposable {
                     return await this._handleDrift(request, response);
                 case 'repos':
                     return await this._handleRepos(response, token);
+                case 'promote':
+                    return await this._handlePromote(request, response, token);
+                case 'versions':
+                    return await this._handleVersions(request, response, token);
                 default:
                     return await this._handleFreeform(request, response, token);
             }
@@ -389,9 +393,40 @@ export class StrataChatParticipant implements vscode.Disposable {
         }
 
         const rel = vscode.workspace.asRelativePath(filePath);
-        response.markdown(`Running drift detection on **${rel}**…\n\n⏳ This runs \`terraform plan\` — may take a moment.\n\n`);
-        response.button({ title: '🔍 Run Drift Detection', command: 'strata.envDrift', arguments: [filePath] });
-        response.markdown(`\nDrift detection compares your deployed infrastructure against the current configuration.\n`);
+        response.markdown(`Running drift detection on **${rel}**…\n\n⏳ This runs \`terraform plan\` and may take a moment.\n\n`);
+
+        let drift: DriftData;
+        try {
+            drift = await this._client.runDrift(filePath);
+        } catch (err) {
+            response.markdown(`**Drift detection failed:** ${err instanceof Error ? err.message : String(err)}\n\n`);
+            response.markdown('You can run it manually from the terminal:\n');
+            response.button({ title: '🔍 Run in Terminal', command: 'strata.envDrift', arguments: [filePath] });
+            return { errorDetails: { message: String(err) } };
+        }
+
+        const driftedStages = drift.stages.filter((s) => s.drifted);
+
+        if (driftedStages.length === 0) {
+            response.markdown('✅ **No drift detected** — infrastructure matches configuration.\n');
+        } else {
+            response.markdown(`⚠️ **Drift detected in ${driftedStages.length} stage${driftedStages.length !== 1 ? 's' : ''}:**\n\n`);
+            for (const stage of driftedStages) {
+                response.markdown(`### Stage: \`${stage.stage}\`\n\n`);
+                if (stage.resources.length === 0) {
+                    response.markdown('*(no resource details available)*\n\n');
+                } else {
+                    response.markdown(`| Resource | Change |\n|---|---|\n`);
+                    for (const r of stage.resources) {
+                        const badge = r.change_type === 'delete' ? '🗑' : r.change_type === 'create' ? '➕' : '✏️';
+                        const attrs = r.attributes.length > 0 ? ` *(${r.attributes.slice(0, 3).join(', ')})*` : '';
+                        response.markdown(`| \`${r.address}\` | ${badge} ${r.change_type}${attrs} |\n`);
+                    }
+                    response.markdown('\n');
+                }
+            }
+            response.button({ title: '🚀 Re-deploy to fix', command: 'strata.deployRun', arguments: [filePath] });
+        }
 
         return { metadata: { command: 'drift', filePath } };
     }
@@ -451,6 +486,137 @@ export class StrataChatParticipant implements vscode.Disposable {
         }
     }
 
+    // ── /promote ────────────────────────────────────────────────────────────────
+
+    private async _handlePromote(
+        request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+        _token: vscode.CancellationToken,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        const subcommand = request.prompt.trim().split(/\s+/)[0]?.toLowerCase();
+
+        try {
+            if (subcommand === 'history') {
+                const history = await this._client.getPromotionHistory(undefined, 10);
+                if (history.length === 0) {
+                    response.markdown('No promotion history found. Run your first promotion with:\n\n```sh\nstrata promote start --ring <ring> --remote <target>\n```\n');
+                    return { metadata: { command: 'promote' } };
+                }
+                response.markdown(`## Promotion History\n\n`);
+                response.markdown(`| Date | Target | Ring | Version | Outcome |\n|---|---|---|---|---|\n`);
+                for (const h of history) {
+                    const date = h.started_at?.slice(0, 10) ?? '?';
+                    const icon = h.outcome === 'success' ? '✅' : h.outcome === 'rolled_back' ? '⏪' : '❌';
+                    response.markdown(`| ${date} | ${h.target} | ${h.ring ?? '?'} | ${h.to_version ?? '?'} | ${icon} ${h.outcome ?? '?'} |\n`);
+                }
+                return { metadata: { command: 'promote' } };
+            }
+
+            // Default: show matrix + in-flight
+            const [matrix, inflight] = await Promise.all([
+                this._client.getPromotionMatrix(),
+                this._client.getPromotionStatus(),
+            ]);
+
+            if (inflight.length > 0) {
+                response.markdown(`## In-Flight Promotions\n\n`);
+                for (const p of inflight) {
+                    const icon = p.status === 'in-progress' ? '🔄' : '✅';
+                    response.markdown(`- ${icon} **${p.target}** → \`${p.ring}\` (${p.version}) — ${p.status}\n`);
+                }
+                response.markdown(`\n`);
+            }
+
+            if (matrix.rings.length === 0) {
+                response.markdown('No promotion rings configured. Set up a promotion strategy in your configuration.\n');
+                return { metadata: { command: 'promote' } };
+            }
+
+            response.markdown(`## Version Matrix\n\n`);
+            response.markdown(`| Ring | Environments | Pins |\n|---|---|---|\n`);
+            for (const ring of matrix.rings) {
+                const envs = ring.environments.join(', ') || '—';
+                const pinCount = Object.keys(ring.versions).length;
+                response.markdown(`| **${ring.ring}** | ${envs} | ${pinCount} |\n`);
+            }
+
+            // Show version details per ring
+            for (const ring of matrix.rings) {
+                const entries = Object.entries(ring.versions);
+                if (entries.length > 0) {
+                    response.markdown(`\n### ${ring.ring}\n\n`);
+                    for (const [target, version] of entries) {
+                        response.markdown(`- \`${target}\`: **${version}**\n`);
+                    }
+                }
+            }
+
+            response.button({ title: '▶ Promote', command: 'strata.promoteStart' });
+            response.button({ title: '⏪ Rollback', command: 'strata.promoteRollback' });
+
+            return { metadata: { command: 'promote' } };
+        } catch (err) {
+            response.markdown(`**Error:** ${err instanceof Error ? err.message : String(err)}`);
+            return { errorDetails: { message: String(err) } };
+        }
+    }
+
+    // ── /versions ──────────────────────────────────────────────────────────────
+
+    private async _handleVersions(
+        _request: vscode.ChatRequest,
+        response: vscode.ChatResponseStream,
+        _token: vscode.CancellationToken,
+    ): Promise<vscode.ChatResult> {
+        if (!this._client) {
+            response.markdown('Strata CLI is not available.');
+            return { errorDetails: { message: 'CLI not available' } };
+        }
+
+        try {
+            const matrix = await this._client.getPromotionMatrix();
+
+            if (matrix.rings.length === 0) {
+                response.markdown('No version pins found. Ensure promotion strategies are configured and lock files exist in `versions/`.\n');
+                return { metadata: { command: 'versions' } };
+            }
+
+            response.markdown(`## Version Pins by Ring\n\n`);
+
+            for (const ring of matrix.rings) {
+                const entries = Object.entries(ring.versions);
+                response.markdown(`### ${ring.ring}`);
+                if (ring.require) {
+                    response.markdown(` *(requires: ${ring.require})*`);
+                }
+                response.markdown(`\n\n`);
+
+                if (entries.length === 0) {
+                    response.markdown(`*(no pins)*\n\n`);
+                    continue;
+                }
+
+                response.markdown(`| Target | Version |\n|---|---|\n`);
+                for (const [target, version] of entries) {
+                    response.markdown(`| \`${target}\` | **${version}** |\n`);
+                }
+                response.markdown(`\n`);
+            }
+
+            response.markdown(`💡 Use \`strata versions export -f <deploy>.yaml\` to see all resolved pins for a deployment.\n`);
+
+            return { metadata: { command: 'versions' } };
+        } catch (err) {
+            response.markdown(`**Error:** ${err instanceof Error ? err.message : String(err)}`);
+            return { errorDetails: { message: String(err) } };
+        }
+    }
+
     // ── Freeform (no slash command) ────────────────────────────────────────────
 
     private async _handleFreeform(
@@ -461,6 +627,21 @@ export class StrataChatParticipant implements vscode.Disposable {
         // Provide workspace context and let the LLM answer
         const status = await this._getStatus();
 
+        // Fetch env status for richer deployment context (best-effort, non-blocking)
+        let envSummary = '';
+        if (this._client) {
+            try {
+                const envData = await this._client.getEnvStatus();
+                if (envData.deployments.length > 0) {
+                    const lines = envData.deployments.map((d) => {
+                        const totalOutputs = d.stages.reduce((s, st) => s + (st.cache?.output_count ?? 0), 0);
+                        return `${d.name}: ${d.cached_count}/${d.stage_count} stages cached, ${totalOutputs} outputs`;
+                    });
+                    envSummary = `Deployments: ${lines.join('; ')}.`;
+                }
+            } catch { /* non-critical — proceed without env data */ }
+        }
+
         const contextBlock = [
             `The user is working in a strata infrastructure workspace.`,
             `Health: ${status.health.status}. Profile: ${status.profiles.active ?? 'none'}.`,
@@ -469,6 +650,7 @@ export class StrataChatParticipant implements vscode.Disposable {
                 ? `Next step: ${status.readiness.next_step.label} (hint: ${status.readiness.next_step.hint ?? 'none'})`
                 : '',
             `Repositories: ${(status.repositories ?? []).map(r => r.name).join(', ') || 'none'}.`,
+            envSummary,
             `\nUser question: ${request.prompt}`,
         ].filter(Boolean).join('\n');
 
@@ -558,6 +740,18 @@ export class StrataChatParticipant implements vscode.Disposable {
                 return [
                     { prompt: '', label: 'Workspace status', command: 'status' },
                     { prompt: '', label: 'Readiness guide', command: 'guide' },
+                    { prompt: '', label: 'Promotions', command: 'promote' },
+                ];
+            case 'promote':
+                return [
+                    { prompt: 'history', label: 'Promotion history', command: 'promote' },
+                    { prompt: '', label: 'Version pins', command: 'versions' },
+                    { prompt: '', label: 'Deploy', command: 'deploy' },
+                ];
+            case 'versions':
+                return [
+                    { prompt: '', label: 'Promote', command: 'promote' },
+                    { prompt: '', label: 'Deploy', command: 'deploy' },
                 ];
             default:
                 return [

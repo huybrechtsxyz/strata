@@ -2,7 +2,10 @@
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from strata.models.environment_model import EnvironmentModel
 
 from strata.exceptions import ServiceLoadError, ServiceNotValidatedError
 from strata.models.configuration_model import ConfigurationModel
@@ -25,6 +28,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
         self._workspace_service: Optional[WorkspaceService] = None
         self._merge_provenance: Optional[MergeProvenance] = None
         self._validation_errors: List[str] = []
+        self._validation_warnings: List[str] = []
         self._structured_errors: List = []
         self._objects_path: Optional[str] = None
         self._load_repo_map: Optional[Dict[str, str]] = None
@@ -124,7 +128,68 @@ class DeploymentService(BaseService["DeploymentModel"]):
                                 f"Available zones: {sorted(config_zone_names)}"
                             )
 
+        # Shadowed-override check (non-fatal warnings, not errors)
+        if work_path and self.model and self.model.spec.versions:
+            _repo_map = {
+                **(configuration_model.get_remote_map() if configuration_model else {}),
+                **(self._repo_map or {}),
+            }
+            self._validation_warnings = self._check_version_pin_shadows(work_path, _repo_map)
+
         return len(errors) == 0, errors
+
+    def _check_version_pin_shadows(
+        self,
+        work_path: str,
+        repo_map: Optional[Dict[str, str]],
+    ) -> List[str]:
+        """Load env file(s) and version pins, return warning strings for shadowed overrides.
+
+        Never raises — all failures are silently suppressed.  Warnings are non-fatal.
+        """
+        if not self.model or not self.model.spec.versions:
+            return []
+        try:
+            from pathlib import Path as _Path
+
+            from strata.services.environment_service import EnvironmentService
+            from strata.services.version_service import VersionService
+
+            _rm = repo_map or {}
+
+            # Resolve env file paths
+            env_paths = [
+                self._resolve_file_path(env_ref.file, work_path, _rm)
+                for env_ref in (self.model.spec.environments or [])
+            ]
+            valid_paths = [p for p in env_paths if _Path(p).exists()]
+            if not valid_paths:
+                return []
+
+            # Load env model (single or merged)
+            if len(valid_paths) == 1:
+                env_svc = EnvironmentService.load(valid_paths[0], validate=True)
+                if not env_svc.model:
+                    return []
+                env_model = env_svc.model
+            else:
+                env_model, _ = EnvironmentService.merge_envfiles(valid_paths, _Path(work_path))
+
+            # Resolve version pins
+            def _resolve_fn(file_ref: str, base: str) -> str:
+                return self._resolve_file_path(file_ref, base, _rm)
+
+            pins = VersionService.load_and_resolve(
+                version_refs=self.model.spec.versions,
+                objects_path=work_path,
+                resolve_path_fn=_resolve_fn,
+            )
+            if not any(pins.values()):
+                return []
+
+            return VersionService.find_shadowed_overrides(env_model, pins)
+        except Exception:
+            return []  # warnings never abort validation
 
     def _validate_deployment_layers(self, configuration_model: ConfigurationModel) -> List[str]:
         """
@@ -354,6 +419,14 @@ class DeploymentService(BaseService["DeploymentModel"]):
         """Return all validation errors: Phase 1 (Pydantic) errors from _errors plus
         dynamic errors accumulated in _validation_errors."""
         return self._errors + self._validation_errors
+
+    def get_validation_warnings(self) -> List[str]:
+        """Return non-fatal warnings accumulated during Phase 2 validation.
+
+        Currently populated by the shadowed-override check: reports ``spec.overrides``
+        entries that are silently overwritten by ``spec.versions`` pins.
+        """
+        return list(self._validation_warnings)
 
     def apply_environment_overrides(self) -> Tuple[bool, List[str]]:
         """
@@ -759,7 +832,9 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 )
 
             # Store workspace service (infrastructure accessed via delegation)
-            self._workspace_service = workspace_service
+            # Apply tool version pins (spec.versions type:tool entries) to provisioner.version fields.
+            # A patched copy is stored so the cached workspace is never mutated.
+            self._workspace_service = self._apply_tool_version_pins(workspace_service, objects_path, repo_map)
             self._objects_path = objects_path
             self._load_repo_map = repo_map
             self.logger.debug(
@@ -807,6 +882,8 @@ class DeploymentService(BaseService["DeploymentModel"]):
                     work_path = Path(objects_path)
                     merged_env, merge_provenance = EnvironmentService.merge_envfiles(env_paths, work_path)
                     self._merge_provenance = merge_provenance
+                    # Apply version pins from spec.versions (layer 3 + 4 in resolution chain)
+                    merged_env = self._apply_version_pins(merged_env, objects_path, repo_map)
                     # Create a service from the merged model
                     env_service = EnvironmentService(data=merged_env.model_dump())
                     # Validate the merged environment
@@ -817,6 +894,11 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 else:
                     # Single environment file - load directly
                     env_service = EnvironmentService.load(env_paths[0], validate=True)
+                    # Apply version pins from spec.versions (layer 3 + 4 in resolution chain)
+                    if env_service.model:
+                        patched = self._apply_version_pins(env_service.model, objects_path, repo_map)
+                        env_service = EnvironmentService(data=patched.model_dump())
+                        env_service.validate()
 
                 if not env_service.is_validated():
                     self.logger.warning("Deployment environment validation failed", paths=env_paths)
@@ -919,6 +1001,88 @@ class DeploymentService(BaseService["DeploymentModel"]):
         """Get a specific resource service by name (delegates to workspace)."""
         return self._ensure_workspace().get_resource_service(resource_name)
 
+    def _apply_version_pins(
+        self,
+        env_model: "EnvironmentModel",
+        objects_path: str,
+        repo_map: Optional[Dict[str, str]] = None,
+    ) -> "EnvironmentModel":
+        """Apply version pins from ``spec.versions`` to a merged EnvironmentModel.
+
+        Returns the (possibly modified) model.  If ``spec.versions`` is absent or
+        empty, returns the model unchanged.
+        """
+        if not self.model or not self.model.spec.versions:
+            return env_model
+
+        from strata.services.version_service import VersionService
+
+        _repo_map = repo_map or {}
+
+        def resolve_fn(file_ref: str, base: str) -> str:
+            return self._resolve_file_path(file_ref, base, _repo_map)
+
+        pins = VersionService.load_and_resolve(
+            version_refs=self.model.spec.versions,
+            objects_path=objects_path,
+            resolve_path_fn=resolve_fn,
+        )
+
+        if any(pins.values()):
+            total = sum(len(v) for v in pins.values())
+            self.logger.debug("Applying version pins to environment", pin_count=total)
+            VersionService.apply_to_environment(env_model, pins)
+
+        return env_model
+
+    def _apply_tool_version_pins(
+        self,
+        workspace_service: "WorkspaceService",
+        objects_path: str,
+        repo_map: Optional[Dict[str, str]] = None,
+    ) -> "WorkspaceService":
+        """Apply ``type: tool`` version pins from ``spec.versions`` to a WorkspaceService.
+
+        Tool pins set ``provisioner.version`` on matching provisioner entries.  A new
+        WorkspaceService is created from the modified data so the cached original is
+        never mutated.
+
+        Returns the original *workspace_service* unchanged when no tool pins exist.
+        """
+        if not self.model or not self.model.spec.versions or not workspace_service.model:
+            return workspace_service
+
+        from strata.models.version_lock_model import VersionPinTargetType
+        from strata.services.version_service import VersionService
+
+        _repo_map = repo_map or {}
+
+        def resolve_fn(file_ref: str, base: str) -> str:
+            return self._resolve_file_path(file_ref, base, _repo_map)
+
+        pins = VersionService.load_and_resolve(
+            version_refs=self.model.spec.versions,
+            objects_path=objects_path,
+            resolve_path_fn=resolve_fn,
+        )
+
+        tool_pins = pins.get(VersionPinTargetType.TOOL, {})
+        if not tool_pins:
+            return workspace_service
+
+        self.logger.debug("Applying tool version pins to workspace provisioners", pin_count=len(tool_pins))
+
+        # Dump to raw dict → patch → re-validate to avoid mutating the cached model
+        patched_data = workspace_service.model.model_dump()
+        for prov in patched_data.get("spec", {}).get("provisioners", []):
+            if prov.get("name") in tool_pins:
+                prov["version"] = tool_pins[prov["name"]]
+                self.logger.debug("Applied tool pin", provisioner=prov["name"], version=prov["version"])
+
+        patched_ws = WorkspaceService(data=patched_data)
+        patched_ws.validate()
+        return patched_ws
+
     def get_environment_service(self) -> Optional[EnvironmentService]:
         """
         Get the environment service for this deployment.
@@ -958,6 +1122,200 @@ class DeploymentService(BaseService["DeploymentModel"]):
         if self._workspace_service is None:
             raise ServiceNotValidatedError("DeploymentService")
         return self._workspace_service
+
+    def check_digest_policy(
+        self,
+        work_path: str,
+        config_model: Optional["ConfigurationModel"],
+        verify_digests: bool = False,
+    ) -> Tuple[List[str], List[str]]:
+        """Check F-2 digest policy for this deployment's version pins.
+
+        Two independent checks — either or both may be active:
+
+        1. **Ring policy** (always active when ``ring.require_digests: true``):
+           Every pin in ``spec.versions`` lock files must carry a ``resolved_sha``.
+           Missing SHA → error (exit 3).
+
+        2. **Format verification** (active only when ``verify_digests=True``):
+           Pins that DO have ``resolved_sha`` must use a recognised format:
+           - ``remote`` → 7–40 hex characters (git commit SHA)
+           - ``image``/``helm_chart`` → ``sha256:<64 hex>`` (OCI content digest)
+           Invalid format → warning (non-fatal).
+
+        Returns:
+            Tuple ``(errors, warnings)`` — both may be empty lists.
+        """
+        errors: List[str] = []
+        warnings: List[str] = []
+
+        if not self.model or not self.model.spec.versions:
+            return errors, warnings
+
+        try:
+            from pathlib import Path as _Path
+
+            from strata.models.version_lock_model import VersionLockModel
+            from strata.services.environment_service import EnvironmentService
+            from strata.services.version_service import VersionService
+
+            _rm: Dict[str, str] = {
+                **(config_model.get_remote_map() if config_model else {}),
+                **(self._repo_map or {}),
+            }
+
+            def resolve_fn(f: str, b: str) -> str:
+                return self._resolve_file_path(f, b, _rm)
+
+            # ── Step 1: find the ring name from first loadable environment ──
+            ring_name: Optional[str] = None
+            for env_ref in self.model.spec.environments or []:
+                env_path = resolve_fn(env_ref.file, work_path)
+                if _Path(env_path).exists():
+                    env_svc = EnvironmentService.load(env_path, validate=True)
+                    if env_svc.model and env_svc.model.spec.promotion:
+                        ring_name = env_svc.model.spec.promotion.ring
+                        break
+
+            # ── Step 2: check ring-level require_digests policy ──
+            ring_require_digests = False
+            if ring_name and config_model and config_model.spec.promotions:
+                for progression in config_model.spec.promotions.progressions or []:
+                    for ring in progression.rings:
+                        if ring.name == ring_name and ring.require_digests:
+                            ring_require_digests = True
+                            break
+                    if ring_require_digests:
+                        break
+
+            # Nothing to do if neither policy is active
+            if not ring_require_digests and not verify_digests:
+                return errors, warnings
+
+            # ── Step 3: load version-lock pins (manifests don't carry resolved_sha) ──
+            lock_pins: list = []
+            for ref in self.model.spec.versions:
+                try:
+                    abs_path = resolve_fn(ref.file, work_path)
+                    model = VersionService.load(abs_path)
+                    if isinstance(model, VersionLockModel):
+                        lock_pins.extend(model.spec.pins or [])
+                except Exception:
+                    pass
+
+            if not lock_pins and ring_require_digests:
+                # Policy requires digests but no lock files loaded
+                if ring_name:
+                    errors.append(
+                        f"Ring '{ring_name}' requires digests (require_digests: true) but "
+                        f"no version-lock file could be loaded from spec.versions. "
+                        f"Run 'strata promote start' to generate the lock."
+                    )
+                return errors, warnings
+
+            # ── Step 4: inspect each pin ──
+            for pin in lock_pins:
+                sha = pin.resolved_sha
+
+                if ring_require_digests and not sha:
+                    errors.append(
+                        f"Ring '{ring_name}' requires digests (require_digests: true) but "
+                        f"pin '{pin.target.name}' (type: {pin.target.type.value}) has no "
+                        f"resolved_sha. Run 'strata promote start' to record digests."
+                    )
+
+                elif verify_digests and sha:
+                    if not VersionService.validate_sha_format(pin.target.type, sha):
+                        warnings.append(
+                            f"Pin '{pin.target.name}' (type: {pin.target.type.value}) has "
+                            f"resolved_sha '{sha}' with unrecognised format — expected "
+                            f"git SHA (hex) for remote pins or 'sha256:<64hex>' for "
+                            f"image/helm_chart pins."
+                        )
+
+        except Exception:
+            pass  # digest check is never fatal to the validate pipeline
+
+        return errors, warnings
+
+    def check_require_lock_mode(
+        self,
+        work_path: Path,
+        config_model: Optional["ConfigurationModel"],
+        flag: bool = False,
+    ) -> Optional[str]:
+        """Check strict lock mode enforcement for build/deploy.
+
+        Returns an error message string if the lock file is missing and
+        enforcement is active, or ``None`` if the check passes (or is not applicable).
+
+        Enforcement is active when either:
+        - ``flag`` is ``True`` (``--require-lock`` CLI flag was passed), or
+        - the resolved ring declares ``require_lock: true`` in the progression config.
+
+        Lock file discovery (checked in order, first found wins):
+        1. New-style: ``{versions_path}/{ring}.lock.yaml`` (from promotion strategy)
+        2. Old-style: ``versions/{ring}.yaml``
+        """
+        env_svc = self._environment_service
+        if env_svc is None or env_svc.model is None:
+            return None  # environment not loaded — skip silently
+
+        spec = env_svc.model.spec if env_svc.model else None
+        promotion = spec.promotion if spec else None
+        if not promotion:
+            return None  # no promotion config on this environment — skip silently
+
+        ring_name: str = promotion.ring
+        strategy_name: str = promotion.strategy
+
+        # Check ring-level require_lock from configuration progressions
+        ring_require_lock = False
+        versions_path_raw: Optional[str] = None
+        if config_model and config_model.spec and config_model.spec.promotions:
+            for progression in config_model.spec.promotions.progressions or []:
+                for ring in progression.rings:
+                    if ring.name == ring_name and ring.require_lock:
+                        ring_require_lock = True
+                        break
+                if ring_require_lock:
+                    break
+            # Also pick up versions_path from the matching strategy
+            for strategy in config_model.spec.promotions.strategies or []:
+                if strategy.name == strategy_name and strategy.versions_path:
+                    versions_path_raw = strategy.versions_path
+                    break
+
+        if not flag and not ring_require_lock:
+            return None  # enforcement not active for this ring
+
+        # Try new-style lock path first: {versions_path}/{ring}.lock.yaml
+        if versions_path_raw:
+            vp_raw = (
+                versions_path_raw.lstrip("@").split("/", 1)[-1]
+                if versions_path_raw.startswith("@")
+                else versions_path_raw
+            )
+            new_lock_path = Path(work_path) / vp_raw / f"{ring_name}.lock.yaml"
+            if new_lock_path.exists():
+                return None  # lock exists — check passes
+
+        # Fallback: old-style lock path versions/{ring}.yaml
+        old_lock_path = Path(work_path) / "versions" / f"{ring_name}.yaml"
+        if old_lock_path.exists():
+            return None  # old-style lock exists — check passes
+
+        # Neither exists — fail
+        hint_path = (
+            f"{versions_path_raw.rstrip('/')}/{ring_name}.lock.yaml"
+            if versions_path_raw
+            else f"versions/{ring_name}.yaml"
+        )
+        return (
+            f"Ring '{ring_name}' has no lock file ({hint_path}). "
+            f"Run 'strata promote {ring_name} <version-file> --promotion {strategy_name}' first, "
+            "or remove --require-lock."
+        )
 
     def validate_related_services(self) -> Tuple[bool, List[str]]:
         """

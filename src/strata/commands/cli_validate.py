@@ -64,6 +64,17 @@ def validate_group() -> None:
     ),
 )
 @click.option(
+    "--verify-digests",
+    is_flag=True,
+    default=False,
+    help=(
+        "Check that resolved_sha values on version-lock pins use a recognised immutable-reference "
+        "format (git SHA or OCI digest). Implies --deep. "
+        "Mismatched format emits a warning; missing resolved_sha on a ring with require_digests: true "
+        "is an error (exit 3)."
+    ),
+)
+@click.option(
     "--explain",
     is_flag=True,
     default=False,
@@ -77,6 +88,7 @@ def validate_run(
     file: Optional[str] = None,
     path: Optional[str] = None,
     deep: bool = False,
+    verify_digests: bool = False,
     explain: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
@@ -99,7 +111,8 @@ def validate_run(
     command = ValidateCommand(
         file=file,
         path=path,
-        deep=deep,
+        deep=deep or verify_digests,
+        verify_digests=verify_digests,
         explain=explain,
         work_path=work_path,
         output=output,

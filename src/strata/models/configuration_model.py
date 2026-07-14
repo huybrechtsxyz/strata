@@ -17,6 +17,7 @@ from strata.models.common_models import (
 )
 from strata.models.integration_model import IntegrationModel
 from strata.models.policy_model import PolicyModel
+from strata.models.promotion_model import ConfigurationPromotionsModel
 from strata.models.repository_model import RemoteModel
 from strata.utils.config import SOLUTION_DEPLOYMENTS_DIR, SOLUTION_DIR, SOLUTION_OUTPUTS_DIR
 
@@ -437,6 +438,10 @@ class ConfigurationSpecModel(PlatformBaseModel):
     audit: Optional[AuditConfigModel] = Field(
         None,
         description="Audit and deploy-log configuration (structure, sinks, retention)",
+    )
+    promotions: Optional[ConfigurationPromotionsModel] = Field(
+        None,
+        description="Promotion strategy configuration: progressions (ring sequences) and strategies (how artifacts move through rings)",
     )
 
     @model_validator(mode="after")

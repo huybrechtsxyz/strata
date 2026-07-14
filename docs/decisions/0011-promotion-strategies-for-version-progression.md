@@ -1,7 +1,8 @@
 # Promotion strategies for version progression across environments
 
-- Status: Accepted
+- Status: Accepted (partially implemented — see Implementation Status)
 - Date: 2026-06-23
+- Revised: 2026-07-14
 
 ## Context and Problem Statement
 
@@ -14,984 +15,687 @@ or a module `chart_version` in an environment YAML file, commits, and deploys. T
 guardrail preventing a direct jump to production, no canary mechanism, no rollback tracking,
 and no visibility into what version is running where across the fleet.
 
-The platform needs a structured promotion system that:
+Version truth is **scattered**: base image/chart versions live in `stack/*.yaml`, git refs
+default in `configuration.spec.remotes[]`, and deviations live in per-environment
+`spec.overrides`. Answering "what version runs in prd?" requires resolving the full merge
+chain. This ADR resolves that by introducing **version files** (named release snapshots)
+and an optional **promotion system** that automates progression through rings.
 
-- Defines allowed progressions (dev → test → acc → prd)
-- Supports gradual rollout strategies (single tenant first, waves, all-at-once)
-- Distinguishes between infrastructure changes (high blast radius) and application changes (lower blast radius)
-- Integrates with the existing git-based workflow (branch, commit YAML edits, PR, merge, deploy)
+The platform needs a structured version and promotion system that:
+
+- Captures the complete version set for a release in a single file
+- Supports manual deployment (explicit version reference) without requiring promotion configuration
+- Defines allowed progressions through ordered **rings** (dev → sandbox → prod)
+- Supports gradual rollout via **waves** (label-based deployment grouping)
+- Integrates with the existing git-based workflow (branch, commit, PR, merge, deploy)
 - Provides visibility into current versions and in-flight promotions
-- Supports unpromotion (controlled rollback) using the same strategy and safety checks
+- Supports rollback using recorded previous state
 
 ## Related Work
 
-**[ADR 0017: Tag-based release workflow](0017-tag-based-release-workflow-option-c.md)** addresses the **release lifecycle**: how versions move from code (commits, tests) into tagged releases and release branches. This ADR (0011) addresses **promotion**: how tagged releases are deployed progressively across environments.
-
-They are complementary:
-
-- **ADR 0017** (Release Lifecycle): Commits → Tests pass → `tested` tag → Release branch → `vX.Y.Z` semantic tag
-- **ADR 0011** (Promotion): Semantic tag → dev environment → test → acceptance → production (with waves and validation)
-
-Together they provide end-to-end visibility and control over version progression from code to production.
-
-## Key Observations
-
-### Terraform vs Helm: different risk profiles
-
-| Dimension               | Terraform (remote ref)                             | Helm (chart version)                                  |
-| ----------------------- | -------------------------------------------------- | ----------------------------------------------------- |
-| What changes            | `spec.overrides.remotes[].reference`               | Module override `chart_version` or `services[].image` |
-| Blast radius            | Infrastructure — add/remove/modify cloud resources | Application — new containers, config values           |
-| Validation before apply | `terraform plan` diff is essential                 | Helm diff is nice-to-have                             |
-| Rollback cost           | High — may require state surgery                   | Low — helm rollback or redeploy previous version      |
-| Canary feasibility      | Hard — infra is usually shared per zone            | Natural — each tenant has own helm release            |
-| Shared vs isolated      | Shared: all tenants in a zone use the same AKS     | Isolated: each tenant has own namespace + release     |
-
-This means the promotion strategy must be type-aware — the same progression
-may use different approaches depending on what's being promoted.
-
-### A promotion is a YAML edit
-
-The mechanism is always the same:
-
-1. Determine which file to edit and what value to change
-2. Create a branch, make the edit, commit
-3. CI validates (plan, lint, overlap check)
-4. PR reviewed and merged
-5. CI deploys
-
-Strata's job is steps 1-2 and providing visibility. Git and CI handle steps 3-5.
-
-### Canary is a special case of waves
-
-All rollout approaches reduce to a single model:
-
-| Approach     | Waves | Wave 1 target                                       |
-| ------------ | ----- | --------------------------------------------------- |
-| All-at-once  | `1`   | Shared environment file (all deployments)           |
-| Canary-first | `2`   | Deployments matching wave 1, then shared env file   |
-| Multi-wave   | `3`   | Deployments declaring iteration 1, then 2, then all |
-
-The underlying mechanic is always: "which deployments get this version in this wave?"
-Wave membership is determined per-deployment via `spec.promotion.wave` (explicit
-`iteration` or `match_labels`). Deployments without wave config default to the last wave.
-
-## Considered Options
-
-### Option A: Configuration-defined strategies, `strata promote` command
-
-Promotion strategies are defined in `configuration.yaml`. Environments reference which
-strategy applies to them. A new `strata promote` command group automates the YAML edits
-and tracks promotion state.
-
-**Configuration model:**
-
-```yaml
-# configuration.yaml
-spec:
-  promotions:
-    progressions:
-      - name: standard
-        environments: [dev, test, acceptance, production]
-      - name: hotfix
-        environments: [dev, production]
-
-    strategies:
-      - name: infra-cautious
-        type: remote                          # promotes spec.overrides.remotes[].reference
-        progression: standard
-        waves:
-          - name: canary                      # first: deployments with iteration: 1
-          - name: all                         # last: everyone else
-        scope: tenant                         # only tenant-layer deployments are waved
-        gates:
-          require_progression_order: true     # previous env in progression must have this version
-
-      - name: app-wave
-        type: module                          # promotes chart_version / image tags
-        progression: standard
-        waves:
-          - name: canary                      # first: explicit iteration: 1 deployments
-          - name: early                       # middle: match_labels tier: standard
-          - name: all                         # last: everyone else
-        scope: tenant                         # only tenant-layer deployments are waved
-        gates:
-          require_progression_order: true     # previous env in progression must have this version
-```
-
-**Environment references the strategy:**
-
-```yaml
-# environments/production.yaml
-spec:
-  promotion:
-    strategy: infra-cautious
-```
-
-**Wave assignment on deployments:**
-
-Wave assignment is decentralized — each deployment declares its own wave membership.
-Deployments without a `wave` block default to the last wave (the "everyone else" catch-all).
-Resolution order: `iteration` wins over `match_labels`.
-
-```yaml
-# deploy/acme-production.yaml — explicit wave assignment  (kind: deployment)
-spec:
-  promotion:
-    wave:
-      iteration: 1                            # acme is always the canary in production
-```
-
-```yaml
-# deploy/contoso-production.yaml — label-based wave assignment  (kind: deployment)
-# (matches against this deployment's resolved meta.labels)
-spec:
-  promotion:
-    wave:
-      match_labels: { tier: standard }        # standard-tier deployments go in wave 1
-```
-
-The `wave:scope` on the strategy determines which layer of deployments can be waved
-at all. Zone-layer infrastructure (shared AKS, shared networking) is always all-at-once
-regardless of wave config — only the layer matching `scope` participates in gradual
-rollout.
-
-**CLI commands:**
-
-```bash
-# Initiate a promotion (wave 1 by default)
-strata promote start --remote tf_landscape --version v2.4.0 --to production
-
-# Advance to wave 2 (explicit — same command, specify wave)
-strata promote start --remote tf_landscape --version v2.4.0 --to production --wave 2
-
-# Check status of all promotions
-strata promote status
-
-# Roll back (reverse promotion, same strategy applies)
-strata promote rollback --remote tf_landscape --to production
-
-# Show version matrix across environments
-strata promote matrix
-
-# Show historical promotions from artifact store
-strata promote history --environment production
-strata promote history --remote tf_landscape --last 5
-
-# Show activity log for a promotion (CI/CD diagnostic output)
-strata promote log --remote tf_landscape --to production
-```
-
-**Promotion state tracking:**
-
-Promotion state is split into two concerns: **activity log** (diagnostic trace for DevOps)
-and **completed record** (durable audit evidence stored alongside deployment manifests).
-
-*Activity log* — lives in `.strata/promotions/` as a running diagnostic file. Not required
-for the promotion to function — strata derives all state from environment files and git.
-DevOps engineers can watch this file to follow what's happening without reading git logs.
-
-```yaml
-# .strata/promotions/tf_landscape-v2.4.0-production.yaml
-target: tf_landscape
-version: v2.4.0
-previous_version: v2.3.0
-environment: production
-strategy: infra-cautious
-progression: [dev, test, acceptance, production]
-branch: promote/tf_landscape-v2.4.0-production
-events:
-  - timestamp: 2026-06-23T10:00:00Z
-    action: start
-    wave: 1
-    initiated_by: brady
-    deployments: [acme]
-    files_modified:
-      - environments/tenants/acme.yaml        # scope: tenant — env file edited for this wave
-  - timestamp: 2026-06-23T10:01:12Z
-    action: gate_passed
-    gate: require_progression_order
-    detail: "acceptance has v2.4.0 — ok to promote to production"
-  - timestamp: 2026-06-23T10:01:15Z
-    action: branch_created
-    branch: promote/tf_landscape-v2.4.0-production
-    commit: abc123f
-  - timestamp: 2026-06-24T14:30:00Z
-    action: start
-    wave: 2
-    initiated_by: brady
-    deployments: [all]
-    files_modified:
-      - environments/production.yaml
-    fields_removed:
-      - environments/tenants/acme.yaml → spec.overrides.remotes[tf_landscape]
-  - timestamp: 2026-06-24T15:10:00Z
-    action: completed
-    outcome: completed
-```
-
-This file is append-only during the promotion. It is never deleted — `.strata/promotions/`
-is gitignored, so logs accumulate locally without polluting the config repo. The information
-is purely diagnostic — the promotion-record in the artifact store is the authoritative
-audit trail.
-
-*Completed record* — written to the configured artifact store (same remote as deployment
-manifests) on promotion completion or rollback. This is the audit evidence:
-
-```yaml
-# Stored in artifact remote, e.g. manifests/promotions/prom-20260623-001.yaml
-apiVersion: strata.huybrechts.xyz/v1
-kind: promotion-record
-meta:
-  name: prom-20260623-001
-  labels:
-    target: tf_landscape
-    environment: production
-spec:
-  target:
-    type: remote
-    name: tf_landscape
-    from_version: v2.3.0
-    to_version: v2.4.0
-  strategy: infra-cautious
-  progression: [dev, test, acceptance, production]
-  outcome: completed                          # completed | rolled-back
-  waves:
-    - wave: 1
-      deployments: [acme]
-      started: 2026-06-23T10:00:00Z
-      deployed: 2026-06-23T15:00:00Z
-    - wave: 2
-      deployments: all
-      started: 2026-06-24T14:30:00Z
-      deployed: 2026-06-24T15:10:00Z
-  initiated_by: brady
-  started: 2026-06-23T10:00:00Z
-  completed: 2026-06-24T15:10:00Z
-  branch: promote/tf_landscape-v2.4.0-production
-  manifests:                                  # links to deployment manifests produced
-    - acme_eu_production/manifest-20260623.yaml
-    - contoso_eu_production/manifest-20260624.yaml
-```
-
-**Why two artifacts?**
-
-| Concern      | Activity log (`.strata/promotions/`)                          | Completed record (artifact store)            |
-| ------------ | ------------------------------------------------------------- | -------------------------------------------- |
-| Purpose      | Diagnostic trace — watch what strata is doing, debug failures | Audit evidence — who, when, what, outcome    |
-| Required     | No — promotion works without it (all state derived from git)  | Yes — authoritative audit trail              |
-| Lifetime     | Kept permanently (gitignored — local only)                    | Permanent — never deleted                    |
-| Content      | Timestamped event log: actions, gates, files, commits         | Summary: waves, outcome, manifests produced  |
-| Storage      | Local workspace (`.strata/`), gitignored                      | Same artifact remote as deployment manifests |
-| Queryable by | `strata promote status` (in-flight diagnostics)               | `strata promote history` (historical)        |
-| Retention    | Always kept locally — accumulates for debugging               | Always written                               |
-
-The completed record follows the same pattern as deployment manifests: it uses the
-Kubernetes-style schema (`apiVersion`, `kind`, `meta`, `spec`), is stored in a configured
-`spec.remotes` artifact store, and provides the audit trail showing that version changes
-followed the declared promotion strategy.
-
-**Git flow for wave progression:**
-
-Strata resolves all deployments in the target environment, evaluates each deployment's
-`spec.promotion.wave` config (iteration, match_labels, or default=last), and groups
-them into waves defined by the strategy.
-
-Wave 1 (canary — deployments matching wave 1):
-- For each wave-1 deployment, edits the existing tenant file directly:
-  `tenants/acme.yaml` → adds `spec.overrides.remotes[tf_landscape].reference: v2.4.0`
-- Already in the merge chain — no new files, no auto-discovery needed
-- This is exactly what a manual promotion does today, just automated
-
-Wave N (final — all remaining):
-- Edits the shared environment file:
-  `environments/production.yaml` → `spec.overrides.remotes[tf_landscape].reference: v2.4.0`
-- Removes per-tenant overrides (shared file now covers everyone, tenant-level pin is redundant)
-
-**Unpromotion (rollback):**
-- Same mechanism in reverse: `strata promote rollback` reads `previous_version` from state,
-  applies it using the same strategy (canary-first if that's the policy)
-- No shortcuts: if production required canary-first going forward, it requires canary-first
-  going backward
-- The completed record stores `outcome: rolled-back` for audit trail
-
-### Option B: Environment-only, no command automation (not chosen)
-
-Define progressions and strategies in configuration, but don't automate the edits.
-Strata only provides `strata promote status` (read-only visibility) and validates that
-promotions follow the declared progression (e.g., reject a direct dev→prd jump during `strata validate`).
-
-The operator manually edits environment YAML files and creates branches/PRs.
-
-- Good: Simpler implementation. No state tracking file. No git automation.
-- Good: Teams keep full control over how they manage branches and PRs.
-- Bad: Manual process is error-prone — the operator must know which file to edit for canary vs full rollout.
-- Bad: No tracking of in-flight promotions — "is production on wave 1 or wave 2?" requires reading git history.
-- Bad: Unpromotion requires the operator to look up the previous version manually.
-
-### Option C: External promotion tool (no strata involvement, not chosen)
-
-Promotions are handled by CI/CD pipeline logic or a separate tool (e.g., ArgoCD progressive
-delivery, Flux + Flagger). Strata just deploys whatever version is in the YAML files.
-
-- Good: No new strata features needed.
-- Good: Leverages mature external tools for canary/progressive delivery.
-- Bad: Only works for Helm/Kubernetes applications — doesn't cover Terraform infrastructure promotions.
-- Bad: Breaks the single-source-of-truth principle — promotion state lives outside the config repo.
-- Bad: No unified visibility — Terraform version matrix requires a separate mechanism from Helm version matrix.
-
-## Decision Outcome
-
-**Decision: Option A** — Configuration-defined strategies with `strata promote` automation.
-
-The promotion system should be a first-class strata concept because:
-
-1. **Both Terraform and Helm need it.** External tools like Flagger only cover Kubernetes.
-   Infrastructure version progression is the harder problem and has no off-the-shelf solution.
-
-2. **The YAML edit is the promotion.** Strata already owns the YAML schema, validation, and
-   deployment. Generating the correct YAML edit for a canary vs full rollout is a natural extension.
-
-3. **State tracking enables visibility.** Without tracking, "what version is running where"
-   requires cross-referencing environment files, deployment manifests, and git history.
-   A small state file makes this queryable.
-
-4. **Unpromotion is critical for safety.** Rolling back under pressure is when mistakes happen.
-   Automating the reverse edit with the same safety checks prevents shortcuts.
-
-### Implementation approach
-
-**Phase 1 — Strategy model + validation:**
-- `configuration.spec.promotions` model (progressions, strategies, named waves)
-- `environment.spec.promotion` reference (which strategy applies)
-- `deployment.spec.promotion.wave` model (`iteration`, `match_labels`) — opt-in wave assignment
-- `strata validate` checks: warn if a version jump skips a progression step
-- Still no automation — strategies are advisory guardrails
-
-**Phase 2 — Promotion automation:**
-- `strata promote start` — creates branch, makes YAML edits, commits (explicit `--wave` for each wave)
-- `strata promote rollback` — reverse promotion using the same strategy
-- `strata promote status` — shows in-flight promotions by reading `.strata/promotions/` activity log
-- `.strata/promotions/` activity log (diagnostic trace, gitignored, kept locally)
-- `kind: promotion-record` written to artifact store on completion/rollback
-- `strata promote history` — query completed records from artifact store
-- Gate: `require_progression_order` — refuse if previous env doesn't have this version
-  (pure YAML inspection, no external tool integration needed)
-- Future gates added incrementally: `require_plan_clean`, `require_healthy`, `require_no_drift`
-
-**Deferred — `strata promote matrix`:**
-`promote matrix` requires loading the full merged environment model for every registered
-deployment to read effective versions — a fleet-wide `EnvironmentService` traversal that
-is expensive without a resolved-model cache. This command is deferred until a `.strata/`
-caching strategy is in place (see OQ-17). When implemented, `promote matrix` will read
-from the cache rather than re-resolving every environment file on every invocation.
-
-The same caching mechanism would benefit other fleet-wide operations: bulk validation,
-drift detection, and any future command that needs a resolved view of all deployments
-without a full re-load. That design belongs in a separate ADR.
-
-### Consequences
-
-- Good: Unified promotion model for both infrastructure and application changes.
-- Good: Strategies are configuration-as-code — auditable, versioned, team-shared.
-- Good: Phased implementation means model + validation ships before automation; matrix deferred until caching lands.
-- Good: Git remains the source of truth — strata automates the edits but the PR/merge flow is unchanged.
-- Good: Unpromotion uses the same strategy, preventing unsafe shortcuts under pressure.
-- Good: Completed promotion records stored in the same artifact remote as deployment manifests — no new infrastructure for audit storage. Reuses existing `spec.remotes` configuration.
-- Good: `kind: promotion-record` follows the Kubernetes-style schema, consistent with all other strata documents.
-- Good: No required runtime state — all promotion state derived from environment files and git. Activity log is diagnostic-only.
-- Good: Terraform landscapes benefit equally — remote reference versions progress through environments via the same progression gate. Zone-layer infra uses a single `all` wave (all-at-once per env, still gated by `require_progression_order`). Tenant-layer infra can canary via `scope: tenant`.
-- Neutral: Zone-layer infrastructure is structurally shared per environment — canary within a single env is not possible. This is inherent to shared infra, not a system limitation. The `scope` field makes this explicit.
-- Neutral: Multi-promotion of the same target to the same environment (e.g., v2.4.0 and v2.5.0 both in flight) produces a git merge conflict on the second PR. This is correct behavior — git is the conflict detector. `strata promote start` can warn if a competing branch exists, but enforcement is via the normal PR process.
-- Neutral: Rollback after a partially-merged promotion (wave 1 PR merged, wave 2 PR still open) requires two actions: discard the open wave 2 branch, then create a new rollback branch that reverses the already-merged wave 1 change. `strata promote rollback` detects this via the activity log and generates the correct reverse edit, but the operator must close the open wave 2 PR manually. No silent partial states.
-
-## Open Questions
-
-1. ~~**Observation period enforcement:**~~ Resolved — not applicable. `strata promote continue`
-   no longer exists (each wave is explicit `start --wave N`). Strata is a config tool, not a
-   runtime system — it doesn't track deployment timestamps. The operator decides when enough
-   time has passed. The explicit wave command and PR review process ARE the observation gate.
-
-2. ~~**Wave tenant selection:**~~ Resolved — no auto-selection. Wave membership is always
-   a deliberate choice: pilots declare `iteration: 1`, middle waves use explicit `iteration`
-   or `match_labels`, everyone else defaults to last wave. The wave array on the strategy
-   declares how many waves exist, not a selection algorithm. No randomness needed.
-
-3. ~~**Promotion scope per layer:**~~ Resolved — the `scope` field on the strategy handles
-   this. Zone-layer uses `waves: [100]` (all-at-once). Tenant-layer uses `scope: tenant`
-   for canary. No automatic adaptation needed — the operator picks the strategy per env.
-
-4. ~~**Multi-promotion conflicts:**~~ Resolved — independent targets edit different files,
-   so no conflict. Same target to the same environment produces a git merge conflict on
-   the second PR — correct behavior, already covered in Consequences (Neutral).
-
-5. ~~**Promotion and `strata deploy list`:**~~ Resolved — `strata deploy list` already
-   resolves the effective configuration per deployment through the merge chain. Promotion
-   overrides are standard YAML files (per-deployment or shared), so deploy naturally sees
-   them. No special integration needed — they're the same system.
-
-6. ~~**Should `strata promote` be part of `strata env`?**~~ Resolved — `strata promote` is
-   its own command group. It has `start`, `rollback`, `status`, `matrix`, `history`, `log` —
-   too many subcommands to nest under `env`.
-
-## Issues to Resolve (Phase 3 Blockers)
-
-7. ~~**Promotion override file not in merge chain:**~~ Resolved — no new files needed.
-   Promotion edits the existing tenant file's `spec.overrides.remotes` field directly
-   (wave 1), then edits the shared environment file and removes the per-tenant override
-   (wave N). Same files, same merge chain, same mechanism as manual promotion.
-   No auto-include or glob needed.
-
-8. ~~**`scope: tenant` has no mechanical definition:**~~ Resolved — `scope` references a
-   layer name from `configuration.spec.layering[]`. The predicate is:
-   `layer_name in deployment.spec.layers` — if the deployment has that layer key, it
-   participates in wave logic. Zone-level deployments lack the `tenant` layer key →
-   excluded from waving → always all-at-once. Generic: works for any layer name.
-
-9. ~~**"Percentage waves" table in Key Observations is stale:**~~ Fixed — renamed to
-   "Multi-wave" with wave count instead of percentages. Membership is always deliberate.
-
-10. ~~**Deployment properties beyond layering:**~~ Resolved — informational properties
-    (`costcenter`, `region`, `project`, etc.) belong in `spec.properties` (already a
-    `Dict[str, Any]` on both deployment and environment models) or `meta.labels` for
-    filtering/matching. `match_labels` in wave assignment matches against `meta.labels`.
-    `spec.tenant` is structural (drives file resolution) and is not used by `match_labels`
-    directly. See Appendix.
-
-11. ~~**Phase 1 reads a field that doesn't exist:**~~ Resolved — there is no `spec.version`
-    field on `kind: environment`. Phase 1 `status` and `matrix` commands scan
-    `spec.overrides.remotes[]` in the merged environment model. This requires loading
-    the full environment model per environment file via `EnvironmentService`, not a
-    lightweight YAML parse.
-
-12. ~~**No deployment discovery mechanism for `promote start`:**~~ Resolved — deployment
-    files are registered in `solution.json` via `strata sln deployment add <path>` or
-    discovered in bulk via `strata sln deployment scan [directory]`. The solution registry
-    (`spec.deployments[]`) is the source of truth for enumeration. `promote start --to
-    production` loads all registered deployments and filters by `spec.environments`
-    containing the target environment name. This also enables the VS Code extension to
-    display all managed deployments.
-
-    **CLI:**
-    ```bash
-    strata sln deployment add deploy/myapp.yaml     # register one file
-    strata sln deployment scan deploy/              # scan + register all in directory
-    strata sln deployment list                      # show registered deployments
-    strata sln deployment remove myapp             # unregister by name
-    ```
-
-13. ~~**Wave-to-file mapping is ambiguous:**~~ Resolved — the `spec.environments` list on
-    `kind: deployment` is extended from `List[str]` to `List[DeploymentEnvironmentRef]`,
-    where each entry has a `file` path and an optional `scope` annotation. Bare strings
-    are auto-coerced at parse time for full backward compatibility.
-
-    The promotion controller identifies which file to edit per wave by matching
-    `entry.scope` against the strategy's `scope` field:
-    - `scope: "tenant"` entry → edited for canary/early waves (per-deployment override)
-    - `scope: "shared"` entry → edited for the final wave (shared environment file)
-    - `scope: null` entries → not targeted for wave-specific edits
-
-    Deployments that don't annotate `scope` on any entry behave as today (all-at-once
-    only). The field is optional — existing YAML without `scope` continues to work.
-
-    ```yaml
-    # deployment with scoped environment refs
-    spec:
-      environments:
-        - file: environments/production.yaml
-          scope: shared
-        - file: environments/tenants/acme.yaml
-          scope: tenant
-
-    # backward-compatible shorthand (scope: null)
-    spec:
-      environments:
-        - environments/production.yaml
-    ```
-
-14. ~~**Rollback depends on a local-only file:**~~ Resolved — `previous_version` is derived
-    via a three-tier fallback that requires no special infrastructure:
-
-    **Tier 1 — Activity log** (`.strata/promotions/{target}-{version}-{env}.yaml`): if
-    present locally, read `previous_version` directly. Fast path, always preferred.
-
-    **Tier 2 — Git history** (robust, always available): the pre-promotion value is always
-    readable at the merge base between the promotion branch and `main`:
-    ```bash
-    git merge-base HEAD main          # → <base-commit>
-    git show <base-commit>:<env-file> # → YAML before promotion started
-    ```
-    Parse `spec.overrides.remotes[{name}].reference` from that YAML — that is the
-    previous version. This works on any machine, in CI, after workspace reset.
-    The branch name (`promote/{target}-{version}-{environment}`) encodes enough context
-    to locate the correct files without the activity log.
-
-    **Tier 3 — Explicit flag** (escape hatch): `--from-version v2.3.0` — required only
-    when Tier 1 and Tier 2 both fail (shallow clone, detached HEAD, etc.).
-
-    This is consistent with the ADR's stated principle: "all promotion state can be derived
-    from environment files and git history." The activity log is a local convenience, not
-    a dependency.
-
-15. ~~**`scope` + single-layer configurations:**~~ Resolved — when a strategy has
-    `scope: tenant` but no registered deployment has the `tenant` layer key,
-    `promote start` degrades to all-at-once mode automatically: it edits the
-    `scope: "shared"` environment file directly (or the only environment file if none
-    are annotated), logs a notice `"No scoped deployments found — falling back to
-    all-at-once"`, and proceeds. No error, no silent no-op — the promotion still
-    happens, just without canary waving.
-
-    Single-layer operators who never annotate `scope` on their environment refs get
-    the same behavior as today: all environment changes go to the shared file in a
-    single wave. Waving is opt-in via `spec.environments[].scope` annotations.
-
-16. ~~**Wave config placement: `kind: deployment` vs `kind: tenant`:**~~ Resolved —
-    `spec.promotion.wave` belongs on `kind: deployment`, not `kind: tenant`.
-    A deployment file already represents "this entity deployed to this environment"
-    (e.g., `deploy/acme-production.yaml`). Wave assignment is per deployment-environment
-    pairing: acme can be canary in production but all-at-once in acceptance (if that
-    environment's strategy uses a single wave). Placing wave config on the tenant file
-    would couple promotion strategy into entity identity and prevent per-environment
-    wave variation. The deployment file is the correct owner because it is already
-    environment-specific and is the unit enumerated by `solution.json`.
-
-17. ~~**`promote matrix` implementation cost — deferred:**~~ Resolved — `promote matrix`
-    requires a full `EnvironmentService` load per registered deployment to read effective
-    versions. Without a resolved-model cache this is expensive for large fleets. The
-    command is deferred until a `.strata/` caching ADR defines the cache format and
-    invalidation strategy. `promote matrix` will read from that cache. The caching
-    mechanism will also benefit bulk validation, drift detection, and other fleet-wide
-    commands. Design tracked in **[ADR-0026](0026-resolved-model-cache.md)**.
-
-## Appendix: How `spec.tenant` Works on Deployments
-
-`deployment.spec.tenant` is an **Optional[PlatformName]** field that drives file-based
-resolution and zone validation — it is not merely metadata.
-
-**When defined** (`spec.tenant: acme`):
-
-1. **File resolution:** The system loads `tenants/acme.yaml` from the repository.
-   Validation fails if the file doesn't exist.
-2. **Zone alignment:** Tenant zones (from the tenant file) are cross-checked against
-   `configuration.spec.zones` and against provider zones. A provider cannot deploy to a
-   zone the tenant isn't allowed in.
-3. **Platform artifact:** The tenant model is embedded in the build artifact
-   (`PlatformTenantModel`) and available to builders (Terraform, Ansible).
-
-**When omitted** (`spec.tenant: null` or absent):
-
-- No tenant file is loaded. No zone-alignment checks run.
-- The deployment is treated as a **shared/platform deployment** serving all tenants.
-- Builders receive `tenant = None` — templates can branch on this.
-
-**Relationship to layers:** `spec.tenant` is a *structural* field (resolves files, drives
-validation). It happens to correspond to the `tenant` layer key in `spec.layers`, but
-serves a different purpose. The layer key controls artifact path structure; the `spec.tenant`
-field controls tenant-scoped validation and embedding.
-
-**Relationship to `match_labels`:** Wave assignment via `match_labels` matches against
-`meta.labels` on any artifact (deployment, environment, tenant file). It does **not** read
-`spec.tenant` directly — if you want to wave by tenant, label the deployment
-(`meta.labels.tenant: acme`) or use `spec.layers` as the scope predicate.
-
-**Informational properties** (`costcenter`, `region`, `project`, etc.) that don't drive file
-resolution belong in `spec.properties` (both deployment and environment models already have
-this as `Dict[str, Any]`) or `meta.labels` for filtering/matching purposes.
+**[ADR 0017: Tag-based release workflow](0017-tag-based-release-workflow-option-c.md)** addresses
+the **release lifecycle**: how versions move from code into tagged releases. This ADR addresses
+**promotion**: how tagged releases are deployed progressively across environments.
+
+- **ADR 0017** (Release): Commits → Tests → `tested` tag → Release branch → `vX.Y.Z` tag
+- **This ADR** (Promotion): Version file → Lock → Ring progression → Waves → Production
 
 ---
 
-## Design: Promotion System
+## Design Overview
 
-This section consolidates the full design for the promotion system as a reference for
-implementation. It supersedes the exploratory examples in Option A above.
+The system is layered. Each layer builds on the previous. Users opt in to as much
+automation as they need — from fully manual to fully automated promotion.
 
-### Concepts
-
-| Concept              | Definition                                                                                                                         |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Progression**      | An ordered list of environments that a version must traverse (e.g., `[dev, test, acc, prd]`)                                       |
-| **Strategy**         | A named policy that governs HOW a version moves into a specific environment (wave count, scope, gates)                             |
-| **Wave**             | A subset of deployments that receive the version together. Waves execute sequentially within an environment                        |
-| **Scope**            | A layer name from `configuration.spec.layering[]` that determines which deployments participate in waving                          |
-| **Gate**             | A precondition that must pass before promotion proceeds (e.g., previous env must have the version)                                 |
-| **Promotion target** | The thing being versioned — a remote reference (`spec.overrides.remotes[].reference`) or a module field (`chart_version`, `image`) |
-
-### Configuration Model
-
-#### `configuration.spec.promotions`
-
-```yaml
-apiVersion: strata.huybrechts.xyz/v1
-kind: configuration
-spec:
-  promotions:
-    progressions:
-      - name: standard
-        environments: [dev, test, acceptance, production]
-      - name: hotfix
-        environments: [dev, production]
-
-    strategies:
-      - name: infra-cautious
-        type: remote
-        progression: standard
-        waves:
-          - name: canary
-          - name: all
-        scope: tenant
-        gates:
-          require_progression_order: true
-
-      - name: app-gradual
-        type: module
-        progression: standard
-        waves:
-          - name: canary
-          - name: early-adopters
-          - name: all
-        scope: tenant
-        gates:
-          require_progression_order: true
-
-      - name: infra-zone
-        type: remote
-        progression: standard
-        waves:
-          - name: all
-        scope: null                           # no waving — all-at-once for zone infra
-        gates:
-          require_progression_order: true
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 1: VERSION FILES          strata versions add            │
+│  Layer 2: LOCKING                strata versions lock           │
+│  Layer 3: MANUAL DEPLOY          strata deploy run -f ... -v .. │
+│  Layer 4: PROMOTIONS             strata promote <ring> <file>   │
+│  Layer 5: AUTO-RESOLVE           strata deploy run -f ...       │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Strategy fields:**
+| Layer | Requires         | What it adds                                       |
+| ----- | ---------------- | -------------------------------------------------- |
+| 1     | Nothing          | Pins snapshot — a named release                    |
+| 2     | Layer 1          | Tamper protection (hash inside file)               |
+| 3     | Layer 2          | Deploy with explicit `-v` flag — no config needed  |
+| 4     | Layer 2 + config | Automated ring progression + wave rollout          |
+| 5     | Layer 4          | Deploy auto-resolves version from promotion config |
 
-| Field         | Type           | Required | Description                                                                                                                                  |
-| ------------- | -------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`        | string         | yes      | Unique identifier for the strategy                                                                                                           |
-| `type`        | enum           | yes      | `remote` (promotes `spec.overrides.remotes[].reference`) or `module` (promotes `chart_version` / `image`)                                    |
-| `progression` | string         | yes      | References a named progression                                                                                                               |
-| `waves`       | list[Wave]     | yes      | Ordered list of wave definitions. Position = execution order                                                                                 |
-| `scope`       | string \| null | no       | Layer name from `configuration.spec.layering[]`. Only deployments with this layer key participate in waving. `null` = all-at-once, no waving |
-| `gates`       | dict           | no       | Named gate conditions (see Gates section)                                                                                                    |
+---
 
-**Wave definition:**
+## Layer 1 — Version Files
 
-| Field  | Type   | Required | Description                                    |
-| ------ | ------ | -------- | ---------------------------------------------- |
-| `name` | string | yes      | Wave identifier (used in CLI: `--wave canary`) |
+A version file is a `kind: version` snapshot of a complete release. It captures all pins
+(images, charts, remotes, tools) in a single, readable YAML file.
 
-Waves are implicitly ordered by position in the list. The last wave is always the
-"everyone else" catch-all — deployments without explicit wave assignment land here.
+### Creating a version file
 
-#### `environment.spec.promotion`
+```bash
+# Generate from current workspace state (scan what's pinnable)
+strata versions add --workspace-file stack/workspace.yaml -o versions/v1.0.1.yaml
+
+# Generate from a previous version (copy + update specific pins)
+strata versions add --version-file versions/v1.0.0.yaml -o versions/v1.0.1.yaml
+```
+
+### Version file format
 
 ```yaml
-# environments/production.yaml
+# versions/v1.0.1.yaml
 apiVersion: strata.huybrechts.xyz/v1
-kind: environment
+kind: version
 meta:
-  name: production
+  name: release-1.0.1
+  annotations:
+    description: "Adds dark mode, fixes auth timeout"
 spec:
-  promotion:
-    strategy: infra-cautious
+  version: 1.0.1                 # canonical version identifier
+  pins:
+    images:
+      infisical:
+        app:    v1.2.0
+        worker: v1.2.0
+        redis:  "7.2.0"
+      traefik: v3.0.0           # single-service module — flat value
+    charts:
+      traefik: "28.2.0"
+    remotes:
+      iac_core: v2.6.0
+    tools:
+      terraform: "~> 1.9"
 ```
 
-Each environment references which strategy applies. Environments without a `promotion`
-block have no promotion guardrails (useful for dev/sandbox — versions can be set freely).
+**Fields:**
 
-#### `deployment.spec.environments` — scoped refs
+| Field               | Required | Description                                     |
+| ------------------- | -------- | ----------------------------------------------- |
+| `spec.version`      | yes      | Canonical version string — the release identity |
+| `spec.pins.images`  | no       | Image tags per module/service                   |
+| `spec.pins.charts`  | no       | Helm chart versions per module                  |
+| `spec.pins.remotes` | no       | Git references per remote                       |
+| `spec.pins.tools`   | no       | Tool version constraints per provisioner        |
 
-The `spec.environments` field on `kind: deployment` accepts either bare strings (backward
-compatible) or scoped ref objects. The `scope` annotation tells the promotion controller
-which file to target for each wave:
+**Who creates them:** a human operator, a CI pipeline, or a renovate-style bot. Strata does
+not care — it reads them. `strata validate <file>` validates the schema.
+
+### Pin syntax
+
+**Images — single-service module** (value is a string):
+```yaml
+images:
+  traefik: v3.0.0       # module name = service name
+```
+
+**Images — multi-service module** (value is a dict):
+```yaml
+images:
+  infisical:
+    app:    v1.2.0       # module: infisical, service: app
+    worker: v1.2.0       # module: infisical, service: worker
+```
+
+**Tools — version constraints** (same syntax as Terraform `required_version`):
+
+| Constraint | Meaning                 |
+| ---------- | ----------------------- |
+| `~> 1.9`   | `>= 1.9.0, < 2.0.0`     |
+| `~> 1.9.2` | `>= 1.9.2, < 1.10.0`    |
+| `>= 1.9`   | minimum, no upper bound |
+| `1.9.2`    | exact match             |
+
+---
+
+## Layer 2 — Locking
+
+Locking adds tamper protection to a version file. Once locked, any modification is
+detectable at build/deploy time.
+
+```bash
+strata versions lock versions/v1.0.1.yaml
+```
+
+This computes a sha256 hash of the file's pin content and writes it into the file:
 
 ```yaml
-# deploy/acme-production.yaml
+# versions/v1.0.1.yaml — after locking
+apiVersion: strata.huybrechts.xyz/v1
+kind: version
+meta:
+  name: release-1.0.1
+spec:
+  version: 1.0.1
+  hash: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+  pins:
+    images:
+      infisical:
+        app: v1.2.0
+        ...
+```
+
+**Rules:**
+- `spec.hash` is computed over the `spec.pins` content (deterministic serialisation)
+- Editing any pin after locking makes the hash invalid
+- `strata validate` verifies the hash; mismatch → exit 3
+- `strata deploy -v` refuses to deploy an unlocked version in strict mode
+- Re-locking after intentional edits: `strata versions lock --force`
+
+A locked version file is the **immutable release artifact**. It lives in git, is PR-approved,
+and its hash proves integrity at every subsequent step.
+
+---
+
+## Layer 3 — Manual Deploy with Version
+
+The simplest deployment mode. No promotion configuration required. Pass the version file
+directly on the command line.
+
+```bash
+strata deploy run -f deploy/landscape-prod.yaml -v versions/v1.0.1.yaml
+```
+
+**What happens:**
+1. Strata reads the version file
+2. Verifies `spec.hash` (if present — required in strict mode)
+3. Applies pins to the deployment (images → module overrides, remotes → references, etc.)
+4. Deploys
+
+The deployment file does NOT need `spec.promotion`. This is fully manual version management:
+the operator chooses which version to deploy, when, and where.
+
+```yaml
+# deploy/landscape-prod.yaml — no promotion config needed
 apiVersion: strata.huybrechts.xyz/v1
 kind: deployment
 meta:
-  name: acme-production
+  name: landscape-prod
 spec:
+  workspace:
+    source: "@config/stack/workspace.yaml"
   environments:
     - file: "@config/environments/production.yaml"
-      scope: shared          # edited by the final wave (all)
-    - file: "@config/environments/tenants/acme.yaml"
-      scope: tenant          # edited by canary/early waves
+  # No spec.promotion — manual mode
 ```
 
+**When to use:** single-workspace setups, early-stage projects, or any deployment where
+you want direct control without the promotion machinery.
+
+---
+
+## Layer 4 — Promotions
+
+Promotions automate version progression through rings. They require configuration on the
+`kind: configuration` file and opt-in on each deployment.
+
+### Promotion configuration
+
 ```yaml
-# deploy/zone-production.yaml — zone infra, no waving
+# config/config.yaml (kind: configuration)
+apiVersion: strata.huybrechts.xyz/v1
+kind: configuration
+meta:
+  name: haven
 spec:
+  promotions:
+    - name: customer-apps
+      versions_path: "@config/versions/customer/"
+      rings:
+        - name: dev
+          order: 1
+        - name: sandbox
+          order: 2
+        - name: prod
+          order: 3
+          waves:
+            - id: 1
+              match_labels:
+                tier: enterprise
+            - id: 2
+              match_labels:
+                tier: growth
+
+    - name: landscape-infra
+      versions_path: "@config/versions/landscape/"
+      rings:
+        - name: dev
+          order: 1
+        - name: prod
+          order: 2
+```
+
+**Promotion fields:**
+
+| Field                  | Required | Description                                             |
+| ---------------------- | -------- | ------------------------------------------------------- |
+| `name`                 | yes      | Promotion identifier — referenced by deployments        |
+| `versions_path`        | yes      | Directory where version files and ring locks live       |
+| `rings`                | yes      | Ordered list of rings                                   |
+| `rings[].name`         | yes      | Ring identifier                                         |
+| `rings[].order`        | yes      | Progression sequence (lower = earlier)                  |
+| `rings[].waves`        | no       | Wave definitions for gradual rollout                    |
+| `waves[].id`           | yes      | Wave number — determines deploy order and lock filename |
+| `waves[].match_labels` | yes      | Label selector matched against deployment `meta.labels` |
+
+### Deployment opt-in
+
+```yaml
+# deploy/customer-acme.yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: deployment
+meta:
+  name: customer-acme
+  labels:
+    tier: enterprise         # → matched to wave 1 by promotion config
+    customer: acme
+spec:
+  promotion:
+    name: customer-apps      # references config.spec.promotions[].name
+    ring: prod               # which ring this deployment belongs to
+  workspace:
+    source: "@config/stack/workspace.yaml"
   environments:
     - file: "@config/environments/production.yaml"
-      scope: shared
 ```
 
-Bare strings (`- environments/production.yaml`) are auto-coerced to `{file: ..., scope: null}`
-at parse time. Deployments with no `scope` annotations are treated as all-at-once only.
+A deployment with `spec.promotion` is **managed** — strata auto-resolves its version from
+the ring lock. A deployment without `spec.promotion` is **unmanaged** — use `-v` flag.
 
-**Scope naming contract:** `spec.environments[].scope` values and `strategy.scope` use the
-same names by convention — a strategy with `scope: "tenant"` targets env entries annotated
-`scope: "tenant"`. These are complementary, not identical in semantics: the strategy field
-is a layer predicate (which deployments participate in waving); the entry annotation is a
-role label (which file gets edited for which wave). An implementer should not assume
-`strategy.scope == entry.scope` is a direct equality check — it is a naming convention.
-
-Deployment files must be **registered in the solution** to be visible to `promote start`:
+### Promoting a version
 
 ```bash
-strata sln deployment add deploy/acme-production.yaml
-strata sln deployment scan deploy/         # register all in directory
-strata sln deployment list                 # verify
+# Lock the version file first (if not already locked)
+strata versions lock versions/customer/v2.1.0.yaml
+
+# Promote dev ring to v2.1.0
+strata promote dev versions/customer/v2.1.0.yaml --promotion customer-apps
+# → looks up customer-apps → versions_path: @config/versions/customer/
+# → writes @config/versions/customer/dev.lock.yaml
+# → git checkout -b promote/dev-2.1.0
+# → commits the lock file
+# → pushes
+# → prints: gh pr create ...
+
+# After validation, promote prod
+strata promote prod versions/customer/v2.1.0.yaml --promotion customer-apps
+# → writes @config/versions/customer/prod.lock.yaml
 ```
 
-#### Wave assignment on deployments
+If only one promotion is configured, `--promotion` can be omitted.
 
-Wave membership is declared on the deployment — decentralized, not centrally managed
-in the strategy.
+### Ring lock file (version-lock)
+
+The ring lock is a small pointer file written by `strata promote`. It records which version
+file the ring is currently on.
 
 ```yaml
-# deploy/acme-production.yaml  (kind: deployment — specific to production)
+# @config/versions/customer/prod.lock.yaml — written by strata promote
+apiVersion: strata.huybrechts.xyz/v1
+kind: version-lock
+meta:
+  name: prod
+spec:
+  source: "v2.1.0.yaml"                    # relative to versions_path
+  hash: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+  version: "2.1.0"                          # copied from meta.version for quick reads
+  previous:
+    source: "v2.0.0.yaml"
+    version: "2.0.0"
+    hash: "sha256:2c624232cdd221771294dfbb310acbc8754e197e333e9342f18b93fcb4e0de7c"
+```
+
+**Lock fields:**
+
+| Field                   | Description                                            |
+| ----------------------- | ------------------------------------------------------ |
+| `spec.source`           | Path to the version file (relative to `versions_path`) |
+| `spec.hash`             | sha256 of the version file — verified at deploy time   |
+| `spec.version`          | Version identifier (from `meta.version` of the source) |
+| `spec.previous.source`  | Previous version file — enables rollback               |
+| `spec.previous.version` | Previous version identifier                            |
+| `spec.previous.hash`    | Previous file hash — verified during rollback          |
+
+The lock is PR-approved in git. It does NOT duplicate pins — it points to the version file.
+Strata follows the reference at deploy time.
+
+### Multi-workspace directory layout
+
+Each promotion has its own `versions_path`. Version files and locks are co-located:
+
+```
+@config/versions/
+  landscape/                     # promotion: landscape-infra
+    v1.0.0.yaml
+    v1.0.1.yaml
+    dev.lock.yaml
+    prod.lock.yaml
+  customer/                      # promotion: customer-apps
+    v2.0.0.yaml
+    v2.1.0.yaml
+    dev.lock.yaml
+    prod.lock.yaml
+    prod.wave.1.lock.yaml        # wave lock (during rollout only)
+```
+
+Each workspace layer promotes independently. Landscape may be on v1.0.1 while customer is
+on v2.1.0. Different cadences, different blast radii, different version files.
+
+### Rollback
+
+```bash
+strata promote rollback prod --promotion customer-apps
+# → reads prod.lock.yaml → spec.previous
+# → verifies previous hash
+# → writes new prod.lock.yaml pointing to previous source
+# → branch → commit → push
+```
+
+No git history traversal needed — the previous version is recorded in the lock itself.
+
+---
+
+## Layer 5 — Auto-Resolve at Deploy Time
+
+When a deployment has `spec.promotion`, strata resolves the version automatically.
+
+```bash
+strata deploy run -f deploy/customer-acme.yaml
+# No -v flag needed — version is resolved from promotion config
+```
+
+**Resolution steps:**
+
+1. Read `spec.promotion.name` → look up promotion in config
+2. Get `versions_path` from the promotion
+3. Read `spec.promotion.ring` → derive lock path: `{versions_path}/{ring}.lock.yaml`
+4. Read the ring lock → follow `spec.source` to the version file
+5. Verify hash (lock hash matches version file)
+6. Check for wave membership (see Waves below)
+7. Apply pins to the deployment
+
+**Resolution precedence (full chain):**
+
+```
+1. Stack defaults                             ← human-authored
+2. Environment merge chain (spec.overrides.*) ← human-authored
+3. Version file pins (via ring lock)          ← machine-resolved
+4. Wave lock pins (if wave rollout active)    ← machine-resolved, wins
+```
+
+A deployment without `spec.promotion` skips layers 3–4 entirely — pre-promotion behaviour
+is fully preserved.
+
+### Build output provenance
+
+`strata build` records which version was used in the build output:
+
+```yaml
+# In build output (platform.json or equivalent)
+versions:
+  source: "@config/versions/customer/v2.1.0.yaml"
+  version: "2.1.0"
+  hash: "sha256:9f86d081..."
+  ring: prod
+  wave: 1                        # if wave rollout active
+```
+
+Reference only — no duplicated pins. The hash proves integrity. The source path + git
+commit enables full reproducibility.
+
+---
+
+## Waves
+
+Waves enable gradual rollout within a ring. Wave 1 deploys first (canary), later waves
+follow after validation. Waves only apply to rings that configure them.
+
+### How waves work
+
+1. Wave definitions live on the promotion config (not on deployments)
+2. Each deployment's `meta.labels` determine its wave membership
+3. During a rollout, wave lock files exist alongside the ring lock
+4. At deploy time, strata resolves wave membership from labels
+
+**Deployments are simple — no wave declaration needed:**
+
+```yaml
+# deploy/customer-acme.yaml
+meta:
+  labels:
+    tier: enterprise         # → matched to wave 1 by promotion config
+    customer: acme
 spec:
   promotion:
-    wave:
-      iteration: 1                # canary in production; may differ per environment
-```
+    name: customer-apps
+    ring: prod
 
-```yaml
-# deploy/contoso-production.yaml  (kind: deployment)
+# deploy/customer-contoso.yaml
+meta:
+  labels:
+    tier: starter            # → not matched by any wave → catch-all
+    customer: contoso
 spec:
   promotion:
-    wave:
-      match_labels:
-        tier: enterprise          # matched against meta.labels on the deployment
+    name: customer-apps
+    ring: prod
 ```
+
+### Wave rollout flow
+
+```bash
+# 1. Promote wave 1
+strata promote prod versions/customer/v2.1.0.yaml --promotion customer-apps --wave 1
+# → writes @config/versions/customer/prod.wave.1.lock.yaml
+# → branch → commit → push → PR
+
+# 2. Deploy wave 1
+strata deploy run --ring prod --wave 1 --promotion customer-apps
+# → finds all prod deployments where meta.labels matches { tier: enterprise }
+# → for each: resolves prod.lock.yaml + layers prod.wave.1.lock.yaml on top
+# → deploys
+
+# 3. Validate, then promote wave 2
+strata promote prod versions/customer/v2.1.0.yaml --promotion customer-apps --wave 2
+strata deploy run --ring prod --wave 2 --promotion customer-apps
+
+# 4. Complete: advance the ring lock, delete wave locks
+strata promote prod versions/customer/v2.1.0.yaml --promotion customer-apps --complete
+# → advances prod.lock.yaml to v2.1.0
+# → deletes prod.wave.*.lock.yaml
+# → branch → commit → push → PR
+```
+
+### Wave resolution at deploy time
+
+When deploying a single deployment that has wave membership:
+
+1. Load ring lock from `{versions_path}/{ring}.lock.yaml`
+2. Read wave config from the promotion (`rings[].waves`)
+3. Match deployment's `meta.labels` against wave selectors → wave N
+4. Look for `{versions_path}/{ring}.wave.{N}.lock.yaml`
+5. If found → layer it on top (wave lock wins for overlapping pins)
+6. If not found → ring lock applies as-is (no rollout in progress)
+
+Deployments not matched by any wave selector are in the **catch-all** group — they receive
+the ring lock only after `--complete`.
+
+### Wave lock file
 
 ```yaml
-# deploy/fabrikam-production.yaml  (kind: deployment)
-# No spec.promotion.wave — defaults to last wave ("all")
+# @config/versions/customer/prod.wave.1.lock.yaml
+apiVersion: strata.huybrechts.xyz/v1
+kind: version-lock
+meta:
+  name: prod.wave.1
+spec:
+  source: "v2.1.0.yaml"
+  hash: "sha256:9f86d081..."
+  version: "2.1.0"
+  wave: 1
 ```
 
-**Resolution order:**
+Same structure as a ring lock, with an additional `wave` field. Exists only during a
+rollout; deleted by `--complete`.
 
-1. `iteration` (explicit wave position, 1-indexed) — wins if present
-2. `match_labels` (matches against `meta.labels` of the deployment) — evaluated if no iteration
-3. Default = last wave — deployments without wave config are in the final catch-all
+---
 
-**Scope filtering:** Before wave assignment is evaluated, the strategy's `scope` field
-filters deployments. Only deployments where `scope_layer_name in deployment.spec.layers`
-participate. Zone-level deployments (no tenant layer) are excluded from waving entirely —
-they follow the `scope: null` / all-at-once path.
+## CLI Summary
 
-### CLI Interface
+### `strata versions`
 
-```
-strata promote <subcommand>
-```
+| Command                         | What it does                                                   |
+| ------------------------------- | -------------------------------------------------------------- |
+| `strata versions add`           | Generate a new version file from workspace or previous version |
+| `strata versions lock <file>`   | Compute hash and write it into the version file                |
+| `strata versions export <file>` | Print resolved pin map (`--output json\|text`)                 |
 
-| Subcommand | Purpose                                                               |
-| ---------- | --------------------------------------------------------------------- |
-| `start`    | Initiate or advance a promotion (creates branch, edits YAML, commits) |
-| `rollback` | Reverse a promotion using the same strategy                           |
-| `status`   | Show in-flight promotions (from activity log)                         |
-| `matrix`   | Show version matrix across all environments                           |
-| `history`  | Query completed promotion records from artifact store                 |
-| `log`      | Show activity log for a specific promotion                            |
+### `strata promote`
 
-#### `strata promote start`
+All commands accept `--promotion <name>` (required when multiple promotions exist, optional when only one is configured).
 
-```bash
-strata promote start \
-  --remote tf_landscape \
-  --version v2.4.0 \
-  --to production \
-  --wave canary
-```
+| Command                                                      | What it does                                 |
+| ------------------------------------------------------------ | -------------------------------------------- |
+| `strata promote <ring> <file> --promotion <name>`            | Write ring lock pointing to the version file |
+| `strata promote <ring> <file> --promotion <name> --wave N`   | Write wave lock for gradual rollout          |
+| `strata promote <ring> <file> --promotion <name> --complete` | Advance ring lock, delete wave locks         |
+| `strata promote <ring> <file> --promotion <name> --dry-run`  | Show what would be written, no side effects  |
+| `strata promote rollback <ring> --promotion <name>`          | Revert ring lock to previous version         |
+| `strata promote status --promotion <name>`                   | Show current version per ring                |
+| `strata promote matrix`                                      | Show version matrix across all promotions    |
 
-| Flag        | Required | Description                                                                                |
-| ----------- | -------- | ------------------------------------------------------------------------------------------ |
-| `--remote`  | yes*     | Remote name being promoted (mutually exclusive with `--module`)                            |
-| `--module`  | yes*     | Module name being promoted (mutually exclusive with `--remote`)                            |
-| `--version` | yes      | Target version                                                                             |
-| `--to`      | yes      | Target environment                                                                         |
-| `--wave`    | no       | Wave name to execute. Defaults to first wave. Use `all` or last wave name for full rollout |
-| `--dry-run` | no       | Show what would be edited without making changes                                           |
+### `strata deploy` (version-related flags)
 
-**What `start` does:**
+| Flag                 | Description                                                          |
+| -------------------- | -------------------------------------------------------------------- |
+| `-v <file>`          | Deploy with explicit version file (manual mode, no promotion needed) |
+| `--ring <name>`      | Filter to deployments in this ring                                   |
+| `--wave <id>`        | Filter to deployments in this wave                                   |
+| `--promotion <name>` | Filter to deployments using this promotion                           |
+| `--require-lock`     | Fail if version file is not locked (strict mode)                     |
 
-1. Loads strategy from the target environment's `spec.promotion.strategy`
-2. Validates gates (progression order, etc.)
-3. Loads all deployments registered in `solution.json` (`spec.deployments[]`), loads each
-   deployment's merged environment model, and filters to deployments where any resolved
-   environment has `meta.name == target_environment`
-4. Filters by scope: only deployments where `strategy.scope in deployment.spec.layers`
-   participate in waving; others are all-at-once
-5. Assigns deployments to waves (iteration → match_labels → default last wave)
-6. For single-layer / no scoped entries: degrades to all-at-once with a console notice
-7. For the specified wave: identifies files via `spec.environments[].scope` matching
-8. Creates branch `promote/{target}-{version}-{environment}`
-9. Makes YAML edits, commits
-10. Appends to activity log (`.strata/promotions/`)
-11. Outputs: files modified, branch name, suggested PR command
+---
 
-**Wave mechanics — what gets edited:**
+## Deployment Modes — Summary
 
-| Wave position                | Action                                                                                                                                                                                                |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| First/middle wave (not last) | For each wave-member deployment: edit the `spec.environments` entry where `scope == strategy.scope` (e.g. `scope: "tenant"`). Set `spec.overrides.remotes[{name}].reference: {version}` in that file. |
-| Last wave (`all`)            | Edit the `scope: "shared"` environment file: set `spec.overrides.remotes[{name}].reference: {version}`. Remove scoped overrides written by earlier waves (they are now covered by the shared file).   |
-| No scoped entries found      | Degrade to all-at-once: edit the `scope: "shared"` file (or the only env file if none are annotated). Log notice: `"No scoped deployments — falling back to all-at-once"`                             |
+| Mode            | Deployment has                   | Version resolved from               | Managed by            |
+| --------------- | -------------------------------- | ----------------------------------- | --------------------- |
+| **No versions** | No `spec.promotion`, no `-v`     | Stack + environment chain only      | Human (overrides)     |
+| **Manual**      | No `spec.promotion`              | `-v` flag on CLI                    | Human (explicit file) |
+| **Promoted**    | `spec.promotion: { name, ring }` | Auto-resolved from promotion config | `strata promote`      |
 
-#### `strata promote rollback`
+A deployment is exactly one mode. If it has `spec.promotion`, it is promoted (Layer 5).
+If not, it is manual (Layer 3) or unversioned.
 
-```bash
-strata promote rollback \
-  --remote tf_landscape \
-  --to production
+---
 
-# explicit previous version when git derivation is unavailable (shallow clone, CI, etc.)
-strata promote rollback \
-  --remote tf_landscape \
-  --to production \
-  --from-version v2.3.0
-```
+## Audit Trail
 
-**`previous_version` resolution — three-tier fallback:**
+| Question                            | Answer                                                       |
+| ----------------------------------- | ------------------------------------------------------------ |
+| What version ran in prod on date X? | Read `prod.lock.yaml` at that git commit                     |
+| Who approved the version change?    | PR merge history on the lock file                            |
+| Was the version file tampered?      | `spec.hash` inside the version file — verified at every step |
+| Was the progression followed?       | Git timestamps on each ring's lock file                      |
+| What changed between versions?      | Diff two version files directly                              |
+| What was deployed?                  | Build output `versions:` section (source + hash)             |
 
-| Tier | Source                                                                    | When available                       |
-| ---- | ------------------------------------------------------------------------- | ------------------------------------ |
-| 1    | Activity log (`.strata/promotions/{target}-{version}-{env}.yaml`)         | Local machine, log present           |
-| 2    | Git merge base: `git merge-base HEAD main` → read env file at that commit | Always, unless shallow clone         |
-| 3    | `--from-version` explicit flag                                            | Escape hatch for CI / shallow clones |
+---
 
-Rollback applies the reverse edit using the **same strategy** — if production required
-canary-first going forward, it requires canary-first going backward. Writes
-`outcome: rolled-back` to the promotion record.
+## Multi-Workspace Topology
 
-#### `strata promote matrix`
+Different workspace layers (landscape, zone, customer) have different version files and
+promote independently. Each promotion config has its own `versions_path`.
 
-```bash
-strata promote matrix
-strata promote matrix --remote tf_landscape
+```yaml
+# config.yaml
+spec:
+  promotions:
+    - name: landscape-infra
+      versions_path: "@config/versions/landscape/"
+      rings:
+        - { name: dev, order: 1 }
+        - { name: prod, order: 2 }
+
+    - name: customer-apps
+      versions_path: "@config/versions/customer/"
+      rings:
+        - { name: dev, order: 1 }
+        - { name: sandbox, order: 2 }
+        - { name: prod, order: 3, waves: [...] }
 ```
 
-Scans environment files and deployment manifests. Outputs a table:
+**Deployment dependency order:**
+1. **Landscape** deploys first (outputs feed zone)
+2. **Zone** deploys second (outputs feed customer)
+3. **Customer** deploys last — separate cadence, waves
 
-```
-Remote: tf_landscape
-┌─────────────┬─────────┬──────────┬────────────┬────────────┐
-│ Environment │ Shared  │ acme     │ contoso    │ fabrikam   │
-├─────────────┼─────────┼──────────┼────────────┼────────────┤
-│ dev         │ v2.5.0  │ —        │ —          │ —          │
-│ test        │ v2.4.0  │ —        │ —          │ —          │
-│ acceptance  │ v2.4.0  │ —        │ —          │ —          │
-│ production  │ v2.3.0  │ v2.4.0 ⚡│ —          │ —          │
-└─────────────┴─────────┴──────────┴────────────┴────────────┘
-⚡ = per-tenant override (promotion in progress)
-```
+Each layer promotes independently. Landscape may be on v1.0.1 while customer is on v2.1.0.
+Different cadences, different blast radii, different version files.
 
-#### `strata promote status`
+---
 
-Shows active/in-flight promotions from `.strata/promotions/`:
+## Implementation Status
 
-```
-In-flight promotions:
-  tf_landscape → production  v2.3.0 → v2.4.0  wave: canary (1/2)  started: 2026-06-23
-```
+| Phase | Description                                                                      | Status | Completed  |
+| ----- | -------------------------------------------------------------------------------- | ------ | ---------- |
+| 1     | Models: `VERSION_LOCK`, `VERSION` kinds; `deployment.spec.versions` field        | ✅ Done | 2026-07-11 |
+| 2     | Resolution: `VersionService`, `_apply_version_pins` hook in `DeploymentService`  | ✅ Done | 2026-07-11 |
+| 3     | Validation: `platform_validator.py`, `cli_schema.py`, shadowed-override warnings | ✅ Done | 2026-07-11 |
+| 4     | CLI: `strata versions` group (`init`, `export`, `apply`, `refresh`)              | ✅ Done | 2026-07-11 |
+| P-1   | Promotion model + validation (`promotion_model.py`, env ring ref check)          | ✅ Done | 2026-07-11 |
+| P-2   | `strata promote` CLI group                                                       | ✅ Done | 2026-07-11 |
+| P-3   | Promotion validation wiring                                                      | ✅ Done | 2026-07-11 |
+| P-4   | Strict lock mode: `require_lock` on ring                                         | ✅ Done | 2026-07-11 |
+| P-5a  | `type: tool` support                                                             | ✅ Done | 2026-07-11 |
+| P-5b  | Shadowed-override warnings                                                       | ✅ Done | 2026-07-11 |
+| F-2   | Artifact digest policy                                                           | ✅ Done | 2026-07-11 |
+| R-1   | Revised design: layers, `-v` flag, `versions_path`, hash-in-file                 | ✅ Done | 2026-07-14 |
+| R-2   | `strata versions add` (generate from workspace/previous)                         | ✅ Done | 2026-07-14 |
+| R-3   | `strata versions lock` (hash-in-file)                                            | ✅ Done | 2026-07-14 |
+| R-4   | `deploy -v` flag (manual mode)                                                   | ✅ Done | 2026-07-14 |
+| R-5   | `spec.promotions[].versions_path` on configuration                               | ✅ Done | 2026-07-14 |
+| R-6   | Auto-resolve version from promotion at deploy time (Layer 5)                     | ✅ Done | 2026-07-14 |
+| R-7   | Wave lock files (`{ring}.wave.{N}.lock.yaml`); `--wave N`, `--complete`          | ✅ Done | 2026-07-14 |
+| R-8   | `spec.hash`, `spec.version`, `spec.wave`, `spec.previous` on lock files          | ✅ Done | 2026-07-14 |
+| R-9   | Hash verification in `VersionService.load()` when following pointer              | ✅ Done | 2026-07-14 |
+| R-10  | `run_pointer_rollback()` — restore ring lock via `spec.previous`                 | ✅ Done | 2026-07-14 |
+| R-11  | `deploy run --ring / --wave / --promotion` filter flags + wave lock layering     | ✅ Done | 2026-07-14 |
 
-#### `strata promote history`
+---
 
-Queries completed `kind: promotion-record` documents from the artifact store:
+## Edge Cases
 
-```bash
-strata promote history --to production --last 5
-strata promote history --remote tf_landscape
-```
+| Scenario                                                     | Behaviour                                                                                                                              |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Deploy with `spec.promotion` but no lock file exists         | Exit 3: `"No lock file at '{versions_path}/{ring}.lock.yaml'. Run 'strata promote' first."`                                            |
+| `strata deploy -v` with unlocked version file (non-strict)   | Warn: `"Version file has no spec.hash — integrity cannot be verified."` Deploy proceeds.                                               |
+| `strata deploy -v --require-lock` with unlocked version file | Exit 3: `"Version file is not locked. Run 'strata versions lock' first."`                                                              |
+| `strata promote` with file outside `versions_path`           | Exit 3: `"Version file must be inside versions_path '{path}' for promotion '{name}'."`                                                 |
+| Two promotions with overlapping `versions_path`              | Caught by `strata validate`: `"Promotions '{a}' and '{b}' share versions_path '{path}'. Each promotion must have a unique directory."` |
+| `strata promote --dry-run`                                   | Shows what would be written (lock content, git branch name) without creating files or git operations.                                  |
 
-### Gates
+---
 
-Gates are preconditions evaluated before `strata promote start` proceeds.
+## Open Questions
 
-| Gate                        | Behavior                                                                                                                                                                    |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `require_progression_order` | Refuses promotion if the previous environment in the progression doesn't have this version. Example: can't promote to production if acceptance is still on an older version |
-
-**Future gates** (not in Phase 3, added incrementally):
-
-| Gate                          | Behavior                                                              |
-| ----------------------------- | --------------------------------------------------------------------- |
-| `require_plan_clean`          | Refuses if the last Terraform plan for this deployment showed drift   |
-| `require_healthy`             | Refuses if the deployment's health check (external) reports unhealthy |
-| `require_no_active_promotion` | Refuses if another promotion for the same target+env is in progress   |
-
-Gates are evaluated at `start` time. If a gate fails, strata prints the reason and exits
-with code 3 (validation failure). No branch is created, no files are edited.
-
-### State Management
-
-#### Activity log (diagnostic — `.strata/promotions/`)
-
-- One file per active promotion: `{target}-{version}-{environment}.yaml`
-- Append-only event log: timestamped actions, gates, files modified, commits
-- Gitignored — local diagnostic only. Strata does NOT require this file to function
-- All promotion state can be derived from environment files + git history
-- Used by `strata promote status` and `strata promote log`
-
-#### Promotion record (audit — artifact store)
-
-- Written on completion or rollback to the configured `spec.remotes` artifact store
-- `kind: promotion-record` — Kubernetes-style schema
-- Contains: target, versions (from/to), strategy used, waves executed, outcome, timestamps,
-  initiated_by, branch, links to produced deployment manifests
-- Used by `strata promote history`
-- Never deleted — permanent audit trail
-
-### Git Flow
-
-```
-main ─────────────────────────────────────────────────────────────►
-       │                              │
-       │ promote/tf_landscape-v2.4.0-production
-       ├──── wave 1: edit tenants/acme.yaml ──── PR ──── merge ───►
-       │                                                  │
-       │                                                  │
-       ├──── wave 2: edit environments/production.yaml ── PR ── merge ─►
-       │           + remove acme override
-```
-
-Each wave is an explicit `strata promote start --wave {name}` invocation. The operator
-decides when to advance (after observing canary, after CI passes, after stakeholder
-approval). There is no auto-advance — strata is a config tool, not a runtime system.
-
-### Interaction with Existing Systems
-
-| System                      | Interaction                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `strata validate`           | Phase 2+: warns if a version jump skips a progression step                                              |
-| `strata deploy list`        | Already resolves effective config through the merge chain — sees promotion overrides natively           |
-| `strata build`              | Unchanged — builds whatever version is in the resolved config                                           |
-| CI/CD pipeline              | Unchanged — deploys on merge to main. Strata creates the branch and edits, CI validates and deploys     |
-| `spec.overrides.remotes`    | The exact field being edited by promotions. Existing override merge chain handles layering              |
-| `spec.tenant`               | Drives file resolution for wave-1 edits (which tenant file to edit). Not read by `match_labels`         |
-| `meta.labels`               | Matched by `match_labels` for wave assignment. Informational labels live here                           |
-| `spec.layers`               | Used by `scope` predicate to filter which deployments participate in waving                             |
-| `spec.environments[].scope` | Identifies which environment file to edit per wave (`"shared"` = final wave, layer name = canary waves) |
-
-### Constraints and Non-Goals
-
-- **No runtime monitoring.** Strata does not watch deployments, check health, or auto-advance.
-  The operator (or CI) decides when to proceed.
-- **No percentage-based wave sizing.** Wave membership is always deliberate (explicit iteration
-  or label matching). No random selection, no "deploy to 25% of tenants."
-- **No cross-environment atomicity.** Each environment is promoted independently. The
-  progression gate ensures ordering but doesn't create atomic multi-env transactions.
-- **No promotion of arbitrary fields.** Only `spec.overrides.remotes[].reference` (type: remote)
-  and module version fields (type: module) are supported promotion targets.
-- **No auto-discovery of what to promote.** The operator specifies the target and version
-  explicitly. Strata doesn't scan registries or detect new versions.
-
-## More Information
-
-- [VCT-INT Architecture](../issues/VCT-INT-architecture.md) — landscape versioning section
-- [Environment Configuration](../config/environment.md) — remote reference overrides
-- [At Scale Guide](../guides/at-scale.md) — variable flow, tenant model, tier environments
+- ~~**Progression enforcement strictness**~~ — **Decided:** hard exit-3 error with a clear
+  message: `"Error: ring 'prod' (order 3) cannot be promoted before 'sandbox' (order 2)
+  has received version 2.1.0. Promote sandbox first, or use --force to override."`
+  No configuration needed. `--force` bypasses for emergencies.
+- ~~**Wave lock scope**~~ — **Decided:** all wave locks reference the same version file
+  (the one being promoted). The ring lock stays on the previous version until `--complete`.
+  Waves control **timing**, not different versions. During rollout: `prod.lock → v1`,
+  `prod.wave.1.lock → v2`, wave 2 has no lock yet so gets v1 from ring lock.
+  After `--complete`: `prod.lock → v2`, wave locks deleted.
+- ~~**Multi-label matching**~~ — **Decided:** exit-3 error, no guessing. If a deployment's
+  labels match multiple wave selectors, `strata validate` and `strata deploy` fail with:
+  `"Error: deployment 'customer-acme' matches wave 1 and wave 2 in promotion 'customer-apps'.
+  Labels must match exactly one wave. Fix match_labels to be unambiguous."`
+  Wave selectors must be mutually exclusive — the operator designs labels that don't overlap.
+- ~~**`-v` with promoted deployments**~~ — **Decided:** mutually exclusive. If a deployment
+  has `spec.promotion`, `-v` is refused: `"Error: deployment 'customer-acme' is managed by
+  promotion 'customer-apps'. Use 'strata promote' to change its version, or remove
+  spec.promotion to use manual mode."` For hotfixes: `strata promote` with `--force`
+  bypasses progression order — that's the escape hatch, not `-v`.

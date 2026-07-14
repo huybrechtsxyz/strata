@@ -40,6 +40,7 @@ from strata.commands.cli_mcp import mcp_group
 from strata.commands.cli_new import new_command
 from strata.commands.cli_policy import policy_group
 from strata.commands.cli_profile import profile_group
+from strata.commands.cli_promote import promote_group
 from strata.commands.cli_ref import ref_group
 from strata.commands.cli_repo import repo_group
 from strata.commands.cli_schema import schema_group
@@ -51,6 +52,7 @@ from strata.commands.cli_validate import validate_command
 from strata.commands.cli_values import values_group
 from strata.commands.cli_vars import vars_group
 from strata.commands.cli_version import version_command
+from strata.commands.cli_versions import versions_group
 from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
 from strata.utils.config import SOLUTION_CONFIG_FILE, SOLUTION_DIR
@@ -134,7 +136,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Workspace Setup", ["sln", "profile", "new"]),
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
-    ("Build & Deploy", ["build", "deploy", "env", "service"]),
+    ("Build & Deploy", ["build", "deploy", "env", "service", "versions"]),
     ("Inspection & Validation", ["guide", "validate", "schema", "policy", "tools"]),
     ("Utility", ["secret", "version", "help", "log", "completion", "mcp"]),
 ]
@@ -278,6 +280,8 @@ main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
 main.add_command(env_group, name="env")
 main.add_command(values_group, name="values")
+main.add_command(versions_group, name="versions")
+main.add_command(promote_group, name="promote")
 main.add_command(tools_group, name="tools")
 main.add_command(secret_group, name="secret")
 main.add_command(service_group, name="service")

@@ -12,7 +12,7 @@
 
 import * as vscode from 'vscode';
 import { StrataCLIError } from '../strataClient';
-import type { StrataClient, ValidationError } from '../strataClient';
+import type { StrataClient, ValidationError, PolicyCheckData } from '../strataClient';
 
 /** Strata apiVersion prefixes that identify a strata YAML document. */
 const STRATA_API_PREFIXES = ['strata.omp.com/v1', 'strata.huybrechts.xyz/v1'];
@@ -119,8 +119,13 @@ export class DiagnosticsProvider implements vscode.Disposable {
         try {
             const result = await this._client.validateFile(document.uri.fsPath);
             const diagnostics = this._toDiagnostics(result.errors, document);
+
+            // Add version-lock-specific hints (informational, not errors)
+            const versionHints = this._getVersionLockHints(document);
+            diagnostics.push(...versionHints);
+
             this._collection.set(document.uri, diagnostics);
-            return { passed: result.validation_passed, errorCount: diagnostics.length };
+            return { passed: result.validation_passed, errorCount: result.errors.length };
         } catch (err) {
             // CLI itself failed (parse error, missing file, etc.) — surface as a
             // single error on line 0 so the user knows validation couldn't run.
@@ -141,6 +146,44 @@ export class DiagnosticsProvider implements vscode.Disposable {
     /** Clear all diagnostics (call from deactivate). */
     clearAll(): void {
         this._collection.clear();
+    }
+
+    /**
+     * Run `strata policy check` for a deployment file and push violations to
+     * the Problems panel as Error (enforcement=deny) or Warning (enforcement=warn).
+     *
+     * Returns the raw result so callers can gate the deploy confirmation dialog.
+     * Returns null if the CLI is unavailable or the deployment has no policies.
+     */
+    async checkPolicyDiagnostics(deploymentUri: vscode.Uri): Promise<PolicyCheckData | null> {
+        if (!this._client) return null;
+        try {
+            const result = await this._client.checkPolicy(deploymentUri.fsPath);
+            const policyDiags: vscode.Diagnostic[] = [];
+            for (const r of result.results) {
+                if (r.passed) continue;
+                const severity = r.enforcement === 'deny'
+                    ? vscode.DiagnosticSeverity.Error
+                    : vscode.DiagnosticSeverity.Warning;
+                for (const violation of r.violations) {
+                    const diag = new vscode.Diagnostic(
+                        new vscode.Range(0, 0, 0, 0),
+                        `Policy "${r.policy}" [${r.phase}] (${r.enforcement}): ${violation}`,
+                        severity,
+                    );
+                    diag.source = 'strata-policy';
+                    diag.code = r.policy;
+                    policyDiags.push(diag);
+                }
+            }
+            // Keep existing validation diagnostics, replace only policy ones
+            const existing = [...(this._collection.get(deploymentUri) ?? [])];
+            const validationDiags = existing.filter(d => d.source !== 'strata-policy');
+            this._collection.set(deploymentUri, [...validationDiags, ...policyDiags]);
+            return result;
+        } catch {
+            return null; // no policies defined or CLI unavailable — don't block
+        }
     }
 
     dispose(): void {
@@ -278,5 +321,73 @@ export class DiagnosticsProvider implements vscode.Disposable {
     private _escapeRegex(s: string): string {
         return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
-}
 
+    // ── Version lock hints ────────────────────────────────────────────────────
+
+    /**
+     * Produce informational diagnostics for version-lock documents:
+     * - Pointer lock → shows the source path
+     * - Hash present → notes hash-verified pointer
+     * - Wave lock → shows wave number
+     */
+    private _getVersionLockHints(document: vscode.TextDocument): vscode.Diagnostic[] {
+        const hints: vscode.Diagnostic[] = [];
+
+        let isVersionLock = false;
+        let sourceLine = -1;
+        let sourceValue = '';
+        let hashLine = -1;
+        let hashValue = '';
+        let waveLine = -1;
+        let waveValue = '';
+
+        for (let i = 0; i < Math.min(document.lineCount, 50); i++) {
+            const text = document.lineAt(i).text;
+            if (/^\s*kind:\s*version-lock/i.test(text)) {
+                isVersionLock = true;
+            }
+            const srcMatch = text.match(/^\s*source:\s*(.+)/);
+            if (srcMatch && sourceLine === -1) {
+                sourceLine = i;
+                sourceValue = srcMatch[1].trim().replace(/^["']|["']$/g, '');
+            }
+            const hashMatch = text.match(/^\s*hash:\s*(.+)/);
+            if (hashMatch && hashLine === -1) {
+                hashLine = i;
+                hashValue = hashMatch[1].trim().replace(/^["']|["']$/g, '');
+            }
+            const waveMatch = text.match(/^\s*wave:\s*(\d+)/);
+            if (waveMatch && waveLine === -1) {
+                waveLine = i;
+                waveValue = waveMatch[1];
+            }
+        }
+
+        if (!isVersionLock) return hints;
+
+        // Pointer lock hint
+        if (sourceLine >= 0 && sourceValue) {
+            const range = new vscode.Range(sourceLine, 0, sourceLine, document.lineAt(sourceLine).text.length);
+            const msg = hashValue
+                ? `Pointer lock → ${sourceValue} (hash-verified: ${hashValue.slice(0, 12)}…)`
+                : `Pointer lock → ${sourceValue}`;
+            const hint = new vscode.Diagnostic(range, msg, vscode.DiagnosticSeverity.Information);
+            hint.source = 'strata-version';
+            hints.push(hint);
+        }
+
+        // Wave lock hint
+        if (waveLine >= 0) {
+            const range = new vscode.Range(waveLine, 0, waveLine, document.lineAt(waveLine).text.length);
+            const hint = new vscode.Diagnostic(
+                range,
+                `Wave ${waveValue} lock — partial rollout`,
+                vscode.DiagnosticSeverity.Information,
+            );
+            hint.source = 'strata-version';
+            hints.push(hint);
+        }
+
+        return hints;
+    }
+}

@@ -21,6 +21,9 @@ const STRATA_API_VERSIONS = [
 /** Kinds that support Build / Deploy Dry Run lenses. */
 const BUILDABLE_KINDS = ['deployment'];
 
+/** Kinds that show promotion-related lenses. */
+const PROMOTABLE_KINDS = ['version-lock', 'version-manifest'];
+
 export class CodeLensProvider
     implements vscode.CodeLensProvider, vscode.Disposable {
     private readonly _onDidChangeCodeLenses =
@@ -122,6 +125,30 @@ export class CodeLensProvider
                 command: 'strata.auditChanges',
                 tooltip: 'Show recent deploy-log entries for this deployment',
                 arguments: [document.uri.fsPath],
+            }));
+        }
+
+        // Promote / Matrix — version files only
+        if (kind && PROMOTABLE_KINDS.includes(kind)) {
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(arrow-up) Promote',
+                command: 'strata.promoteStart',
+                tooltip: 'Start a promotion to the next ring',
+            }));
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(table) Matrix',
+                command: 'strata.promoteMatrix',
+                tooltip: 'Show version matrix across all rings',
+            }));
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(arrow-down) Rollback',
+                command: 'strata.promoteRollback',
+                tooltip: 'Rollback the last promotion',
+            }));
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(history) History',
+                command: 'strata.promoteHistory',
+                tooltip: 'Show promotion history',
             }));
         }
 

@@ -317,7 +317,62 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
             if remote_errors:
                 return False, remote_errors
 
+        # Phase 2: validate spec.promotion strategy and ring references
+        if configuration_model and spec and spec.promotion:
+            promotion_errors = self._validate_promotion_refs(spec.promotion, configuration_model)
+            if promotion_errors:
+                return False, promotion_errors
+
         return True, []
+
+    def _validate_promotion_refs(
+        self,
+        promotion: Any,
+        configuration_model: "ConfigurationModel",
+    ) -> List[str]:
+        """Validate that spec.promotion.strategy and spec.promotion.ring exist in the configuration.
+
+        Returns a list of error strings (empty = valid).
+        """
+        errors: List[str] = []
+        config_promotions = configuration_model.spec.promotions if configuration_model.spec else None
+
+        if config_promotions is None:
+            # No promotions defined in configuration — strategy reference cannot be validated
+            errors.append(
+                f"Environment '{self.model.meta.name}' declares spec.promotion.strategy "
+                f"'{promotion.strategy}' but configuration.spec.promotions is not defined."
+            )
+            return errors
+
+        strategies = {s.name: s for s in (config_promotions.strategies or [])}
+        if promotion.strategy not in strategies:
+            known = sorted(strategies.keys()) or "(none)"
+            errors.append(
+                f"Environment '{self.model.meta.name}' references unknown promotion strategy "
+                f"'{promotion.strategy}'. Known strategies: {known}"
+            )
+            return errors
+
+        strategy = strategies[promotion.strategy]
+        progressions = {p.name: p for p in (config_promotions.progressions or [])}
+        progression = progressions.get(strategy.progression)
+        if progression is None:
+            errors.append(
+                f"Environment '{self.model.meta.name}' promotion strategy '{promotion.strategy}' "
+                f"references unknown progression '{strategy.progression}'."
+            )
+            return errors
+
+        ring_names = progression.ring_names()
+        if promotion.ring not in ring_names:
+            errors.append(
+                f"Environment '{self.model.meta.name}' declares spec.promotion.ring '{promotion.ring}' "
+                f"but that ring does not exist in progression '{strategy.progression}'. "
+                f"Known rings: {sorted(ring_names)}"
+            )
+
+        return errors
 
     # Service methods for accessing environment details
 
