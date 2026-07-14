@@ -82,7 +82,7 @@ envelope (unchanged behaviour).
 
 All events share a common envelope:
 
-```json
+```text
 {"event": "<type>", "ts": "<ISO8601_UTC>", ...type-specific fields...}
 ```
 
@@ -104,7 +104,7 @@ milliseconds.
 
 #### Example stream
 
-```json
+```text
 {"event": "run_start", "ts": "2026-07-11T14:30:00Z", "deployment": "haven-prd", "stages": ["networking", "compute", "dns"]}
 {"event": "stage_start", "ts": "2026-07-11T14:30:00Z", "stage": "networking", "provisioner": "terraform"}
 {"event": "stage_log", "ts": "2026-07-11T14:30:02Z", "stage": "networking", "level": "INFO", "msg": "Terraform 1.9.0"}
