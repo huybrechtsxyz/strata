@@ -2,7 +2,7 @@
   "name": "xyz-strata",
   "displayName": "Strata",
   "description": "Strata infrastructure workspace integration — validate YAML, explore workspace, build and deploy.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "huybrechts-xyz",
   "icon": "resources/icon.png",
   "license": "AGPL-3.0-or-later",
@@ -72,6 +72,14 @@
           {
             "name": "repos",
             "description": "Show repository status with latest release and quality-gate tags"
+          },
+          {
+            "name": "promote",
+            "description": "Show promotion status, matrix, or trigger a promotion"
+          },
+          {
+            "name": "versions",
+            "description": "Show version pins and lock status for a ring"
           }
         ]
       }
@@ -231,6 +239,56 @@
         "command": "strata.auditSetLimit",
         "title": "Strata: Set Audit Entry Limit",
         "icon": "$(list-ordered)"
+      },
+      {
+        "command": "strata.buildPlan",
+        "title": "Strata: Build Plan",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "strata.checkPolicy",
+        "title": "Strata: Check Policies",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "strata.copyOutputValue",
+        "title": "Copy Output Value",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "strata.manageRefs",
+        "title": "Strata: Manage Profile References",
+        "icon": "$(references)"
+      },
+      {
+        "command": "strata.promoteStatus",
+        "title": "Strata: Show Promotion Status",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "strata.promoteMatrix",
+        "title": "Strata: Show Version Matrix",
+        "icon": "$(table)"
+      },
+      {
+        "command": "strata.promoteHistory",
+        "title": "Strata: Show Promotion History",
+        "icon": "$(history)"
+      },
+      {
+        "command": "strata.promoteStart",
+        "title": "Strata: Promote to Ring",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "strata.promoteRollback",
+        "title": "Strata: Rollback Promotion",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "strata.refreshPromotions",
+        "title": "Refresh",
+        "icon": "$(refresh)"
       }
     ],
     "viewsContainers": {
@@ -278,6 +336,11 @@
           "id": "strataValues",
           "name": "Values",
           "contextualTitle": "Strata Values"
+        },
+        {
+          "id": "strataPromotions",
+          "name": "Promotions",
+          "contextualTitle": "Strata Promotions"
         }
       ]
     },
@@ -285,7 +348,7 @@
       "view/title": [
         {
           "command": "strata.refreshTreeView",
-          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools || view == strataEnvironment || view == strataAudit || view == strataValues",
+          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools || view == strataEnvironment || view == strataAudit || view == strataValues || view == strataPromotions",
           "group": "navigation"
         },
         {
@@ -384,6 +447,31 @@
           "command": "strata.copyValueKey",
           "when": "view == strataValues && viewItem == value",
           "group": "strata@1"
+        },
+        {
+          "command": "strata.copyOutputValue",
+          "when": "view == strataEnvironment && viewItem == output",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.buildPlan",
+          "when": "view == strataEnvironment && viewItem == deployment",
+          "group": "strata@7"
+        },
+        {
+          "command": "strata.checkPolicy",
+          "when": "view == strataEnvironment && viewItem == deployment",
+          "group": "strata@8"
+        },
+        {
+          "command": "strata.promoteStart",
+          "when": "view == strataPromotions && viewItem == ring",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.promoteRollback",
+          "when": "view == strataPromotions && viewItem == ring",
+          "group": "strata@2"
         }
       ],
       "editor/title": [
@@ -425,9 +513,19 @@
           "group": "strata@6"
         },
         {
-          "command": "strata.lockStatus",
+          "command": "strata.buildPlan",
           "when": "resourceExtname == .yaml && strata.workspaceActive",
           "group": "strata@7"
+        },
+        {
+          "command": "strata.checkPolicy",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@8"
+        },
+        {
+          "command": "strata.lockStatus",
+          "when": "resourceExtname == .yaml && strata.workspaceActive",
+          "group": "strata@9"
         }
       ]
     },

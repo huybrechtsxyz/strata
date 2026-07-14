@@ -130,6 +130,23 @@ config/providers/
 └── azure-eastus.yaml
 ```
 
+## Environment-Specific Provider Overrides
+
+Different environments can use different provider files (e.g., dev vs prod in different regions or cloud accounts). See [Environment Provider Overrides](environment.md#provider-overrides) for syntax and examples.
+
+**Example:** Use a different provider file for production:
+
+```yaml
+# environments/prod.yaml
+spec:
+  overrides:
+    providers:
+      - provider: kamatera_europe
+        file: config/providers/kamatera-eu-fr-prod.yaml  # Different prod config
+```
+
+This allows dev and prod to deploy to different regions, cloud accounts, or with different authentication without modifying the workspace.
+
 ## Validation
 
 Platform validates:

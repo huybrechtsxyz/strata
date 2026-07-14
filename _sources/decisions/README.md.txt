@@ -23,6 +23,10 @@ were considered, and why. They exist so the rationale survives beyond the author
 | [0011](0011-promotion-strategies-for-version-progression.md) | Promotion strategies for version progression across environments | Proposed |
 | [0018](0018-deployment-audit-traceability.md)                | Deployment audit and traceability for compliance                 | Proposed |
 | [0025](0025-ai-agent-integration-for-build-and-deploy.md)    | AI agent integration for build and deploy workflows              | Proposed |
+| [0031](0031-cost-estimation-and-visibility.md)               | Cost estimation and visibility                                   | Proposed |
+| [0032](0032-approval-workflows-and-gates.md)                 | Approval workflows and gates                                     | Proposed |
+| [0033](0033-github-pull-request-integration.md)              | GitHub pull request integration                                  | Proposed |
+| [0035](0035-enterprise-store.md)                             | Enterprise store — private organization-level content registry   | Proposed |
 
 ## Adding a new ADR
 
