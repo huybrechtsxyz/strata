@@ -94,10 +94,11 @@ def _collect_templates_with_descriptions(work_path: Optional[Path]) -> List[Dict
                     "type": "scaffold",
                 }
 
-    # Workspace-local templates
+    # Workspace-local templates — directories take priority over same-named YAML files
     if work_path is not None:
         ws_dir = work_path / ".strata" / "templates"
         if ws_dir.is_dir():
+            # Pass 1: single-file templates
             for f in ws_dir.iterdir():
                 if f.is_file() and f.suffix == ".yaml":
                     templates[f.stem] = {
@@ -105,7 +106,9 @@ def _collect_templates_with_descriptions(work_path: Optional[Path]) -> List[Dict
                         "description": f"Workspace {f.stem} template",
                         "type": "file (workspace)",
                     }
-                elif f.is_dir():
+            # Pass 2: bundle directories (overrides same-named file entry)
+            for f in ws_dir.iterdir():
+                if f.is_dir():
                     desc = _read_bundle_description(f)
                     tpl_type = "scaffold (workspace)" if (f / "scaffold").is_dir() else "bundle (workspace)"
                     templates[f.name] = {
@@ -353,7 +356,11 @@ class NewCommand(BaseCommand):
         """
         output_root = Path(self._path) if self._path else Path(os.getcwd())
 
-        bundle_files = sorted(f for f in bundle_dir.rglob("*") if f.is_file())
+        bundle_files = sorted(
+            f
+            for f in bundle_dir.rglob("*")
+            if f.is_file() and not (f.name == "template.yaml" and f.parent == bundle_dir)
+        )
         if not bundle_files:
             self._errors.append(f"Bundle '{self._template}' contains no files.")
             return False

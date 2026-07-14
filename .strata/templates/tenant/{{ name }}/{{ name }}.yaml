@@ -1,0 +1,27 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: tenant
+meta:
+  name: { { name } }
+  annotations:
+    description: "{{ name }} tenant configuration"
+  labels:
+    tier: standard
+spec:
+  code: { { name } }
+  name: { { name } }
+  zones:
+    - default # update to match a zone defined in configuration.yaml
+  onboarded: { { onboarded | default("2026-01-01") } }
+
+  # Base environment files merged as a base layer before each deployment's own environments.
+  # environments:
+  #   - environments/tiers/standard.yaml
+
+  properties:
+    tier: standard # standard | premium | enterprise
+
+  configuration:
+    support_level: standard
+  references:
+    variables: []
+    secrets: []

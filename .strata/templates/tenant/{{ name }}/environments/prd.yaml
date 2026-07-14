@@ -1,0 +1,20 @@
+apiVersion: strata.huybrechts.xyz/v1
+kind: environment
+meta:
+  name: {{ name }}_prd
+  annotations:
+    description: "Production environment for {{ name }}"
+  labels:
+    version: "1.0.0"
+spec:
+  variables:
+    - key: ENVIRONMENT
+      store: constant
+      value: prd
+  overrides:
+    providers:
+      - provider: primary
+        configuration:
+          env_tag: prd
+          # region: eastus      # uncomment to override provider region
+          # file: providers/primary-prd.yaml   # swap entire provider file for prod
