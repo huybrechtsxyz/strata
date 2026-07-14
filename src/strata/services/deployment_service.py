@@ -1247,10 +1247,9 @@ class DeploymentService(BaseService["DeploymentModel"]):
         - ``flag`` is ``True`` (``--require-lock`` CLI flag was passed), or
         - the resolved ring declares ``require_lock: true`` in the progression config.
 
-        Args:
-            work_path: Workspace root — lock files are at ``work_path/versions/{ring}.yaml``.
-            config_model: Loaded configuration model (may be ``None``).
-            flag: ``True`` when ``--require-lock`` was passed on the CLI.
+        Lock file discovery (checked in order, first found wins):
+        1. New-style: ``{versions_path}/{ring}.lock.yaml`` (from promotion strategy)
+        2. Old-style: ``versions/{ring}.yaml``
         """
         env_svc = self._environment_service
         if env_svc is None or env_svc.model is None:
@@ -1262,9 +1261,11 @@ class DeploymentService(BaseService["DeploymentModel"]):
             return None  # no promotion config on this environment — skip silently
 
         ring_name: str = promotion.ring
+        strategy_name: str = promotion.strategy
 
         # Check ring-level require_lock from configuration progressions
         ring_require_lock = False
+        versions_path_raw: Optional[str] = None
         if config_model and config_model.spec and config_model.spec.promotions:
             for progression in config_model.spec.promotions.progressions or []:
                 for ring in progression.rings:
@@ -1273,17 +1274,38 @@ class DeploymentService(BaseService["DeploymentModel"]):
                         break
                 if ring_require_lock:
                     break
+            # Also pick up versions_path from the matching strategy
+            for strategy in config_model.spec.promotions.strategies or []:
+                if strategy.name == strategy_name and strategy.versions_path:
+                    versions_path_raw = strategy.versions_path
+                    break
 
         if not flag and not ring_require_lock:
             return None  # enforcement not active for this ring
 
-        lock_path = Path(work_path) / "versions" / f"{ring_name}.yaml"
-        if not lock_path.exists():
-            return (
-                f"Ring '{ring_name}' has no lock file (versions/{ring_name}.yaml). "
-                f"Run 'strata promote start --to {ring_name}' first, or remove --require-lock."
-            )
-        return None
+        # Try new-style lock path first: {versions_path}/{ring}.lock.yaml
+        if versions_path_raw:
+            vp_raw = versions_path_raw.lstrip("@").split("/", 1)[-1] if versions_path_raw.startswith("@") else versions_path_raw
+            new_lock_path = Path(work_path) / vp_raw / f"{ring_name}.lock.yaml"
+            if new_lock_path.exists():
+                return None  # lock exists — check passes
+
+        # Fallback: old-style lock path versions/{ring}.yaml
+        old_lock_path = Path(work_path) / "versions" / f"{ring_name}.yaml"
+        if old_lock_path.exists():
+            return None  # old-style lock exists — check passes
+
+        # Neither exists — fail
+        hint_path = (
+            f"{versions_path_raw.rstrip('/')}/{ring_name}.lock.yaml"
+            if versions_path_raw
+            else f"versions/{ring_name}.yaml"
+        )
+        return (
+            f"Ring '{ring_name}' has no lock file ({hint_path}). "
+            f"Run 'strata promote {ring_name} <version-file> --promotion {strategy_name}' first, "
+            "or remove --require-lock."
+        )
 
     def validate_related_services(self) -> Tuple[bool, List[str]]:
         """

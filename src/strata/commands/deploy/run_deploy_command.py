@@ -39,6 +39,10 @@ class RunDeployCommand(BaseDeployCommand):
         dry_run: bool = False,
         force_lock: bool = False,
         require_lock: bool = False,
+        version_file: Optional[str] = None,
+        ring_override: Optional[str] = None,
+        wave: Optional[int] = None,
+        promotion_override: Optional[str] = None,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -56,6 +60,10 @@ class RunDeployCommand(BaseDeployCommand):
         self._dry_run = dry_run
         self._force_lock = force_lock
         self._require_lock = require_lock
+        self._version_file = version_file
+        self._ring_override = ring_override
+        self._wave = wave
+        self._promotion_override = promotion_override
         self._resolved_values: Optional[ResolvedValues] = None
 
     # -------------------------------------------------------------------------
@@ -94,6 +102,27 @@ class RunDeployCommand(BaseDeployCommand):
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
                 self._finalize(success=False)
                 return False
+
+            # -v / --version-file: mutual exclusion + inject into spec.versions (Layer 3)
+            if self._version_file:
+                version_err = self._apply_explicit_version_file()
+                if version_err:
+                    self._errors.append(version_err)
+                    if self._is_console_output():
+                        click.echo(f"\n❌  {version_err}")
+                    self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
+                    self._finalize(success=False)
+                    return False
+            elif self._should_auto_resolve_version():
+                # Layer 5: auto-resolve version from spec.promotion → lock → version file
+                version_err = self._auto_resolve_version_from_promotion()
+                if version_err:
+                    self._errors.append(version_err)
+                    if self._is_console_output():
+                        click.echo(f"\n❌  {version_err}")
+                    self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
+                    self._finalize(success=False)
+                    return False
 
             # Strict lock mode check (--require-lock or ring.require_lock: true)
             if self._deployment_service is not None:
@@ -191,6 +220,232 @@ class RunDeployCommand(BaseDeployCommand):
             self._finalize(success=False)
             self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
             return False
+
+    # -------------------------------------------------------------------------
+    # Version file helpers (Layer 3 — manual -v, and Layer 5 — auto-resolve)
+    # -------------------------------------------------------------------------
+
+    def _inject_version_file(self, version_file_path: str) -> None:
+        """Append *version_file_path* to deployment spec.versions so the existing
+        _apply_version_pins pipeline will load and apply it automatically."""
+        if self._deployment_service is None or self._deployment_service.model is None:
+            return
+        from strata.models.deployment_model import DeploymentVersionRef
+        model = self._deployment_service.model
+        current = list(model.spec.versions or [])
+        current.append(DeploymentVersionRef(file=version_file_path))
+        # Use model_copy to avoid mutating a frozen model
+        updated_spec = model.spec.model_copy(update={"versions": current})
+        self._deployment_service.model = model.model_copy(update={"spec": updated_spec})
+
+    def _apply_explicit_version_file(self) -> Optional[str]:
+        """Validate and inject a user-supplied -v version file (Layer 3).
+
+        Returns an error string if validation fails, None on success.
+        """
+        import hashlib
+        import json as _json
+        from pathlib import Path
+
+        import yaml as _yaml
+
+        vf = Path(str(self._version_file))
+        if not vf.is_absolute():
+            vf = Path(str(self._work_path)) / vf
+
+        if not vf.exists():
+            return f"Version file not found: {vf}"
+
+        # Mutual exclusion: -v not allowed when deployment uses spec.promotion
+        dep_model = (
+            self._deployment_service.model if self._deployment_service else None
+        )
+        env_svc = (
+            self._deployment_service._environment_service
+            if self._deployment_service and hasattr(self._deployment_service, "_environment_service")
+            else None
+        )
+        env_model = env_svc.model if env_svc else None
+        if env_model and env_model.spec and env_model.spec.promotion:
+            return (
+                f"Deployment is managed by promotion '{env_model.spec.promotion.strategy}'. "
+                "Use 'strata promote' to change its version, or remove spec.promotion to use manual mode. "
+                "Pass --force to override."
+                if not self._force
+                else None
+            )
+
+        # Hash check: if spec.hash is present, verify it
+        try:
+            raw = _yaml.safe_load(vf.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return f"Could not read version file '{vf}': {exc}"
+
+        if isinstance(raw, dict) and raw.get("kind") == "version":
+            spec_hash = (raw.get("spec") or {}).get("hash")
+            if spec_hash:
+                pins = (raw.get("spec") or {}).get("pins", {})
+                canonical = _json.dumps(pins, sort_keys=True, separators=(",", ":"))
+                computed = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+                if computed != spec_hash:
+                    return (
+                        f"Version file '{vf.name}' hash mismatch — file may have been modified. "
+                        f"Expected: {spec_hash[:12]}…  Got: {computed[:12]}…  "
+                        "Run 'strata versions lock' to recompute, or investigate the change."
+                    )
+            else:
+                # No hash — warn but proceed
+                import warnings
+                warnings.warn(
+                    f"Version file '{vf.name}' has no spec.hash — integrity cannot be verified. "
+                    "Run 'strata versions lock' to add a tamper-evident hash.",
+                    stacklevel=2,
+                )
+
+        self._inject_version_file(str(vf))
+        return None
+
+    def _should_auto_resolve_version(self) -> bool:
+        """True when the deployment's environment has spec.promotion and no -v was given."""
+        if self._deployment_service is None:
+            return False
+        dep_model = self._deployment_service.model
+        if dep_model is None:
+            return False
+        env_svc = getattr(self._deployment_service, "_environment_service", None)
+        if env_svc is None or env_svc.model is None:
+            return False
+        return env_svc.model.spec.promotion is not None
+
+    def _auto_resolve_version_from_promotion(self) -> Optional[str]:
+        """Layer 5: resolve version from spec.promotion → config → lock → version file.
+
+        Honours ``--ring``, ``--wave``, and ``--promotion`` overrides.
+        When ``--wave N`` is given, the wave lock is layered on top of the ring lock:
+        the wave lock is injected first, then the ring lock, so that the wave pins take
+        precedence (last-writer-wins in VersionService.resolve_pins).
+
+        Returns an error string on failure, None on success.
+        """
+        from pathlib import Path
+        import yaml as _yaml
+
+        env_svc = getattr(self._deployment_service, "_environment_service", None)
+        if env_svc is None or env_svc.model is None:
+            return None  # no environment — skip
+
+        promotion = env_svc.model.spec.promotion
+        if not promotion and not (self._ring_override and self._promotion_override):
+            return None
+
+        ring_name: str = self._ring_override or (promotion.ring if promotion else "")
+        strategy_name: str = self._promotion_override or (promotion.strategy if promotion else "")
+
+        if not ring_name or not strategy_name:
+            return None
+
+        # Load config to get versions_path
+        config_svc = self._configuration_service
+        if config_svc is None or config_svc.model is None:
+            return (
+                f"Environment has spec.promotion but no configuration is loaded. "
+                "Cannot resolve version automatically."
+            )
+
+        promotions = config_svc.model.spec.promotions if config_svc.model.spec else None
+        if not promotions or not promotions.strategies:
+            return (
+                f"No promotions configured in configuration.spec.promotions. "
+                f"Cannot auto-resolve version for ring '{ring_name}'."
+            )
+
+        strategy = next(
+            (s for s in (promotions.strategies or []) if s.name == strategy_name), None
+        )
+        if strategy is None:
+            return (
+                f"Promotion strategy '{strategy_name}' not found in configuration. "
+                "Cannot auto-resolve version."
+            )
+
+        if not strategy.versions_path:
+            return (
+                f"Promotion '{strategy_name}' has no versions_path configured. "
+                "Cannot auto-resolve version."
+            )
+
+        # Resolve versions_path
+        vp_raw = strategy.versions_path
+        if vp_raw.startswith("@"):
+            vp_raw = vp_raw.lstrip("@").split("/", 1)[-1]
+        vp = Path(str(self._work_path)) / vp_raw
+
+        # Find ring lock
+        lock_path = vp / f"{ring_name}.lock.yaml"
+        if not lock_path.exists():
+            return (
+                f"No lock file at '{lock_path.relative_to(self._work_path)}'. "
+                f"Run 'strata promote {ring_name} <file> --promotion {strategy_name}' first."
+            )
+
+        # Load lock → follow pointer → get version file path
+        try:
+            lock_raw = _yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return f"Could not read lock file '{lock_path}': {exc}"
+
+        source = (lock_raw.get("spec") or {}).get("source")
+        if not source:
+            # Old-style pins lock — pins are already in the lock file; inject it
+            self._inject_version_file(str(lock_path))
+            return None
+
+        version_file_path = (lock_path.parent / source).resolve()
+        if not version_file_path.exists():
+            return (
+                f"Lock file points to '{source}' which does not exist "
+                f"(resolved: '{version_file_path}'). "
+                "Re-run 'strata promote' to fix the lock."
+            )
+
+        # ── wave lock layering ──────────────────────────────────────────────
+        # When --wave N is given, look for {ring}.wave.N.lock.yaml and layer it
+        # on top: inject ring version file first, then wave lock (wave wins).
+        if self._wave is not None:
+            wave_lock_path = vp / f"{ring_name}.wave.{self._wave}.lock.yaml"
+            if not wave_lock_path.exists():
+                return (
+                    f"Wave lock '{wave_lock_path.name}' not found in '{vp}'. "
+                    f"Run 'strata promote {ring_name} <file> --promotion {strategy_name} "
+                    f"--wave {self._wave}' first."
+                )
+            # Load wave lock and follow its pointer to the wave version file
+            try:
+                wave_raw = _yaml.safe_load(wave_lock_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                return f"Could not read wave lock file '{wave_lock_path}': {exc}"
+
+            wave_source = (wave_raw.get("spec") or {}).get("source")
+            if wave_source:
+                wave_version_file = (wave_lock_path.parent / wave_source).resolve()
+                if not wave_version_file.exists():
+                    return (
+                        f"Wave lock points to '{wave_source}' which does not exist "
+                        f"(resolved: '{wave_version_file}'). "
+                        "Re-run 'strata promote' to fix the wave lock."
+                    )
+                # Inject ring version file first (lower priority), then wave (wins)
+                self._inject_version_file(str(version_file_path))
+                self._inject_version_file(str(wave_version_file))
+                return None
+            else:
+                # Old-style wave lock with inline pins — inject ring file + wave lock
+                self._inject_version_file(str(version_file_path))
+                self._inject_version_file(str(wave_lock_path))
+                return None
+
+        self._inject_version_file(str(version_file_path))
+        return None
 
     # -------------------------------------------------------------------------
     # Internal pipeline steps

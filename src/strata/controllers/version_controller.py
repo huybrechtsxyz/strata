@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -324,6 +326,95 @@ class VersionController(BaseController):
                 image: Optional[str] = svc_ov.get("image")
                 if svc_name and image:
                     discovered["images"].setdefault(svc_name, image)
+
+    # ── lock ──────────────────────────────────────────────────────────────────
+
+    def lock_manifest(self, file_path: Path) -> dict:
+        """Compute spec.hash for a version-manifest file and write it back in place.
+
+        The hash is a SHA-256 over the canonical JSON serialisation of spec.pins
+        (sorted keys, no extra whitespace).  Any existing spec.hash value is replaced.
+
+        Returns ``{"file": str, "hash": str}`` on success, ``{}`` on failure.
+        """
+        if not file_path.exists():
+            self._add_error(f"File not found: {file_path}")
+            return {}
+
+        with file_path.open("r", encoding="utf-8") as fh:
+            raw_doc = yaml.safe_load(fh)
+
+        if not isinstance(raw_doc, dict) or raw_doc.get("kind") != PlatformKind.VERSION_MANIFEST.value:
+            self._add_error(
+                f"Expected kind: {PlatformKind.VERSION_MANIFEST.value} — "
+                f"got '{raw_doc.get('kind') if isinstance(raw_doc, dict) else '<invalid>'}'."
+            )
+            return {}
+
+        pins = raw_doc.get("spec", {}).get("pins", {})
+        canonical = json.dumps(pins, sort_keys=True, separators=(",", ":"))
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+        raw_doc.setdefault("spec", {})["hash"] = digest
+        self._write_yaml(file_path, raw_doc)
+
+        return {"file": str(file_path), "hash": digest}
+
+    # ── add ───────────────────────────────────────────────────────────────────
+
+    def add_manifest(
+        self,
+        dest: Path,
+        ring: str,
+        from_file: Optional[Path] = None,
+        force: bool = False,
+    ) -> dict:
+        """Create a new version-manifest snapshot file.
+
+        When *from_file* is provided the pins are copied from that file.
+        Otherwise an empty scaffold is written (like ``init_manifest``).
+
+        Returns ``{"file": str, "ring": str, "from": str | None}`` on success, ``{}`` on failure.
+        """
+        if dest.exists() and not force:
+            self._add_error(f"File already exists: {dest}. Use --force to overwrite.")
+            return {}
+
+        if from_file is not None:
+            if not from_file.exists():
+                self._add_error(f"Source file not found: {from_file}")
+                return {}
+
+            with from_file.open("r", encoding="utf-8") as fh:
+                src = yaml.safe_load(fh)
+
+            if not isinstance(src, dict) or src.get("kind") != PlatformKind.VERSION_MANIFEST.value:
+                self._add_error(
+                    f"--from must be a kind: {PlatformKind.VERSION_MANIFEST.value} file, "
+                    f"got '{src.get('kind') if isinstance(src, dict) else '<invalid>'}'."
+                )
+                return {}
+
+            pins = src.get("spec", {}).get("pins", {})
+        else:
+            pins = {"images": {}, "charts": {}, "remotes": {}}
+
+        doc = {
+            "apiVersion": _API_VERSION,
+            "kind": PlatformKind.VERSION_MANIFEST.value,
+            "meta": {
+                "name": dest.stem,
+                "annotations": {"description": f"Version snapshot for the {ring} ring"},
+            },
+            "spec": {
+                "ring": ring,
+                "pins": pins,
+            },
+        }
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        self._write_yaml(dest, doc)
+        return {"file": str(dest), "ring": ring, "from": str(from_file) if from_file else None}
 
     # ── helpers ───────────────────────────────────────────────────────────────
 

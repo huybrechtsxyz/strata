@@ -2,9 +2,11 @@
 
 Subcommands
 -----------
+add     — Create a new version-manifest snapshot (optionally copied from an existing file).
 init    — Scaffold a starter version-manifest (kind: version) file for a ring.
+lock    — Compute spec.hash over pins and write it back into the version file.
 export  — Print the resolved flat pin state from a version file.
-apply   — Convert a version-manifest into a version-lock file.
+apply   — Convert a version-manifest into a version-lock file (old-style inline pins).
 refresh — Sync a manifest against discovered targets in the workspace.
 """
 
@@ -21,9 +23,11 @@ from strata.commands.cli_common import (
     click_work_path,
     handle_command_exit,
 )
+from strata.commands.versions.add_versions_command import AddVersionsCommand
 from strata.commands.versions.apply_versions_command import ApplyVersionsCommand
 from strata.commands.versions.export_versions_command import ExportVersionsCommand
 from strata.commands.versions.init_versions_command import InitVersionsCommand
+from strata.commands.versions.lock_versions_command import LockVersionsCommand
 from strata.commands.versions.refresh_versions_command import RefreshVersionsCommand
 
 
@@ -222,6 +226,108 @@ def versions_refresh(
         scan=scan,
         remove_stale=remove_stale,
         dry_run=dry_run,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+# ── add ──────────────────────────────────────────────────────────────────────
+
+
+@versions_group.command(
+    name="add",
+    help=(
+        "Create a new version-manifest snapshot file (Layer 1).\n\n"
+        "When --from is given, pins are copied from that file as a starting point. "
+        "After reviewing the pins, run 'strata versions lock' to compute a tamper-evident hash."
+    ),
+)
+@click.option(
+    "--out",
+    "-o",
+    required=True,
+    metavar="PATH",
+    help="Output path for the new version file (e.g. versions/customer/v2.1.0.yaml).",
+)
+@click.option(
+    "--ring",
+    "-r",
+    required=True,
+    metavar="NAME",
+    help="Ring name this version snapshot covers (e.g. dev, prd).",
+)
+@click.option(
+    "--from",
+    "from_file",
+    default=None,
+    metavar="PATH",
+    help="Copy pins from this existing version-manifest file.",
+)
+@click.option("--force", is_flag=True, default=False, help="Overwrite if the file already exists.")
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def versions_add(
+    out: str,
+    ring: str,
+    from_file: Optional[str],
+    force: bool,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Create a new version-manifest snapshot."""
+    command = AddVersionsCommand(
+        out=out,
+        ring=ring,
+        from_file=from_file,
+        force=force,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+# ── lock ──────────────────────────────────────────────────────────────────────
+
+
+@versions_group.command(
+    name="lock",
+    help=(
+        "Compute a SHA-256 hash over spec.pins and write it to spec.hash in the file (Layer 2).\n\n"
+        "Locking makes the file tamper-evident. A locked file that has been modified "
+        "will fail integrity checks at deploy time."
+    ),
+)
+@click.option(
+    "--file",
+    "-f",
+    required=True,
+    metavar="PATH",
+    help="Path to the version-manifest (kind: version) YAML file to lock.",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def versions_lock(
+    file: str,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Compute and write spec.hash for a version-manifest."""
+    command = LockVersionsCommand(
+        file=file,
         work_path=work_path,
         output=output,
         verbose=verbose,

@@ -711,8 +711,7 @@ class TestCheckRequireLockMode:
         result = svc.check_require_lock_mode(tmp_path, None, flag=True)
         assert result is not None
         assert "prd" in result
-        assert "versions/prd.yaml" in result
-        assert "promote start" in result
+        assert "promote" in result
 
     def test_error_message_includes_ring_name(self, tmp_path):
         svc = self._make_svc("staging")

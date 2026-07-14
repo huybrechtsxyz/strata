@@ -75,6 +75,48 @@ def deploy():
         "Also enforced when the ring declares require_lock: true in configuration."
     ),
 )
+@click.option(
+    "--version-file",
+    "-v",
+    "version_file",
+    default=None,
+    metavar="PATH",
+    help=(
+        "Explicit version file (kind: version) to apply for this deployment (Layer 3). "
+        "Mutually exclusive with spec.promotion — use 'strata promote' for managed promotions."
+    ),
+)
+@click.option(
+    "--ring",
+    "ring_override",
+    default=None,
+    metavar="NAME",
+    help=(
+        "Override the ring name used for version lock resolution. "
+        "Defaults to the ring declared in the deployment's spec.promotion.ring."
+    ),
+)
+@click.option(
+    "--wave",
+    "wave",
+    default=None,
+    type=int,
+    metavar="N",
+    help=(
+        "Layer the wave-N lock file ({ring}.wave.N.lock.yaml) on top of the ring lock "
+        "during version resolution. Wave pins win over ring pins for the same target."
+    ),
+)
+@click.option(
+    "--promotion",
+    "promotion_override",
+    default=None,
+    metavar="NAME",
+    help=(
+        "Override the promotion strategy name used for version lock resolution. "
+        "Defaults to the strategy declared in the deployment's spec.promotion.strategy."
+    ),
+)
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -87,6 +129,10 @@ def deploy_run(
     dry_run: bool = False,
     force_lock: bool = False,
     require_lock: bool = False,
+    version_file: Optional[str] = None,
+    ring_override: Optional[str] = None,
+    wave: Optional[int] = None,
+    promotion_override: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
     quiet: Optional[bool] = None,
@@ -101,6 +147,10 @@ def deploy_run(
         dry_run=dry_run,
         force_lock=force_lock,
         require_lock=require_lock,
+        version_file=version_file,
+        ring_override=ring_override,
+        wave=wave,
+        promotion_override=promotion_override,
         output=output,
         verbose=verbose,
         quiet=quiet,

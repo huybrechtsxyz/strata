@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Service for loading version files and applying version pins to the environment merge chain."""
 
+import hashlib
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     from strata.models.workspace_model import WorkspaceSpecModel
@@ -72,7 +73,30 @@ class VersionService:
 
         kind = raw.get("kind")
         if kind == PlatformKind.VERSION_LOCK:
-            return VersionLockModel.model_validate(raw)
+            lock = VersionLockModel.model_validate(raw)
+            if lock.is_pointer:
+                # New-style pointer lock: follow spec.source relative to the lock file's directory
+                source_path = file_path.parent / lock.spec.source
+                source_path = source_path.resolve()
+                if not source_path.exists():
+                    raise PlatformFileNotFoundError(
+                        f"Lock '{file_path.name}' points to '{lock.spec.source}' which does not exist "
+                        f"(resolved to '{source_path}')."
+                    )
+                # Hash verification: if the lock recorded spec.hash, the pointed-to version
+                # file must still carry the same hash (i.e. spec.hash on the version file).
+                if lock.spec.hash:
+                    with source_path.open("r", encoding="utf-8") as _vf:
+                        vf_raw = yaml.safe_load(_vf)
+                    actual_hash = (vf_raw or {}).get("spec", {}).get("hash") if isinstance(vf_raw, dict) else None
+                    if actual_hash and actual_hash != lock.spec.hash:
+                        raise ValueError(
+                            f"Lock '{file_path.name}' hash mismatch \u2014 "
+                            f"version file '{lock.spec.source}' may have been modified since promotion. "
+                            f"Expected: {lock.spec.hash[:20]}\u2026  Got: {actual_hash[:20]}\u2026"
+                        )
+                return cls.load(str(source_path))
+            return lock
         elif kind == PlatformKind.VERSION_MANIFEST:
             return VersionManifestModel.model_validate(raw)
         else:

@@ -68,6 +68,14 @@ class VersionManifestSpecModel(PlatformBaseModel):
         default_factory=VersionManifestPinsModel,
         description="Version declarations grouped by type (images, charts, remotes).",
     )
+    hash: Optional[str] = Field(
+        None,
+        description=(
+            "SHA-256 of the canonical pins payload, written by 'strata versions lock'. "
+            "When present, deploy validates the file has not been modified since locking. "
+            "Absent on new/unlocked files — they can still be deployed with a warning."
+        ),
+    )
 
 
 class VersionManifestModel(PlatformBaseModel):

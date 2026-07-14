@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import hashlib
 import json
 import os
 import re
@@ -139,7 +140,7 @@ class PromoteController(BaseController):
 
     def _write_lock_file(self, path: Path, ring: str, pins: List[dict],
                           scope: Optional[str] = None, scope_selector: Optional[str] = None) -> None:
-        """Write a version-lock YAML to path."""
+        """Write an old-style (inline pins) version-lock YAML to path."""
         meta_name = f"{ring}.{scope_selector}" if scope_selector else ring
         spec: dict = {"ring": ring, "pins": pins}
         if scope:
@@ -154,6 +155,81 @@ class PromoteController(BaseController):
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
+            yaml.dump(doc, default_flow_style=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+    def _write_pointer_lock(
+        self,
+        lock_path: Path,
+        ring: str,
+        version_file: Path,
+        wave: Optional[int] = None,
+    ) -> None:
+        """Write a new-style (pointer) version-lock YAML at lock_path.
+
+        spec.source is the relative path from lock_path's directory to version_file.
+        When *wave* is not None the lock is a wave lock (spec.wave is set).
+        On ring locks, spec.previous captures the *current* ring lock state so
+        that rollback can restore it without git history traversal.
+        """
+        try:
+            source_rel = version_file.resolve().relative_to(lock_path.parent.resolve())
+        except ValueError:
+            source_rel = version_file.resolve()
+
+        # ── read version file metadata ────────────────────────────────────
+        vf_version: Optional[str] = None
+        vf_hash: Optional[str] = None
+        try:
+            raw = yaml.safe_load(version_file.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                vf_version = (raw.get("meta") or {}).get("name")
+                vf_hash = (raw.get("spec") or {}).get("hash")
+        except Exception:
+            pass
+
+        # ── snapshot of the current ring lock (for rollback) ─────────────
+        previous: Optional[dict] = None
+        if wave is None and lock_path.exists():
+            try:
+                existing_raw = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+                if isinstance(existing_raw, dict):
+                    ex_spec = existing_raw.get("spec") or {}
+                    ex_source = ex_spec.get("source")
+                    if ex_source:
+                        previous = {k: v for k, v in {
+                            "source": ex_source,
+                            "version": ex_spec.get("version"),
+                            "hash": ex_spec.get("hash"),
+                        }.items() if v is not None}
+            except Exception:
+                pass
+
+        spec: Dict[str, Any] = {"ring": ring, "source": source_rel.as_posix()}
+        if vf_hash is not None:
+            spec["hash"] = vf_hash
+        if vf_version is not None:
+            spec["version"] = vf_version
+        if wave is not None:
+            spec["wave"] = wave
+        if previous:
+            spec["previous"] = previous
+
+        doc = {
+            "apiVersion": _API_VERSION,
+            "kind": PlatformKind.VERSION_LOCK.value,
+            "meta": {
+                "name": ring,
+                "annotations": {
+                    "generated_at": _now_iso(),
+                    "generated_by": "strata promote",
+                },
+            },
+            "spec": spec,
+        }
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(
             yaml.dump(doc, default_flow_style=False, allow_unicode=True),
             encoding="utf-8",
         )
@@ -221,10 +297,6 @@ class PromoteController(BaseController):
         if not ok:
             sha = "unknown"
         return True, sha
-
-    def _git_current_branch(self, work_path: Path) -> str:
-        ok, branch, _ = self._run_git(["rev-parse", "--abbrev-ref", "HEAD"], work_path)
-        return branch if ok else "unknown"
 
     def _git_merge_base_file_content(self, file_path: Path, work_path: Path) -> Optional[str]:
         """Read a file's content at the merge base of HEAD and main/master."""
@@ -863,6 +935,165 @@ class PromoteController(BaseController):
 
     # ── promotion record writing ──────────────────────────────────────────────
 
+    def run_pointer_rollback(
+        self,
+        ring: str,
+        promotion_name: str,
+        work_path: Path,
+        dry_run: bool = False,
+    ) -> dict:
+        """Rollback a pointer-style ring lock to the version recorded in spec.previous.
+
+        Reads the current ring lock's ``spec.previous`` field (written at promote time)
+        and rewrites the ring lock so that it points to the previous version file.
+        The old (current) lock state is preserved in ``spec.previous`` of the new lock,
+        enabling further rollbacks (each promote/rollback writes a new snapshot).
+
+        Args:
+            ring: Ring name whose lock should be rolled back.
+            promotion_name: Promotion strategy name (for record-keeping).
+            work_path: Workspace root directory.
+            dry_run: If True, return plan dict without writing files.
+
+        Returns:
+            Result dict or empty dict on error.
+        """
+        config = self._load_config_model(work_path)
+        if not config:
+            return {}
+
+        strategy, progression, ring_model = self._find_strategy_for_ring(config, ring)
+        if not strategy:
+            self._add_error(f"No promotion strategy found for ring '{ring}'.")
+            return {}
+
+        if not strategy.versions_path:
+            self._add_error(
+                f"Promotion strategy for ring '{ring}' has no versions_path configured."
+            )
+            return {}
+
+        vp = self._resolve_versions_path(strategy.versions_path, work_path)
+        ring_lock_path = vp / f"{ring}.lock.yaml"
+
+        if not ring_lock_path.exists():
+            self._add_error(f"Ring lock for '{ring}' not found at '{ring_lock_path}'.")
+            return {}
+
+        try:
+            existing_raw = yaml.safe_load(ring_lock_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            self._add_error(f"Failed to read lock file '{ring_lock_path}': {exc}")
+            return {}
+
+        if not isinstance(existing_raw, dict):
+            self._add_error(f"Lock file '{ring_lock_path}' is not a valid YAML mapping.")
+            return {}
+
+        ex_spec = existing_raw.get("spec") or {}
+        current_source = ex_spec.get("source")
+        if not current_source:
+            self._add_error(
+                f"Ring lock for '{ring}' is an inline-pins lock (no spec.source). "
+                "Use 'strata promote rollback' for inline-pins locks."
+            )
+            return {}
+
+        previous = ex_spec.get("previous") or {}
+        prev_source = previous.get("source")
+        if not prev_source:
+            self._add_error(
+                f"Ring lock for '{ring}' has no spec.previous — nothing to rollback to. "
+                "This lock was not written by 'strata promote' or it was the first promotion."
+            )
+            return {}
+
+        current_version = ex_spec.get("version") or current_source
+        prev_version = previous.get("version") or prev_source
+
+        # Verify that the previous version file exists
+        prev_file = (ring_lock_path.parent / prev_source).resolve()
+        if not prev_file.exists():
+            self._add_error(
+                f"Previous version file '{prev_source}' not found at '{prev_file}'. "
+                "Cannot complete rollback."
+            )
+            return {}
+
+        branch = f"rollback/{_slug(ring)}-to-{_slug(prev_version)}"
+        commit_message = f"rollback {ring} {current_version} → {prev_version}"
+
+        if dry_run:
+            return {
+                "dry_run": True,
+                "branch": branch,
+                "commit_message": commit_message,
+                "ring": ring,
+                "current_version": current_version,
+                "rollback_to_version": prev_version,
+                "previous_source": prev_source,
+            }
+
+        # ── git branch & write ───────────────────────────────────────────────
+        started_at = _now_iso()
+        ok, err = self._git_create_or_checkout_branch(branch, work_path)
+        if not ok:
+            self._add_error(err)
+            return {}
+
+        self._write_pointer_lock(ring_lock_path, ring, prev_file)
+
+        ok, sha = self._git_add_and_commit([ring_lock_path], commit_message, work_path)
+        if not ok:
+            self._add_error(sha)
+            return {}
+
+        committed_at = _now_iso()
+
+        record_path = self._write_promotion_record(
+            target_type=strategy.type or "image",
+            target_name=ring,
+            version=prev_version,
+            previous_version=current_version,
+            strategy=strategy,
+            progression=progression,
+            ring=ring,
+            outcome=PromotionOutcome.ROLLED_BACK,
+            branch=branch,
+            commits=[PromotionCommitModel(
+                ring_wave=1, sha=sha, message=commit_message, committed_at=committed_at
+            )],
+            gates=[],
+            ring_waves=[PromotionRingWaveSummaryModel(
+                ring_wave=1,
+                environments=ring_model.environment_names(),
+                deployment_wave=None,
+                deployments="all",
+                files_modified=[str(ring_lock_path)],
+                committed_at=committed_at,
+            )],
+            started_at=started_at,
+            completed_at=committed_at,
+            rollback_of=None,
+            work_path=work_path,
+        )
+
+        return {
+            "dry_run": False,
+            "branch": branch,
+            "ring": ring,
+            "rolled_back_from": current_version,
+            "rolled_back_to": prev_version,
+            "commit_sha": sha,
+            "promotion_record": record_path,
+            "pr_suggestion": (
+                f"gh pr create --head {branch} --title '{commit_message}' "
+                f"--body 'Rollback: {ring} → {prev_version}'"
+            ),
+        }
+
+    # ── promotion record writing ──────────────────────────────────────────────
+
     def _write_promotion_record(
         self,
         target_type: str,
@@ -1092,3 +1323,204 @@ class PromoteController(BaseController):
             return os.environ.get("CI_ACTOR") or os.environ.get("GITHUB_ACTOR") or getpass.getuser()
         except Exception:
             return "unknown"
+
+    # ── run_promote (new ADR-0011 layered design) ─────────────────────────────
+
+    def _resolve_versions_path(self, versions_path_raw: str, work_path: Path) -> Path:
+        """Resolve a versions_path string to an absolute Path.
+
+        Supports plain relative paths (relative to work_path) and
+        @repo_name/path syntax (resolved as work_path/@repo_name/path for now).
+        """
+        if versions_path_raw.startswith("@"):
+            # Strip @repo_name prefix — treat as relative to work_path for now
+            # Full cross-repo resolution is deferred to a later phase
+            stripped = versions_path_raw.lstrip("@")
+            parts = stripped.split("/", 1)
+            rel = parts[1] if len(parts) > 1 else parts[0]
+            return (work_path / rel).resolve()
+        p = Path(versions_path_raw)
+        if p.is_absolute():
+            return p
+        return (work_path / p).resolve()
+
+    def _find_strategy_by_name(self, config_model, promotion_name: str):
+        """Return (strategy, progression) for the named promotion, or (None, None)."""
+        if not config_model or not config_model.spec or not config_model.spec.promotions:
+            return None, None
+        promotions = config_model.spec.promotions
+        if not promotions.strategies or not promotions.progressions:
+            return None, None
+        prog_map = {p.name: p for p in promotions.progressions}
+        for strategy in promotions.strategies:
+            if strategy.name == promotion_name:
+                prog = prog_map.get(strategy.progression)
+                return strategy, prog
+        return None, None
+
+    def run_promote(
+        self,
+        ring: str,
+        version_file: Path,
+        promotion_name: str,
+        wave: Optional[int] = None,
+        complete: bool = False,
+        force: bool = False,
+        dry_run: bool = False,
+        work_path: Optional[Path] = None,
+    ) -> dict:
+        """Write a pointer ring lock for the new layered promotion design (ADR-0011).
+
+        This is the new-style promote operation:
+        - Writes ``{versions_path}/{ring}.lock.yaml`` pointing to *version_file*.
+        - For wave promotions: writes ``{ring}.wave.{N}.lock.yaml``.
+        - For ``--complete``: advances ring lock and deletes wave locks.
+
+        Returns a result dict on success, {} on error.
+        """
+        if work_path is None:
+            self._add_error("work_path is required for run_promote.")
+            return {}
+
+        # ── 1. load config and find strategy ───────────────────────────────
+        config = self._load_config_model(work_path)
+        if not config:
+            return {}
+
+        strategy, progression = self._find_strategy_by_name(config, promotion_name)
+        if not strategy:
+            self._add_error(
+                f"Promotion '{promotion_name}' not found in configuration.spec.promotions.strategies."
+            )
+            return {}
+
+        if not strategy.versions_path:
+            self._add_error(
+                f"Promotion '{promotion_name}' has no versions_path configured. "
+                "Add spec.promotions.strategies[].versions_path to your configuration."
+            )
+            return {}
+
+        # ── 2. resolve versions_path and validate version_file location ─────
+        vp = self._resolve_versions_path(strategy.versions_path, work_path)
+        version_file_abs = version_file.resolve()
+
+        try:
+            version_file_abs.relative_to(vp)
+        except ValueError:
+            self._add_error(
+                f"Version file '{version_file}' must be inside versions_path '{strategy.versions_path}' "
+                f"for promotion '{promotion_name}'."
+            )
+            return {}
+
+        # ── 3. find ring in progression ─────────────────────────────────────
+        if not progression:
+            self._add_error(
+                f"Progression '{strategy.progression}' not found for promotion '{promotion_name}'."
+            )
+            return {}
+
+        ring_model = next((r for r in progression.rings if r.name == ring), None)
+        if not ring_model:
+            self._add_error(
+                f"Ring '{ring}' not found in progression '{strategy.progression}'. "
+                f"Valid rings: {progression.ring_names()}"
+            )
+            return {}
+
+        # ── 4. progression order gate ───────────────────────────────────────
+        if strategy.gates and strategy.gates.require_progression_order and not force:
+            prev_ring_model = self._get_previous_ring(progression, ring)
+            if prev_ring_model:
+                prev_lock_path = vp / f"{prev_ring_model.name}.lock.yaml"
+                if not prev_lock_path.exists():
+                    self._add_error(
+                        f"Ring '{prev_ring_model.name}' (order {progression.ring_names().index(prev_ring_model.name) + 1}) "
+                        f"has no lock file — version not yet promoted there. "
+                        f"Promote '{prev_ring_model.name}' first, or use --force to override."
+                    )
+                    return {}
+
+        # ── 5. determine lock file path(s) ──────────────────────────────────
+        ring_lock_path = vp / f"{ring}.lock.yaml"
+        wave_lock_path = vp / f"{ring}.wave.{wave}.lock.yaml" if wave is not None else None
+
+        branch = f"promote/{_slug(promotion_name)}-{_slug(ring)}-{_slug(version_file_abs.stem)}"
+        commit_message = (
+            f"promote {promotion_name} → {ring}: {version_file_abs.stem}"
+            + (f" (wave {wave})" if wave is not None else "")
+            + (" [complete]" if complete else "")
+        )
+
+        # ── 6. dry run ───────────────────────────────────────────────────────
+        if dry_run:
+            files_to_write = []
+            files_to_delete = []
+            if complete:
+                files_to_write.append(str(ring_lock_path))
+                # List any existing wave locks that would be deleted
+                for wf in vp.glob(f"{ring}.wave.*.lock.yaml"):
+                    files_to_delete.append(str(wf))
+            elif wave is not None:
+                files_to_write.append(str(wave_lock_path))
+            else:
+                files_to_write.append(str(ring_lock_path))
+
+            return {
+                "dry_run": True,
+                "branch": branch,
+                "promotion": promotion_name,
+                "ring": ring,
+                "version_file": str(version_file_abs),
+                "files_to_write": files_to_write,
+                "files_to_delete": files_to_delete,
+                "versions_path": str(vp),
+            }
+
+        # ── 7. execute ───────────────────────────────────────────────────────
+        files_written: List[Path] = []
+        files_deleted: List[str] = []
+
+        if complete:
+            # Advance ring lock, delete wave locks
+            self._write_pointer_lock(ring_lock_path, ring, version_file_abs)
+            files_written.append(ring_lock_path)
+            for wf in sorted(vp.glob(f"{ring}.wave.*.lock.yaml")):
+                wf.unlink()
+                files_deleted.append(str(wf))
+        elif wave is not None:
+            # Write wave lock (ring lock stays pointing at previous version)
+            self._write_pointer_lock(wave_lock_path, ring, version_file_abs, wave=wave)
+            files_written.append(wave_lock_path)
+        else:
+            # All-at-once: write ring lock directly
+            self._write_pointer_lock(ring_lock_path, ring, version_file_abs)
+            files_written.append(ring_lock_path)
+
+        # ── 8. git commit ────────────────────────────────────────────────────
+        ok, err = self._git_create_or_checkout_branch(branch, work_path)
+        if not ok:
+            self._add_error(err)
+            return {}
+
+        all_staged = list(files_written)
+        ok, sha = self._git_add_and_commit(all_staged, commit_message, work_path)
+        if not ok:
+            self._add_error(sha)
+            return {}
+
+        return {
+            "dry_run": False,
+            "branch": branch,
+            "commit_sha": sha,
+            "promotion": promotion_name,
+            "ring": ring,
+            "version_file": str(version_file_abs),
+            "versions_path": str(vp),
+            "files_written": [str(f) for f in files_written],
+            "files_deleted": files_deleted,
+            "pr_suggestion": (
+                f"gh pr create --head {branch} --title '{commit_message}'"
+            ),
+        }

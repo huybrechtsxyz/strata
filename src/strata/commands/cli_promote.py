@@ -1,17 +1,21 @@
 """Click CLI wiring for the ``promote`` command group.
 
-Subcommands
------------
-start    — Initiate or advance a promotion wave (creates branch, writes lock, commits).
-rollback — Reverse a promotion using the same strategy.
-status   — Show in-flight promotions from local activity logs.
-matrix   — Show version matrix across all rings from lock files.
-history  — Query completed promotion records.
-log      — Show activity log for a specific promotion.
+Top-level invocation (new ADR-0011 layered design):
+    strata promote <ring> <file> --promotion <name> [--wave N] [--complete] [--dry-run] [--force]
+
+Subcommands (read-only or old-style):
+    start    — Old-style promote: targets a specific artifact by name+version.
+    rollback — Reverse a promotion using the same strategy.
+    status   — Show in-flight promotions from local activity logs.
+    matrix   — Show version matrix across all rings from lock files.
+    history  — Query completed promotion records.
+    log      — Show activity log for a specific promotion.
 """
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -27,16 +31,114 @@ from strata.commands.promote.history_promote_command import HistoryPromoteComman
 from strata.commands.promote.log_promote_command import LogPromoteCommand
 from strata.commands.promote.matrix_promote_command import MatrixPromoteCommand
 from strata.commands.promote.rollback_promote_command import RollbackPromoteCommand
+from strata.commands.promote.run_promote_command import RunPromoteCommand
 from strata.commands.promote.start_promote_command import StartPromoteCommand
 from strata.commands.promote.status_promote_command import StatusPromoteCommand
 
 
-# ── group ─────────────────────────────────────────────────────────────────────
+# ── group (new ADR-0011 interface: strata promote <ring> <file> --promotion <name>) ──
 
 
-@click.group(name="promote", help="Manage version promotions across rings.")
-def promote_group() -> None:
-    """Promote command group."""
+@click.group(
+    name="promote",
+    invoke_without_command=True,
+    help=(
+        "Manage version promotions across rings.\n\n"
+        "To promote a version file to a ring (Layer 4 pointer lock):\n\n"
+        "  strata promote --ring RING --file FILE --promotion NAME\n\n"
+        "Use subcommands for rollback, status, history, and the version matrix."
+    ),
+)
+@click.option(
+    "--ring",
+    "-r",
+    default=None,
+    metavar="RING",
+    help="Ring to promote to (e.g. dev, prd).",
+)
+@click.option(
+    "--file",
+    "-f",
+    "file",
+    default=None,
+    metavar="FILE",
+    help="Version file (kind: version) to promote.",
+)
+@click.option(
+    "--promotion",
+    "-p",
+    default=None,
+    metavar="NAME",
+    help="Promotion strategy name (required when --ring and --file are given).",
+)
+@click.option(
+    "--wave",
+    default=None,
+    type=int,
+    metavar="N",
+    help="Wave number for gradual rollout (1-based).",
+)
+@click.option(
+    "--complete",
+    is_flag=True,
+    default=False,
+    help="Advance the ring lock and delete wave lock files (end the wave rollout).",
+)
+@click.option("--dry-run", is_flag=True, default=False, help="Show plan without making changes.")
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Bypass progression order gate (for emergency hotfixes).",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+@click.pass_context
+def promote_group(
+    ctx: click.Context,
+    ring: Optional[str],
+    file: Optional[str],
+    promotion: Optional[str],
+    wave: Optional[int],
+    complete: bool,
+    dry_run: bool,
+    force: bool,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> None:
+    """Promote a version file to a ring, or run a subcommand."""
+    if ctx.invoked_subcommand is not None:
+        # A subcommand was given — pass through, don't run the promote logic
+        return
+
+    if not ring or not file:
+        click.echo(ctx.get_help())
+        ctx.exit(0)
+        return
+
+    if not promotion:
+        raise click.UsageError("--promotion NAME is required when --ring and --file are given.")
+
+    cmd = RunPromoteCommand(
+        ring=ring,
+        file=file,
+        promotion=promotion,
+        wave=wave,
+        complete=complete,
+        dry_run=dry_run,
+        force=force,
+        work_path=work_path,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    from strata.commands.cli_common import handle_command_exit
+    success = cmd.execute()
+    handle_command_exit(cmd, success)
 
 
 # ── start ──────────────────────────────────────────────────────────────────────

@@ -164,6 +164,16 @@ class PromotionStrategyModel(PlatformBaseModel):
             "zone-layer infrastructure is always all-at-once."
         ),
     )
+    versions_path: Optional[str] = Field(
+        None,
+        description=(
+            "Directory where this promotion's version files and ring lock files live. "
+            "Supports @repo_name/relative/path syntax for cross-repo paths. "
+            "Ring lock files are written to '{versions_path}/{ring}.lock.yaml'. "
+            "Version files are stored here and referenced by the lock (e.g. 'v2.1.0.yaml'). "
+            "Required when any deployment uses spec.promotion pointing to this strategy."
+        ),
+    )
     gates: Optional[PromotionGatesModel] = Field(
         None,
         description="Gate conditions evaluated before a promotion step proceeds.",
@@ -263,7 +273,28 @@ class ConfigurationPromotionsModel(PlatformBaseModel):
         if errors:
             raise ValueError("; ".join(errors))
         return self
-
+    @model_validator(mode="after")
+    def validate_unique_versions_paths(self) -> "ConfigurationPromotionsModel":
+        """Validate that no two strategies share the same versions_path."""
+        if not self.strategies:
+            return self
+        seen: dict[str, str] = {}  # versions_path → strategy name
+        errors = []
+        for strategy in self.strategies:
+            if not strategy.versions_path:
+                continue
+            norm = strategy.versions_path.rstrip("/")
+            if norm in seen:
+                errors.append(
+                    f"Promotions '{seen[norm]}' and '{strategy.name}' share "
+                    f"versions_path '{strategy.versions_path}'. "
+                    "Each promotion must have a unique directory."
+                )
+            else:
+                seen[norm] = strategy.name
+        if errors:
+            raise ValueError("\n".join(errors))
+        return self
 
 # ─── Environment-level promotion membership ───────────────────────────────────
 
