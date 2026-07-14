@@ -35,7 +35,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - `VERSION.txt` updated to `1.1.0` with corresponding git tags
   - Changelog versioning aligned with semantic versioning for clarity on minor vs patch releases
 
+- **Tenant Scaffolding Bundle Template**
+  - New workspace-local bundle template `.strata/templates/tenant/` enables rapid tenant provisioning for multi-customer deployments
+  - `strata new tenant <name>` generates complete tenant structure: tenant config file + dev/qa/prd environments with provider overrides
+  - Supports `{{ name }}` variable substitution in generated tenant codes, file paths, and descriptions
+  - Eliminates copy-paste for 200+ customer onboarding; teams maintain template in their workspace, not shipped with strata
+  - Includes auto-generated README and CHECKLIST for onboarding workflow
+  - Fixed `strata new` to exclude `template.yaml` metadata from bundle output
+  - Fixed `strata new --list` to properly display workspace bundle templates alongside single-file templates
+
 ### Changed
+
+- **`strata new --list` workspace template priority** — bundle directories in `.strata/templates/` now take precedence over same-named single-file templates in display (matching resolution precedence)
 
 - **Provider Override Handling** — provider resolution now includes fallback chain: workspace default → environment override file → environment override configuration
 - **Deployment Build Output** — plan summaries now show provider resolution details (file loaded, overrides applied per stage)

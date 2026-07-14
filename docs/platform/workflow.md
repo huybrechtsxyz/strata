@@ -342,14 +342,24 @@ an existing file.
 
 A template can also be a **directory** under `.strata/templates/`. The
 directory tree is the output structure — `{{ var }}` substitution runs on both
-file content and path segments. This is how you scaffold multiple related files
-(deployments, environments, values stubs) in a single command without
-hardcoding anything in strata itself.
+file content and path segments. This is the primary way to scaffold multiple related files
+(tenant configs, environment sets, deployment stubs) in a single command.
 
-The `tenant` bundle lives in `.strata/templates/tenant/`. Drop any
-directory there and `strata new <name>` picks it up automatically — no code
-changes needed. See [commands reference](commands.md#new) for the full bundle
-template format.
+**Example: Tenant bundle** — Creates a complete multi-environment tenant structure with one command:
+
+```bash
+strata new tenant contoso --path tenants/
+# Generates:
+#   tenants/contoso/contoso.yaml
+#   tenants/contoso/environments/{dev,qa,prd}.yaml
+#   tenants/contoso/README.md
+#   tenants/contoso/CHECKLIST.md
+```
+
+The `tenant` bundle template lives in `.strata/templates/tenant/` in the workspace.
+Teams can create custom bundles in `.strata/templates/<name>/` and `strata new` picks them up 
+automatically — no code changes needed. See [commands reference](commands.md#bundle-templates) 
+for the full bundle template format and examples.
 
 ---
 
