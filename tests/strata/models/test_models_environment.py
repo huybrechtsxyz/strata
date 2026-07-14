@@ -393,6 +393,75 @@ class TestEnvironmentOverrides:
         assert "duplicate" in str(exc_info.value).lower()
         assert "manager" in str(exc_info.value).lower()
 
+    def test_provider_override_configuration_only(self):
+        """Provider override with configuration only is valid."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "overrides": {
+                    "providers": [
+                        {
+                            "provider": "kamatera_europe",
+                            "configuration": {"region": "eu-fr", "network_tier": "premium"},
+                        },
+                    ]
+                }
+            },
+        }
+        model = EnvironmentModel.model_validate(data)
+        prov = model.spec.overrides.providers[0]
+        assert str(prov.provider) == "kamatera_europe"
+        assert prov.file is None
+        assert prov.configuration["region"] == "eu-fr"
+
+    def test_provider_override_file_only(self):
+        """Provider override with file only is valid."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "overrides": {
+                    "providers": [
+                        {"provider": "kamatera_europe", "file": "@config/providers/kamatera-prod.yaml"},
+                    ]
+                }
+            },
+        }
+        model = EnvironmentModel.model_validate(data)
+        prov = model.spec.overrides.providers[0]
+        assert str(prov.provider) == "kamatera_europe"
+        assert prov.file == "@config/providers/kamatera-prod.yaml"
+        assert prov.configuration is None
+
+    def test_provider_override_file_and_configuration(self):
+        """Provider override can specify both file and configuration overrides."""
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "environment",
+            "meta": {"name": "test_env", "labels": {"version": "1.0.0"}},
+            "spec": {
+                "overrides": {
+                    "providers": [
+                        {
+                            "provider": "kamatera_europe",
+                            "file": "@config/providers/kamatera-prod.yaml",
+                            "description": "Production override",
+                            "configuration": {"region": "eu-de"},
+                        },
+                    ]
+                }
+            },
+        }
+        model = EnvironmentModel.model_validate(data)
+        prov = model.spec.overrides.providers[0]
+        assert str(prov.provider) == "kamatera_europe"
+        assert prov.file == "@config/providers/kamatera-prod.yaml"
+        assert prov.description == "Production override"
+        assert prov.configuration["region"] == "eu-de"
+
     def test_duplicate_provider_overrides(self):
         """Test that duplicate provider overrides are rejected."""
         data = {

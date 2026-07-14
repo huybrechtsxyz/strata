@@ -1,6 +1,6 @@
 # Workspace, Provider, and Environment-level Provider Overrides
 
-- Status: proposed
+- Status: completed
 - Date: 2026-07-14
 
 ## Context and Problem Statement
@@ -672,13 +672,13 @@ spec:
 
 ## Next Steps
 
-- [ ] Implement `EnvironmentProviderOverrideModel`
-- [ ] Implement `resolve_provider_file()` with full test coverage
-- [ ] Implement `load_provider_spec()` with validation
-- [ ] Update Terraform builder to use resolved provider file
-- [ ] Add CLI test: `strata deploy --environment prod` with provider file overrides
-- [ ] Document in provider configuration guide
-- [ ] Add to ADR decision log
+- [x] Implement `EnvironmentProviderOverrideModel`
+- [x] Implement `resolve_provider_file()` with full test coverage
+- [x] Implement `load_provider_spec()` with validation
+- [x] Update Terraform builder to use resolved provider file
+- [x] Add CLI test: `strata deploy --environment prod` with provider file overrides
+- [x] Document in provider configuration guide
+- [x] Add to ADR decision log
 
 ## References
 
