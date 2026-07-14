@@ -46,6 +46,7 @@ class LogPromoteCommand(BasePromoteCommand):
         return True
 
     def _run(self) -> bool:
+        assert self._controller is not None
         target_name = self._remote or self._module
         if not target_name:
             self._errors.append("One of --remote or --module is required.")

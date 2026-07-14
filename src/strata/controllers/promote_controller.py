@@ -434,7 +434,7 @@ class PromoteController(BaseController):
 
     def _deployment_env_names(self, deployment) -> set:
         """Return set of environment names referenced by a deployment (filename stems)."""
-        names = set()
+        names: set[str] = set()
         if not deployment.spec.environments:
             return names
         for env_ref in deployment.spec.environments:

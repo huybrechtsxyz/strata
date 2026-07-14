@@ -51,6 +51,7 @@ class AddVersionsCommand(BaseVersionsCommand):
         return True
 
     def _run(self) -> bool:
+        assert self._controller is not None
         dest = Path(self._out)
         if not dest.is_absolute():
             dest = Path(str(self._work_path)) / dest

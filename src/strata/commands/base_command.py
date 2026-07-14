@@ -46,7 +46,7 @@ class BaseCommand:
         self._execution_id: str = generate_uuid()
 
         # Structured result data
-        self._output_data: dict = {}
+        self._output_data: Any = {}
         self._output_format = output or "console"
         self._output_verbose = verbose or False
         self._output_quiet = quiet or False

@@ -160,7 +160,7 @@ if ($SkipDocsBuild) {
 }
 else {
     Write-Host "[*] Sphinx docs build..." -ForegroundColor Blue
-    uv sync --extra doc 2>&1 | Out-Null
+    uv sync --group doc 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "    [!] Failed to install doc group dependencies" -ForegroundColor Red
         $failed += "sphinx docs build"

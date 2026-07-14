@@ -54,6 +54,7 @@ class RefreshVersionsCommand(BaseVersionsCommand):
         return True
 
     def _run(self) -> bool:
+        assert self._controller is not None
         file_path = Path(resolve_path(str(self._work_path), self._file))
         scan_dir_raw = self._scan or str(self._work_path)
         scan_dir = Path(scan_dir_raw)

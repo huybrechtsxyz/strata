@@ -60,7 +60,7 @@ from strata.models.version_lock_model import VersionLockModel as _VersionLockMod
 def _make_lock_model(pins: list) -> MagicMock:
     """Return a MagicMock that isinstance-checks as VersionLockModel."""
     m = MagicMock()
-    m.__class__ = _VersionLockModel
+    m.__class__ = _VersionLockModel  # type: ignore[assignment]
     m.spec.pins = pins
     return m
 

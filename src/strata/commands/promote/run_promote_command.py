@@ -57,6 +57,7 @@ class RunPromoteCommand(BasePromoteCommand):
         return True
 
     def _run(self) -> bool:
+        assert self._controller is not None
         file_path = Path(self._file)
         if not file_path.is_absolute():
             file_path = Path(str(self._work_path)) / file_path

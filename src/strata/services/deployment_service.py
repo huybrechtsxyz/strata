@@ -2,7 +2,10 @@
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from strata.models.environment_model import EnvironmentModel
 
 from strata.exceptions import ServiceLoadError, ServiceNotValidatedError
 from strata.models.configuration_model import ConfigurationModel
@@ -1190,13 +1193,13 @@ class DeploymentService(BaseService["DeploymentModel"]):
                 return errors, warnings
 
             # ── Step 3: load version-lock pins (manifests don't carry resolved_sha) ──
-            lock_pins = []
+            lock_pins: list = []
             for ref in self.model.spec.versions:
                 try:
                     abs_path = resolve_fn(ref.file, work_path)
                     model = VersionService.load(abs_path)
                     if isinstance(model, VersionLockModel):
-                        lock_pins.extend(model.spec.pins)
+                        lock_pins.extend(model.spec.pins or [])
                 except Exception:
                     pass
 

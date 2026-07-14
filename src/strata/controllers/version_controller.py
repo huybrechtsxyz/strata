@@ -247,7 +247,7 @@ class VersionController(BaseController):
         """
         discovered: TargetMap = {"images": {}, "charts": {}, "remotes": {}}
 
-        _KIND_EXTRACTORS = {
+        kind_extractors = {
             PlatformKind.MODULE.value: self._extract_module_targets,
             PlatformKind.WORKSPACE.value: self._extract_workspace_targets,
             PlatformKind.CONFIGURATION.value: self._extract_configuration_targets,
@@ -260,7 +260,7 @@ class VersionController(BaseController):
                     raw = yaml.safe_load(fh)
                 if not isinstance(raw, dict):
                     continue
-                extractor = _KIND_EXTRACTORS.get(raw.get("kind"))
+                extractor = kind_extractors.get(raw.get("kind") or "")  # type: ignore[arg-type]
                 if extractor:
                     extractor(raw, discovered)
             except Exception:

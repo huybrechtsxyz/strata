@@ -56,8 +56,8 @@ def _make_workspace(tmp_path: Path) -> tuple[Path, Path]:
 
 def _no_git(ctrl: PromoteController) -> PromoteController:
     """Patch git operations so tests don't need a real repo."""
-    ctrl._git_create_or_checkout_branch = lambda branch, wp: (True, branch)
-    ctrl._git_add_and_commit = lambda files, msg, wp: (True, "abc123")
+    ctrl._git_create_or_checkout_branch = lambda branch, wp: (True, branch)  # type: ignore[assignment]
+    ctrl._git_add_and_commit = lambda files, msg, wp: (True, "abc123")  # type: ignore[assignment]
     return ctrl
 
 

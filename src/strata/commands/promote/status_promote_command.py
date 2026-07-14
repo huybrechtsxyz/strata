@@ -38,6 +38,7 @@ class StatusPromoteCommand(BasePromoteCommand):
         return True
 
     def _run(self) -> bool:
+        assert self._controller is not None
         self._result = self._controller.get_status(Path(str(self._work_path)))
         self._output_data = self._result
         self._render()

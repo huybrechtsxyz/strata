@@ -14,6 +14,7 @@ strata
 
    README
    INDEX
+   GLOSSARY
 
 .. toctree::
    :maxdepth: 2
@@ -138,6 +139,7 @@ strata
    decisions/0017-tag-based-release-workflow-option-c
    decisions/0018-deployment-audit-traceability
    decisions/0019-configurable-terraform-build-output
+   decisions/0020-cli-parameter-consistency-standard
    decisions/0020-lifecycle-phases-and-environment-variables
    decisions/0021-deployment-manifests-as-first-class-build-artifacts
    decisions/0022-siem-integration-splunk-hec-cef

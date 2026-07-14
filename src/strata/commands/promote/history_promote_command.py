@@ -46,6 +46,7 @@ class HistoryPromoteCommand(BasePromoteCommand):
         return True
 
     def _run(self) -> bool:
+        assert self._controller is not None
         target_name = self._remote or self._module
         self._result = self._controller.get_history(
             work_path=Path(str(self._work_path)),

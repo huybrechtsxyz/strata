@@ -53,6 +53,7 @@ class RollbackPromoteCommand(BasePromoteCommand):
         return True
 
     def _run(self) -> bool:
+        assert self._controller is not None
         if self._remote and self._module:
             self._errors.append("--remote and --module are mutually exclusive.")
             return False
@@ -62,6 +63,7 @@ class RollbackPromoteCommand(BasePromoteCommand):
 
         target_type = "remote" if self._remote else "module"
         target_name = self._remote or self._module
+        assert target_name is not None
 
         self._result = self._controller.run_rollback(
             target_type=target_type,
