@@ -512,6 +512,8 @@ class SolutionController(BaseController):
           1. ``iac.source.target_path`` — explicit override
           2. ``iac.source.source_path`` — default (matches what the builder copies)
         """
+        if iac.source is None:
+            raise ValueError(f"Provisioner '{iac.name}' has no source defined.")
         target = iac.source.target_path or iac.source.source_path
         if target is None:
             raise ValueError(f"Provisioner '{iac.name}' source has no source_path or target_path defined.")
@@ -1263,9 +1265,11 @@ class SolutionController(BaseController):
                 from strata import __version__
 
                 content = src.read_text(encoding="utf-8")
-                content = TemplateProcessor.render(
-                    content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
-                )
+                # .j2 files are raw Jinja2 templates for end-users — copy verbatim.
+                if src.suffix != ".j2":
+                    content = TemplateProcessor.render(
+                        content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
+                    )
                 if dest.name == SOLUTION_LOGGING_FILE:
                     log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
                     content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)
@@ -1351,9 +1355,11 @@ class SolutionController(BaseController):
                 from strata import __version__
 
                 content = src.read_text(encoding="utf-8")
-                content = TemplateProcessor.render(
-                    content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
-                )
+                # .j2 files are raw Jinja2 templates for end-users — copy verbatim.
+                if src.suffix != ".j2":
+                    content = TemplateProcessor.render(
+                        content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
+                    )
                 if dest.name == SOLUTION_LOGGING_FILE:
                     log_file = (state_dir / SOLUTION_LOGS_DIR / "application.json").as_posix()
                     content = content.replace(f"{SOLUTION_DIR}/{SOLUTION_LOGS_DIR}/application.json", log_file)

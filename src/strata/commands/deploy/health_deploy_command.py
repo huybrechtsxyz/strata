@@ -80,36 +80,54 @@ class HealthDeployCommand(BaseDeployCommand):
             self._errors.append(f"Stage '{self._stage}' not found. Available: {[s.name for s in all_stages]}")
             return False
 
-        # Filter to stages that actually have health checks defined
-        checkable = [s for s in stages if s.health_checks]
-        skipped = [s for s in stages if not s.health_checks]
+        # Stages with explicit health_checks entries (HTTP/TCP probes)
+        http_checkable = [s for s in stages if s.health_checks]
+        # Sync stages (argocd/flux) — auto-detected by backend.integration presence
+        sync_checkable = [s for s in stages if s.backend is not None and s.backend.integration and not s.health_checks]
+        # Remaining stages with no checks of any kind
+        skipped = [s for s in stages if not s.health_checks and not (s.backend and s.backend.integration)]
 
         if skipped and self._is_console_output():
             names = ", ".join(str(s.name) for s in skipped)
             click.echo(f"\n  ℹ  No health checks defined for: {names}")
 
-        if not checkable:
+        if not http_checkable and not sync_checkable:
             if self._is_console_output():
                 click.echo(
                     "\n  ℹ  No stages have health checks configured.\n"
-                    "     Add 'health_checks:' to a stage in your deployment YAML to use this command."
+                    "     Add 'health_checks:' to a stage or use a sync provisioner (argocd/flux)."
                 )
             self._output_data = {"mode": "health", "stages": {}, "summary": "no_checks_defined"}
             return True
 
-        if self._is_console_output():
-            click.echo(f"\n🏥  Running health checks for {len(checkable)} stage(s)…\n")
-
         results: Dict[str, Any] = {}
         all_passed = True
 
-        for stage in checkable:
-            ok, stage_results = self._check_stage(stage)
-            results[str(stage.name)] = stage_results
-            if not ok:
-                all_passed = False
+        # --- HTTP/TCP health checks (existing behaviour) ---
+        if http_checkable:
             if self._is_console_output():
-                self._print_stage_results(str(stage.name), ok, stage_results)
+                click.echo(f"\n🏥  Running health checks for {len(http_checkable)} stage(s)…\n")
+
+            for stage in http_checkable:
+                ok, stage_results = self._check_stage(stage)
+                results[str(stage.name)] = stage_results
+                if not ok:
+                    all_passed = False
+                if self._is_console_output():
+                    self._print_stage_results(str(stage.name), ok, stage_results)
+
+        # --- GitOps reconciliation health (auto-detected sync stages) ---
+        if sync_checkable:
+            if self._is_console_output():
+                click.echo(f"\n🔄  Querying reconciliation status for {len(sync_checkable)} sync stage(s)…\n")
+
+            for stage in sync_checkable:
+                ok, stage_results = self._check_sync_stage(stage)
+                results[str(stage.name)] = stage_results
+                if not ok:
+                    all_passed = False
+                if self._is_console_output():
+                    self._print_sync_stage_results(str(stage.name), ok, stage_results)
 
         passed = sum(1 for r in results.values() if r.get("passed"))
         failed = len(results) - passed
@@ -167,6 +185,19 @@ class HealthDeployCommand(BaseDeployCommand):
         if check.type == "http":
             return self._http_check(check, outputs)
         return self._tcp_check(check, outputs)
+
+    def _check_sync_stage(self, stage: DeploymentStageModel) -> Tuple[bool, Dict[str, Any]]:
+        """Query a GitOps controller (argocd/flux) for reconciliation status."""
+        deployer = self._create_deployer(stage)
+        if deployer is None:
+            return False, {"passed": False, "error": f"Could not create deployer for stage '{stage.name}'"}
+
+        ok_env, env_msgs = deployer.validate_environment()
+        if not ok_env:
+            return False, {"passed": False, "error": "; ".join(env_msgs)}
+
+        ok, health_data, messages = deployer.health()
+        return ok, {"passed": ok, "type": "sync", "reconciliation": health_data, "messages": messages}
 
     # -------------------------------------------------------------------------
     # HTTP check
@@ -270,6 +301,22 @@ class HealthDeployCommand(BaseDeployCommand):
                 detail_parts.append(f"error: {chk['error']}")
             detail = "  ".join(detail_parts)
             click.echo(f"       {c_icon}  {name}  {detail}")
+        click.echo()
+
+    def _print_sync_stage_results(self, stage_name: str, passed: bool, results: Dict[str, Any]) -> None:
+        icon = "✅" if passed else "❌"
+        click.echo(f"  {icon}  Stage: {stage_name}  [sync]")
+        if results.get("error"):
+            click.echo(f"       ⚠  {results['error']}")
+        rec = results.get("reconciliation", {})
+        if rec:
+            sync_s = rec.get("sync_status", "Unknown")
+            health_s = rec.get("health_status", "Unknown")
+            revision = (rec.get("revision") or "unknown")[:7]
+            drift_flag = "  ⚠ drift" if rec.get("drift") else ""
+            click.echo(f"       Sync: {sync_s}  Health: {health_s}  Rev: {revision}{drift_flag}")
+            if rec.get("message"):
+                click.echo(f"       {rec['message']}")
         click.echo()
 
     # -------------------------------------------------------------------------

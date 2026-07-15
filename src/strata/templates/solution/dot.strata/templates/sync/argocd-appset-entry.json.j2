@@ -1,0 +1,9 @@
+{
+  "appName": "{{ integration.app_name | default(name) }}",
+  "project": "{{ integration.project | default('default') }}",
+  "repoURL": "{{ integration.repo_url }}",
+  "targetRevision": "{{ integration.target_revision | default(revision | default('HEAD')) }}",
+  "path": "{{ integration.path }}",
+  "destinationNamespace": "{{ integration.destination_namespace | default(layers.environment | default('default')) }}",
+  "destinationServer": "{{ integration.destination_server | default('https://kubernetes.default.svc') }}"
+}

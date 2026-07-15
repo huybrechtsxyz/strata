@@ -707,6 +707,43 @@ class PlatformSpecModel(BaseModel):
         description="Policy declarations active during build — copied from configuration.spec.policies",
     )
 
+    # -----------------------------------------------------------------------
+    # Convenience fields for Jinja2 template access (populated by builder)
+    # -----------------------------------------------------------------------
+
+    name: Optional[str] = Field(
+        None,
+        description="Deployment name promoted from meta.name — allows templates to access the name without meta prefix.",
+    )
+    labels: Optional[Dict[str, str]] = Field(
+        None,
+        description="Workspace labels promoted from workspace.labels — useful for ArgoCD/Flux label selectors.",
+    )
+    annotations: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Workspace annotations promoted from workspace.annotations.",
+    )
+    layers: Optional[Dict[str, str]] = Field(
+        None,
+        description="Layer key-value pairs — alias for deployment field, convenience for template access (e.g. {{ layers.zone }}).",
+    )
+    chart_versions: Optional[Dict[str, str]] = Field(
+        None,
+        description="Module/chart name → resolved version (flat dict). Populated by builder after version-lock resolution.",
+    )
+    image_versions: Optional[Dict[str, str]] = Field(
+        None,
+        description="Module/chart name → full image reference with digest (flat dict). Populated by builder.",
+    )
+    resolved_variables: Optional[Dict[str, str]] = Field(
+        None,
+        description="Flat variable name→value dict. Non-secret variables only — secrets are never exposed to templates.",
+    )
+    revision: Optional[str] = Field(
+        None,
+        description="Git commit SHA at build time (git rev-parse HEAD).",
+    )
+
     @classmethod
     def from_deployment_model(
         cls, model: DeploymentSpecModel, artifact_path: Optional[str] = None
@@ -749,6 +786,14 @@ class PlatformSpecModel(BaseModel):
             modules=None,
             firewalls=None,
             policies=None,
+            name=None,
+            labels=None,
+            annotations=None,
+            layers=None,
+            chart_versions=None,
+            image_versions=None,
+            resolved_variables=None,
+            revision=None,
         )
 
 

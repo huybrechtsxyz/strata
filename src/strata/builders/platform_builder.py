@@ -2,8 +2,9 @@
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -33,6 +34,7 @@ from strata.models.store_models import (
     FeatureStoreModel,
     SecretStoreModel,
     VariableStoreModel,
+    VariableStoreType,
 )
 from strata.services.deployment_service import DeploymentService
 from strata.services.platform_artifact_service import PlatformService
@@ -500,6 +502,54 @@ class PlatformBuilder(BaseBuilder):
             else:
                 self._errors.append(f"tenant file not found for '{deployment_model.spec.tenant}': {tenant_file}")
 
+        # ------------------------------------------------------------------
+        # Convenience fields (populated here so Jinja2 templates can use
+        # top-level names without navigating nested paths)
+        # ------------------------------------------------------------------
+        convenience_name: Optional[str] = str(deployment_model.meta.name)
+        convenience_labels: Optional[Dict] = deployment_model.meta.labels or None
+        convenience_annotations: Optional[Dict] = deployment_model.meta.annotations or None
+        convenience_layers: Optional[Dict] = deployment_model.spec.layers or None
+
+        # chart_versions: module name → helm chart version (chart-based modules only)
+        chart_versions: Optional[Dict[str, str]] = None
+        if modules:
+            cv = {str(m.name): m.source.chart_version for m in modules if m.source.chart_version is not None}
+            chart_versions = cv or None
+
+        # image_versions: module name → first container image found in services
+        image_versions: Optional[Dict[str, str]] = None
+        if modules:
+            iv: Dict[str, str] = {}
+            for m in modules:
+                if m.services:
+                    for svc in m.services:
+                        if svc.image:
+                            iv[str(m.name)] = svc.image
+                            break
+            image_versions = iv or None
+
+        # resolved_variables: only CONSTANT-store variables have literal values at build time
+        resolved_variables: Optional[Dict[str, str]] = None
+        if all_variables:
+            rv = {v.key: str(v.value) for v in all_variables if v.store == VariableStoreType.CONSTANT}
+            resolved_variables = rv or None
+
+        # revision: git HEAD SHA at build time (best-effort; None if not in a git repo)
+        revision: Optional[str] = None
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                cwd=str(work_path) if work_path else None,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                revision = result.stdout.strip() or None
+        except Exception:
+            pass
+
         return PlatformSpecModel(
             workspace=workspace,
             providers=providers,
@@ -531,6 +581,14 @@ class PlatformBuilder(BaseBuilder):
             stereotypes=None,
             tenant=platform_tenant,
             policies=getattr(configuration_model.spec, "policies", None) or None if configuration_model else None,
+            name=convenience_name,
+            labels=convenience_labels,
+            annotations=convenience_annotations,
+            layers=convenience_layers,
+            chart_versions=chart_versions,
+            image_versions=image_versions,
+            resolved_variables=resolved_variables,
+            revision=revision,
         )
 
     # ------------------------------------------------------------------

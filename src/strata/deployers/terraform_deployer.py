@@ -699,7 +699,9 @@ class TerraformDeployer(BaseDeployer):
         location and where the builder writes the auto.tfvars.json files.
         """
         deployment_build_path = deployment_service.get_build_path(build_path)
-        target = iac_model.source.target_path or (Path("terraform") / iac_model.name)
+        target = (
+            Path(iac_model.source.target_path) if iac_model.source.target_path else Path("terraform") / iac_model.name
+        )
         return deployment_build_path / target
 
     def _build_backend_config(self, iac_model: WorkspaceIacModel) -> Optional[Dict[str, str]]:

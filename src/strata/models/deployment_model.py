@@ -254,6 +254,30 @@ class DeploymentStageTimeoutsModel(PlatformBaseModel):
     )
 
 
+class SyncBackendModel(PlatformBaseModel):
+    """Backend configuration for a sync provisioner stage (argocd, flux).
+
+    Specifies which integration instance handles this stage and where rendered
+    output is committed. Analogous to the terraform backend block — the stage
+    decides where its output goes, not the integration itself.
+    """
+
+    integration: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description=(
+            "Integration name — references configuration.spec.integrations[].name. "
+            "The named integration must have the 'sync' capability. "
+            "Allows multiple instances of the same type (e.g., 'argocd-prod' vs 'argocd-staging')."
+        )
+    )
+    remote: Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)] = Field(
+        description=(
+            "Remote name — references a strata remote (strata repo add) where the "
+            "rendered controller input file is committed. The provisioner commits to "
+            "this remote during deploy."
+        )
+    )
+
+
 class DeploymentStageModel(PlatformBaseModel):
     """Model for a deployment stage (pipeline execution step).
 
@@ -339,6 +363,24 @@ class DeploymentStageModel(PlatformBaseModel):
             "Only these keys are passed to the deployer. "
             "Omit or set to null for no secret access. "
             "Use ['*'] to grant access to all secrets (escape hatch)."
+        ),
+    )
+    namespace: Optional[str] = Field(
+        None,
+        description=(
+            "Namespace name to scope this sync stage — references workspace.spec.namespaces[].name. "
+            "When set, the sync provisioner filters modules to those declared in this namespace "
+            "and injects 'namespace' as a single object into the Jinja2 template context. "
+            "Omit to include all namespaces (template is responsible for iteration). "
+            "Only meaningful for sync provisioners (argocd, flux)."
+        ),
+    )
+    backend: Optional[SyncBackendModel] = Field(
+        None,
+        description=(
+            "Sync backend configuration — specifies the integration instance and remote "
+            "for sync provisioners (argocd, flux). "
+            "Analogous to terraform backend: the stage controls where output is committed."
         ),
     )
 
