@@ -418,14 +418,36 @@ class DeploymentSpecModel(PlatformBaseModel):
             "Omit for shared/platform deployments that serve all tenants."
         ),
     )
-    workspace: DeploymentWorkspaceModel = Field(description="Name of the associated workspace for this deployment")
-    environments: Annotated[
-        List[DeploymentEnvironmentRef],
-        Field(
-            min_length=1,
-            description="List of environment file paths (or scoped refs) for this deployment (later files override earlier ones)",
+    partial: bool = Field(
+        False,
+        description=(
+            "When True, this file is a reusable base that is not deployable in isolation. "
+            "Phase 2 (semantic) validation is skipped; required fields such as "
+            "'workspace' and 'environments' need not be present. "
+            "strata deploy rejects partial files outright."
         ),
-    ]
+    )
+    extends: Optional[str] = Field(
+        None,
+        description=(
+            "@repo/path reference to a base deployment file whose spec is merged into "
+            "this file before validation and execution. Top-level fields are replaced; "
+            "stages are merged by name; environments are appended after the base list. "
+            "Circular references are rejected at load time."
+        ),
+    )
+    workspace: Optional[DeploymentWorkspaceModel] = Field(
+        None, description="Name of the associated workspace for this deployment"
+    )
+    environments: Optional[
+        Annotated[
+            List[DeploymentEnvironmentRef],
+            Field(
+                min_length=1,
+                description="List of environment file paths (or scoped refs) for this deployment (later files override earlier ones)",
+            ),
+        ]
+    ] = None
 
     @field_validator("environments", mode="before")
     @classmethod

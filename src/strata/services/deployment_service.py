@@ -76,6 +76,14 @@ class DeploymentService(BaseService["DeploymentModel"]):
         """
         errors = []
 
+        # Reject partial deployments — they are base files, not deploy targets.
+        if self.model and self.model.spec.partial:
+            return False, [
+                f"'{self.path or 'deployment'}' is a partial deployment (spec.partial: true) "
+                "and cannot be used as a deploy target. "
+                "A leaf deployment that extends this file is required."
+            ]
+
         # Validate deployment layers against configuration layering
         if configuration_model and configuration_model.spec.layering:
             layer_errors = self._validate_deployment_layers(configuration_model)
@@ -889,7 +897,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
             env_paths = tenant_env_paths + [
                 self._resolve_file_path(env_ref.file, objects_path, repo_map)
-                for env_ref in self.model.spec.environments
+                for env_ref in (self.model.spec.environments or [])
             ]
 
             self.logger.debug("Loading deployment environments", count=len(env_paths), paths=env_paths)

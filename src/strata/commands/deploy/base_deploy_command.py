@@ -353,16 +353,38 @@ class BaseDeployCommand(BaseCommand):
         self._build_path = self._get_build_path()
 
         # Phase 1: load + Pydantic-validate the deployment file
-        deployment_service = DeploymentService.load(str(self._file_path), validate=True)
+        # ADR 0039: resolve spec.extends before loading into DeploymentService.
+        from strata.services.deployment_extension_resolver import DeploymentExtensionResolver
+
+        resolver = DeploymentExtensionResolver(work_path=Path(self._work_path), repo_map=repo_map)
+        if resolver.needs_resolution(self._file_path):
+            try:
+                merged_data = resolver.resolve(self._file_path)
+            except (ValueError, FileNotFoundError) as exc:
+                self._errors.append(f"Deployment extends resolution failed: {exc}")
+                return False
+            deployment_service = DeploymentService(path=str(self._file_path), data=merged_data)
+            deployment_service.validate()
+        else:
+            deployment_service = DeploymentService.load(str(self._file_path), validate=True)
+
         if not deployment_service.is_validated():
             self._errors.extend(deployment_service.get_validation_errors())
+            return False
+
+        # Pre-flight: reject partial deployments before any infrastructure operation.
+        if deployment_service.model and deployment_service.model.spec.partial:
+            self._errors.append(
+                f"'{self._file_path.name}' is a partial deployment (spec.partial: true) "
+                "and cannot be deployed. A leaf deployment file that extends this base is required."
+            )
             return False
 
         # Phase 2: cross-validate against configuration
         config_model = self._configuration_service.model if self._configuration_service else None
         ok, errors = deployment_service.validate(
             configuration_model=config_model,
-            work_path=self._work_path,
+            work_path=str(self._work_path),
             repo_map=repo_map,
         )
         if not ok:
