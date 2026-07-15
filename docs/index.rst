@@ -158,6 +158,11 @@ strata
    decisions/0035-enterprise-store
    decisions/0036-workspace-provider-environment-overrides
    decisions/0037-mass-wave-deployment
+   decisions/0038-multi-tenant-fleet-management-patterns
+   decisions/0039-deployment-templates
+   decisions/0040-tenant-onboarding-scaffolding
+   decisions/0041-gitops-controller-integration
+   decisions/0042-deep-validation-layer-consistency
 
 .. toctree::
    :maxdepth: 2

@@ -1,6 +1,6 @@
 # Multi-Tenant Fleet Management Patterns and Gaps
 
-- Status: proposed
+- Status: completed
 - Date: 2026-07-14
 
 ## Context and Problem Statement
@@ -68,15 +68,15 @@ the assembly instruction that names which layers to compose for a specific
 
 **What the operator replaces with strata:**
 
-| ADO / GitHub native                       | Strata equivalent                               |
-|-------------------------------------------|-------------------------------------------------|
-| ADO Library Groups (flat, no history)     | Environment YAML (git-tracked, PR-reviewed)     |
-| GitHub secrets (runtime-only)             | Secret store references (auditable declarations)|
-| No version tracking across environments   | Version-lock files per ring                     |
-| No promotion workflow                     | Waves, rings, gates, canary overlays            |
-| No SBOM                                   | CycloneDX 1.6 SBOM across full fleet            |
-| Pipeline logs (per-pipeline, ephemeral)   | Structured audit log with execution IDs         |
-| Approval gates (invisible to code review) | `spec.approvals` declared in deployment file    |
+| ADO / GitHub native                       | Strata equivalent                                |
+| ----------------------------------------- | ------------------------------------------------ |
+| ADO Library Groups (flat, no history)     | Environment YAML (git-tracked, PR-reviewed)      |
+| GitHub secrets (runtime-only)             | Secret store references (auditable declarations) |
+| No version tracking across environments   | Version-lock files per ring                      |
+| No promotion workflow                     | Waves, rings, gates, canary overlays             |
+| No SBOM                                   | CycloneDX 1.6 SBOM across full fleet             |
+| Pipeline logs (per-pipeline, ephemeral)   | Structured audit log with execution IDs          |
+| Approval gates (invisible to code review) | `spec.approvals` declared in deployment file     |
 
 **Why version-lock and promotion are the primary payoff:**
 
@@ -202,13 +202,13 @@ layer identity does not match the path of any referenced file.
 Accept this ADR as a design record capturing the fleet-scale usage pattern and the gaps
 above as inputs to the strata roadmap. The gaps are ranked by impact:
 
-| Priority | Gap                             | Proposed ADR / Feature          |
-|----------|---------------------------------|---------------------------------|
-| 1        | Fleet-level visibility          | Extend ADR 0037 read-side       |
-| 2        | Deploy.yaml proliferation       | New ADR — deployment templates  |
-| 3        | Tenant onboarding friction      | Extend ADR 0014 scaffolding     |
-| 4        | GitOps controller integration   | New ADR — gitops output mode    |
-| 5        | Layer consistency validation    | Extend `strata validate --deep` |
+| Priority | Gap                           | Proposed ADR / Feature                               |
+| -------- | ----------------------------- | ---------------------------------------------------- |
+| 1        | Fleet-level visibility        | ADR 0037 — Fleet Operations and Mass Wave Deployment |
+| 2        | Deploy.yaml proliferation     | ADR 0039 — Deployment Templates                      |
+| 3        | Tenant onboarding friction    | ADR 0040 — Tenant Onboarding Scaffolding             |
+| 4        | GitOps controller integration | ADR 0041 — GitOps Controller Integration             |
+| 5        | Layer consistency validation  | ADR 0042 — Deep Validation and Layer Consistency     |
 
 No changes to the current strata schema or CLI are made by this ADR. Each gap will be
 addressed in a follow-on ADR or issue.
