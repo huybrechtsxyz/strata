@@ -9,6 +9,39 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [1.1.1] — 2026-07-15
+
+### Added
+
+- **`strata new --validate` flag**
+  - New `--validate` / `-v` flag on `strata new` validates each generated file immediately after creation using `PlatformValidator`
+  - Runs `before_validate → validate → after_validate` lifecycle on every produced file (single-file and bundle modes)
+  - Validation errors are appended to command output; generated files are preserved for manual correction
+  - Exit code reflects combined result of generation + validation
+
+### Changed
+
+- **BaseCommand lifecycle — ADR 0030 (completed)**
+  - All command `_run()` overrides migrated to `_execute()` across the entire command layer (~80 files)
+  - `execute()` is now a concrete sealed method on `BaseCommand`; subclasses must not override it
+  - `INIT_REQUIRED` ClassVar removed; workspace-optional commands call `_initialize_session()` instead of `super()._initialize()`
+  - `_initialize_session()` added to `BaseCommand` — mirrors `_initialize()` but does not error when `solution.json` is absent
+  - Three regression guards added to `scripts/Check.ps1`: no `INIT_REQUIRED`, no `execute()` overrides, no `_run()` definitions
+  - `CONTRIBUTING.md` updated with new command authoring pattern
+
+### Fixed
+
+- `cli_ref.py` — `super()._run()` call inside `_execute()` updated to `super()._execute()` (leftover from ADR 0030 migration)
+- `sbom_build_command.py`, `drift_deploy_command.py` — removed unnecessary `f` prefix from string literals with no placeholders (ruff F541)
+- `run_new_command.py` — mypy `Optional` reassignment on `context` variable resolved via separate `prompted` variable
+
+### Design & ADR Progress
+
+- **ADR-0030** (Command lifecycle explicitness and thin overrides) — status updated to `completed`
+- **ADR-0043** (Tenant offboarding — `strata remove tenant`) — new ADR, status `proposed`
+
+---
+
 ## [1.1.0] — 2026-07-14
 
 ### Added
