@@ -17,7 +17,6 @@ class AddProfileCommand(BaseCommand):
     """
 
     OPERATION = "solution_profile_add"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -42,7 +41,7 @@ class AddProfileCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Create the profile in the already-loaded solution and persist."""
         profile = SolutionSpecProfileModel(
             name=self._profile_name,

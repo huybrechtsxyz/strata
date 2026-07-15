@@ -25,7 +25,6 @@ class ListPolicyCommand(BaseCommand):
     """
 
     OPERATION = "policy_list"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -56,7 +55,7 @@ class ListPolicyCommand(BaseCommand):
     # Lifecycle overrides
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Load services and extract policies."""
         controller = PolicyController()
 

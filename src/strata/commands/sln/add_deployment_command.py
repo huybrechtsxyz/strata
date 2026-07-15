@@ -21,7 +21,6 @@ class AddDeploymentCommand(BaseCommand):
     """
 
     OPERATION = "solution_deployment_add"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -46,7 +45,7 @@ class AddDeploymentCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         file_path = Path(self._input_path)
         if not file_path.is_absolute():
             file_path = self._work_path / file_path

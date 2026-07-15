@@ -1,7 +1,8 @@
 # Explicit Command Lifecycle: ABC-Enforced Phases and Thin Overrides
 
-- Status: proposed
+- Status: completed
 - Date: 2026-07-11
+- Implemented: 2026-07-15
 
 ## Context and Problem Statement
 
@@ -78,72 +79,125 @@ lifecycle **explicit and local** — readable in the command file, not hidden in
 - Con: Magic — the lifecycle is invisible again, just in a different place.
 - **Rejected:** Violates the explicitness requirement.
 
+### Option D: Concrete `execute()` with always-run phases and `_execute()` override point
+
+- `BaseCommand` keeps `execute()` as a **concrete, non-overrideable orchestrator**.
+  Subclasses implement `_execute()` (renamed from `_run()`) for business logic.
+- `execute()` always runs all four phases plus finalize. Each phase is wrapped in
+  `try/except`; errors accumulate in `self._errors`. No phase is skipped due to a
+  prior phase failure.
+- Individual phases (`_initialize`, `_before_execute`, `_after_execute`) may be
+  overridden for customisation — but they never control flow.
+- `_finalize` is structurally guaranteed: it is always the last statement in the
+  concrete `execute()`. It cannot be skipped by any subclass.
+- Pro: `_finalize` is guaranteed without any per-command boilerplate.
+- Pro: Phase infrastructure (timing, logging, config) always runs — even when business
+  logic raises unexpectedly.
+- Pro: Simple mental model: "each phase always runs; errors accumulate; finalize reports."
+- Pro: No `INIT_REQUIRED` flags needed — commands needing no workspace context override
+  `_initialize()` to skip the solution.json check, or inherit `StatelessCommand`.
+- Con: `_execute()` may run even when `_initialize()` failed (e.g. workspace not found).
+  Phase implementations must be resilient to partial setup.
+- Mitigation: Per-phase try/except produces specific, actionable errors for each failed
+  phase rather than a single cascading failure message.
+
 ## Decision Outcome
 
-Chosen: **Option B — abstract `BaseCommand`, explicit `execute()` in each command**.
+Chosen: **Option D — concrete `execute()`, always-run phases, `_execute()` override point**.
 
-### Core contract
+### Core principle
 
-`BaseCommand` becomes an abstract base class (ABC). `execute()` is declared as
-`@abstractmethod`. The base class exposes a convenience helper `_run_phases()` for the
-standard case (no lifecycle deviation):
+`BaseCommand.execute()` is a concrete orchestrator that always runs all lifecycle phases
+in sequence. Each phase is wrapped in `try/except`; errors accumulate in `self._errors`.
+No phase controls whether the next phase runs — that is `execute()`'s job, and the
+answer is always "yes".
+
+Subclasses override `_execute()` for business logic. Individual phases may be overridden
+for customisation but never for flow control.
+
+### Why Option D over Option B
+
+Option B (abstract `execute()`, per-command lifecycle wiring) solves the visibility
+problem but introduces a new risk: per-command boilerplate is still code the author can
+get wrong. A command that writes `execute()` incorrectly still skips `_finalize`.
+
+Option D removes the override point entirely. `_finalize` is structurally guaranteed —
+it is always the last statement in `BaseCommand.execute()`, unreachable by any subclass
+override. The lifecycle is enforced by architecture, not by convention.
+
+### `BaseCommand` contract
 
 ```python
-# BaseCommand (base_command.py)
-from abc import ABC, abstractmethod
+class BaseCommand:
+    """Base command class. execute() is the concrete lifecycle orchestrator."""
 
-class BaseCommand(ABC):
     OPERATION: str = "base_command"
+    SHOW_CHROME: ClassVar[bool] = True
 
-    @abstractmethod
-    def execute(self, *args: Any, **kwargs: Any) -> bool:
-        """Orchestrate the five lifecycle phases and return overall success."""
-        ...
+    def execute(self) -> bool:
+        """Run all lifecycle phases. Always reaches _finalize.
 
-    def _run_phases(self, show_chrome: bool = True) -> bool:
-        """Convenience: run the standard five-phase lifecycle.
-
-        Commands with no lifecycle deviation call this from their own execute():
-
-            def execute(self) -> bool:
-                return self._run_phases()
+        Not intended for override. Subclasses implement _execute() for business
+        logic. Individual phases may be overridden for customisation.
         """
+        success = True
+
+        # Phase 1: workspace, timing, logging, config setup
         try:
-            if not self._initialize(show_header=show_chrome):
-                self._finalize(success=False, show_footer=show_chrome)
-                return False
-
-            if not self._before_execute():
-                self._finalize(success=False, show_footer=show_chrome)
-                return False
-
-            success = self._run()
-
-            self._after_execute()
-            self._finalize(success=success, show_footer=show_chrome)
-            return success
-
+            if not self._initialize(show_header=self.SHOW_CHROME):
+                success = False
         except Exception as exc:
-            self._errors.append(f"Unexpected error: {exc}")
-            self.logger.exception("Command failed", error=str(exc))
-            self._finalize(success=False, show_footer=show_chrome)
-            return False
+            self._errors.append(f"Initialization failed: {exc}")
+            self.logger.exception("_initialize raised", error=str(exc))
+            success = False
 
-    def _run(self) -> bool:
-        """Phase 3 — command core work.
+        # Phase 2: pre-execution validation and requirement checks
+        try:
+            if not self._before_execute():
+                success = False
+        except Exception as exc:
+            self._errors.append(f"Pre-execution failed: {exc}")
+            self.logger.exception("_before_execute raised", error=str(exc))
+            success = False
 
-        Override when using _run_phases(). Not called when execute() is
-        written manually.
+        # Phase 3: core business logic — the subclass override point
+        try:
+            if not self._execute():
+                success = False
+        except Exception as exc:
+            self._errors.append(f"Execution failed: {exc}")
+            self.logger.exception("_execute raised", error=str(exc))
+            success = False
+
+        # Phase 4: post-execution cleanup
+        try:
+            if not self._after_execute():
+                success = False
+        except Exception as exc:
+            self._errors.append(f"Post-execution failed: {exc}")
+            self.logger.exception("_after_execute raised", error=str(exc))
+            success = False
+
+        # Phase 5: audit, structured output, footer — always runs
+        self._finalize(success=success, show_footer=self.SHOW_CHROME)
+        return success
+
+    def _execute(self) -> bool:
+        """Phase 3 — core business logic.
+
+        Override in subclasses. Return True on success, False on failure (add
+        details to self._errors). Raise exceptions for unexpected errors —
+        execute() will catch and record them.
         """
         raise NotImplementedError(
-            f"{self.__class__.__name__} must implement _run() when using _run_phases()."
+            f"{self.__class__.__name__} must implement _execute()."
         )
 ```
 
-### Standard command pattern (uses `_run_phases`)
+### Standard command pattern
 
-Commands with no lifecycle deviation — the majority of strata commands — implement
-only `_run()` and write a one-liner `execute()`:
+Commands implement only `_execute()`. No `execute()` override, no phase-wiring
+boilerplate, no risk of forgetting `_finalize`:
 
 ```python
 class StatusDeployCommand(BaseCommand):
@@ -153,47 +207,32 @@ class StatusDeployCommand(BaseCommand):
         super().__init__(...)
         ...
 
-    def execute(self) -> bool:
-        return self._run_phases()
-
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         # All business logic here.
         ...
         return True
 ```
 
-### Deviant command pattern (custom `execute()`)
+### Phase customisation pattern
 
-Commands that need a different lifecycle (e.g. `strata sln init` which must skip the
-`.strata/` directory check, or `strata validate` which is stateless) write a full
-`execute()`:
+Commands that need different initialisation (e.g. `strata sln init` which must skip
+the `.strata/` existence check) override only the phase that differs. The flow is still
+guaranteed by `BaseCommand.execute()`:
 
 ```python
 class InitSlnCommand(BaseCommand):
     OPERATION = "sln_init"
 
-    def execute(self) -> bool:
-        try:
-            # Phase 1: custom _initialize that skips .strata/ existence check.
-            if not self._initialize():
-                self._finalize(success=False)
-                return False
+    def _initialize(self, show_header: bool = True) -> bool:
+        # Custom initialisation that does NOT check for solution.json.
+        self._start_time = datetime.now()
+        self._configure_session_logging()
+        if show_header and self._is_console_output():
+            self.show_console_header()
+        return True
 
-            # Phase 2: validate template name.
-            if not self._before_execute():
-                self._finalize(success=False)
-                return False
-
-            success = self._create_workspace()
-
-            self._finalize(success=success)
-            return success
-
-        except Exception as exc:
-            self._errors.append(f"Unexpected error: {exc}")
-            self.logger.exception("sln init failed", error=str(exc))
-            self._finalize(success=False)
-            return False
+    def _execute(self) -> bool:
+        return self._create_workspace()
 ```
 
 ### Stateless command pattern (no workspace, no audit)
@@ -214,14 +253,15 @@ class StatelessCommand:
         self._messages: list[str] = []
         self.logger = get_logger(self.__class__.__module__)
 
-    @abstractmethod
-    def execute(self) -> bool: ...
+    def execute(self) -> bool:
+        try:
+            return self._execute()
+        except Exception as exc:
+            self._errors.append(str(exc))
+            return False
 
-    def _is_console_output(self) -> bool:
-        return self._output_format in ("console", "")
-
-    def _is_structured_output(self) -> bool:
-        return self._output_format in ("json", "text")
+    def _execute(self) -> bool:
+        raise NotImplementedError
 ```
 
 > `ValidateCommand` is a natural candidate for `StatelessCommand`: it requires a file
@@ -230,70 +270,71 @@ class StatelessCommand:
 
 ## Migration Plan
 
-The change is fully backward compatible. It is applied incrementally:
+The change is backward compatible for commands that implement `_run()` — rename
+`_run()` to `_execute()` in each command. Applied incrementally:
 
-1. **Phase 1 — Base class changes** (single PR, no behavioral change):
-   - Import `ABC`, `abstractmethod` into `base_command.py`.
-   - Add `@abstractmethod` to `execute()`.
-   - Add `_run_phases()` helper (content is the current concrete `execute()` body,
-     minus the `SHOW_CHROME` classvar reference — pass `show_chrome` explicitly instead).
-   - `_run()` default remains `raise NotImplementedError`.
-   - All existing commands that override `_run()` now call `_run_phases()` from their
-     `execute()` — add a one-liner `execute()` to each.
-   - All existing commands that already override `execute()` are unchanged.
-   - **No behavioral change.** Tests pass without modification.
+1. ✅ **Phase 1 — Base class changes** (complete):
+   - Rewrote `execute()` in `base_command.py` as the always-run orchestrator (five
+     phases, per-phase try/except, no short-circuit).
+   - Added `_execute()` with a `raise NotImplementedError` default.
+   - Removed `_run_phases()` helper — no longer needed.
+   - All existing commands that implement `_run()`: renamed method to `_execute()`.
+   - All existing commands that override `execute()` directly: converted override logic
+     to phase overrides (`_initialize`, `_before_execute`, etc.) and renamed business
+     logic to `_execute()`.
+   - **No behavioral change for standard commands.** All tests pass without modification.
 
-2. **Phase 2 — Migrate deviant commands** (per command group PR):
-   - For each command group that overrides `execute()` with non-standard logic, verify
-     the override is intentional and add a comment explaining the deviation.
-   - Remove `INIT_REQUIRED = False` from commands that should become `StatelessCommand`
-     subclasses; migrate them.
+2. ✅ **Phase 2 — Eliminate `INIT_REQUIRED`** (complete):
+   - All commands with `INIT_REQUIRED = False` now override `_initialize()` to call
+     `self._initialize_session()` — a new `BaseCommand` helper that performs the full
+     session setup (timing, logging, context) without requiring `solution.json` to exist.
+   - The planned `StatelessCommand` base class was not introduced; `_initialize_session()`
+     covers the same use cases with less structural overhead.
+   - Removed `INIT_REQUIRED` ClassVar from `BaseCommand` and all 46 subclasses.
 
-3. **Phase 3 — Enforce via linting** (CI addition):
-   - Add a `ruff` rule or a custom `scripts/Check.ps1` assertion: every class in
-     `src/strata/commands/` that inherits `BaseCommand` must define its own `execute()`
-     method (i.e. the abstract contract is satisfied at the class level, not inherited).
-   - This prevents future commands from accidentally relying on an inherited concrete
-     `execute()`.
+3. ✅ **Phase 3 — Enforce via linting** (complete):
+   - Added three guards to `scripts/Check.ps1` (section 7 — ADR 0030 migration guards):
+     - No `INIT_REQUIRED` references in commands.
+     - No `execute()` overrides in `BaseCommand` subclasses.
+     - No `_run()` method definitions in commands.
 
 ## Consequences
 
 **Good:**
-- The lifecycle is explicit in every command file. A new contributor can read
-  `RunDeployCommand.execute()` and understand the full execution order without reading
-  the base class.
-- `_finalize` (audit + structured output) is guaranteed to run on every exit path
-  because the command author wires it in their `execute()` — there is nowhere for it to
-  disappear silently.
-- `INIT_REQUIRED = False` class variables are eliminated over time; commands that need
-  no workspace context opt out structurally by using `StatelessCommand`.
-- The `_run_phases()` helper keeps the common case at one line per command, so the
-  explicitness comes at near-zero boilerplate cost for standard commands.
+- `_finalize` (audit + structured output) is structurally guaranteed on every exit
+  path. It cannot be skipped because it is always the last statement in the concrete
+  `BaseCommand.execute()`. No per-command boilerplate required.
+- Phase infrastructure (timing, logging, config) always runs — a `_execute()` that
+  raises unexpectedly will still produce a full audit entry and structured output
+  envelope.
+- `INIT_REQUIRED = False` class variables are eliminated; commands that need no
+  workspace context override `_initialize()` to call `self._initialize_session()`.
+- Commands are minimal: implement `_execute()` and nothing else for the standard case.
+- Per-phase try/except produces specific, actionable error messages from each failing
+  phase rather than a single first-failure message with subsequent phases silenced.
 
 **Bad / Trade-offs:**
-- Every command file gains `def execute(self) -> bool: return self._run_phases()` —
-  three lines of boilerplate. This is the price of explicitness.
-- The ABC constraint means `mypy` will flag any `BaseCommand` subclass that does not
-  implement `execute()`. This is intentional but may surface hidden violations on the
-  first migration run.
+- `_execute()` runs even when `_initialize()` failed. Phase implementations must be
+  resilient to partial setup. In practice, `_execute()` will also fail quickly and add
+  its own error — both errors are reported in `_finalize`, giving the user full context.
+- Subclasses can no longer override `execute()` for non-standard flows. Deviations must
+  be expressed as phase overrides (`_initialize`, `_before_execute`, etc.). This is the
+  correct constraint — it prevents the original problem of accidentally skipping finalize.
 
 ## Reference: Sterling Implementation
 
-The sterling codebase (same author, same layered-architecture pattern) serves as the
-reference implementation for this pattern. Key files:
+The sterling codebase (same author, same layered-architecture pattern) uses Option B:
+abstract `BaseCommand` with an explicit `execute()` in each command. Strata diverges
+from this with Option D, trading per-command lifecycle visibility for structural
+`_finalize` guarantees and zero boilerplate.
 
-- `src/sterling/commands/base_command.py` — abstract `BaseCommand` with five lifecycle
-  phases, shared `_emit_stage / _emit_task_line / _emit_summary_line` console helpers,
-  `_finalize` always writes the audit entry.
-- `src/sterling/commands/init_command.py` — example of a deviant command: overrides
-  `_initialize()` to skip the `.sterling/` directory check, writes its own `execute()`.
-- `src/sterling/commands/run_command.py` — example of a complex command that writes its
-  own `execute()` with extra phases and per-phase error handling.
-- `src/sterling/commands/validate_command.py` — example of a stateless command: does
-  **not** inherit `BaseCommand`; is a plain class with a minimal `execute()` and its
-  own output logic.
-
-These patterns map directly to the three command archetypes described in this ADR.
+Sterling patterns that still apply in Option D:
+- `_emit_stage / _emit_task_line / _emit_summary_line` console helper methods —
+  carried over unchanged.
+- Phase override for non-standard initialisation (`init_command.py` overrides
+  `_initialize()`) — identical pattern.
+- Stateless commands as plain classes with a minimal `execute()` — same concept,
+  expressed as `StatelessCommand` in strata.
 
 ## More Information
 

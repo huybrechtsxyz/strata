@@ -15,7 +15,6 @@ class RemoveDeploymentCommand(BaseCommand):
     """
 
     OPERATION = "solution_deployment_remove"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -40,7 +39,7 @@ class RemoveDeploymentCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         # Capture metadata before removing
         deployments, errors = self._solution_controller.get_deployments(self._deployment_name)
         if errors:

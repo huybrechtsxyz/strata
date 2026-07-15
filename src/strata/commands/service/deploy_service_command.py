@@ -38,58 +38,39 @@ class DeployServiceCommand(BaseServiceCommand):
         self._dry_run = dry_run
         self._resolved_values: Optional[ResolvedValues] = None
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                self._finalize(success=False)
-                return False
-
-            if not self._name:
-                self._errors.append("Service name is required. Use: strata service deploy <name>")
-                self._finalize(success=False)
-                return False
-
-            targets, errors = self._resolve_targets_by_name(self._name)
-            if errors:
-                self._errors.extend(errors)
-                if self._is_console_output():
-                    for e in errors:
-                        click.echo(f"  ❌  {e}")
-                self._finalize(success=False)
-                return False
-
-            # Resolve values (variables, secrets, features)
-            if not self._resolve_values():
-                self._finalize(success=False)
-                return False
-
-            if self._is_console_output():
-                prefix = "[DRY-RUN] " if self._dry_run else ""
-                click.echo(f"\n{prefix}Deploying {len(targets)} service(s)…")
-
-            all_ok = True
-            for target in targets:
-                ok = self._deploy_target(target)
-                if not ok:
-                    all_ok = False
-                    if not self._force:
-                        break
-
-            if all_ok and self._is_console_output() and not self._dry_run:
-                click.echo("\n✅  Service deployment completed.")
-
-            self._finalize(success=all_ok)
-            return all_ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to deploy service: {exc}")
-            self.logger.exception("service_deploy failed")
-            self._finalize(success=False)
+    def _execute(self) -> bool:
+        if not self._name:
+            self._errors.append("Service name is required. Use: strata service deploy <name>")
             return False
+
+        targets, errors = self._resolve_targets_by_name(self._name)
+        if errors:
+            self._errors.extend(errors)
+            if self._is_console_output():
+                for e in errors:
+                    click.echo(f"  ❌  {e}")
+            return False
+
+        # Resolve values (variables, secrets, features)
+        if not self._resolve_values():
+            return False
+
+        if self._is_console_output():
+            prefix = "[DRY-RUN] " if self._dry_run else ""
+            click.echo(f"\n{prefix}Deploying {len(targets)} service(s)…")
+
+        all_ok = True
+        for target in targets:
+            ok = self._deploy_target(target)
+            if not ok:
+                all_ok = False
+                if not self._force:
+                    break
+
+        if all_ok and self._is_console_output() and not self._dry_run:
+            click.echo("\n✅  Service deployment completed.")
+
+        return all_ok
 
     def _resolve_values(self) -> bool:
         """Resolve variables, secrets, and feature flags."""

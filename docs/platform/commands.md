@@ -31,34 +31,34 @@ These options are accepted by every command and subcommand:
 
 ## Command Groups
 
-| Group        | Subcommands                                                                    | Description                                               |
-| ------------ | ------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `sln`        | `init` `update` `clean` `status` `export`                                      | Solution workspace lifecycle                              |
-| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset`   | Manage persistent workspace defaults and logging config   |
-| `log` †      | `list`                                                                         | View execution logs (read-only)                           |
-| `profile` †  | `add` `remove` `list` `activate` `show`                                        | Manage environment profiles                               |
-| `ref` †      | `env` `config` `data` `secret`                                                 | Manage file references within profiles                    |
-| `repo` †     | `add` `remove` `list` `sync` `status`                                          | Manage repositories in the solution                       |
-| `build` †    | `run` `plan` `clean` `sbom`                                                    | Build platform and Terraform artifacts; generate SBOMs    |
-| `validate`   | `run` `graph`                                                                  | Validate YAML files and visualize workspace dependencies  |
-| `env` †      | `info` `output` `show` `status` `drift` `doctor`                               | Inspect environment configuration and infrastructure      |
-| `guide`      | —                                                                              | Show workspace setup progress and suggest the next action |
-| `console` †  | —                                                                              | Interactive workspace REPL                                |
-| `schema`     | `list` `get`                                                                   | Inspect JSON schemas for platform YAML kinds              |
-| `policy` †   | `list` `check`                                                                 | Inspect and evaluate deployment guardrails                |
-| `secret`     | `generate` `mask`                                                              | Generate and manage secret values                         |
-| `audit` †    | `changes` `resend` `export`                                                    | Query deploy-log evidence and forward to audit sinks      |
+| Group        | Subcommands                                                                            | Description                                               |
+| ------------ | -------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `sln`        | `init` `update` `clean` `status` `export`                                              | Solution workspace lifecycle                              |
+| `config`     | `set` `unset` `list`; `log list` `log get` `log set` `log unset` `log reset`           | Manage persistent workspace defaults and logging config   |
+| `log` †      | `list`                                                                                 | View execution logs (read-only)                           |
+| `profile` †  | `add` `remove` `list` `activate` `show`                                                | Manage environment profiles                               |
+| `ref` †      | `env` `config` `data` `secret`                                                         | Manage file references within profiles                    |
+| `repo` †     | `add` `remove` `list` `sync` `status`                                                  | Manage repositories in the solution                       |
+| `build` †    | `run` `plan` `clean` `sbom`                                                            | Build platform and Terraform artifacts; generate SBOMs    |
+| `validate`   | `run` `graph`                                                                          | Validate YAML files and visualize workspace dependencies  |
+| `env` †      | `info` `output` `show` `status` `drift` `doctor`                                       | Inspect environment configuration and infrastructure      |
+| `guide`      | —                                                                                      | Show workspace setup progress and suggest the next action |
+| `console` †  | —                                                                                      | Interactive workspace REPL                                |
+| `schema`     | `list` `get`                                                                           | Inspect JSON schemas for platform YAML kinds              |
+| `policy` †   | `list` `check`                                                                         | Inspect and evaluate deployment guardrails                |
+| `secret`     | `generate` `mask`                                                                      | Generate and manage secret values                         |
+| `audit` †    | `changes` `resend` `export`                                                            | Query deploy-log evidence and forward to audit sinks      |
 | `deploy` †   | `run` `destroy` `show` `status` `history` `health` `drift` `output` `outputs` `lock *` | Deploy platform using provisioners                        |
-| `service` †  | `list` `status` `deploy` `destroy`                                             | Deploy and manage individual services                     |
-| `manifest` † | `list` `show` `export`                                                         | Query and export deployment manifests                     |
-| `mcp`        | `serve`                                                                        | Model Context Protocol server for AI integration          |
-| `values` †   | `list` `get` `set` `resolve`                                                   | Inspect and manage resolved deployment values             |
-| `vars` †     | `set` `unset` `list`                                                           | Manage team-shared template variables                     |
-| `tools`      | `status` `check` `install`                                                     | Manage and inspect external tool integrations             |
-| `new` †      | —                                                                              | Create a platform config file from a template             |
-| `version`    | —                                                                              | Show CLI version                                          |
-| `completion` | `bash` `zsh` `fish` `powershell`                                               | Output shell completion script for the given shell        |
-| `help`       | —                                                                              | Show help topics                                          |
+| `service` †  | `list` `status` `deploy` `destroy`                                                     | Deploy and manage individual services                     |
+| `manifest` † | `list` `show` `export`                                                                 | Query and export deployment manifests                     |
+| `mcp`        | `serve`                                                                                | Model Context Protocol server for AI integration          |
+| `values` †   | `list` `get` `set` `resolve`                                                           | Inspect and manage resolved deployment values             |
+| `vars` †     | `set` `unset` `list`                                                                   | Manage team-shared template variables                     |
+| `tools`      | `status` `check` `install`                                                             | Manage and inspect external tool integrations             |
+| `new` †      | —                                                                                      | Create a platform config file from a template             |
+| `version`    | —                                                                                      | Show CLI version                                          |
+| `completion` | `bash` `zsh` `fish` `powershell`                                                       | Output shell completion script for the given shell        |
+| `help`       | —                                                                                      | Show help topics                                          |
 
 > **†** Requires an initialized workspace (`.strata/` directory). Run `strata sln init --name NAME` first.
 
@@ -326,32 +326,43 @@ template files. The directory tree is the output structure — `{{ var }}`
 substitution runs on both file content and path segments using the same
 `{{ var }}` syntax as single-file templates.
 
-```
-.strata/templates/
-└── tenant/                    ← bundle directory
-    ├── tenants/
-    │   └── {{ name }}/
-    │       ├── deployments/
-    │       │   ├── {{ name }}-dev.yaml
-    │       │   └── {{ name }}-prod.yaml
-    │       └── environments/
-    │           └── {{ name }}.yaml
-    └── README.md
-```
-
-Running `strata new tenant newcorp --path repos/xyz-config/ --set zone=eu`
-produces:
+**Built-in tenant bundle example:**
 
 ```
-repos/xyz-config/tenants/newcorp/deployments/newcorp-dev.yaml
-repos/xyz-config/tenants/newcorp/deployments/newcorp-prod.yaml
-repos/xyz-config/tenants/newcorp/environments/newcorp.yaml
+.strata/templates/tenant/
+├── template.yaml              ← metadata + description
+├── README.md
+└── {{ name }}/                ← rendered to tenant name
+    ├── {{ name }}.yaml        ← tenant config
+    ├── README.md
+    ├── CHECKLIST.md
+    └── environments/
+        ├── dev.yaml           ← environment overrides
+        ├── qa.yaml
+        └── prd.yaml
+```
+
+Running `strata new tenant contoso --path tenants/` produces:
+
+```
+tenants/contoso/
+├── contoso.yaml               (tenant config with {{ name }} → contoso)
+├── README.md
+├── CHECKLIST.md
+└── environments/
+    ├── dev.yaml               (dev environment template)
+    ├── qa.yaml                (qa environment template)
+    └── prd.yaml               (prd environment template)
 ```
 
 All `{{ var }}` references in content and path segments are substituted from:
 - `name` — the `NAME` argument (always available)
 - `--set KEY=VALUE` overrides
 - Team context from `solution.json` (if present)
+
+**Workspace-local bundles** — Teams can create custom bundles in `.strata/templates/<name>/`
+to standardize tenant provisioning, CI/CD pipelines, or deployment structures. Teams maintain
+these templates locally; they are not shipped with strata.
 
 ---
 
@@ -709,11 +720,11 @@ Also shows a **value status table** derived from YAML alone (no store access req
 
 Value status column values:
 
-| Status      | Meaning                                                              |
-| ----------- | -------------------------------------------------------------------- |
-| `ok`        | Built-in store (`constant`, `environment`, `github`) — always available |
-| `seeded`    | Integration-backed with `default:` — seeded on first run             |
-| `generated` | Secret with `generate:` spec — auto-generated on first run           |
+| Status      | Meaning                                                                    |
+| ----------- | -------------------------------------------------------------------------- |
+| `ok`        | Built-in store (`constant`, `environment`, `github`) — always available    |
+| `seeded`    | Integration-backed with `default:` — seeded on first run                   |
+| `generated` | Secret with `generate:` spec — auto-generated on first run                 |
 | `required`  | Integration-backed with no `default:` or `generate:` — must exist in store |
 
 ```bash

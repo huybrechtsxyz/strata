@@ -15,7 +15,6 @@ class ListProfilePathCommand(BaseCommand):
     """
 
     OPERATION = "solution_profile_path_list"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -43,7 +42,7 @@ class ListProfilePathCommand(BaseCommand):
             self._profile_name = str(active.name)
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Read profile paths from the already-loaded solution."""
         paths_by_type, errors = self._solution_controller.get_profile_paths(self._profile_name)
         if errors:

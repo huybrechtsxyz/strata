@@ -70,11 +70,10 @@ class ListDeployCommand(BaseCommand):
     Designed for CI matrix generation: pipe ``--output json`` output to
     ``jq`` or consume directly as a GitHub Actions matrix.
 
-    ``INIT_REQUIRED = False`` — works without an initialised strata workspace.
+    Works without an initialised strata workspace.
     """
 
     OPERATION = "deploy_list"
-    INIT_REQUIRED = False
 
     def __init__(
         self,
@@ -100,7 +99,11 @@ class ListDeployCommand(BaseCommand):
     # Implementation
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _initialize(self, show_header: bool = True) -> bool:
+        # Works without an initialized workspace — run super for side-effects only.
+        return self._initialize_session(show_header=show_header)
+
+    def _execute(self) -> bool:
         if not self._scan_path.exists() or not self._scan_path.is_dir():
             self._errors.append(f"Path does not exist or is not a directory: {self._scan_path}")
             return False

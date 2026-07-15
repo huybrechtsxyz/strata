@@ -19,7 +19,6 @@ class SetContextCommand(BaseCommand):
     """
 
     OPERATION = "context_set"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -57,7 +56,7 @@ class SetContextCommand(BaseCommand):
     def _before_execute(self) -> bool:
         return super()._before_execute()
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         controller = ContextController(self._work_path)
 
         if self._action == "list":

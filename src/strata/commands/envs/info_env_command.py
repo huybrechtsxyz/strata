@@ -25,7 +25,6 @@ class InfoEnvCommand(BaseCommand):
     """
 
     OPERATION = "env_info"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -48,7 +47,7 @@ class InfoEnvCommand(BaseCommand):
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         solution = self._solution_controller.solution
         if solution is None:
             self._errors.append("No solution loaded.")

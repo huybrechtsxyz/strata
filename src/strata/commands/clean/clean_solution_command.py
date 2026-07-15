@@ -16,7 +16,6 @@ class CleanSolutionCommand(BaseCommand):
     """
 
     OPERATION = "solution_clean"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -54,7 +53,7 @@ class CleanSolutionCommand(BaseCommand):
         """
         return {}
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._run_lifecycle_phase(
             "solution_clean_before",
             context={"work_path": str(self._work_path), "dry_run": self._dry_run},
@@ -91,8 +90,9 @@ class CleanSolutionCommand(BaseCommand):
         Initialize the command and optionally allow running without an initialized
         solution by passing `require_solution=False`.
 
-        This temporarily overrides the command's `INIT_REQUIRED` flag so the
-        base initializer can enforce (or skip) the solution presence check.
+        The command degrades gracefully: it calls super()._initialize() but
+        the _initialize() override always returns True so cleaning works even
+        without an initialized workspace.
         """
         if not super()._initialize(show_header=show_header):
             return False

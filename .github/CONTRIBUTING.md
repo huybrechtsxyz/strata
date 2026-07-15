@@ -37,12 +37,13 @@ utils/        ← Pure utilities (no business logic, no service imports)
 ### Adding a new CLI command
 
 1. Create `src/strata/commands/<group>/<name>_command.py` extending `BaseCommand`.
-2. Implement `get_required_integrations()`, `execute()`, and optionally `_print_console`.
-3. Wire it up in `src/strata/commands/cli_<group>.py` with Click decorators.
-4. Register the group in `src/strata/cli.py` if it's new.
-5. Use `@click_work_path`, `@click_output_format`, `@click_output_verbose`, `@click_output_quiet` from `cli_common.py`.
-6. Use `@click_file` from `cli_common.py` for `--file` options (includes `STRATA_FILE` env var automatically).
-7. Never use `sys.exit()` — raise `click.exceptions.Exit(code)`.
+2. Implement `get_required_integrations()` and `_execute()`. Do **not** override `execute()` — it is the concrete lifecycle orchestrator on the base class.
+3. For commands that work without an initialized workspace (no `solution.json` required), override `_initialize()` to call `self._initialize_session()` and return its result.
+4. Wire it up in `src/strata/commands/cli_<group>.py` with Click decorators.
+5. Register the group in `src/strata/cli.py` if it's new.
+6. Use `@click_work_path`, `@click_output_format`, `@click_output_verbose`, `@click_output_quiet` from `cli_common.py`.
+7. Use `@click_file` from `cli_common.py` for `--file` options (includes `STRATA_FILE` env var automatically).
+8. Never use `sys.exit()` — raise `click.exceptions.Exit(code)`.
 
 ### Adding a new integration
 

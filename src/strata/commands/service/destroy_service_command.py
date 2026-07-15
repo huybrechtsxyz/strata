@@ -36,57 +36,38 @@ class DestroyServiceCommand(BaseServiceCommand):
         self._force = force
         self._dry_run = dry_run
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                self._finalize(success=False)
-                return False
-
-            if not self._name:
-                self._errors.append("Service name is required. Use: strata service destroy <name>")
-                self._finalize(success=False)
-                return False
-
-            if not self._force and not self._dry_run:
-                self._errors.append("--force is required for destroy (or use --dry-run to preview).")
-                self._finalize(success=False)
-                return False
-
-            targets, errors = self._resolve_targets_by_name(self._name)
-            if errors:
-                self._errors.extend(errors)
-                if self._is_console_output():
-                    for e in errors:
-                        click.echo(f"  ❌  {e}")
-                self._finalize(success=False)
-                return False
-
-            if self._is_console_output():
-                prefix = "[DRY-RUN] " if self._dry_run else ""
-                click.echo(f"\n{prefix}Destroying {len(targets)} service(s)…")
-
-            all_ok = True
-            for target in targets:
-                ok = self._destroy_target(target)
-                if not ok:
-                    all_ok = False
-                    break
-
-            if all_ok and self._is_console_output() and not self._dry_run:
-                click.echo("\n✅  Service destruction completed.")
-
-            self._finalize(success=all_ok)
-            return all_ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to destroy service: {exc}")
-            self.logger.exception("service_destroy failed")
-            self._finalize(success=False)
+    def _execute(self) -> bool:
+        if not self._name:
+            self._errors.append("Service name is required. Use: strata service destroy <name>")
             return False
+
+        if not self._force and not self._dry_run:
+            self._errors.append("--force is required for destroy (or use --dry-run to preview).")
+            return False
+
+        targets, errors = self._resolve_targets_by_name(self._name)
+        if errors:
+            self._errors.extend(errors)
+            if self._is_console_output():
+                for e in errors:
+                    click.echo(f"  ❌  {e}")
+            return False
+
+        if self._is_console_output():
+            prefix = "[DRY-RUN] " if self._dry_run else ""
+            click.echo(f"\n{prefix}Destroying {len(targets)} service(s)…")
+
+        all_ok = True
+        for target in targets:
+            ok = self._destroy_target(target)
+            if not ok:
+                all_ok = False
+                break
+
+        if all_ok and self._is_console_output() and not self._dry_run:
+            click.echo("\n✅  Service destruction completed.")
+
+        return all_ok
 
     def _destroy_target(self, target: ServiceTarget) -> bool:
         """Destroy a single service target."""

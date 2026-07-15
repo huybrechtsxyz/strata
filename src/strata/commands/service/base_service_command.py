@@ -32,7 +32,6 @@ class BaseServiceCommand(BaseCommand, ABC):
     """
 
     OPERATION = "service"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -58,7 +57,7 @@ class BaseServiceCommand(BaseCommand, ABC):
         self._targets: List[ServiceTarget] = []
 
     @abstractmethod
-    def execute(self) -> bool:
+    def _execute(self) -> bool:
         raise NotImplementedError
 
     def get_required_integrations(self):

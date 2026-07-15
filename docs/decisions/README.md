@@ -27,6 +27,13 @@ were considered, and why. They exist so the rationale survives beyond the author
 | [0032](0032-approval-workflows-and-gates.md)                 | Approval workflows and gates                                     | Proposed |
 | [0033](0033-github-pull-request-integration.md)              | GitHub pull request integration                                  | Proposed |
 | [0035](0035-enterprise-store.md)                             | Enterprise store — private organization-level content registry   | Proposed |
+| [0036](0036-workspace-provider-environment-overrides.md)     | Workspace, provider, and environment-level provider overrides    | Accepted |
+| [0037](0037-mass-wave-deployment.md)                         | Fleet operations and mass wave deployment                        | Proposed |
+| [0038](0038-multi-tenant-fleet-management-patterns.md)       | Multi-tenant fleet management patterns and gaps                  | Accepted |
+| [0039](0039-deployment-templates.md)                         | Deployment templates                                             | Proposed |
+| [0040](0040-tenant-onboarding-scaffolding.md)                | Tenant onboarding scaffolding                                    | Proposed |
+| [0041](0041-gitops-controller-integration.md)                | GitOps controller integration                                    | Proposed |
+| [0042](0042-deep-validation-layer-consistency.md)            | Deep validation and layer consistency                            | Proposed |
 
 ## Adding a new ADR
 

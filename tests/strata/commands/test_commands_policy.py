@@ -144,7 +144,7 @@ class TestListPolicyCommandOutputData:
             return True
 
         runner = CliRunner()
-        with patch.object(ListPolicyCommand, "_run", fake_run_execution):
+        with patch.object(ListPolicyCommand, "_execute", fake_run_execution):
             with patch.object(ListPolicyCommand, "_initialize", fake_initialize):
                 with patch.object(ListPolicyCommand, "_before_execute", return_value=True):
                     result = runner.invoke(

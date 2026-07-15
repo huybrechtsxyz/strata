@@ -69,7 +69,7 @@ class SetValuesDeployCommand(BaseDeployCommand):
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._key:
             self._errors.append("No key specified. Use --key.")
             return False

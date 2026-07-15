@@ -17,7 +17,6 @@ class RemoveRepoSolutionCommand(BaseCommand):
     """
 
     OPERATION = "solution_repo_remove"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -41,7 +40,7 @@ class RemoveRepoSolutionCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Capture repo metadata, remove from registry, optionally purge."""
         # Capture metadata before removing so _after_execute can report it
         repos, errors = self._solution_controller.get_repositories(self._repo_name)

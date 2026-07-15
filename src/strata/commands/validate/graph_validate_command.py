@@ -21,7 +21,6 @@ class GraphCommand(BaseCommand):
     """Build and render a workspace dependency graph (file or resource mode)."""
 
     OPERATION = "graph"
-    INIT_REQUIRED = False
 
     def __init__(
         self,
@@ -53,7 +52,11 @@ class GraphCommand(BaseCommand):
         problem_statuses = {"missing", "invalid", "dangling"}
         return any(n.status in problem_statuses for n in self._result.nodes)
 
-    def _run(self) -> bool:
+    def _initialize(self, show_header: bool = True) -> bool:
+        # Works without an initialized workspace — run super for side-effects only.
+        return self._initialize_session(show_header=show_header)
+
+    def _execute(self) -> bool:
         controller = GraphController(
             work_path=self._work_path,
             entry=self._entry,

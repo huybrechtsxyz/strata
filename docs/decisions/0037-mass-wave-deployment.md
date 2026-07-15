@@ -1,4 +1,4 @@
-# Mass Wave Deployment
+# Fleet Operations and Mass Wave Deployment
 
 - Status: proposed
 - Date: 2026-07-14
@@ -75,20 +75,20 @@ The order and concurrency of sub-deployments is the primary open question.  Thre
 Deploy one file at a time in discovery order (alphabetical by file path).  Stop immediately on the
 first failure.
 
-| Pro | Con |
-|-----|-----|
-| Simple, predictable | Slow for large fleets |
+| Pro                                              | Con                                        |
+| ------------------------------------------------ | ------------------------------------------ |
+| Simple, predictable                              | Slow for large fleets                      |
 | Each deployment fully settled before next starts | A single slow deployment blocks everything |
-| Easy to reason about failure state | No parallelism benefit |
+| Easy to reason about failure state               | No parallelism benefit                     |
 
 #### Option B — Sequential with configurable inter-deployment delay (`--stagger N`)
 Same as Option A but an optional `--stagger <seconds>` flag inserts a wait between deployments.
 This gives the monitoring system time to observe the previous deployment before proceeding.
 
-| Pro | Con |
-|-----|-----|
-| Natural "bake time" between deployments | Still single-threaded |
-| Operator controls blast radius rate | Long total wall-clock time |
+| Pro                                     | Con                        |
+| --------------------------------------- | -------------------------- |
+| Natural "bake time" between deployments | Still single-threaded      |
+| Operator controls blast radius rate     | Long total wall-clock time |
 
 #### Option C — Parallel groups (recommended starting point)
 Deployments are sorted into **groups** based on the `deployment_wave` field in the promotion ring
@@ -108,11 +108,11 @@ Done.
 When no `deployment_wave` is configured, all matched deployments are in a single group (equivalent
 to "all in parallel, up to concurrency limit").
 
-| Pro | Con |
-|-----|-----|
-| Significantly faster for large fleets | More complex failure analysis |
-| Natural blast-radius control via groups | Requires `deployment_wave` to be configured for ordering |
-| Concurrency limit caps infrastructure load | Partial failure state (some deployed, some not) |
+| Pro                                        | Con                                                      |
+| ------------------------------------------ | -------------------------------------------------------- |
+| Significantly faster for large fleets      | More complex failure analysis                            |
+| Natural blast-radius control via groups    | Requires `deployment_wave` to be configured for ordering |
+| Concurrency limit caps infrastructure load | Partial failure state (some deployed, some not)          |
 
 **Failure handling for Option C:**
 - **Stop on group failure (default)**: If any deployment in a group fails, the group is marked
@@ -232,12 +232,12 @@ batch exits with code 130 (interrupted).
 
 ## Implementation Status
 
-| Phase | Description                                                         | Status     | Completed |
-| ----- | ------------------------------------------------------------------- | ---------- | --------- |
-| M-1   | Discovery: scan solution registry, match ring + promotion + labels  | 🔲 TODO    | —         |
-| M-2   | Sequential execution loop (`RunBatchDeployCommand`)                 | 🔲 TODO    | —         |
-| M-3   | `--stagger N` inter-deployment delay                                | 🔲 TODO    | —         |
-| M-4   | `--continue-on-error` flag                                          | 🔲 TODO    | —         |
-| M-5   | Batch summary output (console + JSON)                               | 🔲 TODO    | —         |
-| M-6   | SIGTERM handling for batch context                                  | 🔲 TODO    | —         |
-| M-7   | Parallel groups (`deployment_wave` field, Option C)                 | 🔲 DEFERRED | —        |
+| Phase | Description                                                        | Status     | Completed |
+| ----- | ------------------------------------------------------------------ | ---------- | --------- |
+| M-1   | Discovery: scan solution registry, match ring + promotion + labels | 🔲 TODO     | —         |
+| M-2   | Sequential execution loop (`RunBatchDeployCommand`)                | 🔲 TODO     | —         |
+| M-3   | `--stagger N` inter-deployment delay                               | 🔲 TODO     | —         |
+| M-4   | `--continue-on-error` flag                                         | 🔲 TODO     | —         |
+| M-5   | Batch summary output (console + JSON)                              | 🔲 TODO     | —         |
+| M-6   | SIGTERM handling for batch context                                 | 🔲 TODO     | —         |
+| M-7   | Parallel groups (`deployment_wave` field, Option C)                | 🔲 DEFERRED | —         |

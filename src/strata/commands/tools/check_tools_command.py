@@ -16,7 +16,6 @@ class CheckToolsCommand(BaseCommand):
     """Deep-check a single integration: availability, env vars, auth methods."""
 
     OPERATION = "tools_check"
-    INIT_REQUIRED = False
     SHOW_CHROME: ClassVar[bool] = False
 
     def __init__(
@@ -34,7 +33,11 @@ class CheckToolsCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def _run(self) -> bool:
+    def _initialize(self, show_header: bool = True) -> bool:
+        # Works without an initialized workspace — run super for side-effects only.
+        return self._initialize_session(show_header=show_header)
+
+    def _execute(self) -> bool:
         controller = ToolsController()
         success, detail, errors = controller.check(self._name)
         for err in errors:

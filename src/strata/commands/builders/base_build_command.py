@@ -15,7 +15,6 @@ class BaseBuildCommand(BaseCommand):
     """Base class for build command implementations."""
 
     OPERATION = "build"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

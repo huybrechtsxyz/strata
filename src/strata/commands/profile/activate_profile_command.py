@@ -14,7 +14,6 @@ class ActivateProfileCommand(BaseCommand):
     """
 
     OPERATION = "solution_profile_activate"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -35,7 +34,7 @@ class ActivateProfileCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Activate the profile and persist."""
         ok, errors = self._solution_controller.activate_profile(self._profile_name)
         self._messages.extend(self._solution_controller.get_messages())

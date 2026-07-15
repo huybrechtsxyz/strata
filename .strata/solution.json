@@ -6,6 +6,34 @@
   },
   "spec": {
     "solution_id": "13a78223-eb8b-4d97-8975-7d6b4b8022ed",
+    "templates": [
+      {
+        "name": "customer",
+        "bundle": [
+          {
+            "name": "customer",
+            "path": "customers/{{ shortname }}"
+          },
+          {
+            "name": "bootstrap",
+            "path": "zones/{{ zonecode }}/customers/{{ shortname }}"
+          },
+          {
+            "name": "environment",
+            "path": "zones/{{ zonecode }}/customers/{{ shortname }}/{{ environment }}"
+          }
+        ]
+      },
+      {
+        "name": "zones",
+        "bundle": [
+          {
+            "name": "zone",
+            "path": "zones/{{ zonecode }}"
+          }
+        ]
+      }
+    ],
     "profiles": [
       {
         "name": "dev",
@@ -18,4 +46,3 @@
       }
     ]
   }
-}

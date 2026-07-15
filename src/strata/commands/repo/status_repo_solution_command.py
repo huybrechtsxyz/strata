@@ -28,7 +28,6 @@ class StatusRepoSolutionCommand(BaseCommand):
     """
 
     OPERATION = "solution_repo_status"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -48,7 +47,7 @@ class StatusRepoSolutionCommand(BaseCommand):
     # Execution
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         repos, errors = self._solution_controller.get_repositories(self._filter_name)
         if errors:
             self._errors.extend(errors)

@@ -15,7 +15,6 @@ class StatusToolsCommand(BaseCommand):
     """List all known integrations and their availability status."""
 
     OPERATION = "tools_status"
-    INIT_REQUIRED = False
     SHOW_CHROME: ClassVar[bool] = False
 
     def __init__(
@@ -45,7 +44,11 @@ class StatusToolsCommand(BaseCommand):
     def has_validation_errors(self) -> bool:
         return self._has_missing_required
 
-    def _run(self) -> bool:
+    def _initialize(self, show_header: bool = True) -> bool:
+        # Works without an initialized workspace.
+        return self._initialize_session(show_header=show_header)
+
+    def _execute(self) -> bool:
         controller = ToolsController()
         success, rows, errors = controller.status(
             deployment_file=self._deployment_file,

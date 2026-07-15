@@ -1,0 +1,5 @@
+name: tenant
+description: "Multi-environment tenant scaffold — generates tenant config with dev/qa/prd environments"
+variables:
+  - name: name
+    description: "Tenant identifier used in directory/file names (e.g. contoso)"

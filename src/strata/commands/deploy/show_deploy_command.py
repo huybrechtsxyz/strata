@@ -40,7 +40,7 @@ class ShowDeployCommand(BaseDeployCommand):
     # Core logic
     # -------------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         ok = self._collect()
         if self._is_console_output():
             self._print_output()

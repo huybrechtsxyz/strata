@@ -23,7 +23,6 @@ class ValidateCommand(BaseCommand):
     """
 
     OPERATION = "validate"
-    INIT_REQUIRED = False
 
     def __init__(
         self,
@@ -62,7 +61,11 @@ class ValidateCommand(BaseCommand):
     # Lifecycle overrides
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _initialize(self, show_header: bool = True) -> bool:
+        # Works without an initialized workspace.
+        return self._initialize_session(show_header=show_header)
+
+    def _execute(self) -> bool:
         if not self._run_execution():
             if self._is_console_output():
                 click.echo("\n❌  Execution failed")

@@ -39,6 +39,13 @@ from strata.commands.new.run_new_command import NewCommand
     is_eager=True,
     help="List available templates and exit.",
 )
+@click.option(
+    "--validate",
+    "run_validate",
+    is_flag=True,
+    default=False,
+    help="Validate each generated file immediately after creation.",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -50,6 +57,7 @@ def new_command(
     overwrite: bool,
     set_values: Tuple[str, ...],
     list_templates: bool,
+    run_validate: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
@@ -78,6 +86,7 @@ def new_command(
         path=path,
         overwrite=overwrite,
         set_values=set_values,
+        run_validate=run_validate,
         work_path=work_path,
         output=output,
         verbose=verbose,

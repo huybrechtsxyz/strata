@@ -63,40 +63,10 @@ class ListValuesDeployCommand(BaseDeployCommand):
         self._trace = trace
 
     # ------------------------------------------------------------------
-    # Entry point
-    # ------------------------------------------------------------------
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._run()
-
-            self._after_execute()
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_values_list: {exc}")
-            self.logger.exception("deploy_values_list failed")
-            self._finalize(success=False)
-            return False
-
-    # ------------------------------------------------------------------
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False

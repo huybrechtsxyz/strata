@@ -17,7 +17,6 @@ class AddProfilePathCommand(BaseCommand):
     """
 
     OPERATION = "solution_profile_path_add"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -57,7 +56,7 @@ class AddProfilePathCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Add the path to the profile and persist."""
         config = SolutionSpecProfileConfigModel(
             name=self._path_name,

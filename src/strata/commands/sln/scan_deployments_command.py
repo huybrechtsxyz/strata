@@ -43,7 +43,6 @@ class ScanDeploymentsCommand(BaseCommand):
     """
 
     OPERATION = "solution_deployment_scan"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -62,7 +61,7 @@ class ScanDeploymentsCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         scan_root = Path(self._scan_path) if self._scan_path else self._work_path
         if not scan_root.is_absolute():
             scan_root = self._work_path / scan_root

@@ -59,35 +59,33 @@ class SbomBuildCommand(BaseBuildCommand):
     def get_required_integrations(self):
         return {}
 
-    def execute(self) -> bool:
+    def _initialize(self, show_header: bool = True) -> bool:
+        # In scan mode there is no deployment file or workspace; skip all
+        # workspace init so _execute() can route directly to _execute_scan().
+        if self._scan_path is not None:
+            return True
+        return super()._initialize(show_header=show_header)
+
+    def _before_execute(self) -> bool:
+        # In scan mode there is no deployment file — skip file validation.
+        if self._scan_path is not None:
+            return True
+        return super()._before_execute()
+
+    def _execute(self) -> bool:
         try:
-            # Scan mode — bypass workspace/deployment init entirely
             if self._scan_path is not None:
                 return self._execute_scan()
-
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
 
             if self._report == "inventory":
                 if not self._execute_inventory():
                     if self._is_console_output():
                         click.echo("\n❌  Inventory generation failed")
-                    self._finalize(success=False)
                     return False
             else:
                 if not self._execute_sbom_build():
                     if self._is_console_output():
                         click.echo("\n❌  SBOM build failed")
-                    self._finalize(success=False)
                     return False
 
             self._output_data.update(
@@ -107,16 +105,13 @@ class SbomBuildCommand(BaseBuildCommand):
                 if sbom_path and sbom_path.exists():
                     audit_ok = self._execute_audit(sbom_path)
                     if not audit_ok:
-                        self._finalize(success=False)
                         return False
 
-            self._finalize(success=True)
             return True
 
         except Exception as exc:
             self._errors.append(f"Failed to execute build_sbom: {exc}")
             self.logger.exception("build_sbom failed")
-            self._finalize(success=False)
             return False
 
     def _execute_sbom_build(self) -> bool:

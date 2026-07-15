@@ -34,7 +34,7 @@ class CleanBuildCommand(BaseBuildCommand):
     def get_required_integrations(self):
         return {}
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._run_lifecycle_phase(
             "build_clean_before",
             context={"file": str(self._file_path), "dry_run": self._dry_run},

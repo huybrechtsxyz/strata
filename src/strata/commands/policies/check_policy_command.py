@@ -32,7 +32,6 @@ class CheckPolicyCommand(BaseCommand):
     """
 
     OPERATION = "policy_check"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -70,7 +69,7 @@ class CheckPolicyCommand(BaseCommand):
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if not self._run_execution():
             if self._is_console_output():
                 click.echo("\n❌  Execution failed")

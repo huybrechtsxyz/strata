@@ -20,7 +20,6 @@ class StatusSecretCommand(BaseCommand):
     """Check rotation health for secrets with a rotate policy."""
 
     OPERATION = "secret_status"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -36,10 +35,7 @@ class StatusSecretCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def execute(self) -> bool:
-        ok = self._initialize()
-        if not ok:
-            return False
+    def _execute(self) -> bool:
 
         if not self._file:
             self._errors.append("--file / -f is required.")

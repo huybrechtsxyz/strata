@@ -20,7 +20,6 @@ class PutSecretCommand(BaseCommand):
     """Write a secret value to the configured store (create-if-not-exists)."""
 
     OPERATION = "secret_put"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -42,10 +41,7 @@ class PutSecretCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def execute(self) -> bool:
-        ok = self._initialize()
-        if not ok:
-            return False
+    def _execute(self) -> bool:
 
         if not self._file:
             self._errors.append("--file / -f is required.")

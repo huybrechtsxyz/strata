@@ -28,7 +28,6 @@ class ConsoleCommand(BaseCommand):
     """Interactive workspace session with guided onboarding."""
 
     OPERATION = "console"
-    INIT_REQUIRED = False
 
     def __init__(
         self,
@@ -44,34 +43,26 @@ class ConsoleCommand(BaseCommand):
     def get_required_integrations(self) -> dict:
         return {}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                self._console.print("[red]❌  Initialization failed[/red]")
-                self._finalize(success=False)
-                return False
+    def _initialize(self, show_header: bool = True) -> bool:
+        ok = self._initialize_session(show_header=show_header)
+        if not ok:
+            self._console.print("[red]❌  Initialization failed[/red]")
+        return True  # console works without initialized workspace
 
-            self._guide_controller = GuideController(self._work_path)
-            self._guide_controller.load()
-            self._guide_controller.evaluate_from_workflow()
+    def _execute(self) -> bool:
+        self._guide_controller = GuideController(self._work_path)
+        self._guide_controller.load()
+        self._guide_controller.evaluate_from_workflow()
 
-            self._session = self._create_prompt_session()
+        self._session = self._create_prompt_session()
 
-            self._render_header()
-            self._render_status()
-            self._render_next()
-            self._console.print()
+        self._render_header()
+        self._render_status()
+        self._render_next()
+        self._console.print()
 
-            self._repl_loop()
-
-            self._finalize(success=True)
-            return True
-
-        except Exception as e:
-            logger.exception("Console crashed", error=str(e))
-            self._console.print(f"[red]❌  Console error: {e}[/red]")
-            self._finalize(success=False)
-            return False
+        self._repl_loop()
+        return True
 
     # ------------------------------------------------------------------
     # REPL loop

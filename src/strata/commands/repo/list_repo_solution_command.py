@@ -15,7 +15,6 @@ class ListRepoSolutionCommand(BaseCommand):
     """
 
     OPERATION = "solution_repo_list"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -37,7 +36,7 @@ class ListRepoSolutionCommand(BaseCommand):
             return False
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         """Read repositories from the already-loaded solution."""
         repos, errors = self._solution_controller.get_repositories(self._filter_name)
         if errors:

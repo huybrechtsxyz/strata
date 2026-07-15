@@ -50,7 +50,7 @@ class AddVersionsCommand(BaseVersionsCommand):
         self._controller = VersionController()
         return True
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         assert self._controller is not None
         dest = Path(self._out)
         if not dest.is_absolute():

@@ -49,7 +49,7 @@ class ShowEnvCommand(BaseDeployCommand):
         )
         self._stage = stage
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         if self._deployment_service is None:
             self._errors.append("Deployment service not loaded")
             return False

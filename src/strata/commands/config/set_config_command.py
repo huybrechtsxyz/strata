@@ -20,7 +20,6 @@ class SetConfigCommand(BaseCommand):
     """
 
     OPERATION = "config_set"
-    INIT_REQUIRED = False  # CLI preferences do not require an initialized solution
 
     ALLOWED_KEYS = ("output", "verbose", "quiet", "work_path")
 
@@ -48,8 +47,7 @@ class SetConfigCommand(BaseCommand):
     # ------------------------------------------------------------------
 
     def _initialize(self, show_header: bool = True) -> bool:
-        if not super()._initialize(show_header=show_header):
-            return False
+        self._initialize_session(show_header=show_header)
         self.logger.debug(
             "SetConfigCommand initializing",
             extra={
@@ -67,7 +65,7 @@ class SetConfigCommand(BaseCommand):
     def _before_execute(self) -> bool:
         return super()._before_execute()
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         controller = ConfigurationController(self._work_path)
 
         if self._action == "list":

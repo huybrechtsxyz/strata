@@ -20,7 +20,6 @@ class RotateSecretCommand(BaseCommand):
     """Rotate a secret by generating a new value and writing it to the store."""
 
     OPERATION = "secret_rotate"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -40,10 +39,7 @@ class RotateSecretCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def execute(self) -> bool:
-        ok = self._initialize()
-        if not ok:
-            return False
+    def _execute(self) -> bool:
 
         if not self._file:
             self._errors.append("--file / -f is required.")

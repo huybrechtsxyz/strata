@@ -60,31 +60,18 @@ class DestroyDeployCommand(BaseDeployCommand):
     # Public entry point
     # -------------------------------------------------------------------------
 
-    def execute(self) -> bool:
+    def _execute(self) -> bool:
         try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
             self._record_deploy_start()
 
             if not self._resolve_values():
                 if self._is_console_output():
                     click.echo("\n❌  Failed to resolve variables/secrets/features")
                 self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
                 return False
 
             if self._dry_run and self._is_console_output():
-                click.echo("\n[DRY-RUN] Planning destroy — no infrastructure will be removed")
+                click.echo("\n[DRY-RUN] Planning destroy \u2014 no infrastructure will be removed")
             elif self._is_console_output():
                 click.echo("\n⚠️  --destroy: removing provisioned infrastructure per stage")
 
@@ -95,14 +82,12 @@ class DestroyDeployCommand(BaseDeployCommand):
                 if self._is_console_output():
                     click.echo("\n❌  Pre-destroy lifecycle hook failed")
                 self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
                 return False
 
             if not self._execute_provisioning():
                 if self._is_console_output():
                     click.echo("\n❌  Destroy failed")
                 self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
                 return False
 
             if not self._run_lifecycle_phase(
@@ -112,14 +97,6 @@ class DestroyDeployCommand(BaseDeployCommand):
                 if self._is_console_output():
                     click.echo("\n❌  Post-destroy lifecycle hook failed")
                 self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution hook failed")
-                self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
                 return False
 
             self._output_data.update(
@@ -140,14 +117,12 @@ class DestroyDeployCommand(BaseDeployCommand):
             if manifest_path and self._is_console_output():
                 click.echo(f"\n📋  Deployment manifest: {manifest_path}")
 
-            self._finalize(success=True)
             return True
 
         except Exception as exc:
             self._errors.append(f"Failed to execute deploy_destroy: {exc}")
             self.logger.exception("deploy_destroy failed")
             self._write_deployment_manifest(action="destroy", status="failed", dry_run=self._dry_run)
-            self._finalize(success=False)
             return False
 
     # -------------------------------------------------------------------------

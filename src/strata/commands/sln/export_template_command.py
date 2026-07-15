@@ -74,7 +74,6 @@ class SolutionExportCommand(BaseCommand):
     """Export the current workspace as a reusable scaffold template."""
 
     OPERATION = "sln_export"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -98,7 +97,7 @@ class SolutionExportCommand(BaseCommand):
     # Core logic
     # ------------------------------------------------------------------
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         solution = self._solution_controller.solution
         if solution is None:
             self._errors.append("No solution loaded.")

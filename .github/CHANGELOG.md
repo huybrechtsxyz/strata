@@ -9,6 +9,55 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [1.1.0] — 2026-07-14
+
+### Added
+
+- **Environment Provider Overrides (ADR 0036)**
+  - `EnvironmentProviderOverrideModel` — environments can now override provider file bindings per provider name, supporting both file swaps and configuration-level property overrides
+  - `spec.overrides.providers[].file` — replace entire provider YAML file per environment (enables region/cloud-account variants without workspace duplication)
+  - `spec.overrides.providers[].configuration` — overlay specific provider properties without maintaining separate provider files
+  - Provider file validation — when an override loads a new provider file, `meta.name` is validated to match the workspace provider name (hard error if mismatched)
+  - `EnvironmentService.get_overridden_provider_names()` — returns set of provider names with overrides
+  - `EnvironmentService.get_provider_override()` — accessor for override model by provider name
+  - `DeploymentService.apply_environment_overrides()` — applies file swaps + configuration overlays during deployment build
+  - Full test coverage: model validation tests (file-only, configuration-only, combined), service merge tests, provider file resolution tests
+  - Documentation: `docs/config/environment.md#Provider-Overrides` with multi-region examples; `docs/config/provider.md#Environment-Specific-Provider-Overrides` with cross-reference
+
+- **Environment Promotion Strategies** (preparation for ADR 0011)
+  - `PromotionStrategyModel` — framework for multi-environment promotion workflows (dev → staging → prod)
+  - `spec.promotion` field on environments to define advancement criteria and gates
+  - Promotion validator — ensures environment sequences are valid and acyclic
+  - CLI ready for future `strata promote` subcommand
+
+- **Version Management & Release Tooling**
+  - `scripts/Release.ps1` now supports version parameter: `-Version X.Y.Z` for automated version bumping
+  - `VERSION.txt` updated to `1.1.0` with corresponding git tags
+  - Changelog versioning aligned with semantic versioning for clarity on minor vs patch releases
+
+- **Tenant Scaffolding Bundle Template**
+  - New workspace-local bundle template `.strata/templates/tenant/` enables rapid tenant provisioning for multi-customer deployments
+  - `strata new tenant <name>` generates complete tenant structure: tenant config file + dev/qa/prd environments with provider overrides
+  - Supports `{{ name }}` variable substitution in generated tenant codes, file paths, and descriptions
+  - Eliminates copy-paste for 200+ customer onboarding; teams maintain template in their workspace, not shipped with strata
+  - Includes auto-generated README and CHECKLIST for onboarding workflow
+  - Fixed `strata new` to exclude `template.yaml` metadata from bundle output
+  - Fixed `strata new --list` to properly display workspace bundle templates alongside single-file templates
+
+### Changed
+
+- **`strata new --list` workspace template priority** — bundle directories in `.strata/templates/` now take precedence over same-named single-file templates in display (matching resolution precedence)
+
+- **Provider Override Handling** — provider resolution now includes fallback chain: workspace default → environment override file → environment override configuration
+- **Deployment Build Output** — plan summaries now show provider resolution details (file loaded, overrides applied per stage)
+
+### Design & ADR Progress
+
+- **ADR-0036** (Workspace, Provider, and Environment-level Provider Overrides) — status updated to `completed`
+- **ADR-0011** (Promotion strategies) — status updated to `in-progress` (model framework added, CLI TBD)
+
+---
+
 ## [1.0.1] — 2026-07-09
 
 ### Added

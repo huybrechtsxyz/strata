@@ -22,7 +22,6 @@ class ShowLogCommand(BaseCommand):
     """
 
     OPERATION = "log_show"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -50,7 +49,7 @@ class ShowLogCommand(BaseCommand):
     def _before_execute(self) -> bool:
         return super()._before_execute()
 
-    def _run(self) -> bool:
+    def _execute(self) -> bool:
         # Resolve --last flag: use the last execution ID stored in the solution
         if self._use_last_execution and not self._filter_execution_id:
             self._filter_execution_id = self._solution_controller.get_solution_id() or None
