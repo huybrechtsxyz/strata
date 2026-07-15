@@ -3532,12 +3532,15 @@
 <li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#option-a-document-the-existing-template-method-contract-more-thoroughly">Option A: Document the existing template-method contract more thoroughly</a></li>
 <li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#option-b-make-basecommand-abstract-execute-is-an-abstractmethod">Option B: Make <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> abstract; <code class="docutils literal notranslate"><span class="pre">execute()</span></code> is an <code class="docutils literal notranslate"><span class="pre">&#64;abstractmethod</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#option-c-replace-with-a-decorator-context-manager-lifecycle">Option C: Replace with a decorator / context-manager lifecycle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#option-d-concrete-execute-with-always-run-phases-and-execute-override-point">Option D: Concrete <code class="docutils literal notranslate"><span class="pre">execute()</span></code> with always-run phases and <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> override point</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#decision-outcome">Decision Outcome</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#core-contract">Core contract</a></li>
-<li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#standard-command-pattern-uses-run-phases">Standard command pattern (uses <code class="docutils literal notranslate"><span class="pre">_run_phases</span></code>)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#deviant-command-pattern-custom-execute">Deviant command pattern (custom <code class="docutils literal notranslate"><span class="pre">execute()</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#core-principle">Core principle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#why-option-d-over-option-b">Why Option D over Option B</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#basecommand-contract"><code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> contract</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#standard-command-pattern">Standard command pattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#phase-customisation-pattern">Phase customisation pattern</a></li>
 <li class="toctree-l3"><a class="reference internal" href="decisions/0030-command-lifecycle-explicitness-and-thin-overrides.html#stateless-command-pattern-no-workspace-no-audit">Stateless command pattern (no workspace, no audit)</a></li>
 </ul>
 </li>
@@ -3786,7 +3789,7 @@
 <li class="toctree-l2"><a class="reference internal" href="decisions/0036-workspace-provider-environment-overrides.html#references">References</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="decisions/0037-mass-wave-deployment.html">Mass Wave Deployment</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="decisions/0037-mass-wave-deployment.html">Fleet Operations and Mass Wave Deployment</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="decisions/0037-mass-wave-deployment.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="decisions/0037-mass-wave-deployment.html#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="decisions/0037-mass-wave-deployment.html#design-overview">Design Overview</a><ul>
@@ -3808,6 +3811,96 @@
 <li class="toctree-l2"><a class="reference internal" href="decisions/0037-mass-wave-deployment.html#constraints-and-non-goals">Constraints and Non-Goals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="decisions/0037-mass-wave-deployment.html#open-questions">Open Questions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="decisions/0037-mass-wave-deployment.html#implementation-status">Implementation Status</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html">Multi-Tenant Fleet Management Patterns and Gaps</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#observed-usage-pattern">Observed Usage Pattern</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#gaps-identified">Gaps Identified</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#gap-1-deploy-yaml-proliferation">Gap 1 — Deploy.yaml proliferation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#gap-2-tenant-onboarding-friction">Gap 2 — Tenant onboarding friction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#gap-3-no-fleet-level-visibility">Gap 3 — No fleet-level visibility</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#gap-4-gitops-controller-integration-is-implicit">Gap 4 — GitOps controller integration is implicit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#gap-5-layer-consistency-is-not-validated">Gap 5 — Layer consistency is not validated</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#decision">Decision</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0038-multi-tenant-fleet-management-patterns.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="decisions/0039-deployment-templates.html">Deployment Templates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0039-deployment-templates.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0039-deployment-templates.html#related-work">Related Work</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0039-deployment-templates.html#design-overview">Design Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0039-deployment-templates.html#core-concept-base-template-thin-instantiation">Core concept: base template + thin instantiation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0039-deployment-templates.html#merge-semantics">Merge semantics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0039-deployment-templates.html#validation">Validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0039-deployment-templates.html#compatibility-with-fleet-discovery-adr-0037">Compatibility with fleet discovery (ADR 0037)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0039-deployment-templates.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0039-deployment-templates.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html">Tenant Onboarding Scaffolding</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html#related-work">Related Work</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html#design-overview">Design Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html#new-command-strata-new-tenant">New command: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">new</span> <span class="pre">tenant</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html#path-consistency-enforcement">Path consistency enforcement</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html#dry-run-and-validation">Dry-run and validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html#tenant-removal-strata-remove-tenant">Tenant removal: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">remove</span> <span class="pre">tenant</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0040-tenant-onboarding-scaffolding.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html">GitOps Controller Integration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html#related-work">Related Work</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html#design-overview">Design Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html#two-surfaces-output-and-health">Two surfaces: output and health</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html#surface-1-strata-build-gitops">Surface 1: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">gitops</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html#surface-2-strata-deploy-health-gitops">Surface 2: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span> <span class="pre">--gitops</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html#audit-integration">Audit integration</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0041-gitops-controller-integration.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html">Deep Validation and Layer Consistency</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#related-work">Related Work</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#design-overview">Design Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#strata-validate-deep-extensions"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--deep</span></code> extensions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#rule-set-1-layer-identity-consistency">Rule set 1: Layer identity consistency</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#rule-set-2-template-drift-detection">Rule set 2: Template drift detection</a></li>
+<li class="toctree-l4"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#rule-set-3-tenant-field-vs-path-consistency">Rule set 3: Tenant field vs path consistency</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#strata-validate-path-deep-fleet-wide-scan"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--path</span> <span class="pre">&quot;**&quot;</span> <span class="pre">--deep</span></code> — fleet-wide scan</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0042-deep-validation-layer-consistency.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="decisions/0043-tenant-offboarding.html">Tenant Offboarding</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#command-interface">Command interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#discovery-algorithm">Discovery algorithm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#output-console-dry-run">Output (console, dry-run)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#output-console-force">Output (console, –force)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#json-envelope-output-json">JSON envelope (–output json)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#implementation">Implementation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#consequences">Consequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="decisions/0043-tenant-offboarding.html#related-adrs">Related ADRs</a></li>
 </ul>
 </li>
 </ul>
@@ -4345,6 +4438,32 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="guides/cve-vulnerability-scanning.html#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="guides/scaffolding-templates.html">Scaffolding Templates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="guides/scaffolding-templates.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="guides/scaffolding-templates.html#layer-1-single-file-templates">Layer 1 — Single-file templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="guides/scaffolding-templates.html#layer-2-bundle-directory-templates">Layer 2 — Bundle directory templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="guides/scaffolding-templates.html#layer-3-solution-bundles">Layer 3 — Solution bundles</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#defining-solution-bundles">Defining solution bundles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#how-resolution-works">How resolution works</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#usage">Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="guides/scaffolding-templates.html#fleet-and-multi-tenant-patterns">Fleet and multi-tenant patterns</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#recommended-directory-layout">Recommended directory layout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#onboarding-a-new-customer">Onboarding a new customer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#onboarding-a-customer-into-multiple-zones">Onboarding a customer into multiple zones</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#team-shared-variable-defaults">Team-shared variable defaults</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="guides/scaffolding-templates.html#template-resolution-order-full">Template resolution order (full)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="guides/scaffolding-templates.html#adding-new-template-sources">Adding new template sources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#add-a-workspace-single-file-template">Add a workspace single-file template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#add-a-workspace-bundle-directory">Add a workspace bundle directory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="guides/scaffolding-templates.html#add-a-solution-bundle">Add a solution bundle</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="guides/at-scale.html">Operating Strata at Scale — Multi-Tenant Design</a><ul>

@@ -158,6 +158,12 @@ strata
    decisions/0035-enterprise-store
    decisions/0036-workspace-provider-environment-overrides
    decisions/0037-mass-wave-deployment
+   decisions/0038-multi-tenant-fleet-management-patterns
+   decisions/0039-deployment-templates
+   decisions/0040-tenant-onboarding-scaffolding
+   decisions/0041-gitops-controller-integration
+   decisions/0042-deep-validation-layer-consistency
+   decisions/0043-tenant-offboarding
 
 .. toctree::
    :maxdepth: 2
@@ -180,6 +186,7 @@ strata
    guides/extending-sbom-plugins
    guides/sbom-plugin-examples
    guides/cve-vulnerability-scanning
+   guides/scaffolding-templates
    guides/at-scale
    guides/using-console
    guides/building-a-provisioner-plugin

@@ -3535,12 +3535,15 @@
 <li class="toctree-l3"><a class="reference internal" href="#option-a-document-the-existing-template-method-contract-more-thoroughly">Option A: Document the existing template-method contract more thoroughly</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#option-b-make-basecommand-abstract-execute-is-an-abstractmethod">Option B: Make <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> abstract; <code class="docutils literal notranslate"><span class="pre">execute()</span></code> is an <code class="docutils literal notranslate"><span class="pre">&#64;abstractmethod</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#option-c-replace-with-a-decorator-context-manager-lifecycle">Option C: Replace with a decorator / context-manager lifecycle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#option-d-concrete-execute-with-always-run-phases-and-execute-override-point">Option D: Concrete <code class="docutils literal notranslate"><span class="pre">execute()</span></code> with always-run phases and <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> override point</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#decision-outcome">Decision Outcome</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#core-contract">Core contract</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#standard-command-pattern-uses-run-phases">Standard command pattern (uses <code class="docutils literal notranslate"><span class="pre">_run_phases</span></code>)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#deviant-command-pattern-custom-execute">Deviant command pattern (custom <code class="docutils literal notranslate"><span class="pre">execute()</span></code>)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core-principle">Core principle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#why-option-d-over-option-b">Why Option D over Option B</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#basecommand-contract"><code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> contract</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#standard-command-pattern">Standard command pattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#phase-customisation-pattern">Phase customisation pattern</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#stateless-command-pattern-no-workspace-no-audit">Stateless command pattern (no workspace, no audit)</a></li>
 </ul>
 </li>
@@ -3789,7 +3792,7 @@
 <li class="toctree-l2"><a class="reference internal" href="0036-workspace-provider-environment-overrides.html#references">References</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="0037-mass-wave-deployment.html">Mass Wave Deployment</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="0037-mass-wave-deployment.html">Fleet Operations and Mass Wave Deployment</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="0037-mass-wave-deployment.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0037-mass-wave-deployment.html#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0037-mass-wave-deployment.html#design-overview">Design Overview</a><ul>
@@ -3811,6 +3814,96 @@
 <li class="toctree-l2"><a class="reference internal" href="0037-mass-wave-deployment.html#constraints-and-non-goals">Constraints and Non-Goals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0037-mass-wave-deployment.html#open-questions">Open Questions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0037-mass-wave-deployment.html#implementation-status">Implementation Status</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html">Multi-Tenant Fleet Management Patterns and Gaps</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#observed-usage-pattern">Observed Usage Pattern</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#gaps-identified">Gaps Identified</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#gap-1-deploy-yaml-proliferation">Gap 1 — Deploy.yaml proliferation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#gap-2-tenant-onboarding-friction">Gap 2 — Tenant onboarding friction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#gap-3-no-fleet-level-visibility">Gap 3 — No fleet-level visibility</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#gap-4-gitops-controller-integration-is-implicit">Gap 4 — GitOps controller integration is implicit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#gap-5-layer-consistency-is-not-validated">Gap 5 — Layer consistency is not validated</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#decision">Decision</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0039-deployment-templates.html">Deployment Templates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#related-work">Related Work</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#design-overview">Design Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#core-concept-base-template-thin-instantiation">Core concept: base template + thin instantiation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#merge-semantics">Merge semantics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#validation">Validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#compatibility-with-fleet-discovery-adr-0037">Compatibility with fleet discovery (ADR 0037)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html">Tenant Onboarding Scaffolding</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html#related-work">Related Work</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html#design-overview">Design Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html#new-command-strata-new-tenant">New command: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">new</span> <span class="pre">tenant</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html#path-consistency-enforcement">Path consistency enforcement</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html#dry-run-and-validation">Dry-run and validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html#tenant-removal-strata-remove-tenant">Tenant removal: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">remove</span> <span class="pre">tenant</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0040-tenant-onboarding-scaffolding.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0041-gitops-controller-integration.html">GitOps Controller Integration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#related-work">Related Work</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#design-overview">Design Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#two-surfaces-output-and-health">Two surfaces: output and health</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#surface-1-strata-build-gitops">Surface 1: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">gitops</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#surface-2-strata-deploy-health-gitops">Surface 2: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span> <span class="pre">--gitops</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#audit-integration">Audit integration</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0042-deep-validation-layer-consistency.html">Deep Validation and Layer Consistency</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#related-work">Related Work</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#design-overview">Design Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#strata-validate-deep-extensions"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--deep</span></code> extensions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#rule-set-1-layer-identity-consistency">Rule set 1: Layer identity consistency</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#rule-set-2-template-drift-detection">Rule set 2: Template drift detection</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#rule-set-3-tenant-field-vs-path-consistency">Rule set 3: Tenant field vs path consistency</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#strata-validate-path-deep-fleet-wide-scan"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--path</span> <span class="pre">&quot;**&quot;</span> <span class="pre">--deep</span></code> — fleet-wide scan</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0042-deep-validation-layer-consistency.html#consequences">Consequences</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0043-tenant-offboarding.html">Tenant Offboarding</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#decision-drivers">Decision Drivers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0043-tenant-offboarding.html#command-interface">Command interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0043-tenant-offboarding.html#discovery-algorithm">Discovery algorithm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0043-tenant-offboarding.html#output-console-dry-run">Output (console, dry-run)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0043-tenant-offboarding.html#output-console-force">Output (console, –force)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0043-tenant-offboarding.html#json-envelope-output-json">JSON envelope (–output json)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0043-tenant-offboarding.html#implementation">Implementation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#consequences">Consequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#related-adrs">Related ADRs</a></li>
 </ul>
 </li>
 </ul>
@@ -4350,6 +4443,32 @@
 <li class="toctree-l2"><a class="reference internal" href="../guides/cve-vulnerability-scanning.html#see-also">See Also</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../guides/scaffolding-templates.html">Scaffolding Templates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../guides/scaffolding-templates.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/scaffolding-templates.html#layer-1-single-file-templates">Layer 1 — Single-file templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/scaffolding-templates.html#layer-2-bundle-directory-templates">Layer 2 — Bundle directory templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/scaffolding-templates.html#layer-3-solution-bundles">Layer 3 — Solution bundles</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#defining-solution-bundles">Defining solution bundles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#how-resolution-works">How resolution works</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#usage">Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/scaffolding-templates.html#fleet-and-multi-tenant-patterns">Fleet and multi-tenant patterns</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#recommended-directory-layout">Recommended directory layout</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#onboarding-a-new-customer">Onboarding a new customer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#onboarding-a-customer-into-multiple-zones">Onboarding a customer into multiple zones</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#team-shared-variable-defaults">Team-shared variable defaults</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/scaffolding-templates.html#template-resolution-order-full">Template resolution order (full)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/scaffolding-templates.html#adding-new-template-sources">Adding new template sources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#add-a-workspace-single-file-template">Add a workspace single-file template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#add-a-workspace-bundle-directory">Add a workspace bundle directory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../guides/scaffolding-templates.html#add-a-solution-bundle">Add a solution bundle</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../guides/at-scale.html">Operating Strata at Scale — Multi-Tenant Design</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#scenario">Scenario</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/at-scale.html#three-layer-bootstrap-architecture">Three-Layer Bootstrap Architecture</a><ul>
@@ -4560,8 +4679,9 @@
   <section id="explicit-command-lifecycle-abc-enforced-phases-and-thin-overrides">
 <h1>Explicit Command Lifecycle: ABC-Enforced Phases and Thin Overrides<a class="headerlink" href="#explicit-command-lifecycle-abc-enforced-phases-and-thin-overrides" title="Link to this heading"></a></h1>
 <ul class="simple">
-<li><p>Status: proposed</p></li>
+<li><p>Status: completed</p></li>
 <li><p>Date: 2026-07-11</p></li>
+<li><p>Implemented: 2026-07-15</p></li>
 </ul>
 <section id="context-and-problem-statement">
 <h2>Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Link to this heading"></a></h2>
@@ -4645,71 +4765,125 @@ automatically.</p></li>
 <li><p><strong>Rejected:</strong> Violates the explicitness requirement.</p></li>
 </ul>
 </section>
+<section id="option-d-concrete-execute-with-always-run-phases-and-execute-override-point">
+<h3>Option D: Concrete <code class="docutils literal notranslate"><span class="pre">execute()</span></code> with always-run phases and <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> override point<a class="headerlink" href="#option-d-concrete-execute-with-always-run-phases-and-execute-override-point" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> keeps <code class="docutils literal notranslate"><span class="pre">execute()</span></code> as a <strong>concrete, non-overrideable orchestrator</strong>.
+Subclasses implement <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> (renamed from <code class="docutils literal notranslate"><span class="pre">_run()</span></code>) for business logic.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">execute()</span></code> always runs all four phases plus finalize. Each phase is wrapped in
+<code class="docutils literal notranslate"><span class="pre">try/except</span></code>; errors accumulate in <code class="docutils literal notranslate"><span class="pre">self._errors</span></code>. No phase is skipped due to a
+prior phase failure.</p></li>
+<li><p>Individual phases (<code class="docutils literal notranslate"><span class="pre">_initialize</span></code>, <code class="docutils literal notranslate"><span class="pre">_before_execute</span></code>, <code class="docutils literal notranslate"><span class="pre">_after_execute</span></code>) may be
+overridden for customisation — but they never control flow.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_finalize</span></code> is structurally guaranteed: it is always the last statement in the
+concrete <code class="docutils literal notranslate"><span class="pre">execute()</span></code>. It cannot be skipped by any subclass.</p></li>
+<li><p>Pro: <code class="docutils literal notranslate"><span class="pre">_finalize</span></code> is guaranteed without any per-command boilerplate.</p></li>
+<li><p>Pro: Phase infrastructure (timing, logging, config) always runs — even when business
+logic raises unexpectedly.</p></li>
+<li><p>Pro: Simple mental model: “each phase always runs; errors accumulate; finalize reports.”</p></li>
+<li><p>Pro: No <code class="docutils literal notranslate"><span class="pre">INIT_REQUIRED</span></code> flags needed — commands needing no workspace context override
+<code class="docutils literal notranslate"><span class="pre">_initialize()</span></code> to skip the solution.json check, or inherit <code class="docutils literal notranslate"><span class="pre">StatelessCommand</span></code>.</p></li>
+<li><p>Con: <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> may run even when <code class="docutils literal notranslate"><span class="pre">_initialize()</span></code> failed (e.g. workspace not found).
+Phase implementations must be resilient to partial setup.</p></li>
+<li><p>Mitigation: Per-phase try/except produces specific, actionable errors for each failed
+phase rather than a single cascading failure message.</p></li>
+</ul>
+</section>
 </section>
 <section id="decision-outcome">
 <h2>Decision Outcome<a class="headerlink" href="#decision-outcome" title="Link to this heading"></a></h2>
-<p>Chosen: <strong>Option B — abstract <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code>, explicit <code class="docutils literal notranslate"><span class="pre">execute()</span></code> in each command</strong>.</p>
-<section id="core-contract">
-<h3>Core contract<a class="headerlink" href="#core-contract" title="Link to this heading"></a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> becomes an abstract base class (ABC). <code class="docutils literal notranslate"><span class="pre">execute()</span></code> is declared as
-<code class="docutils literal notranslate"><span class="pre">&#64;abstractmethod</span></code>. The base class exposes a convenience helper <code class="docutils literal notranslate"><span class="pre">_run_phases()</span></code> for the
-standard case (no lifecycle deviation):</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># BaseCommand (base_command.py)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<p>Chosen: <strong>Option D — concrete <code class="docutils literal notranslate"><span class="pre">execute()</span></code>, always-run phases, <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> override point</strong>.</p>
+<section id="core-principle">
+<h3>Core principle<a class="headerlink" href="#core-principle" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">BaseCommand.execute()</span></code> is a concrete orchestrator that always runs all lifecycle phases
+in sequence. Each phase is wrapped in <code class="docutils literal notranslate"><span class="pre">try/except</span></code>; errors accumulate in <code class="docutils literal notranslate"><span class="pre">self._errors</span></code>.
+No phase controls whether the next phase runs — that is <code class="docutils literal notranslate"><span class="pre">execute()</span></code>’s job, and the
+answer is always “yes”.</p>
+<p>Subclasses override <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> for business logic. Individual phases may be overridden
+for customisation but never for flow control.</p>
+</section>
+<section id="why-option-d-over-option-b">
+<h3>Why Option D over Option B<a class="headerlink" href="#why-option-d-over-option-b" title="Link to this heading"></a></h3>
+<p>Option B (abstract <code class="docutils literal notranslate"><span class="pre">execute()</span></code>, per-command lifecycle wiring) solves the visibility
+problem but introduces a new risk: per-command boilerplate is still code the author can
+get wrong. A command that writes <code class="docutils literal notranslate"><span class="pre">execute()</span></code> incorrectly still skips <code class="docutils literal notranslate"><span class="pre">_finalize</span></code>.</p>
+<p>Option D removes the override point entirely. <code class="docutils literal notranslate"><span class="pre">_finalize</span></code> is structurally guaranteed —
+it is always the last statement in <code class="docutils literal notranslate"><span class="pre">BaseCommand.execute()</span></code>, unreachable by any subclass
+override. The lifecycle is enforced by architecture, not by convention.</p>
+</section>
+<section id="basecommand-contract">
+<h3><code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> contract<a class="headerlink" href="#basecommand-contract" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">BaseCommand</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base command class. execute() is the concrete lifecycle orchestrator.&quot;&quot;&quot;</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">BaseCommand</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
     <span class="n">OPERATION</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;base_command&quot;</span>
+    <span class="n">SHOW_CHROME</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
 
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Orchestrate the five lifecycle phases and return overall success.&quot;&quot;&quot;</span>
-        <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run all lifecycle phases. Always reaches _finalize.</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_run_phases</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">show_chrome</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convenience: run the standard five-phase lifecycle.</span>
-
-<span class="sd">        Commands with no lifecycle deviation call this from their own execute():</span>
-
-<span class="sd">            def execute(self) -&gt; bool:</span>
-<span class="sd">                return self._run_phases()</span>
+<span class="sd">        Not intended for override. Subclasses implement _execute() for business</span>
+<span class="sd">        logic. Individual phases may be overridden for customisation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">success</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># Phase 1: workspace, timing, logging, config setup</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialize</span><span class="p">(</span><span class="n">show_header</span><span class="o">=</span><span class="n">show_chrome</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">show_footer</span><span class="o">=</span><span class="n">show_chrome</span><span class="p">)</span>
-                <span class="k">return</span> <span class="kc">False</span>
-
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_before_execute</span><span class="p">():</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">show_footer</span><span class="o">=</span><span class="n">show_chrome</span><span class="p">)</span>
-                <span class="k">return</span> <span class="kc">False</span>
-
-            <span class="n">success</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">()</span>
-
-            <span class="bp">self</span><span class="o">.</span><span class="n">_after_execute</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="n">success</span><span class="p">,</span> <span class="n">show_footer</span><span class="o">=</span><span class="n">show_chrome</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">success</span>
-
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialize</span><span class="p">(</span><span class="n">show_header</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">SHOW_CHROME</span><span class="p">):</span>
+                <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected error: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Command failed&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">show_footer</span><span class="o">=</span><span class="n">show_chrome</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">False</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initialization failed: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;_initialize raised&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+            <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Phase 3 — command core work.</span>
+        <span class="c1"># Phase 2: pre-execution validation and requirement checks</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_before_execute</span><span class="p">():</span>
+                <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Pre-execution failed: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;_before_execute raised&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+            <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
 
-<span class="sd">        Override when using _run_phases(). Not called when execute() is</span>
-<span class="sd">        written manually.</span>
+        <span class="c1"># Phase 3: core business logic — the subclass override point</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_execute</span><span class="p">():</span>
+                <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Execution failed: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;_execute raised&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+            <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Phase 4: post-execution cleanup</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_after_execute</span><span class="p">():</span>
+                <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Post-execution failed: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;_after_execute raised&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+            <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Phase 5: audit, structured output, footer — always runs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="n">success</span><span class="p">,</span> <span class="n">show_footer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">SHOW_CHROME</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">success</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Phase 3 — core business logic.</span>
+
+<span class="sd">        Override in subclasses. Return True on success, False on failure (add</span>
+<span class="sd">        details to self._errors). Raise exceptions for unexpected errors —</span>
+<span class="sd">        execute() will catch and record them.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> must implement _run() when using _run_phases().&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> must implement _execute().&quot;</span>
         <span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="standard-command-pattern-uses-run-phases">
-<h3>Standard command pattern (uses <code class="docutils literal notranslate"><span class="pre">_run_phases</span></code>)<a class="headerlink" href="#standard-command-pattern-uses-run-phases" title="Link to this heading"></a></h3>
-<p>Commands with no lifecycle deviation — the majority of strata commands — implement
-only <code class="docutils literal notranslate"><span class="pre">_run()</span></code> and write a one-liner <code class="docutils literal notranslate"><span class="pre">execute()</span></code>:</p>
+<section id="standard-command-pattern">
+<h3>Standard command pattern<a class="headerlink" href="#standard-command-pattern" title="Link to this heading"></a></h3>
+<p>Commands implement only <code class="docutils literal notranslate"><span class="pre">_execute()</span></code>. No <code class="docutils literal notranslate"><span class="pre">execute()</span></code> override, no phase-wiring
+boilerplate, no risk of forgetting <code class="docutils literal notranslate"><span class="pre">_finalize</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">StatusDeployCommand</span><span class="p">(</span><span class="n">BaseCommand</span><span class="p">):</span>
     <span class="n">OPERATION</span> <span class="o">=</span> <span class="s2">&quot;deploy_status&quot;</span>
 
@@ -4717,46 +4891,31 @@ only <code class="docutils literal notranslate"><span class="pre">_run()</span><
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
         <span class="o">...</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_phases</span><span class="p">()</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="c1"># All business logic here.</span>
         <span class="o">...</span>
         <span class="k">return</span> <span class="kc">True</span>
 </pre></div>
 </div>
 </section>
-<section id="deviant-command-pattern-custom-execute">
-<h3>Deviant command pattern (custom <code class="docutils literal notranslate"><span class="pre">execute()</span></code>)<a class="headerlink" href="#deviant-command-pattern-custom-execute" title="Link to this heading"></a></h3>
-<p>Commands that need a different lifecycle (e.g. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code> which must skip the
-<code class="docutils literal notranslate"><span class="pre">.strata/</span></code> directory check, or <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> which is stateless) write a full
-<code class="docutils literal notranslate"><span class="pre">execute()</span></code>:</p>
+<section id="phase-customisation-pattern">
+<h3>Phase customisation pattern<a class="headerlink" href="#phase-customisation-pattern" title="Link to this heading"></a></h3>
+<p>Commands that need different initialisation (e.g. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code> which must skip
+the <code class="docutils literal notranslate"><span class="pre">.strata/</span></code> existence check) override only the phase that differs. The flow is still
+guaranteed by <code class="docutils literal notranslate"><span class="pre">BaseCommand.execute()</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">InitSlnCommand</span><span class="p">(</span><span class="n">BaseCommand</span><span class="p">):</span>
     <span class="n">OPERATION</span> <span class="o">=</span> <span class="s2">&quot;sln_init&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="c1"># Phase 1: custom _initialize that skips .strata/ existence check.</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialize</span><span class="p">():</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_initialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">show_header</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="c1"># Custom initialisation that does NOT check for solution.json.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_start_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_configure_session_logging</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">show_header</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_console_output</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">show_console_header</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">True</span>
 
-            <span class="c1"># Phase 2: validate template name.</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_before_execute</span><span class="p">():</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                <span class="k">return</span> <span class="kc">False</span>
-
-            <span class="n">success</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_workspace</span><span class="p">()</span>
-
-            <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="n">success</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">success</span>
-
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected error: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;sln init failed&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_finalize</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_workspace</span><span class="p">()</span>
 </pre></div>
 </div>
 </section>
@@ -4776,14 +4935,15 @@ environment loading, and audit logging entirely:</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">_messages</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__module__</span><span class="p">)</span>
 
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_execute</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span>
+            <span class="k">return</span> <span class="kc">False</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_is_console_output</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_format</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;console&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_is_structured_output</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_format</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;json&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 </pre></div>
 </div>
 <blockquote>
@@ -4795,36 +4955,41 @@ adds complexity for no benefit.</p>
 </section>
 <section id="migration-plan">
 <h2>Migration Plan<a class="headerlink" href="#migration-plan" title="Link to this heading"></a></h2>
-<p>The change is fully backward compatible. It is applied incrementally:</p>
+<p>The change is backward compatible for commands that implement <code class="docutils literal notranslate"><span class="pre">_run()</span></code> — rename
+<code class="docutils literal notranslate"><span class="pre">_run()</span></code> to <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> in each command. Applied incrementally:</p>
 <ol class="arabic simple">
-<li><p><strong>Phase 1 — Base class changes</strong> (single PR, no behavioral change):</p>
+<li><p>✅ <strong>Phase 1 — Base class changes</strong> (complete):</p>
 <ul class="simple">
-<li><p>Import <code class="docutils literal notranslate"><span class="pre">ABC</span></code>, <code class="docutils literal notranslate"><span class="pre">abstractmethod</span></code> into <code class="docutils literal notranslate"><span class="pre">base_command.py</span></code>.</p></li>
-<li><p>Add <code class="docutils literal notranslate"><span class="pre">&#64;abstractmethod</span></code> to <code class="docutils literal notranslate"><span class="pre">execute()</span></code>.</p></li>
-<li><p>Add <code class="docutils literal notranslate"><span class="pre">_run_phases()</span></code> helper (content is the current concrete <code class="docutils literal notranslate"><span class="pre">execute()</span></code> body,
-minus the <code class="docutils literal notranslate"><span class="pre">SHOW_CHROME</span></code> classvar reference — pass <code class="docutils literal notranslate"><span class="pre">show_chrome</span></code> explicitly instead).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">_run()</span></code> default remains <code class="docutils literal notranslate"><span class="pre">raise</span> <span class="pre">NotImplementedError</span></code>.</p></li>
-<li><p>All existing commands that override <code class="docutils literal notranslate"><span class="pre">_run()</span></code> now call <code class="docutils literal notranslate"><span class="pre">_run_phases()</span></code> from their
-<code class="docutils literal notranslate"><span class="pre">execute()</span></code> — add a one-liner <code class="docutils literal notranslate"><span class="pre">execute()</span></code> to each.</p></li>
-<li><p>All existing commands that already override <code class="docutils literal notranslate"><span class="pre">execute()</span></code> are unchanged.</p></li>
-<li><p><strong>No behavioral change.</strong> Tests pass without modification.</p></li>
+<li><p>Rewrote <code class="docutils literal notranslate"><span class="pre">execute()</span></code> in <code class="docutils literal notranslate"><span class="pre">base_command.py</span></code> as the always-run orchestrator (five
+phases, per-phase try/except, no short-circuit).</p></li>
+<li><p>Added <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> with a <code class="docutils literal notranslate"><span class="pre">raise</span> <span class="pre">NotImplementedError</span></code> default.</p></li>
+<li><p>Removed <code class="docutils literal notranslate"><span class="pre">_run_phases()</span></code> helper — no longer needed.</p></li>
+<li><p>All existing commands that implement <code class="docutils literal notranslate"><span class="pre">_run()</span></code>: renamed method to <code class="docutils literal notranslate"><span class="pre">_execute()</span></code>.</p></li>
+<li><p>All existing commands that override <code class="docutils literal notranslate"><span class="pre">execute()</span></code> directly: converted override logic
+to phase overrides (<code class="docutils literal notranslate"><span class="pre">_initialize</span></code>, <code class="docutils literal notranslate"><span class="pre">_before_execute</span></code>, etc.) and renamed business
+logic to <code class="docutils literal notranslate"><span class="pre">_execute()</span></code>.</p></li>
+<li><p><strong>No behavioral change for standard commands.</strong> All tests pass without modification.</p></li>
 </ul>
 </li>
-<li><p><strong>Phase 2 — Migrate deviant commands</strong> (per command group PR):</p>
+<li><p>✅ <strong>Phase 2 — Eliminate <code class="docutils literal notranslate"><span class="pre">INIT_REQUIRED</span></code></strong> (complete):</p>
 <ul class="simple">
-<li><p>For each command group that overrides <code class="docutils literal notranslate"><span class="pre">execute()</span></code> with non-standard logic, verify
-the override is intentional and add a comment explaining the deviation.</p></li>
-<li><p>Remove <code class="docutils literal notranslate"><span class="pre">INIT_REQUIRED</span> <span class="pre">=</span> <span class="pre">False</span></code> from commands that should become <code class="docutils literal notranslate"><span class="pre">StatelessCommand</span></code>
-subclasses; migrate them.</p></li>
+<li><p>All commands with <code class="docutils literal notranslate"><span class="pre">INIT_REQUIRED</span> <span class="pre">=</span> <span class="pre">False</span></code> now override <code class="docutils literal notranslate"><span class="pre">_initialize()</span></code> to call
+<code class="docutils literal notranslate"><span class="pre">self._initialize_session()</span></code> — a new <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> helper that performs the full
+session setup (timing, logging, context) without requiring <code class="docutils literal notranslate"><span class="pre">solution.json</span></code> to exist.</p></li>
+<li><p>The planned <code class="docutils literal notranslate"><span class="pre">StatelessCommand</span></code> base class was not introduced; <code class="docutils literal notranslate"><span class="pre">_initialize_session()</span></code>
+covers the same use cases with less structural overhead.</p></li>
+<li><p>Removed <code class="docutils literal notranslate"><span class="pre">INIT_REQUIRED</span></code> ClassVar from <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> and all 46 subclasses.</p></li>
 </ul>
 </li>
-<li><p><strong>Phase 3 — Enforce via linting</strong> (CI addition):</p>
+<li><p>✅ <strong>Phase 3 — Enforce via linting</strong> (complete):</p>
 <ul class="simple">
-<li><p>Add a <code class="docutils literal notranslate"><span class="pre">ruff</span></code> rule or a custom <code class="docutils literal notranslate"><span class="pre">scripts/Check.ps1</span></code> assertion: every class in
-<code class="docutils literal notranslate"><span class="pre">src/strata/commands/</span></code> that inherits <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> must define its own <code class="docutils literal notranslate"><span class="pre">execute()</span></code>
-method (i.e. the abstract contract is satisfied at the class level, not inherited).</p></li>
-<li><p>This prevents future commands from accidentally relying on an inherited concrete
-<code class="docutils literal notranslate"><span class="pre">execute()</span></code>.</p></li>
+<li><p>Added three guards to <code class="docutils literal notranslate"><span class="pre">scripts/Check.ps1</span></code> (section 7 — ADR 0030 migration guards):</p>
+<ul>
+<li><p>No <code class="docutils literal notranslate"><span class="pre">INIT_REQUIRED</span></code> references in commands.</p></li>
+<li><p>No <code class="docutils literal notranslate"><span class="pre">execute()</span></code> overrides in <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> subclasses.</p></li>
+<li><p>No <code class="docutils literal notranslate"><span class="pre">_run()</span></code> method definitions in commands.</p></li>
+</ul>
+</li>
 </ul>
 </li>
 </ol>
@@ -4833,43 +4998,43 @@ method (i.e. the abstract contract is satisfied at the class level, not inherite
 <h2>Consequences<a class="headerlink" href="#consequences" title="Link to this heading"></a></h2>
 <p><strong>Good:</strong></p>
 <ul class="simple">
-<li><p>The lifecycle is explicit in every command file. A new contributor can read
-<code class="docutils literal notranslate"><span class="pre">RunDeployCommand.execute()</span></code> and understand the full execution order without reading
-the base class.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">_finalize</span></code> (audit + structured output) is guaranteed to run on every exit path
-because the command author wires it in their <code class="docutils literal notranslate"><span class="pre">execute()</span></code> — there is nowhere for it to
-disappear silently.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">INIT_REQUIRED</span> <span class="pre">=</span> <span class="pre">False</span></code> class variables are eliminated over time; commands that need
-no workspace context opt out structurally by using <code class="docutils literal notranslate"><span class="pre">StatelessCommand</span></code>.</p></li>
-<li><p>The <code class="docutils literal notranslate"><span class="pre">_run_phases()</span></code> helper keeps the common case at one line per command, so the
-explicitness comes at near-zero boilerplate cost for standard commands.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_finalize</span></code> (audit + structured output) is structurally guaranteed on every exit
+path. It cannot be skipped because it is always the last statement in the concrete
+<code class="docutils literal notranslate"><span class="pre">BaseCommand.execute()</span></code>. No per-command boilerplate required.</p></li>
+<li><p>Phase infrastructure (timing, logging, config) always runs — a <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> that
+raises unexpectedly will still produce a full audit entry and structured output
+envelope.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">INIT_REQUIRED</span> <span class="pre">=</span> <span class="pre">False</span></code> class variables are eliminated; commands that need no
+workspace context override <code class="docutils literal notranslate"><span class="pre">_initialize()</span></code> to call <code class="docutils literal notranslate"><span class="pre">self._initialize_session()</span></code>.</p></li>
+<li><p>Commands are minimal: implement <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> and nothing else for the standard case.</p></li>
+<li><p>Per-phase try/except produces specific, actionable error messages from each failing
+phase rather than a single first-failure message with subsequent phases silenced.</p></li>
 </ul>
 <p><strong>Bad / Trade-offs:</strong></p>
 <ul class="simple">
-<li><p>Every command file gains <code class="docutils literal notranslate"><span class="pre">def</span> <span class="pre">execute(self)</span> <span class="pre">-&gt;</span> <span class="pre">bool:</span> <span class="pre">return</span> <span class="pre">self._run_phases()</span></code> —
-three lines of boilerplate. This is the price of explicitness.</p></li>
-<li><p>The ABC constraint means <code class="docutils literal notranslate"><span class="pre">mypy</span></code> will flag any <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> subclass that does not
-implement <code class="docutils literal notranslate"><span class="pre">execute()</span></code>. This is intentional but may surface hidden violations on the
-first migration run.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_execute()</span></code> runs even when <code class="docutils literal notranslate"><span class="pre">_initialize()</span></code> failed. Phase implementations must be
+resilient to partial setup. In practice, <code class="docutils literal notranslate"><span class="pre">_execute()</span></code> will also fail quickly and add
+its own error — both errors are reported in <code class="docutils literal notranslate"><span class="pre">_finalize</span></code>, giving the user full context.</p></li>
+<li><p>Subclasses can no longer override <code class="docutils literal notranslate"><span class="pre">execute()</span></code> for non-standard flows. Deviations must
+be expressed as phase overrides (<code class="docutils literal notranslate"><span class="pre">_initialize</span></code>, <code class="docutils literal notranslate"><span class="pre">_before_execute</span></code>, etc.). This is the
+correct constraint — it prevents the original problem of accidentally skipping finalize.</p></li>
 </ul>
 </section>
 <section id="reference-sterling-implementation">
 <h2>Reference: Sterling Implementation<a class="headerlink" href="#reference-sterling-implementation" title="Link to this heading"></a></h2>
-<p>The sterling codebase (same author, same layered-architecture pattern) serves as the
-reference implementation for this pattern. Key files:</p>
+<p>The sterling codebase (same author, same layered-architecture pattern) uses Option B:
+abstract <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> with an explicit <code class="docutils literal notranslate"><span class="pre">execute()</span></code> in each command. Strata diverges
+from this with Option D, trading per-command lifecycle visibility for structural
+<code class="docutils literal notranslate"><span class="pre">_finalize</span></code> guarantees and zero boilerplate.</p>
+<p>Sterling patterns that still apply in Option D:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">src/sterling/commands/base_command.py</span></code> — abstract <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> with five lifecycle
-phases, shared <code class="docutils literal notranslate"><span class="pre">_emit_stage</span> <span class="pre">/</span> <span class="pre">_emit_task_line</span> <span class="pre">/</span> <span class="pre">_emit_summary_line</span></code> console helpers,
-<code class="docutils literal notranslate"><span class="pre">_finalize</span></code> always writes the audit entry.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">src/sterling/commands/init_command.py</span></code> — example of a deviant command: overrides
-<code class="docutils literal notranslate"><span class="pre">_initialize()</span></code> to skip the <code class="docutils literal notranslate"><span class="pre">.sterling/</span></code> directory check, writes its own <code class="docutils literal notranslate"><span class="pre">execute()</span></code>.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">src/sterling/commands/run_command.py</span></code> — example of a complex command that writes its
-own <code class="docutils literal notranslate"><span class="pre">execute()</span></code> with extra phases and per-phase error handling.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">src/sterling/commands/validate_command.py</span></code> — example of a stateless command: does
-<strong>not</strong> inherit <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code>; is a plain class with a minimal <code class="docutils literal notranslate"><span class="pre">execute()</span></code> and its
-own output logic.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_emit_stage</span> <span class="pre">/</span> <span class="pre">_emit_task_line</span> <span class="pre">/</span> <span class="pre">_emit_summary_line</span></code> console helper methods —
+carried over unchanged.</p></li>
+<li><p>Phase override for non-standard initialisation (<code class="docutils literal notranslate"><span class="pre">init_command.py</span></code> overrides
+<code class="docutils literal notranslate"><span class="pre">_initialize()</span></code>) — identical pattern.</p></li>
+<li><p>Stateless commands as plain classes with a minimal <code class="docutils literal notranslate"><span class="pre">execute()</span></code> — same concept,
+expressed as <code class="docutils literal notranslate"><span class="pre">StatelessCommand</span></code> in strata.</p></li>
 </ul>
-<p>These patterns map directly to the three command archetypes described in this ADR.</p>
 </section>
 <section id="more-information">
 <h2>More Information<a class="headerlink" href="#more-information" title="Link to this heading"></a></h2>
