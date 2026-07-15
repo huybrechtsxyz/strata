@@ -897,7 +897,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
             env_paths = tenant_env_paths + [
                 self._resolve_file_path(env_ref.file, objects_path, repo_map)
-                for env_ref in self.model.spec.environments
+                for env_ref in (self.model.spec.environments or [])
             ]
 
             self.logger.debug("Loading deployment environments", count=len(env_paths), paths=env_paths)

@@ -384,7 +384,7 @@ class BaseDeployCommand(BaseCommand):
         config_model = self._configuration_service.model if self._configuration_service else None
         ok, errors = deployment_service.validate(
             configuration_model=config_model,
-            work_path=self._work_path,
+            work_path=str(self._work_path),
             repo_map=repo_map,
         )
         if not ok:
