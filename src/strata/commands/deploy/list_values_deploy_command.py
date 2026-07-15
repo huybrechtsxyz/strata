@@ -1,4 +1,4 @@
-﻿"""Command to list resolved variables, secrets, and feature flags for a deployment."""
+"""Command to list resolved variables, secrets, and feature flags for a deployment."""
 
 from typing import Any, Dict, List, Optional
 

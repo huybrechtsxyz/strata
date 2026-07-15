@@ -168,7 +168,6 @@ class RunDeployCommand(BaseDeployCommand):
                 }
             )
 
-
             manifest_path = self._write_deployment_manifest(
                 action="deploy",
                 status="success",

@@ -1,4 +1,4 @@
-﻿"""Command to retrieve full resolved values for specific keys from a deployment."""
+"""Command to retrieve full resolved values for specific keys from a deployment."""
 
 from typing import Any, Dict, List, Optional
 

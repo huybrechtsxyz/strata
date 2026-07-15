@@ -80,12 +80,12 @@ class SbomBuildCommand(BaseBuildCommand):
             if self._report == "inventory":
                 if not self._execute_inventory():
                     if self._is_console_output():
-                        click.echo(f"\n❌  Inventory generation failed")
+                        click.echo("\n❌  Inventory generation failed")
                     return False
             else:
                 if not self._execute_sbom_build():
                     if self._is_console_output():
-                        click.echo(f"\n❌  SBOM build failed")
+                        click.echo("\n❌  SBOM build failed")
                     return False
 
             self._output_data.update(

@@ -58,7 +58,7 @@ class DriftDeployCommand(BaseDeployCommand):
             context={"file": str(self._file_path)},
         ):
             if self._is_console_output():
-                click.echo(f"\n❌  Drift lifecycle hook failed")
+                click.echo("\n❌  Drift lifecycle hook failed")
             return False
 
         return self._run_drift_detection()

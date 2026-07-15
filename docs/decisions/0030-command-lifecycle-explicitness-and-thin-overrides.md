@@ -1,6 +1,6 @@
 # Explicit Command Lifecycle: ABC-Enforced Phases and Thin Overrides
 
-- Status: accepted
+- Status: completed
 - Date: 2026-07-11
 - Implemented: 2026-07-15
 

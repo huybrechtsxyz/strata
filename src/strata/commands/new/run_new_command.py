@@ -331,9 +331,10 @@ class NewCommand(BaseCommand):
         if solution_tpl is not None:
             all_paths = [entry.path for entry in solution_tpl.bundle]
             required_vars = _extract_jinja_vars(all_paths)
-            context = _prompt_missing_vars(required_vars, context)
-            if context is None:
+            prompted = _prompt_missing_vars(required_vars, context)
+            if prompted is None:
                 return False
+            context = prompted
             result = self._run_solution_bundle_execution(solution_tpl, context)
         else:
             # 3. Tiers 1-4: file-system resolution (workspace bundle/file → package bundle/file)
