@@ -27,6 +27,39 @@ The existing `strata repo add` mechanism technically works (it's just git), but 
 - Authentication patterns for private repos
 - Catalog/browsing UX
 
+## What Users Expect From a Registry
+
+Users arrive with different mental models depending on their background:
+
+| Expectation                 | What they picture                      | Git repo sufficient?                 |
+| --------------------------- | -------------------------------------- | ------------------------------------ |
+| Browse available content    | Terraform registry search UX           | Maybe — `strata store list` via CLI  |
+| Version pinning             | `version = "2.1.0"` semver constraint  | Yes — git tags are versions          |
+| Private / not public        | Only my org can see it                 | Yes — any private git repo           |
+| Governed / approved content | PR review before publish               | Yes — git branch protection policies |
+| Air-gapped / no internet    | Self-hosted, no public dependency      | Yes — any self-hosted git server     |
+| Docs alongside content      | README, examples/ folder               | Yes — just files in the repo         |
+| Per-team access control     | Infra team only sees security policies | Yes — repo-level permissions         |
+
+**Is a GitHub repo OK?** Yes — for most teams a private GitHub repo is the registry.
+No new infrastructure needed. `strata repo add <url>` is the install command.
+
+**Acceptable hosting targets (all supported via `strata repo add`):**
+- **GitHub / GitHub Enterprise** — private repo, branch protection for governance
+- **Azure DevOps** — private repo, PAT or managed identity authentication
+- **GitLab / GitLab Enterprise** — private repo, deploy tokens for CI
+- **Gitea / Forgejo / self-hosted** — air-gapped environments
+- **Any HTTPS git URL** — SSH or token auth
+
+**Gaps vs Terraform Cloud registry** (where a git repo falls short):
+- No web search/browse UI — discovery is `strata store list` or the repo README
+- No automatic version indexing — versions are git tags (must be created manually)
+- No built-in download stats, deprecation warnings, or input/output schema rendering
+
+These gaps are acceptable for internal platform content. Teams already manage
+modules via git and know what's in their repos. The Terraform Cloud registry
+UX matters for public/community modules, not internal standards.
+
 ## Decision Drivers
 
 - Enterprise teams have 5–50+ strata workspaces that should share standards

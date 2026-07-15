@@ -1,7 +1,8 @@
-# Real-Time Progress Streaming via ndjson (`--stream`)
+# Real-Time Progress Streaming via ndjson (`--output ndjson`)
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-07-11
+- Implemented: 2026-07-15
 
 ## Context and Problem Statement
 
@@ -20,6 +21,10 @@ until the provisioner exits. This creates three problems:
 
 `--stream` was documented in ADR-0020 and marked `[TODO: not yet implemented]`. This
 ADR decides the event schema, transport, and integration points.
+
+**Implementation note:** Streaming is implemented as `--output ndjson` (not a separate
+`--stream` flag). `OUTPUT_FORMATS = ["console", "text", "json", "ndjson"]` — ndjson is
+a first-class output format alongside json and console, not an opt-in overlay.
 
 ## Decision Drivers
 
@@ -72,11 +77,13 @@ ADR decides the event schema, transport, and integration points.
 
 ## Decision Outcome
 
-Chosen: **Option B — ndjson structured events to stdout**.
+Chosen: **Option B — ndjson structured events to stdout**, implemented as
+`--output ndjson`.
 
-When `--stream` is set, stdout carries a sequence of ndjson lines followed by a final
-`result` event. When `--stream` is not set, stdout carries only the normal strata result
-envelope (unchanged behaviour).
+When `--output ndjson` is set, stdout carries a sequence of ndjson lines. Each line is
+flushed immediately as it is produced — no buffering until completion. When `--output
+ndjson` is not set, stdout carries only the normal strata result envelope (unchanged
+behaviour).
 
 ### Event schema
 
@@ -90,82 +97,59 @@ All events share a common envelope:
 Sub-second precision is not used — provisioner operations are measured in seconds, not
 milliseconds.
 
-#### Event types
+#### Event types implemented
 
-| Event type       | When emitted                                         | Key fields                                   |
-| ---------------- | ---------------------------------------------------- | -------------------------------------------- |
-| `run_start`      | Before any stage begins                              | `deployment`, `stages` (list of stage names) |
-| `stage_start`    | When a stage begins                                  | `stage`, `provisioner`                       |
-| `stage_log`      | Each log line from the provisioner subprocess        | `stage`, `level`, `msg`                      |
-| `stage_complete` | When a stage finishes                                | `stage`, `exit_code`, `duration_s`           |
-| `stage_skipped`  | When a stage is skipped (scope filter, dry-run)      | `stage`, `reason`                            |
-| `run_complete`   | After all stages finish                              | `exit_code`, `duration_s`                    |
-| `result`         | Last line; carries the normal strata result envelope | `success`, `data`, `errors`, `messages`      |
+| Event type       | When emitted                                  | Key fields                                              |
+| ---------------- | --------------------------------------------- | ------------------------------------------------------- |
+| `stage_start`    | When a stage begins                           | `stage`, `ts`                                           |
+| `log`            | Each log line from the provisioner subprocess | `stage`, `step`, `stream` (stdout/stderr), `text`       |
+| `stage_complete` | When a stage finishes                         | `stage`, `success`, `ts`                                |
+| `complete`       | Last event; carries the final result envelope | `success`, `data`, `errors`, `messages`, `execution_id` |
+
+**Note:** The ADR originally specified `run_start`, `stage_log`, `run_complete`, and
+`result` as event names. The implementation uses `stage_start`, `log`, `stage_complete`,
+and `complete`. The schema is otherwise equivalent.
 
 #### Example stream
 
 ```text
-{"event": "run_start", "ts": "2026-07-11T14:30:00Z", "deployment": "haven-prd", "stages": ["networking", "compute", "dns"]}
-{"event": "stage_start", "ts": "2026-07-11T14:30:00Z", "stage": "networking", "provisioner": "terraform"}
-{"event": "stage_log", "ts": "2026-07-11T14:30:02Z", "stage": "networking", "level": "INFO", "msg": "Terraform 1.9.0"}
-{"event": "stage_log", "ts": "2026-07-11T14:30:05Z", "stage": "networking", "level": "INFO", "msg": "Plan: 3 to add, 0 to change, 0 to destroy."}
-{"event": "stage_complete", "ts": "2026-07-11T14:31:10Z", "stage": "networking", "exit_code": 0, "duration_s": 70}
-{"event": "stage_start", "ts": "2026-07-11T14:31:10Z", "stage": "compute", "provisioner": "terraform"}
-{"event": "stage_complete", "ts": "2026-07-11T14:34:45Z", "stage": "compute", "exit_code": 0, "duration_s": 215}
-{"event": "stage_skipped", "ts": "2026-07-11T14:34:45Z", "stage": "dns", "reason": "--scope filter did not match"}
-{"event": "run_complete", "ts": "2026-07-11T14:34:45Z", "exit_code": 0, "duration_s": 285}
-{"event": "result", "ts": "2026-07-11T14:34:45Z", "success": true, "data": {...}, "errors": [], "messages": []}
+{"event": "stage_start", "stage": "provision", "ts": "2026-07-15T10:00:00Z"}
+{"event": "log", "stage": "provision", "step": "apply", "stream": "stdout", "text": "azurerm_resource_group.main: Creating..."}
+{"event": "log", "stage": "provision", "step": "apply", "stream": "stdout", "text": "azurerm_resource_group.main: Creation complete after 2s"}
+{"event": "stage_complete", "stage": "provision", "success": true, "ts": "2026-07-15T10:02:14Z"}
+{"event": "complete", "success": true, "command": "deploy.run", "execution_id": "abc123", "data": {...}, "errors": [], "messages": []}
 ```
 
 ### Implementation
 
-An `EventEmitter` class wraps `sys.stdout` writes. It is instantiated once per
-command invocation when `--stream` is set; when not set, a no-op `NullEmitter` is used
-so the provisioner code does not need to check the flag.
+**Implemented.** The core emitter lives in `BaseCommand`:
 
-```python
-class EventEmitter:
-    def emit(self, event_type: str, **kwargs) -> None:
-        payload = {"event": event_type, "ts": _now_utc(), **kwargs}
-        sys.stdout.write(json.dumps(payload) + "\n")
-        sys.stdout.flush()  # ensure each event is written immediately
+- `_is_ndjson_output()` — returns `True` when `--output ndjson` is active
+- `emit_ndjson(event: dict)` — serialises to JSON, writes to stdout, flushes immediately
+- `make_ndjson_line_callback(step, stage)` — returns a callback for subprocess line output
 
-class NullEmitter:
-    def emit(self, event_type: str, **kwargs) -> None:
-        pass  # no-op when --stream is not set
-```
+The subprocess wrapper in `run_deploy_command.py` uses the line callback to emit one
+`log` event per line as the provisioner produces output (non-blocking drain via threads).
+The `_finalize()` method in `BaseCommand` emits the terminal `complete` event.
 
-The provisioner subprocess wrapper reads from the subprocess's stdout/stderr line by
-line (non-blocking via `iter(proc.stdout.readline, b"")`) and emits `stage_log` events.
-This replaces the current behaviour of buffering all output and printing it at the end.
+**Remaining work:**
+- Rich console progress UI (spinners, stage progress bars) for `--output console`
+- VS Code extension live status panel consuming the ndjson stream
+- Remove `[TODO: not yet implemented]` from ADR-0020 `--stream` entries
 
 ### Composability with `--output`
 
-When `--stream` is set, the final strata result envelope is emitted as the last ndjson
-line (`{"event": "result", ...}`) rather than printed as the sole stdout content.
-This means:
+`--output ndjson` is a first-class output format. It replaces `--output json` for
+consumers that want live streaming. A consumer that previously used `--output json`
+and read the final envelope can switch to `--output ndjson` and read the terminal
+`complete` event instead — the payload is identical.
 
-- A consumer that reads only the last line gets the result envelope it expects (if it
-  uses a `tail -1 | jq` pattern).
-- A consumer that reads all lines and filters for `"event": "result"` gets the same.
-- A consumer that reads the full stream gets all progress events plus the final result.
+### `log` event volume management
 
-`--stream` and `--output json` may be combined. `--stream` and `--output console` will
-produce ndjson events interspersed with human-readable text — this combination is
-discouraged in non-interactive contexts (document in help text).
-
-### `stage_log` volume management
-
-Raw Terraform output can be thousands of lines. When `--stream` is set, all lines are
-emitted as `stage_log` events. This is intentional — the consumer (CI log aggregator,
-VS Code extension) decides what to display. A future option `--stream-filter LEVEL`
-(e.g., `--stream-filter WARNING`) could suppress below-threshold `stage_log` events;
-this is out of scope for the initial implementation.
-
-### Removal of `[TODO]` markers
-
-When this ADR is accepted and implementation begins, remove the `[TODO: not yet
-implemented]` annotations from the `--stream` entries in ADR-0020's command specs.
+Raw Terraform output can be thousands of lines. When `--output ndjson` is set, all
+lines are emitted as `log` events. This is intentional — the consumer (CI log
+aggregator, VS Code extension) decides what to display. A future option
+`--stream-filter LEVEL` could suppress below-threshold events; deferred.
 
 ## Consequences
 
