@@ -203,9 +203,61 @@ class PlatformValidator(BaseValidator):
             )
             return False
 
+        # --- ADR 0039: deployment extends/partial resolution ---
+        # Read spec.partial and spec.extends from raw YAML before any Pydantic loading.
+        # This is done once here so the rest of the validation pipeline sees the
+        # merged model, not the raw child-only data.
+        injected_data: Optional[dict] = None
+        skip_phase2_partial = False
+
+        if self._detected_kind == PlatformKind.DEPLOYMENT:
+            raw_spec: dict = {}
+            try:
+                _raw = yaml.safe_load(self._file_path.read_text(encoding="utf-8")) or {}
+                raw_spec = _raw.get("spec") or {}
+            except Exception:
+                pass  # parse failure is reported by Phase 1 below
+
+            skip_phase2_partial = bool(raw_spec.get("partial", False))
+            _extends_ref = raw_spec.get("extends")
+
+            if _extends_ref:
+                from strata.services.deployment_extension_resolver import DeploymentExtensionResolver
+
+                resolver = DeploymentExtensionResolver(
+                    work_path=work_path,
+                    repo_map=self._repo_map,
+                )
+                try:
+                    injected_data = resolver.resolve(self._file_path)
+                except (ValueError, FileNotFoundError) as exc:
+                    self.add_validation_error(
+                        "EXTENDS_RESOLUTION_ERROR",
+                        f"Failed to resolve extends chain for '{self._file_path}': {exc}",
+                        phase=1,
+                    )
+                    return False
+
+                # Leaf of the chain must not be partial after resolution
+                merged_partial = (injected_data.get("spec") or {}).get("partial", False)
+                if merged_partial:
+                    self.add_validation_error(
+                        "PARTIAL_LEAF_ERROR",
+                        f"'{self._file_path}' is a partial deployment. "
+                        "The last file in an extends chain must be a complete, deployable deployment.",
+                        phase=1,
+                    )
+                    return False
+
         # Phase 1: structural (Pydantic) validation via BaseService.load()
         try:
-            service = service_class.load(str(self._file_path))
+            if injected_data is not None:
+                service = service_class(path=str(self._file_path), data=injected_data)
+                is_valid, errors = service.validate()
+                if not is_valid:
+                    service._errors.extend(errors)
+            else:
+                service = service_class.load(str(self._file_path))
         except Exception as exc:
             self.add_validation_error(
                 "SERVICE_LOAD_ERROR",
@@ -246,8 +298,10 @@ class PlatformValidator(BaseValidator):
 
         self._service = service
 
-        # Phase 2: dynamic validation against configuration (optional)
-        if self._configuration_service is not None:
+        # Phase 2: dynamic validation against configuration (optional).
+        # Skipped entirely for partial deployments (spec.partial: true) — they are
+        # base files not intended to be validated as complete deploy targets.
+        if self._configuration_service is not None and not skip_phase2_partial:
             is_valid, dynamic_errors = service.validate(
                 configuration_model=self._configuration_service.model,
                 work_path=str(work_path),
