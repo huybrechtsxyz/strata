@@ -185,6 +185,7 @@ strata
    guides/extending-sbom-plugins
    guides/sbom-plugin-examples
    guides/cve-vulnerability-scanning
+   guides/scaffolding-templates
    guides/at-scale
    guides/using-console
    guides/building-a-provisioner-plugin

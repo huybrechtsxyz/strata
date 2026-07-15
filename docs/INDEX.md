@@ -57,6 +57,7 @@ This is a comprehensive guide to all Strata documentation and resources. Use thi
 
 | Guide | Purpose |
 |-------|---------|
+| [Scaffolding Templates](./guides/scaffolding-templates.md) | Creating files, bundles, and multi-tenant fleet scaffolds |
 | [Policy Engine](./guides/policies.md) | Built-in policies and custom rules |
 | [Lifecycle Hooks](./guides/lifecycle-hooks.md) | Pre/post deployment scripts |
 | [Multi-Repository Setup](./guides/multi-repo.md) | Working with multiple configuration repos |
