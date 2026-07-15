@@ -15,7 +15,6 @@ class ListDeploymentsCommand(BaseCommand):
     """
 
     OPERATION = "solution_deployment_list"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

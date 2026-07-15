@@ -80,28 +80,9 @@ class RunDeployCommand(BaseDeployCommand):
     # Public entry point
     # -------------------------------------------------------------------------
 
-    def execute(self) -> bool:
+    def _execute(self) -> bool:
         try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
             self._record_deploy_start()
-
-            if not self._load_related_services():
-                if self._is_console_output():
-                    click.echo("\n❌  Failed to load deployment related services")
-                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
-                return False
 
             # -v / --version-file: mutual exclusion + inject into spec.versions (Layer 3)
             if self._version_file:
@@ -111,7 +92,6 @@ class RunDeployCommand(BaseDeployCommand):
                     if self._is_console_output():
                         click.echo(f"\n❌  {version_err}")
                     self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                    self._finalize(success=False)
                     return False
             elif self._should_auto_resolve_version():
                 # Layer 5: auto-resolve version from spec.promotion → lock → version file
@@ -121,7 +101,6 @@ class RunDeployCommand(BaseDeployCommand):
                     if self._is_console_output():
                         click.echo(f"\n❌  {version_err}")
                     self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                    self._finalize(success=False)
                     return False
 
             # Strict lock mode check (--require-lock or ring.require_lock: true)
@@ -135,14 +114,12 @@ class RunDeployCommand(BaseDeployCommand):
                     if self._is_console_output():
                         click.echo(f"\n❌  {lock_error}")
                     self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                    self._finalize(success=False)
                     return False
 
             if not self._resolve_values():
                 if self._is_console_output():
                     click.echo("\n❌  Failed to resolve variables/secrets/features")
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
                 return False
 
             if self._dry_run and self._is_console_output():
@@ -155,14 +132,12 @@ class RunDeployCommand(BaseDeployCommand):
                 if self._is_console_output():
                     click.echo("\n❌  Pre-deploy lifecycle hook failed")
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
                 return False
 
             if not self._execute_provisioning():
                 if self._is_console_output():
                     click.echo("\n❌  Deploy provisioning failed")
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
                 return False
 
             if not self._run_lifecycle_phase(
@@ -172,7 +147,6 @@ class RunDeployCommand(BaseDeployCommand):
                 if self._is_console_output():
                     click.echo("\n\u274c  Configure lifecycle hook failed")
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
                 return False
 
             if not self._run_lifecycle_phase(
@@ -182,14 +156,6 @@ class RunDeployCommand(BaseDeployCommand):
                 if self._is_console_output():
                     click.echo("\n❌  Post-deploy lifecycle hook failed")
                 self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution hook failed")
-                self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
-                self._finalize(success=False)
                 return False
 
             self._output_data.update(
@@ -202,7 +168,6 @@ class RunDeployCommand(BaseDeployCommand):
                 }
             )
 
-            self._finalize(success=True)
 
             manifest_path = self._write_deployment_manifest(
                 action="deploy",
@@ -217,7 +182,6 @@ class RunDeployCommand(BaseDeployCommand):
         except Exception as exc:
             self._errors.append(f"Failed to execute deploy_run: {exc}")
             self.logger.exception("deploy_run failed")
-            self._finalize(success=False)
             self._write_deployment_manifest(action="deploy", status="failed", dry_run=self._dry_run)
             return False
 

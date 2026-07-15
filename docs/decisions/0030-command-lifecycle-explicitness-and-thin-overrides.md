@@ -1,7 +1,8 @@
 # Explicit Command Lifecycle: ABC-Enforced Phases and Thin Overrides
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-07-11
+- Implemented: 2026-07-15
 
 ## Context and Problem Statement
 
@@ -272,27 +273,30 @@ class StatelessCommand:
 The change is backward compatible for commands that implement `_run()` — rename
 `_run()` to `_execute()` in each command. Applied incrementally:
 
-1. **Phase 1 — Base class changes** (single PR):
-   - Rewrite `execute()` in `base_command.py` as the always-run orchestrator (five
+1. ✅ **Phase 1 — Base class changes** (complete):
+   - Rewrote `execute()` in `base_command.py` as the always-run orchestrator (five
      phases, per-phase try/except, no short-circuit).
-   - Add `_execute()` with a `raise NotImplementedError` default.
-   - Remove `_run_phases()` helper — no longer needed.
-   - All existing commands that implement `_run()`: rename method to `_execute()`.
-   - All existing commands that override `execute()` directly: convert override logic
-     to phase overrides (`_initialize`, `_before_execute`, etc.) and rename business
+   - Added `_execute()` with a `raise NotImplementedError` default.
+   - Removed `_run_phases()` helper — no longer needed.
+   - All existing commands that implement `_run()`: renamed method to `_execute()`.
+   - All existing commands that override `execute()` directly: converted override logic
+     to phase overrides (`_initialize`, `_before_execute`, etc.) and renamed business
      logic to `_execute()`.
-   - **No behavioral change for standard commands.** Tests pass without modification.
+   - **No behavioral change for standard commands.** All tests pass without modification.
 
-2. **Phase 2 — Eliminate `INIT_REQUIRED`** (per command group PR):
-   - Commands that set `INIT_REQUIRED = False` should override `_initialize()` to skip
-     the solution.json existence check instead.
-   - Migrate purely stateless commands (`strata version`, `strata schema`) to
-     `StatelessCommand`.
-   - Remove `INIT_REQUIRED` from `BaseCommand` once all usages are converted.
+2. ✅ **Phase 2 — Eliminate `INIT_REQUIRED`** (complete):
+   - All commands with `INIT_REQUIRED = False` now override `_initialize()` to call
+     `self._initialize_session()` — a new `BaseCommand` helper that performs the full
+     session setup (timing, logging, context) without requiring `solution.json` to exist.
+   - The planned `StatelessCommand` base class was not introduced; `_initialize_session()`
+     covers the same use cases with less structural overhead.
+   - Removed `INIT_REQUIRED` ClassVar from `BaseCommand` and all 46 subclasses.
 
-3. **Phase 3 — Enforce via linting** (CI addition):
-   - Add a check: no `BaseCommand` subclass may define `execute()` (reserved for the
-     base). This prevents future authors from re-introducing the skip-finalize problem.
+3. ✅ **Phase 3 — Enforce via linting** (complete):
+   - Added three guards to `scripts/Check.ps1` (section 7 — ADR 0030 migration guards):
+     - No `INIT_REQUIRED` references in commands.
+     - No `execute()` overrides in `BaseCommand` subclasses.
+     - No `_run()` method definitions in commands.
 
 ## Consequences
 
@@ -303,8 +307,8 @@ The change is backward compatible for commands that implement `_run()` — renam
 - Phase infrastructure (timing, logging, config) always runs — a `_execute()` that
   raises unexpectedly will still produce a full audit entry and structured output
   envelope.
-- `INIT_REQUIRED = False` class variables are eliminated over time; commands that need
-  no workspace context opt out structurally by using `StatelessCommand`.
+- `INIT_REQUIRED = False` class variables are eliminated; commands that need no
+  workspace context override `_initialize()` to call `self._initialize_session()`.
 - Commands are minimal: implement `_execute()` and nothing else for the standard case.
 - Per-phase try/except produces specific, actionable error messages from each failing
   phase rather than a single first-failure message with subsequent phases silenced.

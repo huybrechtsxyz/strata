@@ -20,7 +20,6 @@ class GetSecretCommand(BaseCommand):
     """Read a secret value from the configured store."""
 
     OPERATION = "secret_get"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

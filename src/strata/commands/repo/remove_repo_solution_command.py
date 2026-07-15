@@ -17,7 +17,6 @@ class RemoveRepoSolutionCommand(BaseCommand):
     """
 
     OPERATION = "solution_repo_remove"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

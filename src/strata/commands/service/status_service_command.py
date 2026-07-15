@@ -12,44 +12,26 @@ class StatusServiceCommand(BaseServiceCommand):
 
     OPERATION = "service_status"
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                self._finalize(success=False)
-                return False
-
-            if not self._name:
-                self._errors.append("Service name is required. Use: strata service status <name>")
-                self._finalize(success=False)
-                return False
-
-            targets, errors = self._resolve_targets_by_name(self._name)
-            if errors:
-                self._errors.extend(errors)
-                if self._is_console_output():
-                    for e in errors:
-                        click.echo(f"  ❌  {e}")
-                self._finalize(success=False)
-                return False
-
-            all_ok = True
-            for target in targets:
-                ok = self._show_status(target)
-                if not ok:
-                    all_ok = False
-
-            self._finalize(success=all_ok)
-            return all_ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to get service status: {exc}")
-            self.logger.exception("service_status failed")
-            self._finalize(success=False)
+    def _execute(self) -> bool:
+        if not self._name:
+            self._errors.append("Service name is required. Use: strata service status <name>")
             return False
+
+        targets, errors = self._resolve_targets_by_name(self._name)
+        if errors:
+            self._errors.extend(errors)
+            if self._is_console_output():
+                for e in errors:
+                    click.echo(f"  ❌  {e}")
+            return False
+
+        all_ok = True
+        for target in targets:
+            ok = self._show_status(target)
+            if not ok:
+                all_ok = False
+
+        return all_ok
 
     def _show_status(self, target: ServiceTarget) -> bool:
         """Query status for a single service target."""

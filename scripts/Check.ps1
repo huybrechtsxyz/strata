@@ -179,6 +179,50 @@ else {
     }
 }
 Write-Host ""
+# ── 7. ADR 0030 migration guards ─────────────────────────────────────────────
+# Regression guards for the BaseCommand lifecycle migration (ADR 0030 Option D).
+# These patterns were deliberately eliminated; a failure here means a regression.
+Write-Host "[*] ADR 0030 migration guards..." -ForegroundColor Blue
+$guardOk = $true
+$cmdSrc = Get-ChildItem -Path "$projectRoot\src\strata\commands" -Recurse -Filter "*.py"
+
+# Guard 1: INIT_REQUIRED must never reappear — eliminated in Group F.
+$initRequired = $cmdSrc | Select-String -Pattern "\bINIT_REQUIRED\b"
+if ($initRequired) {
+    Write-Host "    [!] INIT_REQUIRED re-introduced in:" -ForegroundColor Red
+    $initRequired | ForEach-Object { Write-Host "        $($_.Filename):$($_.LineNumber)" -ForegroundColor Yellow }
+    $guardOk = $false
+}
+else {
+    Write-Host "    [+] No INIT_REQUIRED references" -ForegroundColor Green
+}
+
+# Guard 2: execute() must not be overridden in subclasses — only BaseCommand defines it.
+$executeOverrides = $cmdSrc |
+Where-Object { $_.Name -ne "base_command.py" } |
+Select-String -Pattern "^\s+def execute\(self"
+if ($executeOverrides) {
+    Write-Host "    [!] execute() overrides found — use _execute() instead:" -ForegroundColor Red
+    $executeOverrides | ForEach-Object { Write-Host "        $($_.Filename):$($_.LineNumber)" -ForegroundColor Yellow }
+    $guardOk = $false
+}
+else {
+    Write-Host "    [+] No execute() overrides in command subclasses" -ForegroundColor Green
+}
+
+# Guard 3: _run() must not reappear — bulk-renamed to _execute() in Groups A-E.
+$runMethods = $cmdSrc | Select-String -Pattern "^\s+def _run\(self"
+if ($runMethods) {
+    Write-Host "    [!] _run() definitions found — rename to _execute():" -ForegroundColor Red
+    $runMethods | ForEach-Object { Write-Host "        $($_.Filename):$($_.LineNumber)" -ForegroundColor Yellow }
+    $guardOk = $false
+}
+else {
+    Write-Host "    [+] No _run() method definitions in commands" -ForegroundColor Green
+}
+
+if (-not $guardOk) { $failed += "ADR 0030 migration guards" }
+Write-Host ""
 # ── Summary ─────────────────────────────────────────────────────────────────
 # Restore the original index strategy
 $env:UV_INDEX_STRATEGY = $prevIndexStrategy

@@ -20,7 +20,6 @@ class RotateSecretCommand(BaseCommand):
     """Rotate a secret by generating a new value and writing it to the store."""
 
     OPERATION = "secret_rotate"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

@@ -25,7 +25,6 @@ class InfoEnvCommand(BaseCommand):
     """
 
     OPERATION = "env_info"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

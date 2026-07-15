@@ -20,7 +20,6 @@ class PutSecretCommand(BaseCommand):
     """Write a secret value to the configured store (create-if-not-exists)."""
 
     OPERATION = "secret_put"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

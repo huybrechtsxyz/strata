@@ -52,41 +52,16 @@ class HealthDeployCommand(BaseDeployCommand):
     # Entry point
     # -------------------------------------------------------------------------
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-            if not self._run_lifecycle_phase(
-                "deploy_health",
-                context={"file": str(self._file_path)},
-            ):
-                if self._is_console_output():
-                    click.echo("\n\u274c  Health lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-            ok = self._run_health_checks()
-
-            if not self._after_execute():
-                self._finalize(success=False)
-                return False
-
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_health: {exc}")
-            self.logger.exception("deploy_health failed")
-            self._finalize(success=False)
+    def _execute(self) -> bool:
+        if not self._run_lifecycle_phase(
+            "deploy_health",
+            context={"file": str(self._file_path)},
+        ):
+            if self._is_console_output():
+                click.echo("\n❌  Health lifecycle hook failed")
             return False
+
+        return self._run_health_checks()
 
     # -------------------------------------------------------------------------
     # Core
@@ -120,7 +95,6 @@ class HealthDeployCommand(BaseDeployCommand):
                     "     Add 'health_checks:' to a stage in your deployment YAML to use this command."
                 )
             self._output_data = {"mode": "health", "stages": {}, "summary": "no_checks_defined"}
-            self._finalize(success=True)
             return True
 
         if self._is_console_output():

@@ -65,43 +65,16 @@ class StatusEnvCommand(BaseDeployCommand):
             return {}
         return {"terraform": "querying live infrastructure state"}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            # Multi-deployment mode: bypass _before_execute() (no single file required)
-            if self._all or self._path:
-                ok = self._run_multi()
-                self._finalize(success=ok)
-                return ok
-
-            # Single-deployment mode: standard BaseDeployCommand path
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._run_single()
-            self._after_execute()
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute env_status: {exc}")
-            self.logger.exception("env_status failed")
-            self._finalize(success=False)
-            return False
-
-    # ------------------------------------------------------------------
-    # Multi-deployment mode
-    # ------------------------------------------------------------------
+    def _before_execute(self) -> bool:
+        # Multi-deployment mode needs no deployment file — skip the BaseDeployCommand
+        # file-loading validation and let _execute() handle the scan directly.
+        if self._all or self._path:
+            return True
+        return super()._before_execute()
 
     def _execute(self) -> bool:
+        if self._all or self._path:
+            return self._run_multi()
         return self._run_single()
 
     def _run_multi(self) -> bool:

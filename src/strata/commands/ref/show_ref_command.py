@@ -17,7 +17,6 @@ class ShowRefCommand(BaseCommand):
     """
 
     OPERATION = "ref_show"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

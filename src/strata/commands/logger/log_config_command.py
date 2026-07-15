@@ -21,7 +21,6 @@ class LogConfigCommand(BaseCommand):
     """
 
     OPERATION = "log_config"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

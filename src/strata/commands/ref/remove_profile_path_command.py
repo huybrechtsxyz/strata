@@ -15,7 +15,6 @@ class RemoveProfilePathCommand(BaseCommand):
     """
 
     OPERATION = "solution_profile_path_remove"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

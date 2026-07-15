@@ -1,4 +1,4 @@
-"""Command to retrieve full resolved values for specific keys from a deployment."""
+﻿"""Command to retrieve full resolved values for specific keys from a deployment."""
 
 from typing import Any, Dict, List, Optional
 
@@ -38,36 +38,6 @@ class GetValuesDeployCommand(BaseDeployCommand):
             quiet=quiet,
         )
         self._keys: List[str] = list(keys or [])
-
-    # ------------------------------------------------------------------
-    # Entry point
-    # ------------------------------------------------------------------
-
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            ok = self._execute()
-
-            self._after_execute()
-            self._finalize(success=ok)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute deploy_values_get: {exc}")
-            self.logger.exception("deploy_values_get failed")
-            self._finalize(success=False)
-            return False
 
     # ------------------------------------------------------------------
     # Core logic

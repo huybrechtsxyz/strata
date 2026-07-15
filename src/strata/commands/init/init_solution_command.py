@@ -25,7 +25,6 @@ class InitSolutionCommand(BaseCommand):
     """
 
     OPERATION = "solution_init"
-    INIT_REQUIRED = False  # Allow running even if no existing solution is detected
 
     def __init__(
         self,
@@ -82,10 +81,8 @@ class InitSolutionCommand(BaseCommand):
     # ------------------------------------------------------------------
 
     def _initialize(self, show_header: bool = True) -> bool:
-        if not super()._initialize(show_header=show_header):
-            return False
+        self._initialize_session(show_header=show_header)
         self.logger.debug(
-            "InitSolutionCommand initializing",
             extra={
                 "solution_name": self._solution_name,
                 "work_path": str(self._work_path),

@@ -70,7 +70,6 @@ class DoctorEnvCommand(BaseCommand):
     """
 
     OPERATION = "env_doctor"
-    INIT_REQUIRED = False
 
     def __init__(
         self,
@@ -107,6 +106,10 @@ class DoctorEnvCommand(BaseCommand):
     # ------------------------------------------------------------------
     # Core logic
     # ------------------------------------------------------------------
+
+    def _initialize(self, show_header: bool = True) -> bool:
+        # Works without an initialized workspace — run super for side-effects only.
+        return self._initialize_session(show_header=show_header)
 
     def _execute(self) -> bool:
         # Validate --category filter

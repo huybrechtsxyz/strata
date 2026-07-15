@@ -74,7 +74,6 @@ class SolutionExportCommand(BaseCommand):
     """Export the current workspace as a reusable scaffold template."""
 
     OPERATION = "sln_export"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

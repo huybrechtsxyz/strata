@@ -15,7 +15,6 @@ class GuideCommand(BaseCommand):
     """Show setup progress and suggest the next action for this workspace."""
 
     OPERATION = "guide"
-    INIT_REQUIRED = False
 
     def __init__(
         self,
@@ -32,34 +31,15 @@ class GuideCommand(BaseCommand):
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
 
-    def execute(self) -> bool:
-        try:
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=True)
-                return True
+    def _initialize(self, show_header: bool = True) -> bool:
+        # The guide is designed to work even before the workspace is initialized.
+        # Run the parent init for side-effects (logging, execution-id) but always
+        # succeed so _before_execute / _execute are never gated.
+        return self._initialize_session(show_header=show_header)
 
-            if not self._before_execute():
-                self._finalize(success=True)
-                return True
-
-            self._run_execution()
-
-            if not self._after_execute():
-                self._finalize(success=True)
-                return True
-
-            self._finalize(success=True)
-            return True
-
-        except Exception as e:
-            error_msg = f"Failed to show guide: {e}"
-            self.logger.exception(error_msg)
-            if self._is_console_output():
-                click.echo(f"\n⚠️  Could not complete guide analysis: {e}")
-            self._finalize(success=True)
-            return True
+    def _execute(self) -> bool:
+        self._run_execution()
+        return True
 
     # ------------------------------------------------------------------
     # Lifecycle

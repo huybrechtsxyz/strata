@@ -43,7 +43,6 @@ class BaseDeployCommand(BaseCommand):
     """Base class for deploy command implementations."""
 
     OPERATION = "deploy"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

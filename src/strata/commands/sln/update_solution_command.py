@@ -28,7 +28,6 @@ class UpdateSolutionCommand(BaseCommand):
     """
 
     OPERATION = "sln_update"
-    INIT_REQUIRED = True  # Requires an existing solution
 
     def __init__(
         self,

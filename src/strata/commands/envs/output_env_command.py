@@ -35,7 +35,6 @@ class OutputEnvCommand(BaseDeployCommand):
     """
 
     OPERATION = "env_output"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
@@ -60,46 +59,19 @@ class OutputEnvCommand(BaseDeployCommand):
         self._provisioner = provisioner
         self._raw = raw
         self._json_output = json_output
+        # Suppress header/footer chrome in raw/json passthrough modes so only
+        # the bare value or JSON object is printed (used for shell scripting).
+        self.SHOW_CHROME = not (raw or json_output)
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {"terraform": "reading live infrastructure outputs"}
 
-    # -------------------------------------------------------------------------
-    # Entry point
-    # -------------------------------------------------------------------------
-
-    def execute(self) -> bool:
-        # In --raw / --json mode suppress all strata chrome so only the value
-        # or JSON object is printed — clean output for shell scripting.
-        show_chrome = not (self._raw or self._json_output)
-
-        try:
-            if not self._initialize(show_header=show_chrome):
-                if show_chrome and self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False, show_footer=show_chrome)
-                return False
-
-            if not self._before_execute():
-                if show_chrome and self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False, show_footer=show_chrome)
-                return False
-
-            # Prevent the standard JSON envelope in raw/json passthrough modes.
-            if not show_chrome:
-                self._output_format = "console"
-
-            ok = self._execute()
-            self._after_execute()
-            self._finalize(success=ok, show_footer=show_chrome)
-            return ok
-
-        except Exception as exc:
-            self._errors.append(f"Failed to execute env_output: {exc}")
-            self.logger.exception("env_output failed")
-            self._finalize(success=False, show_footer=show_chrome)
-            return False
+    def _before_execute(self) -> bool:
+        # In raw/json passthrough modes, prevent the strata JSON envelope from
+        # wrapping the native terraform output -- force console format instead.
+        if not self.SHOW_CHROME:
+            self._output_format = "console"
+        return super()._before_execute()
 
     # -------------------------------------------------------------------------
     # Core logic

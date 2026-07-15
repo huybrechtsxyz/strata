@@ -14,7 +14,6 @@ class ActivateProfileCommand(BaseCommand):
     """
 
     OPERATION = "solution_profile_activate"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

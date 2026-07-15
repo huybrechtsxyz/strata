@@ -17,7 +17,6 @@ class AddProfilePathCommand(BaseCommand):
     """
 
     OPERATION = "solution_profile_path_add"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

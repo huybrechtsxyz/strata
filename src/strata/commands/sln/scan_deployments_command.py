@@ -43,7 +43,6 @@ class ScanDeploymentsCommand(BaseCommand):
     """
 
     OPERATION = "solution_deployment_scan"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

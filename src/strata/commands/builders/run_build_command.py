@@ -56,27 +56,9 @@ class RunBuildCommand(BaseBuildCommand):
     def get_required_integrations(self):
         return {}
 
-    def execute(self) -> bool:
+    def _execute(self) -> bool:
         try:
             self._build_started_at = datetime.now(timezone.utc).isoformat()
-
-            if not self._initialize():
-                if self._is_console_output():
-                    click.echo("\n❌  Initialization failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._before_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Pre-execution validation failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._load_related_services():
-                if self._is_console_output():
-                    click.echo("\n❌  Failed to load deployment related services")
-                self._finalize(success=False)
-                return False
 
             # Strict lock mode check (--require-lock or ring.require_lock: true)
             if self._deployment_service is not None:
@@ -88,7 +70,6 @@ class RunBuildCommand(BaseBuildCommand):
                     self._errors.append(lock_error)
                     if self._is_console_output():
                         click.echo(f"\n❌  {lock_error}")
-                    self._finalize(success=False)
                     return False
 
             if self._dry_run and self._is_console_output():
@@ -100,7 +81,6 @@ class RunBuildCommand(BaseBuildCommand):
             ):
                 if self._is_console_output():
                     click.echo("\n❌  Pre-build lifecycle hook failed")
-                self._finalize(success=False)
                 return False
             if not self._run_lifecycle_phase(
                 "build_validate",
@@ -108,42 +88,35 @@ class RunBuildCommand(BaseBuildCommand):
             ):
                 if self._is_console_output():
                     click.echo("\n\u274c  Build validate lifecycle hook failed")
-                self._finalize(success=False)
                 return False
             if not self._execute_platform_build():
                 if self._is_console_output():
                     click.echo("\n❌  Platform build failed")
-                self._finalize(success=False)
                 return False
 
             if not self._execute_terraform_build():
                 if self._is_console_output():
                     click.echo("\n❌  Terraform build failed")
-                self._finalize(success=False)
                 return False
 
             if not self._execute_ansible_build():
                 if self._is_console_output():
                     click.echo("\n❌  Ansible build failed")
-                self._finalize(success=False)
                 return False
 
             if not self._execute_compose_build():
                 if self._is_console_output():
                     click.echo("\n❌  Compose build failed")
-                self._finalize(success=False)
                 return False
 
             if not self._execute_helm_build():
                 if self._is_console_output():
                     click.echo("\n❌  Helm build failed")
-                self._finalize(success=False)
                 return False
 
             if not self._execute_sbom_build():
                 if self._is_console_output():
                     click.echo("\n❌  SBOM build failed")
-                self._finalize(success=False)
                 return False
 
             if self._audit and not self._dry_run:
@@ -154,7 +127,6 @@ class RunBuildCommand(BaseBuildCommand):
                 )
                 if sbom_path and sbom_path.exists():
                     if not self._execute_audit(sbom_path):
-                        self._finalize(success=False)
                         return False
 
             if not self._run_lifecycle_phase(
@@ -163,12 +135,10 @@ class RunBuildCommand(BaseBuildCommand):
             ):
                 if self._is_console_output():
                     click.echo("\n\u274c  Build generate lifecycle hook failed")
-                self._finalize(success=False)
                 return False
             if not self._evaluate_build_policies():
                 if self._is_console_output():
                     click.echo("\n\u274c  Build policy check failed")
-                self._finalize(success=False)
                 return False
             if not self._run_lifecycle_phase(
                 "build_run_after",
@@ -176,13 +146,6 @@ class RunBuildCommand(BaseBuildCommand):
             ):
                 if self._is_console_output():
                     click.echo("\n❌  Post-build lifecycle hook failed")
-                self._finalize(success=False)
-                return False
-
-            if not self._after_execute():
-                if self._is_console_output():
-                    click.echo("\n❌  Post-execution hook failed")
-                self._finalize(success=False)
                 return False
 
             self._output_data.update(
@@ -198,13 +161,11 @@ class RunBuildCommand(BaseBuildCommand):
             if manifest_path:
                 self._output_data["manifest_path"] = str(manifest_path)
 
-            self._finalize(success=True)
             return True
 
         except Exception as exc:
             self._errors.append(f"Failed to execute build_run: {exc}")
             self.logger.exception("build_run failed")
-            self._finalize(success=False)
             return False
 
     def _load_related_services(self) -> bool:

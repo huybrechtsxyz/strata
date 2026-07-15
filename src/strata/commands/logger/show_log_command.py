@@ -22,7 +22,6 @@ class ShowLogCommand(BaseCommand):
     """
 
     OPERATION = "log_show"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

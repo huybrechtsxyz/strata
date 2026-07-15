@@ -26,7 +26,6 @@ class SbomIgnoreValidateCommand(BaseCommand):
     """
 
     OPERATION = "validate sbom-ignore"
-    INIT_REQUIRED = False
 
     def __init__(
         self,
@@ -44,6 +43,10 @@ class SbomIgnoreValidateCommand(BaseCommand):
 
     def has_validation_errors(self) -> bool:
         return bool(self.get_errors())
+
+    def _initialize(self, show_header: bool = True) -> bool:
+        # Works without an initialized workspace — run super for side-effects only.
+        return self._initialize_session(show_header=show_header)
 
     def _execute(self) -> bool:
         from strata.controllers.solution_controller import SolutionController

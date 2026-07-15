@@ -15,7 +15,6 @@ class ListProfilePathCommand(BaseCommand):
     """
 
     OPERATION = "solution_profile_path_list"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

@@ -218,12 +218,11 @@ def _resolve_template_path(template: str, work_path: Optional[Path]) -> Optional
 class NewCommand(BaseCommand):
     """Create a new platform configuration file from a template.
 
-    ``INIT_REQUIRED = False`` — the command works without a workspace; solution
+    The command works without a workspace; solution
     context loading is attempted but failures are silently ignored.
     """
 
     OPERATION = "new"
-    INIT_REQUIRED = False
 
     def __init__(
         self,
@@ -255,8 +254,7 @@ class NewCommand(BaseCommand):
     # ------------------------------------------------------------------
 
     def _initialize(self, show_header: bool = True) -> bool:
-        if not super()._initialize(show_header=show_header):
-            return False
+        self._initialize_session(show_header=show_header)
         self.logger.debug(
             "NewCommand initializing",
             template=self._template,

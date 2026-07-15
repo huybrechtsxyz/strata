@@ -15,7 +15,6 @@ class ListRepoSolutionCommand(BaseCommand):
     """
 
     OPERATION = "solution_repo_list"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

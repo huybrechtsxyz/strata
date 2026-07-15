@@ -23,7 +23,6 @@ class BaseCommand:
     """Base command class for Strata CLI commands."""
 
     OPERATION = "base_command"
-    INIT_REQUIRED = True  # By default, commands require an initialized solution (solution.json)
     SHOW_CHROME: ClassVar[bool] = True  # Set False on commands that suppress header/footer (e.g. tools commands)
 
     def __init__(
@@ -262,7 +261,7 @@ class BaseCommand:
             if solution_path.exists():
                 self._solution_controller.load()
                 solution_id = self._solution_controller.get_solution_id()
-            elif self.INIT_REQUIRED:
+            else:
                 error_msg = f"Solution configuration not found at {solution_path}. This command requires an initialized solution. Please run 'strata sln init' first."
                 self.logger.error(error_msg)
                 self._errors.append(error_msg)
@@ -283,6 +282,76 @@ class BaseCommand:
             self._load_env_sources()
 
             # Load and merge configfile_paths from active profile
+            self._load_config_sources()
+
+            if show_header and self._is_console_output():
+                self.show_console_header()
+
+            self.logger.debug(
+                "Command initialized successfully",
+                extra={
+                    "command_class": self.__class__.__name__,
+                    "solution_id": solution_id,
+                    "execution_id": self._execution_id,
+                },
+            )
+
+            return True
+        except Exception as e:
+            self.logger.error(
+                "Failed to initialize command",
+                extra={
+                    "error": str(e),
+                    "exc_info": True,
+                    "execution_id": self._execution_id,
+                    "command_class": self.__class__.__name__,
+                },
+            )
+            self._errors.append(f"Failed to initialize command: {e}")
+            return False
+
+    def _initialize_session(self, show_header: bool = True) -> bool:
+        """Workspace-optional variant of :meth:`_initialize`.
+
+        Performs session setup (timing, logging, context, env/config loading)
+        and loads the solution when ``solution.json`` exists, but does *not*
+        require it to be present.  Returns ``False`` only when the work path
+        itself is missing or an unexpected exception is raised.
+
+        Commands that function without an initialized workspace must override
+        ``_initialize()`` and delegate here instead of calling
+        ``super()._initialize()``, so that missing-solution-json errors are
+        neither logged to stdout nor accumulated in ``self._errors``.
+        """
+        try:
+            self._start_time = datetime.now()
+            self._configure_session_logging()
+
+            self.logger.debug(
+                "Initializing command",
+                extra={"command_class": self.__class__.__name__},
+            )
+
+            if not self._work_path.exists():
+                error_msg = f"Work path does not exist: {self._work_path}"
+                self.logger.error(error_msg)
+                self._errors.append(error_msg)
+                return False
+
+            solution_id: str = "unknown"
+            solution_path = SolutionController.get_solution_json_path(self._work_path)
+            if solution_path.exists():
+                self._solution_controller.load()
+                solution_id = self._solution_controller.get_solution_id()
+
+            set_context({"solution_id": solution_id, "execution_id": self._execution_id})
+
+            if not is_audit_configured():
+                audit_path = self._work_path / SOLUTION_DIR / "audit.log"
+                configure_audit_log(log_path=str(audit_path))
+
+            self._start_session_operation()
+            self._load_env_sources()
             self._load_config_sources()
 
             if show_header and self._is_console_output():

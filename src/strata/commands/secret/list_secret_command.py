@@ -19,7 +19,6 @@ class ListSecretCommand(BaseCommand):
     """List secrets declared in the deployment environment YAML."""
 
     OPERATION = "secret_list"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

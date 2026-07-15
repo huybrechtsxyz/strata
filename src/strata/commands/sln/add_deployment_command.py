@@ -21,7 +21,6 @@ class AddDeploymentCommand(BaseCommand):
     """
 
     OPERATION = "solution_deployment_add"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

@@ -19,7 +19,6 @@ class SetContextCommand(BaseCommand):
     """
 
     OPERATION = "context_set"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

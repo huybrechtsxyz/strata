@@ -20,7 +20,6 @@ class StatusSecretCommand(BaseCommand):
     """Check rotation health for secrets with a rotate policy."""
 
     OPERATION = "secret_status"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

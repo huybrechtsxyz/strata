@@ -32,7 +32,6 @@ class CheckPolicyCommand(BaseCommand):
     """
 
     OPERATION = "policy_check"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

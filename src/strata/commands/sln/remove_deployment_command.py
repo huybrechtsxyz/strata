@@ -15,7 +15,6 @@ class RemoveDeploymentCommand(BaseCommand):
     """
 
     OPERATION = "solution_deployment_remove"
-    INIT_REQUIRED = True
 
     def __init__(
         self,

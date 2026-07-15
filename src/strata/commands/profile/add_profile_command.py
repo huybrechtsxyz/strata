@@ -17,7 +17,6 @@ class AddProfileCommand(BaseCommand):
     """
 
     OPERATION = "solution_profile_add"
-    INIT_REQUIRED = True
 
     def __init__(
         self,
