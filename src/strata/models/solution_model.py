@@ -63,6 +63,22 @@ class SolutionSpecRepositoryModel(BaseModel):
     created: Optional[str] = Field(None, description="Creation timestamp of the repository")
 
 
+class SolutionTemplateBundleEntryModel(BaseModel):
+    """A single entry in a solution template bundle."""
+
+    name: str = Field(..., description="Template source name to look up via the standard resolution chain")
+    path: str = Field(..., description="Jinja2 destination path relative to the work path")
+
+
+class SolutionTemplateModel(BaseModel):
+    """A named template defined in solution.json that expands to one or more destination paths."""
+
+    name: str = Field(..., description="Template name matched by --template")
+    bundle: List["SolutionTemplateBundleEntryModel"] = Field(
+        ..., description="One or more bundle entries describing source templates and their destination paths"
+    )
+
+
 class SolutionSpecDeploymentModel(BaseModel):
     """
     Model for a registered deployment file entry in the solution specification.
@@ -95,6 +111,10 @@ class SolutionSpecModel(BaseModel):
     context: Optional[Dict[str, str]] = Field(
         None,
         description="Team-shared template substitution variables (committed to solution.json).",
+    )
+    templates: Optional[List[SolutionTemplateModel]] = Field(
+        None,
+        description="Named solution templates that scaffold one or more paths from a bundle definition.",
     )
 
 

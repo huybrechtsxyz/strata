@@ -1,6 +1,7 @@
 """Command to create a new platform configuration file from a template."""
 
 import os
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -9,8 +10,49 @@ import yaml
 
 from strata.commands.base_command import BaseCommand
 from strata.logger import get_logger
+from strata.models.solution_model import SolutionTemplateModel
 from strata.utils.system import get_pkg_templates_path
 from strata.utils.templater import TemplateProcessor
+
+_JINJA_VAR_RE = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+
+
+def _extract_jinja_vars(paths: List[str]) -> set:
+    """Return all undeclared variable names found in the given Jinja2 path strings."""
+    found: set = set()
+    for path in paths:
+        found.update(_JINJA_VAR_RE.findall(path))
+    return found
+
+
+def _prompt_missing_vars(required: set, context: Dict[str, str]) -> Optional[Dict[str, str]]:
+    """Prompt for any variables in *required* that are absent from *context*.
+
+    Returns an updated copy of *context* with all variables filled in,
+    or ``None`` if the user cancelled (Ctrl+C / Ctrl+D).
+    """
+    result = dict(context)
+    missing = sorted(required - result.keys())
+    if not missing:
+        return result
+    click.echo("")
+    try:
+        for var in missing:
+            result[var] = click.prompt(f"  {var}")
+    except (click.Abort, KeyboardInterrupt):
+        click.echo("\n⚠️  Cancelled.")
+        return None
+    return result
+
+
+def _resolve_solution_template(name: str, solution_spec) -> Optional["SolutionTemplateModel"]:
+    """Return the first template entry in *solution_spec* whose name matches *name*."""
+    if solution_spec is None or not solution_spec.templates:
+        return None
+    for tpl in solution_spec.templates:
+        if tpl.name == name:
+            return tpl
+    return None
 
 
 def _collect_available_templates(work_path: Optional[Path]) -> list[str]:
@@ -261,8 +303,40 @@ class NewCommand(BaseCommand):
                     click.echo("No templates found.")
             return True
 
-        # 1. Resolve template (file or bundle directory)
         assert self._template is not None and self._name is not None  # guarded in cli_new.py
+
+        # 1. Build substitution context (shared by all tiers)
+        context: Dict[str, str] = {"name": self._name}
+
+        # Best-effort: load solution.json for team context and solution templates
+        solution_spec = None
+        try:
+            ok, _errors = self._solution_controller.load()
+            if ok and self._solution_controller._solution is not None:
+                solution_spec = self._solution_controller._solution.spec
+                context.update(solution_spec.context or {})
+        except Exception:
+            pass  # No workspace — skip silently
+
+        # Apply --set overrides (CLI wins over solution context)
+        for kv in self._set_values:
+            if "=" in kv:
+                k, v = kv.split("=", 1)
+                context[k.strip()] = v.strip()
+            else:
+                self.logger.warning("Ignoring malformed --set value (expected KEY=VALUE)", value=kv)
+
+        # 2. Tier-0: solution.json spec.templates[]
+        solution_tpl = _resolve_solution_template(self._template, solution_spec)
+        if solution_tpl is not None:
+            all_paths = [entry.path for entry in solution_tpl.bundle]
+            required_vars = _extract_jinja_vars(all_paths)
+            context = _prompt_missing_vars(required_vars, context)
+            if context is None:
+                return False
+            return self._run_solution_bundle_execution(solution_tpl, context)
+
+        # 3. Tiers 1-4: file-system resolution (workspace bundle/file → package bundle/file)
         template_path = _resolve_template_path(self._template, self._work_path)
         if template_path is None:
             available = _collect_available_templates(self._work_path)
@@ -271,27 +345,6 @@ class NewCommand(BaseCommand):
             )
             return False
 
-        # 2. Build substitution context (shared by both modes)
-        context: Dict[str, str] = {"name": self._name}
-
-        # Best-effort: load team context from solution.json if workspace is available
-        try:
-            ok, _errors = self._solution_controller.load()
-            if ok and self._solution_controller._solution is not None:
-                team_context = self._solution_controller._solution.spec.context or {}
-                context.update(team_context)
-        except Exception:
-            pass  # No workspace — skip silently
-
-        # Apply --set overrides (CLI wins)
-        for kv in self._set_values:
-            if "=" in kv:
-                k, v = kv.split("=", 1)
-                context[k.strip()] = v.strip()
-            else:
-                self.logger.warning("Ignoring malformed --set value (expected KEY=VALUE)", value=kv)
-
-        # 3. Dispatch
         if template_path.is_dir():
             return self._run_bundle_execution(template_path, context)
         return self._run_file_execution(template_path, context)
@@ -404,6 +457,105 @@ class NewCommand(BaseCommand):
             "name": self._name,
             "files": created,
         }
+        return True
+
+    def _run_solution_bundle_execution(self, template: "SolutionTemplateModel", context: Dict[str, str]) -> bool:
+        """Execute a solution-level template bundle.
+
+        For each entry in *template.bundle*:
+
+        1. Render the ``path`` field with *context* to get the destination directory.
+        2. Resolve the template source (``entry.name``) via the standard file-system
+           resolution chain (tiers 1-4).
+        3. Copy/render template content into the destination directory.
+        """
+        all_created: list[str] = []
+        output_root = Path(self._path) if self._path else Path(os.getcwd())
+
+        for entry in template.bundle:
+            # Render destination path
+            dest_dir = output_root / TemplateProcessor.render(entry.path, context)
+
+            # Resolve source template
+            source_path = _resolve_template_path(entry.name, self._work_path)
+            if source_path is None:
+                self._errors.append(
+                    f"Bundle entry '{entry.name}' not found. "
+                    f"Add a template named '{entry.name}' to .strata/templates/ or the package."
+                )
+                return False
+
+            if source_path.is_dir():
+                # Bundle directory → walk and copy all files into dest_dir
+                bundle_files = sorted(
+                    f
+                    for f in source_path.rglob("*")
+                    if f.is_file() and not (f.name == "template.yaml" and f.parent == source_path)
+                )
+                if not bundle_files:
+                    self._errors.append(f"Bundle source '{entry.name}' contains no files.")
+                    return False
+
+                for src_file in bundle_files:
+                    rel = src_file.relative_to(source_path)
+                    rendered_parts = [TemplateProcessor.render(part, context) for part in rel.parts]
+                    output_path = dest_dir.joinpath(*rendered_parts)
+
+                    if output_path.exists() and not self._overwrite:
+                        self._errors.append(f"File already exists: {output_path}. Use --overwrite to replace it.")
+                        return False
+
+                    try:
+                        content = src_file.read_text(encoding="utf-8")
+                    except Exception as e:
+                        self._errors.append(f"Failed to read bundle file '{src_file}': {e}")
+                        return False
+
+                    rendered = TemplateProcessor.render(content, context)
+                    try:
+                        output_path.parent.mkdir(parents=True, exist_ok=True)
+                        output_path.write_text(rendered, encoding="utf-8")
+                    except Exception as e:
+                        self._errors.append(f"Failed to write '{output_path}': {e}")
+                        return False
+
+                    all_created.append(str(output_path))
+
+            else:
+                # Single YAML file → write into dest_dir using the file name
+                output_path = dest_dir / source_path.name
+
+                if output_path.exists() and not self._overwrite:
+                    self._errors.append(f"File already exists: {output_path}. Use --overwrite to replace it.")
+                    return False
+
+                try:
+                    content = source_path.read_text(encoding="utf-8")
+                except Exception as e:
+                    self._errors.append(f"Failed to read template '{source_path}': {e}")
+                    return False
+
+                rendered = TemplateProcessor.render(content, context)
+                try:
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    output_path.write_text(rendered, encoding="utf-8")
+                except Exception as e:
+                    self._errors.append(f"Failed to write '{output_path}': {e}")
+                    return False
+
+                all_created.append(str(output_path))
+
+        self._messages.extend(f"Created: {p}" for p in all_created)
+        self._output_data = {
+            "template": template.name,
+            "name": self._name,
+            "files": all_created,
+        }
+        self.logger.info(
+            "Solution bundle executed",
+            template=template.name,
+            files=all_created,
+        )
         return True
 
     def _after_execute(self) -> bool:
