@@ -232,6 +232,7 @@ class NewCommand(BaseCommand):
         path: Optional[str] = None,
         overwrite: bool = False,
         set_values: Tuple[str, ...] = (),
+        run_validate: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -245,6 +246,7 @@ class NewCommand(BaseCommand):
         self._path = path
         self._overwrite = overwrite
         self._set_values = set_values  # tuple of "KEY=VALUE" strings
+        self._run_validate = run_validate
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
@@ -332,20 +334,25 @@ class NewCommand(BaseCommand):
             context = _prompt_missing_vars(required_vars, context)
             if context is None:
                 return False
-            return self._run_solution_bundle_execution(solution_tpl, context)
+            result = self._run_solution_bundle_execution(solution_tpl, context)
+        else:
+            # 3. Tiers 1-4: file-system resolution (workspace bundle/file → package bundle/file)
+            template_path = _resolve_template_path(self._template, self._work_path)
+            if template_path is None:
+                available = _collect_available_templates(self._work_path)
+                self._errors.append(
+                    f"Template '{self._template}' not found. Available: {', '.join(available) if available else '(none)'}"
+                )
+                return False
 
-        # 3. Tiers 1-4: file-system resolution (workspace bundle/file → package bundle/file)
-        template_path = _resolve_template_path(self._template, self._work_path)
-        if template_path is None:
-            available = _collect_available_templates(self._work_path)
-            self._errors.append(
-                f"Template '{self._template}' not found. Available: {', '.join(available) if available else '(none)'}"
-            )
-            return False
+            if template_path.is_dir():
+                result = self._run_bundle_execution(template_path, context)
+            else:
+                result = self._run_file_execution(template_path, context)
 
-        if template_path.is_dir():
-            return self._run_bundle_execution(template_path, context)
-        return self._run_file_execution(template_path, context)
+        if result and self._run_validate:
+            result = self._validate_generated()
+        return result
 
     def _run_file_execution(self, template_path: Path, context: Dict[str, str]) -> bool:
         """Render a single-file template."""
@@ -555,6 +562,46 @@ class NewCommand(BaseCommand):
             files=all_created,
         )
         return True
+
+    def _validate_generated(self) -> bool:
+        """Validate every file produced by the most recent generation step.
+
+        Reads generated paths from ``self._output_data`` (key ``path`` for
+        single-file execution, ``files`` for bundle execution).  Validation
+        errors are appended to ``self._errors`` but the generated files are
+        *not* rolled back — the operator may edit and re-validate manually.
+        """
+        from strata.validators.platform_validator import PlatformValidator
+
+        data = self._output_data or {}
+        paths: list[str] = [data["path"]] if "path" in data else list(data.get("files", []))
+
+        if not paths:
+            return True
+
+        all_ok = True
+        for path_str in paths:
+            file_path = Path(path_str)
+            try:
+                validator = PlatformValidator(
+                    file_path=file_path,
+                    configuration_service=None,
+                    repo_map=None,
+                    verify_digests=False,
+                )
+                for phase_fn in (validator.before_validate, validator.validate, validator.after_validate):
+                    if not phase_fn(self._work_path):
+                        break
+                if validator.has_errors():
+                    for err in validator.get_errors():
+                        self._errors.append(f"[validate] {file_path.name}: {err}")
+                    all_ok = False
+                else:
+                    self._messages.append(f"Validated: {file_path.name} ✓")
+            except Exception as e:
+                self._errors.append(f"[validate] {file_path.name}: unexpected error — {e}")
+                all_ok = False
+        return all_ok
 
     def _after_execute(self) -> bool:
         if not self._list_templates and self._is_console_output():

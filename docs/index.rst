@@ -163,6 +163,7 @@ strata
    decisions/0040-tenant-onboarding-scaffolding
    decisions/0041-gitops-controller-integration
    decisions/0042-deep-validation-layer-consistency
+   decisions/0043-tenant-offboarding
 
 .. toctree::
    :maxdepth: 2
