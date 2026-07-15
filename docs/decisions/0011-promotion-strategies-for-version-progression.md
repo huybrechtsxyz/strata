@@ -1,6 +1,6 @@
 # Promotion strategies for version progression across environments
 
-- Status: Implementated
+- Status: completed
 - Date: 2026-06-23
 - Revised: 2026-07-14
 

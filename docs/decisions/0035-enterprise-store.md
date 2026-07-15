@@ -1,6 +1,6 @@
 # Enterprise Store — Private Organization-Level Content Registry
 
-- Status: proposed
+- Status: partial
 - Date: 2026-07-11
 
 ## Context and Problem Statement
