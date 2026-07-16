@@ -699,6 +699,7 @@ class TerraformDeployer(BaseDeployer):
         location and where the builder writes the auto.tfvars.json files.
         """
         deployment_build_path = deployment_service.get_build_path(build_path)
+        assert iac_model.source is not None  # model validator guarantees source for non-sync provisioners
         target = (
             Path(iac_model.source.target_path) if iac_model.source.target_path else Path("terraform") / iac_model.name
         )

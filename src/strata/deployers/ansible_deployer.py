@@ -136,6 +136,7 @@ class AnsibleDeployer(BaseDeployer):
         if self.solution_controller is not None:
             source_path = self.solution_controller.get_provisioner_path(self.deployment_service, self.build_path, iac)
         else:
+            assert iac.source is not None  # model validator guarantees source for non-sync provisioners
             target = Path(iac.source.target_path) if iac.source.target_path else Path("ansible") / iac.name
             source_path = self.build_path / target
         if not source_path.exists():

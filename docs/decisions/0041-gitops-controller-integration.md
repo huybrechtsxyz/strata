@@ -367,7 +367,7 @@ The raw artifact is always available — power users can iterate over `modules`,
 parameters, Flux HelmRelease values) needs flat dicts. Without convenience fields,
 every template would start with boilerplate Jinja2 loops to flatten the model:
 
-```jinja2
+```jinja
 {# Without convenience fields — verbose and error-prone #}
 {% set chart_versions = {} %}
 {% for mod in modules %}
@@ -377,7 +377,7 @@ every template would start with boilerplate Jinja2 loops to flatten the model:
 
 With convenience fields, the same template is clean:
 
-```jinja2
+```jinja
 {# With convenience fields — direct access #}
 "chart_version": "{{ chart_versions['integrator-core'] }}"
 ```
@@ -455,7 +455,7 @@ separately by the provisioner.
 
 ### ArgoCD example template
 
-```jinja2
+```jinja
 {# .strata/templates/sync/argocd-appset-entry.json.j2 #}
 {# Context: platform artifact scoped to stage namespace #}
 {
@@ -476,7 +476,7 @@ separately by the provisioner.
 
 ### Flux Kustomization example template
 
-```jinja2
+```jinja
 {# .strata/templates/sync/flux-kustomization.yaml.j2 #}
 {# Uses scoped namespace from stage — no iteration needed #}
 apiVersion: kustomize.toolkit.fluxcd.io/v1
@@ -505,7 +505,7 @@ spec:
 
 ### Flux HelmRelease example template
 
-```jinja2
+```jinja
 {# .strata/templates/sync/flux-helmrelease.yaml.j2 #}
 {# Iterates modules scoped to the stage's namespace #}
 {% for chart, version in chart_versions.items() %}
