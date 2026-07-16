@@ -104,70 +104,302 @@ For each deployment file with a `tenant` field:
 
 #### Rule set 4: File path convention validation (`path_convention` policy type)
 
-Checks that the file's own path on disk is consistent with declared zones and tenants.
-Triggered during `validate` phase when a policy of type `path_convention` is present in
-`configuration.spec.policies`.
+Validates that files on disk follow the declared directory naming conventions. A single
+repository can contain **multiple independent path hierarchies** — each with its own
+convention. For example a configuration repository may have:
 
-**Configuration format:**
+```
+customers/{tenant}/tenant.yaml          # tenant registry (flat)
+landscape/{name}/landscape.yaml         # landscape definitions (flat)
+zones/{zone}/customers/{tenant}/{env}/  # zone deployment tree (nested)
+```
+
+These are three different conventions with different depths, segments, and validation
+rules. The design must support all of them without conflict.
+
+---
+
+**Why not `spec.layering`?**
+
+`spec.layering` already exists on `ConfigurationModel` and serves a different purpose:
+it declares deployment layer **metadata** (which layers are required, default values,
+value validation patterns). Bolting path-convention fields onto it conflates two concerns:
+_"what layers does this platform have"_ vs _"what does the folder tree look like on disk"_.
+A platform can have zone/tenant/ring layers without implying any particular folder
+structure. Path conventions are a **separate declaration**.
+
+---
+
+**New model: `spec.paths`**
+
+A list of scoped convention rules, declared once in the configuration file. Each
+convention targets a subtree of the repository via a `scope` glob and defines the
+expected path structure within that scope.
+
+```yaml
+# configuration.yaml
+spec:
+  paths:
+    - name: tenant-registry
+      scope: "customers/**"
+      pattern: "customers/{tenant}"
+      validate:
+        tenant: "customers/{tenant}/tenant.yaml"   # file must exist
+
+    - name: zone-deployment-tree
+      scope: "zones/**"
+      pattern: "zones/{zone}/customers/{tenant}/{env}"
+      validate:
+        zone: spec.zones[*].name                   # must be a declared zone
+        tenant: "customers/{tenant}/tenant.yaml"   # tenant registered at root
+        env: spec.environments[*].name             # must be a declared environment
+
+    - name: landscape-registry
+      scope: "landscape/**"
+      pattern: "landscape/{landscape}"
+      validate:
+        landscape: "landscape/{landscape}/landscape.yaml"
+```
+
+**Fields:**
+
+| Field      | Required | Description                                                        |
+| ---------- | -------- | ------------------------------------------------------------------ |
+| `name`     | yes      | Unique name for diagnostics and policy reference                   |
+| `scope`    | yes      | Glob pattern — only files matching this scope are checked          |
+| `pattern`  | yes      | Path template with `{segment}` captures (one segment = one folder) |
+| `validate` | no       | Per-segment validation rules (see rule types below)                |
+
+**`scope`** — determines which files this convention applies to. A file is checked
+against a convention only if its relative path (from `work_path`) matches the glob.
+Multiple conventions may match the same file if their scopes overlap — all matching
+conventions are evaluated independently.
+
+**`pattern`** — matched against the relative path from `work_path`. Anchored at the
+start. `{segment}` captures exactly one path part (no `/`). Remaining path parts after
+the pattern (e.g. ring directory, filename) are ignored — they don't need to match.
+If the path doesn't match the pattern → skip (not a violation; file is in scope but
+at a shallower depth).
+
+**`validate`** — per-segment rules. Two rule types:
+
+| Rule syntax                      | Meaning                                                       |
+| -------------------------------- | ------------------------------------------------------------- |
+| `spec.zones[*].name`             | Value must appear in a field of the loaded ConfigurationModel |
+| `customers/{tenant}/tenant.yaml` | File at this path (anchored at `work_path` root) must exist   |
+
+Placeholder expansion: `{segment}` references in validate rules are expanded from the
+captured values dict. E.g., if `tenant = "contoso"` was captured, then
+`customers/{tenant}/tenant.yaml` → `customers/contoso/tenant.yaml`.
+
+---
+
+**Policy declaration — triggers enforcement:**
 
 ```yaml
 policies:
-  - name: fleet-path-convention
+  - name: enforce-path-conventions
     type: path_convention
     phase: validate
     enforcement: deny
-    description: "Deployment files under zones/ must use declared zone and tenant names"
-    configuration:
-      pattern: "zones/{zone}/customers/{tenant}"
-      validate:
-        zone: spec.zones[*].name          # resolved against ConfigurationModel
-        tenant: customers/{tenant}/tenant.yaml  # file existence check relative to work_path
+    description: "All files must follow declared path conventions"
+    # reads spec.path_conventions automatically — no configuration block needed
 ```
 
-**`pattern`** — a path fragment (not anchored to work_path root) that the file's path must
-contain. Named `{segment}` placeholders capture the actual values from the path.
+When a `path_convention` policy is declared, the engine reads `spec.paths`
+from the loaded `ConfigurationModel`. If `spec.paths` is absent or empty,
+the policy skips with a warning.
 
-**`validate`** — per-segment validation rule. Two rule types:
+The `enforcement` level (`deny` / `warn`) applies to all conventions uniformly. If
+per-convention enforcement granularity is needed, declare multiple policies with a
+`conventions` filter:
 
-| Rule syntax | Meaning |
-|---|---|
-| `spec.zones[*].name` | Value must appear in a field of the loaded ConfigurationModel |
-| `customers/{segment}/tenant.yaml` | File at this path (relative to work_path) must exist |
+```yaml
+policies:
+  - name: strict-zone-check
+    type: path_convention
+    phase: validate
+    enforcement: deny
+    configuration:
+      conventions: [zone-deployment-tree]   # only check this convention
+
+  - name: advisory-landscape-check
+    type: path_convention
+    phase: validate
+    enforcement: warn
+    configuration:
+      conventions: [landscape-registry]
+```
+
+---
 
 **Evaluation steps:**
 
-1. Compute the file path relative to `work_path`.
-2. Attempt to match the `pattern` against the relative path. If no match → skip (file is
-   not under the convention tree; not a violation).
-3. Extract the named segment values from the match.
-4. For each segment with a `validate` rule:
-   - `spec.*` rules: resolve the dot-path against the `ConfigurationModel` (requires active
-     profile and configuration service in context). If no configuration service → warn and skip.
-   - File existence rules: expand `{segment}` placeholders in the rule path and check
-     `work_path / expanded_path` exists.
-5. Emit a violation for each segment whose value is not found in the validation set.
+1. Load `spec.paths` from the `ConfigurationModel`.
+2. For the file being validated, compute its path relative to `work_path`.
+3. For each convention whose `scope` glob matches the relative path:
+   a. Attempt to match `pattern` against the relative path. If no match → skip (file
+      is at a depth the pattern doesn't reach; not a violation).
+   b. Extract captured segment values into a dict (e.g., `{"zone": "europe", "tenant": "contoso"}`).
+   c. For each segment with a `validate` rule:
+      - `spec.*` rules: resolve the dot-path against the `ConfigurationModel`. If no
+        configuration service → warn and skip.
+      - File existence rules: expand `{segment}` placeholders from the captured dict,
+        check `work_path / expanded_path` exists.
+   d. Emit a violation for each segment whose value fails validation.
+
+---
 
 **Example output:**
 
 ```
 DENY  zones/atlantis/customers/contoso/dev/deploy.yaml
-      path segment 'zone' = 'atlantis'
-      not in configuration.spec.zones[*].name: [europe, nordics, us-east, us-west]
+      convention 'zone-deployment-tree' — segment 'zone' = 'atlantis'
+      not in spec.zones[*].name: [europe, nordics, us-east, us-west]
 
 DENY  zones/europe/customers/unknown-co/prd/deploy.yaml
-      path segment 'tenant' = 'unknown-co'
+      convention 'zone-deployment-tree' — segment 'tenant' = 'unknown-co'
       customers/unknown-co/tenant.yaml does not exist
+
+WARN  landscape/ghost/landscape.yaml
+      convention 'landscape-registry' — segment 'landscape' = 'ghost'
+      landscape/ghost/landscape.yaml does not exist (self-reference — file is being created?)
 ```
+
+---
+
+**How the matcher handles variant structures:**
+
+```
+# Convention: zone-deployment-tree
+#   scope: "zones/**"
+#   pattern: "zones/{zone}/customers/{tenant}/{env}"
+
+# Structure A — zones/{zone}/customers/{tenant}/{env}/deploy.yaml
+path: zones/europe/customers/contoso/prd/deploy.yaml
+  match pattern at: zones/europe/customers/contoso/prd → ✓
+  captures: zone=europe, tenant=contoso, env=prd
+  validate zone: "europe" ∈ spec.zones[*].name → ✓
+  validate tenant: customers/contoso/tenant.yaml exists → ✓
+  validate env: "prd" ∈ spec.environments[*].name → ✓
+
+# Structure B — zones/{zone}/{tenant}/{env}/deploy.yaml (no customers/ folder)
+# Requires a DIFFERENT convention entry:
+#   pattern: "zones/{zone}/{tenant}/{env}"
+path: zones/europe/contoso/prd/deploy.yaml
+  match "zones/{zone}/customers/{tenant}/{env}" → NO MATCH (no "customers" literal)
+  → this file needs its own convention with the flat pattern
+```
+
+This is the key insight: **variant folder structures require separate convention entries**,
+not a single convention with optional markers. Each entry is explicit about what the
+path looks like. The `scope` globs can overlap — the engine evaluates all matching
+conventions independently.
+
+```yaml
+# Supporting both structures in the same repo:
+paths:
+  - name: zone-tree-with-customers-folder
+    scope: "zones/**/customers/**"
+    pattern: "zones/{zone}/customers/{tenant}/{env}"
+    validate:
+      zone: spec.zones[*].name
+      tenant: "customers/{tenant}/tenant.yaml"
+      env: spec.environments[*].name
+
+  - name: zone-tree-flat
+    scope: "zones/**"
+    pattern: "zones/{zone}/{tenant}/{env}"
+    validate:
+      zone: spec.zones[*].name
+      tenant: "customers/{tenant}/tenant.yaml"
+      env: spec.environments[*].name
+```
+
+Scope ordering ensures the more specific `zones/**/customers/**` matches first. If a
+file matches both, both are evaluated — but the flat pattern won't match a path that
+contains `customers/` as a literal segment (because `{tenant}` would capture
+"customers" and fail the tenant file existence check). In practice, operators declare
+one or the other — not both.
+
+---
+
+**Deploy-repo usage:**
+
+Deploy repositories have no `ConfigurationModel` with `spec.paths`. For these,
+the explicit `configuration` block on the policy carries the convention inline:
+
+```yaml
+# In the deployment workspace's configuration
+policies:
+  - name: deploy-landscape-convention
+    type: path_convention
+    phase: validate
+    enforcement: deny
+    configuration:
+      # Inline convention — used when spec.path_conventions is absent
+      scope: "deploy/**"
+      pattern: "deploy/{landscape}/{ring}"
+      validate:
+        landscape: "deploy/{landscape}/landscape.yaml"
+```
+
+When `configuration.scope` + `configuration.pattern` are present on the policy, the
+engine uses them directly instead of reading from `spec.paths`. This is the
+mechanism for deployment repositories or any context without a configuration model.
+
+---
 
 **Design constraints:**
 
-- Pattern matching is prefix-based on forward-slash-split path parts. Patterns do not
-  use glob syntax — `{segment}` captures exactly one path segment (no `/`).
-- If `configuration_service` is absent and a `spec.*` rule is required → policy emits a
-  warning (`skipped: no configuration loaded`) rather than failing. Deep validation
-  (`--deep`) guarantees the configuration is loaded; surface validation does not.
-- `file_path` must be added to `PolicyContext` — it is not currently present. The policy
-  engine populates it from the file being validated before calling `evaluate()`.
+- **`{segment}` captures exactly one path part** (no `/`). Literal folder names in the
+  pattern must match verbatim. `zones/{zone}/customers/{tenant}` has two captures and
+  two literals.
+- **Pattern is anchored at start of relative path.** Trailing path parts after the last
+  segment are ignored (allows ring directories, filenames, etc. to vary freely).
+- **Placeholder names link `pattern` → `validate`.** Keys in `validate` must exactly
+  match `{name}` placeholders in `pattern`. Placeholders inside validate rule paths
+  (e.g., `customers/{tenant}/tenant.yaml`) are also expanded from the same captured dict.
+- **File existence rules are always anchored at `work_path` root.** The path in the rule
+  is not relative to the file being validated — it's relative to the workspace root.
+- **`spec.*` rules require configuration to be loaded** (i.e., `--deep` mode). Without
+  it, the policy emits `skipped: no configuration loaded` and does not fail.
+- **`file_path` must be added to `PolicyContext`** — the policy engine populates it from
+  the file being validated before calling `evaluate()`.
+- **Multiple conventions may match a single file.** All are evaluated independently.
+  This is intentional — a file at `zones/europe/customers/contoso/prd/deploy.yaml` can
+  be checked against both the zone convention and the tenant-registry convention.
+
+---
+
+**Model changes required:**
+
+New field on `ConfigurationSpecModel` (`src/strata/models/configuration_model.py`):
+
+```python
+class PathConventionModel(PlatformBaseModel):
+    """A single path convention rule for directory structure validation."""
+
+    name: PlatformName = Field(description="Unique convention name for diagnostics")
+    scope: str = Field(description="Glob pattern — only files matching this are checked")
+    pattern: str = Field(
+        description="Path template with {segment} captures, anchored at work_path root"
+    )
+    validate: Optional[Dict[str, str]] = Field(
+        None,
+        description="Per-segment validation rules (spec.* or file existence templates)",
+    )
+
+
+# On ConfigurationSpecModel:
+paths: Optional[List[PathConventionModel]] = Field(
+    None,
+    description="Declared directory structure conventions for path validation policy",
+)
+```
+
+`spec.layering` remains unchanged — it continues to serve its original purpose
+(deployment layer metadata). Path conventions are a separate concern.
 
 ### `strata validate --path "**" --deep` — fleet-wide scan
 
@@ -193,54 +425,68 @@ Not yet implemented. Requires extending the `--deep` validation path in
 
 ### Rule set 4 — `PathConventionPolicy`
 
-**Step 1 — Add `file_path` to `PolicyContext`**
+**Step 1 — New model: `PathConventionModel`**
+
+`src/strata/models/configuration_model.py`:
+- Add `PathConventionModel(PlatformBaseModel)` with fields: `name`, `scope`, `pattern`,
+  `validate: Optional[Dict[str, str]]`.
+- Add `paths: Optional[List[PathConventionModel]]` to `ConfigurationSpecModel`.
+- `spec.layering` remains unchanged (separate concern).
+
+**Step 2 — Add `file_path` to `PolicyContext`**
 
 `src/strata/validators/policies/base_policy.py`:
 - Add `file_path: Optional[Path] = None` to `PolicyContext`.
-- The policy engine (`policy_engine.py`) must populate this from the file path being
-  validated before calling `evaluate()` on each policy.
+- The policy engine (`policy_engine.py`) populates this from the file being validated.
 
-**Step 2 — New policy class**
+**Step 3 — New policy class**
 
 `src/strata/validators/policies/path_convention_policy.py`:
 - `PathConventionPolicy(BasePolicy)` — implements `evaluate(context)`.
+- Convention source resolution:
+  - If `policy.configuration` has `scope` + `pattern` → use inline convention (deploy-repo mode).
+  - Otherwise → read `context.configuration_service.model.spec.paths`.
+  - If `configuration.conventions` filter is set → only evaluate named conventions.
+- Private `_match_scope(rel_path, scope_glob)` → `bool`.
 - Private `_match_pattern(rel_path, pattern)` → `dict[str, str] | None` — splits both on
   `/`, aligns positionally, captures `{name}` segments.
-- Private `_validate_segment(name, value, rule, context)` → `str | None` (violation or None):
-  - `spec.*` rule: resolve dot-path on `context.configuration_service.model`, check membership.
-  - File existence rule: expand `{segment}` in rule path, `Path(work_path / expanded).exists()`.
-- Register in `src/strata/validators/policies/__init__.py`.
-- Register in `policy_engine.py` type dispatch (`"path_convention": PathConventionPolicy`).
+- Private `_validate_segment(name, value, rule, context)` → `str | None` (violation msg):
+  - `spec.*` rule: resolve dot-path on configuration model, check membership.
+  - File existence rule: expand `{segment}` placeholders, check `work_path / expanded`.
+- Register in `__init__.py` and `policy_engine.py` type dispatch.
 
-**Step 3 — Tests**
+**Step 4 — Tests**
 
 `tests/strata/validators/policies/test_policies_path_convention.py`:
-- Pattern match: matching path, non-matching path (skip), partial match.
+- Scope matching: file in scope, file outside scope (skip).
+- Pattern matching: matching path, non-matching path (skip), trailing parts ignored.
+- Multiple conventions: both evaluated, violations from each reported independently.
 - Zone validation: valid zone, unknown zone, no configuration service (warn + skip).
 - Tenant file existence: file exists, file missing.
-- Mixed: both violations in one file, enforcement=warn vs deny.
+- Inline convention (deploy-repo mode): policy with `configuration.scope` + `configuration.pattern`.
+- Convention filter: `configuration.conventions` limits which named conventions run.
+- Enforcement levels: warn vs deny.
 
-**Step 4 — Documentation**
+**Step 5 — Documentation**
 
-`docs/config/configuration.md` — add `path_convention` to the policy types table with
-the `pattern` + `validate` fields documented.
+- `docs/config/configuration.md` — add `paths` to the spec fields table;
+  add `path_convention` to the policy types table.
 
 ---
 
-## Open Questions
+## Decisions (resolved from open questions)
 
-1. **Error vs warning classification** — layer mismatch is a likely mistake but could
-   be intentional (shared env files). Should it be configurable per-rule whether a
-   finding is an error or a warning?
-2. **Path heuristic reliability** — the layer-in-path heuristic works for the canonical
-   directory structure described in ADR 0038 but may produce false positives for non-standard
-   layouts. Should operators be able to configure which path segments are significant?
-3. **Performance at fleet scale** — running `--deep` across N×M×K files in CI must be
-   fast. Resolution must be cached; template hash comparison must not require full
-   model resolution.
-4. **Rule set 4 — surface vs deep** — `path_convention` with `spec.*` rules requires the
-   configuration to be loaded, which currently only happens under `--deep`. Should a
-   file-existence-only `path_convention` policy run at surface validation without `--deep`?
+1. **Error vs warning** — the `enforcement` level on the policy entry controls this.
+   Operators declare `deny` or `warn` per policy. No per-rule granularity needed.
+2. **Path heuristic reliability** — v1 uses heuristic matching. Future versions may
+   add per-convention segment significance configuration if false positives emerge.
+3. **Performance** — caching is out of scope (separate ADR). File-per-file evaluation
+   is acceptable for v1.
+4. **Surface vs deep** — `path_convention` runs only during `--deep` validation.
+   File-existence-only checks also require deep mode (configuration must be loaded to
+   resolve `spec.paths`).
+5. **Overlapping scopes** — evaluate all matching conventions independently. Operators
+   can use the `conventions` filter on the policy to restrict which conventions apply.
 
 ---
 
