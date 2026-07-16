@@ -1,6 +1,6 @@
 # Resolve secrets at build time, not deploy time
 
-- Status: accepted
+- Status: completed
 - Date: 2025-07-16
 
 ## Context and Problem Statement

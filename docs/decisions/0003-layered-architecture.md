@@ -1,6 +1,6 @@
 # Strict layered architecture (commands → controllers → services)
 
-- Status: accepted
+- Status: completed
 - Date: 2025-07-16
 
 ## Context and Problem Statement

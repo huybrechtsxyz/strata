@@ -1,12 +1,35 @@
 # Consolidate Templating on Jinja2
 
-- Status: accepted
+- Status: partial
 - Date: 2026-06-24
 - Parent: [0016-console-interactive-repl.md](0016-console-interactive-repl.md) (question #11)
 
 ## Summary
 
 Replace all `$VAR` / `${VAR}` / `str.replace()` templating in strata with Jinja2. One engine, one syntax (`{{ var }}`, `{% if %}`, `{% for %}`), everywhere.
+
+## Implementation Snapshot
+
+### Implemented
+
+- `pyproject.toml` includes `jinja2>=3.1`.
+- `utils/templater.py` is Jinja2-based (`Environment`), with:
+  - strict env rendering for `process_single_template()`
+  - lenient rendering for `render()` to preserve unresolved placeholders.
+- `commands/new/run_new_command.py` renders both template content and path segments with `TemplateProcessor.render()`.
+- `builders/base_builder.py` uses `TemplateProcessor.render()`.
+- `controllers/solution_controller.py` renders scaffold templates via `TemplateProcessor.render()` (no `str.replace("${SOLUTION_NAME}", ...)`).
+- `commands/sln/export_template_command.py` exports placeholders as `{{ solution_name }}`.
+- solution scaffold templates under `src/strata/templates/solution/` use Jinja2 placeholders (for example `{{ SOLUTION_NAME }}`).
+
+### Still To Implement
+
+- `integrations/base_integration.py::_resolve_env_vars()` still performs regex `${VAR}` / `$VAR` substitution. If this ADR is interpreted literally as "no `$VAR`/`${VAR}` templating anywhere", this path remains out of compliance.
+- ADR wording needs a scope clarification: some `${...}` usages in repository templates are not strata templating (for example VS Code `${input:...}`, GitHub `${{ ... }}`, and shell `$VAR`) and should not be migrated to Jinja2.
+
+### Current Interpretation
+
+Template rendering for strata-owned scaffold/build/new flows is migrated to Jinja2. Integration-time environment substitution still uses `$VAR`/`${VAR}` semantics. Keep status as `partial` until either `_resolve_env_vars()` is migrated or this ADR is narrowed to explicit template-rendering surfaces.
 
 ## Context
 
@@ -233,10 +256,10 @@ Both patterns must survive the migration. The ADR's proposed API already covers 
 
 Two Jinja2 environments are needed, not one:
 
-| Environment | `undefined` | Used by | Behavior on missing var |
-|-------------|-------------|---------|------------------------|
-| `_STRICT_ENV` | `StrictUndefined` | `process_single_template()` | Raises `UndefinedError` — correct for deployment templates where missing env vars = broken |
-| `_LENIENT_ENV` | `DebugUndefined` | `render()` | Renders as `{{ var }}` — leaves placeholder visible in output, matching old keep-as-is behavior |
+| Environment    | `undefined`       | Used by                     | Behavior on missing var                                                                         |
+| -------------- | ----------------- | --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `_STRICT_ENV`  | `StrictUndefined` | `process_single_template()` | Raises `UndefinedError` — correct for deployment templates where missing env vars = broken      |
+| `_LENIENT_ENV` | `DebugUndefined`  | `render()`                  | Renders as `{{ var }}` — leaves placeholder visible in output, matching old keep-as-is behavior |
 
 `StrictUndefined` everywhere would break `strata new` which legitimately supports partial context (e.g., `name` provided but `owner`/`version` unknown — the user edits those later). `DebugUndefined` preserves the old UX while using Jinja2 syntax.
 

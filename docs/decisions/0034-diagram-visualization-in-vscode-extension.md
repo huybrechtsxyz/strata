@@ -12,7 +12,7 @@ The gaps:
 - **No deployment stage flow diagram** — The execution order, dependencies, and provisioner assignments across deployment stages are not visually apparent.
 - **No version promotion flow diagram** — Promotion rings (dev → test → qas → prd), gates, and policies lack visual representation; operators cannot see version progression across environments at a glance.
 - **No service dependency diagram** — Cross-module and cross-namespace service dependencies are difficult to reason about from YAML alone.
-- **Current dependency graph is file-focused** — `dependencyGraphProvider` shows YAML file references (`@repo/path` patterns) but doesn't visualize logical infrastructure relationships.
+- **Current dependency graph is file-focused** — `dependencyGraphProvider` shows YAML file references (`@repo/path` patterns) but doesn't visualize logical infrastructure relationships. ADR 0015 has since delivered `strata validate graph` with both file-reference and resource-topology modes; the VS Code extension should consume this rather than reimplement it.
 - **No user-composable diagrams** — Users cannot combine data sources to create custom views tailored to their specific needs.
 
 This breaks the "visualize the YAML" principle: infrastructure configuration should be navigable as diagrams, not just as hierarchical text.
@@ -23,7 +23,7 @@ This breaks the "visualize the YAML" principle: infrastructure configuration sho
 - **Operational confidence** — Seeing stage flows and promotion gates visually increases confidence before deployment.
 - **Onboarding acceleration** — New team members learn infrastructure topology faster via diagrams than YAML exploration.
 - **Compliance visibility** — Promotion gates and approval workflows must be immediately visible to auditors and operators.
-- **Data availability** — The required infrastructure data is already present in `strata status` output; no new CLI commands needed.
+- **Data availability** — Infrastructure topology and file-reference data is already available via `strata validate graph --output json` (ADR 0015, completed). The VS Code extension consumes CLI JSON output rather than re-extracting data in TypeScript.
 - **Customizability** — Every workspace is different; users need to compose their own views, not be limited to a fixed set.
 
 ## Considered Options
@@ -67,9 +67,27 @@ We provide:
 
 ---
 
+## Related Work
+
+- **ADR 0015 — `strata validate graph`** (completed): delivers the data foundation for built-in diagrams #1 and #8. The VS Code extension consumes `strata validate graph --output json` via `strataClient.ts` and renders the returned Mermaid source in a webview. `dependencyGraphProvider.ts` should be updated to delegate to this CLI output rather than doing its own `@repo/` parsing.
+- **ADR 0009 — Extended SBOM**: SBOM catalog diagrams (Category 26) use `strata build sbom --output json`.
+- **ADR 0007 — Deployment State Locking**: Category 25 diagrams use lock manifest data.
+- **ADR 0038 — Multi-Tenant Fleet**: Category 13 and 22 diagrams use fleet deployment data.
+
 ## Implementation Status
 
 Not yet started. This is a proposal for prioritization and roadmap planning.
+
+### What ADR 0015 already delivers (no VS Code work needed for data layer)
+
+| Built-in # | Diagram                        | CLI backing                                            | VS Code work remaining                                           |
+| ---------- | ------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------- |
+| 1          | Infrastructure Topology        | `strata validate graph --mode resources --output json` | Webview + Mermaid render                                         |
+| 8          | Deployment File Reference Tree | `strata validate graph --mode files --output json`     | Webview + Mermaid render (replaces `dependencyGraphProvider.ts`) |
+
+Catalog Cat.1 #1, #2 and Cat.6 #49 are also covered by ADR 0015's JSON output.
+
+All other built-in diagrams (#2–7, #9–10) and the full catalog require new data extraction.
 
 ---
 
@@ -79,16 +97,18 @@ These diagrams are available immediately with zero configuration — one click f
 
 | #   | Name                           | Chat Command    | Mermaid Type | Purpose                                                                          |
 | --- | ------------------------------ | --------------- | ------------ | -------------------------------------------------------------------------------- |
-| 1   | Infrastructure Topology        | `/topology`     | flowchart    | Workspace → topologies → namespaces → modules → services hierarchy               |
-| 2   | Deployment Stage Flow          | `/stages`       | flowchart    | Stage execution order, dependencies, failure handling                            |
-| 3   | Version Promotion Flow         | `/promote`      | flowchart LR | Ring progression with gates and current versions                                 |
-| 4   | Network Topology               | `/network`      | flowchart    | Networks, subnets, peerings, firewalls, DNS zones combined                       |
-| 5   | Service Dependency Graph       | `/services`     | flowchart    | Cross-module service dependencies and startup ordering                           |
-| 6   | Environment Composition        | `/envs`         | flowchart    | Base + override merge hierarchy producing final config                           |
-| 7   | Secret Resolution Chain        | `/secrets`      | flowchart    | Store → generate → resolve → inject lifecycle                                    |
-| 8   | Deployment File Reference Tree | `/refs`         | flowchart    | All YAML files referenced by a deployment                                        |
-| 9   | Stage Execution Timeline       | `/timeline`     | gantt        | Per-stage and per-step duration from deployment history                          |
-| 10  | Full Platform Architecture     | `/architecture` | flowchart    | End-to-end: providers → topologies → resources → namespaces → modules → services |
+| #   | Name                           | Chat Command    | Mermaid Type | Purpose                                                                          | Data source                                                                   |
+| --- | ------------------------------ | --------------- | ------------ | -------------------------------------------------------------------------------- | ---                                                                           |
+| 1   | Infrastructure Topology        | `/topology`     | flowchart    | Workspace → topologies → namespaces → modules → services hierarchy               | `strata validate graph --mode resources --output json` (ADR 0015 ✅)           |
+| 2   | Deployment Stage Flow          | `/stages`       | flowchart    | Stage execution order, dependencies, failure handling                            | `strata deploy status --output json`                                          |
+| 3   | Version Promotion Flow         | `/promote`      | flowchart LR | Ring progression with gates and current versions                                 | `strata promote status --output json`                                         |
+| 4   | Network Topology               | `/network`      | flowchart    | Networks, subnets, peerings, firewalls, DNS zones combined                       | `strata validate run --output json` (network/firewall/dns models)             |
+| 5   | Service Dependency Graph       | `/services`     | flowchart    | Cross-module service dependencies and startup ordering                           | `strata validate graph --mode resources --output json` (ADR 0015 ✅)           |
+| 6   | Environment Composition        | `/envs`         | flowchart    | Base + override merge hierarchy producing final config                           | `strata values list --output json`                                            |
+| 7   | Secret Resolution Chain        | `/secrets`      | flowchart    | Store → generate → resolve → inject lifecycle                                    | `strata values list --output json` (secret entries)                           |
+| 8   | Deployment File Reference Tree | `/refs`         | flowchart    | All YAML files referenced by a deployment                                        | `strata validate graph --mode files --output json` (ADR 0015 ✅)               |
+| 9   | Stage Execution Timeline       | `/timeline`     | gantt        | Per-stage and per-step duration from deployment history                          | `strata deploy history --output json`                                         |
+| 10  | Full Platform Architecture     | `/architecture` | flowchart    | End-to-end: providers → topologies → resources → namespaces → modules → services | `strata validate graph --mode resources --output json` (ADR 0015 ✅, extended) |
 
 ---
 
