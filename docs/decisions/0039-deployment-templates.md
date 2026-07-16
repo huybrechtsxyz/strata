@@ -1,13 +1,13 @@
 # Deployment Templates
 
-- Status: partial
+- Status: completed
 - Date: 2026-07-15
+- Updated: 2026-07-16
 
-> **Deferred block — Phase 2 not yet implemented**
-> Silent drift detection (`--check-template-drift`) is a known gap in Phase 1. After Phase 1
-> ships, leaf files that deviate from an evolved base will not be flagged automatically.
-> See [Phase 2 — Drift detection](#phase-2----drift-detection-future) in the implementation
-> plan. This ADR is not `completed` until Phase 2 is delivered.
+> **Phase 2 deferred**
+> Silent drift detection (`--check-template-drift`) is a known gap. Phase 1 is complete and
+> tested. Phase 2 is explicitly deferred — leaf files that deviate from an evolved base will
+> not be flagged automatically until Phase 2 is delivered. Tracked as a future ADR amendment.
 
 ## Context and Problem Statement
 
@@ -235,11 +235,11 @@ if deployment.spec.partial:
 | Validator    | Partial file → Phase 2 skipped; leaf-is-partial → hard error; merged model validated                               |
 | Deploy guard | `partial: true` file → rejected before any operation                                                               |
 
-### Phase 2 — Drift detection (future)
+### Phase 2 — Drift detection (deferred)
 
 `strata validate --check-template-drift`: hash the resolved base at build time
 (`meta.annotations["strata.huybrechts.xyz/base-hash"]`); compare at validate time to detect
-leaf files whose base has silently changed.
+leaf files whose base has silently changed. Phase 2 is explicitly deferred.
 
 ---
 
