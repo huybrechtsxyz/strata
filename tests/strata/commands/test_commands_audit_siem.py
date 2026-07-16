@@ -104,7 +104,9 @@ class TestAuditExportSiemFlag:
         mock_instance = MagicMock()
         mock_instance.send_batch.return_value = True
 
-        with patch("strata.commands.cli_audit._forward_entries_to_siem", return_value=True) as mock_fwd:
+        with patch(
+            "strata.commands.audit.export_audit_command.ExportAuditCommand._forward_to_siem", return_value=True
+        ) as mock_fwd:
             result = runner.invoke(
                 audit_group,
                 ["export", "--siem", "splunk_hec", "--work-path", str(tmp_path), "--quiet"],
@@ -112,8 +114,6 @@ class TestAuditExportSiemFlag:
 
         assert result.exit_code == 0
         mock_fwd.assert_called_once()
-        call_args = mock_fwd.call_args[0]
-        assert call_args[0] == "splunk_hec"
 
     def test_siem_forwarding_failure_exits_nonzero(self, tmp_path: Path) -> None:
         """When send_batch fails, exit code is non-zero."""
@@ -122,7 +122,9 @@ class TestAuditExportSiemFlag:
         log_dir.mkdir(parents=True)
         _write_deploy_log(log_dir)
 
-        with patch("strata.commands.cli_audit._forward_entries_to_siem", return_value=False):
+        with patch(
+            "strata.commands.audit.export_audit_command.ExportAuditCommand._forward_to_siem", return_value=False
+        ):
             result = runner.invoke(
                 audit_group,
                 ["export", "--siem", "splunk_hec", "--work-path", str(tmp_path), "--quiet"],
@@ -138,7 +140,7 @@ class TestAuditExportSiemFlag:
         _write_deploy_log(log_dir)
         out_file = tmp_path / "out.json"
 
-        with patch("strata.commands.cli_audit._forward_entries_to_siem", return_value=True):
+        with patch("strata.commands.audit.export_audit_command.ExportAuditCommand._forward_to_siem", return_value=True):
             result = runner.invoke(
                 audit_group,
                 [
@@ -183,16 +185,16 @@ class TestAuditExportSiemFlag:
 
 class TestForwardEntriesToSiem:
     def test_integration_not_found_returns_false(self, tmp_path: Path) -> None:
-        from strata.commands.cli_audit import _forward_entries_to_siem
+        from strata.commands.audit.export_audit_command import ExportAuditCommand
 
-        result = _forward_entries_to_siem("missing_integration", [], tmp_path, quiet=True)
-        assert result is False
+        cmd = ExportAuditCommand(out_file=None, siem_name="missing_integration", work_path=str(tmp_path))
+        cmd._initialize(show_header=False)
+        result = cmd._find_integration_model("missing_integration")
+        assert result is None
 
     def test_non_siem_integration_returns_false(self, tmp_path: Path) -> None:
         """Integration that doesn't implement ISiemSink should fail gracefully."""
-        from strata.commands.cli_audit import _forward_entries_to_siem
-
-        # Mock: config found with the integration, but the created instance is not an ISiemSink
+        from strata.commands.audit.export_audit_command import ExportAuditCommand
         from strata.models.integration_model import IntegrationModel
 
         int_model = IntegrationModel(name="git_tool", type="git")
@@ -206,19 +208,21 @@ class TestForwardEntriesToSiem:
             patch("strata.services.configuration_service.ConfigurationService.load", return_value=mock_svc),
             patch("strata.integrations.factory.IntegrationFactory.create", return_value=non_siem_instance),
         ):
-            # Need at least one yaml file to trigger the config scan
             cfg_dir = tmp_path / ".strata"
             cfg_dir.mkdir()
             (cfg_dir / "config.yaml").write_text(
                 "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n  integrations:\n    - name: git_tool\n      type: git\n"
             )
 
-            result = _forward_entries_to_siem("git_tool", [], tmp_path, quiet=True)
+            cmd = ExportAuditCommand(out_file=None, siem_name="git_tool", work_path=str(tmp_path))
+            cmd._initialize(show_header=False)
+            cmd._siem_name = "git_tool"
+            result = cmd._forward_to_siem()
 
         assert result is False
 
     def test_send_batch_called_with_all_entries(self, tmp_path: Path) -> None:
-        from strata.commands.cli_audit import _forward_entries_to_siem
+        from strata.commands.audit.export_audit_command import ExportAuditCommand
         from strata.models.deploy_log_model import DeployLogModel
 
         entries = [
@@ -261,6 +265,10 @@ class TestForwardEntriesToSiem:
             cfg_dir.mkdir()
             (cfg_dir / "config.yaml").write_text("")
 
-            result = _forward_entries_to_siem("splunk_hec", entries, tmp_path, quiet=True)
+            cmd = ExportAuditCommand(out_file=None, siem_name="splunk_hec", work_path=str(tmp_path))
+            cmd._initialize(show_header=False)
+            cmd._siem_name = "splunk_hec"
+            cmd._entries = entries
+            result = cmd._forward_to_siem()
 
         assert result is True
