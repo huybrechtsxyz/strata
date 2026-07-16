@@ -1,6 +1,6 @@
 # Diagram visualization in VS Code extension
 
-- Status: partial
+- Status: proposed
 - Date: 2026-07-11
 
 ## Context and Problem Statement

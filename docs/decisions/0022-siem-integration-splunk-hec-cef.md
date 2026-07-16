@@ -1,6 +1,6 @@
 # SIEM Integration: Splunk HEC + CEF Format
 
-- Status: accepted
+- Status: completed
 - Date: 2026-07-05
 - Related: [ADR 0018 — Deployment Audit Traceability](0018-deployment-audit-traceability.md)
 
@@ -129,13 +129,13 @@ Resolution path:
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `src/strata/integrations/siem/__init__.py` | Export `SplunkSiemIntegration` |
-| `src/strata/integrations/factory.py` | Register `"splunk"` type |
-| `src/strata/models/audit_config_model.py` | `format` field on `AuditSinkModel` |
-| `src/strata/controllers/audit_controller.py` | `_send_syslog(fmt)` + `_format_cef()` |
-| `src/strata/commands/cli_audit.py` | `--siem` flag + `_forward_entries_to_siem()` |
+| File                                         | Change                                       |
+| -------------------------------------------- | -------------------------------------------- |
+| `src/strata/integrations/siem/__init__.py`   | Export `SplunkSiemIntegration`               |
+| `src/strata/integrations/factory.py`         | Register `"splunk"` type                     |
+| `src/strata/models/audit_config_model.py`    | `format` field on `AuditSinkModel`           |
+| `src/strata/controllers/audit_controller.py` | `_send_syslog(fmt)` + `_format_cef()`        |
+| `src/strata/commands/cli_audit.py`           | `--siem` flag + `_forward_entries_to_siem()` |
 
 ### New tests
 

@@ -1,8 +1,14 @@
 # Real-Time Progress Streaming via ndjson (`--output ndjson`)
 
-- Status: accepted
+- Status: partial
 - Date: 2026-07-11
 - Implemented: 2026-07-15
+
+## What Still Needs To Be Done
+
+- Extend live NDJSON stage/log streaming to `strata deploy destroy` and `strata build run`. Current stage/line event emission is implemented in deploy run, but destroy/build paths do not emit equivalent live stage/log events yet.
+- Align documented event names with actual emitted schema (or migrate emitters): code emits `line` and `stage_end`/`step_*`, while this ADR currently documents `log` and `stage_complete`.
+- Decide and document timestamp contract precisely (`Z` second precision vs `+00:00` ISO values currently emitted), then make emitter output and ADR consistent.
 
 ## Context and Problem Statement
 

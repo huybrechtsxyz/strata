@@ -1,8 +1,14 @@
 # Explicit Command Lifecycle: ABC-Enforced Phases and Thin Overrides
 
-- Status: completed
+- Status: partial
 - Date: 2026-07-11
 - Implemented: 2026-07-15
+
+## What Still Needs To Be Done
+
+- Align BaseCommand.execute behavior with Option D always-run contract, or update this ADR to reflect the implemented short-circuit semantics. Current code gates `_before_execute` and `_execute` behind `if success`.
+- If Option D remains the target, remove the phase short-circuit guards so `_before_execute` and `_execute` run even after `_initialize` failure, while preserving always-run `_after_execute` and `_finalize`.
+- Add targeted tests that lock the intended lifecycle contract (phase-call order and call presence on failure paths) to prevent drift between ADR text and implementation.
 
 ## Context and Problem Statement
 

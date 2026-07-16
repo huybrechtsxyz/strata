@@ -1,6 +1,6 @@
 # Environment composition — complete flat-merge and provenance tracking
 
-- Status: accepted
+- Status: completed
 - Date: 2026-07-05
 - Issue: [#170](https://github.com/huybrechtsxyz/strata/issues/170)
 
