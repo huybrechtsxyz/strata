@@ -9,6 +9,45 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [1.2.0] — 2026-07-16
+
+### Added
+
+- **GitOps Controller Integration — ADR 0041 (completed)**
+  - `argocd` and `flux` provisioner types — integrate GitOps controllers as first-class deployment stages with no new CLI commands
+  - `SyncBackendModel` — `backend.integration` (names the integration instance) and `backend.remote` (names the git remote for rendered output) on deployment stages
+  - `namespace` field on `DeploymentStageModel` — scopes sync provisioner output to a declared workspace namespace
+  - `ProvisionerType.ARGOCD` / `ProvisionerType.FLUX` added to the enum; `_SYNC_PROVISIONER_TYPES` frozenset used throughout for sync-aware branching
+  - `ReconciliationResult` dataclass — shared health result type: `sync_status`, `health_status`, `last_synced_at`, `revision`, `intended_revision`, `drift`, `message`
+  - `SyncBuilder` — reads platform artifact, finds sync stages, renders user-editable Jinja2 templates (`StrictUndefined`), writes output files; wired into `strata build run`
+  - `BaseSyncDeployer`, `ArgocdDeployer`, `FluxDeployer` — step-based deployers; apply step commits rendered output to git remote; health step queries controller API (`GET /api/v1/applications/{name}` for ArgoCD, `kubectl get kustomizations` for Flux)
+  - `strata deploy health` auto-detects sync stages and queries reconciliation status alongside infrastructure health — no flags required
+  - Cross-reference validation in `DeploymentService._validate_sync_stages()`: `backend.integration` must exist in configuration with `sync` capability; `backend.remote` must be in the merged repo map; `namespace` must match a declared workspace namespace
+  - `_validate_sync_stages()` tests — 12 test cases in `TestValidateSyncStages`
+  - Sync Jinja2 adapter templates scaffolded by `strata sln init` / `sln update`: `.strata/templates/sync/argocd-appset-entry.json.j2`, `flux-kustomization.yaml.j2`, `README.md`
+  - `.j2` files skipped by `TemplateProcessor.render()` in scaffold methods — raw Jinja2 templates are copied verbatim so end-users can use template syntax freely
+
+- **Platform artifact convenience fields (ADR 0041 — Decision 8)**
+  - 8 new computed fields on `PlatformSpecModel` populated by the platform builder: `name`, `labels`, `annotations`, `layers`, `chart_versions`, `image_versions`, `resolved_variables`, `revision`
+  - `revision` — `git rev-parse HEAD` at build time (best-effort, `None` outside git repos)
+  - `resolved_variables` — non-secret variables only; secrets never appear in template context
+  - `chart_versions` / `image_versions` — flat `name → value` dicts for ergonomic Jinja2 access
+
+### Changed
+
+- **`WorkspaceIacModel.source` is now optional** — required for IaC provisioner types (`terraform`, `ansible`, `helm`, `compose`, `script`) via `validate_provisioner_fields()` model validator; optional for sync types (`argocd`, `flux`) which generate output from the platform artifact
+- **`DeploymentService._merged_repo_map()`** — new helper merges configuration-level remote map with solution-level repo map (solution names take precedence); replaces three inline dict merges in `_validate_dynamic()`
+- `ansible_deployer.py` / `terraform_deployer.py` — removed redundant `iac.source and` null guards; added `assert iac.source is not None` (model validator guarantees this for non-sync provisioners, satisfies mypy)
+- ADR 0041 status → `completed`; ADR 0011 status typo fixed (`Implementated` → `completed`)
+- ADR status taxonomy extended: 7 ADRs updated from `proposed` to `partial` (0031, 0034, 0035, 0037, 0039, 0040, 0042)
+- `docs/guides/features.md` — added `argocd`/`flux` to provisioner table with GitOps explanation; added Version management and Promotions sections
+
+### Fixed
+
+- ADR 0041 code fences changed from ` ```jinja2 ` to ` ```jinja ` — `jinja2` is not a valid Pygments lexer name; fixes Sphinx docs build warnings
+
+---
+
 ## [1.1.1] — 2026-07-15
 
 ### Added
