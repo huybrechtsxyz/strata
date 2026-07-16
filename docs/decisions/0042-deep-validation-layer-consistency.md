@@ -3,6 +3,22 @@
 - Status: partial
 - Date: 2026-07-15
 
+## TODO
+
+- [x] **Rule Sets 1–3 Implementation Plan** — Implementation steps added for all three rule sets
+- [ ] **Configuration Service Dependency Chain** — Define behavior when `--deep` validation runs without configuration service available; clarify `DeploymentService` ↔ `ConfigurationService` coupling
+- [ ] **Backwards Compatibility & Migration Path** — Document how operators migrate existing non-compliant files; define timeline for optional → mandatory enforcement
+- [ ] **Scope Precedence Algorithm** — Clarify glob matching specificity rules; define ordering when multiple conventions match the same file
+- [ ] **Convention Self-Validation** — Add Pydantic validators to `PathConventionModel` to catch malformed patterns and mismatched segment names
+- [ ] **Performance Considerations** — Estimate glob matching cost at fleet scale (~1000s of files); identify optimization opportunities for file-existence checks
+- [ ] **Failure Mode Diagnostics** — Document edge cases: unmatched files, missing placeholders, permission errors, and appropriate warning/error handling
+- [ ] **Segment Naming Conflicts** — Add guidelines to prevent semantic conflicts when multiple conventions reuse the same `{segment}` names
+- [ ] **Template Drift Actionability** — Clarify `template_version` update workflow (scaffolding integration per ADR 0040); define what `--check-template-drift` output contains
+- [ ] **Uncovered Files Policy** — Define whether files that match no convention scope should warn or silently pass
+- [ ] **Inline vs Spec.paths Precedence** — Clarify coexistence and conflict resolution for inline conventions (deploy repos) vs `spec.paths` conventions
+- [ ] **ADR 0038 Gap Closure** — Map how this ADR closes Gap 5; add gap closure checklist
+- [ ] **End-to-End Example Workflow** — Add complete scenario: operator setup → file structure → validation → remediation
+
 ## Context and Problem Statement
 
 `strata validate <file>` performs structural validation: schema correctness, required fields,
@@ -417,11 +433,177 @@ affect exit code but appear in the report.
 
 ## Implementation Plan
 
-### Rule sets 1–3 (existing gap)
+### Rule set 1 — Layer identity consistency
 
-Not yet implemented. Requires extending the `--deep` validation path in
-`run_validate_command.py` to run the layer consistency checks after the
-`DeploymentService` is loaded.
+**Step 1 — New checker module**
+
+`src/strata/validators/layer_consistency_checker.py`:
+- `LayerConsistencyChecker` — stateless class with a single public method
+  `check(model: DeploymentModel, work_path: Path) -> List[LayerConsistencyWarning]`.
+- `LayerConsistencyWarning(dataclass)`: `field: str`, `declared_value: str`,
+  `conflicting_segment: str`, `env_path: str`, `message: str`.
+- Private `_extract_env_path(ref: DeploymentEnvironmentRef) -> str` — strips `@repo/`
+  prefix to produce the bare path string used for segment inspection.
+- Private `_check_path_for_foreign_layer(path_str: str, layer_key: str,
+  declared_value: str, all_layer_values: Dict[str, str]) -> str | None` — splits
+  path on `/`, returns the first segment that matches any known layer value that is
+  **not** the declared value for `layer_key`.
+
+Logic for `check()`:
+1. If `model.spec.layers` is `None` or `model.spec.environments` is empty → return `[]`.
+2. Build `all_layer_values: Dict[str, str]` from `model.spec.layers` (e.g.
+   `{"zone": "europe-west", "customer": "contoso", "environment": "dev"}`).
+3. For each `(layer_key, declared_value)` in `all_layer_values`:
+   - Build a set of all other layer values: `foreign_values = {v for k,v in all_layer_values.items() if k != layer_key}`.
+   - For each `env_ref` in `model.spec.environments`:
+     - Extract the path string.
+     - Split on `/` and look for a segment that matches any value in `foreign_values` AND
+       that foreign value belongs to a different key whose declared value does NOT appear
+       in the path — emit a `LayerConsistencyWarning`.
+4. Return de-duplicated warning list.
+
+**Step 2 — Wire into `run_validate_command.py`**
+
+In `ValidateCommand._run_single_file_execution()`, after the validator phases complete
+and only when `self._deep` is `True` and `self._detected_kind == "deployment"`:
+
+```python
+if self._deep and self._detected_kind == "deployment":
+    from strata.validators.layer_consistency_checker import LayerConsistencyChecker
+    deployment_model = self._validator.get_model()  # returns parsed DeploymentModel
+    if deployment_model is not None:
+        checker = LayerConsistencyChecker()
+        layer_warnings = checker.check(deployment_model, self._work_path)
+        for w in layer_warnings:
+            self._validator.add_warning(w.message)
+        if layer_warnings:
+            self._output_data.setdefault("layer_warnings", []).extend(
+                [w.message for w in layer_warnings]
+            )
+```
+
+Add `layer_warnings` to the output schema (console and JSON) alongside `warnings`.
+
+**Step 3 — Tests**
+
+`tests/strata/validators/test_layer_consistency_checker.py`:
+- No layers block → no warnings.
+- Layers block with matching env paths → no warnings.
+- `layers.customer = contoso`, env path contains `fabrikam` → one warning, correct field and segment reported.
+- Multiple mismatched env paths → one warning per mismatch.
+- Env path with `@repo/` prefix → prefix stripped before segment inspection.
+- Single-segment paths (e.g. `shared.yaml`) → no false positives.
+- All layer values appear in different paths → only foreign-key mismatches reported.
+
+---
+
+### Rule set 2 — Template drift detection
+
+**Step 1 — Resolve template version at validation time**
+
+`src/strata/validators/template_drift_checker.py`:
+- `TemplateDriftChecker` — requires `repo_map: Dict[str, str]` and `work_path: Path` at
+  construction (same pattern as `PlatformValidator`).
+- `check(model: DeploymentModel) -> Optional[TemplateDriftWarning]` — returns a warning
+  if a drift condition is detected, `None` otherwise.
+- `TemplateDriftWarning(dataclass)`: `template_ref: str`, `template_version: str`,
+  `instantiation_version: str`, `message: str`.
+
+Logic for `check()`:
+1. If `model.spec.extends` is `None` → return `None`.
+2. Resolve the `@repo/path` reference using `resolve_path(work_path, extends, repo_map)`.
+   If the file does not exist → return a warning: `"template '{ref}' could not be resolved"`.
+3. Parse the template file with `yaml.safe_load`. Extract
+   `meta.labels.version` → `template_version: str | None`.
+4. Extract `model.meta.annotations.get("template_version")` from the instantiation file
+   → `instantiation_version: str | None`.
+5. If either version is `None` → return `None` (no version tracking in place; skip).
+6. Compare using `packaging.version.Version` (already a transitive dependency via
+   other tooling) or simple semver string comparison:
+   - `template_version > instantiation_version` → return `TemplateDriftWarning`.
+   - Otherwise → return `None`.
+
+**Step 2 — Wire into `run_validate_command.py`**
+
+Same insertion point as Rule Set 1, immediately after layer consistency checks:
+
+```python
+if self._deep and self._detected_kind == "deployment":
+    from strata.validators.template_drift_checker import TemplateDriftChecker
+    repo_map = self._solution_controller.get_repo_map()
+    drift_checker = TemplateDriftChecker(repo_map=repo_map, work_path=self._work_path)
+    drift_warning = drift_checker.check(deployment_model)
+    if drift_warning:
+        self._validator.add_warning(drift_warning.message)
+        self._output_data.setdefault("template_drift", []).append({
+            "template": drift_warning.template_ref,
+            "template_version": drift_warning.template_version,
+            "reviewed_against": drift_warning.instantiation_version,
+        })
+```
+
+**Step 3 — `meta.annotations.template_version` population**
+
+Scaffolding (ADR 0040) is responsible for writing `template_version` at creation time.
+This ADR requires only that the _reader_ side exists. The annotation key is
+`template_version` on `meta.annotations` (a free-form `Dict[str, str]` on
+`PlatformMetaModel` — no model change needed).
+
+**Step 4 — Tests**
+
+`tests/strata/validators/test_template_drift_checker.py`:
+- No `extends` field → no warning.
+- `extends` present, template file missing → warning about unresolvable reference.
+- Template and instantiation at same version → no warning.
+- Template version newer than instantiation version → drift warning with correct versions.
+- Template has no `meta.labels.version` → no warning (skip gracefully).
+- Instantiation has no `meta.annotations.template_version` → no warning (skip gracefully).
+- Semver comparison edge cases: `1.10` > `1.9`, `2.0` > `1.9`.
+
+---
+
+### Rule set 3 — Tenant field vs path consistency
+
+**Step 1 — Extend `LayerConsistencyChecker`**
+
+Add a second public method to the existing `LayerConsistencyChecker`:
+
+```python
+def check_tenant_paths(
+    self, model: DeploymentModel
+) -> List[LayerConsistencyWarning]:
+    ...
+```
+
+Logic:
+1. If `model.spec.tenant` is `None` → return `[]`.
+2. `declared_tenant = model.spec.tenant`.
+3. For each `env_ref` in `model.spec.environments`:
+   - Extract path string.
+   - Heuristic: if `/customers/` appears as a literal segment in the path, this is a
+     tenant-specific path → verify `declared_tenant` appears as a path segment
+     immediately following `customers/`.
+   - If `customers/{X}/` is present and `X != declared_tenant` → emit a warning:
+     `"spec.tenant = '{declared_tenant}' but environments[N] path is under customers/{X}/ — possible tenant mismatch"`.
+4. Return warning list.
+
+Reuses `LayerConsistencyWarning` dataclass — set `field="spec.tenant"`.
+
+**Step 2 — Wire into `run_validate_command.py`**
+
+Call `checker.check_tenant_paths(deployment_model)` immediately after
+`checker.check(deployment_model)` at the same insertion point. Merge warnings into the
+same `layer_warnings` output key.
+
+**Step 3 — Tests**
+
+`tests/strata/validators/test_layer_consistency_checker.py` (extend existing file):
+- No `tenant` field → no warnings.
+- `tenant = contoso`, all env paths under `customers/contoso/` → no warnings.
+- `tenant = contoso`, one env path under `customers/fabrikam/` → one warning.
+- Env paths without `/customers/` segment → not checked (shared env files).
+- Mixed: some tenant-specific, some shared → only tenant-specific paths checked.
+- `@repo/` prefix in env path → stripped before segment inspection.
 
 ### Rule set 4 — `PathConventionPolicy`
 
