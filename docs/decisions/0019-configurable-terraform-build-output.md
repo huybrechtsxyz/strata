@@ -1,6 +1,6 @@
 # Configurable Terraform build output
 
-- Status: accepted
+- Status: completed
 - Date: 2026-07-03
 
 ## Context and Problem Statement

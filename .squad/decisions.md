@@ -164,6 +164,13 @@
 - **Rejected alternatives:** advance/advancement (generic), rollout (collides with k8s rolling-update), propagate (unfamiliar), release-progression (verbose; "release" already means the ADR-0017 tagging lifecycle).
 - **Action for ADR owner:** No structural change — ensure every CLI example uses `promote` (forward) and `promote rollback` (reverse).
 
+### 2026-07-16 — ADR-0018 status is partial, not accepted
+- **By:** Reuben
+- **Requested by:** Vincent Huybrechts
+- **Decision:** Document ADR-0018 as `partial`, not `accepted`.
+- **Rationale:** Repository verification confirmed the normal deploy flow writes the deploy-log but does not automatically invoke `AuditController.enrich_with_pr_data()`, `AuditController.push_to_remote()`, or `AuditController.forward_to_siem()` end-to-end. The ADR also describes a future `strata audit diff` capability that is not present in this repository, and Layer 1 PR-template process evidence appears to live outside this repo, so it cannot be verified here.
+- **Implications:** Keep the ADR narrative intact, but preserve the explicit status downgrade and the short "What Still Needs To Be Done" checklist until the deploy-path wiring, CLI surface, and any external process boundaries are either implemented or the ADR scope is narrowed.
+
 ## Governance
 
 - All meaningful architectural changes require a decision entry here

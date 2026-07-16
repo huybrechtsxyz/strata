@@ -81,7 +81,7 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
         * ``overrides.remotes``   — last-wins by ``remote`` name
         * ``overrides.properties``— shallow ``dict.update``
         * ``overrides.includes``  — append; deduplicated by ``source`` path
-        * ``overrides.output_files`` — append; deduplicated by ``path``
+        * ``overrides.output_files`` — append; deduplicated by ``name``
 
         Args:
             envfiles: List of environment file paths to merge (relative to work_path).
@@ -197,7 +197,7 @@ class EnvironmentService(BaseService["EnvironmentModel"]):
                         merged_includes[inc.source] = inc
                 if ovr.output_files:
                     for of in ovr.output_files:
-                        merged_output_files[of.path] = of
+                        merged_output_files[of.name] = of
 
         # Build merged EnvironmentOverridesModel (only when at least one override exists)
         has_overrides = any(

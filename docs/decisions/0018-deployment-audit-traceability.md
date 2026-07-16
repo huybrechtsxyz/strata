@@ -1,7 +1,13 @@
 # Deployment audit and traceability for compliance (ISO 27001 / ISAE 3402)
 
-- Status: accepted
+- Status: partial
 - Date: 2026-06-24
+
+## What Still Needs To Be Done
+
+- [ ] Wire the normal deploy flow to automatically invoke `enrich_with_pr_data`, `push_to_remote`, and `forward_to_siem` after writing the deploy-log. The current deploy path writes the deploy-log but does not call those methods end-to-end.
+- [ ] Treat Layer 1 PR template coverage as external process/documentation work. This repository does not contain enough code to verify that process here.
+- [ ] Either implement the future `strata audit diff` command described in this ADR or update the ADR text. This repository currently exposes `audit changes`, `audit resend`, and `audit export`, but not `audit diff`.
 
 ## Context and Problem Statement
 
@@ -2662,4 +2668,5 @@ spec:
 | Manifest    | `audit_log` field in `DeploymentManifestSpecModel`                | `src/strata/models/deployment_manifest_model.py` |
 
 **Test coverage:** 183 tests covering models, integrations, controllers, and CLI commands.
+
 
