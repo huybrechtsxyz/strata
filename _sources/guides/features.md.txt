@@ -155,14 +155,22 @@ Orchestrates stages in dependency order. Each stage calls the provisioner via su
 
 ### Supported provisioners
 
-| Provisioner | What it calls                       | Typical stage type        |
-| ----------- | ----------------------------------- | ------------------------- |
-| `terraform` | `terraform init/plan/apply`         | `infrastructure`          |
-| `opentofu`  | `tofu init/plan/apply`              | `infrastructure`          |
-| `ansible`   | `ansible-playbook`                  | `configure`, `initialize` |
-| `helm`      | `helm upgrade --install`            | `deploy`                  |
-| `compose`   | `docker stack deploy`               | `deploy`                  |
-| `script`    | Shell / PowerShell / Python scripts | any                       |
+| Provisioner | What it calls                                                | Typical stage type        |
+| ----------- | ------------------------------------------------------------ | ------------------------- |
+| `terraform` | `terraform init/plan/apply`                                  | `infrastructure`          |
+| `opentofu`  | `tofu init/plan/apply`                                       | `infrastructure`          |
+| `ansible`   | `ansible-playbook`                                           | `configure`, `initialize` |
+| `helm`      | `helm upgrade --install`                                     | `deploy`                  |
+| `compose`   | `docker stack deploy`                                        | `deploy`                  |
+| `script`    | Shell / PowerShell / Python scripts                          | any                       |
+| `argocd`    | Renders Jinja2 template → commits to git → ArgoCD reconciles | `sync`                    |
+| `flux`      | Renders Jinja2 template → commits to git → Flux reconciles   | `sync`                    |
+
+ArgoCD and Flux are **GitOps provisioners** — `strata build run` renders a Jinja2 template using
+the full deployment context (versions, variables, namespace, tenant) and writes the output to a
+git remote. The controller picks up the committed file and reconciles the cluster.
+`strata deploy health` queries the controller API for reconciliation status alongside infrastructure
+health checks — no extra flags needed.
 
 ### Other deploy subcommands
 
@@ -175,6 +183,46 @@ strata deploy output   --file deploy/deploy-prd.yaml   # print infrastructure ou
 strata deploy destroy  --file deploy/deploy-prd.yaml   # tear down (with confirmation)
 strata deploy lock     --file deploy/deploy-prd.yaml   # acquire deployment lock
 ```
+
+---
+
+## Version management — pin and lock chart/image versions
+
+```bash
+strata versions init   --file deploy/deploy-prd.yaml   # scaffold a starter version manifest
+strata versions add    --file versions/v1.yaml          # create a new snapshot
+strata versions refresh --file versions/v1.yaml        # sync pins against versionable targets
+strata versions apply  --file versions/v1.yaml          # convert manifest → version-lock file
+strata versions lock   --file versions/v1.yaml          # compute + store a SHA-256 hash of pins
+strata versions export --file versions/v1.yaml          # print resolved flat pin state
+```
+
+Version manifests (`kind: version`) declare pinned chart/image versions per ring. Pins flow into
+the platform artifact as `chart_versions` and `image_versions` convenience fields — templates
+and provisioners read them directly, no lookups required.
+
+---
+
+## Promotions — advance versions across rings
+
+```bash
+# Promote a version manifest to a ring (writes a pointer lock)
+strata promote --ring prd --file versions/v2.yaml --promotion canary
+
+# Check promotion status and history
+strata promote status  --ring prd
+strata promote history --ring prd
+
+# Roll back to the previous ring state
+strata promote rollback --ring prd
+
+# View the version matrix across all rings
+strata promote matrix
+```
+
+Each ring (dev, staging, prod) holds a pointer lock that references the active version manifest.
+Promoting advances the pointer — the next `strata build run` picks up the new versions automatically.
+Rollback restores the previous pointer; no manual file edits needed.
 
 ---
 

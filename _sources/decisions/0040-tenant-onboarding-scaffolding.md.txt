@@ -1,6 +1,6 @@
 # Tenant Onboarding Scaffolding
 
-- Status: proposed
+- Status: partial
 - Date: 2026-07-15
 
 ## Context and Problem Statement

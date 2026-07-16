@@ -1,6 +1,6 @@
 # Fleet Operations and Mass Wave Deployment
 
-- Status: proposed
+- Status: partial
 - Date: 2026-07-14
 
 ## Context and Problem Statement

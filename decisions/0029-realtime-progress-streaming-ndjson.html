@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Real-Time Progress Streaming via ndjson (--stream) &mdash; strata 0.8.0 documentation</title>
+  <title>Real-Time Progress Streaming via ndjson (--output ndjson) &mdash; strata 0.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -3499,7 +3499,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--stream</span></code>)</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#decision-drivers">Decision Drivers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#considered-options">Considered Options</a><ul>
@@ -3511,14 +3511,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#decision-outcome">Decision Outcome</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#event-schema">Event schema</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#event-types">Event types</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#event-types-implemented">Event types implemented</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#example-stream">Example stream</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#implementation">Implementation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#composability-with-output">Composability with <code class="docutils literal notranslate"><span class="pre">--output</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#stage-log-volume-management"><code class="docutils literal notranslate"><span class="pre">stage_log</span></code> volume management</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#removal-of-todo-markers">Removal of <code class="docutils literal notranslate"><span class="pre">[TODO]</span></code> markers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#log-event-volume-management"><code class="docutils literal notranslate"><span class="pre">log</span></code> event volume management</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#consequences">Consequences</a></li>
@@ -3555,7 +3554,10 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0031-cost-estimation-and-visibility.html">Cost estimation and visibility</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#context-and-problem-statement">Context and Problem Statement</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#option-b-detail-infracost">Option B Detail — Infracost</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#decision-outcome">Decision Outcome</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#consequences">Consequences</a></li>
 </ul>
@@ -3605,6 +3607,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0032-approval-workflows-and-gates.html">Approval workflows and gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#foundational-constraint-git-is-required">Foundational Constraint — Git Is Required</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#considered-options">Considered Options</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#decision-outcome">Decision Outcome</a></li>
@@ -3719,6 +3722,7 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0035-enterprise-store.html">Enterprise Store — Private Organization-Level Content Registry</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#what-users-expect-from-a-registry">What Users Expect From a Registry</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#decision-drivers">Decision Drivers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#considered-options">Considered Options</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="0035-enterprise-store.html#option-a-enterprise-store-as-a-typed-git-repository">Option A — Enterprise Store as a Typed Git Repository</a></li>
@@ -3835,13 +3839,28 @@
 <li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#design-overview">Design Overview</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#core-concept-base-template-thin-instantiation">Core concept: base template + thin instantiation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#core-concept-spec-extends-spec-partial">Core concept: <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> + <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#spec-partial"><code class="docutils literal notranslate"><span class="pre">spec.partial</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#spec-extends"><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#merge-semantics">Merge semantics</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#validation">Validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#two-phase-validation">Two-phase validation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#compatibility-with-fleet-discovery-adr-0037">Compatibility with fleet discovery (ADR 0037)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#drift-detection">Drift detection</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#phase-1-model-resolver-and-validation-this-adr">Phase 1 — Model, resolver, and validation (this ADR)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#models-deployment-model-py">1.1 <code class="docutils literal notranslate"><span class="pre">models/deployment_model.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#services-deployment-extension-resolver-py-new">1.2 <code class="docutils literal notranslate"><span class="pre">services/deployment_extension_resolver.py</span></code> (new)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#validators-platform-validator-py">1.3 <code class="docutils literal notranslate"><span class="pre">validators/platform_validator.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#services-deployment-service-py">1.4 <code class="docutils literal notranslate"><span class="pre">services/deployment_service.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#commands-deploy-base-deploy-command-py">1.5 <code class="docutils literal notranslate"><span class="pre">commands/deploy/base_deploy_command.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#phase-1-test-coverage">Phase 1 test coverage</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#phase-2-drift-detection-future">Phase 2 — Drift detection (future)</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#consequences">Consequences</a></li>
 </ul>
 </li>
@@ -3860,16 +3879,46 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0041-gitops-controller-integration.html">GitOps Controller Integration</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#context-and-problem-statement">Context and Problem Statement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#why-not-let-the-controller-handle-versions-natively">Why not let the controller handle versions natively?</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#design-overview">Design Overview</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#two-surfaces-output-and-health">Two surfaces: output and health</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#surface-1-strata-build-gitops">Surface 1: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">gitops</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#surface-2-strata-deploy-health-gitops">Surface 2: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span> <span class="pre">--gitops</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#key-insight-no-new-commands-needed">Key insight: no new commands needed</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#deployment-separation-with-partial-files-adr-0039">Deployment separation with partial files (ADR 0039)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="0041-gitops-controller-integration.html#namespace-as-the-unit-of-sync">Namespace as the unit of sync</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#integration-model-spec-integrations">Integration model — <code class="docutils literal notranslate"><span class="pre">spec.integrations</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#provisioner-lifecycle">Provisioner lifecycle</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#controller-input-requirements">Controller Input Requirements</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#what-each-controller-needs">What each controller needs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#platform-artifact-as-template-context">Platform artifact as template context</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="0041-gitops-controller-integration.html#convenience-fields-to-add-to-platformspecmodel">Convenience fields to add to <code class="docutils literal notranslate"><span class="pre">PlatformSpecModel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0041-gitops-controller-integration.html#why-convenience-fields-instead-of-raw-only">Why convenience fields instead of raw-only?</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#jinja2-adapter-templates">Jinja2 Adapter Templates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#template-location">Template location</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#template-variables-context">Template variables (context)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#argocd-example-template">ArgoCD example template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#flux-kustomization-example-template">Flux Kustomization example template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#flux-helmrelease-example-template">Flux HelmRelease example template</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#reconciliation-health">Reconciliation Health</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#reconciliation-result-shared-across-providers">Reconciliation result (shared across providers)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#provider-specific-health-queries">Provider-specific health queries</a></li>
 <li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#audit-integration">Audit integration</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#scaffolding-via-strata-sln-init">Scaffolding via <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#decisions">Decisions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#consequences">Consequences</a></li>
 </ul>
 </li>
@@ -3904,6 +3953,33 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#consequences">Consequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#related-adrs">Related ADRs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html">Competitive Landscape and Feature Gaps</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#competitor-tools">Competitor Tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#feature-comparison">Feature Comparison</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#dry-configuration-inheritance">1. DRY Configuration &amp; Inheritance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#dependency-graph-execution-order">2. Dependency Graph / Execution Order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#drift-detection">3. Drift Detection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#policy-engine-guardrails">4. Policy Engine / Guardrails</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#cost-estimation">5. Cost Estimation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#approval-workflows-gates">6. Approval Workflows / Gates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#gitops-reconciliation">7. GitOps Reconciliation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#self-service-environments-ephemeral-ttl">8. Self-Service Environments (Ephemeral / TTL)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#vcs-integration-pr-comments-plan-previews">9. VCS Integration (PR comments, plan previews)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#state-locking-concurrency-control">10. State Locking / Concurrency Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#module-component-registry-private">11. Module / Component Registry (Private)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#change-detection-only-deploy-what-changed">12. Change Detection (Only Deploy What Changed)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#rbac-multi-tenancy-access-control">13. RBAC / Multi-Tenancy Access Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#real-time-streaming-progress-ui">14. Real-Time Streaming / Progress UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#workload-abstraction-score-platform-spec">15. Workload Abstraction (Score / Platform Spec)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#multi-provisioner-orchestration-terraform-ansible-helm-under-one-roof">16. Multi-Provisioner Orchestration (Terraform + Ansible + Helm under one roof)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#server-mode-api-first-architecture">17. Server Mode / API-First Architecture</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#summary-priority-assessment">Summary — Priority Assessment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#notes">Notes</a></li>
 </ul>
 </li>
 </ul>
@@ -4013,6 +4089,8 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#other-deploy-subcommands">Other deploy subcommands</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#version-management-pin-and-lock-chart-image-versions">Version management — pin and lock chart/image versions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#promotions-advance-versions-across-rings">Promotions — advance versions across rings</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#deployment-locking">Deployment locking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#lifecycle-hooks-run-scripts-at-any-phase">Lifecycle hooks — run scripts at any phase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#policy-guardrails">Policy guardrails</a></li>
@@ -4666,7 +4744,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--stream</span></code>)</li>
+      <li class="breadcrumb-item active">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code>)</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/decisions/0029-realtime-progress-streaming-ndjson.md.txt" rel="nofollow"> View page source</a>
       </li>
@@ -4676,11 +4754,12 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="real-time-progress-streaming-via-ndjson-stream">
-<h1>Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--stream</span></code>)<a class="headerlink" href="#real-time-progress-streaming-via-ndjson-stream" title="Link to this heading"></a></h1>
+  <section id="real-time-progress-streaming-via-ndjson-output-ndjson">
+<h1>Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code>)<a class="headerlink" href="#real-time-progress-streaming-via-ndjson-output-ndjson" title="Link to this heading"></a></h1>
 <ul class="simple">
-<li><p>Status: proposed</p></li>
+<li><p>Status: accepted</p></li>
 <li><p>Date: 2026-07-11</p></li>
+<li><p>Implemented: 2026-07-15</p></li>
 </ul>
 <section id="context-and-problem-statement">
 <h2>Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Link to this heading"></a></h2>
@@ -4699,6 +4778,9 @@ with external events is difficult.</p></li>
 </ol>
 <p><code class="docutils literal notranslate"><span class="pre">--stream</span></code> was documented in ADR-0020 and marked <code class="docutils literal notranslate"><span class="pre">[TODO:</span> <span class="pre">not</span> <span class="pre">yet</span> <span class="pre">implemented]</span></code>. This
 ADR decides the event schema, transport, and integration points.</p>
+<p><strong>Implementation note:</strong> Streaming is implemented as <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code> (not a separate
+<code class="docutils literal notranslate"><span class="pre">--stream</span></code> flag). <code class="docutils literal notranslate"><span class="pre">OUTPUT_FORMATS</span> <span class="pre">=</span> <span class="pre">[&quot;console&quot;,</span> <span class="pre">&quot;text&quot;,</span> <span class="pre">&quot;json&quot;,</span> <span class="pre">&quot;ndjson&quot;]</span></code> — ndjson is
+a first-class output format alongside json and console, not an opt-in overlay.</p>
 </section>
 <section id="decision-drivers">
 <h2>Decision Drivers<a class="headerlink" href="#decision-drivers" title="Link to this heading"></a></h2>
@@ -4766,10 +4848,11 @@ in shell scripts and CI YAML).</p></li>
 </section>
 <section id="decision-outcome">
 <h2>Decision Outcome<a class="headerlink" href="#decision-outcome" title="Link to this heading"></a></h2>
-<p>Chosen: <strong>Option B — ndjson structured events to stdout</strong>.</p>
-<p>When <code class="docutils literal notranslate"><span class="pre">--stream</span></code> is set, stdout carries a sequence of ndjson lines followed by a final
-<code class="docutils literal notranslate"><span class="pre">result</span></code> event. When <code class="docutils literal notranslate"><span class="pre">--stream</span></code> is not set, stdout carries only the normal strata result
-envelope (unchanged behaviour).</p>
+<p>Chosen: <strong>Option B — ndjson structured events to stdout</strong>, implemented as
+<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code>.</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code> is set, stdout carries a sequence of ndjson lines. Each line is
+flushed immediately as it is produced — no buffering until completion. When <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code> is not set, stdout carries only the normal strata result envelope (unchanged
+behaviour).</p>
 <section id="event-schema">
 <h3>Event schema<a class="headerlink" href="#event-schema" title="Link to this heading"></a></h3>
 <p>All events share a common envelope:</p>
@@ -4779,8 +4862,8 @@ envelope (unchanged behaviour).</p>
 <p><strong>Timestamp format:</strong> <code class="docutils literal notranslate"><span class="pre">YYYY-MM-DDTHH:MM:SSZ</span></code> (UTC with Z suffix, second precision).
 Sub-second precision is not used — provisioner operations are measured in seconds, not
 milliseconds.</p>
-<section id="event-types">
-<h4>Event types<a class="headerlink" href="#event-types" title="Link to this heading"></a></h4>
+<section id="event-types-implemented">
+<h4>Event types implemented<a class="headerlink" href="#event-types-implemented" title="Link to this heading"></a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Event type</p></th>
@@ -4789,99 +4872,70 @@ milliseconds.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">run_start</span></code></p></td>
-<td><p>Before any stage begins</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">deployment</span></code>, <code class="docutils literal notranslate"><span class="pre">stages</span></code> (list of stage names)</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">stage_start</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">stage_start</span></code></p></td>
 <td><p>When a stage begins</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">provisioner</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">ts</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">stage_log</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">log</span></code></p></td>
 <td><p>Each log line from the provisioner subprocess</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">level</span></code>, <code class="docutils literal notranslate"><span class="pre">msg</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">step</span></code>, <code class="docutils literal notranslate"><span class="pre">stream</span></code> (stdout/stderr), <code class="docutils literal notranslate"><span class="pre">text</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">stage_complete</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">stage_complete</span></code></p></td>
 <td><p>When a stage finishes</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">exit_code</span></code>, <code class="docutils literal notranslate"><span class="pre">duration_s</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">success</span></code>, <code class="docutils literal notranslate"><span class="pre">ts</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">stage_skipped</span></code></p></td>
-<td><p>When a stage is skipped (scope filter, dry-run)</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">stage</span></code>, <code class="docutils literal notranslate"><span class="pre">reason</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">run_complete</span></code></p></td>
-<td><p>After all stages finish</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">exit_code</span></code>, <code class="docutils literal notranslate"><span class="pre">duration_s</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">result</span></code></p></td>
-<td><p>Last line; carries the normal strata result envelope</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">success</span></code>, <code class="docutils literal notranslate"><span class="pre">data</span></code>, <code class="docutils literal notranslate"><span class="pre">errors</span></code>, <code class="docutils literal notranslate"><span class="pre">messages</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">complete</span></code></p></td>
+<td><p>Last event; carries the final result envelope</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">success</span></code>, <code class="docutils literal notranslate"><span class="pre">data</span></code>, <code class="docutils literal notranslate"><span class="pre">errors</span></code>, <code class="docutils literal notranslate"><span class="pre">messages</span></code>, <code class="docutils literal notranslate"><span class="pre">execution_id</span></code></p></td>
 </tr>
 </tbody>
 </table>
+<p><strong>Note:</strong> The ADR originally specified <code class="docutils literal notranslate"><span class="pre">run_start</span></code>, <code class="docutils literal notranslate"><span class="pre">stage_log</span></code>, <code class="docutils literal notranslate"><span class="pre">run_complete</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">result</span></code> as event names. The implementation uses <code class="docutils literal notranslate"><span class="pre">stage_start</span></code>, <code class="docutils literal notranslate"><span class="pre">log</span></code>, <code class="docutils literal notranslate"><span class="pre">stage_complete</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">complete</span></code>. The schema is otherwise equivalent.</p>
 </section>
 <section id="example-stream">
 <h4>Example stream<a class="headerlink" href="#example-stream" title="Link to this heading"></a></h4>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{&quot;event&quot;: &quot;run_start&quot;, &quot;ts&quot;: &quot;2026-07-11T14:30:00Z&quot;, &quot;deployment&quot;: &quot;haven-prd&quot;, &quot;stages&quot;: [&quot;networking&quot;, &quot;compute&quot;, &quot;dns&quot;]}
-{&quot;event&quot;: &quot;stage_start&quot;, &quot;ts&quot;: &quot;2026-07-11T14:30:00Z&quot;, &quot;stage&quot;: &quot;networking&quot;, &quot;provisioner&quot;: &quot;terraform&quot;}
-{&quot;event&quot;: &quot;stage_log&quot;, &quot;ts&quot;: &quot;2026-07-11T14:30:02Z&quot;, &quot;stage&quot;: &quot;networking&quot;, &quot;level&quot;: &quot;INFO&quot;, &quot;msg&quot;: &quot;Terraform 1.9.0&quot;}
-{&quot;event&quot;: &quot;stage_log&quot;, &quot;ts&quot;: &quot;2026-07-11T14:30:05Z&quot;, &quot;stage&quot;: &quot;networking&quot;, &quot;level&quot;: &quot;INFO&quot;, &quot;msg&quot;: &quot;Plan: 3 to add, 0 to change, 0 to destroy.&quot;}
-{&quot;event&quot;: &quot;stage_complete&quot;, &quot;ts&quot;: &quot;2026-07-11T14:31:10Z&quot;, &quot;stage&quot;: &quot;networking&quot;, &quot;exit_code&quot;: 0, &quot;duration_s&quot;: 70}
-{&quot;event&quot;: &quot;stage_start&quot;, &quot;ts&quot;: &quot;2026-07-11T14:31:10Z&quot;, &quot;stage&quot;: &quot;compute&quot;, &quot;provisioner&quot;: &quot;terraform&quot;}
-{&quot;event&quot;: &quot;stage_complete&quot;, &quot;ts&quot;: &quot;2026-07-11T14:34:45Z&quot;, &quot;stage&quot;: &quot;compute&quot;, &quot;exit_code&quot;: 0, &quot;duration_s&quot;: 215}
-{&quot;event&quot;: &quot;stage_skipped&quot;, &quot;ts&quot;: &quot;2026-07-11T14:34:45Z&quot;, &quot;stage&quot;: &quot;dns&quot;, &quot;reason&quot;: &quot;--scope filter did not match&quot;}
-{&quot;event&quot;: &quot;run_complete&quot;, &quot;ts&quot;: &quot;2026-07-11T14:34:45Z&quot;, &quot;exit_code&quot;: 0, &quot;duration_s&quot;: 285}
-{&quot;event&quot;: &quot;result&quot;, &quot;ts&quot;: &quot;2026-07-11T14:34:45Z&quot;, &quot;success&quot;: true, &quot;data&quot;: {...}, &quot;errors&quot;: [], &quot;messages&quot;: []}
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>{&quot;event&quot;: &quot;stage_start&quot;, &quot;stage&quot;: &quot;provision&quot;, &quot;ts&quot;: &quot;2026-07-15T10:00:00Z&quot;}
+{&quot;event&quot;: &quot;log&quot;, &quot;stage&quot;: &quot;provision&quot;, &quot;step&quot;: &quot;apply&quot;, &quot;stream&quot;: &quot;stdout&quot;, &quot;text&quot;: &quot;azurerm_resource_group.main: Creating...&quot;}
+{&quot;event&quot;: &quot;log&quot;, &quot;stage&quot;: &quot;provision&quot;, &quot;step&quot;: &quot;apply&quot;, &quot;stream&quot;: &quot;stdout&quot;, &quot;text&quot;: &quot;azurerm_resource_group.main: Creation complete after 2s&quot;}
+{&quot;event&quot;: &quot;stage_complete&quot;, &quot;stage&quot;: &quot;provision&quot;, &quot;success&quot;: true, &quot;ts&quot;: &quot;2026-07-15T10:02:14Z&quot;}
+{&quot;event&quot;: &quot;complete&quot;, &quot;success&quot;: true, &quot;command&quot;: &quot;deploy.run&quot;, &quot;execution_id&quot;: &quot;abc123&quot;, &quot;data&quot;: {...}, &quot;errors&quot;: [], &quot;messages&quot;: []}
 </pre></div>
 </div>
 </section>
 </section>
 <section id="implementation">
 <h3>Implementation<a class="headerlink" href="#implementation" title="Link to this heading"></a></h3>
-<p>An <code class="docutils literal notranslate"><span class="pre">EventEmitter</span></code> class wraps <code class="docutils literal notranslate"><span class="pre">sys.stdout</span></code> writes. It is instantiated once per
-command invocation when <code class="docutils literal notranslate"><span class="pre">--stream</span></code> is set; when not set, a no-op <code class="docutils literal notranslate"><span class="pre">NullEmitter</span></code> is used
-so the provisioner code does not need to check the flag.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">EventEmitter</span><span class="p">:</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">emit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="n">event_type</span><span class="p">,</span> <span class="s2">&quot;ts&quot;</span><span class="p">:</span> <span class="n">_now_utc</span><span class="p">(),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
-        <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>  <span class="c1"># ensure each event is written immediately</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">NullEmitter</span><span class="p">:</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">emit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">pass</span>  <span class="c1"># no-op when --stream is not set</span>
-</pre></div>
-</div>
-<p>The provisioner subprocess wrapper reads from the subprocess’s stdout/stderr line by
-line (non-blocking via <code class="docutils literal notranslate"><span class="pre">iter(proc.stdout.readline,</span> <span class="pre">b&quot;&quot;)</span></code>) and emits <code class="docutils literal notranslate"><span class="pre">stage_log</span></code> events.
-This replaces the current behaviour of buffering all output and printing it at the end.</p>
+<p><strong>Implemented.</strong> The core emitter lives in <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">_is_ndjson_output()</span></code> — returns <code class="docutils literal notranslate"><span class="pre">True</span></code> when <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code> is active</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">emit_ndjson(event:</span> <span class="pre">dict)</span></code> — serialises to JSON, writes to stdout, flushes immediately</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">make_ndjson_line_callback(step,</span> <span class="pre">stage)</span></code> — returns a callback for subprocess line output</p></li>
+</ul>
+<p>The subprocess wrapper in <code class="docutils literal notranslate"><span class="pre">run_deploy_command.py</span></code> uses the line callback to emit one
+<code class="docutils literal notranslate"><span class="pre">log</span></code> event per line as the provisioner produces output (non-blocking drain via threads).
+The <code class="docutils literal notranslate"><span class="pre">_finalize()</span></code> method in <code class="docutils literal notranslate"><span class="pre">BaseCommand</span></code> emits the terminal <code class="docutils literal notranslate"><span class="pre">complete</span></code> event.</p>
+<p><strong>Remaining work:</strong></p>
+<ul class="simple">
+<li><p>Rich console progress UI (spinners, stage progress bars) for <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">console</span></code></p></li>
+<li><p>VS Code extension live status panel consuming the ndjson stream</p></li>
+<li><p>Remove <code class="docutils literal notranslate"><span class="pre">[TODO:</span> <span class="pre">not</span> <span class="pre">yet</span> <span class="pre">implemented]</span></code> from ADR-0020 <code class="docutils literal notranslate"><span class="pre">--stream</span></code> entries</p></li>
+</ul>
 </section>
 <section id="composability-with-output">
 <h3>Composability with <code class="docutils literal notranslate"><span class="pre">--output</span></code><a class="headerlink" href="#composability-with-output" title="Link to this heading"></a></h3>
-<p>When <code class="docutils literal notranslate"><span class="pre">--stream</span></code> is set, the final strata result envelope is emitted as the last ndjson
-line (<code class="docutils literal notranslate"><span class="pre">{&quot;event&quot;:</span> <span class="pre">&quot;result&quot;,</span> <span class="pre">...}</span></code>) rather than printed as the sole stdout content.
-This means:</p>
-<ul class="simple">
-<li><p>A consumer that reads only the last line gets the result envelope it expects (if it
-uses a <code class="docutils literal notranslate"><span class="pre">tail</span> <span class="pre">-1</span> <span class="pre">|</span> <span class="pre">jq</span></code> pattern).</p></li>
-<li><p>A consumer that reads all lines and filters for <code class="docutils literal notranslate"><span class="pre">&quot;event&quot;:</span> <span class="pre">&quot;result&quot;</span></code> gets the same.</p></li>
-<li><p>A consumer that reads the full stream gets all progress events plus the final result.</p></li>
-</ul>
-<p><code class="docutils literal notranslate"><span class="pre">--stream</span></code> and <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code> may be combined. <code class="docutils literal notranslate"><span class="pre">--stream</span></code> and <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">console</span></code> will
-produce ndjson events interspersed with human-readable text — this combination is
-discouraged in non-interactive contexts (document in help text).</p>
+<p><code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code> is a first-class output format. It replaces <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code> for
+consumers that want live streaming. A consumer that previously used <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code>
+and read the final envelope can switch to <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code> and read the terminal
+<code class="docutils literal notranslate"><span class="pre">complete</span></code> event instead — the payload is identical.</p>
 </section>
-<section id="stage-log-volume-management">
-<h3><code class="docutils literal notranslate"><span class="pre">stage_log</span></code> volume management<a class="headerlink" href="#stage-log-volume-management" title="Link to this heading"></a></h3>
-<p>Raw Terraform output can be thousands of lines. When <code class="docutils literal notranslate"><span class="pre">--stream</span></code> is set, all lines are
-emitted as <code class="docutils literal notranslate"><span class="pre">stage_log</span></code> events. This is intentional — the consumer (CI log aggregator,
-VS Code extension) decides what to display. A future option <code class="docutils literal notranslate"><span class="pre">--stream-filter</span> <span class="pre">LEVEL</span></code>
-(e.g., <code class="docutils literal notranslate"><span class="pre">--stream-filter</span> <span class="pre">WARNING</span></code>) could suppress below-threshold <code class="docutils literal notranslate"><span class="pre">stage_log</span></code> events;
-this is out of scope for the initial implementation.</p>
-</section>
-<section id="removal-of-todo-markers">
-<h3>Removal of <code class="docutils literal notranslate"><span class="pre">[TODO]</span></code> markers<a class="headerlink" href="#removal-of-todo-markers" title="Link to this heading"></a></h3>
-<p>When this ADR is accepted and implementation begins, remove the <code class="docutils literal notranslate"><span class="pre">[TODO:</span> <span class="pre">not</span> <span class="pre">yet</span> <span class="pre">implemented]</span></code> annotations from the <code class="docutils literal notranslate"><span class="pre">--stream</span></code> entries in ADR-0020’s command specs.</p>
+<section id="log-event-volume-management">
+<h3><code class="docutils literal notranslate"><span class="pre">log</span></code> event volume management<a class="headerlink" href="#log-event-volume-management" title="Link to this heading"></a></h3>
+<p>Raw Terraform output can be thousands of lines. When <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code> is set, all
+lines are emitted as <code class="docutils literal notranslate"><span class="pre">log</span></code> events. This is intentional — the consumer (CI log
+aggregator, VS Code extension) decides what to display. A future option
+<code class="docutils literal notranslate"><span class="pre">--stream-filter</span> <span class="pre">LEVEL</span></code> could suppress below-threshold events; deferred.</p>
 </section>
 </section>
 <section id="consequences">

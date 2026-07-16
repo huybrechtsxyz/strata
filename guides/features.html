@@ -3499,7 +3499,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--stream</span></code>)</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#decision-drivers">Decision Drivers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#considered-options">Considered Options</a><ul>
@@ -3511,14 +3511,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#decision-outcome">Decision Outcome</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#event-schema">Event schema</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#event-types">Event types</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#event-types-implemented">Event types implemented</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#example-stream">Example stream</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#implementation">Implementation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#composability-with-output">Composability with <code class="docutils literal notranslate"><span class="pre">--output</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#stage-log-volume-management"><code class="docutils literal notranslate"><span class="pre">stage_log</span></code> volume management</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#removal-of-todo-markers">Removal of <code class="docutils literal notranslate"><span class="pre">[TODO]</span></code> markers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#log-event-volume-management"><code class="docutils literal notranslate"><span class="pre">log</span></code> event volume management</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0029-realtime-progress-streaming-ndjson.html#consequences">Consequences</a></li>
@@ -3555,7 +3554,10 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../decisions/0031-cost-estimation-and-visibility.html">Cost estimation and visibility</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0031-cost-estimation-and-visibility.html#context-and-problem-statement">Context and Problem Statement</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../decisions/0031-cost-estimation-and-visibility.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0031-cost-estimation-and-visibility.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0031-cost-estimation-and-visibility.html#option-b-detail-infracost">Option B Detail — Infracost</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0031-cost-estimation-and-visibility.html#decision-outcome">Decision Outcome</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0031-cost-estimation-and-visibility.html#consequences">Consequences</a></li>
 </ul>
@@ -3605,6 +3607,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../decisions/0032-approval-workflows-and-gates.html">Approval workflows and gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0032-approval-workflows-and-gates.html#foundational-constraint-git-is-required">Foundational Constraint — Git Is Required</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0032-approval-workflows-and-gates.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0032-approval-workflows-and-gates.html#considered-options">Considered Options</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0032-approval-workflows-and-gates.html#decision-outcome">Decision Outcome</a></li>
@@ -3719,6 +3722,7 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../decisions/0035-enterprise-store.html">Enterprise Store — Private Organization-Level Content Registry</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0035-enterprise-store.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0035-enterprise-store.html#what-users-expect-from-a-registry">What Users Expect From a Registry</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0035-enterprise-store.html#decision-drivers">Decision Drivers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0035-enterprise-store.html#considered-options">Considered Options</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0035-enterprise-store.html#option-a-enterprise-store-as-a-typed-git-repository">Option A — Enterprise Store as a Typed Git Repository</a></li>
@@ -3835,13 +3839,28 @@
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0039-deployment-templates.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0039-deployment-templates.html#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0039-deployment-templates.html#design-overview">Design Overview</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#core-concept-base-template-thin-instantiation">Core concept: base template + thin instantiation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#core-concept-spec-extends-spec-partial">Core concept: <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> + <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#spec-partial"><code class="docutils literal notranslate"><span class="pre">spec.partial</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#spec-extends"><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#merge-semantics">Merge semantics</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#validation">Validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#two-phase-validation">Two-phase validation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#compatibility-with-fleet-discovery-adr-0037">Compatibility with fleet discovery (ADR 0037)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#drift-detection">Drift detection</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../decisions/0039-deployment-templates.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0039-deployment-templates.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#phase-1-model-resolver-and-validation-this-adr">Phase 1 — Model, resolver, and validation (this ADR)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0039-deployment-templates.html#models-deployment-model-py">1.1 <code class="docutils literal notranslate"><span class="pre">models/deployment_model.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0039-deployment-templates.html#services-deployment-extension-resolver-py-new">1.2 <code class="docutils literal notranslate"><span class="pre">services/deployment_extension_resolver.py</span></code> (new)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0039-deployment-templates.html#validators-platform-validator-py">1.3 <code class="docutils literal notranslate"><span class="pre">validators/platform_validator.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0039-deployment-templates.html#services-deployment-service-py">1.4 <code class="docutils literal notranslate"><span class="pre">services/deployment_service.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0039-deployment-templates.html#commands-deploy-base-deploy-command-py">1.5 <code class="docutils literal notranslate"><span class="pre">commands/deploy/base_deploy_command.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0039-deployment-templates.html#phase-1-test-coverage">Phase 1 test coverage</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0039-deployment-templates.html#phase-2-drift-detection-future">Phase 2 — Drift detection (future)</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0039-deployment-templates.html#consequences">Consequences</a></li>
 </ul>
 </li>
@@ -3860,16 +3879,46 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html">GitOps Controller Integration</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#context-and-problem-statement">Context and Problem Statement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#why-not-let-the-controller-handle-versions-natively">Why not let the controller handle versions natively?</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#design-overview">Design Overview</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#two-surfaces-output-and-health">Two surfaces: output and health</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#surface-1-strata-build-gitops">Surface 1: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">gitops</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#surface-2-strata-deploy-health-gitops">Surface 2: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span> <span class="pre">--gitops</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#key-insight-no-new-commands-needed">Key insight: no new commands needed</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#deployment-separation-with-partial-files-adr-0039">Deployment separation with partial files (ADR 0039)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#namespace-as-the-unit-of-sync">Namespace as the unit of sync</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#integration-model-spec-integrations">Integration model — <code class="docutils literal notranslate"><span class="pre">spec.integrations</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#provisioner-lifecycle">Provisioner lifecycle</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#controller-input-requirements">Controller Input Requirements</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#what-each-controller-needs">What each controller needs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#platform-artifact-as-template-context">Platform artifact as template context</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#convenience-fields-to-add-to-platformspecmodel">Convenience fields to add to <code class="docutils literal notranslate"><span class="pre">PlatformSpecModel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#why-convenience-fields-instead-of-raw-only">Why convenience fields instead of raw-only?</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#jinja2-adapter-templates">Jinja2 Adapter Templates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#template-location">Template location</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#template-variables-context">Template variables (context)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#argocd-example-template">ArgoCD example template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#flux-kustomization-example-template">Flux Kustomization example template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#flux-helmrelease-example-template">Flux HelmRelease example template</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#reconciliation-health">Reconciliation Health</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#reconciliation-result-shared-across-providers">Reconciliation result (shared across providers)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#provider-specific-health-queries">Provider-specific health queries</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#audit-integration">Audit integration</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#scaffolding-via-strata-sln-init">Scaffolding via <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#decisions">Decisions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0041-gitops-controller-integration.html#consequences">Consequences</a></li>
 </ul>
 </li>
@@ -3904,6 +3953,33 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0043-tenant-offboarding.html#consequences">Consequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../decisions/0043-tenant-offboarding.html#related-adrs">Related ADRs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html">Competitive Landscape and Feature Gaps</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#competitor-tools">Competitor Tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#feature-comparison">Feature Comparison</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#dry-configuration-inheritance">1. DRY Configuration &amp; Inheritance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#dependency-graph-execution-order">2. Dependency Graph / Execution Order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#drift-detection">3. Drift Detection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#policy-engine-guardrails">4. Policy Engine / Guardrails</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#cost-estimation">5. Cost Estimation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#approval-workflows-gates">6. Approval Workflows / Gates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#gitops-reconciliation">7. GitOps Reconciliation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#self-service-environments-ephemeral-ttl">8. Self-Service Environments (Ephemeral / TTL)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#vcs-integration-pr-comments-plan-previews">9. VCS Integration (PR comments, plan previews)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#state-locking-concurrency-control">10. State Locking / Concurrency Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#module-component-registry-private">11. Module / Component Registry (Private)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#change-detection-only-deploy-what-changed">12. Change Detection (Only Deploy What Changed)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#rbac-multi-tenancy-access-control">13. RBAC / Multi-Tenancy Access Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#real-time-streaming-progress-ui">14. Real-Time Streaming / Progress UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#workload-abstraction-score-platform-spec">15. Workload Abstraction (Score / Platform Spec)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#multi-provisioner-orchestration-terraform-ansible-helm-under-one-roof">16. Multi-Provisioner Orchestration (Terraform + Ansible + Helm under one roof)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#server-mode-api-first-architecture">17. Server Mode / API-First Architecture</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#summary-priority-assessment">Summary — Priority Assessment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../decisions/0044-competitive-landscape-and-feature-gaps.html#notes">Notes</a></li>
 </ul>
 </li>
 </ul>
@@ -4013,6 +4089,8 @@
 <li class="toctree-l3"><a class="reference internal" href="#other-deploy-subcommands">Other deploy subcommands</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#version-management-pin-and-lock-chart-image-versions">Version management — pin and lock chart/image versions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#promotions-advance-versions-across-rings">Promotions — advance versions across rings</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#deployment-locking">Deployment locking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#lifecycle-hooks-run-scripts-at-any-phase">Lifecycle hooks — run scripts at any phase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#policy-guardrails">Policy guardrails</a></li>
@@ -4884,8 +4962,21 @@ strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> 
 <td><p>Shell / PowerShell / Python scripts</p></td>
 <td><p>any</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">argocd</span></code></p></td>
+<td><p>Renders Jinja2 template → commits to git → ArgoCD reconciles</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sync</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">flux</span></code></p></td>
+<td><p>Renders Jinja2 template → commits to git → Flux reconciles</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sync</span></code></p></td>
+</tr>
 </tbody>
 </table>
+<p>ArgoCD and Flux are <strong>GitOps provisioners</strong> — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> renders a Jinja2 template using
+the full deployment context (versions, variables, namespace, tenant) and writes the output to a
+git remote. The controller picks up the committed file and reconciles the cluster.
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span></code> queries the controller API for reconciliation status alongside infrastructure
+health checks — no extra flags needed.</p>
 </section>
 <section id="other-deploy-subcommands">
 <h3>Other deploy subcommands<a class="headerlink" href="#other-deploy-subcommands" title="Link to this heading"></a></h3>
@@ -4899,6 +4990,42 @@ strata<span class="w"> </span>deploy<span class="w"> </span>lock<span class="w">
 </pre></div>
 </div>
 </section>
+</section>
+<hr class="docutils" />
+<section id="version-management-pin-and-lock-chart-image-versions">
+<h2>Version management — pin and lock chart/image versions<a class="headerlink" href="#version-management-pin-and-lock-chart-image-versions" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>versions<span class="w"> </span>init<span class="w">   </span>--file<span class="w"> </span>deploy/deploy-prd.yaml<span class="w">   </span><span class="c1"># scaffold a starter version manifest</span>
+strata<span class="w"> </span>versions<span class="w"> </span>add<span class="w">    </span>--file<span class="w"> </span>versions/v1.yaml<span class="w">          </span><span class="c1"># create a new snapshot</span>
+strata<span class="w"> </span>versions<span class="w"> </span>refresh<span class="w"> </span>--file<span class="w"> </span>versions/v1.yaml<span class="w">        </span><span class="c1"># sync pins against versionable targets</span>
+strata<span class="w"> </span>versions<span class="w"> </span>apply<span class="w">  </span>--file<span class="w"> </span>versions/v1.yaml<span class="w">          </span><span class="c1"># convert manifest → version-lock file</span>
+strata<span class="w"> </span>versions<span class="w"> </span>lock<span class="w">   </span>--file<span class="w"> </span>versions/v1.yaml<span class="w">          </span><span class="c1"># compute + store a SHA-256 hash of pins</span>
+strata<span class="w"> </span>versions<span class="w"> </span><span class="nb">export</span><span class="w"> </span>--file<span class="w"> </span>versions/v1.yaml<span class="w">          </span><span class="c1"># print resolved flat pin state</span>
+</pre></div>
+</div>
+<p>Version manifests (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>) declare pinned chart/image versions per ring. Pins flow into
+the platform artifact as <code class="docutils literal notranslate"><span class="pre">chart_versions</span></code> and <code class="docutils literal notranslate"><span class="pre">image_versions</span></code> convenience fields — templates
+and provisioners read them directly, no lookups required.</p>
+</section>
+<hr class="docutils" />
+<section id="promotions-advance-versions-across-rings">
+<h2>Promotions — advance versions across rings<a class="headerlink" href="#promotions-advance-versions-across-rings" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Promote a version manifest to a ring (writes a pointer lock)</span>
+strata<span class="w"> </span>promote<span class="w"> </span>--ring<span class="w"> </span>prd<span class="w"> </span>--file<span class="w"> </span>versions/v2.yaml<span class="w"> </span>--promotion<span class="w"> </span>canary
+
+<span class="c1"># Check promotion status and history</span>
+strata<span class="w"> </span>promote<span class="w"> </span>status<span class="w">  </span>--ring<span class="w"> </span>prd
+strata<span class="w"> </span>promote<span class="w"> </span><span class="nb">history</span><span class="w"> </span>--ring<span class="w"> </span>prd
+
+<span class="c1"># Roll back to the previous ring state</span>
+strata<span class="w"> </span>promote<span class="w"> </span>rollback<span class="w"> </span>--ring<span class="w"> </span>prd
+
+<span class="c1"># View the version matrix across all rings</span>
+strata<span class="w"> </span>promote<span class="w"> </span>matrix
+</pre></div>
+</div>
+<p>Each ring (dev, staging, prod) holds a pointer lock that references the active version manifest.
+Promoting advances the pointer — the next <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> picks up the new versions automatically.
+Rollback restores the previous pointer; no manual file edits needed.</p>
 </section>
 <hr class="docutils" />
 <section id="deployment-locking">

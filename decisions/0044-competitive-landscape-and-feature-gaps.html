@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deployment state locking for concurrent deploy protection &mdash; strata 0.8.0 documentation</title>
+  <title>Competitive Landscape and Feature Gaps &mdash; strata 0.8.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Infrastructure drift detection" href="0008-infrastructure-drift-detection.html" />
-    <link rel="prev" title="Policy engine for deployment guardrails" href="0006-policy-engine-for-deployment-guardrails.html" /> 
+    <link rel="next" title="How Deployments Work" href="../guides/how-deployments-work.html" />
+    <link rel="prev" title="Tenant Offboarding" href="0043-tenant-offboarding.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -2232,59 +2232,59 @@
 <li class="toctree-l2"><a class="reference internal" href="0006-policy-engine-for-deployment-guardrails.html#more-information">More Information</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Deployment state locking for concurrent deploy protection</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#context-and-problem-statement">Context and Problem Statement</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#considered-options">Considered Options</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#decision-outcome">Decision Outcome</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#consequences">Consequences</a></li>
+<li class="toctree-l1"><a class="reference internal" href="0007-deployment-state-locking.html">Deployment state locking for concurrent deploy protection</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0007-deployment-state-locking.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0007-deployment-state-locking.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0007-deployment-state-locking.html#decision-outcome">Decision Outcome</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#consequences">Consequences</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#detailed-design">Detailed Design</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#connection-source-workspaceiacbackendmodel">Connection Source — <code class="docutils literal notranslate"><span class="pre">WorkspaceIacBackendModel</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#yaml-configuration-spec-locking">YAML Configuration — <code class="docutils literal notranslate"><span class="pre">spec.locking</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#backend-selection-by-provisioner-type">Backend Selection by Provisioner Type</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#backend-implementation-details">Backend Implementation Details</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#azurerm-azure-blob-lease"><code class="docutils literal notranslate"><span class="pre">azurerm</span></code> — Azure Blob Lease</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#terraform-cloud-remote-tfc-workspace-lock-api"><code class="docutils literal notranslate"><span class="pre">terraform_cloud</span></code> / <code class="docutils literal notranslate"><span class="pre">remote</span></code> — TFC Workspace Lock API</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#s3-dynamodb-conditional-put"><code class="docutils literal notranslate"><span class="pre">s3</span></code> — DynamoDB Conditional Put</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#consul-session-kv-lock"><code class="docutils literal notranslate"><span class="pre">consul</span></code> — Session + KV Lock</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#local-no-backend-file-lock"><code class="docutils literal notranslate"><span class="pre">local</span></code> / no backend — File Lock</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0007-deployment-state-locking.html#detailed-design">Detailed Design</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#connection-source-workspaceiacbackendmodel">Connection Source — <code class="docutils literal notranslate"><span class="pre">WorkspaceIacBackendModel</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#yaml-configuration-spec-locking">YAML Configuration — <code class="docutils literal notranslate"><span class="pre">spec.locking</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#backend-selection-by-provisioner-type">Backend Selection by Provisioner Type</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#backend-implementation-details">Backend Implementation Details</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="0007-deployment-state-locking.html#azurerm-azure-blob-lease"><code class="docutils literal notranslate"><span class="pre">azurerm</span></code> — Azure Blob Lease</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0007-deployment-state-locking.html#terraform-cloud-remote-tfc-workspace-lock-api"><code class="docutils literal notranslate"><span class="pre">terraform_cloud</span></code> / <code class="docutils literal notranslate"><span class="pre">remote</span></code> — TFC Workspace Lock API</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0007-deployment-state-locking.html#s3-dynamodb-conditional-put"><code class="docutils literal notranslate"><span class="pre">s3</span></code> — DynamoDB Conditional Put</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0007-deployment-state-locking.html#consul-session-kv-lock"><code class="docutils literal notranslate"><span class="pre">consul</span></code> — Session + KV Lock</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0007-deployment-state-locking.html#local-no-backend-file-lock"><code class="docutils literal notranslate"><span class="pre">local</span></code> / no backend — File Lock</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#lock-entry-schema">Lock Entry Schema</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#strategies">Strategies</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#architecture">Architecture</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#model-additions">Model Additions</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#integration-pattern-baselockbackend">Integration Pattern — BaseLockBackend</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#lock-factory">Lock Factory</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#execution-flow-integration">Execution Flow Integration</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#cli-commands">CLI Commands</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#dry-run-behavior">Dry-Run Behavior</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#failure-scenarios">Failure Scenarios</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#notification-hooks-future-extension">Notification Hooks (Future Extension)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#lock-entry-schema">Lock Entry Schema</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#strategies">Strategies</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#architecture">Architecture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#model-additions">Model Additions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#integration-pattern-baselockbackend">Integration Pattern — BaseLockBackend</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#lock-factory">Lock Factory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#execution-flow-integration">Execution Flow Integration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#cli-commands">CLI Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#dry-run-behavior">Dry-Run Behavior</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#failure-scenarios">Failure Scenarios</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#notification-hooks-future-extension">Notification Hooks (Future Extension)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#implementation-phases">Implementation Phases</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#phase-1-core-mvp">Phase 1 — Core (MVP)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#phase-2-remote-backends">Phase 2 — Remote Backends</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#phase-3-additional-backends-robustness">Phase 3 — Additional Backends + Robustness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0007-deployment-state-locking.html#implementation-phases">Implementation Phases</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#phase-1-core-mvp">Phase 1 — Core (MVP)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#phase-2-remote-backends">Phase 2 — Remote Backends</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#phase-3-additional-backends-robustness">Phase 3 — Additional Backends + Robustness</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#implementation-plan">Implementation Plan</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#step-1-model-deploymentlockingmodel">Step 1 — Model: <code class="docutils literal notranslate"><span class="pre">DeploymentLockingModel</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-2-model-manifestlockreferencemodel">Step 2 — Model: <code class="docutils literal notranslate"><span class="pre">ManifestLockReferenceModel</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-3-abc-baselockbackend-dataclasses">Step 3 — ABC: <code class="docutils literal notranslate"><span class="pre">BaseLockBackend</span></code> + dataclasses</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-4-locallockbackend">Step 4 — <code class="docutils literal notranslate"><span class="pre">LocalLockBackend</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-5-lockfactory">Step 5 — <code class="docutils literal notranslate"><span class="pre">LockFactory</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-6-duration-parser-utility">Step 6 — Duration parser utility</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-7-wire-locking-into-rundeploycommand">Step 7 — Wire locking into <code class="docutils literal notranslate"><span class="pre">RunDeployCommand</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-8-cli-strata-deploy-lock-subgroup">Step 8 — CLI: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span></code> subgroup</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-9-azurermlockbackend-phase-2">Step 9 — <code class="docutils literal notranslate"><span class="pre">AzurermLockBackend</span></code> (Phase 2)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-10-tfclockbackend-phase-2">Step 10 — <code class="docutils literal notranslate"><span class="pre">TfcLockBackend</span></code> (Phase 2)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-11-consullockbackend-phase-2">Step 11 — <code class="docutils literal notranslate"><span class="pre">ConsulLockBackend</span></code> (Phase 2)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-12-strata-deploy-lock-history-phase-2">Step 12 — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">history</span></code> (Phase 2)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#step-13-docs-schema-update">Step 13 — Docs + schema update</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#implementation-order-summary">Implementation order summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0007-deployment-state-locking.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-1-model-deploymentlockingmodel">Step 1 — Model: <code class="docutils literal notranslate"><span class="pre">DeploymentLockingModel</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-2-model-manifestlockreferencemodel">Step 2 — Model: <code class="docutils literal notranslate"><span class="pre">ManifestLockReferenceModel</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-3-abc-baselockbackend-dataclasses">Step 3 — ABC: <code class="docutils literal notranslate"><span class="pre">BaseLockBackend</span></code> + dataclasses</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-4-locallockbackend">Step 4 — <code class="docutils literal notranslate"><span class="pre">LocalLockBackend</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-5-lockfactory">Step 5 — <code class="docutils literal notranslate"><span class="pre">LockFactory</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-6-duration-parser-utility">Step 6 — Duration parser utility</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-7-wire-locking-into-rundeploycommand">Step 7 — Wire locking into <code class="docutils literal notranslate"><span class="pre">RunDeployCommand</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-8-cli-strata-deploy-lock-subgroup">Step 8 — CLI: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span></code> subgroup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-9-azurermlockbackend-phase-2">Step 9 — <code class="docutils literal notranslate"><span class="pre">AzurermLockBackend</span></code> (Phase 2)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-10-tfclockbackend-phase-2">Step 10 — <code class="docutils literal notranslate"><span class="pre">TfcLockBackend</span></code> (Phase 2)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-11-consullockbackend-phase-2">Step 11 — <code class="docutils literal notranslate"><span class="pre">ConsulLockBackend</span></code> (Phase 2)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-12-strata-deploy-lock-history-phase-2">Step 12 — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">history</span></code> (Phase 2)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#step-13-docs-schema-update">Step 13 — Docs + schema update</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0007-deployment-state-locking.html#implementation-order-summary">Implementation order summary</a></li>
 </ul>
 </li>
 </ul>
@@ -3955,31 +3955,31 @@
 <li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#related-adrs">Related ADRs</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html">Competitive Landscape and Feature Gaps</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#context-and-problem-statement">Context and Problem Statement</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#competitor-tools">Competitor Tools</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#feature-comparison">Feature Comparison</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#dry-configuration-inheritance">1. DRY Configuration &amp; Inheritance</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#dependency-graph-execution-order">2. Dependency Graph / Execution Order</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#drift-detection">3. Drift Detection</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#policy-engine-guardrails">4. Policy Engine / Guardrails</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#cost-estimation">5. Cost Estimation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#approval-workflows-gates">6. Approval Workflows / Gates</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#gitops-reconciliation">7. GitOps Reconciliation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#self-service-environments-ephemeral-ttl">8. Self-Service Environments (Ephemeral / TTL)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#vcs-integration-pr-comments-plan-previews">9. VCS Integration (PR comments, plan previews)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#state-locking-concurrency-control">10. State Locking / Concurrency Control</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#module-component-registry-private">11. Module / Component Registry (Private)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#change-detection-only-deploy-what-changed">12. Change Detection (Only Deploy What Changed)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#rbac-multi-tenancy-access-control">13. RBAC / Multi-Tenancy Access Control</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#real-time-streaming-progress-ui">14. Real-Time Streaming / Progress UI</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#workload-abstraction-score-platform-spec">15. Workload Abstraction (Score / Platform Spec)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#multi-provisioner-orchestration-terraform-ansible-helm-under-one-roof">16. Multi-Provisioner Orchestration (Terraform + Ansible + Helm under one roof)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#server-mode-api-first-architecture">17. Server Mode / API-First Architecture</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Competitive Landscape and Feature Gaps</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#competitor-tools">Competitor Tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#feature-comparison">Feature Comparison</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#dry-configuration-inheritance">1. DRY Configuration &amp; Inheritance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#dependency-graph-execution-order">2. Dependency Graph / Execution Order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#drift-detection">3. Drift Detection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#policy-engine-guardrails">4. Policy Engine / Guardrails</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cost-estimation">5. Cost Estimation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#approval-workflows-gates">6. Approval Workflows / Gates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#gitops-reconciliation">7. GitOps Reconciliation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#self-service-environments-ephemeral-ttl">8. Self-Service Environments (Ephemeral / TTL)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#vcs-integration-pr-comments-plan-previews">9. VCS Integration (PR comments, plan previews)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#state-locking-concurrency-control">10. State Locking / Concurrency Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-component-registry-private">11. Module / Component Registry (Private)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#change-detection-only-deploy-what-changed">12. Change Detection (Only Deploy What Changed)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#rbac-multi-tenancy-access-control">13. RBAC / Multi-Tenancy Access Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#real-time-streaming-progress-ui">14. Real-Time Streaming / Progress UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#workload-abstraction-score-platform-spec">15. Workload Abstraction (Score / Platform Spec)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multi-provisioner-orchestration-terraform-ansible-helm-under-one-roof">16. Multi-Provisioner Orchestration (Terraform + Ansible + Helm under one roof)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#server-mode-api-first-architecture">17. Server Mode / API-First Architecture</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#summary-priority-assessment">Summary — Priority Assessment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#notes">Notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#summary-priority-assessment">Summary — Priority Assessment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
 </ul>
@@ -4744,9 +4744,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Deployment state locking for concurrent deploy protection</li>
+      <li class="breadcrumb-item active">Competitive Landscape and Feature Gaps</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/decisions/0007-deployment-state-locking.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/decisions/0044-competitive-landscape-and-feature-gaps.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -4754,844 +4754,1310 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="deployment-state-locking-for-concurrent-deploy-protection">
-<h1>Deployment state locking for concurrent deploy protection<a class="headerlink" href="#deployment-state-locking-for-concurrent-deploy-protection" title="Link to this heading"></a></h1>
+  <section id="competitive-landscape-and-feature-gaps">
+<h1>Competitive Landscape and Feature Gaps<a class="headerlink" href="#competitive-landscape-and-feature-gaps" title="Link to this heading"></a></h1>
 <ul class="simple">
-<li><p>Status: accepted</p></li>
-<li><p>Date: 2026-06-16</p></li>
+<li><p>Status: proposed</p></li>
+<li><p>Date: 2026-07-15</p></li>
 </ul>
 <section id="context-and-problem-statement">
 <h2>Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Link to this heading"></a></h2>
-<p>When multiple team members work on the same strata repo from different machines, nothing prevents them from running <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code> simultaneously against the same infrastructure. Terraform locks its own state during <code class="docutils literal notranslate"><span class="pre">plan</span></code>/<code class="docutils literal notranslate"><span class="pre">apply</span></code>, but strata’s pipeline spans more than Terraform — it includes lifecycle hooks, Ansible runs, health checks, outputs collection, and policy evaluation. Two overlapping pipelines can corrupt state, produce partial deployments, or trigger conflicting Ansible runs.</p>
-<p>The risk is highest in teams with shared environments (staging, production) where CI/CD and human operators both trigger deployments.</p>
+<p>Strata is not the first tool to tackle infrastructure orchestration above Terraform and
+Ansible. Multiple open-source and commercial products address overlapping concerns. This
+ADR catalogues those tools, identifies what they do well (or better), and assesses whether
+each capability is relevant for strata to adopt.</p>
+<p>This is an inventory — individual features that warrant implementation will get their own
+ADRs.</p>
 </section>
-<section id="considered-options">
-<h2>Considered Options<a class="headerlink" href="#considered-options" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><strong>Option A</strong>: Rely entirely on Terraform’s native backend locking</p></li>
-<li><p><strong>Option B</strong>: Strata-managed lock wrapping the full pipeline, using a remote backend</p></li>
-<li><p><strong>Option C</strong>: Strata-managed lock derived from the provisioner’s existing <code class="docutils literal notranslate"><span class="pre">backend</span></code> configuration</p></li>
-</ul>
-</section>
-<section id="decision-outcome">
-<h2>Decision Outcome<a class="headerlink" href="#decision-outcome" title="Link to this heading"></a></h2>
-<p>Chosen: <strong>Option C — Lock backend derived from the provisioner’s existing <code class="docutils literal notranslate"><span class="pre">WorkspaceIacBackendModel</span></code></strong>, because:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">WorkspaceIacModel.backend</span></code> already carries <code class="docutils literal notranslate"><span class="pre">type</span></code> + <code class="docutils literal notranslate"><span class="pre">configuration</span></code> (including variable/secret references) for every provisioner — no duplicate connection config needed</p></li>
-<li><p>The connection details are already resolved by <code class="docutils literal notranslate"><span class="pre">ResolvedValues</span></code> before deploy runs; the lock backend receives concrete values</p></li>
-<li><p>A pluggable <code class="docutils literal notranslate"><span class="pre">BaseLockBackend</span></code> ABC follows strata’s existing integration pattern without registering in the integration factory (locking is an internal concern, not a user-declared integration)</p></li>
-<li><p>Terraform Cloud is fully supported via its workspace lock API with the same credentials Terraform uses</p></li>
-</ul>
-<section id="consequences">
-<h3>Consequences<a class="headerlink" href="#consequences" title="Link to this heading"></a></h3>
-<ul class="simple">
-<li><p>Good: Full pipeline protection — hooks, Ansible, health checks, and policy evaluation all covered</p></li>
-<li><p>Good: Zero duplicate configuration — connection details come from the provisioner backend already in the workspace YAML</p></li>
-<li><p>Good: Terraform Cloud users get native workspace lock integration with no extra setup</p></li>
-<li><p>Good: Lock metadata in the deployment manifest provides audit trail</p></li>
-<li><p>Bad: Lock acquisition adds latency (~1-2s per deploy start)</p></li>
-<li><p>Bad: Stale lock cleanup requires heuristics (TTL, heartbeat, force-unlock)</p></li>
-<li><p>Bad: Dry-run mode must skip locks explicitly</p></li>
-</ul>
-</section>
-</section>
-<section id="detailed-design">
-<h2>Detailed Design<a class="headerlink" href="#detailed-design" title="Link to this heading"></a></h2>
-<section id="connection-source-workspaceiacbackendmodel">
-<h3>Connection Source — <code class="docutils literal notranslate"><span class="pre">WorkspaceIacBackendModel</span></code><a class="headerlink" href="#connection-source-workspaceiacbackendmodel" title="Link to this heading"></a></h3>
-<p>The backend connection details are <strong>not</strong> declared on <code class="docutils literal notranslate"><span class="pre">spec.locking</span></code>. They already exist on each provisioner in the workspace YAML as <code class="docutils literal notranslate"><span class="pre">WorkspaceIacBackendModel</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># workspace.yaml — already supported today</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">provisioners</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tf_main</span>
-<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform</span>
-<span class="w">      </span><span class="nt">source</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terraform/</span>
-<span class="w">      </span><span class="nt">backend</span><span class="p">:</span>
-<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azurerm</span><span class="w">                              </span><span class="c1"># determines which lock backend to use</span>
-<span class="w">        </span><span class="nt">configuration</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">resource_group_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${var:rg_name}</span><span class="w">      </span><span class="c1"># resolved before deploy runs</span>
-<span class="w">          </span><span class="nt">storage_account_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${var:storage_acct}</span>
-<span class="w">          </span><span class="nt">container_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tfstate</span>
-<span class="w">          </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prod.terraform.tfstate</span>
-</pre></div>
-</div>
-<p>At deploy time strata:</p>
-<ol class="arabic simple">
-<li><p>Looks up the provisioner for each stage via <code class="docutils literal notranslate"><span class="pre">workspace.spec.provisioners[stage.provisioner]</span></code></p></li>
-<li><p>Reads <code class="docutils literal notranslate"><span class="pre">provisioner.backend.type</span></code> → selects the lock backend implementation</p></li>
-<li><p>Reads <code class="docutils literal notranslate"><span class="pre">provisioner.backend.configuration</span></code> (already variable-resolved) → passes to the backend</p></li>
-</ol>
-<p>Multiple stages in the same deployment share the same lock if they use the same provisioner backend. Stages with no backend (Ansible, scripts, local) fall back to <code class="docutils literal notranslate"><span class="pre">local</span></code> file lock.</p>
-</section>
-<section id="yaml-configuration-spec-locking">
-<h3>YAML Configuration — <code class="docutils literal notranslate"><span class="pre">spec.locking</span></code><a class="headerlink" href="#yaml-configuration-spec-locking" title="Link to this heading"></a></h3>
-<p>Only behavioural settings live here — no connection config:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
-<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
-<span class="nt">meta</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prod-platform</span>
-<span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">locking</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<span class="w">    </span><span class="nt">strategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wrap</span><span class="w">          </span><span class="c1"># wrap | delegate  (default: wrap)</span>
-<span class="w">    </span><span class="nt">wait_timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30m</span><span class="w">       </span><span class="c1"># how long to wait for a held lock (default: 30m)</span>
-<span class="w">    </span><span class="nt">force_unlock_after</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8h</span><span class="w">  </span><span class="c1"># stale lock TTL — auto-release after this (default: 8h)</span>
-</pre></div>
-</div>
-</section>
-<section id="backend-selection-by-provisioner-type">
-<h3>Backend Selection by Provisioner Type<a class="headerlink" href="#backend-selection-by-provisioner-type" title="Link to this heading"></a></h3>
-<p>The lock backend is chosen from <code class="docutils literal notranslate"><span class="pre">provisioner.backend.type</span></code>:</p>
+<section id="competitor-tools">
+<h2>Competitor Tools<a class="headerlink" href="#competitor-tools" title="Link to this heading"></a></h2>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">backend.type</span></code></p></th>
-<th class="head"><p>Lock Backend</p></th>
-<th class="head"><p>Lock Mechanism</p></th>
-<th class="head"><p>Atomic Guarantee</p></th>
-<th class="head"><p>Multi-Machine</p></th>
-<th class="head"><p>New Dependency</p></th>
+<tr class="row-odd"><th class="head"><p>Tool</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Primary Strength</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">azurerm</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">AzurermLockBackend</span></code></p></td>
-<td><p>Blob lease (60s, auto-renewed via REST)</p></td>
-<td><p>Azure-native</p></td>
-<td><p>Yes</p></td>
-<td><p>None (<code class="docutils literal notranslate"><span class="pre">az</span></code> CLI + <code class="docutils literal notranslate"><span class="pre">urllib</span></code>)</p></td>
+<tr class="row-even"><td><p>Terragrunt</p></td>
+<td><p>OSS (Gruntwork)</p></td>
+<td><p>DRY Terraform configs, dependency orchestration, environment promotion</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">s3</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">S3LockBackend</span></code></p></td>
-<td><p>DynamoDB conditional put (<code class="docutils literal notranslate"><span class="pre">attribute_not_exists</span></code>)</p></td>
-<td><p>DynamoDB-native</p></td>
-<td><p>Yes</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">boto3</span></code></p></td>
+<tr class="row-odd"><td><p>Terramate</p></td>
+<td><p>OSS</p></td>
+<td><p>Stacks, change detection, code generation, orchestration</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">consul</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ConsulLockBackend</span></code></p></td>
-<td><p>Session + KV lock (reuses <code class="docutils literal notranslate"><span class="pre">ConsulIntegration</span></code>)</p></td>
-<td><p>Consul-native</p></td>
-<td><p>Yes</p></td>
-<td><p>None (existing integration)</p></td>
+<tr class="row-even"><td><p>Atmos</p></td>
+<td><p>OSS (Cloud Posse)</p></td>
+<td><p>YAML-driven stacks, components, vendoring, environment inheritance</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">terraform_cloud</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">TfcLockBackend</span></code></p></td>
-<td><p>Workspace lock API (<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/workspaces/:id/actions/lock</span></code>)</p></td>
-<td><p>TFC-native</p></td>
-<td><p>Yes</p></td>
-<td><p>None (<code class="docutils literal notranslate"><span class="pre">httpx</span></code>/<code class="docutils literal notranslate"><span class="pre">urllib</span></code>)</p></td>
+<tr class="row-odd"><td><p>Spacelift</p></td>
+<td><p>SaaS</p></td>
+<td><p>Policy-as-code, drift detection, approval workflows, VCS integration</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">remote</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">TfcLockBackend</span></code></p></td>
-<td><p>Same as <code class="docutils literal notranslate"><span class="pre">terraform_cloud</span></code> — <code class="docutils literal notranslate"><span class="pre">remote</span></code> is an alias</p></td>
-<td><p>TFC-native</p></td>
-<td><p>Yes</p></td>
-<td><p>None</p></td>
+<tr class="row-even"><td><p>Env0</p></td>
+<td><p>SaaS</p></td>
+<td><p>Self-service environments, cost guardrails, TTL environments</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gcs</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">GcsLockBackend</span></code></p></td>
-<td><p>GCS object conditions (<code class="docutils literal notranslate"><span class="pre">if-generation-match:</span> <span class="pre">0</span></code>)</p></td>
-<td><p>GCS-native</p></td>
-<td><p>Yes</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">google-cloud-storage</span></code></p></td>
+<tr class="row-odd"><td><p>Scalr</p></td>
+<td><p>SaaS</p></td>
+<td><p>Hierarchical workspaces, OPA policies, RBAC, cost tracking</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">local</span></code> / none</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">LocalLockBackend</span></code></p></td>
-<td><p>File lock (<code class="docutils literal notranslate"><span class="pre">LockFileEx</span></code> / <code class="docutils literal notranslate"><span class="pre">fcntl</span></code>)</p></td>
-<td><p>OS-native</p></td>
-<td><p>No (single machine)</p></td>
-<td><p>None</p></td>
+<tr class="row-even"><td><p>Pulumi Deployments</p></td>
+<td><p>SaaS + OSS</p></td>
+<td><p>Real-language IaC, deployment automation, environments</p></td>
+</tr>
+<tr class="row-odd"><td><p>Crossplane</p></td>
+<td><p>OSS (CNCF)</p></td>
+<td><p>Kubernetes-native infra provisioning, compositions, XRDs</p></td>
+</tr>
+<tr class="row-even"><td><p>Humanitec / Score</p></td>
+<td><p>SaaS + OSS</p></td>
+<td><p>Platform engineering, workload spec abstraction</p></td>
+</tr>
+<tr class="row-odd"><td><p>ArgoCD / Flux</p></td>
+<td><p>OSS (CNCF)</p></td>
+<td><p>GitOps reconciliation for Kubernetes workloads</p></td>
 </tr>
 </tbody>
 </table>
 </section>
-<section id="backend-implementation-details">
-<h3>Backend Implementation Details<a class="headerlink" href="#backend-implementation-details" title="Link to this heading"></a></h3>
-<section id="azurerm-azure-blob-lease">
-<h4><code class="docutils literal notranslate"><span class="pre">azurerm</span></code> — Azure Blob Lease<a class="headerlink" href="#azurerm-azure-blob-lease" title="Link to this heading"></a></h4>
-<p>Follows the same pattern as <code class="docutils literal notranslate"><span class="pre">AzureKeyVaultIntegration</span></code> and <code class="docutils literal notranslate"><span class="pre">AzureAppConfigIntegration</span></code>: no SDK, uses <code class="docutils literal notranslate"><span class="pre">az</span> <span class="pre">account</span> <span class="pre">get-access-token</span></code> for a Bearer token and calls the REST API over <code class="docutils literal notranslate"><span class="pre">urllib.request</span></code>.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Configuration keys read from provisioner.backend.configuration:
-  storage_account_name  → {storage_account}.blob.core.windows.net
-  container_name        → container for the lock blob
-  (resource_group_name and key are ignored for locking)
-
-Lock blob path: {container}/strata-locks/{deployment_name}.lock
-
-Auth:  az account get-access-token --resource https://storage.azure.com
-       → Bearer token, valid 1h, cached
-
-REST:
-  Acquire:  PUT  …/{blob}?comp=lease  x-ms-lease-action: acquire  x-ms-lease-duration: 60
-  Renew:    PUT  …/{blob}?comp=lease  x-ms-lease-action: renew    x-ms-lease-id: {id}
-  Release:  PUT  …/{blob}?comp=lease  x-ms-lease-action: release  x-ms-lease-id: {id}
-  Status:   HEAD …/{blob}             → x-ms-lease-state header
+<section id="feature-comparison">
+<h2>Feature Comparison<a class="headerlink" href="#feature-comparison" title="Link to this heading"></a></h2>
+<p>Legend:</p>
+<ul class="simple">
+<li><p><strong>Strata status</strong>: ✅ exists | 🔨 ADR proposed | ❌ not present</p></li>
+<li><p><strong>Useful for strata?</strong>: yes / maybe / no — with rationale</p></li>
+<li><p><strong>Ref</strong>: existing ADR if applicable</p></li>
+</ul>
+<section id="dry-configuration-inheritance">
+<h3>1. DRY Configuration &amp; Inheritance<a class="headerlink" href="#dry-configuration-inheritance" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Terragrunt (<code class="docutils literal notranslate"><span class="pre">include</span></code> blocks), Atmos (stack inheritance), Terramate (globals)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Eliminate repetition across environments via layered inheritance, includes, and variable cascading</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Terragrunt’s <code class="docutils literal notranslate"><span class="pre">include</span></code> is more flexible. Atmos has deep inheritance with mixins. Strata’s environment composition is functional but simpler.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>✅ Environment composition exists</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Maybe — current flat-merge works (ADR 0024) but mixin/include patterns could reduce duplication in large repos</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0024-environment-composition-flat-merge-fix.html"><span class="std std-doc">ADR 0024</span></a></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="dependency-graph-execution-order">
+<h3>2. Dependency Graph / Execution Order<a class="headerlink" href="#dependency-graph-execution-order" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Terragrunt (<code class="docutils literal notranslate"><span class="pre">dependency</span></code> blocks), Spacelift (stack dependencies), Atmos (component deps)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Automatically determine deployment order from declared dependencies. Parallel where safe, serial where required.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata stages are linear and manually ordered. No automatic parallelism within a deployment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>🔨 Partially proposed</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — would enable parallel stage execution and cross-deployment dependency resolution</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0015-flow-command-dependency-graph.html"><span class="std std-doc">ADR 0015</span></a></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="drift-detection">
+<h3>3. Drift Detection<a class="headerlink" href="#drift-detection" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Spacelift (scheduled drift runs), Env0 (drift alerts), Crossplane (continuous reconciliation)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Periodically compare actual infrastructure state against declared state. Alert or auto-remediate.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata has no scheduled drift detection today.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>🔨 ADR proposed</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — critical for production governance. Could run as <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span></code> extension.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0008-infrastructure-drift-detection.html"><span class="std std-doc">ADR 0008</span></a></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="policy-engine-guardrails">
+<h3>4. Policy Engine / Guardrails<a class="headerlink" href="#policy-engine-guardrails" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Spacelift (OPA + built-in), Scalr (OPA), Env0 (custom policies), Terramate (checks)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Evaluate policies before/after plan — block deploys that violate cost, security, or naming rules</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata has the ADR but no implementation. Spacelift’s is production-hardened.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>🔨 ADR proposed</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — especially for enterprise/multi-tenant scenarios</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0006-policy-engine-for-deployment-guardrails.html"><span class="std std-doc">ADR 0006</span></a></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Implementation approach — OPA (Open Policy Agent):</strong></p>
+<p>OPA is a CNCF-graduated, language-agnostic policy engine. Policies are written in Rego
+(a declarative query language). OPA evaluates JSON input and returns structured
+allow/deny decisions.</p>
+<p><strong>How competitors integrate OPA:</strong></p>
+<ul class="simple">
+<li><p><strong>Spacelift:</strong> Converts Terraform plan to JSON → evaluates against Rego policies stored
+in the platform → blocks apply on deny. Supports <code class="docutils literal notranslate"><span class="pre">plan</span></code>, <code class="docutils literal notranslate"><span class="pre">init</span></code>, and <code class="docutils literal notranslate"><span class="pre">notification</span></code>
+policy types with different trigger points.</p></li>
+<li><p><strong>Scalr:</strong> OPA policies attached at account/environment/workspace levels (hierarchical).
+Policies run on <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">plan</span></code> JSON output. Supports <code class="docutils literal notranslate"><span class="pre">enforced</span></code> (hard block) and
+<code class="docutils literal notranslate"><span class="pre">advisory</span></code> (warn only) severity.</p></li>
+<li><p><strong>Env0:</strong> Custom policies via OPA or cost-based rules. Integrates with <code class="docutils literal notranslate"><span class="pre">conftest</span></code> for
+local evaluation.</p></li>
+</ul>
+<p><strong>How strata could implement it:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">validate</span> <span class="o">&lt;</span><span class="n">file</span><span class="o">&gt;</span> <span class="o">--</span><span class="n">policy</span> <span class="o">./</span><span class="n">policies</span><span class="o">/</span>    <span class="c1"># evaluate against local Rego policies</span>
+<span class="n">strata</span> <span class="n">build</span> <span class="n">plan</span> <span class="o">-</span><span class="n">f</span> <span class="n">deploy</span><span class="o">.</span><span class="n">yaml</span> <span class="o">--</span><span class="n">policy</span> <span class="o">...</span>  <span class="c1"># evaluate plan output against policies</span>
+<span class="n">strata</span> <span class="n">deploy</span> <span class="n">run</span> <span class="o">-</span><span class="n">f</span> <span class="n">deploy</span><span class="o">.</span><span class="n">yaml</span> <span class="o">--</span><span class="n">policy</span> <span class="o">...</span>  <span class="c1"># pre-deploy gate</span>
 </pre></div>
 </div>
-<p>Lock content (blob body) is JSON: <code class="docutils literal notranslate"><span class="pre">LockEntry</span></code> schema.
-Heartbeat thread renews every 30s while the pipeline runs.</p>
-</section>
-<section id="terraform-cloud-remote-tfc-workspace-lock-api">
-<h4><code class="docutils literal notranslate"><span class="pre">terraform_cloud</span></code> / <code class="docutils literal notranslate"><span class="pre">remote</span></code> — TFC Workspace Lock API<a class="headerlink" href="#terraform-cloud-remote-tfc-workspace-lock-api" title="Link to this heading"></a></h4>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Configuration keys read from provisioner.backend.configuration:
-  organization   → TFC organization name
-  workspaces.name or workspace → TFC workspace name
-  (token resolved from TF_TOKEN_app_terraform_io env var or .terraformrc)
-
-REST:
-  Acquire:  POST  https://app.terraform.io/api/v2/workspaces/{id}/actions/lock
-            Body: {&quot;reason&quot;: &quot;strata deploy run — {deployment} by {holder}&quot;}
-  Release:  POST  https://app.terraform.io/api/v2/workspaces/{id}/actions/unlock
-  Status:   GET   https://app.terraform.io/api/v2/workspaces/{id}
-            → attributes.locked + attributes.locked-by
+<p>Integration points in the strata lifecycle:</p>
+<ol class="arabic simple">
+<li><p><strong>Pre-build (schema + policy):</strong> Evaluate the resolved YAML model against naming,
+tagging, and structural policies before any Terraform runs.</p></li>
+<li><p><strong>Post-plan (plan output):</strong> Convert <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">plan</span> <span class="pre">-json</span></code> output to OPA input,
+evaluate against cost/security/compliance rules.</p></li>
+<li><p><strong>Pre-deploy gate:</strong> Final policy check before <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">apply</span></code>. Block if any
+<code class="docutils literal notranslate"><span class="pre">enforced</span></code> policy fails.</p></li>
+</ol>
+<p>Policy file structure (candidate):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>policies/
+├── naming.rego          # resource naming conventions
+├── security.rego        # no public endpoints, encryption required
+├── cost.rego            # instance size limits, region restrictions
+└── compliance.rego      # tagging requirements, data residency
 </pre></div>
 </div>
-<p>No new dependency — plain <code class="docutils literal notranslate"><span class="pre">urllib.request</span></code> with Bearer token from env var.</p>
-<p><strong><code class="docutils literal notranslate"><span class="pre">delegate</span></code> strategy with TFC:</strong> When <code class="docutils literal notranslate"><span class="pre">strategy:</span> <span class="pre">delegate</span></code> and <code class="docutils literal notranslate"><span class="pre">backend.type:</span> <span class="pre">terraform_cloud</span></code>, strata skips explicit locking and relies on TFC’s run queue. Only safe when all stages use TFC remote execution (no Ansible or script stages).</p>
-</section>
-<section id="s3-dynamodb-conditional-put">
-<h4><code class="docutils literal notranslate"><span class="pre">s3</span></code> — DynamoDB Conditional Put<a class="headerlink" href="#s3-dynamodb-conditional-put" title="Link to this heading"></a></h4>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Configuration keys read from provisioner.backend.configuration:
-  dynamodb_table  → DynamoDB table for state locking (same table Terraform uses)
-  region          → AWS region
-  (bucket, key are ignored for locking)
+<p>Example Rego policy — “all resources must have cost-center tag”:</p>
+<div class="highlight-rego notranslate"><div class="highlight"><pre><span></span><span class="k">package</span><span class="w"> </span><span class="n">strata</span><span class="p">.</span><span class="n">policy</span>
 
-Auth: standard AWS credential chain (env vars, ~/.aws/credentials, instance profile)
-
-Operation:
-  Acquire:  PutItem with ConditionExpression=&quot;attribute_not_exists(LockID)&quot;
-  Release:  DeleteItem
-  Status:   GetItem
-</pre></div>
-</div>
-<p>New dependency: <code class="docutils literal notranslate"><span class="pre">boto3</span></code> (optional, only imported when <code class="docutils literal notranslate"><span class="pre">backend.type:</span> <span class="pre">s3</span></code>).</p>
-</section>
-<section id="consul-session-kv-lock">
-<h4><code class="docutils literal notranslate"><span class="pre">consul</span></code> — Session + KV Lock<a class="headerlink" href="#consul-session-kv-lock" title="Link to this heading"></a></h4>
-<p>Reuses the existing <code class="docutils literal notranslate"><span class="pre">ConsulIntegration</span></code> (<code class="docutils literal notranslate"><span class="pre">hashicorp_consul.py</span></code>). No new code for the integration layer.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Configuration keys read from provisioner.backend.configuration:
-  address  → Consul HTTP endpoint (e.g., http://consul:8500)
-  (path, scheme, datacenter also read if present)
-
-Lock key path: strata/locks/{deployment_name}
-Auth: CONSUL_HTTP_TOKEN env var (same as ConsulIntegration)
-
-Operations: session create → KV acquire → heartbeat → KV release → session destroy
-</pre></div>
-</div>
-</section>
-<section id="local-no-backend-file-lock">
-<h4><code class="docutils literal notranslate"><span class="pre">local</span></code> / no backend — File Lock<a class="headerlink" href="#local-no-backend-file-lock" title="Link to this heading"></a></h4>
-<p>Used when no provisioner backend is declared (Ansible stages, script stages) or <code class="docutils literal notranslate"><span class="pre">backend.type:</span> <span class="pre">local</span></code>.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Lock</span> <span class="n">file</span> <span class="n">path</span><span class="p">:</span> <span class="p">{</span><span class="n">work_path</span><span class="p">}</span><span class="o">/.</span><span class="n">strata</span><span class="o">/</span><span class="n">locks</span><span class="o">/</span><span class="p">{</span><span class="n">deployment_name</span><span class="p">}</span><span class="o">.</span><span class="n">lock</span>
-<span class="n">Auth</span><span class="p">:</span> <span class="n">none</span>
-<span class="n">Operations</span><span class="p">:</span> <span class="n">platform</span> <span class="n">file</span> <span class="n">lock</span> <span class="p">(</span><span class="n">fcntl</span><span class="o">.</span><span class="n">flock</span> <span class="n">on</span> <span class="n">Unix</span><span class="p">,</span> <span class="n">LockFileEx</span> <span class="n">on</span> <span class="n">Windows</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Only protects against concurrent processes on the same machine. Appropriate for development or single-operator setups.</p>
-</section>
-</section>
-<section id="lock-entry-schema">
-<h3>Lock Entry Schema<a class="headerlink" href="#lock-entry-schema" title="Link to this heading"></a></h3>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;lock_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;a1b2c3d4-e5f6-7890-abcd-ef1234567890&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;deployment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;prod-platform&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;holder&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alice@company.com&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;hostname&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;WORKSTATION-A&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;pid&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">12345</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;acquired_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-06-16T14:02:01Z&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;expires_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-06-16T22:02:01Z&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;strata deploy run&quot;</span>
+<span class="n">deny</span><span class="p">[</span><span class="n">msg</span><span class="p">]</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">resource</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">input</span><span class="p">.</span><span class="n">planned_values</span><span class="p">.</span><span class="n">root_module</span><span class="p">.</span><span class="n">resources</span><span class="p">[</span><span class="n">_</span><span class="p">]</span>
+<span class="w">    </span><span class="k">not</span><span class="w"> </span><span class="n">resource</span><span class="p">.</span><span class="n">values</span><span class="p">.</span><span class="n">tags</span><span class="p">[</span><span class="s2">&quot;cost-center&quot;</span><span class="p">]</span>
+<span class="w">    </span><span class="n">msg</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">sprintf</span><span class="p">(</span><span class="s2">&quot;Resource %s missing required tag: cost-center&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="n">resource</span><span class="p">.</span><span class="n">address</span><span class="p">])</span>
 <span class="p">}</span>
 </pre></div>
 </div>
+<p><strong>Dependencies:</strong> <code class="docutils literal notranslate"><span class="pre">opa</span></code> binary (Go, single binary, ~50MB) or Python <code class="docutils literal notranslate"><span class="pre">regopy</span></code> /
+<code class="docutils literal notranslate"><span class="pre">opa-python</span></code> for embedded evaluation without subprocess.</p>
+<p><strong>Severity model:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">enforced</span></code> — hard block, exit code 3</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">advisory</span></code> — warn in output, proceed with deploy</p></li>
+<li><p>Configurable per-environment (e.g., advisory in dev, enforced in prod)</p></li>
+</ul>
 </section>
-<section id="strategies">
-<h3>Strategies<a class="headerlink" href="#strategies" title="Link to this heading"></a></h3>
+<section id="cost-estimation">
+<h3>5. Cost Estimation<a class="headerlink" href="#cost-estimation" title="Link to this heading"></a></h3>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Strategy</p></th>
-<th class="head"><p>Behavior</p></th>
-<th class="head"><p>Use When</p></th>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">wrap</span></code></p></td>
-<td><p>Strata acquires lock before first stage, holds for entire pipeline, releases after last stage</p></td>
-<td><p>Mixed pipelines (Terraform + Ansible + scripts) — <strong>default</strong></p></td>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Env0 (Infracost integration), Spacelift (cost policies), Scalr (cost dashboard)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">delegate</span></code></p></td>
-<td><p>Strata does NOT lock; trusts the backend’s native locking (TFC run queue, TF state lock)</p></td>
-<td><p>Pure TFC remote execution pipelines only</p></td>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Estimate cloud costs from Terraform plan output before apply. Set budgets and alert on thresholds.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata has no cost estimation today.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>🔨 ADR proposed</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — especially pre-deploy cost visibility in <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span></code> output</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0031-cost-estimation-and-visibility.html"><span class="std std-doc">ADR 0031</span></a></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>How competitors compute costs — Infracost:</strong></p>
+<p>The dominant approach for <em>pre-deploy</em> estimation is <strong>Infracost</strong> (not the cloud cost APIs,
+which report <em>actual</em> spend after the fact).</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Cloud cost API</p></th>
+<th class="head"><p>What it actually is</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>AWS Cost Explorer</p></td>
+<td><p>Historical spend — post-deploy only</p></td>
+</tr>
+<tr class="row-odd"><td><p>Azure Cost Management API</p></td>
+<td><p>Actual/amortized costs, budgets, alerts — post-deploy</p></td>
+</tr>
+<tr class="row-even"><td><p>GCP Billing Export</p></td>
+<td><p>Detailed billing data for analysis — post-deploy</p></td>
+</tr>
+</tbody>
+</table>
+<p>Infracost takes a different approach:</p>
+<ol class="arabic simple">
+<li><p>Parses <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">plan</span> <span class="pre">-json</span></code> output</p></li>
+<li><p>Maps each resource type to a pricing lookup using its own bundled price database,
+scraped from cloud provider pricing pages:</p>
+<ul class="simple">
+<li><p>AWS: Bulk Pricing API</p></li>
+<li><p>Azure: Retail Prices API (<code class="docutils literal notranslate"><span class="pre">prices.azure.com</span></code>)</p></li>
+<li><p>GCP: Cloud Billing Catalog API</p></li>
+</ul>
+</li>
+<li><p>Returns monthly cost estimate per resource + a before/after diff</p></li>
+</ol>
+<p><strong>Infracost pricing/licensing:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Tier</p></th>
+<th class="head"><p>Cost</p></th>
+<th class="head"><p>Limits</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Community (OSS)</p></td>
+<td><p>Free, self-host</p></td>
+<td><p>Unlimited — Apache 2.0</p></td>
+</tr>
+<tr class="row-odd"><td><p>Cloud Free</p></td>
+<td><p>Free</p></td>
+<td><p>1,000 runs/month — hosted API, PR comments, dashboard</p></td>
+</tr>
+<tr class="row-even"><td><p>Cloud Team</p></td>
+<td><p>~$50/user/month</p></td>
+<td><p>Unlimited runs, SSO, custom price books</p></td>
+</tr>
+<tr class="row-odd"><td><p>Enterprise</p></td>
+<td><p>Custom</p></td>
+<td><p>On-prem, air-gapped, custom SKU mappings</p></td>
+</tr>
+</tbody>
+</table>
+<p>The OSS binary ships with a <strong>bundled pricing database</strong> — no API key required for basic
+estimation. The cloud API key is only needed for latest-price updates or the hosted
+dashboard. License is Apache 2.0.</p>
+<p><strong>How strata could integrate it (Option B in ADR 0031):</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># After terraform plan</span>
+terraform<span class="w"> </span>show<span class="w"> </span>-json<span class="w"> </span>tfplan<span class="w"> </span>&gt;<span class="w"> </span>plan.json
+infracost<span class="w"> </span>diff<span class="w"> </span>--path<span class="w"> </span>plan.json<span class="w"> </span>--format<span class="w"> </span>json
+</pre></div>
+</div>
+<p>Add <code class="docutils literal notranslate"><span class="pre">infracost</span></code> to <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">tools</span> <span class="pre">status</span></code> as an optional tool (same pattern as <code class="docutils literal notranslate"><span class="pre">terraform</span></code>
+and <code class="docutils literal notranslate"><span class="pre">ansible</span></code>). Surface cost diff in <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span></code> output. No licensing cost for
+standard use — same situation as Terraform itself.</p>
+<p><strong>Note:</strong> ADR 0031 chose Option C (scenario-based model with human-readable dimensions)
+over direct Infracost integration, because Option C requires zero cloud pricing
+knowledge from users and is cloud-agnostic. Infracost remains a viable Option B
+alternative — faster to implement but requires users to understand Terraform plan output.</p>
+</section>
+<section id="approval-workflows-gates">
+<h3>6. Approval Workflows / Gates<a class="headerlink" href="#approval-workflows-gates" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Spacelift (approval policies), Env0 (environment policies), Scalr (run approval)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Require human or automated approval before production deploys. Role-based, time-windowed, environment-scoped.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata has <code class="docutils literal notranslate"><span class="pre">--force</span></code> but no structured approval flow.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>🔨 ADR proposed</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — mandatory for regulated environments</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0032-approval-workflows-and-gates.html"><span class="std std-doc">ADR 0032</span></a></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>How competitors do it:</strong></p>
+<ul class="simple">
+<li><p><strong>Web UI button</strong> — run pauses, authorized user logs into dashboard and clicks Approve</p></li>
+<li><p><strong>Slack/Teams bot</strong> — approval request posted to a channel, approver clicks inline button</p></li>
+<li><p><strong>PR merge as gate</strong> — plan on PR open, apply on PR merge (Atlantis, Spacelift)</p></li>
+<li><p><strong>OPA auto-approve</strong> — if all policies pass, no human needed; OPA flags trigger human gate</p></li>
+<li><p><strong>Time-windowed</strong> — approvals only valid inside maintenance windows (Env0, Scalr)</p></li>
+<li><p><strong>Multi-party</strong> — N of M approvers required (Scalr enterprise)</p></li>
+</ul>
+<p><strong>How strata can do it differently — git as the approval system:</strong></p>
+<p>Strata cannot run without git. Every operator is already authenticated to a git repository
+before <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code> is ever invoked. This means strata does not need to build an auth
+system — it already has one.</p>
+<p>A git artifact is tamper-evident cryptographic proof of approval:</p>
+<ul class="simple">
+<li><p><strong>Signed tag</strong> — <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">tag</span> <span class="pre">-s</span> <span class="pre">approve/&lt;deploy-id&gt;</span> <span class="pre">&lt;commit&gt;</span></code> ties an approval to a GPG
+key, a commit hash, and a timestamp. Verifiable forever via <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">log</span> <span class="pre">--show-signature</span></code>.</p></li>
+<li><p><strong>PR merge commit</strong> — the merge author and timestamp are permanent repo history.
+GitHub/GitLab branch protection rules enforce who can merge = who can approve.</p></li>
+<li><p><strong>Branch creation</strong> — an approver creating <code class="docutils literal notranslate"><span class="pre">approved/&lt;deploy-id&gt;</span></code> from a known commit
+is attributable and auditable without any external system.</p></li>
+</ul>
+<p>The audit trail is the git log — immutable, signed, and already satisfying most compliance
+requirements without a separate database. See <a class="reference internal" href="0018-deployment-audit-traceability.html"><span class="std std-doc">ADR 0018</span></a>.</p>
+<p><strong>Simplest viable implementation:</strong></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Requester — pauses deploy, writes pending record</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy-prd.yaml<span class="w"> </span>--require-approval
+<span class="c1"># → pauses, prints: approval required: strata deploy approve &lt;id&gt;</span>
+
+<span class="c1"># Approver (different identity, different terminal/CI step)</span>
+strata<span class="w"> </span>deploy<span class="w"> </span>approve<span class="w"> </span>&lt;id&gt;
+<span class="c1"># → reads git identity, creates signed tag, resumes deploy</span>
+</pre></div>
+</div>
+</section>
+<section id="gitops-reconciliation">
+<h3>7. GitOps Reconciliation<a class="headerlink" href="#gitops-reconciliation" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>ArgoCD, Flux, Crossplane</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Continuously reconcile desired state in git with actual cluster state. Self-healing.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Different paradigm — strata is push-based (imperative deploy), GitOps is pull-based (declarative reconciliation). Not directly comparable.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>🔨 <strong>In active design</strong> — ADR 0041</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — being implemented as a provisioner type, not a competing approach</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0041-gitops-controller-integration.html"><span class="std std-doc">ADR 0041</span></a></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What ADR 0041 decided — strata is the decision-maker, the controller is the executor:</strong></p>
+<p>The key insight is that ArgoCD and Flux are excellent at <em>reconciling declared state to a
+cluster</em> but are not designed to <em>decide what that state should be across a heterogeneous
+fleet</em>. Letting the controller manage versions natively fails at fleet scale because:</p>
+<ul class="simple">
+<li><p><strong>No promotion control</strong> — all tenants update simultaneously when a new chart appears.
+Strata’s wave/ring model (ADR 0011, ADR 0037) gates version progression per cohort.</p></li>
+<li><p><strong>No per-tenant version pinning</strong> — semver constraints apply uniformly. Strata’s
+version-lock files express per-deployment pins.</p></li>
+<li><p><strong>No coordinated rollout</strong> — the controller acts independently per Application. Strata
+orchestrates atomic wave deploys across 50–200 tenants.</p></li>
+<li><p><strong>No audit trail</strong> — the controller tracks what is running, not who decided it. Strata’s
+version-lock commits are the auditable decision record.</p></li>
+<li><p><strong>No cross-concern coordination</strong> — version bumps require matching variable/secret/flag
+changes. Strata resolves the full context as a single atomic unit.</p></li>
+</ul>
+<p><strong>The integration contract:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>strata decides WHAT (versions, variables, per-tenant pins, wave ordering)
+    → writes resolved state to git
+        → controller reconciles git state TO the cluster
+            → strata verifies reconciliation succeeded
+</pre></div>
+</div>
+<p><strong>No new commands needed.</strong> ArgoCD and Flux plug in as provisioner types inside the
+existing stage model:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Existing command</p></th>
+<th class="head"><p>For terraform</p></th>
+<th class="head"><p>For argocd/flux</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code></p></td>
+<td><p>Generates TF artifacts</p></td>
+<td><p>Renders Jinja2 template → controller input file</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code></p></td>
+<td><p>Runs <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">apply</span></code></p></td>
+<td><p>Commits rendered output to git (triggers controller)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span></code></p></td>
+<td><p>Checks infra state</p></td>
+<td><p>Queries controller for reconciliation status</p></td>
+</tr>
+</tbody>
+</table>
+<p>A deployment stage declares <code class="docutils literal notranslate"><span class="pre">provisioner:</span> <span class="pre">argocd</span></code> or <code class="docutils literal notranslate"><span class="pre">provisioner:</span> <span class="pre">flux</span></code> — everything
+else (layers, environments, tenant scoping, partial files) works identically to Terraform
+stages. See ADR 0041 for full design including namespace scoping, ApplicationSet
+generation, and health verification.</p>
+</section>
+<section id="self-service-environments-ephemeral-ttl">
+<h3>8. Self-Service Environments (Ephemeral / TTL)<a class="headerlink" href="#self-service-environments-ephemeral-ttl" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Env0 (TTL environments), Spacelift (preview stacks), Humanitec (on-demand envs)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Spin up short-lived environments for PR previews or testing, auto-destroy after TTL or merge.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata has no ephemeral environment concept.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>❌ Not present — but primitives exist</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Maybe — useful for dev/test workflows but adds complexity. Could be a deployment template pattern (ADR 0039).</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0039-deployment-templates.html"><span class="std std-doc">ADR 0039</span></a> (tangential)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>How it works (all tools):</strong></p>
+<p>The mechanism is just <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">apply</span></code> on a trigger and <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">destroy</span></code> on a timer
+or event — with scaffolding around unique naming and state isolation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>PR opened / timer fires
+    → strata deploy run    (create the environment)
+    → environment lives
+    → TTL expires OR PR merged/closed
+    → strata deploy destroy (kill everything)
+</pre></div>
+</div>
+<p>The hard parts are not apply/destroy — those already work in strata:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Challenge</p></th>
+<th class="head"><p>How competitors solve it</p></th>
+<th class="head"><p>Strata equivalent</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>State isolation</p></td>
+<td><p>Dynamic state key per env: <code class="docutils literal notranslate"><span class="pre">tf-state/pr-42/terraform.tfstate</span></code></p></td>
+<td><p>Terraform backend config per deployment</p></td>
+</tr>
+<tr class="row-odd"><td><p>Unique naming</p></td>
+<td><p>Variable injection: <code class="docutils literal notranslate"><span class="pre">var.environment_suffix</span> <span class="pre">=</span> <span class="pre">&quot;pr-42&quot;</span></code></p></td>
+<td><p>Environment layers / variables</p></td>
+</tr>
+<tr class="row-even"><td><p>Thin environments (app only, shared DB)</p></td>
+<td><p>Partial stacks or environment templates</p></td>
+<td><p>Deployment templates (ADR 0039)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Destroy on close</p></td>
+<td><p>Webhook on PR merge → <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">destroy</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">destroy</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>TTL timer</p></td>
+<td><p>Scheduled job fires destroy after N hours</p></td>
+<td><p>❌ <strong>Missing piece</strong></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>The single missing piece — TTL:</strong></p>
+<p>Strata has <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">destroy</span></code> but nothing to <em>schedule</em> it. The gap is a <code class="docutils literal notranslate"><span class="pre">ttl:</span></code> field
+on the deployment that triggers destroy automatically after a duration:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">ttl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8h</span><span class="w">   </span><span class="c1"># strata deploy destroy fires after 8 hours</span>
+</pre></div>
+</div>
+<p>In the short term this can be a CI scheduled workflow. As a native feature it would need
+a lightweight scheduler (a background process or a CI-generated cron job) that calls
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">destroy</span> <span class="pre">-f</span> <span class="pre">&lt;file&gt;</span> <span class="pre">--force</span></code> when the TTL elapses. No new infrastructure
+concepts required — just a timer on top of existing destroy.</p>
+</section>
+<section id="vcs-integration-pr-comments-plan-previews">
+<h3>9. VCS Integration (PR comments, plan previews)<a class="headerlink" href="#vcs-integration-pr-comments-plan-previews" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Spacelift (PR decoration), Env0 (PR plans), Atlantis (plan-on-PR)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Post Terraform plan output as PR comments. Show cost diff. Gate merge on plan success.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata has the ADR but no PR decoration.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>🔨 ADR proposed</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — high-value developer experience improvement</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0033-github-pull-request-integration.html"><span class="std std-doc">ADR 0033</span></a></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What a PR comment looks like (Spacelift / Atlantis style):</strong></p>
+<blockquote>
+<div><p><strong>🏗 strata plan</strong> — <code class="docutils literal notranslate"><span class="pre">deploy/deploy-prd.yaml</span></code> · stage <code class="docutils literal notranslate"><span class="pre">provision</span></code></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>✅ Plan succeeded</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">main</span></code> ← <code class="docutils literal notranslate"><span class="pre">feature/add-redis</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>🕐 Run time</p></td>
+<td><p>42s</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>~ azurerm_redis_cache.app    (update in-place)
+    capacity:  2 → 4
+    sku_name:  &quot;Basic&quot; → &quot;Standard&quot;
+
++ azurerm_private_endpoint.redis   (new resource)
+
+Plan: 1 to add, 1 to change, 0 to destroy.
+</pre></div>
+</div>
+<p>💰 <strong>Estimated cost change:</strong> +$87.40/mo (<code class="docutils literal notranslate"><span class="pre">$312.00</span></code> → <code class="docutils literal notranslate"><span class="pre">$399.40</span></code>)</p>
+<p>✅ All policies passed · ⚠️ Requires approval before apply</p>
+<p><a class="reference internal" href="#"><span class="xref myst">View full plan output</span></a> · <a class="reference internal" href="#"><span class="xref myst">Approve deploy</span></a></p>
+</div></blockquote>
+<p><strong>How strata would generate this (CI pipeline):</strong></p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># .github/workflows/pr-plan.yml</span>
+<span class="nt">on</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">pull_request</span><span class="p p-Indicator">]</span>
+<span class="nt">jobs</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">plan</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata build plan -f deploy/deploy-prd.yaml --output json &gt; plan.json</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">          </span><span class="no">COMMENT=$(cat plan.json | python scripts/format_plan_comment.py)</span>
+<span class="w">          </span><span class="no">gh pr comment ${{ github.event.pull_request.number }} --body &quot;$COMMENT&quot;</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">plan</span> <span class="pre">--output</span> <span class="pre">json</span></code> already produces structured diff output. The
+missing piece is a formatter that renders it as markdown and posts it via <code class="docutils literal notranslate"><span class="pre">gh</span> <span class="pre">pr</span> <span class="pre">comment</span></code>
+(or the GitHub API). No new strata commands needed — just a thin script that reads the
+JSON and calls the GitHub API. ADR 0033 proposes building this formatting + posting
+natively into strata as <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">pr</span> <span class="pre">comment</span></code>.</p>
+</section>
+<section id="state-locking-concurrency-control">
+<h3>10. State Locking / Concurrency Control<a class="headerlink" href="#state-locking-concurrency-control" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Terraform Cloud (native locking), Spacelift (run queuing), Terragrunt (state lock retries)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Prevent concurrent applies to the same state. Queue or reject conflicting runs.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>No — strata has full locking implemented and goes further than Terraform’s native lock.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>✅ <strong>Implemented</strong></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Already a differentiator — full pipeline lock, not just Terraform state lock</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0007-deployment-state-locking.html"><span class="std std-doc">ADR 0007</span></a></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Strata’s locking is broader than Terraform’s native lock.</strong> Terraform only locks its
+own state during <code class="docutils literal notranslate"><span class="pre">plan</span></code>/<code class="docutils literal notranslate"><span class="pre">apply</span></code>. Strata wraps the entire pipeline — lifecycle hooks,
+Ansible runs, health checks, and policy evaluation — under a single distributed lock.</p>
+<p>Implemented backends:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Backend</p></th>
+<th class="head"><p>File</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Azure Blob Storage (<code class="docutils literal notranslate"><span class="pre">azurerm</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">lock_azurerm.py</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>AWS S3 + DynamoDB (<code class="docutils literal notranslate"><span class="pre">s3</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">lock_s3.py</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Google Cloud Storage (<code class="docutils literal notranslate"><span class="pre">gcs</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">lock_gcs.py</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Terraform Cloud workspace lock (<code class="docutils literal notranslate"><span class="pre">tfc</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">lock_tfc.py</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Consul (<code class="docutils literal notranslate"><span class="pre">consul</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">lock_consul.py</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Local file (<code class="docutils literal notranslate"><span class="pre">local</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">lock_local.py</span></code> — fallback for dev</p></td>
+</tr>
+</tbody>
+</table>
+<p>Lock backend is derived automatically from <code class="docutils literal notranslate"><span class="pre">workspace.spec.provisioners[].backend</span></code> —
+no duplicate connection config. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span></code> and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">unlock</span></code> are
+available as manual management commands.</p>
+</section>
+<section id="module-component-registry-private">
+<h3>11. Module / Component Registry (Private)<a class="headerlink" href="#module-component-registry-private" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Terraform Cloud (private registry), Spacelift (module management), Scalr (module registry)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Host versioned, private Terraform modules with documentation, examples, and access control.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata has the enterprise store concept but no registry UX.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>🔨 ADR proposed</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">store</span></code> for sharing modules/configs across teams</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0035-enterprise-store.html"><span class="std std-doc">ADR 0035</span></a></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What users expect from a registry — and what hosting options are acceptable:</strong></p>
+<p>Users come from different backgrounds and have different expectations:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>User expectation</p></th>
+<th class="head"><p>What they picture</p></th>
+<th class="head"><p>Is a git repo enough?</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Browse what’s available</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">registry.terraform.io</span></code> search UX</p></td>
+<td><p>Maybe — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">store</span> <span class="pre">list</span></code> via CLI</p></td>
+</tr>
+<tr class="row-odd"><td><p>Pin a version</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">source</span> <span class="pre">=</span> <span class="pre">&quot;acme/vpc&quot;</span> <span class="pre">version</span> <span class="pre">=</span> <span class="pre">&quot;2.1.0&quot;</span></code></p></td>
+<td><p>Yes — git tags serve as versions</p></td>
+</tr>
+<tr class="row-even"><td><p>Private / not public</p></td>
+<td><p>Only my org can see it</p></td>
+<td><p>Yes — any private git repo</p></td>
+</tr>
+<tr class="row-odd"><td><p>Governed / approved content</p></td>
+<td><p>PR review before publish</p></td>
+<td><p>Yes — git branch policies</p></td>
+</tr>
+<tr class="row-even"><td><p>Works in air-gapped env</p></td>
+<td><p>No internet access</p></td>
+<td><p>Yes — self-hosted git (ADO, GitLab)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Docs + examples alongside module</p></td>
+<td><p>README, examples/ folder</p></td>
+<td><p>Yes — just files in the repo</p></td>
+</tr>
+<tr class="row-even"><td><p>Access control per team</p></td>
+<td><p>Only infra team sees security policies</p></td>
+<td><p>Yes — repo-level permissions</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Is a GitHub repo OK?</strong> Yes — for most teams a private GitHub repo IS the registry.
+Strata’s enterprise store (ADR 0035) is exactly this: a git repo with a <code class="docutils literal notranslate"><span class="pre">store.yaml</span></code>
+manifest and a conventional folder structure. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">repo</span> <span class="pre">add</span></code> is the install step.</p>
+<p><strong>Is a private enterprise repo OK?</strong> Yes — and it’s the primary target:</p>
+<ul class="simple">
+<li><p><strong>GitHub Enterprise</strong> — private repo, branch protection for governance</p></li>
+<li><p><strong>Azure DevOps</strong> — private repo in any project, PAT or managed identity auth</p></li>
+<li><p><strong>GitLab</strong> — private repo, deploy tokens for CI access</p></li>
+<li><p><strong>Gitea / self-hosted</strong> — for air-gapped environments</p></li>
+</ul>
+<p><strong>What a git repo cannot do (the gaps vs Terraform Cloud registry):</strong></p>
+<ul class="simple">
+<li><p>No web search/browse UI — discovery is <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">store</span> <span class="pre">list</span></code> or reading the README</p></li>
+<li><p>No automatic version indexing — versions are git tags (must be created manually)</p></li>
+<li><p>No built-in download stats or deprecation warnings</p></li>
+<li><p>No module input/output schema rendering</p></li>
+</ul>
+<p>For most enterprise teams these gaps are acceptable — they already manage modules
+via git and know what’s in their repos. The Terraform Cloud registry UX matters more
+for public/community modules than for internal platform content.</p>
+</section>
+<section id="change-detection-only-deploy-what-changed">
+<h3>12. Change Detection (Only Deploy What Changed)<a class="headerlink" href="#change-detection-only-deploy-what-changed" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Terramate (change detection via git diff), Spacelift (affected stacks), Atmos (component filtering)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Detect which stacks/components changed in a commit and only plan/apply those. Saves time in monorepos.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata rebuilds everything. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">diff</span> <span class="pre">show</span></code> exists but doesn’t drive selective deploy.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>✅ Partial (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">diff</span> <span class="pre">show</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — critical at scale. Should drive <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">--changed-only</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p>None — candidate for new ADR</p></td>
 </tr>
 </tbody>
 </table>
 </section>
-<section id="architecture">
-<h3>Architecture<a class="headerlink" href="#architecture" title="Link to this heading"></a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>models/
-  deployment_model.py          ← Add: DeploymentLockingModel
-  deployment_manifest_model.py ← Add: ManifestLockReferenceModel
-
-integrations/
-  lock/
-    base_lock_backend.py       ← New: BaseLockBackend ABC + LockHandle + LockEntry dataclasses
-    lock_azurerm.py            ← New: Azure Blob lease (az CLI + urllib, no new dep)
-    lock_tfc.py                ← New: TFC workspace lock API (urllib, no new dep)
-    lock_s3.py                 ← New: DynamoDB conditional put (boto3, optional dep)
-    lock_consul.py             ← New: Consul session lock (wraps ConsulIntegration)
-    lock_gcs.py                ← New: GCS object conditions (google-cloud-storage, optional dep)
-    lock_local.py              ← New: File-based lock (no dep)
-    lock_factory.py            ← New: selects backend from WorkspaceIacBackendModel.type
-
-commands/
-  deploy/
-    run_deploy_command.py      ← Modified: acquire/release around _execute_provisioning()
-    lock_deploy_command.py     ← New: strata deploy lock status|acquire|release|history
-
-  cli_deploy.py                ← Modified: register `deploy lock` subgroup
-</pre></div>
-</div>
-</section>
-<section id="model-additions">
-<h3>Model Additions<a class="headerlink" href="#model-additions" title="Link to this heading"></a></h3>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">DeploymentLockingModel</span><span class="p">(</span><span class="n">PlatformBaseModel</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Locking behaviour for spec.locking — connection config comes from provisioner.backend.&quot;&quot;&quot;</span>
-    <span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">strategy</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;wrap&quot;</span><span class="p">,</span> <span class="s2">&quot;delegate&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;wrap&quot;</span>
-    <span class="n">wait_timeout</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;30m&quot;</span>
-    <span class="n">force_unlock_after</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;8h&quot;</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">ManifestLockReferenceModel</span><span class="p">(</span><span class="n">PlatformBaseModel</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Lock audit trail recorded in the deployment manifest.&quot;&quot;&quot;</span>
-    <span class="n">lock_id</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span>        <span class="c1"># azurerm | terraform_cloud | s3 | consul | gcs | local</span>
-    <span class="n">acquired_at</span><span class="p">:</span> <span class="nb">str</span>    <span class="c1"># ISO-8601</span>
-    <span class="n">released_at</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">holder</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">hostname</span><span class="p">:</span> <span class="nb">str</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">DeploymentLockingConfigModel</span></code> is <strong>not needed</strong> — connection details come from <code class="docutils literal notranslate"><span class="pre">WorkspaceIacBackendModel.configuration</span></code> which is already resolved.</p>
-</section>
-<section id="integration-pattern-baselockbackend">
-<h3>Integration Pattern — BaseLockBackend<a class="headerlink" href="#integration-pattern-baselockbackend" title="Link to this heading"></a></h3>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">BaseLockBackend</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base for deployment lock backends.</span>
-
-<span class="sd">    Instantiated by LockFactory from a resolved WorkspaceIacBackendModel.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">acquire</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">deployment_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">holder</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">timeout_seconds</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;LockHandle&quot;</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Acquire lock. Raises LockTimeoutError if timeout exceeded.&quot;&quot;&quot;</span>
-
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">release</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">handle</span><span class="p">:</span> <span class="s2">&quot;LockHandle&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Release a held lock.&quot;&quot;&quot;</span>
-
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">deployment_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">&quot;LockEntry&quot;</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return current lock state, or None if unlocked.&quot;&quot;&quot;</span>
-
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">force_release</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">deployment_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Force-release regardless of holder. Emergency use only.&quot;&quot;&quot;</span>
-
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">deployment_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="s2">&quot;LockEntry&quot;</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return recent lock events for audit trail.&quot;&quot;&quot;</span>
-</pre></div>
-</div>
-</section>
-<section id="lock-factory">
-<h3>Lock Factory<a class="headerlink" href="#lock-factory" title="Link to this heading"></a></h3>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">LockFactory</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Selects and instantiates a lock backend from a provisioner&#39;s backend config.&quot;&quot;&quot;</span>
-
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">create</span><span class="p">(</span><span class="n">backend_model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">WorkspaceIacBackendModel</span><span class="p">],</span>
-               <span class="n">work_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseLockBackend</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">backend_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">LocalLockBackend</span><span class="p">(</span><span class="n">work_path</span><span class="p">)</span>
-        <span class="k">match</span> <span class="n">backend_model</span><span class="o">.</span><span class="n">type</span><span class="p">:</span>
-            <span class="k">case</span> <span class="s2">&quot;azurerm&quot;</span><span class="p">:</span>       <span class="k">return</span> <span class="n">AzurermLockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span> <span class="s2">&quot;terraform_cloud&quot;</span> <span class="o">|</span> <span class="s2">&quot;remote&quot;</span><span class="p">:</span>
-                                  <span class="k">return</span> <span class="n">TfcLockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span> <span class="s2">&quot;s3&quot;</span><span class="p">:</span>            <span class="k">return</span> <span class="n">S3LockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span> <span class="s2">&quot;consul&quot;</span><span class="p">:</span>        <span class="k">return</span> <span class="n">ConsulLockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span> <span class="s2">&quot;gcs&quot;</span><span class="p">:</span>           <span class="k">return</span> <span class="n">GcsLockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>               <span class="k">return</span> <span class="n">LocalLockBackend</span><span class="p">(</span><span class="n">work_path</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="execution-flow-integration">
-<h3>Execution Flow Integration<a class="headerlink" href="#execution-flow-integration" title="Link to this heading"></a></h3>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># RunDeployCommand._execute_provisioning()</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">_execute_provisioning</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-    <span class="n">stages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_filtered_stages</span><span class="p">()</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">stages</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">True</span>
-
-    <span class="n">lock_handle</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_lock</span><span class="p">():</span>
-        <span class="n">provisioner</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_primary_provisioner</span><span class="p">(</span><span class="n">stages</span><span class="p">)</span>
-        <span class="n">backend</span> <span class="o">=</span> <span class="n">LockFactory</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">provisioner</span><span class="o">.</span><span class="n">backend</span> <span class="k">if</span> <span class="n">provisioner</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-                                     <span class="bp">self</span><span class="o">.</span><span class="n">_work_path</span><span class="p">)</span>
-        <span class="n">lock_handle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acquire_lock</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">stages</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">lock_handle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span>  <span class="c1"># timeout or backend error</span>
-
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_execution_order</span><span class="p">(</span><span class="n">stages</span><span class="p">):</span>
-            <span class="n">success</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_execute_stage</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">success</span> <span class="ow">and</span> <span class="n">stage</span><span class="o">.</span><span class="n">on_failure</span> <span class="o">==</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span>
-                <span class="k">return</span> <span class="kc">False</span>
-        <span class="k">return</span> <span class="kc">True</span>
-    <span class="k">finally</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">lock_handle</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_release_lock</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">lock_handle</span><span class="p">)</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">_resolve_primary_provisioner</span></code> picks the backend from the first Terraform stage in the list, falling back to <code class="docutils literal notranslate"><span class="pre">local</span></code> if none found.</p>
-</section>
-<section id="cli-commands">
-<h3>CLI Commands<a class="headerlink" href="#cli-commands" title="Link to this heading"></a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">deploy</span> <span class="n">lock</span> <span class="n">status</span>  <span class="o">-</span><span class="n">f</span> <span class="n">deployment</span><span class="o">.</span><span class="n">yaml</span>
-<span class="n">strata</span> <span class="n">deploy</span> <span class="n">lock</span> <span class="n">acquire</span> <span class="o">-</span><span class="n">f</span> <span class="n">deployment</span><span class="o">.</span><span class="n">yaml</span> <span class="p">[</span><span class="o">--</span><span class="n">reason</span> <span class="s2">&quot;...&quot;</span><span class="p">]</span>
-<span class="n">strata</span> <span class="n">deploy</span> <span class="n">lock</span> <span class="n">release</span> <span class="o">-</span><span class="n">f</span> <span class="n">deployment</span><span class="o">.</span><span class="n">yaml</span> <span class="p">[</span><span class="o">--</span><span class="n">force</span><span class="p">]</span>
-<span class="n">strata</span> <span class="n">deploy</span> <span class="n">lock</span> <span class="n">history</span> <span class="o">-</span><span class="n">f</span> <span class="n">deployment</span><span class="o">.</span><span class="n">yaml</span> <span class="p">[</span><span class="o">--</span><span class="n">last</span> <span class="n">N</span><span class="p">]</span>
-</pre></div>
-</div>
-<p><strong>Exit codes:</strong></p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">0</span></code> — operation succeeded</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">1</span></code> — system failure (backend unreachable, auth error)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">3</span></code> — lock contention (timeout, or force-release of another holder’s lock denied without <code class="docutils literal notranslate"><span class="pre">--force</span></code>)</p></li>
-</ul>
-</section>
-<section id="dry-run-behavior">
-<h3>Dry-Run Behavior<a class="headerlink" href="#dry-run-behavior" title="Link to this heading"></a></h3>
+<section id="rbac-multi-tenancy-access-control">
+<h3>13. RBAC / Multi-Tenancy Access Control<a class="headerlink" href="#rbac-multi-tenancy-access-control" title="Link to this heading"></a></h3>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Mode</p></th>
-<th class="head"><p>Lock Behavior</p></th>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code> (normal)</p></td>
-<td><p>Acquire → hold → release</p></td>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Scalr (hierarchical RBAC), Spacelift (spaces + policies), Env0 (org/project/env scoping)</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span> <span class="pre">--dry-run</span></code></p></td>
-<td><p>Skip lock entirely (read-only, no mutations)</p></td>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Fine-grained access: who can plan, who can apply, per environment/tenant/project.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">status</span></code></p></td>
-<td><p>Read-only query, no acquire</p></td>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata has no access control layer (relies on git permissions).</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>❌ Not present</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Maybe — relevant for enterprise/SaaS but may be out of scope for a CLI tool. Git branch protection + CI gates may suffice.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p>None</p></td>
 </tr>
 </tbody>
 </table>
 </section>
-<section id="failure-scenarios">
-<h3>Failure Scenarios<a class="headerlink" href="#failure-scenarios" title="Link to this heading"></a></h3>
+<section id="real-time-streaming-progress-ui">
+<h3>14. Real-Time Streaming / Progress UI<a class="headerlink" href="#real-time-streaming-progress-ui" title="Link to this heading"></a></h3>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Scenario</p></th>
-<th class="head"><p>Behavior</p></th>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Deploy succeeds</p></td>
-<td><p>Lock released in <code class="docutils literal notranslate"><span class="pre">finally</span></code> block</p></td>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Spacelift (live log streaming), Terraform Cloud (run UI), Pulumi (rich CLI output)</p></td>
 </tr>
-<tr class="row-odd"><td><p>Deploy fails (stage error)</p></td>
-<td><p>Lock released in <code class="docutils literal notranslate"><span class="pre">finally</span></code> block</p></td>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Stream plan/apply output in real-time with structured progress indicators.</p></td>
 </tr>
-<tr class="row-even"><td><p>Process killed (SIGKILL)</p></td>
-<td><p>Backend TTL/lease expires → auto-release</p></td>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Partially — strata has NDJSON streaming implemented but not a rich console UI.</p></td>
 </tr>
-<tr class="row-odd"><td><p>Machine crashes mid-deploy</p></td>
-<td><p>Same as SIGKILL — TTL handles it</p></td>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>✅ <strong>NDJSON streaming implemented</strong> — console progress UI not yet built</p></td>
 </tr>
-<tr class="row-even"><td><p>Network drops during apply</p></td>
-<td><p>Terraform finishes (has its own retry); strata lock heartbeat fails → TTL expires</p></td>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Already present for tooling. Console/VS Code UI is the remaining gap.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">force_unlock_after</span></code> exceeded</p></td>
-<td><p>Any subsequent acquire auto-releases the stale lock first</p></td>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html"><span class="std std-doc">ADR 0029</span></a></p></td>
 </tr>
-<tr class="row-even"><td><p>Lock holder is unreachable</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">release</span> <span class="pre">--force</span></code> + audit log entry</p></td>
+</tbody>
+</table>
+<p><strong>What’s already implemented:</strong></p>
+<p>Strata supports <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code> on <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code>, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code>, and related
+commands. This streams structured events to stdout as each line is produced — not buffered
+until completion:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>-f<span class="w"> </span>deploy/deploy-prd.yaml<span class="w"> </span>--output<span class="w"> </span>ndjson
+</pre></div>
+</div>
+<p>Event types emitted during a deploy:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">stage_start</span></code> — fired when a stage begins, includes stage name + timestamp</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">log</span></code> — each subprocess output line (terraform, ansible) as it arrives</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stage_complete</span></code> — stage outcome + duration</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">complete</span></code> — final envelope with success/failure, all messages and errors</p></li>
+</ul>
+<p>Example stream:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="s2">&quot;event&quot;</span><span class="p">:</span><span class="s2">&quot;stage_start&quot;</span><span class="p">,</span><span class="s2">&quot;stage&quot;</span><span class="p">:</span><span class="s2">&quot;provision&quot;</span><span class="p">,</span><span class="s2">&quot;ts&quot;</span><span class="p">:</span><span class="s2">&quot;2026-07-15T10:00:00Z&quot;</span><span class="p">}</span>
+<span class="p">{</span><span class="s2">&quot;event&quot;</span><span class="p">:</span><span class="s2">&quot;log&quot;</span><span class="p">,</span><span class="s2">&quot;stage&quot;</span><span class="p">:</span><span class="s2">&quot;provision&quot;</span><span class="p">,</span><span class="s2">&quot;step&quot;</span><span class="p">:</span><span class="s2">&quot;apply&quot;</span><span class="p">,</span><span class="s2">&quot;stream&quot;</span><span class="p">:</span><span class="s2">&quot;stdout&quot;</span><span class="p">,</span><span class="s2">&quot;text&quot;</span><span class="p">:</span><span class="s2">&quot;azurerm_resource_group.main: Creating...&quot;</span><span class="p">}</span>
+<span class="p">{</span><span class="s2">&quot;event&quot;</span><span class="p">:</span><span class="s2">&quot;log&quot;</span><span class="p">,</span><span class="s2">&quot;stage&quot;</span><span class="p">:</span><span class="s2">&quot;provision&quot;</span><span class="p">,</span><span class="s2">&quot;step&quot;</span><span class="p">:</span><span class="s2">&quot;apply&quot;</span><span class="p">,</span><span class="s2">&quot;stream&quot;</span><span class="p">:</span><span class="s2">&quot;stdout&quot;</span><span class="p">,</span><span class="s2">&quot;text&quot;</span><span class="p">:</span><span class="s2">&quot;azurerm_resource_group.main: Creation complete after 2s&quot;</span><span class="p">}</span>
+<span class="p">{</span><span class="s2">&quot;event&quot;</span><span class="p">:</span><span class="s2">&quot;stage_complete&quot;</span><span class="p">,</span><span class="s2">&quot;stage&quot;</span><span class="p">:</span><span class="s2">&quot;provision&quot;</span><span class="p">,</span><span class="s2">&quot;success&quot;</span><span class="p">:</span><span class="n">true</span><span class="p">,</span><span class="s2">&quot;ts&quot;</span><span class="p">:</span><span class="s2">&quot;2026-07-15T10:02:14Z&quot;</span><span class="p">}</span>
+<span class="p">{</span><span class="s2">&quot;event&quot;</span><span class="p">:</span><span class="s2">&quot;complete&quot;</span><span class="p">,</span><span class="s2">&quot;success&quot;</span><span class="p">:</span><span class="n">true</span><span class="p">,</span><span class="s2">&quot;command&quot;</span><span class="p">:</span><span class="s2">&quot;deploy.run&quot;</span><span class="p">,</span><span class="s2">&quot;execution_id&quot;</span><span class="p">:</span><span class="s2">&quot;abc123&quot;</span><span class="p">,</span><span class="s2">&quot;data&quot;</span><span class="p">:{</span><span class="o">...</span><span class="p">}}</span>
+</pre></div>
+</div>
+<p><strong>What’s NOT yet built:</strong></p>
+<ul class="simple">
+<li><p>Rich console progress UI (spinners, stage progress bars) for human-readable <code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">console</span></code></p></li>
+<li><p>VS Code extension live status panel consuming the NDJSON stream</p></li>
+<li><p>ADR 0029 describes both — the NDJSON transport is the prerequisite and it’s done</p></li>
+</ul>
+</section>
+<section id="workload-abstraction-score-platform-spec">
+<h3>15. Workload Abstraction (Score / Platform Spec)<a class="headerlink" href="#workload-abstraction-score-platform-spec" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Humanitec (Score), Backstage (templates), Crossplane (Compositions/XRDs)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Developers describe workloads in a simplified spec; the platform translates to actual infrastructure resources.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Different layer — strata operates at the infrastructure level, not the workload/app level.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>❌ Not present</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>No — strata’s sweet spot is infrastructure orchestration. Workload abstraction is a separate concern that runs above strata.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p>None</p></td>
 </tr>
 </tbody>
 </table>
 </section>
-<section id="notification-hooks-future-extension">
-<h3>Notification Hooks (Future Extension)<a class="headerlink" href="#notification-hooks-future-extension" title="Link to this heading"></a></h3>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">locking</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">notify_on_contention</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">slack</span>
-<span class="w">      </span><span class="nt">channel</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;#platform-deploys&quot;</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">github_issue</span>
-<span class="w">      </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">org/infrastructure</span>
-<span class="w">      </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment-blocked</span>
+<section id="multi-provisioner-orchestration-terraform-ansible-helm-under-one-roof">
+<h3>16. Multi-Provisioner Orchestration (Terraform + Ansible + Helm under one roof)<a class="headerlink" href="#multi-provisioner-orchestration-terraform-ansible-helm-under-one-roof" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Strata (native), Spacelift (Terraform + Pulumi + Ansible + CloudFormation)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Orchestrate multiple IaC tools in a single deployment pipeline with shared context.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Spacelift supports more provisioners. Strata’s pluggable framework is well-designed for extension.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>✅ Exists (Terraform + Ansible)</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Already a differentiator — extend with more provisioners as needed (Helm, Pulumi)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0023-pluggable-provisioner-framework.html"><span class="std std-doc">ADR 0023</span></a></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="server-mode-api-first-architecture">
+<h3>17. Server Mode / API-First Architecture<a class="headerlink" href="#server-mode-api-first-architecture" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Who does it well</strong></p></td>
+<td><p>Terraform Cloud/Enterprise (REST API), Spacelift (SaaS API), Atlantis (local HTTP webhook server)</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>What they do</strong></p></td>
+<td><p>Run as a persistent process exposing an API — all clients (web UI, CLI, IDE, CI) talk to the same service</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Better than strata?</strong></p></td>
+<td><p>Yes — strata is currently stateless CLI; each invocation bootstraps from scratch with no shared context</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Strata status</strong></p></td>
+<td><p>❌ Not present — but VS Code extension + MCP server make it the natural next step</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Useful for strata?</strong></p></td>
+<td><p>Yes — high value but high effort; a local daemon is the tractable first step</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ref</strong></p></td>
+<td><p><a class="reference internal" href="0026-resolved-model-cache.html"><span class="std std-doc">ADR 0026</span></a> (prerequisite — cache is what a daemon would serve)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>The problem today:</strong></p>
+<p>All three strata surfaces work the same way — each spawns a fresh CLI process:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>VS Code extension  →  strata subprocess  →  exits
+MCP server         →  strata subprocess  →  exits
+User (terminal)    →  strata subprocess  →  exits
 </pre></div>
 </div>
-<p>Not in initial scope — noted as a future enhancement once the core lock mechanism is proven.</p>
-</section>
-</section>
-<section id="implementation-phases">
-<h2>Implementation Phases<a class="headerlink" href="#implementation-phases" title="Link to this heading"></a></h2>
-<section id="phase-1-core-mvp">
-<h3>Phase 1 — Core (MVP)<a class="headerlink" href="#phase-1-core-mvp" title="Link to this heading"></a></h3>
+<p>No shared state. No awareness between surfaces. Every invocation reloads all YAML,
+re-resolves all models, reconnects to backends. For a 50-deployment fleet this is
+prohibitively slow (ADR 0026).</p>
+<p><strong>What a daemon would enable:</strong></p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">DeploymentLockingModel</span></code> on <code class="docutils literal notranslate"><span class="pre">DeploymentSpecModel</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">BaseLockBackend</span></code> ABC + <code class="docutils literal notranslate"><span class="pre">LockFactory</span></code> + <code class="docutils literal notranslate"><span class="pre">LocalLockBackend</span></code> (file-based, no dependencies)</p></li>
-<li><p>Lock acquire/release in <code class="docutils literal notranslate"><span class="pre">RunDeployCommand._execute_provisioning()</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">status|release</span></code> commands</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">ManifestLockReferenceModel</span></code> in manifest output</p></li>
+<li><p><strong>Shared execution context</strong> — extension and terminal CLI see the same running deploy</p></li>
+<li><p><strong>No per-invocation startup cost</strong> — config and resolved models already in memory</p></li>
+<li><p><strong>Event subscriptions</strong> — clients subscribe to the NDJSON stream instead of polling
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">status</span></code> (the streaming transport from ADR 0029 is already built)</p></li>
+<li><p><strong>Remote execution</strong> — run the daemon on a build server, control from local VS Code</p></li>
+<li><p><strong>Web UI</strong> — once there is an API, a browser UI is just another client</p></li>
 </ul>
-</section>
-<section id="phase-2-remote-backends">
-<h3>Phase 2 — Remote Backends<a class="headerlink" href="#phase-2-remote-backends" title="Link to this heading"></a></h3>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">AzurermLockBackend</span></code> (blob lease via <code class="docutils literal notranslate"><span class="pre">az</span></code> CLI + <code class="docutils literal notranslate"><span class="pre">urllib</span></code>, no new dependency)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">TfcLockBackend</span></code> (workspace lock API via <code class="docutils literal notranslate"><span class="pre">urllib</span></code>, no new dependency)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">ConsulLockBackend</span></code> (wraps existing <code class="docutils literal notranslate"><span class="pre">ConsulIntegration</span></code>)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">history</span></code> command</p></li>
-</ul>
-</section>
-<section id="phase-3-additional-backends-robustness">
-<h3>Phase 3 — Additional Backends + Robustness<a class="headerlink" href="#phase-3-additional-backends-robustness" title="Link to this heading"></a></h3>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">S3LockBackend</span></code> (DynamoDB conditional put — requires <code class="docutils literal notranslate"><span class="pre">boto3</span></code>)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">GcsLockBackend</span></code> (GCS object conditions — requires <code class="docutils literal notranslate"><span class="pre">google-cloud-storage</span></code>)</p></li>
-<li><p>Heartbeat thread (renew blob lease / TFC lock during long deploys)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">force_unlock_after</span></code> enforcement</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">acquire</span></code> command</p></li>
-<li><p>Notification hooks on contention</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">delegate</span></code> strategy for pure-TFC pipelines</p></li>
-</ul>
-</section>
-</section>
-<section id="implementation-plan">
-<h2>Implementation Plan<a class="headerlink" href="#implementation-plan" title="Link to this heading"></a></h2>
-<section id="step-1-model-deploymentlockingmodel">
-<h3>Step 1 — Model: <code class="docutils literal notranslate"><span class="pre">DeploymentLockingModel</span></code><a class="headerlink" href="#step-1-model-deploymentlockingmodel" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/models/deployment_model.py</span></code></p>
-<p>Add <code class="docutils literal notranslate"><span class="pre">DeploymentLockingModel</span></code> and wire it into <code class="docutils literal notranslate"><span class="pre">DeploymentSpecModel</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">DeploymentLockingModel</span><span class="p">(</span><span class="n">PlatformBaseModel</span><span class="p">):</span>
-    <span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">strategy</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;wrap&quot;</span><span class="p">,</span> <span class="s2">&quot;delegate&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;wrap&quot;</span>
-    <span class="n">wait_timeout</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;30m&quot;</span>
-    <span class="n">force_unlock_after</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;8h&quot;</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">DeploymentSpecModel</span><span class="p">(</span><span class="n">PlatformBaseModel</span><span class="p">):</span>
-    <span class="o">...</span>
-    <span class="n">locking</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DeploymentLockingModel</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
-        <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Pipeline locking behaviour for concurrent deploy protection&quot;</span>
-    <span class="p">)</span>
-</pre></div>
-</div>
-<p><strong>Tests:</strong> valid YAML roundtrip, defaults applied when key absent, <code class="docutils literal notranslate"><span class="pre">strategy</span></code> validation.</p>
-</section>
-<hr class="docutils" />
-<section id="step-2-model-manifestlockreferencemodel">
-<h3>Step 2 — Model: <code class="docutils literal notranslate"><span class="pre">ManifestLockReferenceModel</span></code><a class="headerlink" href="#step-2-model-manifestlockreferencemodel" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/models/deployment_manifest_model.py</span></code></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ManifestLockReferenceModel</span><span class="p">(</span><span class="n">PlatformBaseModel</span><span class="p">):</span>
-    <span class="n">lock_id</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">acquired_at</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">released_at</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">holder</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">hostname</span><span class="p">:</span> <span class="nb">str</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">DeploymentManifestSpecModel</span><span class="p">(</span><span class="n">PlatformBaseModel</span><span class="p">):</span>
-    <span class="o">...</span>
-    <span class="n">lock</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ManifestLockReferenceModel</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
-        <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;State lock audit trail&quot;</span>
-    <span class="p">)</span>
-</pre></div>
-</div>
-<p><strong>Tests:</strong> model construction, serialization, optional field absent.</p>
-</section>
-<hr class="docutils" />
-<section id="step-3-abc-baselockbackend-dataclasses">
-<h3>Step 3 — ABC: <code class="docutils literal notranslate"><span class="pre">BaseLockBackend</span></code> + dataclasses<a class="headerlink" href="#step-3-abc-baselockbackend-dataclasses" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/integrations/lock/base_lock_backend.py</span></code></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">LockEntry</span><span class="p">:</span>
-    <span class="n">lock_id</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">deployment</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">holder</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">hostname</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">pid</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">acquired_at</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">expires_at</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span>
-
-<span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">LockHandle</span><span class="p">:</span>
-    <span class="n">lock_id</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">backend_type</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">acquired_at</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">_backend_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>   <span class="c1"># backend-specific (lease_id, session_id, etc.)</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">BaseLockBackend</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">acquire</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">deployment_name</span><span class="p">,</span> <span class="n">holder</span><span class="p">,</span> <span class="n">reason</span><span class="p">,</span> <span class="n">timeout_seconds</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LockHandle</span><span class="p">:</span> <span class="o">...</span>
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">release</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">handle</span><span class="p">:</span> <span class="n">LockHandle</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">status</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">deployment_name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">LockEntry</span><span class="p">]:</span> <span class="o">...</span>
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">force_release</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">deployment_name</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">deployment_name</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">LockEntry</span><span class="p">]:</span> <span class="o">...</span>
-</pre></div>
-</div>
-<p><strong>Tests:</strong> dataclass construction, ABC cannot be instantiated.</p>
-</section>
-<hr class="docutils" />
-<section id="step-4-locallockbackend">
-<h3>Step 4 — <code class="docutils literal notranslate"><span class="pre">LocalLockBackend</span></code><a class="headerlink" href="#step-4-locallockbackend" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/integrations/lock/lock_local.py</span></code></p>
-<ul class="simple">
-<li><p>Lock file at <code class="docutils literal notranslate"><span class="pre">{work_path}/.strata/locks/{deployment_name}.lock</span></code></p></li>
-<li><p>Uses <code class="docutils literal notranslate"><span class="pre">fcntl.flock</span></code> (Unix) / <code class="docutils literal notranslate"><span class="pre">msvcrt.locking</span></code> or <code class="docutils literal notranslate"><span class="pre">LockFileEx</span></code> (Windows)</p></li>
-<li><p>Lock entry JSON written to the file; read back for <code class="docutils literal notranslate"><span class="pre">status()</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">history()</span></code> — reads <code class="docutils literal notranslate"><span class="pre">{deployment_name}.lock.history</span></code> append-only NDJSON</p></li>
-<li><p>On acquire failure, polls every 5s up to <code class="docutils literal notranslate"><span class="pre">timeout_seconds</span></code></p></li>
-</ul>
-<p><strong>Tests:</strong> acquire/release cycle, contention (second acquire blocks), force-release, status read, history append.</p>
-</section>
-<hr class="docutils" />
-<section id="step-5-lockfactory">
-<h3>Step 5 — <code class="docutils literal notranslate"><span class="pre">LockFactory</span></code><a class="headerlink" href="#step-5-lockfactory" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/integrations/lock/lock_factory.py</span></code></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">LockFactory</span><span class="p">:</span>
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">create</span><span class="p">(</span><span class="n">backend_model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">WorkspaceIacBackendModel</span><span class="p">],</span>
-               <span class="n">work_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseLockBackend</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">backend_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">LocalLockBackend</span><span class="p">(</span><span class="n">work_path</span><span class="p">)</span>
-        <span class="k">match</span> <span class="n">backend_model</span><span class="o">.</span><span class="n">type</span><span class="p">:</span>
-            <span class="k">case</span> <span class="s2">&quot;azurerm&quot;</span><span class="p">:</span>                       <span class="k">return</span> <span class="n">AzurermLockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span> <span class="s2">&quot;terraform_cloud&quot;</span> <span class="o">|</span> <span class="s2">&quot;remote&quot;</span><span class="p">:</span>    <span class="k">return</span> <span class="n">TfcLockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span> <span class="s2">&quot;s3&quot;</span><span class="p">:</span>                            <span class="k">return</span> <span class="n">S3LockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span> <span class="s2">&quot;consul&quot;</span><span class="p">:</span>                        <span class="k">return</span> <span class="n">ConsulLockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span> <span class="s2">&quot;gcs&quot;</span><span class="p">:</span>                           <span class="k">return</span> <span class="n">GcsLockBackend</span><span class="p">(</span><span class="n">backend_model</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
-            <span class="k">case</span><span class="w"> </span><span class="k">_</span><span class="p">:</span>                               <span class="k">return</span> <span class="n">LocalLockBackend</span><span class="p">(</span><span class="n">work_path</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Phase 1 only includes <code class="docutils literal notranslate"><span class="pre">LocalLockBackend</span></code>; other branches raise <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code> with a clear message until Phase 2.</p>
-<p><strong>Tests:</strong> factory returns correct type per backend string, unknown type falls back to local.</p>
-</section>
-<hr class="docutils" />
-<section id="step-6-duration-parser-utility">
-<h3>Step 6 — Duration parser utility<a class="headerlink" href="#step-6-duration-parser-utility" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/utils/duration.py</span></code></p>
-<p>Parses <code class="docutils literal notranslate"><span class="pre">&quot;30m&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;8h&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;2h30m&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;60s&quot;</span></code> into seconds. Used by <code class="docutils literal notranslate"><span class="pre">RunDeployCommand</span></code> to interpret <code class="docutils literal notranslate"><span class="pre">wait_timeout</span></code> and <code class="docutils literal notranslate"><span class="pre">force_unlock_after</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">parse_duration</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse duration string to seconds. Supports h/m/s suffixes.&quot;&quot;&quot;</span>
-</pre></div>
-</div>
-<p><strong>Tests:</strong> <code class="docutils literal notranslate"><span class="pre">&quot;30m&quot;</span></code> → 1800, <code class="docutils literal notranslate"><span class="pre">&quot;8h&quot;</span></code> → 28800, <code class="docutils literal notranslate"><span class="pre">&quot;2h30m&quot;</span></code> → 9000, <code class="docutils literal notranslate"><span class="pre">&quot;60s&quot;</span></code> → 60, invalid → <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p>
-</section>
-<hr class="docutils" />
-<section id="step-7-wire-locking-into-rundeploycommand">
-<h3>Step 7 — Wire locking into <code class="docutils literal notranslate"><span class="pre">RunDeployCommand</span></code><a class="headerlink" href="#step-7-wire-locking-into-rundeploycommand" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/commands/deploy/run_deploy_command.py</span></code></p>
-<p>Add helper methods:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">_should_lock</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if locking is enabled and not a dry-run.&quot;&quot;&quot;</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_lock_backend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stages</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseLockBackend</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Look up the first stage&#39;s provisioner backend, pass to LockFactory.&quot;&quot;&quot;</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_acquire_lock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">backend</span><span class="p">,</span> <span class="n">stages</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">LockHandle</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Acquire with wait_timeout. Log on contention. Return None on timeout.&quot;&quot;&quot;</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_release_lock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">backend</span><span class="p">,</span> <span class="n">handle</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Release lock, log outcome. Never raises — errors are logged.&quot;&quot;&quot;</span>
-</pre></div>
-</div>
-<p>Wrap <code class="docutils literal notranslate"><span class="pre">_execute_provisioning()</span></code> stage loop in <code class="docutils literal notranslate"><span class="pre">try/finally</span></code> with acquire/release.</p>
-<p>After deploy, record <code class="docutils literal notranslate"><span class="pre">ManifestLockReferenceModel</span></code> on the manifest spec.</p>
-<p><strong>Tests:</strong> mock <code class="docutils literal notranslate"><span class="pre">LockFactory.create</span></code>, verify acquire called before stages, release called in finally (success + failure), dry-run skips lock, locking disabled skips lock. Follow the existing <code class="docutils literal notranslate"><span class="pre">TestEvaluatePhasePolices</span></code> pattern with <code class="docutils literal notranslate"><span class="pre">_make_run_command</span></code> helper.</p>
-</section>
-<hr class="docutils" />
-<section id="step-8-cli-strata-deploy-lock-subgroup">
-<h3>Step 8 — CLI: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span></code> subgroup<a class="headerlink" href="#step-8-cli-strata-deploy-lock-subgroup" title="Link to this heading"></a></h3>
-<p><strong>Files:</strong></p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">src/strata/commands/deploy/lock_deploy_command.py</span></code> — <code class="docutils literal notranslate"><span class="pre">LockStatusCommand</span></code>, <code class="docutils literal notranslate"><span class="pre">LockReleaseCommand</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">src/strata/commands/cli_deploy.py</span></code> — register <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span></code> Click group</p></li>
-</ul>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">deploy</span> <span class="n">lock</span> <span class="n">status</span>  <span class="o">-</span><span class="n">f</span> <span class="n">deployment</span><span class="o">.</span><span class="n">yaml</span> <span class="p">[</span><span class="o">--</span><span class="n">output</span> <span class="n">text</span><span class="o">|</span><span class="n">json</span><span class="p">]</span>
-<span class="n">strata</span> <span class="n">deploy</span> <span class="n">lock</span> <span class="n">release</span> <span class="o">-</span><span class="n">f</span> <span class="n">deployment</span><span class="o">.</span><span class="n">yaml</span> <span class="p">[</span><span class="o">--</span><span class="n">force</span><span class="p">]</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">status</span></code> loads the deployment + workspace, creates the lock backend via <code class="docutils literal notranslate"><span class="pre">LockFactory</span></code>, calls <code class="docutils literal notranslate"><span class="pre">backend.status()</span></code>, renders output.</p>
-<p><code class="docutils literal notranslate"><span class="pre">release</span></code> does the same, calls <code class="docutils literal notranslate"><span class="pre">backend.release()</span></code> or <code class="docutils literal notranslate"><span class="pre">backend.force_release()</span></code> with <code class="docutils literal notranslate"><span class="pre">--force</span></code>.</p>
-<p><strong>Tests:</strong> CliRunner invoke, mock backend, verify output format, exit codes (0 success, 1 error, 3 contention).</p>
-</section>
-<hr class="docutils" />
-<section id="step-9-azurermlockbackend-phase-2">
-<h3>Step 9 — <code class="docutils literal notranslate"><span class="pre">AzurermLockBackend</span></code> (Phase 2)<a class="headerlink" href="#step-9-azurermlockbackend-phase-2" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/integrations/lock/lock_azurerm.py</span></code></p>
-<ul class="simple">
-<li><p>Reads <code class="docutils literal notranslate"><span class="pre">storage_account_name</span></code>, <code class="docutils literal notranslate"><span class="pre">container_name</span></code> from <code class="docutils literal notranslate"><span class="pre">backend_model.configuration</span></code></p></li>
-<li><p>Auth via <code class="docutils literal notranslate"><span class="pre">az</span> <span class="pre">account</span> <span class="pre">get-access-token</span> <span class="pre">--resource</span> <span class="pre">https://storage.azure.com</span></code></p></li>
-<li><p>Blob lease REST: acquire (60s duration), renew (30s interval), release</p></li>
-<li><p>Lock blob at <code class="docutils literal notranslate"><span class="pre">{container}/strata-locks/{deployment_name}.lock</span></code></p></li>
-<li><p>Body is JSON <code class="docutils literal notranslate"><span class="pre">LockEntry</span></code></p></li>
-<li><p>Heartbeat thread (<code class="docutils literal notranslate"><span class="pre">threading.Thread(daemon=True)</span></code>) renews lease every 30s</p></li>
-</ul>
-<p><strong>Tests:</strong> mock <code class="docutils literal notranslate"><span class="pre">subprocess</span></code> (for <code class="docutils literal notranslate"><span class="pre">az</span></code>) and <code class="docutils literal notranslate"><span class="pre">urllib.request</span></code> (for REST), verify lease acquire/renew/release flow, auth token caching, timeout polling.</p>
-</section>
-<hr class="docutils" />
-<section id="step-10-tfclockbackend-phase-2">
-<h3>Step 10 — <code class="docutils literal notranslate"><span class="pre">TfcLockBackend</span></code> (Phase 2)<a class="headerlink" href="#step-10-tfclockbackend-phase-2" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/integrations/lock/lock_tfc.py</span></code></p>
-<ul class="simple">
-<li><p>Reads <code class="docutils literal notranslate"><span class="pre">organization</span></code>, workspace name from <code class="docutils literal notranslate"><span class="pre">backend_model.configuration</span></code></p></li>
-<li><p>Auth via <code class="docutils literal notranslate"><span class="pre">TF_TOKEN_app_terraform_io</span></code> env var</p></li>
-<li><p>Resolves workspace ID: <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/api/v2/organizations/{org}/workspaces/{name}</span></code></p></li>
-<li><p>Lock: <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/v2/workspaces/{id}/actions/lock</span></code> with reason body</p></li>
-<li><p>Unlock: <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/v2/workspaces/{id}/actions/unlock</span></code></p></li>
-<li><p>Status: <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/api/v2/workspaces/{id}</span></code> → <code class="docutils literal notranslate"><span class="pre">attributes.locked</span></code>, <code class="docutils literal notranslate"><span class="pre">attributes.locked-by</span></code></p></li>
-</ul>
-<p><strong>Tests:</strong> mock <code class="docutils literal notranslate"><span class="pre">urllib.request</span></code>, verify workspace lookup, lock/unlock/status API calls, missing token error.</p>
-</section>
-<hr class="docutils" />
-<section id="step-11-consullockbackend-phase-2">
-<h3>Step 11 — <code class="docutils literal notranslate"><span class="pre">ConsulLockBackend</span></code> (Phase 2)<a class="headerlink" href="#step-11-consullockbackend-phase-2" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/integrations/lock/lock_consul.py</span></code></p>
-<ul class="simple">
-<li><p>Wraps existing <code class="docutils literal notranslate"><span class="pre">ConsulIntegration</span></code> for HTTP connectivity</p></li>
-<li><p>Lock key: <code class="docutils literal notranslate"><span class="pre">strata/locks/{deployment_name}</span></code></p></li>
-<li><p>Session create → KV acquire → release → session destroy</p></li>
-<li><p>Auth via <code class="docutils literal notranslate"><span class="pre">CONSUL_HTTP_TOKEN</span></code></p></li>
-</ul>
-<p><strong>Tests:</strong> mock <code class="docutils literal notranslate"><span class="pre">ConsulIntegration</span></code>, verify session lifecycle and KV operations.</p>
-</section>
-<hr class="docutils" />
-<section id="step-12-strata-deploy-lock-history-phase-2">
-<h3>Step 12 — <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">history</span></code> (Phase 2)<a class="headerlink" href="#step-12-strata-deploy-lock-history-phase-2" title="Link to this heading"></a></h3>
-<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">src/strata/commands/deploy/lock_deploy_command.py</span></code> — add <code class="docutils literal notranslate"><span class="pre">LockHistoryCommand</span></code></p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">strata</span> <span class="n">deploy</span> <span class="n">lock</span> <span class="n">history</span> <span class="o">-</span><span class="n">f</span> <span class="n">deployment</span><span class="o">.</span><span class="n">yaml</span> <span class="p">[</span><span class="o">--</span><span class="n">last</span> <span class="n">N</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">output</span> <span class="n">text</span><span class="o">|</span><span class="n">json</span><span class="p">]</span>
-</pre></div>
-</div>
-<p>Calls <code class="docutils literal notranslate"><span class="pre">backend.history()</span></code>, renders as table or JSON.</p>
-<p><strong>Tests:</strong> CliRunner invoke with mock backend returning history entries.</p>
-</section>
-<hr class="docutils" />
-<section id="step-13-docs-schema-update">
-<h3>Step 13 — Docs + schema update<a class="headerlink" href="#step-13-docs-schema-update" title="Link to this heading"></a></h3>
-<p><strong>Files:</strong></p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">docs/platform/commands.md</span></code> — add <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">status|release|history</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">docs/config/deployment.md</span></code> — add <code class="docutils literal notranslate"><span class="pre">spec.locking</span></code> section with examples per backend</p></li>
-<li><p>JSON schema (if generated) — add <code class="docutils literal notranslate"><span class="pre">locking</span></code> to deployment spec</p></li>
-</ul>
-</section>
-<hr class="docutils" />
-<section id="implementation-order-summary">
-<h3>Implementation order summary<a class="headerlink" href="#implementation-order-summary" title="Link to this heading"></a></h3>
+<p><strong>Progressive path (least to most effort):</strong></p>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Step</p></th>
-<th class="head"><p>What</p></th>
-<th class="head"><p>Layer</p></th>
-<th class="head"><p>Depends on</p></th>
-<th class="head"><p>New files</p></th>
+<th class="head"><p>What it is</p></th>
+<th class="head"><p>Effort</p></th>
+<th class="head"><p>What it unlocks</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>1</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">DeploymentLockingModel</span></code></p></td>
-<td><p>models</p></td>
-<td><p>—</p></td>
-<td><p>0</p></td>
+<tr class="row-even"><td><p><strong>1. Resolved-model cache</strong></p></td>
+<td><p>Cache on-disk between CLI invocations. No daemon, no API.</p></td>
+<td><p>Low</p></td>
+<td><p>Fleet commands become fast. ADR 0026.</p></td>
 </tr>
-<tr class="row-odd"><td><p>2</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ManifestLockReferenceModel</span></code></p></td>
-<td><p>models</p></td>
-<td><p>—</p></td>
-<td><p>0</p></td>
+<tr class="row-odd"><td><p><strong>2. Local UNIX socket daemon</strong></p></td>
+<td><p>Persistent process, CLI/extension talk via socket. No auth, no network.</p></td>
+<td><p>Medium</p></td>
+<td><p>Shared state, event subscriptions, no startup cost.</p></td>
 </tr>
-<tr class="row-even"><td><p>3</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">BaseLockBackend</span></code> ABC</p></td>
-<td><p>integrations</p></td>
-<td><p>—</p></td>
-<td><p>1</p></td>
+<tr class="row-even"><td><p><strong>3. Local HTTP daemon</strong> (<code class="docutils literal notranslate"><span class="pre">localhost:7420</span></code>)</p></td>
+<td><p>Same but HTTP. No auth required (localhost only).</p></td>
+<td><p>Medium+</p></td>
+<td><p>Web UI possible, curl-able, language-agnostic clients.</p></td>
 </tr>
-<tr class="row-odd"><td><p>4</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">LocalLockBackend</span></code></p></td>
-<td><p>integrations</p></td>
-<td><p>3</p></td>
-<td><p>1</p></td>
+<tr class="row-odd"><td><p><strong>4. Remote HTTP API + fleet control plane</strong></p></td>
+<td><p>Auth, TLS, multi-user, scheduler, state store, webhooks. Runs on AKS.</p></td>
+<td><p>Large</p></td>
+<td><p>Fleet ownership, drift scheduling, pipeline triggers.</p></td>
 </tr>
-<tr class="row-even"><td><p>5</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">LockFactory</span></code></p></td>
-<td><p>integrations</p></td>
-<td><p>3, 4</p></td>
-<td><p>1</p></td>
+<tr class="row-even"><td><p><strong>5. React frontend</strong></p></td>
+<td><p>Browser UI consuming the Step 4 API. Self-hosted or SaaS.</p></td>
+<td><p>Large</p></td>
+<td><p>Full dashboard — fleet status, approvals, cost, logs.</p></td>
 </tr>
-<tr class="row-odd"><td><p>6</p></td>
-<td><p>Duration parser</p></td>
-<td><p>utils</p></td>
-<td><p>—</p></td>
-<td><p>1</p></td>
-</tr>
-<tr class="row-even"><td><p>7</p></td>
-<td><p>Wire into <code class="docutils literal notranslate"><span class="pre">RunDeployCommand</span></code></p></td>
-<td><p>commands</p></td>
-<td><p>1, 2, 5, 6</p></td>
-<td><p>0</p></td>
-</tr>
-<tr class="row-odd"><td><p>8</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span></code> CLI commands</p></td>
-<td><p>commands</p></td>
-<td><p>5</p></td>
-<td><p>1</p></td>
-</tr>
-<tr class="row-even"><td><p>9</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">AzurermLockBackend</span></code></p></td>
-<td><p>integrations</p></td>
-<td><p>3</p></td>
-<td><p>1</p></td>
-</tr>
-<tr class="row-odd"><td><p>10</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">TfcLockBackend</span></code></p></td>
-<td><p>integrations</p></td>
-<td><p>3</p></td>
-<td><p>1</p></td>
-</tr>
-<tr class="row-even"><td><p>11</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ConsulLockBackend</span></code></p></td>
-<td><p>integrations</p></td>
-<td><p>3</p></td>
-<td><p>1</p></td>
-</tr>
-<tr class="row-odd"><td><p>12</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">lock</span> <span class="pre">history</span></code> command</p></td>
-<td><p>commands</p></td>
-<td><p>8</p></td>
-<td><p>0</p></td>
-</tr>
-<tr class="row-even"><td><p>13</p></td>
-<td><p>Docs + schema</p></td>
-<td><p>docs</p></td>
-<td><p>8</p></td>
-<td><p>0</p></td>
+<tr class="row-odd"><td><p><strong>6. Hosted SaaS</strong></p></td>
+<td><p>Terraform Cloud territory — multi-tenant hosted service.</p></td>
+<td><p>Enormous</p></td>
+<td><p>Full platform — separate product, not a CLI feature.</p></td>
 </tr>
 </tbody>
 </table>
-<p>Steps 1–8 = Phase 1 (MVP).  Steps 9–12 = Phase 2 (remote backends).  Step 13 spans both.</p>
+<p>Step 5 (React frontend) is the natural cap of Step 4 — once a REST API exists, a
+browser UI is just another API consumer. It is what Spacelift and Env0 look like to
+the user: a dashboard showing fleet health, running deploys, approval queues, cost
+trends, and audit history. The API does the work; the React app is the face.</p>
+<p>What the frontend would surface:</p>
+<ul class="simple">
+<li><p><strong>Fleet view</strong> — all tenants, their deployed version, health, last deploy timestamp</p></li>
+<li><p><strong>Live deploy stream</strong> — NDJSON events from ADR 0029 rendered as a progress UI</p></li>
+<li><p><strong>Approval queue</strong> — pending deploys waiting for human gate (ADR 0032)</p></li>
+<li><p><strong>Cost dashboard</strong> — per-tenant, per-environment spend trends (ADR 0031)</p></li>
+<li><p><strong>Drift alerts</strong> — tenants whose actual state diverges from declared (ADR 0008)</p></li>
+<li><p><strong>Audit log</strong> — who deployed what, when, from which commit (ADR 0018)</p></li>
+</ul>
+<p><strong>Recommendation:</strong> Step 1 (ADR 0026 cache) is the prerequisite — it solves the
+performance problem without a daemon. Step 2 is the natural follow-on once the MCP
+server and VS Code extension need shared state. Steps 4–6 are a separate product
+decision, not a CLI feature — but every ADR in this document feeds into it.</p>
+<p><strong>Note on the MCP server:</strong> The MCP server is already a form of server mode — it runs
+as a persistent process and accepts requests from AI agents. The gap is that it does not
+share state with the CLI or the VS Code extension. A proper daemon would unify all three
+under one running process.</p>
+<p><strong>Note on Dev Containers:</strong></p>
+<p>A local devcontainer (<code class="docutils literal notranslate"><span class="pre">.devcontainer/</span></code>) running the strata daemon is architecturally
+identical to running the daemon directly on the developer’s machine — it’s still local,
+just containerized. No meaningful difference for the server mode question.</p>
+<p>However, devcontainers are valuable in two other ways:</p>
+<ol class="arabic simple">
+<li><p><strong>Toolchain distribution.</strong> A <code class="docutils literal notranslate"><span class="pre">.devcontainer/</span></code> that pre-installs strata + terraform +
+ansible at pinned versions solves “it works on my machine” without requiring users to
+manage dependencies. Every team member gets the same environment. This is independent
+of server mode.</p></li>
+<li><p><strong>Cloud devcontainers as a path to remote execution.</strong> GitHub Codespaces, Gitpod, and
+Coder run devcontainers in the cloud. If the strata daemon runs inside a cloud-hosted
+devcontainer, remote team members connect via the VS Code Remote extension and share
+the same running process. This is effectively <strong>Step 4 (remote HTTP API) without
+building a server</strong> — the devcontainer host <em>is</em> the server, and VS Code’s remote
+tunnel handles the connectivity and auth. This path is worth noting because it
+requires zero strata changes — just a <code class="docutils literal notranslate"><span class="pre">.devcontainer/</span></code> that starts the daemon.</p></li>
+</ol>
+<p><strong>The fleet control plane use case — why a stateless CLI cannot do this:</strong></p>
+<p>The developer daemon (Steps 1–3) solves the individual developer experience. There is a
+separate, more fundamental problem at fleet scale that a stateless CLI structurally
+cannot solve: <strong>a DevOps team managing 50+ tenants across clusters needs a persistent
+process that owns fleet state.</strong></p>
+<p>Consider a platform engineering team with:</p>
+<ul class="simple">
+<li><p>Their strata repos (configuration, deployments, environments)</p></li>
+<li><p>An AKS cluster (or tooling VM) running their platform tooling</p></li>
+<li><p>CI pipelines in GitHub Actions / Azure DevOps</p></li>
+<li><p>50–200 tenant deployments to track</p></li>
+</ul>
+<p>What they need running on that infrastructure:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>┌──────────────────────────────────────────────────┐
+│  strata control plane (on AKS tooling cluster)    │
+│                                                   │
+│  ┌─────────────┐   ┌─────────────┐               │
+│  │  REST API   │   │  Scheduler  │               │
+│  │             │   │             │               │
+│  │ VS Code ext │   │ drift runs  │               │
+│  │ MCP server  │   │ TTL expiry  │               │
+│  │ CI webhooks │   │ health polls│               │
+│  └─────────────┘   └─────────────┘               │
+│                                                   │
+│  ┌─────────────────────────────────────────────┐ │
+│  │  Fleet State Store                           │ │
+│  │  &quot;tenant X: v2.4.1, healthy, last deploy 2h&quot;│ │
+│  │  &quot;tenant Y: v2.3.0, drifted, lock held&quot;     │ │
+│  │  &quot;tenant Z: deploy running, stage 2/4&quot;      │ │
+│  └─────────────────────────────────────────────┘ │
+│                                                   │
+│  ┌─────────────────────────────────────────────┐ │
+│  │  Event Bus                                   │ │
+│  │  → trigger GitHub Actions pipeline           │ │
+│  │  → receive webhook: pipeline complete        │ │
+│  │  → start wave deployment batch               │ │
+│  │  → emit NDJSON to subscribers (ADR 0029)     │ │
+│  └─────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────┘
+</pre></div>
+</div>
+<p><strong>What the CLI cannot do that the control plane can:</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Capability</p></th>
+<th class="head"><p>Stateless CLI</p></th>
+<th class="head"><p>Control plane</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>“What is the current state of all 50 tenants?”</p></td>
+<td><p>Reads files every time — slow, no history</p></td>
+<td><p>Maintains live state, queryable instantly</p></td>
+</tr>
+<tr class="row-odd"><td><p>Drift detection on a schedule</p></td>
+<td><p>Needs external cron + process manager</p></td>
+<td><p>Built-in scheduler, no external dependency</p></td>
+</tr>
+<tr class="row-even"><td><p>React to a GitHub Actions webhook</p></td>
+<td><p>Cannot — no running process to receive it</p></td>
+<td><p>Webhook endpoint → triggers deploy or batch</p></td>
+</tr>
+<tr class="row-odd"><td><p>Start a wave deployment, go offline, come back</p></td>
+<td><p>Not possible — process must stay alive</p></td>
+<td><p>Deploy runs in control plane regardless of client</p></td>
+</tr>
+<tr class="row-even"><td><p>“Show me which deployments are currently running”</p></td>
+<td><p>Cannot — no shared state across CLI processes</p></td>
+<td><p>Live dashboard — fleet state is always current</p></td>
+</tr>
+<tr class="row-odd"><td><p>TTL expiry for ephemeral envs</p></td>
+<td><p>Needs external cron</p></td>
+<td><p>Scheduler fires <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span></code> automatically</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>This is what Spacelift, Env0, and Scalr ARE.</strong> They are not CI wrappers — they are
+fleet control planes. Their APIs, webhooks, dashboards, and schedulers are all
+components of a persistent service that owns fleet state.</p>
+<p><strong>For strata this is Step 5 on the progressive path</strong> — it requires an API, a state
+store, a scheduler, and webhook handling. Not a CLI feature. But the strata YAML schema,
+lock backends, NDJSON streaming, and audit log are all designed in a way that would
+feed naturally into a control plane implementation.</p>
+<p>Related ADRs: <a class="reference internal" href="0037-mass-wave-deployment.html"><span class="std std-doc">ADR 0037</span></a> (batch fleet operations),
+<a class="reference internal" href="0038-multi-tenant-fleet-management-patterns.html"><span class="std std-doc">ADR 0038</span></a> (fleet patterns),
+<a class="reference internal" href="0008-infrastructure-drift-detection.html"><span class="std std-doc">ADR 0008</span></a> (drift — needs scheduling),
+<a class="reference internal" href="0018-deployment-audit-traceability.html"><span class="std std-doc">ADR 0018</span></a> (audit — becomes the state store feed).</p>
 </section>
+</section>
+<section id="summary-priority-assessment">
+<h2>Summary — Priority Assessment<a class="headerlink" href="#summary-priority-assessment" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Priority</p></th>
+<th class="head"><p>Feature</p></th>
+<th class="head"><p>Status</p></th>
+<th class="head"><p>Rationale</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>High</p></td>
+<td><p>Dependency graph / parallel execution</p></td>
+<td><p>🔨</p></td>
+<td><p>Scale blocker — manual ordering breaks above ~10 stages</p></td>
+</tr>
+<tr class="row-odd"><td><p>High</p></td>
+<td><p>Drift detection</p></td>
+<td><p>🔨</p></td>
+<td><p>Table-stakes for production governance</p></td>
+</tr>
+<tr class="row-even"><td><p>High</p></td>
+<td><p>Change detection → selective deploy</p></td>
+<td><p>Partial</p></td>
+<td><p>CI time savings compound at scale</p></td>
+</tr>
+<tr class="row-odd"><td><p>High</p></td>
+<td><p>State locking</p></td>
+<td><p>✅ Done</p></td>
+<td><p>Full pipeline lock across 6 backends — exceeds TF native lock</p></td>
+</tr>
+<tr class="row-even"><td><p>Medium</p></td>
+<td><p>Policy engine (OPA)</p></td>
+<td><p>🔨</p></td>
+<td><p>Enterprise requirement, but <code class="docutils literal notranslate"><span class="pre">validate</span></code> covers some ground</p></td>
+</tr>
+<tr class="row-odd"><td><p>Medium</p></td>
+<td><p>Cost estimation</p></td>
+<td><p>🔨</p></td>
+<td><p>Developer experience — “what will this cost?” before apply</p></td>
+</tr>
+<tr class="row-even"><td><p>Medium</p></td>
+<td><p>VCS / PR integration</p></td>
+<td><p>🔨</p></td>
+<td><p>Developer experience — plan-on-PR is expected</p></td>
+</tr>
+<tr class="row-odd"><td><p>Medium</p></td>
+<td><p>Approval workflows</p></td>
+<td><p>🔨</p></td>
+<td><p>Compliance — regulated industries mandate it</p></td>
+</tr>
+<tr class="row-even"><td><p>Medium</p></td>
+<td><p>Progress streaming (NDJSON)</p></td>
+<td><p>✅ Partial</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code> done; console progress UI + VS Code panel pending</p></td>
+</tr>
+<tr class="row-odd"><td><p>Medium</p></td>
+<td><p>GitOps integration (ArgoCD/Flux)</p></td>
+<td><p>🔨 Active</p></td>
+<td><p>ADR 0041 in design — provisioner type, no new commands needed</p></td>
+</tr>
+<tr class="row-even"><td><p>Low</p></td>
+<td><p>Ephemeral environments (TTL)</p></td>
+<td><p>Partial</p></td>
+<td><p>All primitives exist; only missing piece is TTL scheduler</p></td>
+</tr>
+<tr class="row-odd"><td><p>Low</p></td>
+<td><p>Private module registry</p></td>
+<td><p>🔨</p></td>
+<td><p>Enterprise store ADR covers this; not urgent for small teams</p></td>
+</tr>
+<tr class="row-even"><td><p>N/A</p></td>
+<td><p>Workload abstraction</p></td>
+<td><p>❌</p></td>
+<td><p>Wrong layer — strata is infra, not app platform</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Strata’s key differentiator remains: <strong>single CLI, strict schema validation, multi-cloud
+multi-provisioner, SBOM built-in, full pipeline locking</strong> — no competitor combines all five.</p></li>
+<li><p>State locking and NDJSON streaming are <strong>implemented</strong> and removed from the gap list.</p></li>
+<li><p>GitOps integration is in <strong>active design</strong> (ADR 0041) — not a gap, a roadmap item.</p></li>
+<li><p>The “High” items remaining are where competitors genuinely outperform strata today.</p></li>
+<li><p>Each feature row marked 🔨 already has a proposed ADR. Implementation priority should
+follow this table.</p></li>
+</ul>
 </section>
 </section>
 
@@ -5599,8 +6065,8 @@ commands/
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="0006-policy-engine-for-deployment-guardrails.html" class="btn btn-neutral float-left" title="Policy engine for deployment guardrails" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="0008-infrastructure-drift-detection.html" class="btn btn-neutral float-right" title="Infrastructure drift detection" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="0043-tenant-offboarding.html" class="btn btn-neutral float-left" title="Tenant Offboarding" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../guides/how-deployments-work.html" class="btn btn-neutral float-right" title="How Deployments Work" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

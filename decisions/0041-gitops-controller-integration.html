@@ -3499,7 +3499,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--stream</span></code>)</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#decision-drivers">Decision Drivers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#considered-options">Considered Options</a><ul>
@@ -3511,14 +3511,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#decision-outcome">Decision Outcome</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#event-schema">Event schema</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#event-types">Event types</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#event-types-implemented">Event types implemented</a></li>
 <li class="toctree-l4"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#example-stream">Example stream</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#implementation">Implementation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#composability-with-output">Composability with <code class="docutils literal notranslate"><span class="pre">--output</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#stage-log-volume-management"><code class="docutils literal notranslate"><span class="pre">stage_log</span></code> volume management</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#removal-of-todo-markers">Removal of <code class="docutils literal notranslate"><span class="pre">[TODO]</span></code> markers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#log-event-volume-management"><code class="docutils literal notranslate"><span class="pre">log</span></code> event volume management</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#consequences">Consequences</a></li>
@@ -3555,7 +3554,10 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0031-cost-estimation-and-visibility.html">Cost estimation and visibility</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#context-and-problem-statement">Context and Problem Statement</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#option-b-detail-infracost">Option B Detail — Infracost</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#decision-outcome">Decision Outcome</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#consequences">Consequences</a></li>
 </ul>
@@ -3605,6 +3607,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0032-approval-workflows-and-gates.html">Approval workflows and gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#foundational-constraint-git-is-required">Foundational Constraint — Git Is Required</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#considered-options">Considered Options</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#decision-outcome">Decision Outcome</a></li>
@@ -3719,6 +3722,7 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0035-enterprise-store.html">Enterprise Store — Private Organization-Level Content Registry</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#what-users-expect-from-a-registry">What Users Expect From a Registry</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#decision-drivers">Decision Drivers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#considered-options">Considered Options</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="0035-enterprise-store.html#option-a-enterprise-store-as-a-typed-git-repository">Option A — Enterprise Store as a Typed Git Repository</a></li>
@@ -3835,13 +3839,28 @@
 <li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#design-overview">Design Overview</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#core-concept-base-template-thin-instantiation">Core concept: base template + thin instantiation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#core-concept-spec-extends-spec-partial">Core concept: <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> + <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#spec-partial"><code class="docutils literal notranslate"><span class="pre">spec.partial</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#spec-extends"><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#merge-semantics">Merge semantics</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#validation">Validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#two-phase-validation">Two-phase validation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#compatibility-with-fleet-discovery-adr-0037">Compatibility with fleet discovery (ADR 0037)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#drift-detection">Drift detection</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#phase-1-model-resolver-and-validation-this-adr">Phase 1 — Model, resolver, and validation (this ADR)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#models-deployment-model-py">1.1 <code class="docutils literal notranslate"><span class="pre">models/deployment_model.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#services-deployment-extension-resolver-py-new">1.2 <code class="docutils literal notranslate"><span class="pre">services/deployment_extension_resolver.py</span></code> (new)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#validators-platform-validator-py">1.3 <code class="docutils literal notranslate"><span class="pre">validators/platform_validator.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#services-deployment-service-py">1.4 <code class="docutils literal notranslate"><span class="pre">services/deployment_service.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#commands-deploy-base-deploy-command-py">1.5 <code class="docutils literal notranslate"><span class="pre">commands/deploy/base_deploy_command.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0039-deployment-templates.html#phase-1-test-coverage">Phase 1 test coverage</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="0039-deployment-templates.html#phase-2-drift-detection-future">Phase 2 — Drift detection (future)</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="0039-deployment-templates.html#consequences">Consequences</a></li>
 </ul>
 </li>
@@ -3860,16 +3879,46 @@
 </ul>
 </li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">GitOps Controller Integration</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#context-and-problem-statement">Context and Problem Statement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#why-not-let-the-controller-handle-versions-natively">Why not let the controller handle versions natively?</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#design-overview">Design Overview</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#two-surfaces-output-and-health">Two surfaces: output and health</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#surface-1-strata-build-gitops">Surface 1: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">gitops</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#surface-2-strata-deploy-health-gitops">Surface 2: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span> <span class="pre">--gitops</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#key-insight-no-new-commands-needed">Key insight: no new commands needed</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deployment-separation-with-partial-files-adr-0039">Deployment separation with partial files (ADR 0039)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#namespace-as-the-unit-of-sync">Namespace as the unit of sync</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#integration-model-spec-integrations">Integration model — <code class="docutils literal notranslate"><span class="pre">spec.integrations</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#provisioner-lifecycle">Provisioner lifecycle</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#controller-input-requirements">Controller Input Requirements</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#what-each-controller-needs">What each controller needs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#platform-artifact-as-template-context">Platform artifact as template context</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#convenience-fields-to-add-to-platformspecmodel">Convenience fields to add to <code class="docutils literal notranslate"><span class="pre">PlatformSpecModel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#why-convenience-fields-instead-of-raw-only">Why convenience fields instead of raw-only?</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#jinja2-adapter-templates">Jinja2 Adapter Templates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#template-location">Template location</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#template-variables-context">Template variables (context)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#argocd-example-template">ArgoCD example template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#flux-kustomization-example-template">Flux Kustomization example template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#flux-helmrelease-example-template">Flux HelmRelease example template</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#reconciliation-health">Reconciliation Health</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#reconciliation-result-shared-across-providers">Reconciliation result (shared across providers)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#provider-specific-health-queries">Provider-specific health queries</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#audit-integration">Audit integration</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#scaffolding-via-strata-sln-init">Scaffolding via <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#decisions">Decisions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#consequences">Consequences</a></li>
 </ul>
 </li>
@@ -3904,6 +3953,33 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#consequences">Consequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#related-adrs">Related ADRs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html">Competitive Landscape and Feature Gaps</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#competitor-tools">Competitor Tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#feature-comparison">Feature Comparison</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#dry-configuration-inheritance">1. DRY Configuration &amp; Inheritance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#dependency-graph-execution-order">2. Dependency Graph / Execution Order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#drift-detection">3. Drift Detection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#policy-engine-guardrails">4. Policy Engine / Guardrails</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#cost-estimation">5. Cost Estimation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#approval-workflows-gates">6. Approval Workflows / Gates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#gitops-reconciliation">7. GitOps Reconciliation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#self-service-environments-ephemeral-ttl">8. Self-Service Environments (Ephemeral / TTL)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#vcs-integration-pr-comments-plan-previews">9. VCS Integration (PR comments, plan previews)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#state-locking-concurrency-control">10. State Locking / Concurrency Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#module-component-registry-private">11. Module / Component Registry (Private)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#change-detection-only-deploy-what-changed">12. Change Detection (Only Deploy What Changed)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#rbac-multi-tenancy-access-control">13. RBAC / Multi-Tenancy Access Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#real-time-streaming-progress-ui">14. Real-Time Streaming / Progress UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#workload-abstraction-score-platform-spec">15. Workload Abstraction (Score / Platform Spec)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#multi-provisioner-orchestration-terraform-ansible-helm-under-one-roof">16. Multi-Provisioner Orchestration (Terraform + Ansible + Helm under one roof)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#server-mode-api-first-architecture">17. Server Mode / API-First Architecture</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#summary-priority-assessment">Summary — Priority Assessment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#notes">Notes</a></li>
 </ul>
 </li>
 </ul>
@@ -4013,6 +4089,8 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#other-deploy-subcommands">Other deploy subcommands</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#version-management-pin-and-lock-chart-image-versions">Version management — pin and lock chart/image versions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#promotions-advance-versions-across-rings">Promotions — advance versions across rings</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#deployment-locking">Deployment locking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#lifecycle-hooks-run-scripts-at-any-phase">Lifecycle hooks — run scripts at any phase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#policy-guardrails">Policy guardrails</a></li>
@@ -4679,7 +4757,7 @@
   <section id="gitops-controller-integration">
 <h1>GitOps Controller Integration<a class="headerlink" href="#gitops-controller-integration" title="Link to this heading"></a></h1>
 <ul class="simple">
-<li><p>Status: proposed</p></li>
+<li><p>Status: completed</p></li>
 <li><p>Date: 2026-07-15</p></li>
 </ul>
 <section id="context-and-problem-statement">
@@ -4687,7 +4765,8 @@
 <p>In fleet-scale deployments (ADR 0038) strata manages the configuration source of truth:
 environment variable/secret layers, version-lock files, and promotion records. The actual
 application workloads on Kubernetes are deployed by a GitOps controller (e.g., ArgoCD
-ApplicationSets) that watches the configuration repository and reconciles the cluster state.</p>
+ApplicationSets, Flux Kustomizations) that watches the configuration repository and reconciles
+the cluster state.</p>
 <p>This relationship is currently <strong>implicit and unverified</strong>:</p>
 <ul class="simple">
 <li><p>Strata knows what it intends to be deployed (version-lock files, resolved env vars).</p></li>
@@ -4699,6 +4778,62 @@ no way to confirm reconciliation succeeded or detect drift between intended and 
 of tenants. Today this is typically achieved by a controller-specific generator (e.g., ArgoCD
 ApplicationSet git generator reading path patterns) with no awareness of strata’s layer model,
 version-lock files, or tenant metadata.</p>
+<section id="why-not-let-the-controller-handle-versions-natively">
+<h3>Why not let the controller handle versions natively?<a class="headerlink" href="#why-not-let-the-controller-handle-versions-natively" title="Link to this heading"></a></h3>
+<p>Both ArgoCD and Flux have built-in mechanisms for tracking new Helm chart versions:</p>
+<ul class="simple">
+<li><p><strong>ArgoCD</strong> — an Application can set <code class="docutils literal notranslate"><span class="pre">spec.source.targetRevision:</span> <span class="pre">*</span></code> or use a semver
+constraint. ArgoCD’s Helm chart tracker polls the HelmRepository and automatically
+detects new versions. Combined with auto-sync, the cluster reconciles to the latest
+matching version without any external trigger.</p></li>
+<li><p><strong>Flux</strong> — a <code class="docutils literal notranslate"><span class="pre">HelmRelease</span></code> with <code class="docutils literal notranslate"><span class="pre">spec.chart.spec.version:</span> <span class="pre">&quot;&gt;=2.0.0</span> <span class="pre">&lt;3.0.0&quot;</span></code> plus a
+<code class="docutils literal notranslate"><span class="pre">HelmRepository</span></code> source will reconcile to the latest chart version matching that range
+on its poll interval. Flux’s <code class="docutils literal notranslate"><span class="pre">ImagePolicy</span></code> can do the same for container images.</p></li>
+</ul>
+<p><strong>Why this is insufficient for fleet-scale operations:</strong></p>
+<ol class="arabic simple">
+<li><p><strong>No promotion control.</strong> The controller treats every tenant identically. When a new
+chart version appears, <em>all</em> Applications using that chart update simultaneously.
+There is no concept of waves, rings, canary deployments, or progressive rollout
+across tenant cohorts. Strata’s promotion system (ADR 0011) is specifically designed
+to gate version progression: dev → staging → production, with health verification
+between each ring.</p></li>
+<li><p><strong>No per-tenant version pinning.</strong> In practice, different tenants may need different
+versions — a customer on a maintenance contract stays on v2.3.x while others move
+to v2.4.x. The controller’s native semver constraint applies uniformly; there is no
+per-Application override without duplicating the constraint in every Application spec.
+Strata’s version-lock files express per-deployment version pins.</p></li>
+<li><p><strong>No coordinated rollout.</strong> Even if version constraints differ, the controller acts
+independently per Application. There is no atomic “deploy v2.4.1 to these 50 tenants
+in wave 1, then these 200 in wave 2 after health is confirmed.” Strata’s fleet
+operations (ADR 0037) provide this orchestration layer.</p></li>
+<li><p><strong>No audit trail.</strong> The controller tracks <em>what is running</em> but not <em>who decided it
+should run</em> or <em>why this version was promoted</em>. The version-lock file committed by
+strata’s promotion workflow is the auditable decision record; the controller is the
+executor, not the decision-maker.</p></li>
+<li><p><strong>No cross-concern coordination.</strong> A version bump often requires corresponding variable
+changes (new feature flags, API endpoint changes, schema migrations). The controller
+sees chart versions in isolation; strata resolves the full deployment context (versions</p>
+<ul class="simple">
+<li><p>variables + secrets + provider config) as a single atomic unit.</p></li>
+</ul>
+</li>
+</ol>
+<p><strong>In summary:</strong> ArgoCD and Flux are excellent at <em>reconciling declared state to a cluster</em>.
+They are not designed to <em>decide what that state should be across a heterogeneous fleet</em>.
+That is strata’s role. The integration contract is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>strata decides WHAT (versions, variables, per-tenant pins, wave ordering)
+    → writes resolved state to git
+        → controller reconciles git state TO the cluster
+            → strata verifies reconciliation succeeded
+</pre></div>
+</div>
+<p>Without this integration, the alternative is either:</p>
+<ul class="simple">
+<li><p>Let the controller auto-update everything (no control, no promotion gates), or</p></li>
+<li><p>Manually edit hundreds of Application specs per version bump (the N×M×K problem).</p></li>
+</ul>
+</section>
 </section>
 <section id="related-work">
 <h2>Related Work<a class="headerlink" href="#related-work" title="Link to this heading"></a></h2>
@@ -4710,133 +4845,739 @@ health verification is the post-deploy confirmation step.</p></li>
 controller should consume for chart/image version resolution.</p></li>
 <li><p><strong>ADR 0018 — Deployment Audit Traceability</strong>: reconciliation status from the controller
 should be recorded in the audit log as a deployment confirmation event.</p></li>
+<li><p><strong>ADR 0039 — Deployment Templates</strong>: partial deployment files enable clean separation of
+infrastructure stages from application sync stages.</p></li>
 </ul>
 </section>
 <hr class="docutils" />
 <section id="design-overview">
 <h2>Design Overview<a class="headerlink" href="#design-overview" title="Link to this heading"></a></h2>
-<section id="two-surfaces-output-and-health">
-<h3>Two surfaces: output and health<a class="headerlink" href="#two-surfaces-output-and-health" title="Link to this heading"></a></h3>
-<p>This ADR covers two complementary capabilities:</p>
-<ol class="arabic simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">gitops</span></code></strong> — emit a structured fleet manifest consumable by an
-ApplicationSet generator, making strata the authoritative source for what the
-controller should deploy.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span> <span class="pre">--gitops</span></code></strong> — query the GitOps controller’s API for
-reconciliation status and surface the result in strata’s health model.</p></li>
-</ol>
-</section>
-<hr class="docutils" />
-<section id="surface-1-strata-build-gitops">
-<h3>Surface 1: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">gitops</span></code><a class="headerlink" href="#surface-1-strata-build-gitops" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>build<span class="w"> </span>gitops<span class="w"> </span>-f<span class="w"> </span>zones/europe-west/customers/contoso/dev/deploy.yaml<span class="w"> </span>--output<span class="w"> </span>json
-strata<span class="w"> </span>build<span class="w"> </span>gitops<span class="w"> </span>--ring<span class="w"> </span>prd<span class="w"> </span>--output<span class="w"> </span>json<span class="w">   </span><span class="c1"># fleet mode (ADR 0037 discovery)</span>
-</pre></div>
-</div>
-<p>Emits a structured manifest per deployment:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;tenant&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;contoso&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;zone&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;europe-west&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;ring&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;dev&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;layers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;zone&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;europe-west&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;customer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;contoso&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;environment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;dev&quot;</span><span class="w"> </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;namespace&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;contoso-dev&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;chart_versions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;integrator-core&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2.4.1&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;integrator-worker&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2.4.1&quot;</span>
-<span class="w">  </span><span class="p">},</span>
-<span class="w">  </span><span class="nt">&quot;variables&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;api_base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://api.dev.contoso.example.com&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;log_level&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;debug&quot;</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-<p>The manifest is designed to be consumed as an <strong>ApplicationSet list generator source</strong>
-(ArgoCD) or equivalent. Each entry contains the resolved values the controller needs
-without requiring the controller to understand strata’s layer model or version-lock format.</p>
-<p>Chart versions are resolved from the active version-lock file for the deployment’s ring —
-the controller does not need to read version-lock files directly.</p>
-</section>
-<section id="surface-2-strata-deploy-health-gitops">
-<h3>Surface 2: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span> <span class="pre">--gitops</span></code><a class="headerlink" href="#surface-2-strata-deploy-health-gitops" title="Link to this heading"></a></h3>
-<p>Extends the existing <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span></code> command with a GitOps reconciliation check:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>health<span class="w"> </span>-f<span class="w"> </span>deploy.yaml<span class="w"> </span>--gitops
-</pre></div>
-</div>
-<p>Queries the configured GitOps controller API (ArgoCD, Flux) for the Application(s)
-associated with this deployment and reports:</p>
+<section id="key-insight-no-new-commands-needed">
+<h3>Key insight: no new commands needed<a class="headerlink" href="#key-insight-no-new-commands-needed" title="Link to this heading"></a></h3>
+<p>ArgoCD and Flux integrate as <strong>provisioner types</strong> within the existing stage/build/deploy
+lifecycle. No new CLI verbs are introduced:</p>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Field</p></th>
+<tr class="row-odd"><th class="head"><p>Existing command</p></th>
+<th class="head"><p>What it does for terraform</p></th>
+<th class="head"><p>What it does for argocd/flux</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code></p></td>
+<td><p>Generates Terraform artifacts</p></td>
+<td><p>Renders Jinja2 template → controller input file</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">run</span></code></p></td>
+<td><p>Runs <code class="docutils literal notranslate"><span class="pre">terraform</span> <span class="pre">apply</span></code></p></td>
+<td><p>Commits rendered output to git (triggers controller)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span></code></p></td>
+<td><p>Checks infra state</p></td>
+<td><p>Queries controller for reconciliation status</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="deployment-separation-with-partial-files-adr-0039">
+<h3>Deployment separation with partial files (ADR 0039)<a class="headerlink" href="#deployment-separation-with-partial-files-adr-0039" title="Link to this heading"></a></h3>
+<p>Partial deployment files enable clean separation of infrastructure provisioning from
+application sync:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># deploy-infra-base.yaml — provision infrastructure (partial)</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infra-base</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace_platform</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@iac/workspaces/workspace-platform.yaml&quot;</span>
+<span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">provision</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">platform_iac</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infrastructure</span>
+<span class="w">      </span><span class="nt">on_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stop</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># deploy-apps-base.yaml — sync applications (partial)</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apps-base</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">workspace</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace_apps</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@iac/workspaces/workspace-apps.yaml&quot;</span>
+<span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sync</span>
+<span class="w">      </span><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="w">      </span><span class="nt">backend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">integration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd-prod</span>
+<span class="w">        </span><span class="nt">remote</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helm-config</span>
+<span class="w">      </span><span class="nt">scope</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">applications</span>
+<span class="w">      </span><span class="nt">on_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stop</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># deploy-contoso-dev.yaml — leaf, deployable</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy-contoso-dev</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@config/templates/deploy-apps-base.yaml&quot;</span>
+<span class="w">  </span><span class="nt">tenant</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso</span>
+<span class="w">  </span><span class="nt">layers</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">europe-west</span>
+<span class="w">    </span><span class="nt">customer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dev</span>
+<span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sync</span>
+<span class="w">      </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso-dev</span><span class="w">       </span><span class="c1"># ← scopes to this namespace</span>
+<span class="w">  </span><span class="nt">environments</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;@config/zones/europe-west/env.yaml&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;@config/customers/contoso/dev/env.yaml&quot;</span>
+</pre></div>
+</div>
+<section id="namespace-as-the-unit-of-sync">
+<h4>Namespace as the unit of sync<a class="headerlink" href="#namespace-as-the-unit-of-sync" title="Link to this heading"></a></h4>
+<p>The <code class="docutils literal notranslate"><span class="pre">namespace</span></code> field on a stage references one of <code class="docutils literal notranslate"><span class="pre">workspace.spec.namespaces[].name</span></code>.
+The namespace YAML declares which modules belong to it — this becomes the set of
+applications the controller manages for that namespace:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># namespaces/contoso-dev.yaml</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">namespace</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso-dev</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">modules</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integrator-core</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">integrator-worker</span>
+</pre></div>
+</div>
+<p>The sync provisioner filters the platform artifact to the scoped namespace and its
+modules. The template receives:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">namespace</span></code> — the single <code class="docutils literal notranslate"><span class="pre">PlatformNamespaceModel</span></code> (name + modules)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">modules[]</span></code> — filtered to only modules declared in that namespace</p></li>
+<li><p>All other context (layers, variables, tenant, etc.) remains available</p></li>
+</ul>
+<p>If the stage omits <code class="docutils literal notranslate"><span class="pre">namespace</span></code>, all namespaces are included and the template is
+responsible for iterating (via <code class="docutils literal notranslate"><span class="pre">{%</span> <span class="pre">for</span> <span class="pre">ns</span> <span class="pre">in</span> <span class="pre">namespaces</span> <span class="pre">%}</span></code>).</p>
+<p>This gives teams the flexibility to:</p>
+<ul class="simple">
+<li><p><strong>Single deployment</strong> — one file with both terraform and argocd stages</p></li>
+<li><p><strong>Split deployments</strong> — <code class="docutils literal notranslate"><span class="pre">deploy-infra.yaml</span></code> (terraform only) + <code class="docutils literal notranslate"><span class="pre">deploy-apps.yaml</span></code> (argocd only)</p></li>
+<li><p><strong>Shared bases</strong> — partial templates with common stage structure, thin leaves per tenant</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="integration-model-spec-integrations">
+<h3>Integration model — <code class="docutils literal notranslate"><span class="pre">spec.integrations</span></code><a class="headerlink" href="#integration-model-spec-integrations" title="Link to this heading"></a></h3>
+<p>ArgoCD and Flux are configured via the existing integration framework in the configuration
+model. The <code class="docutils literal notranslate"><span class="pre">sync</span></code> capability identifies them as reconciliation controllers:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># configuration.yaml</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">integrations</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span>
+<span class="w">      </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">sync</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">endpoints</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">address</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://argocd.platform.example.com</span>
+<span class="w">      </span><span class="nt">authentication</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">token</span>
+<span class="w">        </span><span class="nt">secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd_api_token</span>
+<span class="w">      </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sync/argocd-appset-entry.json.j2</span>
+<span class="w">        </span><span class="nt">output_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sync/appset-params.json</span>
+<span class="w">        </span><span class="nt">project</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<span class="w">        </span><span class="nt">app_label_selector</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata.io/managed=true&quot;</span>
+
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flux</span>
+<span class="w">      </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flux</span>
+<span class="w">      </span><span class="nt">capabilities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">sync</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">properties</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">template</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sync/flux-kustomization.yaml.j2</span>
+<span class="w">        </span><span class="nt">output_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sync/kustomizations.yaml</span>
+<span class="w">        </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flux-system</span>
+<span class="w">        </span><span class="nt">label_selector</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;strata.io/managed=true&quot;</span>
+<span class="w">      </span><span class="nt">authentication</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kubeconfig</span>
+<span class="w">        </span><span class="nt">secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flux_kubeconfig</span>
+</pre></div>
+</div>
+</section>
+<section id="provisioner-lifecycle">
+<h3>Provisioner lifecycle<a class="headerlink" href="#provisioner-lifecycle" title="Link to this heading"></a></h3>
+<p>When a stage has <code class="docutils literal notranslate"><span class="pre">provisioner:</span> <span class="pre">argocd</span></code> (or <code class="docutils literal notranslate"><span class="pre">flux</span></code>), the provisioner class implements:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Phase</p></th>
+<th class="head"><p>Action</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Build</strong></p></td>
+<td><p>Read platform artifact → filter by stage <code class="docutils literal notranslate"><span class="pre">namespace</span></code> → render Jinja2 → write <code class="docutils literal notranslate"><span class="pre">output_file</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Deploy</strong></p></td>
+<td><p>Commit rendered output to config repo (via <code class="docutils literal notranslate"><span class="pre">backend.remote</span></code>) → optionally trigger sync</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Health</strong></p></td>
+<td><p>Query controller API for reconciliation status → return <code class="docutils literal notranslate"><span class="pre">ReconciliationResult</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ArgoCDProvisioner</span><span class="p">(</span><span class="n">BaseProvisioner</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;ArgoCD provisioner — renders sync artifacts and verifies reconciliation.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">BuildContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Render Jinja2 template with resolved deployment context.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">deploy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">DeployContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Commit rendered artifacts; optionally trigger ArgoCD sync.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">health</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">HealthContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconciliationResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Query ArgoCD API for sync/health status.&quot;&quot;&quot;</span>
+        <span class="o">...</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="controller-input-requirements">
+<h2>Controller Input Requirements<a class="headerlink" href="#controller-input-requirements" title="Link to this heading"></a></h2>
+<section id="what-each-controller-needs">
+<h3>What each controller needs<a class="headerlink" href="#what-each-controller-needs" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Concern</p></th>
+<th class="head"><p>ArgoCD (ApplicationSet)</p></th>
+<th class="head"><p>Flux (Kustomization / HelmRelease)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Generator input</strong></p></td>
+<td><p>JSON list of parameter sets (list generator)</p></td>
+<td><p>Kustomization/HelmRelease CRs per app</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Namespace</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.template.spec.destination.namespace</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.targetNamespace</span></code> on the CR</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Chart/image versions</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.source.targetRevision</span></code> / Helm <code class="docutils literal notranslate"><span class="pre">values.image.tag</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.chart.version</span></code> / <code class="docutils literal notranslate"><span class="pre">ImagePolicy</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Variables</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.source.helm.parameters[]</span></code> or inline <code class="docutils literal notranslate"><span class="pre">values</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.postBuild.substituteFrom</span></code> or <code class="docutils literal notranslate"><span class="pre">spec.values</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Cluster targeting</strong></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.destination.server</span></code> (URL or name)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.kubeConfig.secretRef</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Health status API</strong></p></td>
+<td><p>REST: <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/api/v1/applications/{name}</span></code></p></td>
+<td><p>K8s CR: <code class="docutils literal notranslate"><span class="pre">.status.conditions[]</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Auth model</strong></p></td>
+<td><p>Bearer token (API key or OIDC)</p></td>
+<td><p>kubeconfig to management cluster</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="platform-artifact-as-template-context">
+<h3>Platform artifact as template context<a class="headerlink" href="#platform-artifact-as-template-context" title="Link to this heading"></a></h3>
+<p>The platform artifact (<code class="docutils literal notranslate"><span class="pre">platform.json</span></code>) that <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code> already produces contains
+everything the sync provisioner needs. No separate “universal manifest” is required — the
+provisioner serializes the platform artifact to a dict and passes it as the Jinja2 context.</p>
+<p>The artifact already contains:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Data</p></th>
+<th class="head"><p>Platform artifact path</p></th>
 <th class="head"><p>Source</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sync_status</span></code></p></td>
-<td><p>Controller API (Synced / OutOfSync / Unknown)</p></td>
+<tr class="row-even"><td><p>Deployment name</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">meta.name</span></code></p></td>
+<td><p>deployment YAML</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">health_status</span></code></p></td>
-<td><p>Controller API (Healthy / Degraded / Progressing)</p></td>
+<tr class="row-odd"><td><p>Layers</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.deployment</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.layers</span></code> resolved against configuration layering</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">last_synced_at</span></code></p></td>
-<td><p>Controller API</p></td>
+<tr class="row-even"><td><p>Artifact path</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.artifact_path</span></code></p></td>
+<td><p>computed from layer values</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">revision</span></code></p></td>
-<td><p>Controller API — git SHA last reconciled</p></td>
+<tr class="row-odd"><td><p>Tenant</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.tenant.code</span></code>, <code class="docutils literal notranslate"><span class="pre">.name</span></code>, <code class="docutils literal notranslate"><span class="pre">.zones</span></code></p></td>
+<td><p>tenant YAML (ADR 0012)</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">intended_revision</span></code></p></td>
-<td><p>Strata — HEAD commit of config repo at build time</p></td>
+<tr class="row-even"><td><p>Stages</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.stages[]</span></code></p></td>
+<td><p>deployment YAML</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">drift</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code> when <code class="docutils literal notranslate"><span class="pre">revision</span> <span class="pre">!=</span> <span class="pre">intended_revision</span></code></p></td>
+<tr class="row-odd"><td><p>Topologies</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.topologies[]</span></code></p></td>
+<td><p>workspace YAML</p></td>
+</tr>
+<tr class="row-even"><td><p>Providers</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.providers[]</span></code></p></td>
+<td><p>provider YAML (has <code class="docutils literal notranslate"><span class="pre">.properties.region</span></code>, <code class="docutils literal notranslate"><span class="pre">.zone</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Namespaces</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.namespaces[]</span></code></p></td>
+<td><p>namespace YAML (has <code class="docutils literal notranslate"><span class="pre">.modules[]</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p>Modules</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.modules[]</span></code></p></td>
+<td><p>module YAML (has <code class="docutils literal notranslate"><span class="pre">.source</span></code> with chart/image refs)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Variables</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.variables[]</span></code></p></td>
+<td><p>layer stack merge (resolved, non-secret)</p></td>
+</tr>
+<tr class="row-even"><td><p>Secrets</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.secrets[]</span></code></p></td>
+<td><p><strong>excluded from template context</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p>Resources</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">spec.resources[]</span></code></p></td>
+<td><p>resource YAML</p></td>
 </tr>
 </tbody>
 </table>
-<p>Controller connection is configured in <code class="docutils literal notranslate"><span class="pre">.strata/cli.yaml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">gitops</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd</span><span class="w">          </span><span class="c1"># argocd | flux</span>
-<span class="w">  </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://argocd.platform.example.com</span>
-<span class="w">  </span><span class="nt">token_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argocd_token</span>
+<section id="convenience-fields-to-add-to-platformspecmodel">
+<h4>Convenience fields to add to <code class="docutils literal notranslate"><span class="pre">PlatformSpecModel</span></code><a class="headerlink" href="#convenience-fields-to-add-to-platformspecmodel" title="Link to this heading"></a></h4>
+<p>To make the platform artifact more ergonomic as a Jinja2 context, we add computed
+convenience fields. These are derived at build time and require no new input schema:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Additions to PlatformSpecModel</span>
+
+<span class="c1"># Deployment name promoted from meta.name — templates don&#39;t need meta access</span>
+<span class="n">name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+    <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Deployment name (promoted from meta.name)&quot;</span><span class="p">)</span>
+
+<span class="c1"># Labels and annotations promoted from workspace — useful for controller label selectors</span>
+<span class="n">labels</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+    <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Workspace labels (promoted from workspace.labels)&quot;</span><span class="p">)</span>
+
+<span class="n">annotations</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+    <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Workspace annotations (promoted from workspace.annotations)&quot;</span><span class="p">)</span>
+
+<span class="c1"># Flat dict of layer key→value (currently stored as spec.deployment)</span>
+<span class="c1"># Alias for clarity in templates: {{ layers.zone }} vs {{ deployment.zone }}</span>
+<span class="n">layers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+    <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Layer key-value pairs (alias for deployment)&quot;</span><span class="p">)</span>
+
+<span class="c1"># Flat dict of module name→version from version-lock resolution</span>
+<span class="n">chart_versions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+    <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Module/chart name → resolved version&quot;</span><span class="p">)</span>
+
+<span class="c1"># Flat dict of module name→full image reference (registry:tag@digest)</span>
+<span class="n">image_versions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+    <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Module/chart name → resolved container image reference&quot;</span><span class="p">)</span>
+
+<span class="c1"># Flat dict of variable name→value (non-secret only)</span>
+<span class="n">resolved_variables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+    <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Flat variable name→value dict (secrets excluded)&quot;</span><span class="p">)</span>
+
+<span class="c1"># Git commit SHA at build time</span>
+<span class="n">revision</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+    <span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Git commit SHA at build time&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>These are populated by the platform builder during <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">run</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">layers</span></code> — copy of <code class="docutils literal notranslate"><span class="pre">spec.deployment</span></code> (already computed)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">chart_versions</span></code> — extracted from <code class="docutils literal notranslate"><span class="pre">spec.modules[].source.version</span></code> after version-lock
+resolution (ADR 0011)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">image_versions</span></code> — extracted from <code class="docutils literal notranslate"><span class="pre">spec.modules[].source</span></code> where source type is
+container image</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">resolved_variables</span></code> — flattened from <code class="docutils literal notranslate"><span class="pre">spec.variables[]</span></code> excluding any entries that
+came from secret stores</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">revision</span></code> — <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">rev-parse</span> <span class="pre">HEAD</span></code> at build time</p></li>
+</ul>
+</section>
+<section id="why-convenience-fields-instead-of-raw-only">
+<h4>Why convenience fields instead of raw-only?<a class="headerlink" href="#why-convenience-fields-instead-of-raw-only" title="Link to this heading"></a></h4>
+<p>The raw artifact is always available — power users can iterate over <code class="docutils literal notranslate"><span class="pre">modules</span></code>,
+<code class="docutils literal notranslate"><span class="pre">topologies</span></code>, <code class="docutils literal notranslate"><span class="pre">namespaces</span></code> directly. But the common case (ArgoCD ApplicationSet
+parameters, Flux HelmRelease values) needs flat dicts. Without convenience fields,
+every template would start with boilerplate Jinja2 loops to flatten the model:</p>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="c">{# Without convenience fields — verbose and error-prone #}</span>
+<span class="cp">{%</span> <span class="k">set</span> <span class="nv">chart_versions</span> <span class="o">=</span> <span class="o">{}</span> <span class="cp">%}</span>
+<span class="cp">{%</span> <span class="k">for</span> <span class="nv">mod</span> <span class="k">in</span> <span class="nv">modules</span> <span class="cp">%}</span>
+<span class="x">  </span><span class="cp">{%</span> <span class="k">do</span> <span class="nv">chart_versions.update</span><span class="o">({</span><span class="nv">mod.name</span><span class="o">:</span> <span class="nv">mod.source.version</span><span class="o">})</span> <span class="cp">%}</span>
+<span class="cp">{%</span> <span class="k">endfor</span> <span class="cp">%}</span>
+</pre></div>
+</div>
+<p>With convenience fields, the same template is clean:</p>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="c">{# With convenience fields — direct access #}</span>
+<span class="x">&quot;chart_version&quot;: &quot;</span><span class="cp">{{</span> <span class="nv">chart_versions</span><span class="o">[</span><span class="s1">&#39;integrator-core&#39;</span><span class="o">]</span> <span class="cp">}}</span><span class="x">&quot;</span>
+</pre></div>
+</div>
+<p>Both the raw model and convenience fields are available simultaneously.</p>
+</section>
+</section>
+</section>
+<hr class="docutils" />
+<section id="jinja2-adapter-templates">
+<h2>Jinja2 Adapter Templates<a class="headerlink" href="#jinja2-adapter-templates" title="Link to this heading"></a></h2>
+<p>The rendered output format is a <strong>user-editable Jinja2 template</strong> in the workspace.
+Operators customize their controller output without touching strata code.</p>
+<section id="template-location">
+<h3>Template location<a class="headerlink" href="#template-location" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>.strata/templates/sync/
+├── README.md                          ← usage guide and variable reference
+├── argocd-appset-entry.json.j2        ← ArgoCD starter
+└── flux-kustomization.yaml.j2         ← Flux starter
+</pre></div>
+</div>
+<p>The integration’s <code class="docutils literal notranslate"><span class="pre">properties.template</span></code> field names the template file (resolved relative
+to <code class="docutils literal notranslate"><span class="pre">.strata/templates/</span></code>). The <code class="docutils literal notranslate"><span class="pre">properties.output_file</span></code> field defines where the rendered
+result is written (relative to the build output directory).</p>
+</section>
+<section id="template-variables-context">
+<h3>Template variables (context)<a class="headerlink" href="#template-variables-context" title="Link to this heading"></a></h3>
+<p>The full platform artifact is the Jinja2 context. Templates can access any field from
+<code class="docutils literal notranslate"><span class="pre">PlatformSpecModel</span></code>. The most commonly used paths:</p>
+<p>The template context is the <code class="docutils literal notranslate"><span class="pre">PlatformSpecModel</span></code> dict (the <code class="docutils literal notranslate"><span class="pre">spec</span></code> level of the platform
+artifact). Convenience fields from <code class="docutils literal notranslate"><span class="pre">meta</span></code> (like <code class="docutils literal notranslate"><span class="pre">name</span></code>) are promoted into spec so
+templates don’t need to reach outside <code class="docutils literal notranslate"><span class="pre">spec</span></code>. The <code class="docutils literal notranslate"><span class="pre">integration</span></code> dict is injected
+separately by the provisioner.</p>
+<p><strong>Convenience fields (flat, easy to use):</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Variable</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>Deployment name (promoted from <code class="docutils literal notranslate"><span class="pre">meta.name</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">artifact_path</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>Computed artifact path (e.g., <code class="docutils literal notranslate"><span class="pre">eu/contoso/default/production</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">layers</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">str]</span></code></p></td>
+<td><p>Layer key-value pairs</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tenant.code</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>Tenant code</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tenant.name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>Tenant display name</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">chart_versions</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">str]</span></code></p></td>
+<td><p>Module name → resolved version (flat)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">image_versions</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">str]</span></code></p></td>
+<td><p>Module name → full image reference (flat)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">resolved_variables</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">str]</span></code></p></td>
+<td><p>Variable name → value (secrets excluded)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">revision</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>Git commit SHA at build time</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">labels</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">str]</span></code></p></td>
+<td><p>Workspace labels (useful for ArgoCD/Flux label selectors)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">annotations</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict[str,</span> <span class="pre">Any]</span></code></p></td>
+<td><p>Workspace annotations</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">namespace</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">obj</span></code></p></td>
+<td><p>Scoped namespace (when stage has <code class="docutils literal notranslate"><span class="pre">namespace:</span></code> field)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">namespace.name</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">str</span></code></p></td>
+<td><p>Namespace name</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">namespace.modules</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
+<td><p>Modules declared in this namespace</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">integration</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dict</span></code></p></td>
+<td><p>The integration’s <code class="docutils literal notranslate"><span class="pre">properties</span></code> block (injected by provisioner)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Full model access (for advanced templates):</strong></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Variable</p></th>
+<th class="head"><p>Type</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">topologies[]</span></code></p></td>
+<td><p>list</p></td>
+<td><p>Topology with <code class="docutils literal notranslate"><span class="pre">.provider</span></code>, <code class="docutils literal notranslate"><span class="pre">.provisioner</span></code>, <code class="docutils literal notranslate"><span class="pre">.namespaces[]</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">providers[]</span></code></p></td>
+<td><p>list</p></td>
+<td><p>Provider with <code class="docutils literal notranslate"><span class="pre">.properties.type</span></code>, <code class="docutils literal notranslate"><span class="pre">.properties.region</span></code>, <code class="docutils literal notranslate"><span class="pre">.zone</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">namespaces[]</span></code></p></td>
+<td><p>list</p></td>
+<td><p>All namespaces (unfiltered — for multi-namespace templates)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">modules[]</span></code></p></td>
+<td><p>list</p></td>
+<td><p>Modules filtered to namespace scope (or all if no scope)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">variables[]</span></code></p></td>
+<td><p>list</p></td>
+<td><p>Full variable store entries (name, value, source)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">resources[]</span></code></p></td>
+<td><p>list</p></td>
+<td><p>Resources with properties, storage, dependencies</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">stages[]</span></code></p></td>
+<td><p>list</p></td>
+<td><p>Deployment stages</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">workspace</span></code></p></td>
+<td><p>obj</p></td>
+<td><p>Workspace identity (name, annotations, labels)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Namespace scoping behavior:</strong></p>
+<ul class="simple">
+<li><p>Stage has <code class="docutils literal notranslate"><span class="pre">namespace:</span></code> → template gets <code class="docutils literal notranslate"><span class="pre">namespace</span></code> (singular object) and <code class="docutils literal notranslate"><span class="pre">modules[]</span></code>
+filtered to that namespace’s declared modules</p></li>
+<li><p>Stage omits <code class="docutils literal notranslate"><span class="pre">namespace:</span></code> → <code class="docutils literal notranslate"><span class="pre">namespace</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, <code class="docutils literal notranslate"><span class="pre">modules[]</span></code> contains all modules,
+<code class="docutils literal notranslate"><span class="pre">namespaces[]</span></code> is available for iteration</p></li>
+</ul>
+</section>
+<section id="argocd-example-template">
+<h3>ArgoCD example template<a class="headerlink" href="#argocd-example-template" title="Link to this heading"></a></h3>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="c">{# .strata/templates/sync/argocd-appset-entry.json.j2 #}</span>
+<span class="c">{# Context: platform artifact scoped to stage namespace #}</span>
+<span class="x">{</span>
+<span class="x">  &quot;name&quot;: &quot;</span><span class="cp">{{</span> <span class="nv">tenant.code</span> <span class="cp">}}</span><span class="x">-</span><span class="cp">{{</span> <span class="nv">layers.environment</span> <span class="cp">}}</span><span class="x">&quot;,</span>
+<span class="x">  &quot;namespace&quot;: &quot;</span><span class="cp">{{</span> <span class="nv">namespace.name</span> <span class="cp">}}</span><span class="x">&quot;,</span>
+<span class="x">  &quot;server&quot;: &quot;</span><span class="cp">{{</span> <span class="nv">providers</span><span class="o">[</span><span class="m">0</span><span class="o">]</span><span class="nv">.properties.region</span> <span class="cp">}}</span><span class="x">&quot;,</span>
+<span class="x">  &quot;path&quot;: &quot;</span><span class="cp">{{</span> <span class="nv">artifact_path</span> <span class="cp">}}</span><span class="x">&quot;,</span>
+<span class="x">  &quot;targetRevision&quot;: &quot;</span><span class="cp">{{</span> <span class="nv">revision</span> <span class="cp">}}</span><span class="x">&quot;,</span>
+<span class="x">  &quot;project&quot;: &quot;</span><span class="cp">{{</span> <span class="nv">integration.project</span> <span class="o">|</span> <span class="nf">default</span><span class="o">(</span><span class="s1">&#39;default&#39;</span><span class="o">)</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">  </span><span class="cp">{%</span>- <span class="k">for</span> <span class="nv">chart</span><span class="o">,</span> <span class="nv">version</span> <span class="k">in</span> <span class="nv">chart_versions.items</span><span class="o">()</span> <span class="cp">%}</span><span class="x">,</span>
+<span class="x">  &quot;chart_</span><span class="cp">{{</span> <span class="nv">chart</span> <span class="o">|</span> <span class="nf">replace</span><span class="o">(</span><span class="s1">&#39;-&#39;</span><span class="o">,</span> <span class="s1">&#39;_&#39;</span><span class="o">)</span> <span class="cp">}}</span><span class="x">_version&quot;: &quot;</span><span class="cp">{{</span> <span class="nv">version</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">  </span><span class="cp">{%</span>- <span class="k">endfor</span> <span class="cp">%}</span>
+<span class="x">  </span><span class="cp">{%</span>- <span class="k">for</span> <span class="nv">key</span><span class="o">,</span> <span class="nv">value</span> <span class="k">in</span> <span class="nv">resolved_variables.items</span><span class="o">()</span> <span class="cp">%}</span><span class="x">,</span>
+<span class="x">  &quot;var_</span><span class="cp">{{</span> <span class="nv">key</span> <span class="cp">}}</span><span class="x">&quot;: &quot;</span><span class="cp">{{</span> <span class="nv">value</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">  </span><span class="cp">{%</span>- <span class="k">endfor</span> <span class="cp">%}</span>
+<span class="x">}</span>
 </pre></div>
 </div>
 </section>
+<section id="flux-kustomization-example-template">
+<h3>Flux Kustomization example template<a class="headerlink" href="#flux-kustomization-example-template" title="Link to this heading"></a></h3>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="c">{# .strata/templates/sync/flux-kustomization.yaml.j2 #}</span>
+<span class="c">{# Uses scoped namespace from stage — no iteration needed #}</span>
+<span class="x">apiVersion: kustomize.toolkit.fluxcd.io/v1</span>
+<span class="x">kind: Kustomization</span>
+<span class="x">metadata:</span>
+<span class="x">  name: </span><span class="cp">{{</span> <span class="nv">tenant.code</span> <span class="cp">}}</span><span class="x">-</span><span class="cp">{{</span> <span class="nv">layers.environment</span> <span class="cp">}}</span>
+<span class="x">  namespace: </span><span class="cp">{{</span> <span class="nv">integration.namespace</span> <span class="o">|</span> <span class="nf">default</span><span class="o">(</span><span class="s1">&#39;flux-system&#39;</span><span class="o">)</span> <span class="cp">}}</span>
+<span class="x">  labels:</span>
+<span class="x">    strata.io/tenant: &quot;</span><span class="cp">{{</span> <span class="nv">tenant.code</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">    strata.io/zone: &quot;</span><span class="cp">{{</span> <span class="nv">layers.zone</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">    </span><span class="cp">{%</span>- <span class="k">for</span> <span class="nv">key</span><span class="o">,</span> <span class="nv">value</span> <span class="k">in</span> <span class="nv">labels.items</span><span class="o">()</span> <span class="cp">%}</span>
+<span class="x">    </span><span class="cp">{{</span> <span class="nv">key</span> <span class="cp">}}</span><span class="x">: &quot;</span><span class="cp">{{</span> <span class="nv">value</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">    </span><span class="cp">{%</span>- <span class="k">endfor</span> <span class="cp">%}</span>
+<span class="x">spec:</span>
+<span class="x">  targetNamespace: </span><span class="cp">{{</span> <span class="nv">namespace.name</span> <span class="cp">}}</span>
+<span class="x">  sourceRef:</span>
+<span class="x">    kind: GitRepository</span>
+<span class="x">    name: config-repo</span>
+<span class="x">  path: &quot;./</span><span class="cp">{{</span> <span class="nv">artifact_path</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">  postBuild:</span>
+<span class="x">    substitute:</span>
+<span class="x">      </span><span class="cp">{%</span>- <span class="k">for</span> <span class="nv">key</span><span class="o">,</span> <span class="nv">value</span> <span class="k">in</span> <span class="nv">resolved_variables.items</span><span class="o">()</span> <span class="cp">%}</span>
+<span class="x">      </span><span class="cp">{{</span> <span class="nv">key</span> <span class="cp">}}</span><span class="x">: &quot;</span><span class="cp">{{</span> <span class="nv">value</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">      </span><span class="cp">{%</span>- <span class="k">endfor</span> <span class="cp">%}</span>
+</pre></div>
+</div>
+</section>
+<section id="flux-helmrelease-example-template">
+<h3>Flux HelmRelease example template<a class="headerlink" href="#flux-helmrelease-example-template" title="Link to this heading"></a></h3>
+<div class="highlight-jinja notranslate"><div class="highlight"><pre><span></span><span class="c">{# .strata/templates/sync/flux-helmrelease.yaml.j2 #}</span>
+<span class="c">{# Iterates modules scoped to the stage&#39;s namespace #}</span>
+<span class="cp">{%</span> <span class="k">for</span> <span class="nv">chart</span><span class="o">,</span> <span class="nv">version</span> <span class="k">in</span> <span class="nv">chart_versions.items</span><span class="o">()</span> <span class="cp">%}</span>
+<span class="x">---</span>
+<span class="x">apiVersion: helm.toolkit.fluxcd.io/v2</span>
+<span class="x">kind: HelmRelease</span>
+<span class="x">metadata:</span>
+<span class="x">  name: </span><span class="cp">{{</span> <span class="nv">tenant.code</span> <span class="cp">}}</span><span class="x">-</span><span class="cp">{{</span> <span class="nv">layers.environment</span> <span class="cp">}}</span><span class="x">-</span><span class="cp">{{</span> <span class="nv">chart</span> <span class="cp">}}</span>
+<span class="x">  namespace: </span><span class="cp">{{</span> <span class="nv">namespace.name</span> <span class="cp">}}</span>
+<span class="x">  labels:</span>
+<span class="x">    strata.io/tenant: &quot;</span><span class="cp">{{</span> <span class="nv">tenant.code</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">spec:</span>
+<span class="x">  chart:</span>
+<span class="x">    spec:</span>
+<span class="x">      chart: </span><span class="cp">{{</span> <span class="nv">chart</span> <span class="cp">}}</span>
+<span class="x">      version: &quot;</span><span class="cp">{{</span> <span class="nv">version</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">      sourceRef:</span>
+<span class="x">        kind: HelmRepository</span>
+<span class="x">        name: charts</span>
+<span class="x">  values:</span>
+<span class="x">    </span><span class="cp">{%</span>- <span class="k">for</span> <span class="nv">key</span><span class="o">,</span> <span class="nv">value</span> <span class="k">in</span> <span class="nv">resolved_variables.items</span><span class="o">()</span> <span class="cp">%}</span>
+<span class="x">    </span><span class="cp">{{</span> <span class="nv">key</span> <span class="cp">}}</span><span class="x">: &quot;</span><span class="cp">{{</span> <span class="nv">value</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">    </span><span class="cp">{%</span>- <span class="k">endfor</span> <span class="cp">%}</span>
+<span class="x">    </span><span class="cp">{%</span>- <span class="k">if</span> <span class="nv">chart</span> <span class="k">in</span> <span class="nv">image_versions</span> <span class="cp">%}</span>
+<span class="x">    image:</span>
+<span class="x">      repository: &quot;</span><span class="cp">{{</span> <span class="nv">image_versions</span><span class="o">[</span><span class="nv">chart</span><span class="o">]</span><span class="nv">.split</span><span class="o">(</span><span class="s1">&#39;:&#39;</span><span class="o">)[</span><span class="m">0</span><span class="o">]</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">      tag: &quot;</span><span class="cp">{{</span> <span class="nv">image_versions</span><span class="o">[</span><span class="nv">chart</span><span class="o">]</span><span class="nv">.split</span><span class="o">(</span><span class="s1">&#39;:&#39;</span><span class="o">)[</span><span class="m">1</span><span class="o">]</span><span class="nv">.split</span><span class="o">(</span><span class="s1">&#39;@&#39;</span><span class="o">)[</span><span class="m">0</span><span class="o">]</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">    </span><span class="cp">{%</span>- <span class="k">endif</span> <span class="cp">%}</span>
+<span class="cp">{%</span> <span class="k">endfor</span> <span class="cp">%}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="reconciliation-health">
+<h2>Reconciliation Health<a class="headerlink" href="#reconciliation-health" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span></code> auto-detects stages that use a <code class="docutils literal notranslate"><span class="pre">sync</span></code>-capable provisioner and
+queries the controller for reconciliation status. No <code class="docutils literal notranslate"><span class="pre">--gitops</span></code> flag needed.</p>
+<section id="reconciliation-result-shared-across-providers">
+<h3>Reconciliation result (shared across providers)<a class="headerlink" href="#reconciliation-result-shared-across-providers" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReconciliationResult</span><span class="p">:</span>
+    <span class="n">sync_status</span><span class="p">:</span> <span class="nb">str</span>          <span class="c1"># Synced | OutOfSync | Unknown</span>
+    <span class="n">health_status</span><span class="p">:</span> <span class="nb">str</span>        <span class="c1"># Healthy | Degraded | Progressing | Suspended</span>
+    <span class="n">last_synced_at</span><span class="p">:</span> <span class="n">datetime</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">revision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>      <span class="c1"># git SHA the controller last reconciled</span>
+    <span class="n">intended_revision</span><span class="p">:</span> <span class="nb">str</span>    <span class="c1"># git SHA strata expects</span>
+    <span class="n">drift</span><span class="p">:</span> <span class="nb">bool</span>               <span class="c1"># revision != intended_revision</span>
+    <span class="n">message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>       <span class="c1"># controller&#39;s status message</span>
+</pre></div>
+</div>
+</section>
+<section id="provider-specific-health-queries">
+<h3>Provider-specific health queries<a class="headerlink" href="#provider-specific-health-queries" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Provider</p></th>
+<th class="head"><p>How strata queries status</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>ArgoCD</strong></p></td>
+<td><p>REST API: <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/api/v1/applications/{name}</span></code> → <code class="docutils literal notranslate"><span class="pre">.status.sync.status</span></code>, <code class="docutils literal notranslate"><span class="pre">.status.health.status</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Flux</strong></p></td>
+<td><p>Kubernetes API: <code class="docutils literal notranslate"><span class="pre">.status.conditions[]</span></code> on Kustomization/HelmRelease with type <code class="docutils literal notranslate"><span class="pre">Ready</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
 <section id="audit-integration">
 <h3>Audit integration<a class="headerlink" href="#audit-integration" title="Link to this heading"></a></h3>
-<p>When <code class="docutils literal notranslate"><span class="pre">--gitops</span></code> is used after a deployment, the reconciliation result is appended to
-the deployment’s audit record (ADR 0018), providing end-to-end traceability:
+<p>The reconciliation result is appended to the deployment’s audit record (ADR 0018),
+completing the traceability chain:
 strata intended → strata applied → controller reconciled.</p>
 </section>
 </section>
 <hr class="docutils" />
-<section id="open-questions">
-<h2>Open Questions<a class="headerlink" href="#open-questions" title="Link to this heading"></a></h2>
+<section id="scaffolding-via-strata-sln-init">
+<h2>Scaffolding via <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code><a class="headerlink" href="#scaffolding-via-strata-sln-init" title="Link to this heading"></a></h2>
+<p>When a <code class="docutils literal notranslate"><span class="pre">sync</span></code>-capable integration is present in the configuration, <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code>
+creates starter templates and a README:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>.strata/templates/sync/
+├── README.md                          ← usage guide and variable reference
+├── argocd-appset-entry.json.j2        ← (if type: argocd)
+└── flux-kustomization.yaml.j2         ← (if type: flux)
+</pre></div>
+</div>
+<p>The README documents all available template variables, Jinja2 usage tips, and
+configuration instructions. See the template variables table above for the full reference.</p>
+</section>
+<hr class="docutils" />
+<section id="decisions">
+<h2>Decisions<a class="headerlink" href="#decisions" title="Link to this heading"></a></h2>
 <ol class="arabic simple">
-<li><p><strong>Provider scope</strong> — ArgoCD first, Flux as Phase 2, or design a provider interface
-from the start?</p></li>
-<li><p><strong>Pull vs push</strong> — should strata poll for reconciliation status (blocking health check)
-or register a webhook and receive a callback? Webhook requires network access to strata;
-polling is simpler.</p></li>
-<li><p><strong>ApplicationSet ownership</strong> — should strata generate and manage the ApplicationSet
-resource itself (write to cluster), or only emit the generator source data (write to
-file, ArgoCD reads)? The latter keeps strata out of the cluster and preserves GitOps
-principles.</p></li>
-<li><p><strong>Variable exposure</strong> — the gitops manifest includes resolved variable values. Secrets
-must never appear in the manifest; variables that are sensitive by convention should
-be opt-out suppressible.</p></li>
+<li><p><strong>Provisioner model</strong> — ArgoCD and Flux are provisioner types (<code class="docutils literal notranslate"><span class="pre">provisioner:</span> <span class="pre">argocd</span></code>,
+<code class="docutils literal notranslate"><span class="pre">provisioner:</span> <span class="pre">flux</span></code>) within existing deployment stages. No new CLI commands.</p></li>
+<li><p><strong>Capability name: <code class="docutils literal notranslate"><span class="pre">sync</span></code></strong> — the integration declares <code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sync]</span></code>. The
+provisioner renders templates at build time and verifies reconciliation at health time.</p></li>
+<li><p><strong>Jinja2 adapter templates</strong> — the output format is a user-editable template in
+<code class="docutils literal notranslate"><span class="pre">.strata/templates/sync/</span></code>. Operators customize without code changes.</p></li>
+<li><p><strong>Pull model for health</strong> — strata polls the controller API during <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">health</span></code>.
+Webhooks are out of scope.</p></li>
+<li><p><strong>File-based output</strong> — strata writes rendered output to git. The controller reads
+from git. Strata never writes directly to the cluster.</p></li>
+<li><p><strong>Secret suppression</strong> — variables resolved from secret stores are excluded from the
+rendered template context. Only non-secret variables appear in <code class="docutils literal notranslate"><span class="pre">resolved_variables</span></code>.</p></li>
+<li><p><strong>Partial deployment separation</strong> — <code class="docutils literal notranslate"><span class="pre">deploy-infra</span></code> (terraform stages) and <code class="docutils literal notranslate"><span class="pre">deploy-apps</span></code>
+(sync stages) can be separate partial bases, giving teams clean separation of concerns.</p></li>
+<li><p><strong>Platform artifact IS the template context</strong> — no separate “universal manifest.” The
+Jinja2 template receives the full <code class="docutils literal notranslate"><span class="pre">PlatformSpecModel</span></code> dict. Convenience fields
+(<code class="docutils literal notranslate"><span class="pre">layers</span></code>, <code class="docutils literal notranslate"><span class="pre">chart_versions</span></code>, <code class="docutils literal notranslate"><span class="pre">image_versions</span></code>, <code class="docutils literal notranslate"><span class="pre">resolved_variables</span></code>, <code class="docutils literal notranslate"><span class="pre">revision</span></code>) are
+added to the model for ergonomic template access. Power users access the full model.</p></li>
+<li><p><strong>Stage backend binds to integration by name</strong> — <code class="docutils literal notranslate"><span class="pre">backend.integration</span></code> on the stage
+names the integration instance. This allows multiple instances of the same type
+(e.g., <code class="docutils literal notranslate"><span class="pre">argocd-prod</span></code> vs <code class="docutils literal notranslate"><span class="pre">argocd-staging</span></code>).</p></li>
+<li><p><strong>Stage backend specifies deploy target via remote</strong> — <code class="docutils literal notranslate"><span class="pre">backend.remote</span></code> names the
+strata remote (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">repo</span> <span class="pre">add</span></code>) where rendered output is committed. The deployment
+controls where output goes, not the integration. Partial bases define it once; leaves
+inherit via <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code>.</p></li>
+<li><p><strong>Scaffolding via <code class="docutils literal notranslate"><span class="pre">sln</span> <span class="pre">init</span></code> and <code class="docutils literal notranslate"><span class="pre">sln</span> <span class="pre">update</span></code></strong> — starter templates are created when
+a <code class="docutils literal notranslate"><span class="pre">sync</span></code>-capable integration is detected. <code class="docutils literal notranslate"><span class="pre">sln</span> <span class="pre">update</span></code> adds templates for integrations
+added after initial setup.</p></li>
+<li><p><strong>Stage <code class="docutils literal notranslate"><span class="pre">namespace</span></code> scopes the sync</strong> — the stage’s <code class="docutils literal notranslate"><span class="pre">namespace</span></code> field references one
+of <code class="docutils literal notranslate"><span class="pre">workspace.spec.namespaces[].name</span></code>. The provisioner filters modules to those
+declared in that namespace. If omitted, all namespaces/modules are included and the
+template is responsible for iteration.</p></li>
 </ol>
 </section>
 <hr class="docutils" />
 <section id="consequences">
 <h2>Consequences<a class="headerlink" href="#consequences" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p>Strata becomes the single source of truth for what the GitOps controller deploys:
-resolved versions from version-lock files, resolved variables from the layer stack.</p></li>
-<li><p>The controller no longer needs to understand strata’s directory conventions — it reads
-a structured manifest.</p></li>
-<li><p>Promotion records in strata correlate with reconciliation events in the controller,
-closing the audit loop from “intended” to “confirmed deployed.”</p></li>
-<li><p>Keeping strata out of direct cluster writes preserves GitOps principles and avoids
-competing with the controller for cluster ownership.</p></li>
+<li><p>No new CLI surface — ArgoCD/Flux integrate through the existing build/deploy/health
+lifecycle as provisioner types.</p></li>
+<li><p>Teams can split infrastructure (terraform) from applications (argocd/flux) using partial
+deployment files, or combine them in a single deployment with multiple stages.</p></li>
+<li><p>The Jinja2 template approach means strata is not coupled to any specific controller
+resource format — operators own the output shape.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span></code> reports reconciliation status alongside infrastructure health,
+giving a unified view of deployment state.</p></li>
+<li><p>Promotion workflows (ADR 0011) work unchanged — the version-lock file is resolved
+into the template context, and the controller deploys exactly what strata decided.</p></li>
+<li><p>Adding a new GitOps provider requires only a new provisioner class and a starter
+template — the universal manifest contract and health interface remain stable.</p></li>
+<li><p>The platform artifact gains convenience fields (<code class="docutils literal notranslate"><span class="pre">layers</span></code>, <code class="docutils literal notranslate"><span class="pre">chart_versions</span></code>,
+<code class="docutils literal notranslate"><span class="pre">image_versions</span></code>, <code class="docutils literal notranslate"><span class="pre">resolved_variables</span></code>, <code class="docutils literal notranslate"><span class="pre">revision</span></code>) that benefit all provisioner
+types and template consumers, not just sync provisioners.</p></li>
+<li><p>Stage <code class="docutils literal notranslate"><span class="pre">backend.remote</span></code> reuses the existing strata remote system — no new plumbing
+for config repo targeting.</p></li>
 </ul>
 </section>
 </section>

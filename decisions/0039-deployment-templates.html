@@ -3499,7 +3499,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--stream</span></code>)</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html">Real-Time Progress Streaming via ndjson (<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">ndjson</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#decision-drivers">Decision Drivers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#considered-options">Considered Options</a><ul>
@@ -3511,14 +3511,13 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#decision-outcome">Decision Outcome</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#event-schema">Event schema</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#event-types">Event types</a></li>
+<li class="toctree-l4"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#event-types-implemented">Event types implemented</a></li>
 <li class="toctree-l4"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#example-stream">Example stream</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#implementation">Implementation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#composability-with-output">Composability with <code class="docutils literal notranslate"><span class="pre">--output</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#stage-log-volume-management"><code class="docutils literal notranslate"><span class="pre">stage_log</span></code> volume management</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#removal-of-todo-markers">Removal of <code class="docutils literal notranslate"><span class="pre">[TODO]</span></code> markers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#log-event-volume-management"><code class="docutils literal notranslate"><span class="pre">log</span></code> event volume management</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0029-realtime-progress-streaming-ndjson.html#consequences">Consequences</a></li>
@@ -3555,7 +3554,10 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0031-cost-estimation-and-visibility.html">Cost estimation and visibility</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#context-and-problem-statement">Context and Problem Statement</a></li>
-<li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#considered-options">Considered Options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#considered-options">Considered Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#option-b-detail-infracost">Option B Detail — Infracost</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#decision-outcome">Decision Outcome</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="0031-cost-estimation-and-visibility.html#consequences">Consequences</a></li>
 </ul>
@@ -3605,6 +3607,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0032-approval-workflows-and-gates.html">Approval workflows and gates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#foundational-constraint-git-is-required">Foundational Constraint — Git Is Required</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#considered-options">Considered Options</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0032-approval-workflows-and-gates.html#decision-outcome">Decision Outcome</a></li>
@@ -3719,6 +3722,7 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0035-enterprise-store.html">Enterprise Store — Private Organization-Level Content Registry</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#what-users-expect-from-a-registry">What Users Expect From a Registry</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#decision-drivers">Decision Drivers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0035-enterprise-store.html#considered-options">Considered Options</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="0035-enterprise-store.html#option-a-enterprise-store-as-a-typed-git-repository">Option A — Enterprise Store as a Typed Git Repository</a></li>
@@ -3835,13 +3839,28 @@
 <li class="toctree-l2"><a class="reference internal" href="#context-and-problem-statement">Context and Problem Statement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#design-overview">Design Overview</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#core-concept-base-template-thin-instantiation">Core concept: base template + thin instantiation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core-concept-spec-extends-spec-partial">Core concept: <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> + <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#spec-partial"><code class="docutils literal notranslate"><span class="pre">spec.partial</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#spec-extends"><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#merge-semantics">Merge semantics</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#validation">Validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#two-phase-validation">Two-phase validation</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#compatibility-with-fleet-discovery-adr-0037">Compatibility with fleet discovery (ADR 0037)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#drift-detection">Drift detection</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#implementation-plan">Implementation Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#phase-1-model-resolver-and-validation-this-adr">Phase 1 — Model, resolver, and validation (this ADR)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#models-deployment-model-py">1.1 <code class="docutils literal notranslate"><span class="pre">models/deployment_model.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#services-deployment-extension-resolver-py-new">1.2 <code class="docutils literal notranslate"><span class="pre">services/deployment_extension_resolver.py</span></code> (new)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#validators-platform-validator-py">1.3 <code class="docutils literal notranslate"><span class="pre">validators/platform_validator.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#services-deployment-service-py">1.4 <code class="docutils literal notranslate"><span class="pre">services/deployment_service.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#commands-deploy-base-deploy-command-py">1.5 <code class="docutils literal notranslate"><span class="pre">commands/deploy/base_deploy_command.py</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#phase-1-test-coverage">Phase 1 test coverage</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#phase-2-drift-detection-future">Phase 2 — Drift detection (future)</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#consequences">Consequences</a></li>
 </ul>
 </li>
@@ -3860,16 +3879,46 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="0041-gitops-controller-integration.html">GitOps Controller Integration</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#context-and-problem-statement">Context and Problem Statement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#why-not-let-the-controller-handle-versions-natively">Why not let the controller handle versions natively?</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#related-work">Related Work</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#design-overview">Design Overview</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#two-surfaces-output-and-health">Two surfaces: output and health</a></li>
-<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#surface-1-strata-build-gitops">Surface 1: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span> <span class="pre">gitops</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#surface-2-strata-deploy-health-gitops">Surface 2: <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">health</span> <span class="pre">--gitops</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#key-insight-no-new-commands-needed">Key insight: no new commands needed</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#deployment-separation-with-partial-files-adr-0039">Deployment separation with partial files (ADR 0039)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="0041-gitops-controller-integration.html#namespace-as-the-unit-of-sync">Namespace as the unit of sync</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#integration-model-spec-integrations">Integration model — <code class="docutils literal notranslate"><span class="pre">spec.integrations</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#provisioner-lifecycle">Provisioner lifecycle</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#controller-input-requirements">Controller Input Requirements</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#what-each-controller-needs">What each controller needs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#platform-artifact-as-template-context">Platform artifact as template context</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="0041-gitops-controller-integration.html#convenience-fields-to-add-to-platformspecmodel">Convenience fields to add to <code class="docutils literal notranslate"><span class="pre">PlatformSpecModel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="0041-gitops-controller-integration.html#why-convenience-fields-instead-of-raw-only">Why convenience fields instead of raw-only?</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#jinja2-adapter-templates">Jinja2 Adapter Templates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#template-location">Template location</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#template-variables-context">Template variables (context)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#argocd-example-template">ArgoCD example template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#flux-kustomization-example-template">Flux Kustomization example template</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#flux-helmrelease-example-template">Flux HelmRelease example template</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#reconciliation-health">Reconciliation Health</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#reconciliation-result-shared-across-providers">Reconciliation result (shared across providers)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#provider-specific-health-queries">Provider-specific health queries</a></li>
 <li class="toctree-l3"><a class="reference internal" href="0041-gitops-controller-integration.html#audit-integration">Audit integration</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#open-questions">Open Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#scaffolding-via-strata-sln-init">Scaffolding via <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">sln</span> <span class="pre">init</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#decisions">Decisions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0041-gitops-controller-integration.html#consequences">Consequences</a></li>
 </ul>
 </li>
@@ -3904,6 +3953,33 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#consequences">Consequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="0043-tenant-offboarding.html#related-adrs">Related ADRs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html">Competitive Landscape and Feature Gaps</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#context-and-problem-statement">Context and Problem Statement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#competitor-tools">Competitor Tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#feature-comparison">Feature Comparison</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#dry-configuration-inheritance">1. DRY Configuration &amp; Inheritance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#dependency-graph-execution-order">2. Dependency Graph / Execution Order</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#drift-detection">3. Drift Detection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#policy-engine-guardrails">4. Policy Engine / Guardrails</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#cost-estimation">5. Cost Estimation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#approval-workflows-gates">6. Approval Workflows / Gates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#gitops-reconciliation">7. GitOps Reconciliation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#self-service-environments-ephemeral-ttl">8. Self-Service Environments (Ephemeral / TTL)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#vcs-integration-pr-comments-plan-previews">9. VCS Integration (PR comments, plan previews)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#state-locking-concurrency-control">10. State Locking / Concurrency Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#module-component-registry-private">11. Module / Component Registry (Private)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#change-detection-only-deploy-what-changed">12. Change Detection (Only Deploy What Changed)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#rbac-multi-tenancy-access-control">13. RBAC / Multi-Tenancy Access Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#real-time-streaming-progress-ui">14. Real-Time Streaming / Progress UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#workload-abstraction-score-platform-spec">15. Workload Abstraction (Score / Platform Spec)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#multi-provisioner-orchestration-terraform-ansible-helm-under-one-roof">16. Multi-Provisioner Orchestration (Terraform + Ansible + Helm under one roof)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#server-mode-api-first-architecture">17. Server Mode / API-First Architecture</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#summary-priority-assessment">Summary — Priority Assessment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="0044-competitive-landscape-and-feature-gaps.html#notes">Notes</a></li>
 </ul>
 </li>
 </ul>
@@ -4013,6 +4089,8 @@
 <li class="toctree-l3"><a class="reference internal" href="../guides/features.html#other-deploy-subcommands">Other deploy subcommands</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#version-management-pin-and-lock-chart-image-versions">Version management — pin and lock chart/image versions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../guides/features.html#promotions-advance-versions-across-rings">Promotions — advance versions across rings</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#deployment-locking">Deployment locking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#lifecycle-hooks-run-scripts-at-any-phase">Lifecycle hooks — run scripts at any phase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../guides/features.html#policy-guardrails">Policy guardrails</a></li>
@@ -4679,9 +4757,16 @@
   <section id="deployment-templates">
 <h1>Deployment Templates<a class="headerlink" href="#deployment-templates" title="Link to this heading"></a></h1>
 <ul class="simple">
-<li><p>Status: proposed</p></li>
+<li><p>Status: partial</p></li>
 <li><p>Date: 2026-07-15</p></li>
 </ul>
+<blockquote>
+<div><p><strong>Deferred block — Phase 2 not yet implemented</strong>
+Silent drift detection (<code class="docutils literal notranslate"><span class="pre">--check-template-drift</span></code>) is a known gap in Phase 1. After Phase 1
+ships, leaf files that deviate from an evolved base will not be flagged automatically.
+See <a class="reference internal" href="#phase-2----drift-detection-future"><span class="xref myst">Phase 2 — Drift detection</span></a> in the implementation
+plan. This ADR is not <code class="docutils literal notranslate"><span class="pre">completed</span></code> until Phase 2 is delivered.</p>
+</div></blockquote>
 <section id="context-and-problem-statement">
 <h2>Context and Problem Statement<a class="headerlink" href="#context-and-problem-statement" title="Link to this heading"></a></h2>
 <p>In fleet-scale deployments (ADR 0038) every tenant × zone × ring combination requires its own
@@ -4713,17 +4798,18 @@ complement to templates (ADR 0040).</p></li>
 <hr class="docutils" />
 <section id="design-overview">
 <h2>Design Overview<a class="headerlink" href="#design-overview" title="Link to this heading"></a></h2>
-<section id="core-concept-base-template-thin-instantiation">
-<h3>Core concept: base template + thin instantiation<a class="headerlink" href="#core-concept-base-template-thin-instantiation" title="Link to this heading"></a></h3>
-<p>A <strong>deployment template</strong> (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment-template</span></code>) declares the invariant structure:
-workspace reference, stage list, locking, approval configuration. A <strong>deployment instantiation</strong>
-(<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>) references the template and supplies only the values that vary per tenant:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># templates/customer-ring-template.yaml</span>
-<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.omp.com/v1</span>
-<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment-template</span>
+<section id="core-concept-spec-extends-spec-partial">
+<h3>Core concept: <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> + <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code><a class="headerlink" href="#core-concept-spec-extends-spec-partial" title="Link to this heading"></a></h3>
+<p>No new <code class="docutils literal notranslate"><span class="pre">kind</span></code> is introduced. All files remain <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>. A base file that is not
+deployable on its own declares <code class="docutils literal notranslate"><span class="pre">spec.partial:</span> <span class="pre">true</span></code>. A leaf file references the base via
+<code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> and supplies the values that vary per tenant:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># templates/ring-base.yaml  — invariant structure, not deployable alone</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
 <span class="nt">meta</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">customer-ring-template</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ring-base</span>
 <span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">partial</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 <span class="w">  </span><span class="nt">workspace</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">workspace_integration</span>
 <span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@iac/workspaces/workspace-integration.yaml&quot;</span>
@@ -4742,13 +4828,13 @@ workspace reference, stage list, locking, approval configuration. A <strong>depl
 <span class="w">      </span><span class="nt">on_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stop</span>
 </pre></div>
 </div>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># zones/europe-west/customers/contoso/dev/deploy.yaml</span>
-<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.omp.com/v1</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># zones/europe-west/customers/contoso/dev/deploy.yaml  — leaf, deployable</span>
+<span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v1</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
 <span class="nt">meta</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deploy-contoso-westeurope-dev</span>
 <span class="nt">spec</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@config/templates/customer-ring-template.yaml&quot;</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;@config/templates/ring-base.yaml&quot;</span>
 <span class="w">  </span><span class="nt">layers</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">zone</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">europe-west</span>
 <span class="w">    </span><span class="nt">customer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">contoso</span>
@@ -4761,58 +4847,203 @@ workspace reference, stage list, locking, approval configuration. A <strong>depl
 </pre></div>
 </div>
 </section>
+<section id="spec-partial">
+<h3><code class="docutils literal notranslate"><span class="pre">spec.partial</span></code><a class="headerlink" href="#spec-partial" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">spec.partial:</span> <span class="pre">true</span></code> is an explicit declaration that a file is not deployable in isolation.
+It carries two consequences:</p>
+<ol class="arabic simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> in isolation</strong> — Phase 2 (semantic) validation is skipped. The file is
+checked for structural correctness only (valid YAML, known field names, correct types).
+Required deployment fields (<code class="docutils literal notranslate"><span class="pre">tenant</span></code>, <code class="docutils literal notranslate"><span class="pre">environments</span></code>) are not required to be present.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code></strong> — rejects the file immediately with a clear error. A partial file is
+never a valid deploy target.</p></li>
+</ol>
+<p>A chain whose <strong>leaf</strong> is still <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> is a validation error. The last file in any
+<code class="docutils literal notranslate"><span class="pre">extends</span></code> chain must be a complete, deployable deployment file.</p>
+</section>
+<section id="spec-extends">
+<h3><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code><a class="headerlink" href="#spec-extends" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> accepts a single <code class="docutils literal notranslate"><span class="pre">&#64;repo/path</span></code> reference (same resolution rules as all other
+cross-file references in strata). Multi-level chains are supported (<code class="docutils literal notranslate"><span class="pre">A</span> <span class="pre">extends</span> <span class="pre">B</span> <span class="pre">extends</span> <span class="pre">C</span></code>);
+the chain is resolved depth-first before merging. Circular references are detected at load
+time and rejected as a hard error.</p>
+</section>
 <section id="merge-semantics">
 <h3>Merge semantics<a class="headerlink" href="#merge-semantics" title="Link to this heading"></a></h3>
+<p>Resolution produces a single merged model. The child always wins on conflict:</p>
 <ul class="simple">
-<li><p>Fields declared in <code class="docutils literal notranslate"><span class="pre">extends</span></code> are the base.</p></li>
-<li><p>Fields present in the instantiation file <strong>override</strong> the base (top-level field replacement,
-not deep merge, to keep behaviour predictable).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">stages</span></code> is treated as a <strong>named list</strong> — instantiation entries are merged by <code class="docutils literal notranslate"><span class="pre">name</span></code> into the
-base list, allowing per-tenant stage overrides (e.g. a tenant-specific <code class="docutils literal notranslate"><span class="pre">on_failure</span></code> or
-<code class="docutils literal notranslate"><span class="pre">health_checks</span></code>) without redefining the full stage list.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">environments</span></code> is always <strong>appended</strong> after any environments declared in the template
-(template environments = shared base; instantiation environments = tenant-specific layers).</p></li>
+<li><p><strong>Top-level fields</strong> — child value replaces base value (field-level replacement, not deep
+merge, to keep behaviour predictable).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">stages</span></code></strong> — merged by <code class="docutils literal notranslate"><span class="pre">name</span></code>. A child entry with a matching <code class="docutils literal notranslate"><span class="pre">name</span></code> overrides that stage’s
+fields; child stages with new names are appended. This allows a tenant to adjust <code class="docutils literal notranslate"><span class="pre">on_failure</span></code>
+or add <code class="docutils literal notranslate"><span class="pre">health_checks</span></code> on a specific stage without rewriting the full list.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">environments</span></code></strong> — always appended. Base environments come first (shared infrastructure
+layers); child environments follow (tenant-specific layers).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">partial</span></code></strong> — consumed during resolution and stripped from the merged model. The merged
+result is never partial.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">extends</span></code></strong> — consumed during resolution and stripped from the merged model.</p></li>
 </ul>
 </section>
-<section id="validation">
-<h3>Validation<a class="headerlink" href="#validation" title="Link to this heading"></a></h3>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> resolves <code class="docutils literal notranslate"><span class="pre">extends</span></code> before validating — the merged model is what is checked.</p></li>
-<li><p>A <code class="docutils literal notranslate"><span class="pre">--check-template-drift</span></code> flag on <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--path</span> <span class="pre">&quot;**&quot;</span></code> detects instantiation files
-whose base template has changed since the instantiation was last updated (hash comparison
-against the template’s <code class="docutils literal notranslate"><span class="pre">meta.labels.version</span></code>).</p></li>
-</ul>
+<section id="two-phase-validation">
+<h3>Two-phase validation<a class="headerlink" href="#two-phase-validation" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> always runs both phases on the <strong>merged</strong> model. On a raw partial file it
+runs Phase 1 only.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Phase</p></th>
+<th class="head"><p>Scope</p></th>
+<th class="head"><p>What is checked</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>1 — Structural</strong></p></td>
+<td><p>Every file, always</p></td>
+<td><p>Valid YAML; field names known to schema; correct types</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>2 — Semantic</strong></p></td>
+<td><p>Merged model only</p></td>
+<td><p>Required fields present; cross-references resolve; stage names unique; no partial leaf</p></td>
+</tr>
+</tbody>
+</table>
 </section>
 <section id="compatibility-with-fleet-discovery-adr-0037">
 <h3>Compatibility with fleet discovery (ADR 0037)<a class="headerlink" href="#compatibility-with-fleet-discovery-adr-0037" title="Link to this heading"></a></h3>
-<p>Fleet discovery reads <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code> files. Template-instantiation files are <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code> files — they are fully resolved at load time. The fleet sees the merged model;
-the template mechanism is transparent to fleet operations.</p>
+<p>Fleet discovery reads <code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code> files. Partial files are excluded from fleet
+discovery (they have no <code class="docutils literal notranslate"><span class="pre">tenant</span></code> and are not deployable). Leaf files with <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> are
+fully resolved at load time; the fleet sees the merged model. The <code class="docutils literal notranslate"><span class="pre">extends</span></code> mechanism is
+transparent to fleet operations.</p>
+</section>
+<section id="drift-detection">
+<h3>Drift detection<a class="headerlink" href="#drift-detection" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--check-template-drift</span></code> (fleet-wide) detects leaf files whose base has
+changed since the leaf was last updated, using a hash of the resolved base stored in
+<code class="docutils literal notranslate"><span class="pre">meta.annotations[&quot;strata.huybrechts.xyz/base-hash&quot;]</span></code>. The annotation is written by
+<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">build</span></code> and checked by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>.</p>
 </section>
 </section>
 <hr class="docutils" />
-<section id="open-questions">
-<h2>Open Questions<a class="headerlink" href="#open-questions" title="Link to this heading"></a></h2>
+<section id="implementation-plan">
+<h2>Implementation Plan<a class="headerlink" href="#implementation-plan" title="Link to this heading"></a></h2>
+<section id="phase-1-model-resolver-and-validation-this-adr">
+<h3>Phase 1 — Model, resolver, and validation (this ADR)<a class="headerlink" href="#phase-1-model-resolver-and-validation-this-adr" title="Link to this heading"></a></h3>
+<p><strong>Goal:</strong> <code class="docutils literal notranslate"><span class="pre">spec.partial</span></code> and <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> are understood by the schema, resolver, and
+validator. Build and deploy are guarded against partial files. No new CLI flags.</p>
+<section id="models-deployment-model-py">
+<h4>1.1 <code class="docutils literal notranslate"><span class="pre">models/deployment_model.py</span></code><a class="headerlink" href="#models-deployment-model-py" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>Add <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">Field(False,</span> <span class="pre">...)</span></code> to <code class="docutils literal notranslate"><span class="pre">DeploymentSpecModel</span></code>.</p></li>
+<li><p>Add <code class="docutils literal notranslate"><span class="pre">extends:</span> <span class="pre">Optional[str]</span> <span class="pre">=</span> <span class="pre">Field(None,</span> <span class="pre">...)</span></code> to <code class="docutils literal notranslate"><span class="pre">DeploymentSpecModel</span></code>.</p></li>
+<li><p>Make <code class="docutils literal notranslate"><span class="pre">workspace</span></code> and <code class="docutils literal notranslate"><span class="pre">environments</span></code> optional (<code class="docutils literal notranslate"><span class="pre">Optional[...]</span></code>, default <code class="docutils literal notranslate"><span class="pre">None</span></code>) so partial
+files parse without them. Phase 2 enforces their presence on the merged model.</p></li>
+</ul>
+</section>
+<section id="services-deployment-extension-resolver-py-new">
+<h4>1.2 <code class="docutils literal notranslate"><span class="pre">services/deployment_extension_resolver.py</span></code> (new)<a class="headerlink" href="#services-deployment-extension-resolver-py-new" title="Link to this heading"></a></h4>
+<p>Pure resolution — no side effects beyond file loading:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">DeploymentExtensionResolver</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">resolve</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">file_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+        <span class="n">work_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+        <span class="n">repo_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">_visited</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DeploymentSpecModel</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load file, recurse into spec.extends, merge, return resolved spec.&quot;&quot;&quot;</span>
+</pre></div>
+</div>
+<p>Merge rules applied in order:</p>
 <ol class="arabic simple">
-<li><p><strong>Deep merge vs replacement for <code class="docutils literal notranslate"><span class="pre">stages</span></code></strong> — named-list merge is ergonomic but adds
-complexity to the merge algorithm. Alternative: instantiation may only append stages, not
-override existing ones.</p></li>
-<li><p><strong>Template versioning</strong> — should templates carry a <code class="docutils literal notranslate"><span class="pre">meta.labels.version</span></code> that instantiations
-pin to, preventing silent drift? Or is git history sufficient?</p></li>
-<li><p><strong>Circular extends</strong> — must be detected and rejected at load time.</p></li>
-<li><p><strong>Multi-level inheritance</strong> — template extending another template. Useful but adds complexity;
-may be deferred to Phase 2.</p></li>
+<li><p>Recursively resolve <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> to get the base spec.</p></li>
+<li><p>For each top-level field: child wins (field-level replacement).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stages</span></code>: merge by <code class="docutils literal notranslate"><span class="pre">name</span></code>; child entries override matching base entries; new names appended.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">environments</span></code>: base list + child list (append).</p></li>
+<li><p>Strip <code class="docutils literal notranslate"><span class="pre">partial</span></code> and <code class="docutils literal notranslate"><span class="pre">extends</span></code> from the returned model.</p></li>
 </ol>
+<p>Cycle detection: track visited <code class="docutils literal notranslate"><span class="pre">file_path</span></code> strings in <code class="docutils literal notranslate"><span class="pre">_visited</span></code>; raise on collision.</p>
+</section>
+<section id="validators-platform-validator-py">
+<h4>1.3 <code class="docutils literal notranslate"><span class="pre">validators/platform_validator.py</span></code><a class="headerlink" href="#validators-platform-validator-py" title="Link to this heading"></a></h4>
+<p>In <code class="docutils literal notranslate"><span class="pre">validate()</span></code>, before Phase 1 loads the service:</p>
+<ol class="arabic simple">
+<li><p>If <code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> is present → call <code class="docutils literal notranslate"><span class="pre">DeploymentExtensionResolver.resolve()</span></code> → replace the
+raw parsed spec with the merged spec before the service is constructed.</p></li>
+<li><p>If <code class="docutils literal notranslate"><span class="pre">spec.partial:</span> <span class="pre">true</span></code> on the <strong>raw</strong> file (before resolution) → skip Phase 2 entirely.</p></li>
+<li><p>After resolution: if the merged spec still has <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> → hard error
+(<code class="docutils literal notranslate"><span class="pre">PARTIAL_LEAF_ERROR</span></code>): the last file in the chain must not be partial.</p></li>
+</ol>
+</section>
+<section id="services-deployment-service-py">
+<h4>1.4 <code class="docutils literal notranslate"><span class="pre">services/deployment_service.py</span></code><a class="headerlink" href="#services-deployment-service-py" title="Link to this heading"></a></h4>
+<p>Add a pre-flight guard at the top of <code class="docutils literal notranslate"><span class="pre">validate()</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">partial</span><span class="p">:</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;partial deployment cannot be validated as a deploy target&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">False</span>
+</pre></div>
+</div>
+</section>
+<section id="commands-deploy-base-deploy-command-py">
+<h4>1.5 <code class="docutils literal notranslate"><span class="pre">commands/deploy/base_deploy_command.py</span></code><a class="headerlink" href="#commands-deploy-base-deploy-command-py" title="Link to this heading"></a></h4>
+<p>Add a pre-flight check in <code class="docutils literal notranslate"><span class="pre">_before_execute()</span></code> (or <code class="docutils literal notranslate"><span class="pre">_execute()</span></code>) before the deployment
+service is used:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">deployment</span><span class="o">.</span><span class="n">spec</span><span class="o">.</span><span class="n">partial</span><span class="p">:</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_file_path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; is a partial deployment and cannot be deployed. &quot;</span>
+        <span class="s2">&quot;A leaf deployment that extends this file is required.&quot;</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="kc">False</span>
+</pre></div>
+</div>
+</section>
+<section id="phase-1-test-coverage">
+<h4>Phase 1 test coverage<a class="headerlink" href="#phase-1-test-coverage" title="Link to this heading"></a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Area</p></th>
+<th class="head"><p>Tests</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Model</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">partial</span></code> and <code class="docutils literal notranslate"><span class="pre">extends</span></code> fields parse; <code class="docutils literal notranslate"><span class="pre">workspace</span></code>/<code class="docutils literal notranslate"><span class="pre">environments</span></code> optional on partial</p></td>
+</tr>
+<tr class="row-odd"><td><p>Resolver</p></td>
+<td><p>Single-level merge; multi-level chain; field replacement; stages named merge; environments append; cycle detection</p></td>
+</tr>
+<tr class="row-even"><td><p>Validator</p></td>
+<td><p>Partial file → Phase 2 skipped; leaf-is-partial → hard error; merged model validated</p></td>
+</tr>
+<tr class="row-odd"><td><p>Deploy guard</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> file → rejected before any operation</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="phase-2-drift-detection-future">
+<h3>Phase 2 — Drift detection (future)<a class="headerlink" href="#phase-2-drift-detection-future" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span> <span class="pre">--check-template-drift</span></code>: hash the resolved base at build time
+(<code class="docutils literal notranslate"><span class="pre">meta.annotations[&quot;strata.huybrechts.xyz/base-hash&quot;]</span></code>); compare at validate time to detect
+leaf files whose base has silently changed.</p>
+</section>
 </section>
 <hr class="docutils" />
 <section id="consequences">
 <h2>Consequences<a class="headerlink" href="#consequences" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p>Deployment files for fleet-scale repos reduce from N×M×K boilerplate files to a small set
-of templates + thin instantiation files.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> must resolve <code class="docutils literal notranslate"><span class="pre">extends</span></code> before schema validation — load order matters.</p></li>
-<li><p>ADR 0040 (tenant onboarding scaffolding) can generate instantiation files from a template,
+of partial base files + thin leaf files.</p></li>
+<li><p>No new <code class="docutils literal notranslate"><span class="pre">kind</span></code> — the schema surface grows by two optional fields (<code class="docutils literal notranslate"><span class="pre">partial</span></code>, <code class="docutils literal notranslate"><span class="pre">extends</span></code>) on
+the existing deployment kind.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> must resolve <code class="docutils literal notranslate"><span class="pre">extends</span></code> chains before Phase 2 — load order matters for
+validation but not for fleet discovery.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span></code> gains a pre-flight check: reject <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> files before any
+infrastructure operation begins.</p></li>
+<li><p>ADR 0040 (tenant onboarding scaffolding) can generate leaf files from a named base,
 further reducing manual authoring.</p></li>
 <li><p>Existing deployment files without <code class="docutils literal notranslate"><span class="pre">extends</span></code> are unaffected — the feature is purely additive.</p></li>
+<li><p>Multi-level chains (<code class="docutils literal notranslate"><span class="pre">A</span> <span class="pre">extends</span> <span class="pre">B</span> <span class="pre">extends</span> <span class="pre">C</span></code>) are supported from day one; depth is unbounded
+but circular references are rejected.</p></li>
 </ul>
 </section>
 </section>
