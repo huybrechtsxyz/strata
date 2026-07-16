@@ -1,6 +1,6 @@
 # Deployment Templates
 
-- Status: proposed
+- Status: partial
 - Date: 2026-07-15
 
 > **Deferred block — Phase 2 not yet implemented**

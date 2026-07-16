@@ -49,6 +49,15 @@ class DeploymentService(BaseService["DeploymentModel"]):
         """Return the DeploymentModel class for validation."""
         return DeploymentModel
 
+    def _merged_repo_map(self, configuration_model: Optional["ConfigurationModel"]) -> Dict[str, str]:
+        """Return the merged repo_map: config-level remotes + solution-level repos.
+
+        Solution names take precedence so ``@solution_repo/...`` refs in deployment
+        files resolve correctly over config-repo names.
+        """
+        config = configuration_model.get_remote_map() if configuration_model else {}
+        return {**config, **(self._repo_map or {})}
+
     def _validate_dynamic(
         self,
         configuration_model: Optional["ConfigurationModel"] = None,
@@ -96,11 +105,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
 
         # Validate that environment and configuration file references exist on disk
         if work_path and self.model:
-            # Merge solution-level repo_map (self._repo_map) with config-level repo_map.
-            # Solution names (e.g. 'haven') take precedence for resolving @repo/... refs
-            # in deployment files, which use solution repo names, not config repo names.
-            config_repo_map = configuration_model.get_remote_map() if configuration_model else {}
-            repo_map = {**config_repo_map, **(self._repo_map or {})}
+            repo_map = self._merged_repo_map(configuration_model)
             file_refs = []
             for i, env_ref in enumerate(self.model.spec.environments or []):
                 file_refs.append((f"Environment[{i}]", env_ref.file))
@@ -136,13 +141,16 @@ class DeploymentService(BaseService["DeploymentModel"]):
                                 f"Available zones: {sorted(config_zone_names)}"
                             )
 
+        # Validate sync stage cross-references (namespace, backend.integration, backend.remote)
+        if self.model:
+            sync_errors = self._validate_sync_stages(configuration_model, work_path)
+            errors.extend(sync_errors)
+
         # Shadowed-override check (non-fatal warnings, not errors)
         if work_path and self.model and self.model.spec.versions:
-            _repo_map = {
-                **(configuration_model.get_remote_map() if configuration_model else {}),
-                **(self._repo_map or {}),
-            }
-            self._validation_warnings = self._check_version_pin_shadows(work_path, _repo_map)
+            self._validation_warnings = self._check_version_pin_shadows(
+                work_path, self._merged_repo_map(configuration_model)
+            )
 
         return len(errors) == 0, errors
 
@@ -198,6 +206,127 @@ class DeploymentService(BaseService["DeploymentModel"]):
             return VersionService.find_shadowed_overrides(env_model, pins)
         except Exception:
             return []  # warnings never abort validation
+
+    def _validate_sync_stages(
+        self,
+        configuration_model: Optional["ConfigurationModel"],
+        work_path: Optional[str],
+    ) -> List[str]:
+        """Validate sync stage cross-references.
+
+        For every stage that has ``namespace`` or ``backend`` fields set, checks:
+
+        1. ``backend.integration`` exists in ``configuration.spec.integrations[]``
+           and has ``'sync'`` in its capabilities.
+        2. ``backend.remote`` is registered in the merged solution repo_map.
+        3. ``namespace`` names a namespace defined in ``workspace.spec.namespaces[]``
+           (best-effort: skipped silently when workspace cannot be loaded).
+        """
+        from typing import Optional as _Optional  # noqa: F401 (local scope)
+
+        errors: List[str] = []
+        if not self.model:
+            return errors
+
+        stages = self.model.spec.stages or []
+        sync_stages = [s for s in stages if s.namespace or s.backend]
+        if not sync_stages:
+            return errors
+
+        effective_repo_map = self._merged_repo_map(configuration_model)
+
+        # 1. Validate backend.integration against configuration.spec.integrations
+        if configuration_model:
+            integrations = configuration_model.spec.integrations or []
+            integration_map = {str(i.name): i for i in integrations}
+            for stage in sync_stages:
+                if not (stage.backend and stage.backend.integration):
+                    continue
+                int_name = stage.backend.integration
+                integration = integration_map.get(int_name)
+                if integration is None:
+                    available = sorted(integration_map.keys()) or ["(none)"]
+                    errors.append(
+                        f"Stage '{stage.name}': backend.integration '{int_name}' not found in "
+                        f"configuration.spec.integrations. Available: {available}"
+                    )
+                elif "sync" not in (integration.capabilities or set()):
+                    errors.append(
+                        f"Stage '{stage.name}': integration '{int_name}' does not have 'sync' "
+                        f"capability. Add 'sync' to its capabilities list."
+                    )
+
+        # 2. Validate backend.remote against the solution repo_map
+        for stage in sync_stages:
+            if not (stage.backend and stage.backend.remote):
+                continue
+            remote_name = stage.backend.remote
+            if remote_name not in effective_repo_map:
+                available = sorted(effective_repo_map.keys()) or ["(none registered)"]
+                errors.append(
+                    f"Stage '{stage.name}': backend.remote '{remote_name}' is not a registered remote. "
+                    f"Run 'strata repo add' to register it. Available remotes: {available}"
+                )
+
+        # 3. Validate namespace against workspace.spec.namespaces (best-effort)
+        namespace_stages = [s for s in sync_stages if s.namespace]
+        if namespace_stages and work_path and self.model.spec.workspace:
+            ws_namespaces = self._load_workspace_namespaces(work_path, effective_repo_map)
+            if ws_namespaces is not None:
+                for stage in namespace_stages:
+                    ns = stage.namespace
+                    if ns and ns not in ws_namespaces:
+                        available = sorted(ws_namespaces) or ["(none defined)"]
+                        errors.append(
+                            f"Stage '{stage.name}': namespace '{ns}' not found in workspace. "
+                            f"Available namespaces: {available}"
+                        )
+
+        return errors
+
+    def _load_workspace_namespaces(
+        self,
+        work_path: str,
+        repo_map: Optional[Dict[str, str]],
+    ) -> Optional[set]:
+        """Return the set of namespace names from the deployment's workspace YAML.
+
+        Returns ``None`` (not an empty set) when the workspace cannot be loaded, so
+        callers can distinguish "no namespaces defined" from "workspace unavailable".
+
+        Uses raw YAML parsing so the namespace check is not gated on the workspace
+        passing full Pydantic validation (which requires providers, topology, etc.).
+        """
+        if not self.model or not self.model.spec.workspace:
+            return None
+        try:
+            from pathlib import Path as _Path
+
+            import yaml
+
+            ws_file = self._resolve_file_path(
+                self.model.spec.workspace.file,
+                work_path,
+                repo_map or {},
+            )
+            if not _Path(ws_file).exists():
+                return None  # remote or missing workspace — skip gracefully
+            raw = yaml.safe_load(_Path(ws_file).read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                return None
+            spec = raw.get("spec") or {}
+            namespaces = spec.get("namespaces") or []
+            if not namespaces:
+                return set()  # workspace present but no namespaces defined
+            names = set()
+            for ns in namespaces:
+                if isinstance(ns, dict) and ns.get("name"):
+                    names.add(str(ns["name"]))
+                elif isinstance(ns, str):
+                    names.add(ns)
+            return names
+        except Exception:
+            return None  # never fail validation because workspace couldn't load
 
     def _validate_deployment_layers(self, configuration_model: ConfigurationModel) -> List[str]:
         """
@@ -1186,10 +1315,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
             from strata.services.environment_service import EnvironmentService
             from strata.services.version_service import VersionService
 
-            _rm: Dict[str, str] = {
-                **(config_model.get_remote_map() if config_model else {}),
-                **(self._repo_map or {}),
-            }
+            _rm = self._merged_repo_map(config_model)
 
             def resolve_fn(f: str, b: str) -> str:
                 return self._resolve_file_path(f, b, _rm)

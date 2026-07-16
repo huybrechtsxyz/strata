@@ -164,6 +164,7 @@ strata
    decisions/0041-gitops-controller-integration
    decisions/0042-deep-validation-layer-consistency
    decisions/0043-tenant-offboarding
+   decisions/0044-competitive-landscape-and-feature-gaps
 
 .. toctree::
    :maxdepth: 2

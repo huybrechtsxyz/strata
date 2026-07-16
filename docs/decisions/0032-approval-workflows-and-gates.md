@@ -3,6 +3,34 @@
 - Status: proposed
 - Date: 2026-07-11
 
+## Foundational Constraint — Git Is Required
+
+Strata cannot function without git. Every workspace is a git repository. Every deployment
+references a commit. Every operator who can run `strata deploy` has already authenticated
+to git — and therefore has a verifiable identity.
+
+This constraint is not a limitation — it is the approval infrastructure:
+
+- **Identity is ambient.** `git config user.name` + `user.email` identifies who is acting.
+  In CI, the runner's service principal or OIDC token is the identity. No login screen
+  needed — authentication already happened to get here.
+- **A git artifact is tamper-evident proof.** A signed tag, a merge commit, or a branch
+  creation event is cryptographically tied to a key. It is timestamped, attributable, and
+  permanently part of the repository history. This is stronger than a button click in a
+  web UI.
+- **Approval can be a git operation.** An approver creates a signed tag
+  (`git tag -s approve/<deploy-id> <commit>`) or merges a PR. Strata reads the tag/merge
+  as the approval token — no external system required.
+- **The audit trail is the git log.** `git log --show-signature` produces an immutable,
+  signed record of every approval. This satisfies most compliance requirements without
+  a separate audit database.
+
+**Implication:** strata does not need to build an auth system or a web UI for approvals.
+It needs to define a convention for what git artifact constitutes approval, verify it at
+deploy time, and record it in the audit log (ADR 0018).
+
+---
+
 ## Context and Problem Statement
 
 Today, any user with access to the strata workspace can validate, build, and deploy infrastructure. There is no way to require human (or automated) approval before deployments proceed, especially for critical environments like production.

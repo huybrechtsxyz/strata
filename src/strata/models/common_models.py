@@ -88,6 +88,13 @@ class ProvisionerType(str, Enum):
     SCRIPT = "script"
     COMPOSE = "compose"
     HELM = "helm"
+    ARGOCD = "argocd"
+    FLUX = "flux"
+
+
+# Provisioner types that do not require an IaC source directory — they render
+# from the platform artifact at build time and commit to a git remote at deploy time.
+_SYNC_PROVISIONER_TYPES = frozenset({ProvisionerType.ARGOCD, ProvisionerType.FLUX})
 
 
 # Enumeration of supported service deployer types (for module-level service deployment).

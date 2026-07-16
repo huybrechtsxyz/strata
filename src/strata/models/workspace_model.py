@@ -410,10 +410,17 @@ class WorkspaceIacModel(PlatformBaseModel):
         ...,
         description=(
             "IaC tool used for provisioning. Built-in types: terraform, ansible, "
-            "compose, helm, script. Custom provisioner plugins are also accepted."
+            "compose, helm, script, argocd, flux. Custom provisioner plugins are also accepted."
         ),
     )
-    source: SourceModel = Field(description="IaC deployment configuration (file path, variables, secrets)")
+    source: Optional[SourceModel] = Field(
+        None,
+        description=(
+            "IaC deployment configuration (file path, variables, secrets). "
+            "Required for IaC provisioner types (terraform, ansible, helm, compose, script). "
+            "Optional for sync provisioner types (argocd, flux) which render from the platform artifact."
+        ),
+    )
     backend: Optional[WorkspaceIacBackendModel] = Field(
         None,
         description="Backend configuration for state storage (e.g., Terraform Cloud, S3, Azure Storage)",
@@ -444,8 +451,19 @@ class WorkspaceIacModel(PlatformBaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_properties_provisioner_type(self) -> "WorkspaceIacModel":
-        """Ensure properties is only set for provisioner types that support it."""
+    def validate_provisioner_fields(self) -> "WorkspaceIacModel":
+        """Validate provisioner-type-specific field constraints."""
+        from strata.models.common_models import _SYNC_PROVISIONER_TYPES
+
+        is_sync = self.provisioner in {str(t) for t in _SYNC_PROVISIONER_TYPES}
+
+        # source is required for all non-sync provisioner types
+        if not is_sync and self.source is None:
+            raise ValueError(
+                f"Provisioner '{self.name}': 'source' is required for provisioner type '{self.provisioner}'"
+            )
+
+        # properties is only supported for ansible
         if self.properties is not None and self.provisioner != ProvisionerType.ANSIBLE:
             raise ValueError(
                 f"Provisioner '{self.name}': 'properties' is only supported for ansible provisioners "

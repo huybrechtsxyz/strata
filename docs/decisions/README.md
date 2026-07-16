@@ -34,6 +34,8 @@ were considered, and why. They exist so the rationale survives beyond the author
 | [0040](0040-tenant-onboarding-scaffolding.md)                | Tenant onboarding scaffolding                                    | Proposed |
 | [0041](0041-gitops-controller-integration.md)                | GitOps controller integration                                    | Proposed |
 | [0042](0042-deep-validation-layer-consistency.md)            | Deep validation and layer consistency                            | Proposed |
+| [0043](0043-tenant-offboarding.md)                           | Tenant offboarding                                               | Proposed |
+| [0044](0044-competitive-landscape-and-feature-gaps.md)       | Competitive landscape and feature gaps                           | Proposed |
 
 ## Adding a new ADR
 

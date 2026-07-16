@@ -1,6 +1,6 @@
 # Cost estimation and visibility
 
-- Status: proposed
+- Status: partial
 - Date: 2026-07-11
 
 ## Context and Problem Statement
@@ -19,8 +19,30 @@ Strata validates and deploys infrastructure but provides no visibility into cost
 ## Considered Options
 
 - **Option A**: User manually enters `unit_cost` per resource (current field)
-- **Option B**: Auto-lookup from cloud pricing APIs based on Terraform config
+- **Option B**: Infracost integration — parse `terraform plan -json`, auto-lookup prices
 - **Option C**: Scenario-based model — dimensions + scenarios + pricing engine
+
+### Option B Detail — Infracost
+
+[Infracost](https://www.infracost.io) is the de-facto standard for pre-deploy cost
+estimation in the IaC ecosystem. Used by Env0, Spacelift, and Scalr.
+
+**How it works:**
+- Parses `terraform plan -json` output
+- Maps each resource type to cloud pricing using a bundled price database scraped from:
+  - AWS: Bulk Pricing API
+  - Azure: Retail Prices API (`prices.azure.com`)
+  - GCP: Cloud Billing Catalog API
+- Returns monthly cost estimate per resource + before/after diff
+
+**Pricing:** Apache 2.0. OSS binary ships with bundled pricing database — no API key
+required for basic estimation. Free tier: 1,000 runs/month on hosted API.
+
+**Why Option B was not chosen:** Infracost requires users to think in Terraform resource
+terms. It also requires the Terraform plan to already exist. Strata's scenario-based model
+(Option C) lets users estimate costs before writing any Terraform, using human terms.
+Infracost could still be used as the **pricing engine backend** for Option C's price
+lookup layer — the two are not mutually exclusive.
 
 ## Decision Outcome
 

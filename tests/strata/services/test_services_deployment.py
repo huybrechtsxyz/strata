@@ -5,8 +5,25 @@ from pathlib import Path
 
 import pytest
 
+from strata.models.configuration_model import ConfigurationModel
 from strata.models.deployment_model import DeploymentModel
 from strata.services.deployment_service import DeploymentService
+
+
+def _make_config_with_integrations(integrations=None, remotes=None):
+    """Build a ConfigurationModel with the given integrations and remotes."""
+    spec: dict = {}
+    if integrations:
+        spec["integrations"] = integrations
+    if remotes:
+        spec["remotes"] = remotes
+    data = {
+        "apiVersion": "strata.huybrechts.xyz/v1",
+        "kind": "configuration",
+        "meta": {"name": "test_config"},
+        "spec": spec,
+    }
+    return ConfigurationModel.model_validate(data)
 
 
 def _data(relative_path: str) -> str:
@@ -134,3 +151,229 @@ class TestDeploymentService:
         is_valid, errors = svc._validate_dynamic(work_path=str(tmp_path))
         # workspace.yaml is still missing, but no tenant error
         assert not any("acme" in e for e in errors)
+
+
+class TestValidateSyncStages:
+    """Tests for _validate_sync_stages Phase-6 cross-reference validation."""
+
+    def _make_deployment(self, stages=None, workspace_file="workspace.yaml"):
+        data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "deployment",
+            "meta": {"name": "test_sync_deploy"},
+            "spec": {
+                "workspace": {"name": "ws", "file": workspace_file},
+                "environments": ["env.yaml"],
+                "stages": stages or [],
+            },
+        }
+        svc = DeploymentService(data=data)
+        svc.validate()  # Phase 1 — populate self.model
+        return svc
+
+    # ------------------------------------------------------------------ #
+    # No sync fields → no errors regardless of what config provides       #
+    # ------------------------------------------------------------------ #
+
+    def test_no_sync_stages_passes(self):
+        svc = self._make_deployment(stages=[{"name": "infra", "provisioner": "platform_iac"}])
+        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
+        assert errors == []
+
+    def test_empty_stages_passes(self):
+        svc = self._make_deployment(stages=[])
+        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
+        assert errors == []
+
+    # ------------------------------------------------------------------ #
+    # backend.integration validation                                       #
+    # ------------------------------------------------------------------ #
+
+    def test_valid_integration_with_sync_capability_passes(self):
+        config = _make_config_with_integrations(
+            integrations=[{"name": "argocd", "type": "argocd", "capabilities": ["sync"]}]
+        )
+        svc = self._make_deployment(
+            stages=[
+                {
+                    "name": "gitops",
+                    "provisioner": "argocd",
+                    "backend": {"integration": "argocd", "remote": "gitops-repo"},
+                }
+            ]
+        )
+        svc._repo_map = {"gitops-repo": "/tmp/repo"}
+        errors = svc._validate_sync_stages(configuration_model=config, work_path=None)
+        assert errors == []
+
+    def test_missing_integration_reports_error(self):
+        config = _make_config_with_integrations(
+            integrations=[{"name": "argocd", "type": "argocd", "capabilities": ["sync"]}]
+        )
+        svc = self._make_deployment(
+            stages=[
+                {
+                    "name": "gitops",
+                    "provisioner": "flux",
+                    "backend": {"integration": "flux_int", "remote": "gitops-repo"},
+                }
+            ]
+        )
+        svc._repo_map = {"gitops-repo": "/tmp/repo"}
+        errors = svc._validate_sync_stages(configuration_model=config, work_path=None)
+        assert any("flux_int" in e and "not found" in e for e in errors), errors
+
+    def test_integration_without_sync_capability_reports_error(self):
+        config = _make_config_with_integrations(
+            integrations=[{"name": "argocd", "type": "argocd", "capabilities": ["api"]}]
+        )
+        svc = self._make_deployment(
+            stages=[
+                {
+                    "name": "gitops",
+                    "provisioner": "argocd",
+                    "backend": {"integration": "argocd", "remote": "gitops-repo"},
+                }
+            ]
+        )
+        svc._repo_map = {"gitops-repo": "/tmp/repo"}
+        errors = svc._validate_sync_stages(configuration_model=config, work_path=None)
+        assert any("sync" in e and "capability" in e for e in errors), errors
+
+    def test_no_config_model_skips_integration_check(self):
+        """When configuration_model is None integration cross-ref is not validated."""
+        svc = self._make_deployment(
+            stages=[
+                {
+                    "name": "gitops",
+                    "provisioner": "argocd",
+                    "backend": {"integration": "does_not_exist", "remote": "gitops-repo"},
+                }
+            ]
+        )
+        svc._repo_map = {"gitops-repo": "/tmp/repo"}
+        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
+        assert errors == []
+
+    # ------------------------------------------------------------------ #
+    # backend.remote validation                                            #
+    # ------------------------------------------------------------------ #
+
+    def test_valid_remote_passes(self):
+        svc = self._make_deployment(
+            stages=[
+                {
+                    "name": "gitops",
+                    "provisioner": "argocd",
+                    "backend": {"integration": "argocd", "remote": "my-repo"},
+                }
+            ]
+        )
+        svc._repo_map = {"my-repo": "/path/to/repo"}
+        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
+        assert errors == []
+
+    def test_unknown_remote_reports_error(self):
+        svc = self._make_deployment(
+            stages=[
+                {
+                    "name": "gitops",
+                    "provisioner": "argocd",
+                    "backend": {"integration": "argocd", "remote": "missing-repo"},
+                }
+            ]
+        )
+        svc._repo_map = {"other-repo": "/path/to/other"}
+        errors = svc._validate_sync_stages(configuration_model=None, work_path=None)
+        assert any("missing-repo" in e and "not a registered remote" in e for e in errors), errors
+
+    def test_remote_in_config_repo_map_passes(self):
+        """Remotes from configuration.get_remote_map() are valid too."""
+        config = _make_config_with_integrations(
+            integrations=[{"name": "argocd", "type": "argocd", "capabilities": ["sync"]}],
+            remotes=[
+                {
+                    "name": "config-repo",
+                    "type": "gitops",
+                    "repository": "https://example.com/cfg",
+                    "reference": "main",
+                    "source_path": "cfg",
+                    "deploy_path": "cfg",
+                }
+            ],
+        )
+        svc = self._make_deployment(
+            stages=[
+                {
+                    "name": "gitops",
+                    "provisioner": "argocd",
+                    "backend": {"integration": "argocd", "remote": "config-repo"},
+                }
+            ]
+        )
+        svc._repo_map = {}  # config provides the remote, not solution
+        errors = svc._validate_sync_stages(configuration_model=config, work_path=None)
+        assert errors == []
+
+    # ------------------------------------------------------------------ #
+    # namespace validation (best-effort)                                   #
+    # ------------------------------------------------------------------ #
+
+    def test_namespace_without_workspace_skips_gracefully(self, tmp_path):
+        """When workspace YAML is missing, namespace validation is silently skipped."""
+        svc = self._make_deployment(
+            stages=[{"name": "gitops", "provisioner": "argocd", "namespace": "backend"}],
+            workspace_file="workspace.yaml",
+        )
+        # workspace.yaml does NOT exist in tmp_path
+        errors = svc._validate_sync_stages(configuration_model=None, work_path=str(tmp_path))
+        assert errors == []
+
+    def test_valid_namespace_in_workspace_passes(self, tmp_path):
+        """When namespace is defined in workspace.spec.namespaces, no error is reported."""
+        ws_data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "workspace",
+            "meta": {"name": "test_ws"},
+            "spec": {
+                "namespaces": [
+                    {"name": "backend", "file": "namespaces/backend.yaml"},
+                    {"name": "frontend", "file": "namespaces/frontend.yaml"},
+                ],
+                "provisioners": [],
+            },
+        }
+        import yaml
+
+        ws_file = tmp_path / "workspace.yaml"
+        ws_file.write_text(yaml.dump(ws_data))
+
+        svc = self._make_deployment(
+            stages=[{"name": "gitops", "provisioner": "argocd", "namespace": "backend"}],
+            workspace_file=str(ws_file),
+        )
+        errors = svc._validate_sync_stages(configuration_model=None, work_path=str(tmp_path))
+        assert errors == []
+
+    def test_unknown_namespace_reports_error(self, tmp_path):
+        """When namespace is NOT in workspace.spec.namespaces, an error is reported."""
+        ws_data = {
+            "apiVersion": "strata.huybrechts.xyz/v1",
+            "kind": "workspace",
+            "meta": {"name": "test_ws"},
+            "spec": {
+                "namespaces": [{"name": "backend", "file": "namespaces/backend.yaml"}],
+                "provisioners": [],
+            },
+        }
+        import yaml
+
+        ws_file = tmp_path / "workspace.yaml"
+        ws_file.write_text(yaml.dump(ws_data))
+
+        svc = self._make_deployment(
+            stages=[{"name": "gitops", "provisioner": "argocd", "namespace": "unknown-ns"}],
+            workspace_file=str(ws_file),
+        )
+        errors = svc._validate_sync_stages(configuration_model=None, work_path=str(tmp_path))
+        assert any("unknown-ns" in e and "not found" in e for e in errors), errors

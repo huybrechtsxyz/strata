@@ -48,6 +48,8 @@ class DeployerFactory:
         "compose": ("strata.deployers.compose_deployer", "ComposeDeployer"),
         "helm": ("strata.deployers.helm_deployer", "HelmDeployer"),
         "script": ("strata.deployers.script_deployer", "ScriptDeployer"),
+        "argocd": ("strata.deployers.sync_deployer", "ArgocdDeployer"),
+        "flux": ("strata.deployers.sync_deployer", "FluxDeployer"),
     }
 
     # Runtime registry populated by load_plugins() and register()
