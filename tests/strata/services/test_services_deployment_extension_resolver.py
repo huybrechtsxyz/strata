@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytest
+import yaml
 
 from strata.services.deployment_extension_resolver import DeploymentExtensionResolver
 
@@ -279,7 +280,7 @@ class TestResolveErrors:
     def test_invalid_yaml_raises(self, tmp_path: Path) -> None:
         f = tmp_path / "bad.yaml"
         f.write_text(": : invalid: yaml: [[[", encoding="utf-8")
-        with pytest.raises(Exception):
+        with pytest.raises(yaml.YAMLError):
             _resolver(tmp_path).resolve(f)
 
 

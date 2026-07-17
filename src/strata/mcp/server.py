@@ -142,7 +142,7 @@ def get_schema(kind: str) -> Dict[str, Any]:
 
     Returns the JSON Schema dict which describes every allowed field and type.
     """
-    from strata.commands.cli_schema import _KIND_TO_MODEL
+    from strata.commands.schemas.schema_common import KIND_TO_MODEL as _KIND_TO_MODEL
     from strata.models.common_models import PlatformKind
 
     try:
