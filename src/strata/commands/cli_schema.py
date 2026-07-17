@@ -9,6 +9,7 @@ from strata.commands.schemas.export_schema_command import ExportSchemaCommand
 from strata.commands.schemas.get_schema_command import GetSchemaCommand
 from strata.commands.schemas.list_schema_command import ListSchemaCommand
 from strata.commands.schemas.wire_schema_command import WireSchemaCommand
+from strata.models.common_models import PlatformKind
 from strata.utils.config import SOLUTION_DIR, SOLUTION_SCHEMAS_DIR
 
 
@@ -27,7 +28,7 @@ def schema_list(output: Optional[str] = None) -> None:
 
 
 @schema_group.command(name="get", help="Emit the JSON Schema for a platform document kind.")
-@click.argument("kind")
+@click.argument("kind", type=click.Choice([k.value for k in PlatformKind], case_sensitive=False))
 @click_output_format
 def schema_get(kind: str, output: Optional[str] = None) -> None:
     """Emit the JSON Schema for a platform document kind (e.g. deployment, environment)."""
