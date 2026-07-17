@@ -111,6 +111,40 @@ strata remove tenant --name contoso --zones europe-west
 
 ---
 
+## Future Extension — Multi-Zone Cross-Product (`each`)
+
+The common case (one tenant, one zone, N rings) is fully covered by the existing
+`solution.json` bundle mechanism: a fixed list of bundle entries with a `--set zone=europe`
+context variable generates all files correctly.
+
+For the less common case where a **single tenant must be onboarded into multiple zones
+simultaneously** (geo-redundant HA, dual-region data residency), the bundle list would need
+to be repeated for every zone — which is impractical when zone count is dynamic.
+
+The proposed extension is an `each` field on `SolutionTemplateBundleEntryModel`:
+
+```json
+{
+  "name": "tenant-ring-deploy",
+  "path": "zones/{{ zone }}/customers/{{ name }}/{{ ring }}",
+  "each": {
+    "zone": "{{ zones }}",
+    "ring": "{{ rings }}"
+  }
+}
+```
+
+**Semantics:** when `each` is present, the runner iterates the cartesian product of all
+`each` values (split on `,`) and emits one file per combination. `zones=europe,us-east` ×
+`rings=dev,qa,prd` → 6 files from a single bundle entry.
+
+**Scope:** this extension is not needed for Phase 1. It should only be implemented if a
+real operator requirement for multi-zone simultaneous onboarding is confirmed. Premature
+implementation adds complexity to the bundle runner for a case that static bundle entries
+already handle when zone count is known at template-definition time.
+
+---
+
 ## Consequences
 
 - New tenant onboarding goes from 10+ hand-authored files to a single command.

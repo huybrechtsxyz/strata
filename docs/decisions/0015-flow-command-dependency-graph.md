@@ -1,6 +1,6 @@
 # `strata validate graph` — Workspace Dependency Graph
 
-- Status: accepted
+- Status: completed
 - Date: 2026-06-24
 - Parent: [0014-onboarding-experience.md](0014-onboarding-experience.md) (item #11)
 

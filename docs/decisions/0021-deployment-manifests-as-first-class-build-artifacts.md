@@ -1,7 +1,15 @@
 # Deployment Manifests as First-Class Build Artifacts
 
-- Status: accepted
+- Status: partial
 - Date: 2026-07-05
+
+## What Still Needs To Be Done
+
+- [ ] Make manifest discovery recursive in `DeploymentManifestService.list_manifests()` so versioned paths like `{deployment}/{version}/{timestamp}.json` are included.
+- [ ] Align `strata manifest list` with ADR scope: either include both build and deploy manifests, or narrow ADR wording to the implemented deploy-manifest scope.
+- [ ] Align build-manifest path wording with implementation (`build/<deployment>/manifest.json`) or change implementation to the ADR path (`.strata/build/{deployment}/manifest.json`).
+- [ ] Align `strata audit export --include-manifests` behavior and examples: current command exports a bundled JSON/NDJSON payload (and uses `--out`), while ADR text describes `--output-dir` directory packaging.
+- [ ] Tighten `DeploymentManifestSpecModel.action` to an explicit allowed set (`build | deploy | destroy`) if schema-level enforcement is required by this ADR.
 
 ## Summary
 

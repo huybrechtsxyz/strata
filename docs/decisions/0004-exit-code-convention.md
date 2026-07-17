@@ -1,6 +1,6 @@
 # Four exit codes: 0 success, 1 system, 2 usage, 3 validation
 
-- Status: accepted
+- Status: completed
 - Date: 2025-07-16
 
 ## Context and Problem Statement

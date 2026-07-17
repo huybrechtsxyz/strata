@@ -19,15 +19,15 @@ class TestSchemaList:
         result = runner.invoke(schema_group, ["list", "--output", "json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert "kinds" in data
-        assert isinstance(data["kinds"], list)
-        assert len(data["kinds"]) > 0
+        assert "kinds" in data["data"]
+        assert isinstance(data["data"]["kinds"], list)
+        assert len(data["data"]["kinds"]) > 0
 
     def test_json_output_includes_all_platform_kinds(self):
         runner = CliRunner()
         result = runner.invoke(schema_group, ["list", "--output", "json"])
         data = json.loads(result.output)
-        present_kinds = [k["kind"] if isinstance(k, dict) else k for k in data["kinds"]]
+        present_kinds = [k["kind"] if isinstance(k, dict) else k for k in data["data"]["kinds"]]
         for kind in PlatformKind:
             assert kind.value in present_kinds
 
@@ -52,23 +52,24 @@ class TestSchemaGet:
         runner = CliRunner()
         result = runner.invoke(schema_group, ["get", "deployment"])
         assert result.exit_code == 0
-        data = json.loads(result.output)
-        # JSON Schema documents must have at least a "properties" or "$defs" key
-        assert "properties" in data or "$defs" in data
+        # Console output shows a human-readable summary
+        assert "Kind:" in result.output
+        assert "deployment" in result.output
 
     def test_json_output_flag_produces_same_schema(self):
         runner = CliRunner()
         result = runner.invoke(schema_group, ["get", "deployment", "--output", "json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert "properties" in data or "$defs" in data
+        schema = data["data"]["schema"]
+        assert "properties" in schema or "$defs" in schema
 
     def test_text_output_shows_summary(self):
         runner = CliRunner()
         result = runner.invoke(schema_group, ["get", "deployment", "--output", "text"])
         assert result.exit_code == 0
         assert "deployment" in result.output
-        assert "Kind:" in result.output
+        assert "kind:" in result.output
 
     def test_all_valid_kinds_return_zero(self):
         runner = CliRunner()
@@ -78,7 +79,7 @@ class TestSchemaGet:
 
     def test_unknown_kind_exits_2(self):
         runner = CliRunner()
-        result = runner.invoke(schema_group, ["get", "notakind"])
+        result = runner.invoke(schema_group, ["get", "notakind"], catch_exceptions=False)
         assert result.exit_code == 2
 
     def test_unknown_kind_error_lists_valid_kinds(self):

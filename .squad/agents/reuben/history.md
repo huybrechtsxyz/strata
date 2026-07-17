@@ -44,9 +44,13 @@ Key paths: `docs/`, `docs/conf.py`, `docs/index.rst`, `docs/cli-preferences.md`,
 
 ## Learnings
 
+- **ADR completion status checks:** Mark an ADR as partial when helper methods exist but the owning execution path does not invoke them. For deploy/audit work, verify the real command flow and the actual CLI surface before documenting a feature as complete.
+- **Squad recording follow-through:** When that gap is confirmed, promote the note into `.squad/decisions.md` so the completion-state correction is visible outside the originating agent history.
 - **Union fields in record tables:** When a model field becomes a union (one-of), the Required column should change from "Yes"/"No" to "one of" to accurately signal mutual exclusivity. This pattern works for any doc where Pydantic discriminates exactly one field from a set.
 - **spec.references placement:** A top-level spec block's dedicated reference section belongs directly after the top-level fields table, not buried after the sub-object (zone/record) sections. Readers correlate the top-level table row to the section that follows.
 - **secret: records and Terraform variable naming:** The `dns_secret_records` variable is a Terraform-side concern; the doc must tell users they need to wire it in their HCL — strata only omits the value from tfvars and names the env var `TF_VAR_<key>`. Always document the "other side" of the boundary.
 - **Preserving comprehensive examples:** When updating an existing worked example, keep the full richness and just modify/add the records needed to show new patterns. A minimal replacement example loses the coverage that operators use as a copy-paste starting point.
 - **Network kind documentation approach:** The network kind has more validation depth than DNS or firewall (CIDR overlap detection, containment, peering-aware errors). Dedicated sections for each validation tier (subnet-to-subnet, containment, cross-network) are clearer than cramming everything into the validation rules table. The validation rules table gets all 13 rules as a quick-reference, while the "CIDR Overlap Detection" narrative section explains the *why* for operators who need to understand what strata catches. Two-example strategy (haven + enterprise hub-spoke) covers both the simple and complex use cases without requiring a third example.
+
+
 

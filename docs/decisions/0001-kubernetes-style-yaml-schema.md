@@ -1,6 +1,6 @@
 # Kubernetes-style YAML schema for config documents
 
-- Status: accepted
+- Status: completed
 - Date: 2025-07-16
 
 ## Context and Problem Statement

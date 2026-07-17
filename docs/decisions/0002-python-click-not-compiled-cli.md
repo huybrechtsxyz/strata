@@ -1,6 +1,6 @@
 # Python + Click for the CLI, not a compiled binary
 
-- Status: accepted
+- Status: completed
 - Date: 2025-07-16
 
 ## Context and Problem Statement

@@ -1,8 +1,14 @@
 # Pluggable provisioner framework
 
-- Status: accepted
+- Status: partial
 - Date: 2026-07-05
 - Issue: [#169](https://github.com/huybrechtsxyz/strata/issues/169)
+
+## What Still Needs To Be Done
+
+- Wire deployer `status()` into a status command path. `BaseDeployer.status()` exists, but no command currently calls `deployer.status()`.
+- Complete manifest integration: `ProvisionerManifestModel` exists, but `provisioner.yaml` metadata is not loaded/used by `tools status` or guide flows yet.
+- Finish command centralization cleanup: type-dispatch helpers still exist in env commands for provisioner labeling, so plugin types can show as `unknown` in env status/drift output.
 
 ## Context and Problem Statement
 
@@ -19,13 +25,13 @@ The SBOM subsystem already solved an analogous problem: `CollectorPluginLoader` 
 
 ### Current Architecture Debt
 
-| Problem | Impact |
-|---------|--------|
-| `_create_deployer()` duplicated in 9 files | Every new built-in provisioner requires 9 edits |
-| `ScriptDeployer` unreachable | `ProvisionerType.SCRIPT` exists in enum + class exists, but no if/elif branch creates it |
-| No `status` or `health` on `BaseDeployer` | Health checks are modelled on stages, not delegated to the deployer that understands the tool |
-| No plugin discovery for deployers | Third-party provisioners impossible without forking |
-| Build command has 6 sequential `_execute_*_build()` with identical boilerplate | Same copy-paste pattern as deployers |
+| Problem                                                                        | Impact                                                                                        |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `_create_deployer()` duplicated in 9 files                                     | Every new built-in provisioner requires 9 edits                                               |
+| `ScriptDeployer` unreachable                                                   | `ProvisionerType.SCRIPT` exists in enum + class exists, but no if/elif branch creates it      |
+| No `status` or `health` on `BaseDeployer`                                      | Health checks are modelled on stages, not delegated to the deployer that understands the tool |
+| No plugin discovery for deployers                                              | Third-party provisioners impossible without forking                                           |
+| Build command has 6 sequential `_execute_*_build()` with identical boilerplate | Same copy-paste pattern as deployers                                                          |
 
 ## Decision Drivers
 
@@ -280,17 +286,17 @@ STEP_HEALTH = "health"
 
 Deployers already receive comprehensive context via constructor arguments. This design formalizes it:
 
-| Context | Source | Available via |
-|---------|--------|---------------|
-| Stage metadata | `DeploymentStageModel` | `self.stage` |
-| Resolved variables | `ResolvedValues.variables` | `self.resolved_values.variables` |
-| Resolved secrets | `ResolvedValues.secrets` | `self.resolved_values.secrets` |
-| Feature flags | `ResolvedValues.features` | `self.resolved_values.features` |
-| Stage outputs (upstream) | `ResolvedValues.stage_outputs` | `self.resolved_values.stage_outputs` |
-| Build artifacts path | `Path` | `self.build_path` |
-| Workspace root | `Path` | `self.work_path` |
-| IaC model (provisioner config) | `WorkspaceIacModel` | `self._resolve_iac_model()` |
-| Solution controller | `SolutionController` | `self.solution_controller` |
+| Context                        | Source                         | Available via                        |
+| ------------------------------ | ------------------------------ | ------------------------------------ |
+| Stage metadata                 | `DeploymentStageModel`         | `self.stage`                         |
+| Resolved variables             | `ResolvedValues.variables`     | `self.resolved_values.variables`     |
+| Resolved secrets               | `ResolvedValues.secrets`       | `self.resolved_values.secrets`       |
+| Feature flags                  | `ResolvedValues.features`      | `self.resolved_values.features`      |
+| Stage outputs (upstream)       | `ResolvedValues.stage_outputs` | `self.resolved_values.stage_outputs` |
+| Build artifacts path           | `Path`                         | `self.build_path`                    |
+| Workspace root                 | `Path`                         | `self.work_path`                     |
+| IaC model (provisioner config) | `WorkspaceIacModel`            | `self._resolve_iac_model()`          |
+| Solution controller            | `SolutionController`           | `self.solution_controller`           |
 
 **Change**: Make `resolved_values` a first-class constructor parameter on `BaseDeployer` instead of only on concrete deployers:
 
@@ -413,72 +419,72 @@ class ArgoCDDeployer(BaseDeployer):
 
 ### Phase 1 — Factory & Centralization (core)
 
-| Step | Files | Description |
-|------|-------|-------------|
-| 1.1 | `deployers/factory.py` | Create `DeployerFactory` with `_BUILTIN_MAP`, `register()`, `create()`, `get_known_types()`, `reset()` |
-| 1.2 | `deployers/base_deployer.py` | Add `resolved_values` to constructor, add `status()` and `health()` with default impls, add `STEP_STATUS`/`STEP_HEALTH` constants |
-| 1.3 | 5 concrete deployers | Update constructors to pass `resolved_values` to `super().__init__()` |
-| 1.4 | 9 command files | Replace `_create_deployer()` with `DeployerFactory.create()` call |
-| 1.5 | Tests | `tests/strata/deployers/test_deployer_factory.py` — registration, creation, unknown-type error, reset |
+| Step | Files                        | Description                                                                                                                       |
+| ---- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1  | `deployers/factory.py`       | Create `DeployerFactory` with `_BUILTIN_MAP`, `register()`, `create()`, `get_known_types()`, `reset()`                            |
+| 1.2  | `deployers/base_deployer.py` | Add `resolved_values` to constructor, add `status()` and `health()` with default impls, add `STEP_STATUS`/`STEP_HEALTH` constants |
+| 1.3  | 5 concrete deployers         | Update constructors to pass `resolved_values` to `super().__init__()`                                                             |
+| 1.4  | 9 command files              | Replace `_create_deployer()` with `DeployerFactory.create()` call                                                                 |
+| 1.5  | Tests                        | `tests/strata/deployers/test_deployer_factory.py` — registration, creation, unknown-type error, reset                             |
 
 ### Phase 2 — Plugin Discovery
 
-| Step | Files | Description |
-|------|-------|-------------|
-| 2.1 | `deployers/factory.py` | Add `load_plugins(work_path)` — scan `.strata/provisioners/*.py`, import, register subclasses |
-| 2.2 | `models/provisioner_manifest_model.py` | Create optional manifest schema |
-| 2.3 | `models/common_models.py` | Change `WorkspaceIacModel.provisioner` from `ProvisionerType` to `str` with validator |
-| 2.4 | `commands/base_command.py` or `SolutionController` | Call `DeployerFactory.load_plugins()` at startup |
-| 2.5 | Tests | Plugin loading, discovery, manifest validation |
+| Step | Files                                              | Description                                                                                   |
+| ---- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 2.1  | `deployers/factory.py`                             | Add `load_plugins(work_path)` — scan `.strata/provisioners/*.py`, import, register subclasses |
+| 2.2  | `models/provisioner_manifest_model.py`             | Create optional manifest schema                                                               |
+| 2.3  | `models/common_models.py`                          | Change `WorkspaceIacModel.provisioner` from `ProvisionerType` to `str` with validator         |
+| 2.4  | `commands/base_command.py` or `SolutionController` | Call `DeployerFactory.load_plugins()` at startup                                              |
+| 2.5  | Tests                                              | Plugin loading, discovery, manifest validation                                                |
 
 ### Phase 3 — Examples & Documentation
 
-| Step | Files | Description |
-|------|-------|-------------|
-| 3.1 | `docs/examples/provisioners/pulumi_provisioner.py` | Full Pulumi example |
-| 3.2 | `docs/examples/provisioners/argocd_provisioner.py` | Full ArgoCD example |
-| 3.3 | `docs/guides/building-a-provisioner-plugin.md` | User guide with lifecycle, context, testing, publishing |
-| 3.4 | `docs/platform/provisioner-plugin-api.md` | API reference for `BaseDeployer` and `DeployerFactory` |
+| Step | Files                                              | Description                                             |
+| ---- | -------------------------------------------------- | ------------------------------------------------------- |
+| 3.1  | `docs/examples/provisioners/pulumi_provisioner.py` | Full Pulumi example                                     |
+| 3.2  | `docs/examples/provisioners/argocd_provisioner.py` | Full ArgoCD example                                     |
+| 3.3  | `docs/guides/building-a-provisioner-plugin.md`     | User guide with lifecycle, context, testing, publishing |
+| 3.4  | `docs/platform/provisioner-plugin-api.md`          | API reference for `BaseDeployer` and `DeployerFactory`  |
 
 ---
 
 ## File Impact Summary
 
-| File | Change Type |
-|------|-------------|
-| `src/strata/deployers/factory.py` | **New** — DeployerFactory |
-| `src/strata/deployers/base_deployer.py` | **Modify** — add `resolved_values`, `status()`, `health()` |
-| `src/strata/deployers/terraform_deployer.py` | **Modify** — pass `resolved_values` to super |
-| `src/strata/deployers/ansible_deployer.py` | **Modify** — pass `resolved_values` to super |
-| `src/strata/deployers/compose_deployer.py` | **Modify** — pass `resolved_values` to super |
-| `src/strata/deployers/helm_deployer.py` | **Modify** — pass `resolved_values` to super |
-| `src/strata/deployers/script_deployer.py` | **Modify** — pass `resolved_values` to super |
-| `src/strata/models/provisioner_manifest_model.py` | **New** — manifest schema |
-| `src/strata/models/common_models.py` | **Modify** — `WorkspaceIacModel.provisioner` type |
-| `src/strata/commands/deploy/run_deploy_command.py` | **Modify** — replace `_create_deployer()` |
-| `src/strata/commands/deploy/destroy_deploy_command.py` | **Modify** — replace `_create_deployer()` |
-| `src/strata/commands/deploy/health_deploy_command.py` | **Modify** — replace `_create_deployer()` |
-| `src/strata/commands/deploy/status_deploy_command.py` | **Modify** — replace `_create_deployer()` |
-| `src/strata/commands/deploy/plan_deploy_command.py` | **Modify** — replace `_create_deployer()` |
-| `src/strata/commands/deploy/output_deploy_command.py` | **Modify** — replace `_create_deployer()` |
-| `src/strata/commands/envs/status_env_command.py` | **Modify** — replace `_create_deployer()` |
-| `src/strata/commands/envs/output_env_command.py` | **Modify** — replace `_create_deployer()` |
-| `src/strata/commands/envs/drift_env_command.py` | **Modify** — replace `_create_deployer()` |
-| `tests/strata/deployers/test_deployer_factory.py` | **New** |
-| `docs/decisions/0023-pluggable-provisioner-framework.md` | **New** — this ADR |
-| `docs/guides/building-a-provisioner-plugin.md` | **New** |
-| `docs/platform/provisioner-plugin-api.md` | **New** |
-| `docs/examples/provisioners/pulumi_provisioner.py` | **New** |
-| `docs/examples/provisioners/argocd_provisioner.py` | **New** |
+| File                                                     | Change Type                                                |
+| -------------------------------------------------------- | ---------------------------------------------------------- |
+| `src/strata/deployers/factory.py`                        | **New** — DeployerFactory                                  |
+| `src/strata/deployers/base_deployer.py`                  | **Modify** — add `resolved_values`, `status()`, `health()` |
+| `src/strata/deployers/terraform_deployer.py`             | **Modify** — pass `resolved_values` to super               |
+| `src/strata/deployers/ansible_deployer.py`               | **Modify** — pass `resolved_values` to super               |
+| `src/strata/deployers/compose_deployer.py`               | **Modify** — pass `resolved_values` to super               |
+| `src/strata/deployers/helm_deployer.py`                  | **Modify** — pass `resolved_values` to super               |
+| `src/strata/deployers/script_deployer.py`                | **Modify** — pass `resolved_values` to super               |
+| `src/strata/models/provisioner_manifest_model.py`        | **New** — manifest schema                                  |
+| `src/strata/models/common_models.py`                     | **Modify** — `WorkspaceIacModel.provisioner` type          |
+| `src/strata/commands/deploy/run_deploy_command.py`       | **Modify** — replace `_create_deployer()`                  |
+| `src/strata/commands/deploy/destroy_deploy_command.py`   | **Modify** — replace `_create_deployer()`                  |
+| `src/strata/commands/deploy/health_deploy_command.py`    | **Modify** — replace `_create_deployer()`                  |
+| `src/strata/commands/deploy/status_deploy_command.py`    | **Modify** — replace `_create_deployer()`                  |
+| `src/strata/commands/deploy/plan_deploy_command.py`      | **Modify** — replace `_create_deployer()`                  |
+| `src/strata/commands/deploy/output_deploy_command.py`    | **Modify** — replace `_create_deployer()`                  |
+| `src/strata/commands/envs/status_env_command.py`         | **Modify** — replace `_create_deployer()`                  |
+| `src/strata/commands/envs/output_env_command.py`         | **Modify** — replace `_create_deployer()`                  |
+| `src/strata/commands/envs/drift_env_command.py`          | **Modify** — replace `_create_deployer()`                  |
+| `tests/strata/deployers/test_deployer_factory.py`        | **New**                                                    |
+| `docs/decisions/0023-pluggable-provisioner-framework.md` | **New** — this ADR                                         |
+| `docs/guides/building-a-provisioner-plugin.md`           | **New**                                                    |
+| `docs/platform/provisioner-plugin-api.md`                | **New**                                                    |
+| `docs/examples/provisioners/pulumi_provisioner.py`       | **New**                                                    |
+| `docs/examples/provisioners/argocd_provisioner.py`       | **New**                                                    |
 
 ## Risks
 
-| Risk | Mitigation |
-|------|------------|
-| Plugin `.py` files executing arbitrary code | Same risk as SBOM plugins — documented as "workspace-trust" model. Plugins only load from `.strata/` which is under workspace owner control |
+| Risk                                                             | Mitigation                                                                                                                                     |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plugin `.py` files executing arbitrary code                      | Same risk as SBOM plugins — documented as "workspace-trust" model. Plugins only load from `.strata/` which is under workspace owner control    |
 | `provisioner` field change from enum to str breaks existing YAML | Validator accepts all `ProvisionerType` values unchanged; only behavior change is that unknown strings pass parsing (validated at deploy time) |
-| Large refactoring across 9 command files | Each command's `_create_deployer()` is replaced with a 1-line factory call — mechanical, low-risk change that can be done per-file |
-| Plugin API stability | `BaseDeployer` ABC is the contract. Mark as `@stable` in docs. New optional methods use default implementations to avoid breaking plugins |
+| Large refactoring across 9 command files                         | Each command's `_create_deployer()` is replaced with a 1-line factory call — mechanical, low-risk change that can be done per-file             |
+| Plugin API stability                                             | `BaseDeployer` ABC is the contract. Mark as `@stable` in docs. New optional methods use default implementations to avoid breaking plugins      |
 
 ## More Information
 

@@ -1,6 +1,6 @@
 # Cost estimation and visibility
 
-- Status: partial
+- Status: proposed
 - Date: 2026-07-11
 
 ## Context and Problem Statement

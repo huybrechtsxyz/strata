@@ -1,6 +1,6 @@
 # Policy engine for deployment guardrails
 
-- Status: accepted
+- Status: completed
 - Date: 2026-06-15
 
 ## Context and Problem Statement
