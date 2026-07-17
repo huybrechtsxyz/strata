@@ -6,14 +6,15 @@ strata is CI-friendly by design. It provides deterministic exit codes, machine-r
 
 ## Exit Codes
 
-Every strata command returns one of four exit codes. Use these to control pipeline flow:
+Every strata command returns one of five exit codes. Use these to control pipeline flow:
 
-| Code | Meaning                                                      | CI Behaviour                              |
-| ---- | ------------------------------------------------------------ | ----------------------------------------- |
-| `0`  | Success                                                      | Continue pipeline                         |
-| `1`  | System / execution failure (crash, missing file, init error) | Fail the build                            |
-| `2`  | Usage error — invalid CLI arguments                          | Fail the build (fix your pipeline script) |
-| `3`  | Validation failure — file processed but schema-invalid       | Fail the PR gate; block merge             |
+| Code | Meaning                                                      | CI Behaviour                               |
+| ---- | ------------------------------------------------------------ | ------------------------------------------ |
+| `0`  | Success                                                      | Continue pipeline                          |
+| `1`  | System / execution failure (crash, missing file, init error) | Fail the build                             |
+| `2`  | Usage error — invalid CLI arguments                          | Fail the build (fix your pipeline script)  |
+| `3`  | Validation failure — file processed but schema-invalid       | Fail the PR gate; block merge              |
+| `4`  | Lock conflict — deployment locked by another process         | Retry deployment after delay (use backoff) |
 
 > **Tip:** Exit code `3` is the most actionable in CI — it means the YAML was parsed but failed validation. Display the JSON output as a PR comment so authors can fix issues without digging through logs.
 

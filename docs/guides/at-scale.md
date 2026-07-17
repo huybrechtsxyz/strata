@@ -169,7 +169,7 @@ A deployment manifest in Layer 2 references `workspace: application`. If someone
 accidentally puts `workspace: infrastructure` in a customer deployment, they get access
 to zone-level resources — a misconfiguration that crosses the layer boundary.
 
-`strata validate --path "deployments/**"` (GAP-03 overlap check) detects namespace
+`strata validate run --pattern "deployments/**"` (GAP-03 overlap check) detects namespace
 and artifact_path collisions that would result from this, providing a safety net even
 without an explicit layer-boundary rule.
 

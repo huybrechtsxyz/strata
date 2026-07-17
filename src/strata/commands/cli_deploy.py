@@ -32,9 +32,19 @@ def deploy():
     pass
 
 
-@deploy.command(name="run", help="Run the deploy pipeline for a deployment definition.")
+@deploy.command(
+    name="run",
+    help="Run the deploy pipeline for a deployment definition.",
+    epilog=(
+        "Exit codes:\n"
+        "  0  success\n"
+        "  1  system error (infrastructure unavailable, timeout, permissions) — alert\n"
+        "  2  usage error (bad arguments, file not found) — fix script\n"
+        "  3  validation error (schema, cross-ref) — fix config\n"
+        "  4  lock conflict (another deployment in progress) — retry after delay"
+    ),
+)
 @click_file
-@click_work_path
 @click.option(
     "--stage",
     default=None,
@@ -117,6 +127,7 @@ def deploy():
         "Defaults to the strategy declared in the deployment's spec.promotion.strategy."
     ),
 )
+@click_work_path
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -159,9 +170,20 @@ def deploy_run(
     handle_command_exit(command, success)
 
 
-@deploy.command(name="destroy", help="Tear down provisioned infrastructure for a deployment definition.")
+@deploy.command(
+    name="destroy",
+    help="Tear down provisioned infrastructure for a deployment definition.",
+    epilog=(
+        "Exit codes:\n"
+        "  0  success\n"
+        "  1  system error (infrastructure unavailable, timeout, permissions) — alert\n"
+        "  2  usage error (bad arguments, file not found) — fix script\n"
+        "  3  validation error (schema, cross-ref) — fix config\n"
+        "  4  lock conflict (another deployment in progress) — retry after delay\n\n"
+        "Note: exactly one of --dry-run or --force must be provided."
+    ),
+)
 @click_file
-@click_work_path
 @click.option(
     "--stage",
     default=None,
@@ -178,13 +200,13 @@ def deploy_run(
     "--force",
     is_flag=True,
     default=False,
-    help="Auto-approve: run terraform destroy non-interactively. Required unless --dry-run.",
+    help="Auto-approve: run terraform destroy non-interactively. (cannot use with: --dry-run)",
 )
 @click.option(
     "--dry-run",
     is_flag=True,
     default=False,
-    help="Plan what would be destroyed (terraform plan -destroy) without removing anything.",
+    help="Plan what would be destroyed (terraform plan -destroy) without removing anything. (cannot use with: --force)",
 )
 @click.option(
     "--force-lock",
@@ -192,6 +214,7 @@ def deploy_run(
     default=False,
     help="Force-release any held lock before acquiring. Use to recover from a crashed pipeline.",
 )
+@click_work_path
 @click_output_format
 @click_output_verbose
 @click_output_quiet
@@ -208,6 +231,10 @@ def deploy_destroy(
     quiet: Optional[bool] = None,
 ):
     """Tear down provisioned infrastructure."""
+    if force and dry_run:
+        raise click.UsageError("--force and --dry-run are mutually exclusive.")
+    if not force and not dry_run:
+        raise click.UsageError("One of --force or --dry-run must be provided.")
     command = DestroyDeployCommand(
         file=file,
         work_path=work_path,

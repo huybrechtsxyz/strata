@@ -417,13 +417,13 @@ paths: Optional[List[PathConventionModel]] = Field(
 `spec.layering` remains unchanged — it continues to serve its original purpose
 (deployment layer metadata). Path conventions are a separate concern.
 
-### `strata validate --path "**" --deep` — fleet-wide scan
+### `strata validate run --pattern "**" --deep` — fleet-wide scan
 
 Running deep validation across all files in the repository produces a fleet-wide
 consistency report, suitable for use as a CI gate on the configuration repository:
 
 ```bash
-strata validate --path "zones/**/*.yaml" --deep
+strata validate run --pattern "zones/**/*.yaml" --deep
 ```
 
 Exit code 3 (validation failure) when any error-level finding exists. Warnings do not

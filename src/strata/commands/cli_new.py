@@ -17,7 +17,13 @@ from strata.commands.new.run_new_command import NewCommand
 @click.command(name="new")
 @click.argument("template", required=False, default=None)
 @click.argument("name", required=False, default=None)
-@click.option("--path", "-p", default=None, help="Output file path or directory.")
+@click.option(
+    "--output-file",
+    "output_file",
+    default=None,
+    metavar="FILE",
+    help="Output file path or directory.",
+)
 @click.option(
     "--overwrite",
     is_flag=True,
@@ -53,7 +59,7 @@ from strata.commands.new.run_new_command import NewCommand
 def new_command(
     template: Optional[str],
     name: Optional[str],
-    path: Optional[str],
+    output_file: Optional[str],
     overwrite: bool,
     set_values: Tuple[str, ...],
     list_templates: bool,
@@ -83,7 +89,7 @@ def new_command(
         template=template,
         name=name,
         list_templates=list_templates,
-        path=path,
+        path=output_file,
         overwrite=overwrite,
         set_values=set_values,
         run_validate=run_validate,

@@ -124,7 +124,17 @@ class BaseLockBackend(ABC):
         """
 
 
-class LockTimeoutError(PlatformError):
+class LockConflictError(PlatformError):
+    """Raised when a deployment lock cannot be acquired because it is already held.
+
+    Parent of ``LockTimeoutError``. Catch this class to handle all lock-conflict
+    scenarios regardless of the specific failure mode (timeout vs. immediate reject).
+    """
+
+    pass
+
+
+class LockTimeoutError(LockConflictError):
     """Raised when ``acquire()`` cannot obtain the lock within the timeout."""
 
     def __init__(self, deployment_name: str, timeout_seconds: int, holder: str) -> None:

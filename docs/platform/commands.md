@@ -279,18 +279,18 @@ Create a new platform configuration file (or set of files) from a built-in or
 workspace-local template.
 
 ```
-strata new TEMPLATE NAME [--path PATH] [--overwrite] [--set KEY=VALUE ...] [standard options]
+strata new TEMPLATE NAME [--output-file FILE] [--overwrite] [--set KEY=VALUE ...] [standard options]
 strata new --list
 ```
 
-| Option / Argument | Description                                                          |
-| ----------------- | -------------------------------------------------------------------- |
-| `TEMPLATE`        | Template name (e.g. `namespace`, `provider`, `tenant`)               |
-| `NAME`            | Injected as `{{ name }}`; used in output filenames and path segments |
-| `--path PATH`     | Output directory (default: current directory)                        |
-| `--overwrite`     | Overwrite output file(s) if they already exist                       |
-| `--set KEY=VALUE` | Inject an extra variable into the template (repeatable)              |
-| `--list`          | List available templates and bundles, then exit                      |
+| Option / Argument    | Description                                                          |
+| -------------------- | -------------------------------------------------------------------- |
+| `TEMPLATE`           | Template name (e.g. `namespace`, `provider`, `tenant`)               |
+| `NAME`               | Injected as `{{ name }}`; used in output filenames and path segments |
+| `--output-file FILE` | Output file path or directory (default: current directory)           |
+| `--overwrite`        | Overwrite output file(s) if they already exist                       |
+| `--set KEY=VALUE`    | Inject an extra variable into the template (repeatable)              |
+| `--list`             | List available templates and bundles, then exit                      |
 
 **Template discovery** — `strata new --list` shows all templates grouped by type:
 
@@ -301,10 +301,10 @@ Workspace-local templates are marked with `*` in the output.
 
 ```bash
 strata new namespace my-app
-strata new provider azure --path config/
+strata new provider azure --output-file config/
 strata new workspace my-ws --set owner=myteam
-strata new dns my-zones --path config/dns/
-strata new tenant newcorp --path repos/xyz-config/ --set zone=eu --set tier=premium
+strata new dns my-zones --output-file config/dns/
+strata new tenant newcorp --output-file repos/xyz-config/ --set zone=eu --set tier=premium
 strata new --list
 ```
 
@@ -342,7 +342,7 @@ substitution runs on both file content and path segments using the same
         └── prd.yaml
 ```
 
-Running `strata new tenant contoso --path tenants/` produces:
+Running `strata new tenant contoso --output-file tenants/` produces:
 
 ```
 tenants/contoso/

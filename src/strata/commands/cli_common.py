@@ -8,20 +8,26 @@ OUTPUT_FORMATS = ["console", "text", "json", "ndjson"]
 # Exit code handler for commands with validation
 def handle_command_exit(command, success: bool) -> None:
     """
-    Handle command exit codes based on success status and validation errors.
+    Handle command exit codes based on success status and failure type.
 
     Exit codes:
         0 - Success
         1 - System/execution failure
         3 - Validation failure (file invalid)
+        4 - Lock conflict (deploy run / deploy destroy only)
 
     Args:
-        command: Command instance with has_validation_errors() method
+        command: Command instance with optional has_validation_errors() / has_lock_conflict()
         success: Initial success status from command.execute()
 
     Raises:
         click.exceptions.Exit: With appropriate exit code
     """
+    # Lock conflict takes priority over all other failure classifications.
+    # Only reachable for deploy run / deploy destroy (has_lock_conflict lives on BaseDeployCommand).
+    if not success and hasattr(command, "has_lock_conflict") and command.has_lock_conflict():
+        raise click.exceptions.Exit(4)
+
     # Mark as failure if there are validation errors
     if success and hasattr(command, "has_validation_errors") and command.has_validation_errors():
         success = False
@@ -168,8 +174,9 @@ def click_work_path(func):
     func = click.option(
         "--work-path",
         default=None,
+        metavar="PATH",
         type=click.Path(exists=False, file_okay=False, dir_okay=True, path_type=str),
-        help="Optional root path of the workspace, if different then PWD (must exist)",
+        help="Workspace root directory (default: current directory).",
     )(func)
     return func
 
@@ -181,7 +188,7 @@ def click_file(func):
         "-f",
         default=None,
         envvar="STRATA_FILE",
-        metavar="PATH",
+        metavar="FILE",
         help="Path to the deployment YAML file. [env: STRATA_FILE]",
     )(func)
     return func
