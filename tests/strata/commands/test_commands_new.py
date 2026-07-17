@@ -39,7 +39,7 @@ class TestNewCommand:
         with patch("strata.commands.new.run_new_command.NewCommand.execute", return_value=True):
             result = runner.invoke(
                 new_command,
-                ["namespace", "myapp", "--path", str(tmp_path), "--work-path", str(tmp_path)],
+                ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
             )
         assert result.exit_code == 0
 
@@ -114,7 +114,7 @@ class TestNewCommand:
             [
                 "namespace",
                 "myapp",
-                "--path",
+                "--output-file",
                 str(tmp_path),
                 "--work-path",
                 str(tmp_path),
@@ -132,12 +132,12 @@ class TestNewCommand:
         # First write succeeds
         runner.invoke(
             new_command,
-            ["namespace", "myapp", "--path", str(tmp_path), "--work-path", str(tmp_path)],
+            ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
         )
         # Second write without --overwrite must fail
         result = runner.invoke(
             new_command,
-            ["namespace", "myapp", "--path", str(tmp_path), "--work-path", str(tmp_path)],
+            ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 1
 
@@ -146,14 +146,14 @@ class TestNewCommand:
         runner = CliRunner()
         runner.invoke(
             new_command,
-            ["namespace", "myapp", "--path", str(tmp_path), "--work-path", str(tmp_path)],
+            ["namespace", "myapp", "--output-file", str(tmp_path), "--work-path", str(tmp_path)],
         )
         result = runner.invoke(
             new_command,
             [
                 "namespace",
                 "myapp",
-                "--path",
+                "--output-file",
                 str(tmp_path),
                 "--overwrite",
                 "--work-path",
@@ -218,7 +218,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)],
+            ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         assert (out / "acme.yaml").exists()
@@ -235,7 +235,7 @@ class TestNewCommandBundle:
             [
                 "widget",
                 "acme",
-                "--path",
+                "--output-file",
                 str(out),
                 "--set",
                 "zone=eu",
@@ -261,7 +261,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)],
+            ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         assert (out / "acme" / "deployment.yaml").exists()
@@ -278,7 +278,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["widget", "globex", "--path", str(out), "--work-path", str(tmp_path)],
+            ["widget", "globex", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         assert (out / "envs" / "globex" / "globex-dev.yaml").exists()
@@ -290,8 +290,8 @@ class TestNewCommandBundle:
 
         out = tmp_path / "out"
         runner = CliRunner()
-        runner.invoke(new_command, ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)])
-        result = runner.invoke(new_command, ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)])
+        runner.invoke(new_command, ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)])
+        result = runner.invoke(new_command, ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)])
         assert result.exit_code == 1
 
     def test_bundle_overwrite_flag(self, tmp_path):
@@ -301,10 +301,10 @@ class TestNewCommandBundle:
 
         out = tmp_path / "out"
         runner = CliRunner()
-        runner.invoke(new_command, ["widget", "acme", "--path", str(out), "--work-path", str(tmp_path)])
+        runner.invoke(new_command, ["widget", "acme", "--output-file", str(out), "--work-path", str(tmp_path)])
         result = runner.invoke(
             new_command,
-            ["widget", "acme", "--path", str(out), "--overwrite", "--work-path", str(tmp_path)],
+            ["widget", "acme", "--output-file", str(out), "--overwrite", "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
 
@@ -329,7 +329,7 @@ class TestNewCommandBundle:
         runner = CliRunner()
         result = runner.invoke(
             new_command,
-            ["namespace", "myapp", "--path", str(out), "--work-path", str(tmp_path)],
+            ["namespace", "myapp", "--output-file", str(out), "--work-path", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
         # Bundle output file (not the single-file default name)

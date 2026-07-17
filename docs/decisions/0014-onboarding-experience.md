@@ -18,7 +18,7 @@
 | 9   | Rich rendering (panels, tables, progress bar)                       | 2     | done   |
 | 10  | `init` wizard inside the guide REPL                                 | 3     | todo   |
 | 11  | `flow` command — Mermaid dependency graph (`strata validate graph`) | 3     | done   |
-| 12  | `strata validate --path "**"` batch validation                      | 3     | done   |
+| 12  | `strata validate run --pattern "**"` batch validation               | 3     | done   |
 | 13  | `strata validate --explain` — plain-English file summary            | 3     | done   |
 | 14  | Validation error fix suggestions                                    | 3     | done   |
 | 15  | Interactive `strata new` inside the guide REPL                      | 3     | future |
@@ -333,7 +333,7 @@ The existing `strata guide` command already has the right bones: 8-phase workspa
 
     This makes the wiring visible. A new user sees "my deployment references an environment that doesn't exist yet" as a red node in the graph — immediately actionable.
 
-12. **`strata validate --path "**"`** — Batch validation of all YAML files matching a glob. Already have `--path` for overlap validation; extend to accept `**` (all workspace YAML). Output: summary table (file, kind, status, error count). Supports `--output json` for CI. Feeds into the flow command (determines node colors). No new flag needed — just ensure `--path "**"` works as "validate everything."
+12. **`strata validate run --pattern "**"`** — Batch validation of all YAML files matching a glob. Already have `--pattern` for overlap validation; extend to accept `**` (all workspace YAML). Output: summary table (file, kind, status, error count). Supports `--output json` for CI. Feeds into the flow command (determines node colors). No new flag needed — just ensure `--pattern "**"` works as "validate everything."
 
 13. **`strata validate --explain`** — After validation, emit a plain-English explanation of what the file does: "This deployment targets environment 'prd', runs 2 stages: Terraform infra then Compose services, references workspace xyz-ws-platform." TBD: scope and implementation approach — could be a separate flag or folded into verbose output. Needs further design.
 
@@ -415,14 +415,14 @@ Status: **accepted** — proceeding with Phase 1, then Phase 2.
 
 ADR-0014 has 21 items across 5 phases. **v1.0 ships with 18 complete** (Phases 1–4 + core Phase 3). The following items are **explicitly post-v1.0:**
 
-| Item | Name | Phase | Why Deferred |
-|------|------|-------|-------------|
-| 10 | `init` wizard inside guide REPL | 3 | Interactive guided initialization is convenient but not blocking. Users can manually scaffold via `strata new` (slower but works). Priority post-v1. |
-| 15 | Interactive `strata new` in REPL | 3 | Adds conversational UX to scaffolding (`new module --interactive`). Non-essential — single-shot `strata new` is CI-safe and works. |
-| 17 | `strata env doctor` — health check | 3 | Designed but not implemented. Useful for diagnosing workspace issues, but not part of cold-start path. Can ship as a separate enhancement. |
-| 19 | Progressive dependency scaffolding | 5 | When scaffolding a deployment, auto-scaffold missing referenced files. Complex dependency resolution — deferred pending demand. |
-| 20 | Auto-refresh mode (`--auto`) | 5 | REPL with live polling on file changes. Experimental UX feature; v1 doesn't need it. |
-| 21 | Template marketplace | 5 | Community templates via URL/registry. Infrastructure work; built-in templates are sufficient for v1. |
+| Item | Name                               | Phase | Why Deferred                                                                                                                                         |
+| ---- | ---------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 10   | `init` wizard inside guide REPL    | 3     | Interactive guided initialization is convenient but not blocking. Users can manually scaffold via `strata new` (slower but works). Priority post-v1. |
+| 15   | Interactive `strata new` in REPL   | 3     | Adds conversational UX to scaffolding (`new module --interactive`). Non-essential — single-shot `strata new` is CI-safe and works.                   |
+| 17   | `strata env doctor` — health check | 3     | Designed but not implemented. Useful for diagnosing workspace issues, but not part of cold-start path. Can ship as a separate enhancement.           |
+| 19   | Progressive dependency scaffolding | 5     | When scaffolding a deployment, auto-scaffold missing referenced files. Complex dependency resolution — deferred pending demand.                      |
+| 20   | Auto-refresh mode (`--auto`)       | 5     | REPL with live polling on file changes. Experimental UX feature; v1 doesn't need it.                                                                 |
+| 21   | Template marketplace               | 5     | Community templates via URL/registry. Infrastructure work; built-in templates are sufficient for v1.                                                 |
 
 ### Why These Don't Block v1
 

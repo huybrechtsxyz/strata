@@ -14,8 +14,8 @@ from strata.commands.base_command import BaseCommand
 from strata.integrations.lock.base_lock_backend import (
     BaseLockBackend,
     LockBackendError,
+    LockConflictError,
     LockHandle,
-    LockTimeoutError,
 )
 from strata.models.common_models import ProvisionerType
 from strata.models.deployment_manifest_model import (
@@ -68,12 +68,22 @@ class BaseDeployCommand(BaseCommand):
         self._policy_results: List[ManifestPolicyResultModel] = []
         self._lock_ref: Optional[ManifestLockReferenceModel] = None
         self._audit_log_path: Optional[str] = None
+        self._lock_conflict: bool = False
         # Subclasses override these before calling _execute_provisioning.
         self._dry_run: bool = False
         self._force_lock: bool = False
 
     def get_required_integrations(self):
         return {}
+
+    def has_lock_conflict(self) -> bool:
+        """True when the last execute() failed due to a deployment lock conflict.
+
+        Checked by ``handle_command_exit`` to emit exit code 4 instead of 1.
+        Only reachable for ``deploy run`` and ``deploy destroy`` — ``LockConflictError``
+        is only raised by the lock-acquisition path in these commands.
+        """
+        return self._lock_conflict
 
     # -------------------------------------------------------------------------
     # Lock helpers — shared by RunDeployCommand and DestroyDeployCommand
@@ -179,17 +189,19 @@ class BaseDeployCommand(BaseCommand):
                 backend=handle.backend_type,
             )
             return handle
-        except LockTimeoutError as exc:
+        except LockConflictError as exc:
+            self._lock_conflict = True
             self._errors.append(str(exc))
             if self._is_console_output():
+                holder = getattr(exc, "holder", "unknown")
                 click.echo(
-                    f"\n\U0001f512  Could not acquire lock \u2014 held by {exc.holder!r}. "
-                    "Run `strata deploy lock status` for details."
+                    f"\n\U0001f512  Could not acquire lock \u2014 held by {holder!r}. "
+                    "Run `strata deploy lock status` for details, or use --force-lock to override."
                 )
             self.logger.error(
-                "deploy_lock_timeout",
+                "deploy_lock_conflict",
                 deployment=deploy_name,
-                holder=exc.holder,
+                error=str(exc),
             )
             return None
         except LockBackendError as exc:

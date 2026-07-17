@@ -8,6 +8,7 @@
 | 1    | System/Execution Error | Crashes, missing files, initialization failures, exceptions     |
 | 2    | Usage Error            | Invalid CLI arguments, missing required options (Click handles) |
 | 3    | Validation Failure     | File processed but contains validation errors                   |
+| 4    | Lock Conflict          | Deployment locked by another process (safe to retry)            |
 
 ## Usage by Command
 
@@ -20,7 +21,7 @@
 | `ref`      | ✅      | ✅      | ⚠️ Click only | ❌                     |
 | `validate` | ✅      | ✅      | ⚠️ Click only | ✅ Schema-invalid file |
 | `build`    | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  |
-| `deploy`   | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  |
+| `deploy`   | ✅      | ✅      | ⚠️ Click only | ✅ Invalid deployment  | ✅ Lock held by other process |
 | `values`   | ✅      | ✅      | ⚠️ Click only | ✅ Unresolved entries  |
 | `log`      | ✅      | ✅      | ⚠️ Click only | ❌                     |
 

@@ -226,13 +226,14 @@ strata help --topic quickstart
 
 Common issues:
 
-| Symptom                              | Likely cause                      | Fix                                         |
-| ------------------------------------ | --------------------------------- | ------------------------------------------- |
-| `Not inside an strata workspace`     | CWD not in a workspace tree       | Run `strata sln init` or pass `--work-path` |
-| Exit 2 on any command                | Missing required option           | Check `strata <command> --help`             |
-| Exit 3 on `strata validate`          | Schema-invalid YAML               | Read the validation error output            |
-| `@repo-name/...` reference not found | Repo not registered or not cloned | `strata repo add` + `strata repo sync`      |
-| Terraform not found                  | `terraform` not on PATH           | Install Terraform 1.5+                      |
+| Symptom                               | Likely cause                      | Fix                                                     |
+| ------------------------------------- | --------------------------------- | ------------------------------------------------------- |
+| `Not inside an strata workspace`      | CWD not in a workspace tree       | Run `strata sln init` or pass `--work-path`             |
+| Exit 2 on any command                 | Missing required option           | Check `strata <command> --help`                         |
+| Exit 3 on `strata validate`           | Schema-invalid YAML               | Read the validation error output                        |
+| Exit 4 on `strata deploy run/destroy` | Deployment lock held elsewhere    | Wait for other process to finish, or use `--force-lock` |
+| `@repo-name/...` reference not found  | Repo not registered or not cloned | `strata repo add` + `strata repo sync`                  |
+| Terraform not found                   | `terraform` not on PATH           | Install Terraform 1.5+                                  |
 
 ### Inspecting Resolved Values Before Deploy
 

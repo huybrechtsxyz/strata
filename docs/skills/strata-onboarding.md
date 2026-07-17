@@ -224,7 +224,7 @@ strata validate run -f <file.yaml>
 strata validate run -f <file.yaml> --explain
 
 # Validate all deployment manifests
-strata validate run --path "deployments/**"
+strata validate run --pattern "deployments/**"
 
 # Visualize workspace dependency graph
 strata validate graph

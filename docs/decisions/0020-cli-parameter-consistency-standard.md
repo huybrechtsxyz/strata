@@ -247,7 +247,9 @@ All commands MUST use this order:
 - `KEY` — configuration key
 - `VALUE` — configuration value
 - `INT` — integer number
-- `FORMAT` — output format (console, text, json, cyclonedx, inventory)
+- `SECONDS` — duration in seconds (integer); conveys unit explicitly — used for `--timeout`
+- `FORMAT` — output format (console, text, json, ndjson)
+- `REPORT` — report output mode (cyclonedx, inventory) — used for `--report` on `build sbom`
 - `LEVEL` — log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 - `SEVERITY` — severity level (CRITICAL, HIGH, MEDIUM, LOW)
 - `SHELL` — shell type (bash, zsh, fish, powershell)
@@ -303,7 +305,7 @@ Generate shell completion scripts.
 Create a new platform configuration file from a template.
 - `NAME` (optional) — Name for the resource
 - `--template TEMPLATE` (optional) — Template name (e.g., namespace, provider, workspace)
-- `-o, --output-file FILE` (optional) — Output file path or directory
+- `--output-file FILE` (optional) — Output file path or directory (no `-o` shorthand — `-o` is reserved for `--output FORMAT`)
 - `--overwrite` — Overwrite if the output file already exists
 - `--set KEY=VALUE` (optional, repeatable) — Override a template variable
 - `--list` — List available templates and exit
@@ -464,6 +466,8 @@ Validate a platform YAML file against its kind-specific schema.
 - `--verbose` — Enable verbose output
 - `--quiet` — Suppress non-error output
 
+**Exit codes (Phase 5a — epilog added):** 0 (success), 1 (system error), 2 (usage error), 3 (validation error). Note: exit code 4 is only returned by `deploy run` and `deploy destroy`.
+
 ---
 
 ### `strata build` — Build Platform and Terraform Artifacts
@@ -507,7 +511,7 @@ Show artifact diff + terraform plan without writing to real build path.
 (Re)generate SBOM from existing platform.json or scan a directory.
 - `-f, --file FILE` (optional) — Path to deployment YAML file (cannot use with: --scan)
 - `--scan PATH` (optional) — Scan directory for SBOM components (cannot use with: -f)
-- `--report FORMAT` (optional) — Output mode (choices: cyclonedx, inventory; default: cyclonedx)
+- `--report REPORT` (optional) — Output mode (choices: cyclonedx, inventory; default: cyclonedx)
 - `--output-file FILE` (optional) — Write output to FILE instead of default location
 - `--no-deps` — Skip lockfile scanning (faster for large repos)
 - `--work-path PATH` — Workspace root (default: current directory)
@@ -534,6 +538,8 @@ Run the deploy pipeline for a deployment definition.
 - `--verbose` — Enable verbose output
 - `--quiet` — Suppress non-error output
 
+**Exit codes (Phase 5a — epilog added):** 0 (success), 1 (system error), 2 (usage error), 3 (validation error), 4 (lock conflict — another deployment in progress; safe to retry).
+
 #### `strata deploy destroy`
 Tear down provisioned infrastructure for a deployment definition.
 - `-f, --file FILE` (required) — Path to deployment YAML file
@@ -541,7 +547,7 @@ Tear down provisioned infrastructure for a deployment definition.
 - `--scope LABEL` (optional) — Destroy only stages matching this scope label
 - `--dry-run` — Plan destruction (terraform plan -destroy) without removing anything (cannot use with: --force)
 - `--force` (required) — Auto-approve terraform destroy non-interactively (cannot use with: --dry-run)
-  > One of `--dry-run` or `--force` must be provided; neither is not accepted.
+  > One of `--dry-run` or `--force` must be provided; neither is not accepted. (Phase 3 — mutual exclusion enforced)
 - `--force-lock` — Force-release held lock before acquiring (recover from crash)
 - `--timeout SECONDS` (optional) — Abort if command does not complete within N seconds (default: 3600)
 - `--stream` — Stream ndjson progress events to stdout during execution **[TODO: not yet implemented]**
@@ -549,6 +555,8 @@ Tear down provisioned infrastructure for a deployment definition.
 - `--output FORMAT` — Output format (choices: console, text, json; default: console)
 - `--verbose` — Enable verbose output
 - `--quiet` — Suppress non-error output
+
+**Exit codes (Phase 5a — epilog added):** 0 (success), 1 (system error), 2 (usage error), 3 (validation error), 4 (lock conflict — another deployment in progress; safe to retry).
 
 #### `strata deploy show`
 Show resolved deployment configuration: remote versions, workspace, and environment.
@@ -569,7 +577,7 @@ Show the resource change summary from the last saved .tfplan file.
 
 #### `strata deploy list`
 List deployment manifests with metadata for CI matrix generation.
-- `-d, --dir PATH` (optional) — Directory to scan for manifests (default: current directory)
+- `--path PATH` (optional) — Directory to scan for manifests (default: current directory)
 - `--work-path PATH` — Workspace root (default: current directory)
 - `--output FORMAT` — Output format (choices: console, text, json; default: console)
 - `--verbose` — Enable verbose output
@@ -630,7 +638,7 @@ Show live Terraform outputs for a deployment.
 - `--name NAME` (optional) — Print single output value only
 - `--provisioner NAME` (optional) — Limit to stages using specific provisioner (default: all)
 - `--raw` — Print bare value with no formatting (requires: --name)
-- `--json` — Emit raw outputs as JSON (bypasses strata envelope)
+- `--json` — Emit raw Terraform JSON output directly, bypassing the strata command envelope (exception to the envelope standard; use when piping output to tools that consume native `terraform output -json` format)
 - `--work-path PATH` — Workspace root (default: current directory)
 - `--output FORMAT` — Output format (choices: console, text, json; default: console)
 - `--verbose` — Enable verbose output
@@ -1011,7 +1019,7 @@ These environment variables are supported by all commands:
 ## Key Changes From Current Version
 
 ### What Changed:
-1. ✅ **File paths standardized:** `-f, --file` for inputs, `-o, --output-file` for outputs, `-p, --pattern` for globs
+1. ✅ **File paths standardized:** `-f, --file` for inputs, `--output-file` for outputs (no `-o` shorthand — `-o` is reserved for `--output`), `-p, --pattern` for globs
 2. ✅ **Standard flags consistent order:** Always last in fixed order: work-path, output, verbose, quiet
 3. ✅ **Required parameters marked:** All required flags/args clearly marked `(required)`
 4. ✅ **Type annotations standardized:** Using consistent NAME, FILE, PATH, PATTERN, KEY, VALUE, INT, FORMAT, LEVEL, etc.
@@ -1032,7 +1040,7 @@ These environment variables are supported by all commands:
 
 Purely mechanical: rename flags, add markers, add annotations. No behaviour changes. Safe to do in one PR per command group.
 
-- [ ] Rename any `-f` / `--file` / `--path` / `--output-file` variants to canonical forms (`-f, --file FILE`, `-o, --output-file FILE`, `-p, --pattern PATTERN`)
+- [ ] Rename any `-f` / `--file` / `--path` / `--output-file` variants to canonical forms (`-f, --file FILE`, `--output-file FILE`, `-p, --pattern PATTERN`)
 - [ ] Add `(required)` suffix to every required flag and positional argument
 - [ ] Add `(default: VALUE)` to every optional flag that has a default
 - [ ] Add `(choices: val1, val2; default: val1)` to every enum parameter
@@ -1090,6 +1098,8 @@ Replace any silent failure or cryptic internal error with an actionable `click.U
 ---
 
 ### Phase 5 — Exit Code Epilogs + `LockConflictError`
+
+> ~~**Prerequisite:** ADR-0004 must be updated to add exit code 4 before this phase is implemented. Phase 5b is blocked until `docs/decisions/0004-exit-code-convention.md` reflects exit codes 0–4.~~ ✅ **RESOLVED 2026-07-17** — ADR-0004 updated; `LockConflictError` implementation complete with 10/10 tests passing. Phase 5b is unblocked.
 
 Two sub-tasks in one phase:
 
@@ -1156,3 +1166,54 @@ Add an idempotency table to the CLI reference. Categories:
   Warning: last destroy execution for 'mydeployment' exited non-zero. Inspect state before retrying.
   ```
 - No behaviour block — just a warning; operator decides whether to proceed.
+
+---
+
+## Open Issues (Review 2026-07-17)
+
+### 🔴 Must Fix
+
+#### Issue 1 — `--path` vs `--pattern` contradiction
+- **Status:** ✅ **RESOLVED 2026-07-17** — Renamed `--path` → `--pattern` in `cli_validate.py` and updated all related documentation (guides, workflow examples, ADRs)
+- **Previous issue:** The Standard Conventions section documented `-p, --pattern PATTERN` but the implementation used `--path` with `-p` shorthand
+- **Resolution:** Implementation now conforms to standard; senior DevOps engineers expect `-p` to be a glob pattern (grep/ripgrep convention)
+
+#### Issue 2 — `-o` shorthand collision
+- **Status:** ✅ **RESOLVED 2026-07-17** — `--output-file` implemented without shorthand to reserve `-o` for `--output FORMAT`
+- **Previous issue:** Standard Conventions defined `-o, --output-file FILE` which collides with `-o` for `--output FORMAT`
+- **Resolution:** `strata new` uses `--output-file FILE` (no shorthand); `-o` is reserved exclusively for `--output FORMAT`; documentation updated
+
+#### ~~Issue 3 — ADR-0004 not updated for exit code 4~~ ✅ RESOLVED 2026-07-17
+- ADR-0004 updated: title, considered options, decision outcome table, consequences, and More Information section now reflect exit codes 0–4
+- Cross-reference added in both ADRs
+
+### 🟡 Should Fix
+
+#### Issue 4 — `FORMAT` metavar overloaded for `--report`
+- **Where:** Type Annotations table defines `FORMAT` as output format (`console, text, json`). But `strata build sbom` uses `--report FORMAT` where `FORMAT` means `cyclonedx, inventory` — a different domain
+- **Fix:** Add `REPORT` to the Type Annotations table for report-mode options. Rename `--report FORMAT` to `--report REPORT` in the `build sbom` spec
+- **Scope:** Type Annotations table, `strata build sbom` spec
+
+#### Issue 5 — Implementation checklist not created
+- **Where:** Implementation Plan section ends with `TODO — create issue with per-command refactoring tasks`
+- **Impact:** No trackable work items exist for the per-command refactoring across 80+ commands. Progress cannot be measured
+- **Fix:** Create a tracking issue (GitHub issue or ADR appendix checklist) with one entry per command group. Mark status as the phases are completed
+
+#### Issue 6 — Missing command groups in reference table
+- **Where:** The following command groups are not documented in the Standard Conventions (Corrected Format) section: `strata audit`, `strata tools`, `strata diff`, `strata vars`, `strata manifest`, `strata mcp`, and the `strata log` group is incomplete
+- **Impact:** The standard is incomplete as an operator reference; new contributors cannot verify conformance for these groups
+- **Fix:** Add a corrected-format entry for each missing command group in a follow-on PR
+
+### 🟢 Minor
+
+#### Issue 7 — `--timeout SECONDS` metavar
+- `SECONDS` is used as metavar but is not defined in the Type Annotations table. Either add `SECONDS` as a type annotation alias for `INT`, or change to `--timeout INT` and rely on the description ("Abort if command does not complete within N seconds") to convey the unit
+- Affects: `strata build run`, `strata deploy run`, `strata deploy destroy`
+
+#### Issue 8 — `strata deploy output --json` bypasses envelope
+- `--json` on `strata deploy output` "bypasses strata envelope" but `--output json` already exists on every command. These are different semantics (raw Terraform JSON vs. strata-wrapped JSON) but are not explicitly distinguished
+- Fix: Add a note clarifying that `--json` on `deploy output` emits raw Terraform JSON output, not the strata command envelope, and is a deliberate exception to the envelope standard
+
+#### Issue 9 — `strata deploy list -d, --dir`
+- Uses `-d` and `--dir` rather than following the `PATH` convention for directory arguments. The standard reserves `-p` for patterns and uses `PATH` as the type for directories
+- Fix: Rename to `-p, --path PATH` or add an explicit exception note explaining why `-d, --dir` is kept

@@ -39,13 +39,23 @@ def validate_group() -> None:
     """Validate platform YAML files and visualize workspace dependencies."""
 
 
-@validate_group.command(name="run")
+@validate_group.command(
+    name="run",
+    epilog=(
+        "Exit codes:\n"
+        "  0  success\n"
+        "  1  system error (infrastructure unavailable, timeout, permissions) — alert\n"
+        "  2  usage error (bad arguments, file not found) — fix script\n"
+        "  3  validation error (schema, cross-ref) — fix config\n\n"
+        "Note: exit code 4 (lock conflict) is only returned by 'deploy run' and 'deploy destroy'."
+    ),
+)
 @click_file
 @click.option(
-    "--path",
+    "--pattern",
     "-p",
     default=None,
-    metavar="GLOB",
+    metavar="PATTERN",
     help=(
         "Glob pattern to select multiple deployment manifests for cross-manifest overlap validation. "
         "Resolved relative to the workspace root against the active profile's configfile_paths. "
@@ -86,7 +96,7 @@ def validate_group() -> None:
 @click_output_quiet
 def validate_run(
     file: Optional[str] = None,
-    path: Optional[str] = None,
+    pattern: Optional[str] = None,
     deep: bool = False,
     verify_digests: bool = False,
     explain: bool = False,
@@ -101,16 +111,16 @@ def validate_run(
 
         strata validate run -f config/deployment.yaml
 
-    Cross-manifest overlap validation (requires --path glob):
+    Cross-manifest overlap validation (requires --pattern glob):
 
-        strata validate run --path "deployments/**"
-        strata validate run --path "deployments/acme-*"
+        strata validate run --pattern "deployments/**"
+        strata validate run --pattern "deployments/acme-*"
     """
-    if not file and not path:
-        raise click.UsageError("Specify a single file with '-f' / '--file', or a glob with '--path' / '-p'.")
+    if not file and not pattern:
+        raise click.UsageError("Specify a single file with '-f' / '--file', or a glob with '--pattern' / '-p'.")
     command = ValidateCommand(
         file=file,
-        path=path,
+        path=pattern,
         deep=deep or verify_digests,
         verify_digests=verify_digests,
         explain=explain,
