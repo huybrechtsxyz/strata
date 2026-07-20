@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import click
@@ -137,6 +138,16 @@ class DriftEnvCommand(BaseDeployCommand):
             result["error"] = "Could not create deployer"
             return result
 
+        # --- emit stage-start (NDJSON) ---
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_start",
+                    "stage": str(stage.name),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
         # Validate workspace + environment
         for validate_fn in (
             deployer.validate_workspace,
@@ -146,26 +157,107 @@ class DriftEnvCommand(BaseDeployCommand):
             if not ok:
                 result["error"] = "; ".join(msgs)
                 self._messages.extend(msgs)
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "stage_end",
+                            "stage": str(stage.name),
+                            "success": False,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
                 return result
 
         # Setup (terraform init)
-        ok, msgs = deployer.setup()
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_start",
+                    "step": "setup",
+                    "stage": str(stage.name),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        setup_cb = (
+            self.make_ndjson_line_callback(step="setup", stage=str(stage.name)) if self._is_ndjson_output() else None
+        )
+        ok, msgs = deployer.setup(line_callback=setup_cb)
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_end",
+                    "step": "setup",
+                    "stage": str(stage.name),
+                    "success": ok,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         if not ok:
             result["error"] = "; ".join(msgs)
             self._messages.extend(msgs)
+            if self._is_ndjson_output():
+                self.emit_ndjson(
+                    {
+                        "event": "stage_end",
+                        "stage": str(stage.name),
+                        "success": False,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
             return result
 
         # Run plan (terraform plan -detailed-exitcode)
-        ok, msgs = deployer.plan()
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_start",
+                    "step": "plan",
+                    "stage": str(stage.name),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        plan_cb = (
+            self.make_ndjson_line_callback(step="plan", stage=str(stage.name)) if self._is_ndjson_output() else None
+        )
+        ok, msgs = deployer.plan(line_callback=plan_cb)
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_end",
+                    "step": "plan",
+                    "stage": str(stage.name),
+                    "success": ok,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         self._messages.extend(msgs)
         if not ok:
             result["error"] = "; ".join(msgs)
+            if self._is_ndjson_output():
+                self.emit_ndjson(
+                    {
+                        "event": "stage_end",
+                        "stage": str(stage.name),
+                        "success": False,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
             return result
 
         # Check if plan detected changes
         if deployer._plan_has_changes is False:
             result["has_drift"] = False
             result["changes"] = {"create": 0, "update": 0, "delete": 0, "replace": 0}
+            if self._is_ndjson_output():
+                self.emit_ndjson(
+                    {
+                        "event": "stage_end",
+                        "stage": str(stage.name),
+                        "success": True,
+                        "has_drift": False,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
             return result
 
         # Changes detected — parse the plan for details
@@ -173,8 +265,18 @@ class DriftEnvCommand(BaseDeployCommand):
         ok, plan_data, msgs = deployer.show_plan()
         self._messages.extend(msgs)
         if not ok:
-            # Plan ran but we can't parse it — still report drift exists
+            # Plan ran but we can’t parse it — still report drift exists
             result["changes"] = {"create": 0, "update": 0, "delete": 0, "replace": 0}
+            if self._is_ndjson_output():
+                self.emit_ndjson(
+                    {
+                        "event": "stage_end",
+                        "stage": str(stage.name),
+                        "success": True,
+                        "has_drift": True,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
             return result
 
         # Count resource changes by action
@@ -205,6 +307,16 @@ class DriftEnvCommand(BaseDeployCommand):
 
         result["changes"] = counts
         result["resources"] = resources
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_end",
+                    "stage": str(stage.name),
+                    "success": True,
+                    "has_drift": True,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         return result
 
     # ------------------------------------------------------------------

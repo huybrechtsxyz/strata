@@ -1,5 +1,6 @@
 """Command to report live Terraform outputs and saved plan details for a deployment."""
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
@@ -113,11 +114,52 @@ class StatusDeployCommand(BaseDeployCommand):
                 return False, {}, msgs
 
         # setup (init) so output can reach the backend
-        ok, msgs = deployer.setup()
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_start",
+                    "step": "setup",
+                    "stage": str(stage.name),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        setup_cb = (
+            self.make_ndjson_line_callback(step="setup", stage=str(stage.name)) if self._is_ndjson_output() else None
+        )
+        ok, msgs = deployer.setup(line_callback=setup_cb)
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_end",
+                    "step": "setup",
+                    "stage": str(stage.name),
+                    "success": ok,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         if not ok:
             return False, {}, msgs
 
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_start",
+                    "step": "output",
+                    "stage": str(stage.name),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         ok, outputs, msgs = deployer.output()
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_end",
+                    "step": "output",
+                    "stage": str(stage.name),
+                    "success": ok,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         return ok, outputs, msgs
 
     def _print_stage_outputs(

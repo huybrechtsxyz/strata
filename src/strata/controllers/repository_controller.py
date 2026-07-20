@@ -323,6 +323,7 @@ class RepositoryController(BaseController):
         work_path: str,
         repos: List[SolutionSpecRepositoryModel],
         force: bool = False,
+        repo_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Tuple[bool, List[Dict[str, Any]]]:
         """Clone or pull repositories registered in a solution.
 
@@ -334,6 +335,9 @@ class RepositoryController(BaseController):
             work_path: Workspace root (repo paths resolved relative to it).
             repos: Solution repository entries to sync.
             force: When True, pull even over dirty trees.
+            repo_callback: Optional callable invoked after each repo completes,
+                receiving the per-repo result dict.  Use this to emit live
+                progress events (e.g. NDJSON streaming).
 
         Returns:
             ``(all_ok, results)`` where *results* is a list of per-repo dicts::
@@ -356,17 +360,18 @@ class RepositoryController(BaseController):
                     status = "missing"
                     error = f"Local path not found: {repo.url}"
                     self._errors.append(error)
-                results.append(
-                    {
-                        "name": str(repo.name),
-                        "url": repo.url,
-                        "path": str(local_path),
-                        "branch": repo.branch,
-                        "action": "local",
-                        "status": status,
-                        "error": error,
-                    }
-                )
+                result: Dict[str, Any] = {
+                    "name": str(repo.name),
+                    "url": repo.url,
+                    "path": str(local_path),
+                    "branch": repo.branch,
+                    "action": "local",
+                    "status": status,
+                    "error": error,
+                }
+                results.append(result)
+                if repo_callback:
+                    repo_callback(result)
                 continue
 
             # gitops repo — initialise git integration on first use
@@ -385,6 +390,8 @@ class RepositoryController(BaseController):
                 force=force,
             )
             results.append(result)
+            if repo_callback:
+                repo_callback(result)
             if result["status"] == "failed":
                 self._errors.append(result["error"] or f"Sync failed for '{repo.name}'")
 

@@ -1,6 +1,7 @@
 """Command to sync (clone or pull) repositories in an Strata solution."""
 
-from typing import Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 import click
 
@@ -55,13 +56,51 @@ class SyncRepoSolutionCommand(BaseCommand):
             self._errors.append("No repositories registered in solution.")
             return False
 
-        # Step 2: RepositoryController performs the git operations
+        # Step 2: emit stage-start (NDJSON) and wire per-repo callback
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_start",
+                    "stage": "repo_sync",
+                    "count": len(repos),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        def _repo_cb(result: Dict[str, Any]) -> None:
+            self.emit_ndjson(
+                {
+                    "event": "data",
+                    "type": "repo_sync_result",
+                    "repo": result["name"],
+                    "action": result["action"],
+                    "status": result["status"],
+                    "path": result.get("path"),
+                    "error": result.get("error"),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+        # Step 3: RepositoryController performs the git operations
         repo_controller = RepositoryController()
         all_ok, results = repo_controller.sync_solution_repos(
             work_path=str(self._work_path),
             repos=repos,
             force=self._force,
+            repo_callback=_repo_cb if self._is_ndjson_output() else None,
         )
+
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_end",
+                    "stage": "repo_sync",
+                    "success": all_ok,
+                    "synced": sum(1 for r in results if r["status"] == "ok"),
+                    "failed": sum(1 for r in results if r["status"] in ("failed", "missing")),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
 
         self._sync_results = results
         self._errors.extend(repo_controller.get_errors())

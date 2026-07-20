@@ -3,6 +3,7 @@
 import socket
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
@@ -164,13 +165,73 @@ class HealthDeployCommand(BaseDeployCommand):
             ok_ws, _ = deployer.validate_workspace()
             ok_env, _ = deployer.validate_environment()
             if ok_ws and ok_env:
-                ok_setup, _ = deployer.setup()
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "stage_start",
+                            "stage": str(stage.name),
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                setup_cb = (
+                    self.make_ndjson_line_callback(step="setup", stage=str(stage.name))
+                    if self._is_ndjson_output()
+                    else None
+                )
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "step_start",
+                            "step": "setup",
+                            "stage": str(stage.name),
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                ok_setup, _ = deployer.setup(line_callback=setup_cb)
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "step_end",
+                            "step": "setup",
+                            "stage": str(stage.name),
+                            "success": ok_setup,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
                 if ok_setup:
+                    if self._is_ndjson_output():
+                        self.emit_ndjson(
+                            {
+                                "event": "step_start",
+                                "step": "output",
+                                "stage": str(stage.name),
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        )
                     ok_out, outputs, _ = deployer.output()
+                    if self._is_ndjson_output():
+                        self.emit_ndjson(
+                            {
+                                "event": "step_end",
+                                "step": "output",
+                                "stage": str(stage.name),
+                                "success": ok_out,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            }
+                        )
                     if not ok_out:
                         outputs = {}
                     # Query live infrastructure state via deployer.status()
                     _, deployer_status, _ = deployer.status()
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "stage_end",
+                            "stage": str(stage.name),
+                            "success": ok_setup,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
 
         check_results: List[Dict[str, Any]] = []
         all_passed = True

@@ -1,6 +1,7 @@
 """Show Terraform outputs for a deployment — from cache, live backend, or stored artifacts."""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -158,12 +159,53 @@ class OutputDeployCommand(BaseDeployCommand):
             if not ok:
                 return False, {}, None, msgs
 
-        ok, msgs = deployer.setup()
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_start",
+                    "step": "setup",
+                    "stage": str(stage.name),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        setup_cb = (
+            self.make_ndjson_line_callback(step="setup", stage=str(stage.name)) if self._is_ndjson_output() else None
+        )
+        ok, msgs = deployer.setup(line_callback=setup_cb)
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_end",
+                    "step": "setup",
+                    "stage": str(stage.name),
+                    "success": ok,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         if not ok:
             return False, {}, None, msgs
 
         # output() writes the cache as a side effect
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_start",
+                    "step": "output",
+                    "stage": str(stage.name),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         ok, outputs, msgs = deployer.output()
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "step_end",
+                    "step": "output",
+                    "stage": str(stage.name),
+                    "success": ok,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         return ok, outputs, None, msgs
 
     def _read_cache(
