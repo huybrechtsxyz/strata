@@ -523,7 +523,8 @@ class TestGenerateAndMaskIntegration:
         assert gen_result.exit_code == 0
         password = gen_result.output.strip()
 
-        mask_result = runner.invoke(secret_group, ["mask", password, "--show", "5"])
+        # Use -- to stop Click from treating a password that starts with '-' as an option flag.
+        mask_result = runner.invoke(secret_group, ["mask", "--show", "5", "--", password])
         assert mask_result.exit_code == 0
         masked = mask_result.output.strip()
         assert len(masked) == len(password)
