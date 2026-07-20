@@ -1,5 +1,7 @@
 """Common Click decorators, option callbacks, and exit-code helpers for Strata CLI commands."""
 
+from typing import Any
+
 import click
 
 OUTPUT_FORMATS = ["console", "text", "json", "ndjson"]
@@ -16,9 +18,9 @@ STANDARD_EPILOG = (
 )
 
 
-def apply_standard_epilog(cmd: click.BaseCommand) -> None:
+def apply_standard_epilog(cmd: Any) -> None:
     """Recursively set STANDARD_EPILOG on all leaf commands that have no epilog defined."""
-    if isinstance(cmd, click.MultiCommand):
+    if isinstance(cmd, click.Group):
         for sub in cmd.commands.values():
             apply_standard_epilog(sub)
     elif not getattr(cmd, "epilog", None):
