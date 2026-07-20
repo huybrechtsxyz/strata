@@ -18,14 +18,30 @@ These options are accepted by every command and subcommand:
 
 ## Exit Codes
 
-| Code | Meaning                                                      |
-| ---- | ------------------------------------------------------------ |
-| `0`  | Success                                                      |
-| `1`  | System / execution failure (crash, missing file, init error) |
-| `2`  | Usage error — invalid CLI arguments (Click default)          |
-| `3`  | Validation failure — file processed but schema-invalid       |
+| Code | Meaning                                                                                                                           |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | Success                                                                                                                           |
+| `1`  | System / execution failure (crash, missing file, init error)                                                                      |
+| `2`  | Usage error — invalid CLI arguments (Click default)                                                                               |
+| `3`  | Validation failure — file processed but schema-invalid                                                                            |
+| `4`  | Lock conflict — another deployment holds the lock; safe to retry after delay. Only returned by `deploy run` and `deploy destroy`. |
 
 > **Using strata in CI/CD?** See [ci-integration.md](ci-integration.md) for complete GitHub Actions and Azure Pipelines examples that leverage these exit codes.
+
+---
+
+## Idempotency & Retry Safety
+
+This table answers: *"If this command fails, is it safe to re-run without manual cleanup?"*
+
+| Category                         | Commands                                                                                                                                                                                                        | Safe to re-run?                                                                                                                                                                                        |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Read-only**                    | All `status`, `show`, `list`, `get`, `history`, `health`, `info`, `output`, `graph`, `check`, `export` subcommands; `validate run`; `guide`; `version`; `schema *`; `policy list`; `tools status`; `completion` | ✅ Always safe — no state is written                                                                                                                                                                    |
+| **Write-idempotent**             | `sln init`, `sln update`, `config set/unset`, `profile add/activate`, `ref * add/remove`, `repo add/remove/sync`, `vars set/unset`, `values set`, `build plan`, `build clean`                                   | ✅ Safe — produces the same result each time; re-running after failure leaves no partial state                                                                                                          |
+| **Retry-safe with caveats**      | `build run`, `build sbom`, `deploy run`                                                                                                                                                                         | ⚠️ Safe to retry — provisioners are designed for re-entrant execution, but a failed deploy may leave infrastructure in an intermediate state; inspect `deploy status` before retrying                   |
+| **Destructive / side-effecting** | `deploy destroy`, `service destroy`, `sln clean`, `secret put`, `secret rotate`, `audit resend`                                                                                                                 | ❌ Manual review required before re-running — these commands delete infrastructure, overwrite secret values in external stores, or re-send audit records that may already have been partially processed |
+
+> **Lock conflicts (exit 4):** If `deploy run` or `deploy destroy` exits with code 4, another process holds the deployment lock. Wait for it to release (or use `deploy lock status` to inspect), then retry. Do **not** use `deploy lock release` unless the lock is stale from a crashed pipeline.
 
 ---
 

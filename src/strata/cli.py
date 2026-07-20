@@ -27,6 +27,7 @@ import yaml
 
 from strata.commands.cli_audit import audit_group
 from strata.commands.cli_builders import build as build_group
+from strata.commands.cli_common import apply_standard_epilog
 from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
 from strata.commands.cli_console import console_command
@@ -288,6 +289,12 @@ main.add_command(service_group, name="service")
 main.add_command(audit_group, name="audit")
 main.add_command(manifest_group, name="manifest")
 main.add_command(mcp_group, name="mcp")
+
+# Apply the standard exit-code epilog to every leaf command that doesn't
+# already define its own (deploy run / deploy destroy / validate run carry
+# command-specific epilogs and are intentionally skipped).
+apply_standard_epilog(main)
+
 # ENTRY POINT
 #
 

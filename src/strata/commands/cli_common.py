@@ -1,8 +1,30 @@
 """Common Click decorators, option callbacks, and exit-code helpers for Strata CLI commands."""
 
+from typing import Any
+
 import click
 
 OUTPUT_FORMATS = ["console", "text", "json", "ndjson"]
+
+# Standard exit-code epilog applied to every leaf command that doesn't define its own.
+# deploy run / deploy destroy / validate run carry command-specific epilogs and are skipped.
+STANDARD_EPILOG = (
+    "Exit codes:\n"
+    "  0  success\n"
+    "  1  system error (infrastructure unavailable, timeout, permissions) \u2014 alert\n"
+    "  2  usage error (bad arguments, file not found) \u2014 fix script\n"
+    "  3  validation error (schema, cross-ref) \u2014 fix config\n\n"
+    "Note: exit code 4 (lock conflict) is only returned by 'deploy run' and 'deploy destroy'."
+)
+
+
+def apply_standard_epilog(cmd: Any) -> None:
+    """Recursively set STANDARD_EPILOG on all leaf commands that have no epilog defined."""
+    if isinstance(cmd, click.Group):
+        for sub in cmd.commands.values():
+            apply_standard_epilog(sub)
+    elif not getattr(cmd, "epilog", None):
+        cmd.epilog = STANDARD_EPILOG
 
 
 # Exit code handler for commands with validation

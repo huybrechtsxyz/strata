@@ -174,7 +174,7 @@ class ListPolicyCommand(BaseCommand):
 
         profile, _ = self._solution_controller.get_active_profile()
         if profile is None:
-            self._errors.append("policy list requires an active profile. Run `strata profile activate <name>`.")
+            self._errors.append("No active profile. Run `strata profile activate <name>` first.")
             return None
 
         configfile_paths = profile.configfile_paths or []

@@ -79,6 +79,8 @@ class BaseCommand:
         try:
             if not self._initialize(show_header=self.SHOW_CHROME):
                 success = False
+        except click.UsageError:
+            raise
         except Exception as e:
             error_msg = f"Initialization failed in {self.__class__.__name__}: {e}"
             self.logger.exception(error_msg)
@@ -91,6 +93,8 @@ class BaseCommand:
                 if self._is_console_output():
                     click.echo("\n\u274c  Pre-execution validation failed")
                 success = False
+        except click.UsageError:
+            raise
         except Exception as e:
             error_msg = f"Pre-execution failed in {self.__class__.__name__}: {e}"
             self.logger.exception(error_msg)
@@ -101,6 +105,8 @@ class BaseCommand:
         try:
             if success and not self._execute():
                 success = False
+        except click.UsageError:
+            raise
         except Exception as e:
             error_msg = f"Execution failed in {self.__class__.__name__}: {e}"
             self.logger.exception(error_msg)
@@ -111,6 +117,8 @@ class BaseCommand:
         try:
             if not self._after_execute():
                 success = False
+        except click.UsageError:
+            raise
         except Exception as e:
             error_msg = f"Post-execution failed in {self.__class__.__name__}: {e}"
             self.logger.exception(error_msg)

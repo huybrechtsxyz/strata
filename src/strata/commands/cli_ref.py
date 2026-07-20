@@ -207,7 +207,9 @@ class _ListSingleTypeCommand(ListProfilePathCommand):
                 self._errors.extend(errors)
                 return False
             if active is None:
-                self._errors.append("No active profile found. Use --profile to specify one.")
+                self._errors.append(
+                    "No active profile. Run 'strata profile activate <name>' first, or pass --profile NAME."
+                )
                 return False
             self._profile_name = str(active.name)
 

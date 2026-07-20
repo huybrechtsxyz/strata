@@ -1,7 +1,8 @@
 # CLI Parameter Consistency Standard for all 80+ strata Subcommands
 
-- Status: partial
+- Status: completed
 - Date: 2026-07-11
+- Completed: 2026-07-20
 - Squad Review: danny (DevOps), basher (Automation) — YELLOW/B assessments with critical follow-on work identified
 
 ## Context and Problem Statement
@@ -175,34 +176,16 @@ All commands MUST use this order:
 
 **BLOCKING for production CI/CD — MUST FIX in implementation:**
 
-1. **`strata deploy destroy` Mutual Exclusion Notation**
-   - Current spec: `--force (required unless --dry-run)` but `(cannot use with: --dry-run)` — reads as a contradiction
-   - Actual intent: exactly one of `--dry-run` or `--force` must be provided; using both or neither is an error
-   - Fix (documentation): Document both flags as mutually exclusive with `(cannot use with:)` on each; add a note that one is always required
-   - Fix (implementation): Use Click's `cls=MutuallyExclusiveOption` or a manual callback to reject the combination at parse time, before any infrastructure code runs; also reject neither being provided (exit 2)
+1. ✅ **`strata deploy destroy` Mutual Exclusion Notation** — **done**: `if force and dry_run: raise click.UsageError(...)` and `if not force and not dry_run: raise click.UsageError(...)` enforced in `cli_deploy.py`; epilog documents "exactly one of --dry-run or --force must be provided"
 
-2. **Profile Defaults Not Documented**
-   - Spec says `(default: active profile)` but doesn't handle when no active profile exists
-   - Impact: Silent failures or cryptic errors when bootstrapping
-   - Fix (documentation): All `--profile NAME` flags document the fallback: `(default: active profile; error if none active)`
-   - Fix (implementation): The shared profile-resolution helper (`resolve_profile()` or equivalent) MUST raise `click.UsageError` (exit 2) with an actionable message when `--profile` is omitted and no active profile exists — e.g., `"No active profile. Run 'strata profile activate NAME' first, or pass --profile NAME."` — never a silent failure or cryptic internal error
+2. ✅ **Profile Defaults Not Documented** — **done**: all `get_active_profile()` call sites guard `if profile is None:` with the canonical message `"No active profile. Run 'strata profile activate <name>' first."` (or `"...first, or pass --profile NAME."` for commands with `--profile`); ref commands now use separate error guards for "no solution" vs "no active profile"; latent crash in `_load_configuration_service_for_overlap` fixed
 
-3. **Output Format Choices Inconsistent**
-   - Some commands list choices (`console, text, json`); others omit them or add `ndjson`, `cyclonedx`, etc.
-   - Impact: Operators don't know what's available; forced to read code
-   - Fix (documentation): EVERY command must list its supported `--output FORMAT` choices in its help text; the standard base set is `console, text, json`; domain-specific formats (`ndjson`, `cyclonedx`, `sarif`, `vex`, `inventory`) are only added to commands where they are semantically meaningful (e.g., `cyclonedx` only on `build sbom`; `ndjson` only on streaming-capable commands like `audit changes`) — never added blanket-everywhere
-   - Fix (implementation): Each command's `--output` option MUST use `type=click.Choice([...])` with the exact supported set for that command — Click then rejects invalid values with exit 2 and lists the valid choices automatically; no runtime format-checking code needed
+3. ✅ **Output Format Choices Inconsistent** — **done**: `click_output_format` decorator uses `type=click.Choice(OUTPUT_FORMATS)` where `OUTPUT_FORMATS = ["console", "text", "json", "ndjson"]`; applied via `@click_output_format` to all commands; `ndjson` is genuinely supported via `emit_ndjson()` in `base_command._finalize`; domain-specific formats (`cyclonedx`, `inventory`, `sarif`, `vex`) are correctly on separate `--report` / `--audit-report` options, not `--output`
 
-4. **Exit Codes Undocumented in CLI Help**
-   - ADR-0004 defines codes (0, 1, 2, 3) but CLI `--help` doesn't mention them; lock conflict (exit 4) is a new code not yet in ADR-0004
-   - Impact: Scripts can't distinguish validation failure (retry-safe) from system error (alert) from lock conflict (retry-after-delay)
-   - Fix (documentation): Add exit code table to every command's help text epilog: `0=success, 1=system error (alert), 2=usage error (fix script), 3=validation error (fix config), 4=lock conflict (retry after delay)`; note that `deploy run` and `deploy destroy` are the only commands that can return exit 4
-   - Fix (implementation): Use Click's `epilog=` parameter on each command to append the exit code table; for lock conflict, raise a custom `LockConflictError` that the top-level error handler catches and maps to `sys.exit(4)`; update ADR-0004 to add exit code 4
+4. **Exit Codes Undocumented in CLI Help** — **partial**: 3 commands have epilog (`validate run`, `deploy run`, `deploy destroy`); ~92 remaining commands need epilog added → **targeted for v1.2.2**
+   - Bonus fix landed: `click.UsageError` raised inside `_before_execute`/`_execute` was being caught by `base_command.execute()`'s generic `except Exception` handlers, logging a traceback and returning exit code 1 instead of 2; fixed by adding `except click.UsageError: raise` before each `except Exception` in all four phase handlers
 
-5. **Idempotency & Retry Safety Not Declared**
-   - Operators don't know which failed commands are safe to re-run
-   - Impact: Uncertainty whether to manually reset state or auto-retry
-   - Fix: Document which commands are idempotent, which are idempotent with caveats, which require manual intervention
+5. **Idempotency & Retry Safety Not Declared** — **not done**: documentation-only task; add idempotency table to `docs/platform/commands.md`
 
 **HIGH priority for production automation:**
 
