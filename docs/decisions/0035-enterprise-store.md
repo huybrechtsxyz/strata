@@ -1,7 +1,24 @@
-# Enterprise Store — Private Organization-Level Content Registry
+# Enterprise Catalog — Private Organization-Level Content Repository
 
-- Status: partial
+- Status: deferred
 - Date: 2026-07-11
+
+## Revised Design Direction (2026-07-21)
+
+**The `strata store` CLI command group proposed below is dropped.** Two reasons:
+
+1. **Naming collision**: `store` is already a first-class concept in strata — `SecretStoreType`, `VariableStoreType`, `FeatureStoreType`, and `ManifestStoreType` all use "store" to mean the backend where values live (`azure-keyvault`, `bitwarden`, `constant`, etc.). A `strata store add` command would be confusing alongside `spec.secrets[].store: azure-keyvault` in YAML files.
+
+2. **Duplicate mechanism**: The transport is identical to `strata repo`. A catalog is simply a git repo with a `catalog.yaml` manifest — users register it with `strata repo add` and sync it with `strata repo sync`. No new command group is needed.
+
+**Revised CLI surface:**
+- Registration/sync: existing `strata repo add/sync/remove/list`
+- Discovery: `strata repo browse <name>` — lists catalog content from repos that have a `catalog.yaml`
+- The manifest file is renamed `catalog.yaml` (not `store.yaml`) to avoid the collision
+
+The detailed design below is preserved for reference but should be re-read with these amendments in mind. The term **"catalog"** replaces **"store"** throughout.
+
+---
 
 ## Context and Problem Statement
 
