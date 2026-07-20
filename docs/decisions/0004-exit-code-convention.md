@@ -1,6 +1,6 @@
 # Five exit codes: 0 success, 1 system, 2 usage, 3 validation, 4 lock conflict
 
-- Status: implemented
+- Status: completed
 - Date: 2025-07-16
 - Extended: 2026-07-17 (ADR-0020 added exit code 4 — lock conflict)
 - Implementation completed: 2026-07-17 (all 4 steps, 10 tests passing)
