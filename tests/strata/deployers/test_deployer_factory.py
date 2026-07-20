@@ -362,3 +362,109 @@ class TestBaseDeployerLifecycleMethods:
         ok, data, msgs = deployer.health()
         assert ok is True
         assert isinstance(data, dict)
+
+
+class TestDeployerFactoryManifestLoading:
+    """Tests for provisioner.yaml manifest loading inside load_plugins()."""
+
+    _PLUGIN_CODE = """
+from strata.deployers.base_deployer import BaseDeployer
+
+class ManifestPluginDeployer(BaseDeployer):
+    def get_deployer_name(self): return "myplugin"
+    def get_supported_steps(self): return ["setup", "apply"]
+    def validate_workspace(self): return True, []
+    def validate_environment(self): return True, []
+    def setup(self): return True, []
+    def check(self): return True, []
+    def plan(self): return True, []
+    def apply(self): return True, []
+    def destroy(self): return True, []
+    def plan_destroy(self): return True, []
+    def show_plan(self): return True, {}, []
+    def output(self): return True, {}, []
+"""
+
+    def setup_method(self):
+        DeployerFactory.reset()
+
+    def teardown_method(self):
+        DeployerFactory.reset()
+
+    def test_load_sibling_yaml_manifest(self, tmp_path: Path):
+        """load_plugins() reads a sibling {stem}.yaml alongside the .py file."""
+        plugins_dir = tmp_path / ".strata" / "provisioners"
+        plugins_dir.mkdir(parents=True)
+        (plugins_dir / "myplugin.py").write_text(self._PLUGIN_CODE)
+        (plugins_dir / "myplugin.yaml").write_text(
+            "name: myplugin\nversion: '1.2.3'\ndescription: Test plugin\nrequires:\n  - myplugin-cli\n"
+        )
+
+        DeployerFactory.load_plugins(tmp_path)
+
+        manifests = DeployerFactory.get_manifests()
+        assert "myplugin" in manifests
+        assert manifests["myplugin"].version == "1.2.3"
+        assert manifests["myplugin"].description == "Test plugin"
+        assert manifests["myplugin"].requires == ["myplugin-cli"]
+
+    def test_load_fallback_provisioner_yaml(self, tmp_path: Path):
+        """Falls back to provisioner.yaml when no {stem}.yaml exists."""
+        plugins_dir = tmp_path / ".strata" / "provisioners"
+        plugins_dir.mkdir(parents=True)
+        plugin_code = self._PLUGIN_CODE.replace('"myplugin"', '"fallback_plugin"').replace(
+            "ManifestPluginDeployer", "FallbackPluginDeployer"
+        )
+        (plugins_dir / "fallback_plugin.py").write_text(plugin_code)
+        (plugins_dir / "provisioner.yaml").write_text("name: fallback_plugin\nversion: '0.1.0'\n")
+
+        DeployerFactory.load_plugins(tmp_path)
+
+        manifests = DeployerFactory.get_manifests()
+        assert "fallback_plugin" in manifests
+        assert manifests["fallback_plugin"].version == "0.1.0"
+
+    def test_invalid_manifest_does_not_crash(self, tmp_path: Path):
+        """A broken provisioner.yaml is logged but doesn't prevent plugin load."""
+        plugins_dir = tmp_path / ".strata" / "provisioners"
+        plugins_dir.mkdir(parents=True)
+        plugin_code = self._PLUGIN_CODE.replace('"myplugin"', '"badmanifest_plugin"').replace(
+            "ManifestPluginDeployer", "BadManifestDeployer"
+        )
+        (plugins_dir / "badmanifest_plugin.py").write_text(plugin_code)
+        (plugins_dir / "badmanifest_plugin.yaml").write_text("!!invalid yaml: [")
+
+        DeployerFactory.load_plugins(tmp_path)
+
+        # Plugin still registered despite bad manifest
+        assert DeployerFactory.is_known_type("badmanifest_plugin")
+        # Manifest not loaded
+        assert "badmanifest_plugin" not in DeployerFactory.get_manifests()
+
+    def test_reset_clears_manifests(self, tmp_path: Path):
+        """reset() also clears _manifests."""
+        plugins_dir = tmp_path / ".strata" / "provisioners"
+        plugins_dir.mkdir(parents=True)
+        plugin_code = self._PLUGIN_CODE.replace('"myplugin"', '"reset_plugin"').replace(
+            "ManifestPluginDeployer", "ResetPluginDeployer"
+        )
+        (plugins_dir / "reset_plugin.py").write_text(plugin_code)
+        (plugins_dir / "reset_plugin.yaml").write_text("name: reset_plugin\nversion: '1.0.0'\n")
+
+        DeployerFactory.load_plugins(tmp_path)
+        assert len(DeployerFactory.get_manifests()) == 1
+
+        DeployerFactory.reset()
+        assert len(DeployerFactory.get_manifests()) == 0
+
+    def test_get_manifests_returns_copy(self, tmp_path: Path):
+        """get_manifests() returns a copy so mutations don't affect internal state."""
+        plugins_dir = tmp_path / ".strata" / "provisioners"
+        plugins_dir.mkdir(parents=True)
+        (plugins_dir / "myplugin.py").write_text(self._PLUGIN_CODE)
+        (plugins_dir / "myplugin.yaml").write_text("name: myplugin\nversion: '1.0.0'\n")
+
+        DeployerFactory.load_plugins(tmp_path)
+        copy = DeployerFactory.get_manifests()
+        copy["injected"] = None  # type: ignore[assignment]
+        assert "injected" not in DeployerFactory.get_manifests()
