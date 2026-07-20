@@ -72,8 +72,17 @@ class BaseCommand:
     def execute(self) -> bool:
         """Execute the command using the standard lifecycle.
 
-        Runs all five phases unconditionally. Each phase is wrapped in try/except;
-        errors accumulate in self._errors. _finalize always runs as the final step.
+        Phase execution contract (short-circuit on early failure):
+
+        - Phase 1 (``_initialize``): always runs.
+        - Phase 2 (``_before_execute``): skipped if phase 1 failed.
+        - Phase 3 (``_execute``): skipped if phase 1 or 2 failed.
+        - Phase 4 (``_after_execute``): always runs regardless of earlier failures.
+        - Phase 5 (``_finalize``): always runs — writes audit entry and structured output.
+
+        Each phase is wrapped in try/except; errors accumulate in ``self._errors``.
+        Skipping phases 2–3 on early failure prevents cascading errors when the
+        workspace is not initialised (e.g. no ``solution.json``).
 
         Override ``_execute()`` to provide command-specific logic.
         Override individual phases (``_initialize``, ``_before_execute``, etc.)
