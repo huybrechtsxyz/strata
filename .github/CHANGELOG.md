@@ -9,6 +9,22 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ---
 
+## [1.2.1] — 2026-07-20
+
+### Changed
+
+- **`strata new --output-file` replaces `--path`** — `--path` / `-p` renamed to `--output-file` for naming consistency with other commands
+- **`strata validate run --pattern` replaces `--path`** — option renamed from `--path` to `--pattern` (`-p`) for clarity; describes glob patterns used for cross-manifest overlap validation
+- **Exit code 4 for lock conflicts** — `handle_command_exit` now prioritises lock conflict detection before other failure types; `deploy run` and `deploy destroy` exit with code `4` when another process holds the deployment lock
+- **`LockConflictError` / `LockTimeoutError` hierarchy** — `LockTimeoutError` is now a subclass of `LockConflictError`, enabling callers to catch either level of locking failure; exit code 4 is emitted for both
+
+### Fixed
+
+- `strata secret mask` — passwords or tokens starting with `-` are now handled correctly when passed as a positional argument in automated scripts (flaky test fixed; use `--` separator before the value when the secret may start with a dash)
+- Sphinx docs — `decisions/` directory excluded from GitHub Pages build; removed stale toctree references that caused "not in doctree" warnings
+
+---
+
 ## [1.2.0] — 2026-07-16
 
 ### Added
