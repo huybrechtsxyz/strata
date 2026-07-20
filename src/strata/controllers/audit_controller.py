@@ -28,11 +28,18 @@ if TYPE_CHECKING:
 
 # Built-in path definitions — used when spec.deployment.paths is absent
 BUILTIN_PATH_DEFINITIONS: Dict[str, str] = {
+    # ── Simple ──────────────────────────────────────────────────────────────
     "flat": "{{ deployment }}",
     "by-stage": "{{ deployment }}/{{ stage }}",
+    # ── Time-based (default) ────────────────────────────────────────────────
     "by-execution": "{{ deployment }}/{{ timestamp }}",
+    "by-date": "{{ deployment }}/{{ date }}/{{ timestamp }}",
+    # ── Layer / environment ─────────────────────────────────────────────────
+    "by-environment": "{{ environment }}/{{ deployment }}/{{ timestamp }}",
+    "by-workspace": "{{ workspace }}/{{ deployment }}/{{ timestamp }}",
+    # ── Multi-level ─────────────────────────────────────────────────────────
     "by-tenant": "{{ tenant }}/{{ deployment }}/{{ timestamp }}",
-    "full": "{{ tenant }}/{{ workspace }}/{{ deployment }}/{{ timestamp }}",
+    "full": "{{ tenant }}/{{ workspace }}/{{ environment }}/{{ deployment }}/{{ timestamp }}",
 }
 
 
@@ -198,12 +205,21 @@ class AuditController(BaseController):
     # Layer 4 — Remote push, PR enrichment, SIEM forwarding
     # ------------------------------------------------------------------
 
-    def push_to_remote(self, paths: List[Path], remote_name: str = "origin") -> bool:
+    def push_to_remote(
+        self,
+        paths: List[Path],
+        remote_name: str = "origin",
+        working_dir: Optional[Path] = None,
+    ) -> bool:
         """Stage, commit, and push deploy-log files to a git remote.
 
         Args:
-            paths: List of deploy-log file paths to commit.
-            remote_name: Git remote name to push to.
+            paths:       List of deploy-log file paths to commit.
+            remote_name: Git remote name to push to (default: 'origin').
+            working_dir: Directory to run git operations from.  Defaults to
+                         ``self._work_path``.  Pass the resolved path of a
+                         registered solution repo to push from that repo's
+                         working tree.
 
         Returns:
             True if push succeeded, False otherwise.
@@ -219,23 +235,24 @@ class AuditController(BaseController):
             self.logger.warning("push_to_remote_git_unavailable")
             return False
 
-        working_dir = str(self._work_path)
+        wd = str(working_dir) if working_dir else str(self._work_path)
+        base = working_dir if working_dir else self._work_path
 
         # Stage the files
         relative_paths = []
         for p in paths:
             try:
-                relative_paths.append(str(p.relative_to(self._work_path)))
+                relative_paths.append(str(p.relative_to(base)))
             except ValueError:
                 relative_paths.append(str(p))
 
-        result = git.add(working_dir, relative_paths)
+        result = git.add(wd, relative_paths)
         if result.returncode != 0:
             self.logger.warning("push_to_remote_add_failed", stderr=result.stderr)
             return False
 
         # Commit
-        result = git.commit(working_dir, "chore(audit): deploy-log update [skip ci]")
+        result = git.commit(wd, "chore(audit): deploy-log update [skip ci]")
         if result.returncode != 0:
             # Nothing to commit is acceptable (returncode 1 with "nothing to commit")
             if "nothing to commit" in (result.stdout or "") + (result.stderr or ""):
@@ -245,7 +262,7 @@ class AuditController(BaseController):
             return False
 
         # Push
-        result = git.push(working_dir, remote=remote_name)
+        result = git.push(wd, remote=remote_name)
         if result.returncode != 0:
             self.logger.warning("push_to_remote_push_failed", stderr=result.stderr)
             return False

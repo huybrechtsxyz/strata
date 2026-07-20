@@ -63,7 +63,7 @@ This table answers: *"If this command fails, is it safe to re-run without manual
 | `schema`     | `list` `get`                                                                           | Inspect JSON schemas for platform YAML kinds              |
 | `policy` †   | `list` `check`                                                                         | Inspect and evaluate deployment guardrails                |
 | `secret`     | `generate` `mask`                                                                      | Generate and manage secret values                         |
-| `audit` †    | `changes` `resend` `export`                                                            | Query deploy-log evidence and forward to audit sinks      |
+| `audit` †    | `changes` `resend` `export` `diff`                                                     | Query deploy-log evidence and forward to audit sinks      |
 | `deploy` †   | `run` `destroy` `show` `status` `history` `health` `drift` `output` `outputs` `lock *` | Deploy platform using provisioners                        |
 | `service` †  | `list` `status` `deploy` `destroy`                                                     | Deploy and manage individual services                     |
 | `manifest` † | `list` `show` `export`                                                                 | Query and export deployment manifests                     |
@@ -1814,9 +1814,39 @@ strata audit export --format ndjson --out audit-$(date +%Y%m).ndjson
 strata audit export --since 2026-06-01T00:00:00Z --format ndjson | jq 'select(.success == false)'
 ```
 
+### `audit diff`
+
+```
+strata audit diff FROM_ID TO_ID [standard options]
+```
+
+Show the YAML configuration changes between two deployment executions. Retrieves the `commit_sha` fields from both deploy-log entries and runs `git diff <sha_before> <sha_after>` on the deployment YAML file. Useful for auditors who need to see exactly what configuration values changed between two deployments.
+
+| Argument  | Description                                                   |
+| --------- | ------------------------------------------------------------- |
+| `FROM_ID` | Execution ID of the earlier deployment (from `audit changes`) |
+| `TO_ID`   | Execution ID of the later deployment (from `audit changes`)   |
+
+**Exit codes:** `0` no changes · `1` system error · `3` changes detected (scriptable CI gate)
+
+```bash
+# Compare two consecutive deployments
+strata audit diff 12345678-aabb-ccdd-eeff-000000000001 12345678-aabb-ccdd-eeff-000000000002
+
+# Machine-readable — check whether configuration changed
+strata audit diff $FROM_ID $TO_ID --output json | jq '.has_changes'
+
+# Use as a CI gate — exits 3 if configuration changed
+strata audit diff $FROM_ID $TO_ID
+```
+
+**Console output:** colourised unified diff with a metadata header showing deployment name, file, commit SHAs, timestamps, and PR numbers (if PR enrichment is configured).
+
+**JSON output keys:** `from{}`, `to{}`, `file`, `has_changes`, `diff` (raw unified diff string).
+
 ### Audit configuration
 
-Configure audit output in the `spec.deployment.audit` block of your **configuration** YAML (`kind: configuration`):
+Configure audit output in the `spec.audit` block of your **configuration** YAML (`kind: configuration`):
 
 ```yaml
 spec:
@@ -1827,13 +1857,24 @@ spec:
 
     audit:
       path: .strata/deploy-log         # base directory (relative to workspace root)
-      structure: by-execution          # named path from spec.deployment.paths, or inline Jinja2
-      file_per_stage: true             # true: one JSON per stage; false: single execution.json
-      remote: xyz-configuration        # gitops remote to push audit records to (optional)
-      include_in_manifest: true        # cross-reference audit path in deployment manifest (optional)
+      structure: by-execution          # built-in or inline Jinja2 template
+      repository: xyz-configuration    # registered solution repo to push audit records to (optional)
 ```
 
-**Path templates** — `structure` accepts a named path from `spec.deployment.paths` or an inline [Jinja2](https://jinja.palletsprojects.com/) template. Available tokens:
+**Path templates** — `structure` accepts one of the built-in names or an inline [Jinja2](https://jinja.palletsprojects.com/) template. Built-in options:
+
+| Name             | Pattern                                                        | Best for                               |
+| ---------------- | -------------------------------------------------------------- | -------------------------------------- |
+| `flat`           | `{deployment}/`                                                | Simple single-env setups               |
+| `by-stage`       | `{deployment}/{stage}/`                                        | Per-stage history                      |
+| `by-execution`   | `{deployment}/{timestamp}/`                                    | **Default** — one folder per run       |
+| `by-date`        | `{deployment}/{date}/{timestamp}/`                             | Group runs by calendar day             |
+| `by-environment` | `{environment}/{deployment}/{timestamp}/`                      | Multi-env: browse by environment first |
+| `by-workspace`   | `{workspace}/{deployment}/{timestamp}/`                        | Multi-workspace                        |
+| `by-tenant`      | `{tenant}/{deployment}/{timestamp}/`                           | Multi-tenant                           |
+| `full`           | `{tenant}/{workspace}/{environment}/{deployment}/{timestamp}/` | Enterprise: all layers                 |
+
+Available template tokens:
 
 | Token               | Example                | Always available |
 | ------------------- | ---------------------- | ---------------- |

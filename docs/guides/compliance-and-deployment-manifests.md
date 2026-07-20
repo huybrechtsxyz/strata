@@ -82,14 +82,14 @@ strata manifest list --deployment prod --output json | \
 
 **Build manifests capture:**
 
-| Evidence | Field | Use Case |
-|----------|-------|----------|
-| Who initiated build | `user` | Authorization trail |
-| When build ran | `timestamp` | Timeline of changes |
-| Source code version | `artifacts.repositories[].commit` | Change control |
-| Build configuration | `artifacts.platform.content` | Configuration audit |
-| Policy review | `policy_results` | Approval evidence |
-| Supply chain snapshot | `artifacts.sbom` | Vulnerability evidence |
+| Evidence              | Field                             | Use Case               |
+| --------------------- | --------------------------------- | ---------------------- |
+| Who initiated build   | `user`                            | Authorization trail    |
+| When build ran        | `timestamp`                       | Timeline of changes    |
+| Source code version   | `artifacts.repositories[].commit` | Change control         |
+| Build configuration   | `artifacts.platform.content`      | Configuration audit    |
+| Policy review         | `policy_results`                  | Approval evidence      |
+| Supply chain snapshot | `artifacts.sbom`                  | Vulnerability evidence |
 
 **Access:** `.strata/build/{deployment}/manifest.json` (available immediately after `strata build run`)
 
@@ -97,13 +97,13 @@ strata manifest list --deployment prod --output json | \
 
 **Deploy manifests extend build evidence with:**
 
-| Evidence | Field | Use Case |
-|----------|-------|----------|
-| Deployment status | `status` | Execution proof |
-| Stage results | `stages[].status` | Detailed outcome |
-| Infrastructure state | `stages[].outputs` | Resource tracking |
-| Stage durations | `stages[].duration_seconds` | Performance audit |
-| Provisioner details | `artifacts.providers` | Infrastructure-as-code proof |
+| Evidence             | Field                       | Use Case                     |
+| -------------------- | --------------------------- | ---------------------------- |
+| Deployment status    | `status`                    | Execution proof              |
+| Stage results        | `stages[].status`           | Detailed outcome             |
+| Infrastructure state | `stages[].outputs`          | Resource tracking            |
+| Stage durations      | `stages[].duration_seconds` | Performance audit            |
+| Provisioner details  | `artifacts.providers`       | Infrastructure-as-code proof |
 
 **Access:** `.strata/deployments/{deployment}/{version}/{timestamp}.json`
 
@@ -375,7 +375,7 @@ cat >> $report << 'EOF'
 ## Deployment History
 
 | Timestamp | Deployment | Action | Status | User |
-|-----------|-----------|--------|--------|------|
+| --------- | ---------- | ------ | ------ | ---- |
 EOF
 
 # List all recent manifests
@@ -505,6 +505,21 @@ strata audit export --siem splunk_hec --last 30 --out audit-backup.json
 # Replay entries after SIEM downtime
 strata audit resend --since 2024-06-01T00:00:00Z
 ```
+
+**Show what changed between two deployments (`audit diff`):**
+
+```bash
+# Get execution IDs from the deploy-log
+strata audit changes --last 5 --output json | jq -r '.[].execution_id'
+
+# Compare consecutive deployments — shows unified YAML diff
+strata audit diff <from-execution-id> <to-execution-id>
+
+# Use as a CI gate — exit code 3 if configuration changed
+strata audit diff $FROM_ID $TO_ID --output json | jq '.has_changes'
+```
+
+`audit diff` uses the `commit_sha` fields in the deploy-log to run `git diff` on the deployment YAML — providing auditors with the exact before/after values for every ISO 27001 control walkthrough.
 
 See [SIEM Audit Forwarding](./siem-audit-forwarding.md) for full configuration of Splunk HEC, Azure Sentinel, ELK, and OpenTelemetry backends.
 

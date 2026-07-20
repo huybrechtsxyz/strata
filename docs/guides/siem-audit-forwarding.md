@@ -11,18 +11,27 @@ Every `strata deploy run` writes a deploy-log entry locally. These entries can b
 1. **Automatic forwarding** — configured sinks fire during every deploy (build time)
 2. **On-demand forwarding** — `strata audit export --siem <name>` pushes historical entries
 
+**Post-deployment audit pipeline** (all steps are best-effort and never block the deployment):
+
+| Step                   | What happens                                                                                                       | Config required         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| **1. Write**           | `_execution.json` written to `.strata/deploy-log/`                                                                 | — (always)              |
+| **2. PR enrichment**   | `gh pr list` looks up the merge PR for the commit SHA; if found, PR title/approvers/labels are embedded in the log | `gh` CLI in PATH        |
+| **3. SIEM forwarding** | Enriched payload forwarded to all configured sinks                                                                 | `spec.audit.sinks`      |
+| **4. Git push**        | Deploy-log committed and pushed to a registered solution repo                                                      | `spec.audit.repository` |
+
 Both paths use the same integration infrastructure. The integration determines the protocol (HTTP, TCP, OTLP) and format (JSON, CEF, HEC).
 
 ---
 
 ## Supported Backends
 
-| Backend | Type string | Protocol | Best for |
-|---------|-------------|----------|----------|
-| **Splunk** | `splunk` | HTTP Event Collector (HEC) | Enterprise Splunk deployments |
-| **Azure Sentinel** | `sentinel` | DCR Logs Ingestion API | Azure-native environments |
-| **ELK / Logstash** | `elk` | TCP JSON or Elasticsearch Bulk API | Self-hosted ELK stacks |
-| **OpenTelemetry** | `otel` | OTLP/HTTP | Grafana, Datadog, Sumo Logic, any OTLP-compatible backend |
+| Backend            | Type string | Protocol                           | Best for                                                  |
+| ------------------ | ----------- | ---------------------------------- | --------------------------------------------------------- |
+| **Splunk**         | `splunk`    | HTTP Event Collector (HEC)         | Enterprise Splunk deployments                             |
+| **Azure Sentinel** | `sentinel`  | DCR Logs Ingestion API             | Azure-native environments                                 |
+| **ELK / Logstash** | `elk`       | TCP JSON or Elasticsearch Bulk API | Self-hosted ELK stacks                                    |
+| **OpenTelemetry**  | `otel`      | OTLP/HTTP                          | Grafana, Datadog, Sumo Logic, any OTLP-compatible backend |
 
 The `otel` integration reaches Datadog and Sumo Logic without a dedicated integration — point it at their OTLP endpoints.
 
@@ -180,9 +189,9 @@ CEF:0|strata|strata-audit|{version}|deploy_audit|Deployment Audit Event|{severit
 **Severity mapping:**
 
 | Outcome | CEF Severity | Level |
-|---------|-------------|-------|
-| Success | `3` | Low |
-| Failure | `7` | High |
+| ------- | ------------ | ----- |
+| Success | `3`          | Low   |
+| Failure | `7`          | High  |
 
 **Example (success):**
 
@@ -212,12 +221,12 @@ Without `format: cef`, syslog sends raw JSON:
 
 ## All Sink Types
 
-| Type | Config fields | Protocol | Format |
-|------|---------------|----------|--------|
-| `stdout` | _(none)_ | stdout | JSON |
-| `ndjson` | `path` | file append | NDJSON |
-| `syslog` | `address`, `format` | UDP | JSON or CEF |
-| `webhook` | `url`, `headers` | HTTP POST | JSON |
+| Type        | Config fields         | Protocol        | Format          |
+| ----------- | --------------------- | --------------- | --------------- |
+| `stdout`    | _(none)_              | stdout          | JSON            |
+| `ndjson`    | `path`                | file append     | NDJSON          |
+| `syslog`    | `address`, `format`   | UDP             | JSON or CEF     |
+| `webhook`   | `url`, `headers`      | HTTP POST       | JSON            |
 | integration | `integration: <name>` | per-integration | per-integration |
 
 ---
@@ -315,10 +324,10 @@ integrations:
 
 ### Authentication options
 
-| Method | When to use |
-|--------|-------------|
+| Method             | When to use                                                 |
+| ------------------ | ----------------------------------------------------------- |
 | `managed_identity` | Running on Azure VM / AKS / container with managed identity |
-| `oauth2` | Service principal with client credentials |
+| `oauth2`           | Service principal with client credentials                   |
 
 ---
 
@@ -419,11 +428,11 @@ integrations:
 
 All HTTP-based integrations (Splunk, Sentinel, ELK HTTP, OTel) retry on server errors (5xx) and network exceptions:
 
-| Attempt | Backoff |
-|---------|---------|
-| 1 | immediate |
-| 2 | 1 second |
-| 3 | 2 seconds |
+| Attempt | Backoff   |
+| ------- | --------- |
+| 1       | immediate |
+| 2       | 1 second  |
+| 3       | 2 seconds |
 
 Client errors (4xx) are not retried — they indicate a configuration problem (bad token, wrong endpoint, etc.).
 
@@ -435,19 +444,19 @@ Failures are **always graceful** — a failed SIEM forward never blocks or fails
 
 Every audit event forwarded to a SIEM contains:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `execution_id` | string (UUID) | Unique identifier for the deployment execution |
-| `timestamp` | ISO 8601 | When the deployment ran |
-| `version` | string | strata CLI version |
-| `deployment` | string | Deployment name |
-| `file` | string | Deployment file path |
-| `success` | bool | Outcome |
-| `duration_seconds` | float | Total deployment duration |
-| `stages` | array | Per-stage name, status, duration, outputs |
-| `commit_sha` | string | Git commit SHA (if available) |
-| `pull_request` | object | PR number, title, author (if enriched) |
-| `_log_type` | string | Always `"deploy_audit"` |
+| Field              | Type          | Description                                    |
+| ------------------ | ------------- | ---------------------------------------------- |
+| `execution_id`     | string (UUID) | Unique identifier for the deployment execution |
+| `timestamp`        | ISO 8601      | When the deployment ran                        |
+| `version`          | string        | strata CLI version                             |
+| `deployment`       | string        | Deployment name                                |
+| `file`             | string        | Deployment file path                           |
+| `success`          | bool          | Outcome                                        |
+| `duration_seconds` | float         | Total deployment duration                      |
+| `stages`           | array         | Per-stage name, status, duration, outputs      |
+| `commit_sha`       | string        | Git commit SHA (if available)                  |
+| `pull_request`     | object        | PR number, title, author (if enriched)         |
+| `_log_type`        | string        | Always `"deploy_audit"`                        |
 
 ---
 

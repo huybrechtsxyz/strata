@@ -103,9 +103,21 @@ class AuditConfigModel(PlatformBaseModel):
     sinks: List[AuditSinkModel] = Field(default_factory=list, description="Configured sinks")
     structure: Optional[str] = Field(
         default=None,
-        description="Deploy-log directory structure (flat, by-stage, by-execution, by-tenant, full). Defaults to by-execution.",
+        description=(
+            "Deploy-log directory structure. "
+            "Built-in: flat, by-stage, by-execution (default), by-date, "
+            "by-environment, by-workspace, by-tenant, full."
+        ),
     )
     deploy_log_path: Optional[str] = Field(
         default=None,
         description="Custom deploy-log base path relative to workspace root (defaults to .strata/deploy-log)",
+    )
+    repository: Optional[str] = Field(
+        default=None,
+        description=(
+            "Name of a registered solution repo (from 'strata repo add') to commit and push "
+            "deploy-log files to after each deployment. Omit to skip remote push. "
+            "Example: 'config' or 'state'."
+        ),
     )
