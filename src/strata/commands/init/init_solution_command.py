@@ -132,7 +132,7 @@ class InitSolutionCommand(BaseCommand):
     def _copy_scaffold(self, scaffold_dir: Path) -> bool:
         """Copy all files from *scaffold_dir* into the workspace root.
 
-        - Substitutes ``${variable_name}`` in file contents and relative paths.
+        - Substitutes ``{{ variable_name }}`` in file contents and relative paths.
         - Skips files that already exist (idempotent).
         - ``{{ solution_name }}`` is always available from ``--name``.
         """

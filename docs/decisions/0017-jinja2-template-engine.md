@@ -1,7 +1,8 @@
 # Consolidate Templating on Jinja2
 
-- Status: partial
+- Status: completed
 - Date: 2026-06-24
+- Completed: 2026-07-20
 - Parent: [0016-console-interactive-repl.md](0016-console-interactive-repl.md) (question #11)
 
 ## Summary
@@ -10,26 +11,30 @@ Replace all `$VAR` / `${VAR}` / `str.replace()` templating in strata with Jinja2
 
 ## Implementation Snapshot
 
-### Implemented
+### Implemented — all surfaces
 
 - `pyproject.toml` includes `jinja2>=3.1`.
-- `utils/templater.py` is Jinja2-based (`Environment`), with:
-  - strict env rendering for `process_single_template()`
-  - lenient rendering for `render()` to preserve unresolved placeholders.
-- `commands/new/run_new_command.py` renders both template content and path segments with `TemplateProcessor.render()`.
-- `builders/base_builder.py` uses `TemplateProcessor.render()`.
-- `controllers/solution_controller.py` renders scaffold templates via `TemplateProcessor.render()` (no `str.replace("${SOLUTION_NAME}", ...)`).
-- `commands/sln/export_template_command.py` exports placeholders as `{{ solution_name }}`.
-- solution scaffold templates under `src/strata/templates/solution/` use Jinja2 placeholders (for example `{{ SOLUTION_NAME }}`).
+- `utils/templater.py` — Jinja2-based `TemplateProcessor` with:
+  - `process_single_template()` — `StrictUndefined` (missing vars raise)
+  - `render()` — `DebugUndefined` (missing vars stay visible as `{{ var }}`)
+  - `render_strict()` — `StrictUndefined` for surfaces where all vars must be present
+- `commands/new/run_new_command.py` — template content and path segments via `TemplateProcessor.render()`
+- `builders/base_builder.py` — `TemplateProcessor.render()`
+- `controllers/solution_controller.py` — scaffold templates via `TemplateProcessor.render()`; `.j2` files copied verbatim
+- `commands/sln/export_template_command.py` — exports placeholders as `{{ solution_name }}`
+- `integrations/base_integration.py::_resolve_env_vars()` — migrated to `TemplateProcessor.render_strict(value, {"env": os.environ})`; users write `{{ env.VAULT_ADDR }}` instead of `${VAULT_ADDR}`
+- `controllers/lifecycle_controller.py::_process_script_template()` — migrated from `re.sub()` to `TemplateProcessor.render(content, strata_context)` where `strata_context` contains only `STRATA_*` variables; OS env vars are scoped out of the template context (scripts still receive full OS env via `subprocess.run(env=...)`)
+- All scaffold templates under `src/strata/templates/` — use `{{ var }}` placeholders
+- All docstrings and model field descriptions referencing `$VAR` / `${VAR}` — updated to `{{ var }}`
 
-### Still To Implement
+### Intentionally out of scope (not strata templating)
 
-- `integrations/base_integration.py::_resolve_env_vars()` still performs regex `${VAR}` / `$VAR` substitution. If this ADR is interpreted literally as "no `$VAR`/`${VAR}` templating anywhere", this path remains out of compliance.
-- ADR wording needs a scope clarification: some `${...}` usages in repository templates are not strata templating (for example VS Code `${input:...}`, GitHub `${{ ... }}`, and shell `$VAR`) and should not be migrated to Jinja2.
+These remain as-is — they are external syntax strata writes verbatim or reads from external systems:
 
-### Current Interpretation
-
-Template rendering for strata-owned scaffold/build/new flows is migrated to Jinja2. Integration-time environment substitution still uses `$VAR`/`${VAR}` semantics. Keep status as `partial` until either `_resolve_env_vars()` is migrated or this ADR is narrowed to explicit template-rendering surfaces.
+- VS Code settings: `${workspaceFolder}`, `${input:...}` — VS Code substitution, not strata
+- GitHub Actions: `${{ secrets.TOKEN }}` — GitHub Actions expression syntax
+- Docker Compose / Helm values: `${KEY}` — Compose/Helm native substitution in output files
+- Shell runtime variables in lifecycle scripts: `$PATH`, `$HOME` — resolved by the shell at execution time, intentionally not substituted by strata
 
 ## Context
 

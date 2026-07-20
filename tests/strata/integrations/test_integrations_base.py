@@ -3,6 +3,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from strata.integrations.base_integration import BaseIntegration
 from strata.models.integration_model import IntegrationModel
 
@@ -142,19 +144,21 @@ class TestEnvVarHelpers:
         monkeypatch.setenv("HOST", "myhost")
         cfg = _make_config()
         i = ConcreteIntegration(cfg)
-        assert i._resolve_env_vars("https://${HOST}/api") == "https://myhost/api"
+        assert i._resolve_env_vars("https://{{ env.HOST }}/api") == "https://myhost/api"
 
     def test_resolve_env_vars_dollar(self, monkeypatch):
         monkeypatch.setenv("PORT", "8080")
         cfg = _make_config()
         i = ConcreteIntegration(cfg)
-        assert i._resolve_env_vars("http://host:$PORT") == "http://host:8080"
+        assert i._resolve_env_vars("http://host:{{ env.PORT }}") == "http://host:8080"
 
-    def test_resolve_env_vars_missing_unchanged(self):
+    def test_resolve_env_vars_missing_raises(self):
+        from jinja2 import UndefinedError
+
         cfg = _make_config()
         i = ConcreteIntegration(cfg)
-        result = i._resolve_env_vars("${__TOTALLY_MISSING__}")
-        assert result == "${__TOTALLY_MISSING__}"
+        with pytest.raises(UndefinedError):
+            i._resolve_env_vars("{{ env.__TOTALLY_MISSING__ }}")
 
 
 # ---------------------------------------------------------------------------

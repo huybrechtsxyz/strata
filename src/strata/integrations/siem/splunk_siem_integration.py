@@ -9,7 +9,7 @@ The token is read from ``config.authentication.api_key.api_key``.
 Required config:
   endpoints.address:       https://splunk.host:8088   (HEC base URL)
   authentication.method:   api_key
-  authentication.api_key.api_key:  <HEC token>  (supports ${SPLUNK_HEC_TOKEN})
+  authentication.api_key.api_key:  <HEC token>  (supports {{ env.SPLUNK_HEC_TOKEN }})
 
 Optional properties:
   index:       str    — Splunk index  (default: "main")

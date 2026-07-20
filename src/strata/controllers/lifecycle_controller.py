@@ -2,7 +2,6 @@
 
 import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
@@ -36,7 +35,10 @@ class LifecycleController(BaseController):
         Initialize the lifecycle controller.
 
         Args:
-            enable_templating: Whether to enable $VAR / ${VAR} substitution in scripts
+            enable_templating: Whether to enable ``{{ var }}`` Jinja2 substitution
+                in lifecycle scripts.  Use ``{{ STRATA_PHASE }}``,
+                ``{{ STRATA_WORKSPACE_PATH }}``, etc.  Native shell variables
+                (``$PATH``, ``$HOME``) pass through untouched.
         """
         super().__init__()
         self.enable_templating = enable_templating
@@ -511,20 +513,49 @@ class LifecycleController(BaseController):
         env: dict,
         phase_name: str,
     ) -> Tuple[Optional[Path], Optional[Path]]:
-        """
-        Create a temp copy of script with $VAR / ${VAR} substitutions applied.
+        r"""Create a temp copy of a script with Jinja2 ``{{ var }}`` substitutions applied.
 
-        Variables that are not found in env are left as-is (with a warning).
-        The caller is responsible for cleaning up the returned temp directory.
+        Only STRATA_\* variables are available as template context.  Native OS
+        environment variables (``$PATH``, ``$HOME``, etc.) are intentionally
+        excluded from the template context — they are still available to the
+        running script via the subprocess environment and should be referenced
+        using native shell syntax (``$PATH``) rather than Jinja2 syntax.
+
+        Available Jinja2 template variables (all strings):
+
+        =====================  ===========================================
+        ``{{ STRATA_PHASE }}``            Current lifecycle phase name
+        ``{{ STRATA_WORKSPACE_PATH }}``   Workspace root directory
+        ``{{ STRATA_CONFIG_PATH }}``      ``.strata/`` configuration directory
+        ``{{ STRATA_BUILD_PATH }}``       Build output directory
+        ``{{ STRATA_OBJECT_PATH }}``      Build objects directory
+        ``{{ STRATA_<KEY> }}``            Any extra context key passed by the
+                                          caller (injected as STRATA_<KEY_UPPER>)
+        =====================  ===========================================
+
+        Example lifecycle script (Bash)::
+
+            #!/bin/bash
+            echo "Phase:     {{ STRATA_PHASE }}"
+            echo "Workspace: {{ STRATA_WORKSPACE_PATH }}"
+            cd $HOME          # native shell variable — left untouched
+            export PATH=$PATH:/usr/local/bin  # also untouched
+
+        Undefined ``{{ var }}`` references are left visible in the rendered
+        output (lenient mode) and do not abort template processing.
 
         Args:
-            script_path: Original script path
-            env: Environment dict used for substitution
-            phase_name: Phase name (for logging / temp dir naming)
+            script_path: Original script path.
+            env:         Full environment dict (os.environ + STRATA_*).  Only
+                         the STRATA_* subset is passed to the template engine.
+            phase_name:  Phase name (used for temp dir naming and logging).
 
         Returns:
-            Tuple of (processed_script_path, temp_dir_path), or (None, None) on error
+            Tuple of (processed_script_path, temp_dir_path), or (None, None)
+            on error.  The caller is responsible for cleaning up temp_dir_path.
         """
+        from strata.utils.templater import TemplateProcessor
+
         temp_dir: Optional[Path] = None
         try:
             temp_dir = Path(tempfile.mkdtemp(prefix=f"STRATA_lifecycle_{phase_name}_"))
@@ -532,20 +563,13 @@ class LifecycleController(BaseController):
 
             content = script_path.read_text(encoding="utf-8")
 
-            pattern = r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
+            # Scope template context to STRATA_* variables only.
+            # OS env vars ($PATH, $HOME, etc.) are excluded deliberately —
+            # they reach the subprocess via env= and must not be hardcoded
+            # as static strings at template-processing time.
+            strata_context = {k: v for k, v in env.items() if k.startswith("STRATA_")}
+            processed = TemplateProcessor.render(content, strata_context)
 
-            def replace_var(match: re.Match) -> str:
-                var_name = match.group(1)
-                if var_name in env:
-                    return str(env[var_name])
-                self.logger.warning(
-                    "Template variable not found in environment",
-                    script=str(script_path),
-                    variable=var_name,
-                )
-                return match.group(0)
-
-            processed = re.sub(pattern, replace_var, content)
             temp_script.write_text(processed, encoding="utf-8")
 
             # Preserve original permission bits
@@ -585,7 +609,30 @@ class LifecycleController(BaseController):
         Build the environment dict for script execution.
 
         Injects standard STRATA_* variables plus any context key/value pairs
-        as STRATA_<KEY_UPPER> (string value).
+        as STRATA_<KEY_UPPER> (string value).  The full OS environment is also
+        included so that native shell variables (``$PATH``, ``$HOME``, etc.)
+        work normally at subprocess runtime.
+
+        **Standard STRATA_* variables always present:**
+
+        +---------------------------+---------------------------------------------+
+        | Variable                  | Value                                       |
+        +===========================+=============================================+
+        | ``STRATA_PHASE``          | Current lifecycle phase name                |
+        |                           | (e.g. ``deploy_provision_before``)          |
+        +---------------------------+---------------------------------------------+
+        | ``STRATA_WORKSPACE_PATH`` | Workspace root directory                    |
+        +---------------------------+---------------------------------------------+
+        | ``STRATA_CONFIG_PATH``    | ``.strata/`` configuration directory        |
+        +---------------------------+---------------------------------------------+
+        | ``STRATA_BUILD_PATH``     | Build output directory                      |
+        +---------------------------+---------------------------------------------+
+        | ``STRATA_OBJECT_PATH``    | Build objects directory                     |
+        +---------------------------+---------------------------------------------+
+
+        Extra context keys (from the ``context`` parameter) are injected as
+        ``STRATA_<KEY_UPPER>`` and are also available as ``{{ STRATA_<KEY_UPPER> }}``
+        in Jinja2 lifecycle scripts.
 
         Args:
             phase_name: Current lifecycle phase name (injected as STRATA_PHASE)
