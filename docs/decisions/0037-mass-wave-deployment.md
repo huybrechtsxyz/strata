@@ -1,11 +1,12 @@
-# Fleet Operations and Mass Wave Deployment
+# Fleet Rollout — Multi-Deployment Wave Execution (`strata rollout`)
 
-- Status: partial
+- Status: proposed
 - Date: 2026-07-14
+- Revised: 2026-07-21
 
 ## Context and Problem Statement
 
-ADR 0011 introduced wave lock files and `--wave N` as an _explicit context override_ for a single
+ADR-0011 introduced wave lock files and `--wave N` as an _explicit context override_ for a single
 deployment (`strata deploy run -f deployment.yaml --wave 1 --promotion customer-apps`).  A common
 real-world need — executing a wave rollout across an entire fleet — still requires the operator to
 enumerate every relevant deployment file manually or write shell scripts.
@@ -13,42 +14,78 @@ enumerate every relevant deployment file manually or write shell scripts.
 The missing capability is:
 
 ```bash
-strata deploy run --ring prod --wave 1 --promotion customer-apps
+strata rollout run --ring prod --wave 1 --promotion customer-apps
 # → discover every deployment in ring 'prod' that belongs to wave 1
-# → deploy each of them in the correct order
+# → build + deploy each of them in the correct order
 # → summarise results
 ```
 
-This "mass wave deployment" mode turns `strata deploy run` from a single-file tool into a
-**fleet-aware operator** for rolling deployments.
+This ADR introduces `strata rollout` as a **dedicated fleet-level command group** — separate from
+`strata deploy` (single-file) and `strata promote` (version lock management).
+
+### Why a separate command group?
+
+| Concern         | `strata deploy run`                   | `strata rollout run`                      |
+| --------------- | ------------------------------------- | ----------------------------------------- |
+| Scope           | One deployment file (`-f`)            | All matching files in the solution        |
+| Pipeline        | Deploy only (assumes artifacts exist) | Build → validate → deploy                 |
+| Failure model   | Single success/failure exit           | Batch summary, stagger, continue-on-error |
+| Target audience | CI per-file step                      | Operator executing a fleet wave           |
+| Output model    | Per-stage events                      | Batch envelope + per-deployment events    |
+
+Overloading `strata deploy run` with both modes (via "no `-f` = mass mode") was considered and
+rejected: the hidden mode switch, different failure semantics, and build-gap problem make it
+confusing for operators.
 
 ## Related Work
 
-- **ADR 0011 — Promotion strategies for version progression**: defines waves, rings, lock files,
-  `--ring / --wave / --promotion` context flags (Layer 4/5 design). This ADR extends that design
-  with fleet-level execution.
-- **ADR 0028 — SIGTERM graceful shutdown and lock release**: applies directly — a long-running
-  multi-deployment pipeline must release locks on interrupt.
-- **ADR 0027 — Command timeout for long-running operations**: each sub-deployment is subject to the
-  existing timeout semantics.
-- **ADR 0029 — Real-time progress streaming (NDJSON)**: the output model for this command should
-  follow the existing streaming conventions.
+- **ADR-0011 — Promotion strategies**: defines waves, rings, lock files, `--ring / --wave / --promotion` context flags.
+- **ADR-0028 — SIGTERM graceful shutdown**: applies — long-running batch must release locks on interrupt.
+- **ADR-0027 — Command timeout**: each sub-deployment is subject to existing timeout semantics.
+- **ADR-0029 — NDJSON streaming**: the rollout command uses the existing streaming conventions.
+- **ADR-0023 — Pluggable provisioners**: build and deploy use `DeployerFactory`.
 
 ---
 
 ## Design Overview
 
-### Trigger condition
+### CLI Surface — `strata rollout`
 
-Mass-wave mode activates when `-f` is **not** given and at least one of `--ring`, `--wave`, or
-`--promotion` is provided.  When `-f` is given alongside the filter flags, behaviour is unchanged:
-a single deployment runs with the filter flags used only for version-resolution context (ADR 0011
-R-11).
+```bash
+# Full pipeline: build + deploy all wave-1 deployments in ring prod
+strata rollout run --ring prod --wave 1 --promotion customer-apps
 
+# Build only (generate artifacts for all matched deployments)
+strata rollout build --ring prod --wave 1 --promotion customer-apps
+
+# Deploy only (assumes artifacts already built)
+strata rollout deploy --ring prod --wave 1 --promotion customer-apps
+
+# Dry-run (discovery + plan, no provisioning)
+strata rollout run --ring prod --wave 1 --promotion customer-apps --dry-run
+
+# Sequential with 60-second bake time between deployments
+strata rollout run --ring prod --wave 1 --promotion customer-apps --stagger 60
+
+# Continue through failures, collect all results
+strata rollout run --ring prod --wave 1 --promotion customer-apps --continue-on-error
+
+# Status: show current wave state across the fleet
+strata rollout status --ring prod --promotion customer-apps
+
+# History: past rollout executions
+strata rollout history --ring prod --promotion customer-apps
 ```
--f given          → single-deployment mode (today's behaviour, filter flags = version context)
--f NOT given      → mass-wave mode (this ADR)
-```
+
+### Commands
+
+| Command                  | What it does                           |
+| ------------------------ | -------------------------------------- |
+| `strata rollout run`     | Build + deploy all matched deployments |
+| `strata rollout build`   | Build artifacts only                   |
+| `strata rollout deploy`  | Deploy only (artifacts must exist)     |
+| `strata rollout status`  | Show fleet wave state                  |
+| `strata rollout history` | Past rollout results                   |
 
 ### Discovery — how deployments are matched
 
@@ -61,116 +98,73 @@ A deployment matches the filter when **both** conditions hold:
    configuration.  Deployments that do not match any wave selector are in the **catch-all** group
    (not included in wave N execution — included only in the final `--complete` run).
 
-When `--wave` is omitted, all matched deployments are included regardless of wave membership
-(useful for `--complete` runs and for promotions that do not use waves).
+When `--wave` is omitted, all matched deployments are included regardless of wave membership.
 
-Discovery scans all deployment YAML files registered in the workspace solution (`.strata/solution.json`).
-Files not registered are not scanned.
+Discovery scans all deployment YAML files registered in `.strata/solution.json`.
 
-### Execution model — open decision
+### Execution Pipeline
 
-The order and concurrency of sub-deployments is the primary open question.  Three candidate models:
-
-#### Option A — Strict sequential
-Deploy one file at a time in discovery order (alphabetical by file path).  Stop immediately on the
-first failure.
-
-| Pro                                              | Con                                        |
-| ------------------------------------------------ | ------------------------------------------ |
-| Simple, predictable                              | Slow for large fleets                      |
-| Each deployment fully settled before next starts | A single slow deployment blocks everything |
-| Easy to reason about failure state               | No parallelism benefit                     |
-
-#### Option B — Sequential with configurable inter-deployment delay (`--stagger N`)
-Same as Option A but an optional `--stagger <seconds>` flag inserts a wait between deployments.
-This gives the monitoring system time to observe the previous deployment before proceeding.
-
-| Pro                                     | Con                        |
-| --------------------------------------- | -------------------------- |
-| Natural "bake time" between deployments | Still single-threaded      |
-| Operator controls blast radius rate     | Long total wall-clock time |
-
-#### Option C — Parallel groups (recommended starting point)
-Deployments are sorted into **groups** based on the `deployment_wave` field in the promotion ring
-(a sub-ordering within the ring wave, e.g. `deployment_wave: 1` = first, `deployment_wave: 2` =
-second).  Deployments within the same `deployment_wave` group run in parallel up to
-`--concurrency N` (default: 3).  Groups are executed sequentially — all of group 1 must succeed
-before group 2 starts.
+For each matched deployment, `strata rollout run` executes:
 
 ```
-Group 1 (deployment_wave: 1): [svc-a, svc-b, svc-c]  ← run in parallel
+1. Build   → strata build run -f <file>     (generate Terraform/Helm/etc. artifacts)
+2. Validate → strata validate -f <file>     (pre-flight checks)
+3. Deploy  → strata deploy run -f <file>    (provision infrastructure)
+```
+
+Steps 1–2 are skipped for `strata rollout deploy`. Step 3 is skipped for `strata rollout build`.
+
+### Execution Order
+
+#### Phase 1 — Sequential with stagger (initial implementation)
+
+Deployments execute one at a time in solution registration order. `--stagger N` inserts an
+N-second bake time between completions.
+
+#### Phase 2 — Parallel groups (future)
+
+Deployments are grouped by `deployment_wave` field. Groups execute sequentially; deployments
+within a group run in parallel up to `--concurrency N` (default: 3).
+
+```
+Group 1 (deployment_wave: 1): [svc-a, svc-b, svc-c]  ← parallel
           ↓ all succeed
-Group 2 (deployment_wave: 2): [svc-d, svc-e]          ← run in parallel
+Group 2 (deployment_wave: 2): [svc-d, svc-e]          ← parallel
           ↓ all succeed
 Done.
 ```
 
-When no `deployment_wave` is configured, all matched deployments are in a single group (equivalent
-to "all in parallel, up to concurrency limit").
+### Failure Handling
 
-| Pro                                        | Con                                                      |
-| ------------------------------------------ | -------------------------------------------------------- |
-| Significantly faster for large fleets      | More complex failure analysis                            |
-| Natural blast-radius control via groups    | Requires `deployment_wave` to be configured for ordering |
-| Concurrency limit caps infrastructure load | Partial failure state (some deployed, some not)          |
-
-**Failure handling for Option C:**
-- **Stop on group failure (default)**: If any deployment in a group fails, the group is marked
-  failed and subsequent groups do not run.  Already-completed deployments are not rolled back
-  (rollback is a separate `strata promote rollback` operation).
-- **Continue on failure (`--continue-on-error`)**: All groups run regardless.  Exit code reflects
-  the worst result across all deployments.
-
-#### Recommendation
-
-Start with **Option B** (sequential + `--stagger`) as the initial implementation.  It requires no
-new model fields (`deployment_wave` is deferred), is easy to test, and provides the bake-time
-story operators ask for.  Option C (parallel groups) is the target architecture and can be
-introduced once `deployment_wave` is modelled and tested.
-
----
-
-### CLI summary
-
-```bash
-# Deploy all wave-1 deployments in ring prod, using promotion customer-apps
-strata deploy run --ring prod --wave 1 --promotion customer-apps
-
-# Same, dry-run
-strata deploy run --ring prod --wave 1 --promotion customer-apps --dry-run
-
-# Sequential with 60-second bake time between deployments
-strata deploy run --ring prod --wave 1 --promotion customer-apps --stagger 60
-
-# Continue through failures, collect all results
-strata deploy run --ring prod --wave 1 --promotion customer-apps --continue-on-error
-
-# Complete: advance ring lock, no wave filter
-strata deploy run --ring prod --promotion customer-apps --complete
-```
+- **Stop on failure (default)**: First failure halts remaining deployments.
+- **Continue on failure (`--continue-on-error`)**: All deployments run. Exit code reflects worst result.
+- **No automatic rollback**: A failed rollout is not automatically reversed. Rollback is a deliberate
+  operator action (`strata promote rollback`).
 
 ### Output
 
-The command produces a **batch summary** in addition to per-deployment output:
-
+Console:
 ```
-🌊  Mass wave deployment
-    Ring: prod  |  Wave: 1  |  Promotion: customer-apps
-    Deployments found: 4
+🌊  Rollout: ring=prod wave=1 promotion=customer-apps
+    Deployments matched: 4
 
-  [1/4] customer-acme   ✅  2m 14s
-  [2/4] customer-beta   ✅  1m 58s
-  [3/4] customer-gamma  ❌  FAILED (exit 1)  — stopped here
+  [1/4] customer-acme
+        build   ✅  0m 22s
+        deploy  ✅  2m 14s
+  [2/4] customer-beta
+        build   ✅  0m 18s
+        deploy  ✅  1m 58s
+  [3/4] customer-gamma
+        build   ✅  0m 20s
+        deploy  ❌  FAILED — stopped here
 
   Result: 2 succeeded, 1 failed, 1 skipped
-  Exit code: 1
 ```
 
-JSON output (`--output json`) wraps the per-deployment results in a `batch` envelope:
-
+JSON (`--output json`):
 ```json
 {
-  "batch": {
+  "rollout": {
     "ring": "prod",
     "wave": 1,
     "promotion": "customer-apps",
@@ -179,65 +173,55 @@ JSON output (`--output json`) wraps the per-deployment results in a `batch` enve
     "failed": 1,
     "skipped": 1,
     "deployments": [
-      { "file": "deploy/customer-acme.yaml", "status": "succeeded", "duration_seconds": 134 },
-      { "file": "deploy/customer-beta.yaml", "status": "succeeded", "duration_seconds": 118 },
-      { "file": "deploy/customer-gamma.yaml", "status": "failed",    "exit_code": 1 },
-      { "file": "deploy/customer-delta.yaml", "status": "skipped",   "reason": "stopped after failure" }
+      { "file": "deploy/customer-acme.yaml", "build": "succeeded", "deploy": "succeeded", "duration_seconds": 156 },
+      { "file": "deploy/customer-beta.yaml", "build": "succeeded", "deploy": "succeeded", "duration_seconds": 136 },
+      { "file": "deploy/customer-gamma.yaml", "build": "succeeded", "deploy": "failed", "exit_code": 1 },
+      { "file": "deploy/customer-delta.yaml", "build": "skipped", "deploy": "skipped", "reason": "stopped after failure" }
     ]
   }
 }
 ```
 
-### Dry-run behaviour
+NDJSON (`--output ndjson`): per-deployment `stage_start`/`stage_end` events following ADR-0029.
 
-`--dry-run` runs discovery and prints the list of matched deployments (with their resolved wave
-group, if applicable) but does not execute any provisioner.  This is the safe "what would this do?"
-check before a real rollout.
+### SIGTERM / Interruption
 
-### Interaction with SIGTERM / interruption
-
-If the process receives SIGTERM mid-batch, the currently executing sub-deployment is allowed to
-complete its current provisioner step and release its lock.  Queued deployments are skipped.  The
-batch exits with code 130 (interrupted).
+If the process receives SIGTERM mid-rollout, the currently executing deployment completes its
+current provisioner step and releases its lock. Queued deployments are skipped. Exit code: 130.
 
 ---
 
 ## Constraints and Non-Goals
 
-- **No automatic rollback on failure** — a failed batch is not automatically reversed.  Rollback
-  is a deliberate operator action (`strata promote rollback` or `strata deploy run` on the previous
-  wave).
-- **No cross-batch ordering** — this ADR does not address dependencies *between* different
-  promotions or rings.  Each batch is scoped to one ring + one promotion.
-- **No scheduling** — cron-style scheduling of wave deployments is not in scope.  Use a CI/CD
-  pipeline scheduler.
-- **Solution registry required** — discovery depends on `.strata/solution.json`.  Ad-hoc
-  deployment files not registered in the solution are not discovered.
+- **No automatic rollback on failure** — use `strata promote rollback`.
+- **No cross-batch ordering** — each rollout is scoped to one ring + one promotion.
+- **No scheduling** — use a CI/CD pipeline scheduler.
+- **Solution registry required** — only registered deployment files are discovered.
+- **Not in `strata deploy`** — fleet operations are a distinct command group.
 
 ---
 
 ## Open Questions
 
-- **Option C (parallel groups) timing** — When should `deployment_wave` be added to the promotion
-  ring model?  This field enables proper group-based parallelism.  Candidate: ADR 0038 or as a
-  follow-up patch to ADR 0011 models.
-- **`--complete` semantics in mass-wave mode** — Should `--complete` (advance ring lock + delete
-  wave locks) be allowed as a mass-wave trigger?  Or should `--complete` remain a `strata promote`
-  operation only?  Current lean: keep `--complete` in `strata promote`; mass-wave only handles
-  deployment execution.
-- **Re-entrancy** — If a batch is interrupted mid-way, should a re-run skip already-succeeded
-  deployments?  Would require a batch state file.  Deferred.
+1. **`deployment_wave` model field** — When to add for parallel-group support? Follow-up patch to ADR-0011 models.
+2. **`--complete` semantics** — Should `strata rollout run --complete` advance the ring lock? Or keep in `strata promote` only?
+3. **Re-entrancy** — Should re-run skip already-succeeded deployments? Requires batch state file. Deferred.
+4. **Build-only failures** — If 2/4 builds fail, proceed with the 2 that built? Or all-or-nothing?
 
 ---
 
-## Implementation Status
+## Implementation Roadmap
 
-| Phase | Description                                                        | Status     | Completed |
-| ----- | ------------------------------------------------------------------ | ---------- | --------- |
-| M-1   | Discovery: scan solution registry, match ring + promotion + labels | 🔲 TODO     | —         |
-| M-2   | Sequential execution loop (`RunBatchDeployCommand`)                | 🔲 TODO     | —         |
-| M-3   | `--stagger N` inter-deployment delay                               | 🔲 TODO     | —         |
-| M-4   | `--continue-on-error` flag                                         | 🔲 TODO     | —         |
-| M-5   | Batch summary output (console + JSON)                              | 🔲 TODO     | —         |
-| M-6   | SIGTERM handling for batch context                                 | 🔲 TODO     | —         |
-| M-7   | Parallel groups (`deployment_wave` field, Option C)                | 🔲 DEFERRED | —         |
+| Phase | Description                                                        | Status     |
+| ----- | ------------------------------------------------------------------ | ---------- |
+| R-1   | Discovery: scan solution registry, match ring + promotion + labels | 🔲 TODO     |
+| R-2   | `strata rollout build` — batch build for matched deployments       | 🔲 TODO     |
+| R-3   | `strata rollout deploy` — sequential execution loop                | 🔲 TODO     |
+| R-4   | `strata rollout run` — combined build + deploy pipeline            | 🔲 TODO     |
+| R-5   | `--stagger N` inter-deployment bake time                           | 🔲 TODO     |
+| R-6   | `--continue-on-error` flag                                         | 🔲 TODO     |
+| R-7   | Batch summary output (console + JSON + NDJSON)                     | 🔲 TODO     |
+| R-8   | SIGTERM handling for rollout context                               | 🔲 TODO     |
+| R-9   | `strata rollout status` — fleet wave state                         | 🔲 TODO     |
+| R-10  | `strata rollout history` — past rollouts                           | 🔲 TODO     |
+| R-11  | Parallel groups (`deployment_wave`, `--concurrency N`)             | 🔲 DEFERRED |

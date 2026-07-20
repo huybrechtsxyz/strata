@@ -1,12 +1,14 @@
-# Tenant Onboarding Scaffolding
+# Bundle Entry Expansion (`each`) for Multi-File Scaffolding
 
-- Status: partial
-- Date: 2026-07-15
+- Status: proposed
+- Date: 2026-07-21
 
 ## Context and Problem Statement
 
-Adding a new tenant to a fleet-scale deployment (ADR 0038) requires manually creating files
-across multiple directories in a precise path structure:
+Adding a new entity (tenant, zone, workspace type) to a fleet-scale deployment (ADR 0038)
+requires creating files across multiple directory dimensions simultaneously. For a tenant
+deployed across 2 zones × 3 rings, this is 8+ files with paths that must be internally
+consistent:
 
 ```
 customers/<tenant>/tenant.yaml
@@ -16,116 +18,47 @@ zones/<zone>/customers/<tenant>/<ring>/env.yaml   (one per zone × ring)
 zones/<zone>/customers/<tenant>/<ring>/deploy.yaml
 ```
 
-For a tenant deployed across 2 zones and 3 rings, this is 10+ files minimum, with paths that
-must be internally consistent (tenant name, zone name, ring name must match across all files
-and within each file's `meta`, `layers`, and `environments[]` references).
+The `solution.json` bundle mechanism (`spec.templates[].bundle[]`) already supports
+multi-file scaffolding via `strata new <template> <name>`. An operator can define a
+bundle today that generates all of these files — but must statically enumerate one bundle
+entry per zone × ring combination:
 
-Errors in this process — wrong path, mismatched tenant name in `layers`, wrong env file
-reference order — are not caught until `strata validate --deep` or a deployment is attempted.
-There is no guided path from "I need to onboard tenant X" to "I have a valid, deployable
-configuration tree."
+```json
+{ "name": "zone-ring-deploy", "path": "zones/europe-west/customers/{{ name }}/dev" },
+{ "name": "zone-ring-deploy", "path": "zones/europe-west/customers/{{ name }}/qas" },
+{ "name": "zone-ring-deploy", "path": "zones/us-east/customers/{{ name }}/dev" },
+{ "name": "zone-ring-deploy", "path": "zones/us-east/customers/{{ name }}/qas" },
+...
+```
 
-ADR 0014 addressed onboarding friction for new strata users creating their first workspace.
-This ADR addresses the ongoing operational friction of adding tenants to an existing fleet.
+Adding a new zone or ring means editing the bundle definition and adding N new entries.
+The bundle definition becomes coupled to the topology rather than describing the structure
+once.
+
+This is not tenant-specific. Any fleet entity that spans zones × rings has the same
+problem. The fix is in the bundle runner, not in a dedicated subcommand.
 
 ## Related Work
 
-- **ADR 0014 — Guided Onboarding Experience**: `strata new` for initial workspace setup.
-  This ADR extends the scaffolding surface for fleet tenant lifecycle operations.
-- **ADR 0038 — Multi-Tenant Fleet Management Patterns**: identifies this as Gap 2 (Medium-High).
-- **ADR 0039 — Deployment Templates**: tenant scaffolding generates deployment instantiation
-  files that reference a shared template, not standalone deployment files.
-- **ADR 0042 — Deep Validation and Layer Consistency**: validates the output of scaffolding
-  before a tenant is committed.
+- **ADR 0014 — Guided Onboarding Experience**: introduced `strata new` and `solution.json`
+  bundle templates. This ADR extends `SolutionTemplateBundleEntryModel`.
+- **ADR 0038 — Multi-Tenant Fleet Management Patterns**: identifies multi-dimensional
+  scaffolding as Gap 2 (Medium-High).
+- **ADR 0039 — Deployment Templates**: bundle entries reference named templates, not
+  standalone files.
 
 ---
 
-## Design Overview
+## Decision
 
-### New command: `strata new tenant`
-
-```bash
-strata new tenant \
-  --name contoso \
-  --zones europe-west nordics \
-  --rings dev qas prd \
-  --template customer-ring-template    # references ADR 0039 deployment template
-```
-
-**What it generates:**
-
-| File                                                 | Content                                                     |
-| ---------------------------------------------------- | ----------------------------------------------------------- |
-| `customers/<tenant>/tenant.yaml`                     | Tenant metadata stub                                        |
-| `customers/<tenant>/<ring>/env.yaml`                 | Zone-agnostic env stub per ring                             |
-| `zones/<zone>/customers/<tenant>/env.yaml`           | Zone × tenant override stub per zone                        |
-| `zones/<zone>/customers/<tenant>/<ring>/deploy.yaml` | Deployment instantiation (extends template) per zone × ring |
-| `zones/<zone>/customers/<tenant>/<ring>/env.yaml`    | Zone × tenant × ring env stub per zone × ring               |
-
-All generated files are **stubs** — they pass schema validation immediately but contain
-only the structural keys (meta, kind, apiVersion, layers, environments list) pre-wired
-correctly. The operator fills in actual variable/secret values.
-
-### Path consistency enforcement
-
-The scaffolding command derives all paths from `--name`, `--zones`, and `--rings`. It does
-not allow the operator to specify paths independently — this eliminates the class of errors
-where a file is placed in the wrong directory or references the wrong tenant name.
-
-Generated `environments[]` lists in deploy files are assembled in the canonical order:
-1. Zone baseline
-2. Tenant × ring defaults (zone-agnostic)
-3. Zone × tenant × ring specifics
-
-### Dry-run and validation
-
-```bash
-strata new tenant --name fabrikam --zones europe-west --rings dev prd --dry-run
-```
-
-`--dry-run` prints what would be created without writing files. After generation, the
-command automatically runs `strata validate` on each generated file and reports any
-schema errors before the operator commits.
-
-### Tenant removal: `strata remove tenant`
-
-A matching removal command that lists all files associated with a tenant name and
-prompts for confirmation before deletion. Prevents orphaned files when a tenant
-is offboarded.
-
-```bash
-strata remove tenant --name contoso --zones europe-west
-```
-
----
-
-## Open Questions
-
-1. **Template selection** — should `--template` be optional with a sensible default, or
-   always required? Requiring it is explicit; defaulting to the first available template
-   is ergonomic.
-2. **Idempotency** — if some files already exist, should the command skip, overwrite
-   (with `--force`), or error? Skip with a warning is the safest default.
-3. **Interactive mode** — should `strata new tenant` without flags launch an interactive
-   wizard (consistent with ADR 0014 REPL approach) or always require explicit flags?
-
----
-
-## Future Extension — Multi-Zone Cross-Product (`each`)
-
-The common case (one tenant, one zone, N rings) is fully covered by the existing
-`solution.json` bundle mechanism: a fixed list of bundle entries with a `--set zone=europe`
-context variable generates all files correctly.
-
-For the less common case where a **single tenant must be onboarded into multiple zones
-simultaneously** (geo-redundant HA, dual-region data residency), the bundle list would need
-to be repeated for every zone — which is impractical when zone count is dynamic.
-
-The proposed extension is an `each` field on `SolutionTemplateBundleEntryModel`:
+Add an `each` field to `SolutionTemplateBundleEntryModel`. When present, the bundle runner
+computes the cartesian product of all dimension values and emits one output per combination,
+substituting each dimension variable into the entry's `path` and file content alongside the
+standard context variables.
 
 ```json
 {
-  "name": "tenant-ring-deploy",
+  "name": "zone-ring-deploy",
   "path": "zones/{{ zone }}/customers/{{ name }}/{{ ring }}",
   "each": {
     "zone": "{{ zones }}",
@@ -134,23 +67,164 @@ The proposed extension is an `each` field on `SolutionTemplateBundleEntryModel`:
 }
 ```
 
-**Semantics:** when `each` is present, the runner iterates the cartesian product of all
-`each` values (split on `,`) and emits one file per combination. `zones=europe,us-east` ×
-`rings=dev,qa,prd` → 6 files from a single bundle entry.
+`each` values use the same `{{ var }}` Jinja2 syntax used everywhere else in strata. A
+value is rendered against the current context, then split on `,` to produce the list for
+that dimension. No new reference syntax is introduced.
 
-**Scope:** this extension is not needed for Phase 1. It should only be implemented if a
-real operator requirement for multi-zone simultaneous onboarding is confirmed. Premature
-implementation adds complexity to the bundle runner for a case that static bundle entries
-already handle when zone count is known at template-definition time.
+---
+
+## Design
+
+### `SolutionTemplateBundleEntryModel` — model change
+
+```python
+class SolutionTemplateBundleEntryModel(BaseModel):
+    name: str   # template source
+    path: str   # Jinja2 destination path
+    each: Optional[Dict[str, str]] = None
+    # each key   → dimension variable name injected into path and content
+    # each value → Jinja2 expression rendered against context, then split on ","
+```
+
+### Bundle runner — `_run_solution_bundle_execution`
+
+For each entry in the bundle:
+
+1. If `each` is absent → current behaviour (single file, render path with context).
+2. If `each` is present:
+   a. For each dimension key/value pair: render the value string with Jinja2 context,
+      split on `,`, strip whitespace → produces a list of strings per dimension.
+   b. Compute the cartesian product of all dimension lists.
+   c. For each combination: merge `{dimension: value, ...}` into a copy of the context,
+      then execute the standard single-entry logic (render path, render content, write file).
+
+### Complete example — tenant onboarding bundle in `solution.json`
+
+```json
+"context": {
+  "zones": "europe-west,us-east",
+  "rings": "dev,qas,prd"
+},
+"templates": [
+  {
+    "name": "onboard-tenant",
+    "bundle": [
+      {
+        "name": "tenant",
+        "path": "customers/{{ name }}"
+      },
+      {
+        "name": "tenant-ring-env",
+        "path": "customers/{{ name }}/{{ ring }}",
+        "each": { "ring": "{{ rings }}" }
+      },
+      {
+        "name": "zone-tenant-env",
+        "path": "zones/{{ zone }}/customers/{{ name }}",
+        "each": { "zone": "{{ zones }}" }
+      },
+      {
+        "name": "zone-ring-env",
+        "path": "zones/{{ zone }}/customers/{{ name }}/{{ ring }}",
+        "each": { "zone": "{{ zones }}", "ring": "{{ rings }}" }
+      },
+      {
+        "name": "zone-ring-deploy",
+        "path": "zones/{{ zone }}/customers/{{ name }}/{{ ring }}",
+        "each": { "zone": "{{ zones }}", "ring": "{{ rings }}" }
+      }
+    ]
+  }
+]
+```
+
+```bash
+strata new onboard-tenant contoso
+# → 1 + 3 + 2 + 6 + 6 = 18 files for 2 zones × 3 rings
+# → adding a zone: update spec.context.zones — bundle definition unchanged
+```
+
+`spec.context.zones` and `spec.context.rings` act as the fleet's authoritative dimension
+lists, defined once. The `{{ zones }}` reference in `each` picks them up through the same
+context resolution path used for all other Jinja2 variables.
+
+### Idempotency
+
+Existing `--overwrite` flag applies per-file within an expanded entry. Without `--overwrite`,
+the runner stops on the first already-existing destination and reports it.
+
+### Validation
+
+Existing `--validate` flag applies to all generated files regardless of expansion.
+
+---
+
+## Phase 1 — Literal and context-variable expansion
+
+**Scope:** implement `each` with values sourced from:
+- Literal comma-separated string: `"zone": "europe-west,us-east"`
+- `spec.context` variable reference: `"zone": "{{ zones }}"` where `zones` is a key in
+  `spec.context`
+- `--set` overrides: `--set zones=eu-only` narrows expansion at invocation time
+
+No changes to how `NewCommand` loads workspace data are required. `spec.context` is already
+loaded from `solution.json` and merged into the render context.
+
+**Model change:** add `each: Optional[Dict[str, str]] = None` to
+`SolutionTemplateBundleEntryModel`.
+
+**Runner change:** extend `_run_solution_bundle_execution` in `run_new_command.py` to
+detect `each`, compute cartesian product, and iterate.
+
+---
+
+## Phase 2 — Workspace-model-injected dimension variables
+
+**Scope:** `NewCommand` additionally loads the workspace configuration YAML and injects
+well-known variables into the render context before bundle execution:
+
+| Injected variable     | Source                                             |
+| --------------------- | -------------------------------------------------- |
+| `configuration_zones` | `configuration.spec.zones[].name` joined with `,`  |
+| `configuration_rings` | Default progression `rings[].name` joined with `,` |
+
+Operators can then write:
+
+```json
+"each": { "zone": "{{ configuration_zones }}", "ring": "{{ configuration_rings }}" }
+```
+
+The bundle definition becomes fully topology-agnostic — no zone/ring names appear in
+`solution.json` at all. Adding a zone to `configuration.spec.zones` automatically expands
+all bundle entries on the next `strata new` invocation.
+
+`spec.context` values take precedence over injected configuration values (same priority
+order as existing `--set` > `spec.context` > injected).
+
+Phase 2 is gated on a real operator requirement for fully topology-driven expansion.
+Phase 1 `spec.context` references cover the common case with less implementation risk.
+
+---
+
+## Out of Scope
+
+- **`strata new tenant` dedicated subcommand** — unnecessary; the bundle mechanism is
+  generic and already invoked via `strata new <template-name> <entity-name>`.
+- **`--zones` / `--rings` CLI flags** — zones and rings are already known to the workspace;
+  they belong in `spec.context` or injected from configuration, not passed per-invocation.
+- **`strata remove <entity>`** — entity removal is a destructive multi-file operation that
+  warrants its own ADR and confirmation UX. Not addressed here.
 
 ---
 
 ## Consequences
 
-- New tenant onboarding goes from 10+ hand-authored files to a single command.
-- Path structure and layer consistency are enforced at generation time, not discovered
-  at deployment time.
-- ADR 0042 (deep validation) provides a post-generation validation gate before the
-  operator commits the scaffolded files.
-- `strata remove tenant` gives the fleet a clean offboarding path, preventing
-  configuration accumulation for churned tenants.
+- Multi-dimensional scaffolding (tenant × zone × ring, or any future N-dimensional
+  structure) collapses to a single `strata new <template> <name>` invocation.
+- Adding a topology dimension (new zone, new ring) requires updating `spec.context` in
+  `solution.json` once — bundle definitions do not change.
+- The `each` mechanism is general: any bundle entry for any entity kind benefits from it.
+- No new CLI subcommands, no new flag surface, no new syntax beyond the `{{ var }}`
+  operators already use.
+- `SolutionTemplateBundleEntryModel` gains one optional field; existing bundles without
+  `each` are unaffected.
