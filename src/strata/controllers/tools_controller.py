@@ -85,7 +85,42 @@ class ToolsController(BaseController):
                         "requirement": requirements.get(type_str),
                     }
                 )
-        return True, rows, errors
+        return True, rows + self._provisioner_plugin_rows(work_path), errors
+
+    def _provisioner_plugin_rows(self, work_path: Optional[str] = None) -> list[dict]:
+        """Return rows for loaded provisioner plugin manifests.
+
+        Each row has the same schema as integration rows so it can be rendered
+        by the same table formatters.  Binary availability is checked via
+        ``shutil.which`` for each entry in ``manifest.requires``.
+        """
+        import shutil
+
+        from strata.deployers.factory import DeployerFactory
+
+        if work_path:
+            from pathlib import Path
+
+            DeployerFactory.load_plugins(Path(work_path))
+
+        rows = []
+        for name, manifest in DeployerFactory.get_manifests().items():
+            missing = [b for b in (manifest.requires or []) if not shutil.which(b)]
+            available = len(missing) == 0
+            health_cmd = manifest.health_check.command if manifest.health_check else None
+            rows.append(
+                {
+                    "name": f"provisioner:{name}",
+                    "available": available,
+                    "version": manifest.version,
+                    "capabilities": manifest.supported_steps or [],
+                    "command": health_cmd,
+                    "requirement": None,
+                    "description": manifest.description,
+                    "missing_binaries": missing if not available else [],
+                }
+            )
+        return rows
 
     def _derive_required(
         self,

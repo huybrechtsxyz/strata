@@ -156,8 +156,9 @@ class HealthDeployCommand(BaseDeployCommand):
         """Fetch outputs then run every health check for the stage."""
         checks = stage.health_checks or []
 
-        # Fetch live outputs once per stage
+        # Fetch live outputs once per stage, and collect deployer status
         outputs: Dict[str, Any] = {}
+        deployer_status: Dict[str, Any] = {}
         deployer = self._create_deployer(stage)
         if deployer is not None:
             ok_ws, _ = deployer.validate_workspace()
@@ -168,6 +169,8 @@ class HealthDeployCommand(BaseDeployCommand):
                     ok_out, outputs, _ = deployer.output()
                     if not ok_out:
                         outputs = {}
+                    # Query live infrastructure state via deployer.status()
+                    _, deployer_status, _ = deployer.status()
 
         check_results: List[Dict[str, Any]] = []
         all_passed = True
@@ -178,7 +181,10 @@ class HealthDeployCommand(BaseDeployCommand):
                 all_passed = False
             check_results.append({"name": check.name, "type": check.type, "passed": ok, **detail})
 
-        return all_passed, {"passed": all_passed, "checks": check_results}
+        result: Dict[str, Any] = {"passed": all_passed, "checks": check_results}
+        if deployer_status:
+            result["status"] = deployer_status
+        return all_passed, result
 
     def _run_single_check(self, check: HealthCheckModel, outputs: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
         """Execute one health check; return (passed, detail_dict)."""
