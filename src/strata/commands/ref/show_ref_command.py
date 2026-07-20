@@ -51,7 +51,9 @@ class ShowRefCommand(BaseCommand):
                 self._errors.extend(errors)
                 return False
             if active is None:
-                self._errors.append("No active profile found. Use --profile to specify one.")
+                self._errors.append(
+                    "No active profile. Run 'strata profile activate <name>' first, or pass --profile NAME."
+                )
                 return False
             self._resolved_profile = str(active.name)
 

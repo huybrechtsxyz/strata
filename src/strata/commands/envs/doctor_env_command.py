@@ -374,7 +374,7 @@ class DoctorEnvCommand(BaseCommand):
                 CheckResult(
                     "config_profile_files",
                     "skip",
-                    fix_hint="No active profile — run 'strata profile activate <name>'.",
+                    fix_hint="No active profile. Run 'strata profile activate <name>' first.",
                 )
             )
             return results

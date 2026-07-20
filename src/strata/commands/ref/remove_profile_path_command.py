@@ -40,8 +40,13 @@ class RemoveProfilePathCommand(BaseCommand):
             return False
         if not self._profile_name:
             active, errors = self._solution_controller.get_active_profile()
-            if errors or active is None:
-                self._errors.append("No profile specified and no active profile found. Use 'strata profile add' first.")
+            if errors:
+                self._errors.extend(errors)
+                return False
+            if active is None:
+                self._errors.append(
+                    "No active profile. Run 'strata profile activate <name>' first, or pass --profile NAME."
+                )
                 return False
             self._profile_name = str(active.name)
         return True

@@ -116,9 +116,7 @@ class ValidateCommand(BaseCommand):
             )
         profile, _ = self._solution_controller.get_active_profile()
         if profile is None:
-            raise click.UsageError(
-                "Overlap check requires an active profile. Run `strata profile activate <name>` first."
-            )
+            raise click.UsageError("No active profile. Run `strata profile activate <name>` first.")
 
         glob_pattern = self._path_glob
         repo_map = self._solution_controller.get_repo_map()
@@ -283,6 +281,9 @@ class ValidateCommand(BaseCommand):
             from strata.utils.system import resolve_path
 
             profile, _ = self._solution_controller.get_active_profile()
+            if profile is None:
+                self._errors.append("No active profile. Run `strata profile activate <name>` first.")
+                return None
             configfile_paths = profile.configfile_paths or []
             repo_map = self._solution_controller.get_repo_map()
 
@@ -449,9 +450,7 @@ class ValidateCommand(BaseCommand):
 
             profile, _ = self._solution_controller.get_active_profile()
             if profile is None:
-                self._errors.append(
-                    "--deep requires an active profile. Run `strata profile activate <name>` or remove --deep."
-                )
+                self._errors.append("No active profile. Run `strata profile activate <name>` first, or remove --deep.")
                 return None
 
             configfile_paths = profile.configfile_paths or []
