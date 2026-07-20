@@ -1,6 +1,6 @@
 # Deployment audit and traceability for compliance (ISO 27001 / ISAE 3402)
 
-- Status: partial
+- Status: completed
 - Date: 2026-06-24
 
 ## What Still Needs To Be Done
