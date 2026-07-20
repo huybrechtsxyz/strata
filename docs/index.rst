@@ -113,23 +113,6 @@ strata
 .. toctree::
    :maxdepth: 2
    :caption: CLI Reference:
-   decisions/0028-sigterm-graceful-shutdown-and-lock-release
-   decisions/0029-realtime-progress-streaming-ndjson
-   decisions/0030-command-lifecycle-explicitness-and-thin-overrides
-   decisions/0031-cost-estimation-and-visibility
-   decisions/0032-approval-workflows-and-gates
-   decisions/0033-github-pull-request-integration
-   decisions/0034-diagram-visualization-in-vscode-extension
-   decisions/0035-enterprise-store
-   decisions/0036-workspace-provider-environment-overrides
-   decisions/0037-mass-wave-deployment
-   decisions/0038-multi-tenant-fleet-management-patterns
-   decisions/0039-deployment-templates
-   decisions/0040-tenant-onboarding-scaffolding
-   decisions/0041-gitops-controller-integration
-   decisions/0042-deep-validation-layer-consistency
-   decisions/0043-tenant-offboarding
-   decisions/0044-competitive-landscape-and-feature-gaps
 
 .. toctree::
    :maxdepth: 2
