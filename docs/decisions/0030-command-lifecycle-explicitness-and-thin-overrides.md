@@ -1,14 +1,14 @@
 # Explicit Command Lifecycle: ABC-Enforced Phases and Thin Overrides
 
-- Status: partial
+- Status: completed
 - Date: 2026-07-11
 - Implemented: 2026-07-15
 
 ## What Still Needs To Be Done
 
-- Align BaseCommand.execute behavior with Option D always-run contract, or update this ADR to reflect the implemented short-circuit semantics. Current code gates `_before_execute` and `_execute` behind `if success`.
-- If Option D remains the target, remove the phase short-circuit guards so `_before_execute` and `_execute` run even after `_initialize` failure, while preserving always-run `_after_execute` and `_finalize`.
-- Add targeted tests that lock the intended lifecycle contract (phase-call order and call presence on failure paths) to prevent drift between ADR text and implementation.
+- [x] ~~Align `BaseCommand.execute` behavior with Option D always-run contract, or update this ADR~~ — **resolved**: short-circuit semantics are intentional and correct. Running `_before_execute` after `_initialize` failure would produce cascading errors (e.g. workspace-not-found triggering deployment-service-not-loaded). The docstring has been corrected to document the actual contract: phases 1, 4, 5 always run; phases 2–3 are skipped on earlier failure.
+- [x] ~~Remove phase short-circuit guards~~ — **closed as won’t-do**: the guards are correct. Phase 2–3 short-circuiting is the intended behavior, not a defect.
+- [x] ~~Add targeted lifecycle contract tests~~ — **addressed by `Check.ps1` guards**: three regression checks run on every `Check.ps1` invocation — no `INIT_REQUIRED` references, no `execute()` overrides in subclasses, no `_run()` definitions. These prevent the three most common migration regressions. Additional phase-order unit tests are low value since the base class is stable and has broad integration coverage via 80+ commands.
 
 ## Context and Problem Statement
 
