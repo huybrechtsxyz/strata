@@ -1,0 +1,90 @@
+name: Deployment Change Request
+description: Request an infrastructure or configuration change for audit traceability (ISO 27001 / ISAE 3402)
+title: "[Change]: "
+labels: ["change-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form captures the evidence auditors need for every infrastructure change.
+        Strata automatically embeds this information in the deploy-log when the PR is merged.
+
+  - type: input
+    id: ticket
+    attributes:
+      label: Change ticket / work item
+      description: Reference to the work item, ticket, or change advisory board entry.
+      placeholder: "e.g. ORG-1234 or CAB-567"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Target environment
+      description: Which environment will this change be deployed to?
+      options:
+        - development
+        - staging
+        - production
+        - all
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk level
+      description: Assessed risk of this change.
+      options:
+        - low — cosmetic or additive change, no service impact expected
+        - medium — configuration change, minor service impact possible
+        - high — core infrastructure change, service disruption possible
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What is changing
+      description: |
+        Describe the specific YAML files, resources, and settings being modified.
+        Include before/after values where possible.
+      placeholder: |
+        File: deploy/deploy-prd.yaml
+        Change: replica count for web-service increased from 2 → 4
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why (business justification)
+      description: Business reason for this change. Auditors require a documented justification.
+      placeholder: "Load testing indicates current replicas are insufficient for expected peak traffic."
+    validations:
+      required: true
+
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback plan
+      description: How to revert if the deployment fails or causes issues.
+      placeholder: |
+        1. Revert PR (git revert)
+        2. Re-run `strata deploy run -f deploy/deploy-prd.yaml`
+        3. Verify health with `strata deploy health -f deploy/deploy-prd.yaml`
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: pre_checks
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: Change validated locally with `strata validate run -f <deployment.yaml>`
+          required: true
+        - label: Rollback plan documented above
+          required: true
+        - label: Risk level correctly assessed
+          required: true

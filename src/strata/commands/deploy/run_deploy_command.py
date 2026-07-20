@@ -513,6 +513,39 @@ class RunDeployCommand(BaseDeployCommand):
                 structure=structure,
             )
 
+            # Layer 4a: PR enrichment — best-effort, never blocks (gh CLI required)
+            if ok and path:
+                enriched = controller.enrich_with_pr_data(payload)
+                if enriched.pull_request is not None:
+                    import json
+
+                    path.write_text(
+                        json.dumps(enriched.model_dump(exclude_none=True), indent=2, default=str),
+                        encoding="utf-8",
+                    )
+
+                # Layer 4b: SIEM forwarding — best-effort, fire-and-forget
+                # Uses the enriched payload so SIEM gets PR data when available.
+                controller.forward_to_siem(enriched, audit_config=resolved_audit_cfg)
+
+                # Layer 4c: Push to remote repo — best-effort, opt-in via audit.repository
+                if resolved_audit_cfg and resolved_audit_cfg.repository:
+                    from pathlib import Path as _Path
+
+                    from strata.controllers.solution_controller import SolutionController
+
+                    sol_ctrl = SolutionController(work_path=self._work_path)
+                    sol_ctrl.load()
+                    repo_map = sol_ctrl.get_repo_map()
+                    repo_path = repo_map.get(str(resolved_audit_cfg.repository))
+                    if repo_path:
+                        controller.push_to_remote([path], working_dir=_Path(repo_path))
+                    else:
+                        self.logger.warning(
+                            "deploy_log_push_repo_not_found",
+                            repository=str(resolved_audit_cfg.repository),
+                        )
+
             if ok and path and self._is_console_output():
                 self._audit_log_path = str(path.relative_to(self._work_path))
                 click.echo(f"  📝  Deploy-log: {self._audit_log_path}")

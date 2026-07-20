@@ -5,9 +5,14 @@
 
 ## What Still Needs To Be Done
 
-- [ ] Wire the normal deploy flow to automatically invoke `enrich_with_pr_data`, `push_to_remote`, and `forward_to_siem` after writing the deploy-log. The current deploy path writes the deploy-log but does not call those methods end-to-end.
-- [ ] Treat Layer 1 PR template coverage as external process/documentation work. This repository does not contain enough code to verify that process here.
-- [ ] Either implement the future `strata audit diff` command described in this ADR or update the ADR text. This repository currently exposes `audit changes`, `audit resend`, and `audit export`, but not `audit diff`.
+- [x] ~~Wire the normal deploy flow to automatically invoke `enrich_with_pr_data` after writing the deploy-log~~ — **done**: `_write_deploy_log()` now calls `controller.enrich_with_pr_data(payload)` immediately after disk write; if a PR is found via `gh` CLI the execution JSON is overwritten with the enriched payload. Fully best-effort — any failure is caught and logged as WARNING.
+- [x] ~~Wire `forward_to_siem` into the deploy flow~~ — **done**: `controller.forward_to_siem(enriched, audit_config=resolved_audit_cfg)` is called after PR enrichment, using the PR-enriched payload so SIEM receives the full event. Fully best-effort — any failure is caught and logged as WARNING. Both built-in sinks (stdout, ndjson, syslog, webhook) and integration-backed sinks (Splunk etc.) are forwarded.
+- [x] ~~Wire `push_to_remote` into the deploy flow~~ — **done**: `AuditConfigModel.repository` field added (references a registered solution repo name); `push_to_remote()` extended with optional `working_dir` parameter; Layer 4c in `_write_deploy_log()` resolves the repo path from the solution controller and pushes deploy-log files after SIEM forwarding. Fully best-effort — unknown repo name logs a warning; any git failure is caught by the outer try/except.
+- [x] ~~Treat Layer 1 PR template coverage as external process/documentation work~~ — **done**: `strata sln init` and `strata sln update` now scaffold two compliance templates into every config repo:
+  - `.github/ISSUE_TEMPLATE/deployment-change-request.yml` — GitHub issue form capturing change ticket, target environment, risk level, what/why/rollback
+  - `.github/pull_request_template.md` — PR template with before/after table, risk assessment, author and reviewer checklists
+  Both templates are idempotent (existing files are never overwritten by `sln init`; `sln update` refreshes package-owned files).
+- [x] ~~Either implement the future `strata audit diff` command~~ — **done**: `strata audit diff FROM_ID TO_ID` resolves both execution IDs from the deploy-log, retrieves their `commit_sha` fields, and runs `git diff <sha_before> <sha_after> -- <yaml_file>`. Console output renders colourised unified diff; JSON output includes the raw diff string and `has_changes` flag. Exit code 3 when changes are detected (scripts can treat this as a drift signal).
 
 ## Context and Problem Statement
 
