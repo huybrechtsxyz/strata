@@ -8,7 +8,7 @@ import click
 
 from strata.commands.schemas.schema_base_command import SchemaBaseCommand
 from strata.controllers.audit_controller import AuditController
-from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+from strata.utils.config import get_deploy_log_dir
 
 
 class ChangesAuditCommand(SchemaBaseCommand):
@@ -44,7 +44,7 @@ class ChangesAuditCommand(SchemaBaseCommand):
         """Suppress the standard base-command chrome."""
 
     def _execute(self) -> bool:
-        base_path = self._work_path / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+        base_path = get_deploy_log_dir(self._work_path)
         controller = AuditController(work_path=self._work_path)
         self._entries = controller.query_deploy_logs(
             base_path=base_path,

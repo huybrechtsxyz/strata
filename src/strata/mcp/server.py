@@ -332,10 +332,10 @@ def audit_query(
     Each entry has: timestamp, deployment, success, duration_seconds, stages[].
     """
     from strata.controllers.audit_controller import AuditController
-    from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+    from strata.utils.config import get_deploy_log_dir
 
     wp = Path(_work_path(work_path))
-    base_path = wp / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+    base_path = get_deploy_log_dir(wp)
     try:
         controller = AuditController(work_path=wp)
         entries = controller.query_deploy_logs(

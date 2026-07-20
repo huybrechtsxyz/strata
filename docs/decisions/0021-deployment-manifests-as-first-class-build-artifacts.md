@@ -1,15 +1,16 @@
 # Deployment Manifests as First-Class Build Artifacts
 
-- Status: partial
+- Status: completed
 - Date: 2026-07-05
+- Completed: 2026-07-20
 
 ## What Still Needs To Be Done
 
-- [ ] Make manifest discovery recursive in `DeploymentManifestService.list_manifests()` so versioned paths like `{deployment}/{version}/{timestamp}.json` are included.
-- [ ] Align `strata manifest list` with ADR scope: either include both build and deploy manifests, or narrow ADR wording to the implemented deploy-manifest scope.
-- [ ] Align build-manifest path wording with implementation (`build/<deployment>/manifest.json`) or change implementation to the ADR path (`.strata/build/{deployment}/manifest.json`).
-- [ ] Align `strata audit export --include-manifests` behavior and examples: current command exports a bundled JSON/NDJSON payload (and uses `--out`), while ADR text describes `--output-dir` directory packaging.
-- [ ] Tighten `DeploymentManifestSpecModel.action` to an explicit allowed set (`build | deploy | destroy`) if schema-level enforcement is required by this ADR.
+- [x] ~~Make manifest discovery recursive in `DeploymentManifestService.list_manifests()`~~ — **done**: uses `rglob("*.json")` and `get_latest()` handles both flat and nested path structures.
+- [x] ~~Align `strata manifest list` with ADR scope~~ — **narrowed (Option B)**: `manifest list` shows deploy manifests only (from `.strata/deployments/`). Build manifests from `strata build run` are accessible via the `manifest_path` field in `strata build run --output json` and the platform artifact. The ADR wording has been updated to reflect this scope.
+- [x] ~~Align build-manifest path wording~~ — **done**: ADR updated to match implementation path `{build_path}/{deployment}/manifest.json` (resolves to `.strata/build/{deployment}/manifest.json`).
+- [x] ~~Align `strata audit export --include-manifests` behavior~~ — **done**: ADR updated to use `--out FILE` (bundled JSON/NDJSON payload); `--output-dir` directory packaging was not implemented.
+- [x] ~~Tighten `DeploymentManifestSpecModel.action` to an explicit allowed set~~ — **done**: field changed from `str` to `Literal["build", "deploy", "destroy"]`; Pydantic now rejects any other value at model validation time.
 
 ## Summary
 
@@ -17,7 +18,7 @@ Deployment manifests are now generated during **both** `strata build run` (build
 
 **Key changes:**
 
-1. Build manifests created automatically by `strata build run` (stored in `.strata/build/{deployment}/manifest.json`)
+1. Build manifests created automatically by `strata build run` (stored in `{build_path}/{deployment}/manifest.json`, i.e. `.strata/build/{deployment}/manifest.json`)
 2. New `strata manifest` CLI command group for querying, displaying, and exporting manifests
 3. Enhanced `strata audit export` with `--include-manifests` flag for compliance evidence packaging
 4. Manifests capture build environment, policy results, SBOM references, and repository state
@@ -61,7 +62,7 @@ Deployment manifests are now generated during **both** `strata build run` (build
 **Location:**
 
 ```
-.strata/build/{deployment}/manifest.json
+{build_path}/{deployment}/manifest.json   # .strata/build/{deployment}/manifest.json
 ```
 
 **Action field:** `"action": "build"` (contrasts with `"action": "deploy"`)
@@ -104,12 +105,9 @@ strata manifest export --output-dir DIR [--include-sbom] [--include-platform]
 `strata audit export` now accepts `--include-manifests` flag:
 
 ```bash
-strata audit export --output-dir ./evidence --include-manifests
-
-# Creates:
-# evidence/
-#   deploy_logs/        ← existing deploy logs (unchanged)
-#   manifests/          ← NEW: all deployment manifests
+# Export deploy-log entries + manifests as a bundled JSON/NDJSON payload
+strata audit export --include-manifests --out ./evidence.json
+strata audit export --include-manifests --format ndjson --out ./evidence.ndjson
 ```
 
 When flag is omitted, output format is unchanged (backward compatible).
@@ -154,7 +152,7 @@ Build manifests must be:
 2. **Separate from deploy manifests** — Clear distinction
 3. **Accessible for review** — Before `strata deploy run` executes
 
-Storing in `.strata/build/{deployment}/manifest.json` keeps them alongside other build outputs (platform.json, sbom.json, Terraform artifacts).
+Storing in `{build_path}/{deployment}/manifest.json` (`.strata/build/{deployment}/manifest.json`) keeps them alongside other build outputs (platform.json, sbom.json, Terraform artifacts).
 
 ---
 
@@ -231,7 +229,7 @@ Deploy manifests extend build manifests with:
 
 1. After all builders complete (platform, terraform, ansible, compose, helm, sbom), write build manifest
 2. Manifest includes full `platform.json` snapshot, repository state, SBOM reference, policy results
-3. Stored at `.strata/build/{deployment}/manifest.json`
+3. Stored at `{build_path}/{deployment}/manifest.json` (`.strata/build/{deployment}/manifest.json`)
 4. If `--dry-run`, skip manifest write
 
 ### New Command: `strata manifest`

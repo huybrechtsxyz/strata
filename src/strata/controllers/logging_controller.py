@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from strata.controllers.base_controller import BaseController
-from strata.utils.config import SOLUTION_DIR, SOLUTION_LOGGING_FILE
+from strata.utils.config import SOLUTION_LOGGING_FILE, get_logging_config_path, get_strata_dir
 from strata.utils.system import get_pkg_data_path
 
 # Keys that the `level` shorthand touches when the user runs `strata log config set level X`
@@ -33,14 +33,14 @@ class LoggingController(BaseController):
     def __init__(self, work_path: Path) -> None:
         super().__init__()
         self._work_path = work_path
-        self._config_path = work_path / SOLUTION_DIR / SOLUTION_LOGGING_FILE
+        self._config_path = get_logging_config_path(work_path)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _ensure_state_dir(self) -> None:
-        (self._work_path / SOLUTION_DIR).mkdir(parents=True, exist_ok=True)
+        get_strata_dir(self._work_path).mkdir(parents=True, exist_ok=True)
 
     def _pkg_template(self) -> Optional[Path]:
         """Return the path to the package-bundled logging.yaml, or None."""

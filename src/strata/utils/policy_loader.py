@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from strata.logger import get_logger
-from strata.utils.config import SOLUTION_DIR, SOLUTION_POLICIES_DIR
+from strata.utils.config import get_policies_dir
 
 logger = get_logger(__name__)
 
@@ -33,7 +33,7 @@ def load_workspace_policies(work_path: Path) -> int:
         Number of files successfully loaded (i.e. ``register()`` was called
         without raising).
     """
-    policies_dir = work_path / SOLUTION_DIR / SOLUTION_POLICIES_DIR
+    policies_dir = get_policies_dir(work_path)
     if not policies_dir.is_dir():
         return 0
 

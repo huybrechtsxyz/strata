@@ -199,21 +199,15 @@ class TestForwardEntriesToSiem:
 
         int_model = IntegrationModel(name="git_tool", type="git")
 
-        mock_svc = MagicMock()
-        mock_svc.model.spec.integrations = [int_model]
-
         non_siem_instance = MagicMock(spec=[])  # no ISiemSink attributes
 
-        with (
-            patch("strata.services.configuration_service.ConfigurationService.load", return_value=mock_svc),
-            patch("strata.integrations.factory.IntegrationFactory.create", return_value=non_siem_instance),
-        ):
-            cfg_dir = tmp_path / ".strata"
-            cfg_dir.mkdir()
-            (cfg_dir / "config.yaml").write_text(
-                "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n  integrations:\n    - name: git_tool\n      type: git\n"
-            )
+        cfg_dir = tmp_path / ".strata"
+        cfg_dir.mkdir()
+        (cfg_dir / "config.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n  integrations:\n    - name: git_tool\n      type: git\n"
+        )
 
+        with patch("strata.integrations.factory.IntegrationFactory.create", return_value=non_siem_instance):
             cmd = ExportAuditCommand(out_file=None, siem_name="git_tool", work_path=str(tmp_path))
             cmd._initialize(show_header=False)
             cmd._siem_name = "git_tool"
@@ -249,22 +243,22 @@ class TestForwardEntriesToSiem:
             endpoints=IntegrationEndpointsSpecModel(address="https://splunk:8088"),
         )
 
-        mock_svc = MagicMock()
-        mock_svc.model.spec.integrations = [int_model]
-
         SplunkSiemIntegration._instances.clear()
         splunk_instance = SplunkSiemIntegration(config=int_model)
 
+        cfg_dir = tmp_path / ".strata"
+        cfg_dir.mkdir()
+        (cfg_dir / "config.yaml").write_text(
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: configuration\nmeta:\n  name: cfg\nspec:\n"
+            "  integrations:\n    - name: splunk_hec\n      type: splunk\n"
+            "      endpoints:\n        address: https://splunk:8088\n"
+        )
+
         with (
-            patch("strata.services.configuration_service.ConfigurationService.load", return_value=mock_svc),
             patch("strata.integrations.factory.IntegrationFactory.create", return_value=splunk_instance),
             patch.object(splunk_instance, "_post_raw", return_value=True),
             patch.object(splunk_instance, "_get_hec_token", return_value="test-token"),
         ):
-            cfg_dir = tmp_path / ".strata"
-            cfg_dir.mkdir()
-            (cfg_dir / "config.yaml").write_text("")
-
             cmd = ExportAuditCommand(out_file=None, siem_name="splunk_hec", work_path=str(tmp_path))
             cmd._initialize(show_header=False)
             cmd._siem_name = "splunk_hec"

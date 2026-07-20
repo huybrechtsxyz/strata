@@ -1,7 +1,7 @@
 """Configuration service — centralised singleton for platform configuration."""
 
 import threading
-from pathlib import Path
+from pathlib import Path  # noqa: F401 — used in load()
 from typing import Any, Dict, List, Optional, Tuple
 
 from strata.exceptions import PlatformFileNotFoundError
@@ -66,13 +66,26 @@ class ConfigurationService(BaseService["ConfigurationModel"]):
 
     @classmethod
     def load(cls, path: str, validate: bool = True) -> "ConfigurationService":
-        """Return the singleton instance.
+        """Return the singleton, loading *path* on first call if it is not yet populated.
 
-        ConfigurationService is a singleton that aggregates multiple config
-        files via ``load_from_paths`` / ``add_configuration``.  The inherited
-        ``BaseService.load()`` single-file pattern does not apply.
+        The singleton is populated once per process — either by
+        ``_load_config_sources()`` (all commands) or by
+        ``_load_configuration_service()`` (deploy/build commands).  Subsequent
+        calls are free: the already-loaded instance is returned immediately.
+
+        If the singleton has no data yet (e.g. a standalone audit command with
+        no active profile), *path* is loaded now so callers can access
+        ``instance.model``.
         """
-        return cls.get_instance()
+        instance = cls.get_instance()
+        if not instance.data:
+            p = Path(path)
+            if p.exists():
+                try:
+                    instance.add_configuration(p)
+                except Exception:
+                    pass  # non-fatal — callers check instance.model
+        return instance
 
     @classmethod
     def reset(cls):

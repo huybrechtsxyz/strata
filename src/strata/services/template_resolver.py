@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from strata.exceptions import ModelValidationError, PlatformError
 from strata.logger import get_logger
 from strata.models.scaffold_template_model import ScaffoldTemplateModel
-from strata.utils.config import SOLUTION_DIR, SOLUTION_TEMPLATES_DIR
+from strata.utils.config import get_templates_dir
 from strata.utils.system import get_pkg_templates_path
 
 logger = get_logger(__name__)
@@ -64,7 +64,7 @@ def list_scaffold_templates(work_path: Optional[Path] = None) -> List[Dict[str, 
 
     # Workspace-local templates (override built-in)
     if work_path is not None:
-        ws_dir = work_path / SOLUTION_DIR / SOLUTION_TEMPLATES_DIR
+        ws_dir = get_templates_dir(work_path)
         if ws_dir.is_dir():
             for p in ws_dir.iterdir():
                 if p.is_dir() and (p / _SCAFFOLD_DIR).is_dir():

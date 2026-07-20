@@ -9,7 +9,7 @@ import click
 
 from strata.commands.schemas.schema_base_command import SchemaBaseCommand
 from strata.controllers.audit_controller import AuditController
-from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DEPLOYMENTS_DIR, SOLUTION_DIR
+from strata.utils.config import get_deploy_log_dir
 
 
 class ExportAuditCommand(SchemaBaseCommand):
@@ -57,7 +57,7 @@ class ExportAuditCommand(SchemaBaseCommand):
     def _execute(self) -> bool:
         from pathlib import Path
 
-        base_path = self._work_path / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+        base_path = get_deploy_log_dir(self._work_path)
         controller = AuditController(work_path=self._work_path)
         self._entries = controller.query_deploy_logs(
             base_path=base_path,
@@ -66,9 +66,10 @@ class ExportAuditCommand(SchemaBaseCommand):
         )
 
         if self._include_manifests:
+            from strata.controllers.solution_controller import SolutionController
             from strata.services.deployment_manifest_service import DeploymentManifestService
 
-            manifest_base = self._work_path / SOLUTION_DIR / SOLUTION_DEPLOYMENTS_DIR
+            manifest_base = SolutionController.get_deployments_dir(self._work_path)
             if manifest_base.exists():
                 manifest_files = DeploymentManifestService.list_manifests(manifest_base)
                 if self._last:
@@ -184,16 +185,23 @@ class ExportAuditCommand(SchemaBaseCommand):
         return ok
 
     def _find_integration_model(self, siem_name: Optional[str]):
-        from strata.services.configuration_service import ConfigurationService
-        from strata.utils.config import SOLUTION_DIR
+        import yaml
+
+        from strata.models.configuration_model import ConfigurationModel
+        from strata.utils.config import get_strata_dir
 
         if not siem_name:
             return None
-        for cfg_path in (self._work_path / SOLUTION_DIR).rglob("*.yaml"):
+        # Scan each YAML file in .strata/ independently — do NOT use the shared
+        # singleton here, as that would contaminate the process-wide instance.
+        for cfg_path in get_strata_dir(self._work_path).rglob("*.yaml"):
             try:
-                svc = ConfigurationService.load(str(cfg_path), validate=False)
-                if svc.model and svc.model.spec:
-                    for m in getattr(svc.model.spec, "integrations", []) or []:
+                raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+                if not isinstance(raw, dict):
+                    continue
+                model = ConfigurationModel.model_validate(raw)
+                if model.spec:
+                    for m in getattr(model.spec, "integrations", []) or []:
                         if m.name == siem_name:
                             return m
             except Exception:

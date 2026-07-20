@@ -19,7 +19,7 @@ from strata.models.sbom_model import (
     SbomIgnorePackageRuleModel,
     SbomIgnorePathRuleModel,
 )
-from strata.utils.config import SOLUTION_DIR, SOLUTION_FILE, SOLUTION_SBOM_IGNORE_FILE
+from strata.utils.config import get_sbom_ignore_path, get_solution_json_path
 
 logger = get_logger(__name__)
 
@@ -188,7 +188,7 @@ class DependencyFileCollector(BaseSbomCollector):
         Falls back to ``[work_path]`` when the solution is absent or has no
         registered repositories.
         """
-        solution_path = work_path / SOLUTION_DIR / SOLUTION_FILE
+        solution_path = get_solution_json_path(work_path)
         if not solution_path.exists():
             return [work_path]
         try:
@@ -219,7 +219,7 @@ class DependencyFileCollector(BaseSbomCollector):
         Logs a warning and returns an empty config when the file exists but
         fails Pydantic validation (so a bad ignore file never blocks a build).
         """
-        ignore_path = work_path / SOLUTION_DIR / SOLUTION_SBOM_IGNORE_FILE
+        ignore_path = get_sbom_ignore_path(work_path)
         if not ignore_path.exists():
             return SbomIgnoreConfigModel()
         try:

@@ -28,7 +28,7 @@ from strata.models.promotion_record_model import (
     PromotionRecordTargetModel,
     PromotionRingWaveSummaryModel,
 )
-from strata.utils.config import SOLUTION_DIR, SOLUTION_FILE
+from strata.utils.config import SOLUTION_DIR, get_configuration_path, get_solution_json_path
 
 _API_VERSION = "strata.huybrechts.xyz/v1"
 _PROMOTIONS_DIR = "promotions"
@@ -63,10 +63,7 @@ class PromoteController(BaseController):
         """Load and return the ConfigurationModel, or None if unavailable."""
         from strata.models.configuration_model import ConfigurationModel
 
-        config_file = work_path / ".strata" / "configuration.yaml"
-        if not config_file.exists():
-            # Try bare name at work_path root
-            config_file = work_path / "configuration.yaml"
+        config_file = get_configuration_path(work_path)
         if not config_file.exists():
             self._add_error(f"configuration.yaml not found under {work_path}. Run 'strata sln init' first.")
             return None
@@ -81,7 +78,7 @@ class PromoteController(BaseController):
         """Return SolutionModel loaded from solution.json, or None."""
         from strata.services.solution_service import SolutionService
 
-        solution_path = work_path / SOLUTION_DIR / SOLUTION_FILE
+        solution_path = get_solution_json_path(work_path)
         if not solution_path.exists():
             return None
         try:

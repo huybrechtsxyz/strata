@@ -14,7 +14,13 @@ from strata.controllers.solution_controller import SolutionController
 from strata.logger import audit, configure_audit_log, get_logger, is_audit_configured, shutdown_audit
 from strata.logger.context import set_context
 from strata.logger.logger import reconfigure_logging
-from strata.utils.config import DEFAULT_BUILD_PATH, DOCS_URL, SOLUTION_DIR, SUPPORT_URL
+from strata.utils.config import (
+    DEFAULT_BUILD_PATH,
+    DOCS_URL,
+    SUPPORT_URL,
+    get_audit_log_path,
+    get_logs_dir,
+)
 from strata.utils.system import generate_uuid, resolve_path, resolve_work_path
 from strata.utils.version import get_version
 
@@ -280,7 +286,7 @@ class BaseCommand:
             # Configure audit log (separate from application logs).
             # Skip if already configured by the audit: section in logging.yaml.
             if not is_audit_configured():
-                audit_path = self._work_path / SOLUTION_DIR / "audit.log"
+                audit_path = get_audit_log_path(self._work_path)
                 configure_audit_log(log_path=str(audit_path))
 
             # Start session operation if specified
@@ -355,7 +361,7 @@ class BaseCommand:
             set_context({"solution_id": solution_id, "execution_id": self._execution_id})
 
             if not is_audit_configured():
-                audit_path = self._work_path / SOLUTION_DIR / "audit.log"
+                audit_path = get_audit_log_path(self._work_path)
                 configure_audit_log(log_path=str(audit_path))
 
             self._start_session_operation()
@@ -677,7 +683,7 @@ class BaseCommand:
         """Enable a JSON session log file for crash diagnostics when no YAML config exists."""
         from datetime import date
 
-        log_dir = self._work_path / SOLUTION_DIR / "logs"
+        log_dir = get_logs_dir(self._work_path)
         if not log_dir.parent.exists():
             return  # work_path/.strata/ doesn't exist yet (pre-init)
 
@@ -808,7 +814,7 @@ class BaseCommand:
         variable substitution performed by downstream consumers.
         """
         try:
-            from strata.utils.config import SOLUTION_CONFIGURATION_FILE, SOLUTION_DIR
+            from strata.utils.config import get_configuration_path
             from strata.utils.configuration_loader import ConfigurationLoader
             from strata.utils.system import resolve_path
 
@@ -847,11 +853,22 @@ class BaseCommand:
                 keys=len(merged),
             )
 
+            # Populate the ConfigurationService singleton so any downstream code
+            # that calls ConfigurationService.get_instance() gets the merged model
+            # for free — no re-read required.
+            try:
+                from strata.services.configuration_service import ConfigurationService
+
+                if not ConfigurationService.get_instance().data:
+                    ConfigurationService.get_instance().add_configurations([Path(p) for p in resolved_paths])
+            except Exception as e:
+                self.logger.debug(f"ConfigurationService pre-load failed (non-fatal): {e}")
+
             # Write debug artifact — non-fatal
             try:
                 import yaml
 
-                debug_path = self._work_path / SOLUTION_DIR / SOLUTION_CONFIGURATION_FILE
+                debug_path = get_configuration_path(self._work_path)
                 with open(debug_path, "w", encoding="utf-8") as fh:
                     yaml.safe_dump(merged, fh, sort_keys=False)
             except Exception as e:

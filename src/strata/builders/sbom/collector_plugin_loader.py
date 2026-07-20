@@ -8,12 +8,11 @@ from typing import List, Optional
 from strata.builders.sbom.base_sbom_collector import BaseSbomCollector
 from strata.exceptions.base_exception import PlatformError
 from strata.logger import get_logger
-from strata.utils.config import SOLUTION_COLLECTORS_FILE, SOLUTION_DIR, SOLUTION_LOCKFILE_PARSERS_DIR
+from strata.utils.config import get_collectors_path, get_lockfile_parsers_dir
 
 logger = get_logger(__name__)
 
-_COLLECTORS_CONFIG = f"{SOLUTION_DIR}/{SOLUTION_COLLECTORS_FILE}"
-_LOCKFILE_PARSERS_DIR = f"{SOLUTION_DIR}/{SOLUTION_LOCKFILE_PARSERS_DIR}"
+
 _SUPPORTED_TYPES = {"collector", "lockfile_parser"}
 
 
@@ -68,7 +67,7 @@ class CollectorPluginLoader:
             PlatformError: If the config file exists but cannot be parsed, a
                 declared file path is missing, or a class cannot be loaded.
         """
-        config_path = work_path / _COLLECTORS_CONFIG
+        config_path = get_collectors_path(work_path)
         if not config_path.exists():
             # No YAML config, but still auto-discover from folder
             CollectorPluginLoader._discover_lockfile_parsers(work_path)
@@ -81,20 +80,20 @@ class CollectorPluginLoader:
                 data = yaml.safe_load(fh)
         except Exception as exc:
             raise PlatformError(
-                message=f"Failed to parse {_COLLECTORS_CONFIG}: {exc}",
+                message=f"Failed to parse {config_path}: {exc}",
                 error_code="COLLECTOR_PLUGIN_CONFIG_ERROR",
             ) from exc
 
         if not isinstance(data, dict):
             raise PlatformError(
-                message=f"{_COLLECTORS_CONFIG} must be a YAML mapping",
+                message=f"{config_path} must be a YAML mapping",
                 error_code="COLLECTOR_PLUGIN_CONFIG_ERROR",
             )
 
         entries = data.get("collectors") or []
         if not isinstance(entries, list):
             raise PlatformError(
-                message=f"{_COLLECTORS_CONFIG}: 'collectors' must be a list",
+                message=f"{config_path}: 'collectors' must be a list",
                 error_code="COLLECTOR_PLUGIN_CONFIG_ERROR",
             )
 
@@ -172,7 +171,7 @@ class CollectorPluginLoader:
         Files starting with ``_`` are skipped.  Import errors are logged as
         warnings but do not halt processing.
         """
-        parsers_dir = work_path / _LOCKFILE_PARSERS_DIR
+        parsers_dir = get_lockfile_parsers_dir(work_path)
         if not parsers_dir.is_dir():
             return
 

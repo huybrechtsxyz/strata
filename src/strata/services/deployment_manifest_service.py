@@ -158,28 +158,42 @@ class DeploymentManifestService(BaseService["DeploymentManifestModel"]):
     def list_manifests(deployments_dir: Path) -> List[Path]:
         """List all manifest files in the deployments directory, newest first.
 
+        Searches recursively so versioned path structures such as
+        ``{deployment}/{version}/{timestamp}.json`` are included alongside
+        flat ``{deployment_name}_{timestamp}.json`` entries.
+
         Args:
             deployments_dir: Path to ``.strata/deployments/``.
 
         Returns:
-            Sorted list of manifest file paths (newest first by filename).
+            Sorted list of manifest file paths (newest first by path string).
         """
         if not deployments_dir.exists():
             return []
-        return sorted(deployments_dir.glob("*.json"), reverse=True)
+        return sorted(deployments_dir.rglob("*.json"), reverse=True)
 
     @classmethod
     def get_latest(cls, deployments_dir: Path, deployment_name: Optional[str] = None) -> Optional[Path]:
         """Return the most recent manifest, optionally filtered by deployment name.
 
+        Works with both flat (``{deployment}_{timestamp}.json``) and nested
+        (``{deployment}/{version}/{timestamp}.json``) path structures.
+
         Args:
             deployments_dir: Path to ``.strata/deployments/``.
-            deployment_name: If set, only consider manifests for this deployment.
+            deployment_name: If set, only consider manifests whose path contains
+                this deployment name (stem prefix for flat, directory component
+                for nested).
 
         Returns:
             Path to the latest manifest, or None.
         """
         manifests = cls.list_manifests(deployments_dir)
         if deployment_name:
-            manifests = [m for m in manifests if m.stem.startswith(deployment_name + "_")]
+            manifests = [
+                m
+                for m in manifests
+                if m.stem.startswith(deployment_name + "_")  # flat: {name}_{ts}.json
+                or deployment_name in m.parts  # nested: .../name/...
+            ]
         return manifests[0] if manifests else None

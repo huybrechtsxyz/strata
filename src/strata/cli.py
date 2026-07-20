@@ -23,7 +23,6 @@ import sys
 from pathlib import Path
 
 import click
-import yaml
 
 from strata.commands.cli_audit import audit_group
 from strata.commands.cli_builders import build as build_group
@@ -54,16 +53,15 @@ from strata.commands.cli_values import values_group
 from strata.commands.cli_vars import vars_group
 from strata.commands.cli_version import version_command
 from strata.commands.cli_versions import versions_group
+from strata.controllers.configuration_controller import ConfigurationController
 from strata.logger import configure_logging, get_logger, shutdown_logging
 from strata.utils import system
-from strata.utils.config import SOLUTION_CONFIG_FILE, SOLUTION_DIR
 from strata.utils.integration_loader import load_workspace_integrations
 from strata.utils.policy_loader import load_workspace_policies
 from strata.utils.system import resolve_work_path
 
 logger = get_logger(__name__)
 
-_CONFIG_FILE = SOLUTION_CONFIG_FILE
 _DEFAULT_MAP_KEYS = ("output", "verbose", "quiet", "work_path", "file")
 
 
@@ -74,14 +72,8 @@ def _load_workspace_defaults(work_path: Path) -> dict:
     Returns an empty dict when the file is absent or unreadable, so the
     caller can always safely pass the result to Click's ``default_map``.
     """
-    config_path = work_path / SOLUTION_DIR / _CONFIG_FILE
-    if not config_path.exists():
-        return {}
     try:
-        with open(config_path, "r", encoding="utf-8") as fh:
-            raw = yaml.safe_load(fh) or {}
-        values = raw.get("values", {})
-        # Only keep keys that map to actual CLI options
+        values = ConfigurationController(work_path).list_cli_values()
         return {k: v for k, v in values.items() if k in _DEFAULT_MAP_KEYS}
     except Exception as exc:
         logger.debug(f"Could not load workspace config defaults: {exc}")
