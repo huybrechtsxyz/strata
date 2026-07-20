@@ -113,41 +113,6 @@ strata
 .. toctree::
    :maxdepth: 2
    :caption: CLI Reference:
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Architectural Decisions:
-
-   decisions/README
-   decisions/0001-kubernetes-style-yaml-schema
-   decisions/0002-python-click-not-compiled-cli
-   decisions/0003-layered-architecture
-   decisions/0004-exit-code-convention
-   decisions/0005-secret-resolution-at-build-time
-   decisions/0006-policy-engine-for-deployment-guardrails
-   decisions/0007-deployment-state-locking
-   decisions/0008-infrastructure-drift-detection
-   decisions/0009-sbom-extended-sources-and-inventory
-   decisions/0010-rename-configuration-repositories-to-remotes
-   decisions/0011-promotion-strategies-for-version-progression
-   decisions/0012-rename-customer-to-tenant
-   decisions/0013-auto-generated-secrets
-   decisions/0014-onboarding-experience
-   decisions/0015-flow-command-dependency-graph
-   decisions/0016-console-interactive-repl
-   decisions/0017-jinja2-template-engine
-   decisions/0017-tag-based-release-workflow-option-c
-   decisions/0018-deployment-audit-traceability
-   decisions/0019-configurable-terraform-build-output
-   decisions/0020-cli-parameter-consistency-standard
-   decisions/0020-lifecycle-phases-and-environment-variables
-   decisions/0021-deployment-manifests-as-first-class-build-artifacts
-   decisions/0022-siem-integration-splunk-hec-cef
-   decisions/0023-pluggable-provisioner-framework
-   decisions/0024-environment-composition-flat-merge-fix
-   decisions/0025-ai-agent-integration-for-build-and-deploy
-   decisions/0026-resolved-model-cache
-   decisions/0027-command-timeout-for-long-running-operations
    decisions/0028-sigterm-graceful-shutdown-and-lock-release
    decisions/0029-realtime-progress-streaming-ndjson
    decisions/0030-command-lifecycle-explicitness-and-thin-overrides
