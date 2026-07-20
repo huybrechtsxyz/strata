@@ -13,7 +13,6 @@ from strata.deployers.base_deployer import (
     STEP_PLAN,
     STEP_SETUP,
 )
-from strata.deployers.factory import DeployerFactory
 from strata.integrations.lock.base_lock_backend import (
     BaseLockBackend,
     LockHandle,
@@ -1172,45 +1171,6 @@ class RunDeployCommand(BaseDeployCommand):
                     elif result.enforcement == "audit" and self._is_verbose():
                         click.echo(f"    \u00b7  Policy '{result.policy_name}' audit: {v}")
         return not denied
-
-    def _create_deployer(self, stage: DeploymentStageModel):
-        """Instantiate and return the deployer for *stage*, or None.
-
-        Resolution (mutually exclusive — exactly one required at runtime):
-        - stage.provisioner → look up named provisioner entry in workspace
-        - stage.topology    → look up topology by name → derive provisioner type
-                              (errors if topology not found or provisioner is ambiguous)
-        An error is appended to self._errors when resolution fails.
-        """
-        if self._deployment_service is None:
-            self._errors.append(f"Stage '{stage.name}': deployment service not loaded.")
-            return None
-
-        resolved_type, errors = DeployerFactory.resolve_type(stage, self._deployment_service)
-        if errors:
-            self._errors.extend(errors)
-        if resolved_type is None:
-            return None
-
-        # Filter STRATA_SENSITIVE to only secrets declared by this stage
-        _stage_values = self._resolved_values.for_stage(stage.secrets) if self._resolved_values else None
-
-        try:
-            return DeployerFactory.create(
-                resolved_type,
-                stage=stage,
-                deployment_service=self._deployment_service,  # type: ignore[arg-type]
-                configuration_service=self._configuration_service,  # type: ignore[arg-type]
-                build_path=self._build_path,
-                work_path=self._work_path,
-                verbose=self._is_verbose(),
-                force=self._force,
-                resolved_values=_stage_values,
-                solution_controller=self._solution_controller,
-            )
-        except ValueError as exc:
-            self._errors.append(str(exc))
-            return None
 
     def _check_approvals(self, stages_to_run: List[DeploymentStageModel]) -> bool:
         """Log approval metadata declared in spec.approvals before executing stages.

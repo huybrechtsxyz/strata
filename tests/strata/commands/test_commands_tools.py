@@ -380,3 +380,84 @@ class TestToolsInstall:
         runner = CliRunner()
         result = runner.invoke(tools_group, ["install"])
         assert result.exit_code == 2
+
+
+class TestToolsStatusProvisionerPlugins:
+    """Tests for provisioner plugin rows in strata tools status."""
+
+    def setup_method(self):
+        from strata.deployers.factory import DeployerFactory
+
+        DeployerFactory.reset()
+
+    def teardown_method(self):
+        from strata.deployers.factory import DeployerFactory
+
+        DeployerFactory.reset()
+
+    def test_provisioner_plugin_row_available(self, tmp_path):
+        """Plugin with all required binaries present shows available=True."""
+        import shutil
+
+        from strata.controllers.tools_controller import ToolsController
+        from strata.deployers.factory import DeployerFactory
+        from strata.models.provisioner_manifest_model import ProvisionerManifestModel
+
+        manifest = ProvisionerManifestModel(name="myplugin", version="1.0.0", requires=["python"])
+        DeployerFactory._manifests["myplugin"] = manifest
+
+        ctrl = ToolsController()
+        rows = ctrl._provisioner_plugin_rows()
+
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["name"] == "provisioner:myplugin"
+        assert row["version"] == "1.0.0"
+        # python is always on PATH in test env
+        assert row["available"] is (shutil.which("python") is not None)
+
+    def test_provisioner_plugin_row_missing_binary(self, tmp_path):
+        """Plugin with missing required binary shows available=False and lists missing."""
+        from strata.controllers.tools_controller import ToolsController
+        from strata.deployers.factory import DeployerFactory
+        from strata.models.provisioner_manifest_model import ProvisionerManifestModel
+
+        manifest = ProvisionerManifestModel(
+            name="ghost_tool",
+            version="0.1.0",
+            requires=["strata_nonexistent_binary_xyz"],
+        )
+        DeployerFactory._manifests["ghost_tool"] = manifest
+
+        ctrl = ToolsController()
+        rows = ctrl._provisioner_plugin_rows()
+
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["available"] is False
+        assert "strata_nonexistent_binary_xyz" in row["missing_binaries"]
+
+    def test_no_manifests_returns_empty(self, tmp_path):
+        """No manifests loaded → _provisioner_plugin_rows returns []."""
+        from strata.controllers.tools_controller import ToolsController
+
+        ctrl = ToolsController()
+        assert ctrl._provisioner_plugin_rows() == []
+
+    def test_status_includes_plugin_rows(self, tmp_path):
+        """ToolsController.status() includes provisioner plugin rows."""
+        from strata.deployers.factory import DeployerFactory
+        from strata.models.provisioner_manifest_model import ProvisionerManifestModel
+
+        manifest = ProvisionerManifestModel(name="pulumi", version="3.0.0", requires=[])
+        DeployerFactory._manifests["pulumi"] = manifest
+
+        with patch("strata.controllers.tools_controller.IntegrationFactory") as mock_factory:
+            mock_factory.get_known_types.return_value = []
+            from strata.controllers.tools_controller import ToolsController
+
+            ctrl = ToolsController()
+            _, rows, _ = ctrl.status()
+
+        names = [r["name"] for r in rows]
+        assert "provisioner:pulumi" in names

@@ -8,8 +8,6 @@ import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
 from strata.deployers.factory import DeployerFactory
-from strata.deployers.terraform_deployer import TerraformDeployer
-from strata.models.common_models import ProvisionerType
 from strata.models.deployment_model import DeploymentStageModel
 
 
@@ -129,9 +127,9 @@ class DriftEnvCommand(BaseDeployCommand):
         }
 
         # Only terraform supports plan-based drift detection
-        provisioner_type = self._resolve_provisioner_type(stage)
-        if provisioner_type != "terraform":
-            result["error"] = f"Drift detection not supported for '{provisioner_type}' provisioner"
+        resolved_type, _ = DeployerFactory.resolve_type(stage, self._deployment_service)
+        if resolved_type != "terraform":
+            result["error"] = f"Drift detection not supported for '{resolved_type or 'unknown'}' provisioner"
             return result
 
         deployer = self._create_deployer(stage)
@@ -212,43 +210,6 @@ class DriftEnvCommand(BaseDeployCommand):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    def _resolve_provisioner_type(self, stage: DeploymentStageModel) -> str:
-        """Resolve the provisioner type string for a stage."""
-        if not stage.provisioner or self._deployment_service is None:
-            return "unknown"
-        workspace_service = self._deployment_service.get_workspace_service()
-        if not workspace_service or workspace_service.model is None:
-            return "unknown"
-        spec = workspace_service.model.spec
-        provisioners = spec.provisioners or []
-        match = next((p for p in provisioners if p.name == stage.provisioner), None)
-        if not match:
-            return "unknown"
-        if match.provisioner == ProvisionerType.TERRAFORM:
-            return "terraform"
-        if match.provisioner == ProvisionerType.HELM:
-            return "helm"
-        if match.provisioner == ProvisionerType.COMPOSE:
-            return "compose"
-        if match.provisioner == ProvisionerType.ANSIBLE:
-            return "ansible"
-        return "unknown"
-
-    def _create_deployer(self, stage: DeploymentStageModel) -> Optional[TerraformDeployer]:
-        """Create a TerraformDeployer for the given stage."""
-        if self._deployment_service is None:
-            return None
-        return DeployerFactory.create(  # type: ignore[return-value]
-            "terraform",
-            stage=stage,
-            deployment_service=self._deployment_service,
-            configuration_service=self._configuration_service,  # type: ignore[arg-type]
-            build_path=self._build_path,
-            work_path=self._work_path,
-            verbose=self._is_verbose(),
-            solution_controller=self._solution_controller,
-        )
 
     # ------------------------------------------------------------------
     # Console output

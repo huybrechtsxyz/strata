@@ -1,14 +1,17 @@
 # Pluggable provisioner framework
 
-- Status: partial
+- Status: completed
 - Date: 2026-07-05
 - Issue: [#169](https://github.com/huybrechtsxyz/strata/issues/169)
 
 ## What Still Needs To Be Done
 
-- Wire deployer `status()` into a status command path. `BaseDeployer.status()` exists, but no command currently calls `deployer.status()`.
-- Complete manifest integration: `ProvisionerManifestModel` exists, but `provisioner.yaml` metadata is not loaded/used by `tools status` or guide flows yet.
-- Finish command centralization cleanup: type-dispatch helpers still exist in env commands for provisioner labeling, so plugin types can show as `unknown` in env status/drift output.
+- [x] ~~Create `DeployerFactory` with `_BUILTIN_MAP`, `register()`, `create()`, `get_known_types()`, `load_plugins()`, `reset()`~~ — **done**: `src/strata/deployers/factory.py` — built-in types: terraform, ansible, compose, helm, script, argocd, flux.
+- [x] ~~Replace all 9 `_create_deployer()` copies with `DeployerFactory.create()`~~ — **done**: all 9 command files (6 deploy + 3 env) delegate to the factory. Thin `_create_deployer()` wrapper methods still exist in each file but contain no type-dispatch logic.
+- [x] ~~Call `DeployerFactory.load_plugins()` at startup~~ — **done**: called from `BaseDeployCommand._before_execute()`.
+- [x] ~~Wire `deployer.status()` into a command path~~ — **done**: `BaseDeployer.status()` is now called in `health_deploy_command._check_stage()` after `deployer.output()`. The returned `status_data` is included under `"status"` in the stage health result when non-empty. Deployers that override `status()` (e.g. a future `TerraformDeployer.status()` calling `terraform show`) will surface their data through `strata deploy health` automatically.
+- [x] ~~Load `provisioner.yaml` manifests from `.strata/provisioners/`~~ — **done**: `DeployerFactory.load_plugins()` now loads a sibling `{plugin_name}.yaml` (or `provisioner.yaml`) for each `.py` plugin file and stores it in `_manifests`. `DeployerFactory.get_manifests()` exposes the map. `ToolsController._provisioner_plugin_rows()` checks `requires` binary availability via `shutil.which` and appends rows to `strata tools status` output under the `provisioner:{name}` key.
+- [x] ~~Remove the thin `_create_deployer()` wrapper methods from all 9 command files~~ — **done**: method moved to `BaseDeployCommand` (uses `getattr` for subclass-specific `_force`/`_resolved_values`); deleted from all 8 generic subclasses; `health_deploy_command` keeps its override (intentionally silent error handling). `_resolve_provisioner_type()` deleted from `status_env` and `drift_env` — now calls `DeployerFactory.resolve_type()` directly, so plugin types resolve correctly instead of returning `"unknown"`.
 
 ## Context and Problem Statement
 

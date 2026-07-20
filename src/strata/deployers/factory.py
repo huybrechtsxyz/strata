@@ -17,6 +17,7 @@ from strata.models.deployment_model import DeploymentStageModel
 
 if TYPE_CHECKING:
     from strata.controllers.solution_controller import SolutionController
+    from strata.models.provisioner_manifest_model import ProvisionerManifestModel
     from strata.services.configuration_service import ConfigurationService
     from strata.services.deployment_service import DeploymentService
     from strata.utils.resolved_values import ResolvedValues
@@ -55,6 +56,9 @@ class DeployerFactory:
     # Runtime registry populated by load_plugins() and register()
     _registry: ClassVar[Dict[str, Type[BaseDeployer]]] = {}
 
+    # Manifests loaded from sibling provisioner.yaml files during load_plugins()
+    _manifests: ClassVar[Dict[str, "ProvisionerManifestModel"]] = {}
+
     # ------------------------------------------------------------------
     # Registration
     # ------------------------------------------------------------------
@@ -69,6 +73,7 @@ class DeployerFactory:
     def reset(cls) -> None:
         """Clear runtime registry (test helper)."""
         cls._registry.clear()
+        cls._manifests.clear()
 
     # ------------------------------------------------------------------
     # Queries
@@ -78,6 +83,11 @@ class DeployerFactory:
     def get_known_types(cls) -> List[str]:
         """Return all registered + built-in type names, sorted."""
         return sorted(set(cls._BUILTIN_MAP.keys()) | set(cls._registry.keys()))
+
+    @classmethod
+    def get_manifests(cls) -> "Dict[str, ProvisionerManifestModel]":
+        """Return all loaded provisioner manifests (name → model)."""
+        return dict(cls._manifests)
 
     @classmethod
     def is_known_type(cls, type_str: str) -> bool:
@@ -294,6 +304,32 @@ class DeployerFactory:
                             name=name,
                             cls=attr_name,
                             file=str(py_file),
+                        )
+
+                # Load sibling provisioner.yaml manifest if present
+                manifest_file = py_file.with_suffix(".yaml")
+                if not manifest_file.exists():
+                    manifest_file = py_file.with_name("provisioner.yaml")
+                if manifest_file.exists():
+                    try:
+                        import yaml
+
+                        from strata.models.provisioner_manifest_model import ProvisionerManifestModel
+
+                        raw = yaml.safe_load(manifest_file.read_text(encoding="utf-8"))
+                        if isinstance(raw, dict):
+                            manifest = ProvisionerManifestModel.model_validate(raw)
+                            cls._manifests[manifest.name] = manifest
+                            logger.debug(
+                                "Provisioner manifest loaded",
+                                name=manifest.name,
+                                file=str(manifest_file),
+                            )
+                    except Exception:
+                        logger.warning(
+                            "Failed to load provisioner manifest",
+                            file=str(manifest_file),
+                            exc_info=True,
                         )
 
             except Exception:

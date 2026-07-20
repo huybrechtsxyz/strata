@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import click
 
 from strata.commands.deploy.base_deploy_command import BaseDeployCommand
-from strata.deployers.factory import DeployerFactory
 from strata.models.deployment_model import DeploymentStageModel
 
 
@@ -139,33 +138,3 @@ class PlanDeployCommand(BaseDeployCommand):
                 click.echo(f"         {addr}  [{', '.join(actions)}]")
 
         click.echo()
-
-    # -------------------------------------------------------------------------
-    # Deployer factory
-    # -------------------------------------------------------------------------
-
-    def _create_deployer(self, stage: DeploymentStageModel):
-        if self._deployment_service is None:
-            self._errors.append(f"Stage '{stage.name}': deployment service not loaded.")
-            return None
-
-        resolved_type, errors = DeployerFactory.resolve_type(stage, self._deployment_service)
-        if errors:
-            self._errors.extend(errors)
-        if resolved_type is None:
-            return None
-
-        try:
-            return DeployerFactory.create(
-                resolved_type,
-                stage=stage,
-                deployment_service=self._deployment_service,  # type: ignore[arg-type]
-                configuration_service=self._configuration_service,  # type: ignore[arg-type]
-                build_path=self._build_path,
-                work_path=self._work_path,
-                verbose=self._is_verbose(),
-                solution_controller=self._solution_controller,
-            )
-        except ValueError as exc:
-            self._errors.append(str(exc))
-            return None

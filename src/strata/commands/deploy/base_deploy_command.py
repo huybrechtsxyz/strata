@@ -432,6 +432,49 @@ class BaseDeployCommand(BaseCommand):
         )
         return True
 
+    def _create_deployer(self, stage: DeploymentStageModel):
+        """Instantiate the deployer for *stage*, or None on failure.
+
+        Resolution order (mutually exclusive):
+        - stage.provisioner → named provisioner entry in the workspace YAML
+        - stage.topology    → topology name → inferred provisioner type
+
+        Errors are appended to ``self._errors`` and None is returned on failure.
+        Subclass attributes ``_force`` and ``_resolved_values`` are consumed when
+        present; commands that do not declare them receive safe defaults.
+        """
+        from strata.deployers.factory import DeployerFactory
+
+        if self._deployment_service is None:
+            self._errors.append(f"Stage '{stage.name}': deployment service not loaded.")
+            return None
+
+        resolved_type, errors = DeployerFactory.resolve_type(stage, self._deployment_service)
+        if errors:
+            self._errors.extend(errors)
+        if resolved_type is None:
+            return None
+
+        _resolved_values = getattr(self, "_resolved_values", None)
+        _stage_values = _resolved_values.for_stage(stage.secrets) if _resolved_values else None
+
+        try:
+            return DeployerFactory.create(
+                resolved_type,
+                stage=stage,
+                deployment_service=self._deployment_service,  # type: ignore[arg-type]
+                configuration_service=self._configuration_service,  # type: ignore[arg-type]
+                build_path=self._build_path,
+                work_path=self._work_path,
+                verbose=self._is_verbose(),
+                force=getattr(self, "_force", False),
+                resolved_values=_stage_values,
+                solution_controller=self._solution_controller,
+            )
+        except ValueError as exc:
+            self._errors.append(str(exc))
+            return None
+
     def _load_configuration_service(self) -> Optional[ConfigurationService]:
         """Load ConfigurationService from the active profile's configfile_paths."""
         from strata.utils.system import resolve_path
