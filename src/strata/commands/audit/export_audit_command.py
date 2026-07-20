@@ -9,7 +9,7 @@ import click
 
 from strata.commands.schemas.schema_base_command import SchemaBaseCommand
 from strata.controllers.audit_controller import AuditController
-from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DEPLOYMENTS_DIR, SOLUTION_DIR
+from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
 
 
 class ExportAuditCommand(SchemaBaseCommand):
@@ -66,9 +66,10 @@ class ExportAuditCommand(SchemaBaseCommand):
         )
 
         if self._include_manifests:
+            from strata.controllers.solution_controller import SolutionController
             from strata.services.deployment_manifest_service import DeploymentManifestService
 
-            manifest_base = self._work_path / SOLUTION_DIR / SOLUTION_DEPLOYMENTS_DIR
+            manifest_base = SolutionController.get_deployments_dir(self._work_path)
             if manifest_base.exists():
                 manifest_files = DeploymentManifestService.list_manifests(manifest_base)
                 if self._last:

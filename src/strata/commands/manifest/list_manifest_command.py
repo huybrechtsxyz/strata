@@ -9,7 +9,6 @@ import click
 
 from strata.commands.schemas.schema_base_command import SchemaBaseCommand
 from strata.services.deployment_manifest_service import DeploymentManifestService
-from strata.utils.config import SOLUTION_DEPLOYMENTS_DIR, SOLUTION_DIR
 
 
 class ListManifestCommand(SchemaBaseCommand):
@@ -43,7 +42,9 @@ class ListManifestCommand(SchemaBaseCommand):
         """Suppress the standard base-command chrome."""
 
     def _execute(self) -> bool:
-        manifests_dir = self._work_path / SOLUTION_DIR / SOLUTION_DEPLOYMENTS_DIR
+        from strata.controllers.solution_controller import SolutionController
+
+        manifests_dir = SolutionController.get_deployments_dir(self._work_path)
         manifests = DeploymentManifestService.list_manifests(manifests_dir) if manifests_dir.exists() else []
 
         if self._deployment:

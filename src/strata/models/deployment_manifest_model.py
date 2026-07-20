@@ -44,7 +44,7 @@ YAML on-disk format::
           ...
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import Field
 
@@ -231,7 +231,7 @@ class DeploymentManifestSpecModel(PlatformBaseModel):
     environment: Optional[str] = Field(None, description="Environment label (e.g. production, staging)")
 
     # Action & timing
-    action: str = Field(description="Action performed: build | deploy | destroy")
+    action: Literal["build", "deploy", "destroy"] = Field(description="Action performed: build | deploy | destroy")
     started_at: str = Field(description="ISO-8601 timestamp when the deploy started")
     completed_at: Optional[str] = Field(None, description="ISO-8601 timestamp when the deploy completed")
     duration_seconds: Optional[int] = Field(None, description="Total wall-clock duration in seconds")
