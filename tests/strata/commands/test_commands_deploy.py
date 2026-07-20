@@ -1394,3 +1394,114 @@ class TestDeployRunSeedNotes:
             variable_notes={"X": "some-other-note"},
         )
         assert not any("Seeded on first run" in str(line) for line in output)
+
+
+# ---------------------------------------------------------------------------
+# TestDestroyNdjsonStreaming — NDJSON event emission in _execute_stage_destroy
+# ---------------------------------------------------------------------------
+
+
+def _make_destroy_stage(name: str = "infra"):
+    stage = MagicMock()
+    stage.name = name
+    stage.provisioner = "tf_main"
+    stage.topology = None
+    return stage
+
+
+def _make_mock_deployer(step_names=("setup", "destroy")):
+    deployer = MagicMock()
+    deployer.get_deployer_name.return_value = "terraform"
+    deployer.get_supported_steps.return_value = list(step_names)
+    deployer.validate_workspace.return_value = (True, [])
+    deployer.validate_environment.return_value = (True, [])
+    for step in step_names:
+        getattr(deployer, step).return_value = (True, [])
+    return deployer
+
+
+class TestDestroyNdjsonStreaming:
+    """NDJSON stage/step events emitted by _execute_stage_destroy."""
+
+    def _make_cmd(self, tmp_path: Path, force: bool = True):
+        from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
+
+        cmd = DestroyDeployCommand(work_path=str(tmp_path), force=force, dry_run=False)
+        cmd._work_path = tmp_path
+        cmd._build_path = tmp_path / "build"
+        cmd._output_format = "ndjson"
+        cmd._dry_run = False
+        cmd._force = force
+        cmd._deployment_service = MagicMock()
+        cmd._configuration_service = MagicMock()
+        cmd._solution_controller = MagicMock()
+        return cmd
+
+    def test_stage_start_end_emitted(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        deployer = _make_mock_deployer()
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            cmd.emit_ndjson = MagicMock()
+            result = cmd._execute_stage_destroy(_make_destroy_stage())
+
+        assert result is True
+        events = [call.args[0]["event"] for call in cmd.emit_ndjson.call_args_list]
+        assert events[0] == "stage_start"
+        assert events[-1] == "stage_end"
+
+    def test_step_start_end_emitted_per_step(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        deployer = _make_mock_deployer(step_names=("setup", "destroy"))
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            cmd.emit_ndjson = MagicMock()
+            cmd._execute_stage_destroy(_make_destroy_stage())
+
+        events = [call.args[0]["event"] for call in cmd.emit_ndjson.call_args_list]
+        assert events.count("step_start") == 2
+        assert events.count("step_end") == 2
+
+    def test_step_end_failure_emitted_on_step_failure(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        deployer = _make_mock_deployer()
+        deployer.setup.return_value = (True, [])
+        deployer.destroy.return_value = (False, ["destroy failed"])
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            cmd.emit_ndjson = MagicMock()
+            result = cmd._execute_stage_destroy(_make_destroy_stage())
+
+        assert result is False
+        step_ends = [call.args[0] for call in cmd.emit_ndjson.call_args_list if call.args[0].get("event") == "step_end"]
+        failed = [e for e in step_ends if not e.get("success")]
+        assert len(failed) == 1
+        assert failed[0]["step"] == "destroy"
+
+    def test_stage_end_not_emitted_on_failure(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        deployer = _make_mock_deployer()
+        deployer.destroy.return_value = (False, ["fail"])
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            cmd.emit_ndjson = MagicMock()
+            cmd._execute_stage_destroy(_make_destroy_stage())
+
+        events = [call.args[0]["event"] for call in cmd.emit_ndjson.call_args_list]
+        assert "stage_end" not in events
+
+    def test_no_events_when_not_ndjson(self, tmp_path):
+        from strata.commands.deploy.destroy_deploy_command import DestroyDeployCommand
+
+        cmd = DestroyDeployCommand(work_path=str(tmp_path), force=True, dry_run=False)
+        cmd._work_path = tmp_path
+        cmd._build_path = tmp_path / "build"
+        cmd._output_format = "console"
+        cmd._dry_run = False
+        cmd._force = True
+        cmd._deployment_service = MagicMock()
+        cmd._configuration_service = MagicMock()
+        cmd._solution_controller = MagicMock()
+
+        deployer = _make_mock_deployer()
+        with patch.object(cmd, "_create_deployer", return_value=deployer):
+            cmd.emit_ndjson = MagicMock()
+            cmd._execute_stage_destroy(_make_destroy_stage())
+
+        cmd.emit_ndjson.assert_not_called()

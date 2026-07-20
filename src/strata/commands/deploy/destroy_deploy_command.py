@@ -272,6 +272,16 @@ class DestroyDeployCommand(BaseDeployCommand):
 
         supported = deployer.get_supported_steps()
 
+        # --- emit stage-start event (NDJSON) ---
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_start",
+                    "stage": stage.name,
+                    "ts": _dt.now(_tz.utc).isoformat(),
+                }
+            )
+
         for step_name in steps_to_run:
             if step_name not in supported:
                 self._errors.append(
@@ -294,14 +304,37 @@ class DestroyDeployCommand(BaseDeployCommand):
                 prefix = "[DRY-RUN] " if self._dry_run else ""
                 click.echo(f"    {prefix}{step_name}")
 
+            # Build line callback for live NDJSON streaming.
+            line_cb = None
+            if self._is_ndjson_output():
+                self.emit_ndjson(
+                    {
+                        "event": "step_start",
+                        "step": step_name,
+                        "stage": stage.name,
+                        "ts": _dt.now(_tz.utc).isoformat(),
+                    }
+                )
+                line_cb = self.make_ndjson_line_callback(step=step_name, stage=stage.name)
+
             step_fn = getattr(deployer, step_name)
-            ok, msgs = step_fn()
+            ok, msgs = step_fn(line_callback=line_cb)
             self._messages.extend(msgs)
             if self._is_console_output():
                 for msg in msgs:
                     click.echo(f"      {msg}")
             if not ok:
                 self._errors.extend(msgs)
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "step_end",
+                            "step": step_name,
+                            "stage": stage.name,
+                            "success": False,
+                            "ts": _dt.now(_tz.utc).isoformat(),
+                        }
+                    )
                 self._record_stage_result(
                     stage_name=str(stage.name),
                     provisioner=stage.provisioner,
@@ -313,6 +346,27 @@ class DestroyDeployCommand(BaseDeployCommand):
                     error=f"Step '{step_name}' failed",
                 )
                 return False
+
+            if self._is_ndjson_output():
+                self.emit_ndjson(
+                    {
+                        "event": "step_end",
+                        "step": step_name,
+                        "stage": stage.name,
+                        "success": True,
+                        "ts": _dt.now(_tz.utc).isoformat(),
+                    }
+                )
+
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_end",
+                    "stage": stage.name,
+                    "success": True,
+                    "ts": _dt.now(_tz.utc).isoformat(),
+                }
+            )
 
         self._record_stage_result(
             stage_name=str(stage.name),

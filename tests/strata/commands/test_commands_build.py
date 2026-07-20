@@ -577,3 +577,121 @@ class TestPlanBuildValueStatus:
 
         assert "values" in cmd._output_data
         assert len(cmd._output_data["values"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# TestBuildRunNdjsonStreaming — NDJSON stage events emitted per build phase
+# ---------------------------------------------------------------------------
+
+
+class TestBuildRunNdjsonStreaming:
+    """stage_start / stage_end events emitted for each build phase in --output ndjson."""
+
+    _PHASES = [
+        "platform",
+        "terraform",
+        "ansible",
+        "compose",
+        "helm",
+        "sync",
+        "sbom",
+    ]
+
+    def _make_cmd(self, tmp_path: Path):
+        from strata.commands.builders.run_build_command import RunBuildCommand
+
+        cmd = RunBuildCommand(work_path=str(tmp_path), dry_run=False)
+        cmd._work_path = tmp_path
+        cmd._build_path = tmp_path / "build"
+        cmd._output_format = "ndjson"
+        cmd._dry_run = False
+        cmd._require_lock = False
+        cmd._audit = False
+        cmd._deployment_service = MagicMock()
+        cmd._deployment_service.check_require_lock_mode.return_value = None
+        cmd._configuration_service = MagicMock()
+        cmd._configuration_service.model = None
+        cmd._solution_controller = MagicMock()
+        cmd._solution_controller.get_repo_map.return_value = {}
+        cmd._file_path = tmp_path / "deploy.yaml"
+        return cmd
+
+    def test_stage_start_and_end_emitted_for_all_phases(self, tmp_path):
+        import contextlib
+
+        cmd = self._make_cmd(tmp_path)
+        cmd.emit_ndjson = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(cmd, "_initialize", return_value=True))
+            stack.enter_context(patch.object(cmd, "_before_execute", return_value=True))
+            stack.enter_context(patch.object(cmd, "_after_execute", return_value=True))
+            stack.enter_context(patch.object(cmd, "_finalize"))
+            stack.enter_context(patch.object(cmd, "_run_lifecycle_phase", return_value=True))
+            stack.enter_context(patch.object(cmd, "_evaluate_build_policies", return_value=True))
+            stack.enter_context(patch.object(cmd, "_write_build_manifest", return_value=None))
+            for phase in self._PHASES:
+                stack.enter_context(patch.object(cmd, f"_execute_{phase}_build", return_value=True))
+            cmd.execute()
+
+        emitted = [call.args[0] for call in cmd.emit_ndjson.call_args_list]
+        stage_starts = [e["stage"] for e in emitted if e.get("event") == "stage_start"]
+        stage_ends = [e["stage"] for e in emitted if e.get("event") == "stage_end"]
+
+        for phase in self._PHASES:
+            assert f"{phase}_build" in stage_starts, f"Missing stage_start for {phase}"
+            assert f"{phase}_build" in stage_ends, f"Missing stage_end for {phase}"
+
+    def test_stage_end_success_false_on_phase_failure(self, tmp_path):
+        cmd = self._make_cmd(tmp_path)
+        cmd.emit_ndjson = MagicMock()
+
+        with (
+            patch.object(cmd, "_initialize", return_value=True),
+            patch.object(cmd, "_before_execute", return_value=True),
+            patch.object(cmd, "_after_execute", return_value=True),
+            patch.object(cmd, "_finalize"),
+            patch.object(cmd, "_run_lifecycle_phase", return_value=True),
+            patch.object(cmd, "_execute_platform_build", return_value=False),
+        ):
+            cmd.execute()
+
+        emitted = [call.args[0] for call in cmd.emit_ndjson.call_args_list]
+        platform_ends = [e for e in emitted if e.get("event") == "stage_end" and e.get("stage") == "platform_build"]
+        assert len(platform_ends) == 1
+        assert platform_ends[0]["success"] is False
+
+    def test_no_events_when_not_ndjson(self, tmp_path):
+        import contextlib
+
+        from strata.commands.builders.run_build_command import RunBuildCommand
+
+        cmd = RunBuildCommand(work_path=str(tmp_path), dry_run=False)
+        cmd._work_path = tmp_path
+        cmd._build_path = tmp_path / "build"
+        cmd._output_format = "console"
+        cmd._dry_run = False
+        cmd._require_lock = False
+        cmd._audit = False
+        cmd._deployment_service = MagicMock()
+        cmd._deployment_service.check_require_lock_mode.return_value = None
+        cmd._configuration_service = MagicMock()
+        cmd._configuration_service.model = None
+        cmd._solution_controller = MagicMock()
+        cmd._solution_controller.get_repo_map.return_value = {}
+        cmd._file_path = tmp_path / "deploy.yaml"
+        cmd.emit_ndjson = MagicMock()
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(cmd, "_initialize", return_value=True))
+            stack.enter_context(patch.object(cmd, "_before_execute", return_value=True))
+            stack.enter_context(patch.object(cmd, "_after_execute", return_value=True))
+            stack.enter_context(patch.object(cmd, "_finalize"))
+            stack.enter_context(patch.object(cmd, "_run_lifecycle_phase", return_value=True))
+            stack.enter_context(patch.object(cmd, "_evaluate_build_policies", return_value=True))
+            stack.enter_context(patch.object(cmd, "_write_build_manifest", return_value=None))
+            for phase in self._PHASES:
+                stack.enter_context(patch.object(cmd, f"_execute_{phase}_build", return_value=True))
+            cmd.execute()
+
+        cmd.emit_ndjson.assert_not_called()

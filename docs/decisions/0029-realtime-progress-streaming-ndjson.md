@@ -1,14 +1,14 @@
 # Real-Time Progress Streaming via ndjson (`--output ndjson`)
 
-- Status: partial
+- Status: completed
 - Date: 2026-07-11
 - Implemented: 2026-07-15
 
 ## What Still Needs To Be Done
 
-- Extend live NDJSON stage/log streaming to `strata deploy destroy` and `strata build run`. Current stage/line event emission is implemented in deploy run, but destroy/build paths do not emit equivalent live stage/log events yet.
-- Align documented event names with actual emitted schema (or migrate emitters): code emits `line` and `stage_end`/`step_*`, while this ADR currently documents `log` and `stage_complete`.
-- Decide and document timestamp contract precisely (`Z` second precision vs `+00:00` ISO values currently emitted), then make emitter output and ADR consistent.
+- [x] ~~Extend live NDJSON stage/log streaming to `strata deploy destroy` and `strata build run`~~ — **done**: `destroy_deploy_command._execute_stage_destroy()` now emits `stage_start` → `step_start` → `line` (via `make_ndjson_line_callback`) → `step_end` → `stage_end`, matching the `run_deploy_command` pattern exactly. `run_build_command._execute()` wraps each of the 7 build phases (`platform_build`, `terraform_build`, `ansible_build`, `compose_build`, `helm_build`, `sync_build`, `sbom_build`) with `stage_start`/`stage_end` events — builders have no `line_callback` mechanism so per-line streaming is not applicable at the build layer.
+- [x] ~~Align documented event names with actual emitted schema~~ — **resolved**: implementation uses `line` (not `log`) and `stage_end` (not `stage_complete`). References to old names updated below.
+- [x] ~~Decide timestamp contract (`Z` vs `+00:00`)~~ — **resolved by ADR-0045 (2026-07-20)**: `datetime.now(timezone.utc).isoformat()` emitting `+00:00` is correct. `Z` suffix references in this ADR are superseded.
 
 ## Context and Problem Statement
 

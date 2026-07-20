@@ -90,38 +90,37 @@ class RunBuildCommand(BaseBuildCommand):
                 if self._is_console_output():
                     click.echo("\n\u274c  Build validate lifecycle hook failed")
                 return False
-            if not self._execute_platform_build():
-                if self._is_console_output():
-                    click.echo("\n❌  Platform build failed")
-                return False
-
-            if not self._execute_terraform_build():
-                if self._is_console_output():
-                    click.echo("\n❌  Terraform build failed")
-                return False
-
-            if not self._execute_ansible_build():
-                if self._is_console_output():
-                    click.echo("\n❌  Ansible build failed")
-                return False
-
-            if not self._execute_compose_build():
-                if self._is_console_output():
-                    click.echo("\n❌  Compose build failed")
-                return False
-
-            if not self._execute_helm_build():
-                if self._is_console_output():
-                    click.echo("\n❌  Helm build failed")
-                return False
-            if not self._execute_sync_build():
-                if self._is_console_output():
-                    click.echo("\n\u274c  Sync build failed")
-                return False
-            if not self._execute_sbom_build():
-                if self._is_console_output():
-                    click.echo("\n❌  SBOM build failed")
-                return False
+            for _phase, _phase_fn in (
+                ("platform", self._execute_platform_build),
+                ("terraform", self._execute_terraform_build),
+                ("ansible", self._execute_ansible_build),
+                ("compose", self._execute_compose_build),
+                ("helm", self._execute_helm_build),
+                ("sync", self._execute_sync_build),
+                ("sbom", self._execute_sbom_build),
+            ):
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "stage_start",
+                            "stage": f"{_phase}_build",
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                _phase_ok = _phase_fn()
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "stage_end",
+                            "stage": f"{_phase}_build",
+                            "success": _phase_ok,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                if not _phase_ok:
+                    if self._is_console_output():
+                        click.echo(f"\n❌  {_phase.capitalize()} build failed")
+                    return False
 
             if self._audit and not self._dry_run:
                 sbom_path = (

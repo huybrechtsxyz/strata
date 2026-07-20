@@ -15,6 +15,7 @@ Two-layer output
 
 import difflib
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -365,17 +366,66 @@ class PlanBuildCommand(BaseBuildCommand):
                 result["error"] = f"Terraform {label} validation failed"
                 return result
 
+        # --- emit stage-start (NDJSON) ---
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_start",
+                    "stage": str(stage.name),
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
         for step_name, step_fn in (
             (STEP_SETUP, deployer.setup),
             (STEP_CHECK, deployer.check),
             (STEP_PLAN, deployer.plan),
         ):
-            ok, msgs = step_fn()
+            line_cb = None
+            if self._is_ndjson_output():
+                self.emit_ndjson(
+                    {
+                        "event": "step_start",
+                        "step": step_name,
+                        "stage": str(stage.name),
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
+                line_cb = self.make_ndjson_line_callback(step=step_name, stage=str(stage.name))
+            ok, msgs = step_fn(line_callback=line_cb)
+            if self._is_ndjson_output():
+                self.emit_ndjson(
+                    {
+                        "event": "step_end",
+                        "step": step_name,
+                        "stage": str(stage.name),
+                        "success": ok,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
             result["messages"].extend(msgs)
             if not ok:
                 result["error"] = f"terraform {step_name} failed"
+                if self._is_ndjson_output():
+                    self.emit_ndjson(
+                        {
+                            "event": "stage_end",
+                            "stage": str(stage.name),
+                            "success": False,
+                            "ts": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
                 return result
 
+        if self._is_ndjson_output():
+            self.emit_ndjson(
+                {
+                    "event": "stage_end",
+                    "stage": str(stage.name),
+                    "success": True,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         result["ok"] = True
         return result
 
