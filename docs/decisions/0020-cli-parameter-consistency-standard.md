@@ -1,6 +1,6 @@
 # CLI Parameter Consistency Standard for all 80+ strata Subcommands
 
-- Status: accepted
+- Status: partial
 - Date: 2026-07-11
 - Squad Review: danny (DevOps), basher (Automation) — YELLOW/B assessments with critical follow-on work identified
 
@@ -70,7 +70,7 @@ All commands MUST use this order:
 - `SHELL` — shell type (bash, zsh, fish, powershell)
 - `KIND` — configuration kind (deployment, environment, namespace, etc.)
 - `ID` — execution/transaction/lock ID (UUID or opaque identifier)
-- `TIMESTAMP` — ISO 8601 format with timezone (e.g., `2026-07-11T14:30:00Z`)
+- `TIMESTAMP` — ISO 8601 format with explicit timezone (see ADR-0045 for full standard; e.g., `2026-07-20T14:30:00+00:00`)
 
 ### Template vs. Name Conventions
 - **Templates**: always `--template TEMPLATE` flag (never positional argument)
@@ -206,11 +206,11 @@ All commands MUST use this order:
 
 **HIGH priority for production automation:**
 
-- Add `--timeout SECONDS` to long-running commands (`build run`, `deploy run`, `deploy destroy`)
-- Add `--stream` to long-running commands (`build run`, `deploy run`, `deploy destroy`) — boolean flag; streams ndjson progress events to stdout during execution
-- Document signal handling (`SIGTERM` = graceful shutdown + release lock)
-- Mark `--verbose` ↔ `--quiet` as mutually exclusive in all commands
-- Specify exact timestamp format with examples (`YYYY-MM-DDTHH:MM:SSZ` vs. `YYYY-MM-DDTHH:MM:SS±HH:MM`)
+- ~~Add `--timeout SECONDS` to long-running commands~~ → **delegated to ADR-0027** (command timeout for long-running operations)
+- ~~Add `--stream` flag to long-running commands~~ → **delegated to ADR-0029** (realtime progress streaming / ndjson)
+- ~~Document signal handling (`SIGTERM` = graceful shutdown + release lock)~~ → **delegated to ADR-0028** (SIGTERM graceful shutdown and lock release)
+- ✅ ~~Mark `--verbose` ↔ `--quiet` as mutually exclusive~~ — **done**: `validate_verbose_quiet_exclusive` callback enforced via `click_output_verbose` / `click_output_quiet` decorators in `cli_common.py`
+- ~~Specify exact timestamp format~~ → **delegated to ADR-0045** (date/time format and handling standard)
 
 ## More Information
 
