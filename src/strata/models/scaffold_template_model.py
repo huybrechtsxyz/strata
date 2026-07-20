@@ -11,7 +11,7 @@ from strata.models.common_models import PlatformBaseModel
 class ScaffoldTemplateVariable(PlatformBaseModel):
     """A single substitution variable declared in a template manifest."""
 
-    name: str = Field(..., description="Variable name, used as ${name} in scaffold files")
+    name: str = Field(..., description="Variable name, used as {{ name }} in scaffold files")
     description: str = Field("", description="Human-readable description shown on init")
     default: str = Field("", description="Default value used when no override is provided")
 
@@ -30,7 +30,7 @@ class ScaffoldTemplateModel(PlatformBaseModel):
             default: my-workspace
 
     All files under ``scaffold/`` are copied into the workspace with
-    ``${variable_name}`` placeholders replaced by their resolved values.
+    ``{{ variable_name }}`` placeholders replaced by their resolved values.
     ``{{ solution_name }}`` is always available from the ``--name`` flag.
     """
 

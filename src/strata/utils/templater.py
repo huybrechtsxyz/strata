@@ -191,3 +191,26 @@ class TemplateProcessor:
             return content
         template = _LENIENT_ENV.from_string(content)
         return template.render(context)
+
+    @staticmethod
+    def render_strict(content: str, context: dict) -> str:
+        """Render a Jinja2 template string, raising on any undefined variable.
+
+        Use this when all variables must be present — e.g. integration
+        endpoint URLs where a missing env var would produce a broken value.
+
+        Args:
+            content: Template string using Jinja2 syntax (``{{ var }}``).
+            context: Mapping of variable names to replacement values.
+
+        Raises:
+            jinja2.UndefinedError: If the template references a variable
+                that is not present in *context*.
+
+        Returns:
+            The rendered string.
+        """
+        if not content:
+            return content
+        template = _STRICT_ENV.from_string(content)
+        return template.render(context)

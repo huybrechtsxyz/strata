@@ -304,7 +304,7 @@ class WorkspaceResourceModel(PlatformBaseModel):
     )
     condition: Optional[str] = Field(
         None,
-        description="Conditional expression for resource inclusion (e.g., '${environment} == production')",
+        description="Conditional expression for resource inclusion (e.g., '{{ environment }} == production')",
     )
 
     # Resource metadata

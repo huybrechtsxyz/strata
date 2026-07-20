@@ -176,24 +176,22 @@ class BaseIntegration(ABC):
         return os.getenv(var_name, default)
 
     def _resolve_env_vars(self, value: str) -> str:
-        """
-        Resolve environment variable references in a string.
-
-        Replaces ``${VAR}`` and ``$VAR`` patterns with their environment values.
+        """Resolve Jinja2 ``{{ env.VAR }}`` references in a string using the
+        current process environment.
 
         Args:
-            value: String potentially containing env-var references
+            value: String potentially containing ``{{ env.VAR }}`` references.
 
         Returns:
-            String with env-var references replaced by their values
+            String with all references replaced by their environment values.
+
+        Raises:
+            jinja2.UndefinedError: If a referenced environment variable is not
+                set and no default is provided in the template.
         """
-        import re as _re
+        from strata.utils.templater import TemplateProcessor
 
-        def _replace(match: "_re.Match[str]") -> str:
-            var = match.group(1) or match.group(2)
-            return os.getenv(var, match.group(0))
-
-        return _re.sub(r"\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)", _replace, value)
+        return TemplateProcessor.render_strict(value, {"env": os.environ})
 
     # Abstract methods to implement in subclasses
 
