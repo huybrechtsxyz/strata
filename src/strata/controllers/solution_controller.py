@@ -22,30 +22,81 @@ from strata.models.solution_model import (
 )
 from strata.services.solution_service import SolutionService
 from strata.utils.config import (
-    SOLUTION_AUDIT_LOG_FILE,
-    SOLUTION_BUILD_DIR,
-    SOLUTION_COLLECTORS_FILE,
     SOLUTION_CONFIG_FILE,
-    SOLUTION_CONFIGURATION_FILE,
-    SOLUTION_CVE_ALLOWED_FILE,
-    SOLUTION_DEPLOY_LOG_DIR,
-    SOLUTION_DEPLOYMENTS_DIR,
     SOLUTION_DIR,
-    SOLUTION_FILE,
     SOLUTION_GITIGNORE_FILE,
-    SOLUTION_GUIDE_FILE,
     SOLUTION_INTEGRATIONS_DIR,
-    SOLUTION_LOCKFILE_PARSERS_DIR,
-    SOLUTION_LOCKS_DIR,
     SOLUTION_LOGGING_FILE,
     SOLUTION_LOGS_DIR,
-    SOLUTION_OUTPUTS_DIR,
-    SOLUTION_PLUGINS_DIR,
-    SOLUTION_POLICIES_DIR,
-    SOLUTION_SBOM_IGNORE_FILE,
     SOLUTION_SCHEMAS_DIR,
     SOLUTION_TEMPLATES_DIR,
     SOLUTION_WORKSPACE_SUFFIX,
+)
+from strata.utils.config import (
+    get_audit_log_path as _get_audit_log_path,
+)
+from strata.utils.config import (
+    get_build_dir as _get_build_dir,
+)
+from strata.utils.config import (
+    get_cli_config_path as _get_cli_config_path,
+)
+from strata.utils.config import (
+    get_collectors_path as _get_collectors_path,
+)
+from strata.utils.config import (
+    get_configuration_path as _get_configuration_path,
+)
+from strata.utils.config import (
+    get_cve_allowed_path as _get_cve_allowed_path,
+)
+from strata.utils.config import (
+    get_deploy_log_dir as _get_deploy_log_dir,
+)
+from strata.utils.config import (
+    get_deployments_dir as _get_deployments_dir,
+)
+from strata.utils.config import (
+    get_guide_path as _get_guide_path,
+)
+from strata.utils.config import (
+    get_integrations_dir as _get_integrations_dir,
+)
+from strata.utils.config import (
+    get_lockfile_parsers_dir as _get_lockfile_parsers_dir,
+)
+from strata.utils.config import (
+    get_locks_dir as _get_locks_dir,
+)
+from strata.utils.config import (
+    get_logging_config_path as _get_logging_config_path,
+)
+from strata.utils.config import (
+    get_logs_dir as _get_logs_dir,
+)
+from strata.utils.config import (
+    get_outputs_dir as _get_outputs_dir,
+)
+from strata.utils.config import (
+    get_plugins_dir as _get_plugins_dir,
+)
+from strata.utils.config import (
+    get_policies_dir as _get_policies_dir,
+)
+from strata.utils.config import (
+    get_sbom_ignore_path as _get_sbom_ignore_path,
+)
+from strata.utils.config import (
+    get_schemas_dir as _get_schemas_dir,
+)
+from strata.utils.config import (
+    get_solution_json_path as _get_solution_json_path,
+)
+from strata.utils.config import (
+    get_strata_dir as _get_strata_dir,
+)
+from strata.utils.config import (
+    get_templates_dir as _get_templates_dir,
 )
 from strata.utils.system import generate_uuid, get_pkg_templates_path
 from strata.utils.templater import TemplateProcessor
@@ -1118,113 +1169,96 @@ class SolutionController(BaseController):
             return False, [], errors
 
     # ------------------------------------------------------------------
-    # Static path helpers  (no instance needed — safe to call from anywhere)
+    # Static path helpers  — thin wrappers; computation lives in config.*
     # ------------------------------------------------------------------
 
     @staticmethod
     def get_logging_config_path(work_path: Path) -> Path:
-        """Return the path to the solution logging config file."""
-        return work_path / SOLUTION_DIR / SOLUTION_LOGGING_FILE
+        return _get_logging_config_path(work_path)
 
     @staticmethod
     def get_configuration_path(work_path: Path) -> Path:
-        """Return the path to the solution configuration file."""
-        return work_path / SOLUTION_DIR / SOLUTION_CONFIGURATION_FILE
+        return _get_configuration_path(work_path)
 
     @staticmethod
     def get_solution_json_path(work_path: Path) -> Path:
-        """Return the path to solution.json."""
-        return work_path / SOLUTION_DIR / SOLUTION_FILE
+        return _get_solution_json_path(work_path)
 
     @staticmethod
     def get_state_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/ state directory."""
-        return work_path / SOLUTION_DIR
+        return _get_strata_dir(work_path)
 
     @staticmethod
     def get_logs_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/logs/ directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_LOGS_DIR
+        return _get_logs_dir(work_path)
 
     @staticmethod
     def get_schemas_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/schemas/ directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_SCHEMAS_DIR
+        return _get_schemas_dir(work_path)
 
     @staticmethod
     def get_integrations_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/integrations/ drop-in directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_INTEGRATIONS_DIR
+        return _get_integrations_dir(work_path)
 
     @staticmethod
     def get_policies_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/policies/ drop-in directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_POLICIES_DIR
+        return _get_policies_dir(work_path)
 
     @staticmethod
     def get_templates_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/templates/ scaffold directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_TEMPLATES_DIR
+        return _get_templates_dir(work_path)
 
     @staticmethod
     def get_plugins_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/plugins/ directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_PLUGINS_DIR
+        return _get_plugins_dir(work_path)
 
     @staticmethod
     def get_lockfile_parsers_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/lockfile_parsers/ directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_LOCKFILE_PARSERS_DIR
+        return _get_lockfile_parsers_dir(work_path)
 
     @staticmethod
     def get_locks_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/locks/ directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_LOCKS_DIR
+        return _get_locks_dir(work_path)
 
     @staticmethod
     def get_deployments_dir(work_path: Path) -> Path:
-        """Return the default path to the .strata/deployments/ directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_DEPLOYMENTS_DIR
+        return _get_deployments_dir(work_path)
 
     @staticmethod
     def get_outputs_dir(work_path: Path) -> Path:
-        """Return the default path to the .strata/outputs/ directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_OUTPUTS_DIR
+        return _get_outputs_dir(work_path)
 
     @staticmethod
     def get_build_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/build/ directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_BUILD_DIR
+        return _get_build_dir(work_path)
 
     @staticmethod
     def get_deploy_log_dir(work_path: Path) -> Path:
-        """Return the path to the .strata/deploy-log/ directory."""
-        return work_path / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+        return _get_deploy_log_dir(work_path)
 
     @staticmethod
     def get_audit_log_path(work_path: Path) -> Path:
-        """Return the path to the .strata/audit.log file."""
-        return work_path / SOLUTION_DIR / SOLUTION_AUDIT_LOG_FILE
+        return _get_audit_log_path(work_path)
 
     @staticmethod
     def get_collectors_path(work_path: Path) -> Path:
-        """Return the path to the .strata/collectors.yaml file."""
-        return work_path / SOLUTION_DIR / SOLUTION_COLLECTORS_FILE
+        return _get_collectors_path(work_path)
 
     @staticmethod
     def get_cve_allowed_path(work_path: Path) -> Path:
-        """Return the path to the .strata/cve-allowed.yaml file."""
-        return work_path / SOLUTION_DIR / SOLUTION_CVE_ALLOWED_FILE
+        return _get_cve_allowed_path(work_path)
 
     @staticmethod
     def get_sbom_ignore_path(work_path: Path) -> Path:
-        """Return the path to the .strata/sbom-ignore.yaml file."""
-        return work_path / SOLUTION_DIR / SOLUTION_SBOM_IGNORE_FILE
+        return _get_sbom_ignore_path(work_path)
 
     @staticmethod
     def get_guide_path(work_path: Path) -> Path:
-        """Return the path to the .strata/guide.yaml override file."""
-        return work_path / SOLUTION_DIR / SOLUTION_GUIDE_FILE
+        return _get_guide_path(work_path)
+
+    @staticmethod
+    def get_cli_config_path(work_path: Path) -> Path:
+        return _get_cli_config_path(work_path)
 
     # ------------------------------------------------------------------
     # Scaffold

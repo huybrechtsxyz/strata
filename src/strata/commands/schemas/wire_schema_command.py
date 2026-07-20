@@ -7,7 +7,7 @@ import click
 
 from strata.commands.schemas.schema_base_command import SchemaBaseCommand
 from strata.commands.schemas.schema_common import KIND_TO_GLOBS, KIND_TO_MODEL
-from strata.utils.config import SOLUTION_DIR, SOLUTION_SCHEMAS_DIR
+from strata.utils.config import SOLUTION_DIR, SOLUTION_SCHEMAS_DIR, get_schemas_dir
 
 
 class WireSchemaCommand(SchemaBaseCommand):
@@ -28,7 +28,7 @@ class WireSchemaCommand(SchemaBaseCommand):
 
     def _execute(self) -> bool:
         root = self._work_path
-        schemas_dir = root / SOLUTION_DIR / SOLUTION_SCHEMAS_DIR
+        schemas_dir = get_schemas_dir(root)
         vscode_dir = root / ".vscode"
         settings_file = vscode_dir / "settings.json"
 

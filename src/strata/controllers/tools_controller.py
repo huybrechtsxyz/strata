@@ -104,7 +104,6 @@ class ToolsController(BaseController):
         """
         from pathlib import Path
 
-        from strata.services.configuration_service import ConfigurationService
         from strata.services.deployment_service import DeploymentService
         from strata.services.environment_service import EnvironmentService
         from strata.services.workspace_service import WorkspaceService
@@ -157,13 +156,25 @@ class ToolsController(BaseController):
             errors.append(f"Workspace '{dep.spec.workspace.file}': {exc}")
 
         # Configurations: explicit required/optional flags from IntegrationModel
+        # Load each config file independently — do NOT use the shared singleton
+        # here, as deployment-local configs must not contaminate the process-wide
+        # ConfigurationService instance.
         for cfg_ref in dep.spec.configurations or []:
             try:
-                cfg_svc = ConfigurationService.load(str(base / cfg_ref.file))
-                if not cfg_svc.is_validated() or cfg_svc.model is None:
+                import yaml
+
+                from strata.models.configuration_model import ConfigurationModel
+
+                cfg_path = base / cfg_ref.file
+                if not cfg_path.exists():
                     continue
-                for integration in cfg_svc.model.spec.integrations or []:
-                    _mark(str(integration.type), integration.required)
+                raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+                if not isinstance(raw, dict):
+                    continue
+                model = ConfigurationModel.model_validate(raw)
+                if model.spec:
+                    for integration in model.spec.integrations or []:
+                        _mark(str(integration.type), integration.required)
             except Exception as exc:
                 errors.append(f"Configuration '{cfg_ref.file}': {exc}")
 

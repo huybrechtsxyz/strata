@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Tuple
 import yaml
 
 from strata.controllers.base_controller import BaseController
-from strata.utils.config import SOLUTION_CONFIG_FILE, SOLUTION_DIR
+from strata.utils.config import SOLUTION_CONFIG_FILE, get_cli_config_path, get_strata_dir
 from strata.utils.system import get_pkg_templates_path
 
 
@@ -27,10 +27,10 @@ class ConfigurationController(BaseController):
     def __init__(self, work_path: Path) -> None:
         super().__init__()
         self._work_path = work_path
-        self._config_path = self._work_path / SOLUTION_DIR / SOLUTION_CONFIG_FILE
+        self._config_path = get_cli_config_path(self._work_path)
 
     def _ensure_state_dir(self) -> None:
-        (self._work_path / SOLUTION_DIR).mkdir(parents=True, exist_ok=True)
+        get_strata_dir(self._work_path).mkdir(parents=True, exist_ok=True)
 
     def _ensure_from_template(self) -> None:
         """If the config file does not exist, try to copy the package template."""

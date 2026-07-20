@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from strata.logger import get_logger
-from strata.utils.config import SOLUTION_DIR, SOLUTION_DRIFT_DIR
+from strata.utils.config import SOLUTION_DIR, SOLUTION_DRIFT_DIR, get_drift_dir
 
 logger = get_logger(__name__)
 
@@ -47,7 +47,7 @@ class DriftHistoryStore:
     def __init__(self, work_path: Path, deployment_name: str) -> None:
         self._work_path = work_path
         self._deployment_name = deployment_name
-        self._history_dir = work_path / SOLUTION_DIR / SOLUTION_DRIFT_DIR
+        self._history_dir = get_drift_dir(work_path)
         self._history_file = self._history_dir / f"{deployment_name}.drift.json"
         self._data: Dict[str, Any] = {}
         self._loaded = False

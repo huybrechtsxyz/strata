@@ -8,7 +8,7 @@ import click
 
 from strata.commands.schemas.schema_base_command import SchemaBaseCommand
 from strata.controllers.audit_controller import AuditController
-from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+from strata.utils.config import get_configuration_path, get_deploy_log_dir
 
 
 class ResendAuditCommand(SchemaBaseCommand):
@@ -46,13 +46,11 @@ class ResendAuditCommand(SchemaBaseCommand):
         from strata.models.audit_config_model import AuditConfigModel
         from strata.services.configuration_service import ConfigurationService
 
-        base_path = self._work_path / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+        base_path = get_deploy_log_dir(self._work_path)
 
         audit_config: Optional[AuditConfigModel] = None
         try:
-            config_service = ConfigurationService.load(
-                str(self._work_path / SOLUTION_DIR / "configuration.yaml"), validate=False
-            )
+            config_service = ConfigurationService.load(str(get_configuration_path(self._work_path)), validate=False)
             if config_service.model and config_service.model.spec and config_service.model.spec.audit:
                 audit_config = config_service.model.spec.audit
         except Exception:

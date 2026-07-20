@@ -419,7 +419,7 @@ class RunDeployCommand(BaseDeployCommand):
                 DeployLogStageModel,
                 DeployLogStepModel,
             )
-            from strata.utils.config import SOLUTION_DEPLOY_LOG_DIR, SOLUTION_DIR
+            from strata.utils.config import get_deploy_log_dir
 
             # Assemble per-stage data from manifest stage results
             stages: List[DeployLogStageModel] = []
@@ -494,7 +494,7 @@ class RunDeployCommand(BaseDeployCommand):
 
             # Resolve audit config (structure + base path)
             structure = "by-execution"
-            base_path = self._work_path / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+            base_path = get_deploy_log_dir(self._work_path)
             resolved_audit_cfg = None
             if self._configuration_service:
                 resolved_audit_cfg = getattr(getattr(self._configuration_service.model, "spec", None), "audit", None)

@@ -18,7 +18,7 @@ from strata.controllers.base_controller import BaseController
 from strata.deployers.factory import DeployerFactory
 from strata.logger import get_logger
 from strata.models.drift_model import DriftEntry, DriftReport, DriftSeverity, DriftSummary
-from strata.utils.config import SOLUTION_DIR
+from strata.utils.config import get_drift_rules_path
 from strata.utils.drift_history import DriftHistoryStore
 from strata.utils.system import get_pkg_data_path
 
@@ -84,7 +84,7 @@ class DriftClassifier:
     def load(cls, work_path: Path) -> "DriftClassifier":
         """Load rules, merging workspace-level overrides over built-ins."""
         builtin = _load_yaml(_BUILTIN_RULES_PATH)
-        workspace_rules_path = work_path / SOLUTION_DIR / _WORKSPACE_RULES_FILE
+        workspace_rules_path = get_drift_rules_path(work_path)
         if workspace_rules_path.exists():
             workspace = _load_yaml(workspace_rules_path)
             # Workspace rules prepend (take priority over built-ins)
