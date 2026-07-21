@@ -75,7 +75,7 @@ strata service list -f deploy-prd.yaml --output json
 ```
 
 Returns:
-```json
+```text
 {
   "file": "deployments/deploy-prd.yaml",
   "services": [

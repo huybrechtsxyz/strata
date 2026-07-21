@@ -150,7 +150,7 @@ Key columns:
 
 Reference files in registered repos using `@repo_name/path` notation:
 
-```yaml
+```text
 # deployments/deploy-prd.yaml
 apiVersion: strata.huybrechts.xyz/v1
 kind: deployment

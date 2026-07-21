@@ -184,7 +184,7 @@ strata deploy run -f deployments/deploy-prd.yaml --output json
 
 Returns a JSON envelope after completion:
 
-```json
+```text
 {
   "success": true,
   "data": {
