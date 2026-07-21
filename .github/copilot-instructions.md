@@ -2,6 +2,27 @@
 
 This is a **strata** infrastructure workspace — a collection of YAML configuration files that describe deployments, modules, environments, and infrastructure resources.
 
+## Essential Skills
+
+Before working in this workspace, read the domain skills (available in `.github/skills/`):
+
+1. **strata-cli-workflows** — Command structure, exit codes, JSON output, dry-run patterns
+   - When: Every CLI operation
+   
+2. **strata-yaml-schema-and-kinds** — Document structure, valid kinds, schema constraints
+   - When: Writing/modifying YAML
+   
+3. **strata-deployment-lifecycle** — Validate → Build → Deploy workflow, stages, provisioners
+   - When: Orchestrating deployments
+   
+4. **strata-secret-resolution-patterns** — Secrets, secret stores, SSH key lifecycle
+   - When: Handling credentials
+   
+5. **strata-terraform-ansible-provisioning** — Terraform + Ansible, stage orchestration
+   - When: Infrastructure provisioning
+
+---
+
 ## Key facts
 
 - All YAML files use `apiVersion: strata.huybrechts.xyz/v1` and a `kind` field.
