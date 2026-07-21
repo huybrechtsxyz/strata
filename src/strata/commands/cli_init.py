@@ -162,7 +162,7 @@ def init_command(
             name, template = _run_guided_wizard()
         except (click.Abort, KeyboardInterrupt):
             click.echo("\nCancelled.")
-            raise click.exceptions.Exit(0)
+            raise click.exceptions.Exit(0) from None
     elif name is None:
         click.echo("Error: Missing option '--name'.", err=True)
         raise click.exceptions.Exit(2)
