@@ -47,10 +47,13 @@ This is a comprehensive guide to all Strata documentation and resources. Use thi
 | [Commands Reference](./platform/commands.md)                            | Complete CLI command documentation        |
 | [Validation & Error Handling](./platform/validators.md)                 | How validation works and error resolution |
 | [Building Deployments](./platform/builders.md)                          | Pre-deployment artifact generation        |
-| [Deploying Infrastructure](./guides/how-deployments-work.md)            | Deployment process and strategies         |
+| [Deploying Infrastructure](./guides/deploying.md)                       | End-to-end deployment operations          |
 | [Managing Environments](./guides/environment-composition.md)            | Environment composition and overrides     |
+| [Environment Inspection](./guides/environment-command-group.md)         | Query outputs, state, and drift           |
+| [Multi-Repository Setup](./guides/multi-repo-setup.md)                  | Version pinning and promotion workflows   |
+| [Service Deployment](./guides/service-command-group.md)                 | Deploy individual services/modules        |
 | [Secrets, Variables & Features](./guides/secrets-variables-features.md) | Resolution pattern for all three          |
-| [Audit & Compliance](./guides/siem-audit-forwarding.md)                 | Tracking changes and compliance           |
+| [Deployment Audit Trail](./guides/audit-command-group.md)               | Tracking changes and compliance           |
 | [Troubleshooting](./guides/troubleshooting-what-changed.md)             | Common issues and solutions               |
 
 ### Advanced Topics
