@@ -21,6 +21,18 @@ Before working in this workspace, read the domain skills (available in `.github/
 5. **strata-terraform-ansible-provisioning** — Terraform + Ansible, stage orchestration
    - When: Infrastructure provisioning
 
+### Supporting Context Skills
+
+These skills provide DevOps and IaC context that makes the 5 strata-specific skills more powerful:
+
+6. **infrastructure-as-code-best-practices** — IaC principles, state management, modularity, versioning, testing, drift detection
+   - When: Understanding WHY strata patterns exist
+   - Scope: 10 core IaC principles that guide strata design
+   
+7. **devops-ci-cd-workflows** — CI/CD patterns, GitHub Actions, approval gates, testing pipelines, deployment automation
+   - When: Integrating strata with CI/CD pipelines
+   - Scope: GitHub Actions patterns for validate-build-deploy workflows
+
 ---
 
 ## Key facts
