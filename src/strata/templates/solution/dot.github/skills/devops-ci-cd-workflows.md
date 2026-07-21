@@ -115,13 +115,13 @@ jobs:
 
 ### Trigger Events
 
-| Event | When | Use Case |
-|-------|------|----------|
-| `push` | Code pushed to branch | Run tests on every commit |
-| `pull_request` | PR opened or updated | Validate changes before merge |
-| `schedule` | Cron expression | Daily/weekly automated checks |
-| `workflow_dispatch` | Manual trigger | On-demand deployments |
-| `release` | GitHub release published | Production deployment |
+| Event               | When                     | Use Case                      |
+| ------------------- | ------------------------ | ----------------------------- |
+| `push`              | Code pushed to branch    | Run tests on every commit     |
+| `pull_request`      | PR opened or updated     | Validate changes before merge |
+| `schedule`          | Cron expression          | Daily/weekly automated checks |
+| `workflow_dispatch` | Manual trigger           | On-demand deployments         |
+| `release`           | GitHub release published | Production deployment         |
 
 ### Approval Gates (Environments)
 
@@ -489,13 +489,13 @@ compliance:
 
 ## Troubleshooting
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| Workflow doesn't trigger | Wrong branch filter | Check `on: push: branches:` matches your workflow branch |
-| Approval stuck | Reviewer didn't notice | Set up Slack notifications for pending approvals |
-| Secrets not available | Secret not defined in GitHub | Add secret in Settings → Secrets and variables → Actions |
-| Deployment failed in CI but works locally | Environment difference | Check STRATA_WORK_PATH, .strata/ config differences |
-| Slow validation | Too many checks | Run critical checks on PR, full checks on main branch |
+| Problem                                   | Cause                        | Fix                                                      |
+| ----------------------------------------- | ---------------------------- | -------------------------------------------------------- |
+| Workflow doesn't trigger                  | Wrong branch filter          | Check `on: push: branches:` matches your workflow branch |
+| Approval stuck                            | Reviewer didn't notice       | Set up Slack notifications for pending approvals         |
+| Secrets not available                     | Secret not defined in GitHub | Add secret in Settings → Secrets and variables → Actions |
+| Deployment failed in CI but works locally | Environment difference       | Check STRATA_WORK_PATH, .strata/ config differences      |
+| Slow validation                           | Too many checks              | Run critical checks on PR, full checks on main branch    |
 
 ---
 

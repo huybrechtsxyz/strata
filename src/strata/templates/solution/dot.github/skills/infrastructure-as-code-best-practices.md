@@ -139,13 +139,13 @@ Production (stable version)
 
 **Levels of testing:**
 
-| Level | Tool | When |
-|-------|------|------|
-| Syntax validation | `terraform validate` | Every save |
-| Policy checks | `checkov` | Before build |
-| Cost estimation | `terraform plan` | Before deploy |
-| Security scan | `trivy` | Before production |
-| Integration test | Deploy to test environment | Before production |
+| Level             | Tool                       | When              |
+| ----------------- | -------------------------- | ----------------- |
+| Syntax validation | `terraform validate`       | Every save        |
+| Policy checks     | `checkov`                  | Before build      |
+| Cost estimation   | `terraform plan`           | Before deploy     |
+| Security scan     | `trivy`                    | Before production |
+| Integration test  | Deploy to test environment | Before production |
 
 **In strata:**
 ```bash
@@ -286,27 +286,27 @@ config/
 
 ## When to Use IaC
 
-| Scenario | Use IaC? | Why |
-|----------|----------|-----|
-| Production infrastructure | ✅ Yes | Reproducibility, audit trail, disaster recovery |
-| Development/test environments | ✅ Yes | Easy to create/destroy, cost control |
-| One-time manual setup | ❌ No | Overkill for short-lived resources |
-| Learning/exploration | ⚠️ Maybe | Use IaC to document, then clean up |
+| Scenario                      | Use IaC? | Why                                             |
+| ----------------------------- | -------- | ----------------------------------------------- |
+| Production infrastructure     | ✅ Yes    | Reproducibility, audit trail, disaster recovery |
+| Development/test environments | ✅ Yes    | Easy to create/destroy, cost control            |
+| One-time manual setup         | ❌ No     | Overkill for short-lived resources              |
+| Learning/exploration          | ⚠️ Maybe  | Use IaC to document, then clean up              |
 
 ---
 
 ## Anti-Patterns to Avoid
 
-| Anti-Pattern | Problem | Fix |
-|--------------|---------|-----|
-| **Console clicking** | No version control, hard to reproduce | Use IaC from day 1 |
-| **Copy-pasted code** | Maintenance nightmare, inconsistent | Create reusable modules |
-| **Unversioned modules** | Breaking changes hit all users | Pin versions, test before upgrade |
-| **Manual state edits** | Corrupts consistency between code and state | Use IaC commands only |
-| **Secrets in code** | Security breach, hard to rotate | Use secret store references |
-| **No testing** | Broken deployments in production | Validate, plan, dry-run first |
-| **Long drift** | Reality diverges from code | Regular drift checks, rebuild from code |
-| **No documentation** | Team doesn't understand infrastructure | Use annotations, naming conventions, code comments |
+| Anti-Pattern            | Problem                                     | Fix                                                |
+| ----------------------- | ------------------------------------------- | -------------------------------------------------- |
+| **Console clicking**    | No version control, hard to reproduce       | Use IaC from day 1                                 |
+| **Copy-pasted code**    | Maintenance nightmare, inconsistent         | Create reusable modules                            |
+| **Unversioned modules** | Breaking changes hit all users              | Pin versions, test before upgrade                  |
+| **Manual state edits**  | Corrupts consistency between code and state | Use IaC commands only                              |
+| **Secrets in code**     | Security breach, hard to rotate             | Use secret store references                        |
+| **No testing**          | Broken deployments in production            | Validate, plan, dry-run first                      |
+| **Long drift**          | Reality diverges from code                  | Regular drift checks, rebuild from code            |
+| **No documentation**    | Team doesn't understand infrastructure      | Use annotations, naming conventions, code comments |
 
 ---
 
