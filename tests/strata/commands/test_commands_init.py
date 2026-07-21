@@ -134,8 +134,9 @@ class TestGuidedWizard:
         assert result.exit_code == 2
         assert "--guided requires an interactive terminal" in result.output
 
-    def test_guided_kubernetes_azure_selects_aks(self, tmp_path):
+    def test_guided_kubernetes_azure_selects_aks(self, tmp_path, monkeypatch):
         """Kubernetes + Azure maps to the 'aks' template."""
+        monkeypatch.delenv("CI", raising=False)
         runner = CliRunner()
         with patch("strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True):
             result = runner.invoke(
@@ -145,8 +146,9 @@ class TestGuidedWizard:
             )
         assert result.exit_code == 0, result.output
 
-    def test_guided_compose_selects_compose_template(self, tmp_path):
+    def test_guided_compose_selects_compose_template(self, tmp_path, monkeypatch):
         """Docker Compose selection maps to the 'compose' template."""
+        monkeypatch.delenv("CI", raising=False)
         runner = CliRunner()
         with patch(
             "strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True
@@ -158,8 +160,9 @@ class TestGuidedWizard:
             )
         assert result.exit_code == 0, result.output
 
-    def test_guided_minimal_uses_no_template(self, tmp_path):
+    def test_guided_minimal_uses_no_template(self, tmp_path, monkeypatch):
         """Minimal selection initializes without a template."""
+        monkeypatch.delenv("CI", raising=False)
         runner = CliRunner()
         with patch("strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True):
             result = runner.invoke(
@@ -169,8 +172,9 @@ class TestGuidedWizard:
             )
         assert result.exit_code == 0, result.output
 
-    def test_guided_cancel_exits_0(self, tmp_path):
+    def test_guided_cancel_exits_0(self, tmp_path, monkeypatch):
         """Ctrl+C / empty abort during wizard exits 0 cleanly."""
+        monkeypatch.delenv("CI", raising=False)
         runner = CliRunner()
         result = runner.invoke(
             init_command,
