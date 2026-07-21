@@ -36,6 +36,7 @@ were considered, and why. They exist so the rationale survives beyond the author
 | [0042](0042-deep-validation-layer-consistency.md)            | Deep validation and layer consistency                            | Proposed |
 | [0043](0043-tenant-offboarding.md)                           | Tenant offboarding                                               | Proposed |
 | [0044](0044-competitive-landscape-and-feature-gaps.md)       | Competitive landscape and feature gaps                           | Proposed |
+| [0049](0049-workflow-as-executable-runbook.md)               | Workflow file as executable project runbook                      | Proposed |
 
 ## Adding a new ADR
 

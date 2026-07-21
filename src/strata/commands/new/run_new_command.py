@@ -176,6 +176,67 @@ def _read_bundle_description(bundle_dir: Path) -> str:
     return ""
 
 
+def _resolve_at_repo_path(identifier: str, repo_map: Dict[str, str]) -> Optional[Path]:
+    """Resolve a ``@repo_name/relative/path`` reference to an absolute ``Path``.
+
+    Returns ``None`` if the repo is not registered or the identifier is malformed.
+    """
+    if not identifier.startswith("@"):
+        return None
+    rest = identifier[1:]
+    if "/" not in rest:
+        return None
+    repo_name, rel_path = rest.split("/", 1)
+    if repo_name not in repo_map:
+        return None
+    return Path(repo_map[repo_name]) / rel_path
+
+
+def _collect_dep_candidates(
+    graph_result,
+    work_path: Path,
+    repo_map: Dict[str, str],
+) -> List[Tuple[str, str, Path]]:
+    """Return ``(kind, name, resolved_path)`` tuples for unresolved dependencies.
+
+    Covers two node statuses from the graph:
+
+    - ``"missing"``: local relative path that does not exist on disk.
+    - ``"external"``: ``@repo/...`` reference; resolved via *repo_map* and
+      checked for existence — only included when the resolved file is absent.
+
+    Nodes that are already present on disk are silently skipped.
+    """
+    seen: set[str] = set()
+    candidates: List[Tuple[str, str, Path]] = []
+
+    for node in graph_result.nodes:
+        if node.status not in ("missing", "external"):
+            continue
+        if node.identifier in seen:
+            continue
+        seen.add(node.identifier)
+
+        kind = node.kind if node.kind not in ("unknown", "") else None
+        if not kind:
+            continue
+
+        if node.identifier.startswith("@"):
+            resolved = _resolve_at_repo_path(node.identifier, repo_map)
+            if resolved is None:
+                continue  # Repo not registered — cannot scaffold
+            if resolved.exists():
+                continue
+        else:
+            resolved = work_path / node.identifier
+            if resolved.exists():
+                continue
+
+        candidates.append((kind, resolved.stem, resolved))
+
+    return candidates
+
+
 def _resolve_template_path(template: str, work_path: Optional[Path]) -> Optional[Path]:
     """Resolve the template for *template*, preferring workspace over package.
 
@@ -233,6 +294,7 @@ class NewCommand(BaseCommand):
         overwrite: bool = False,
         set_values: Tuple[str, ...] = (),
         run_validate: bool = False,
+        scaffold_deps: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -247,6 +309,7 @@ class NewCommand(BaseCommand):
         self._overwrite = overwrite
         self._set_values = set_values  # tuple of "KEY=VALUE" strings
         self._run_validate = run_validate
+        self._scaffold_deps = scaffold_deps
 
     def get_required_integrations(self) -> Dict[str, str]:
         return {}
@@ -353,6 +416,17 @@ class NewCommand(BaseCommand):
 
         if result and self._run_validate:
             result = self._validate_generated()
+
+        if result and self._scaffold_deps and not self._list_templates:
+            created: list[str] = []
+            if self._output_data:
+                if "path" in self._output_data:
+                    created = [self._output_data["path"]]
+                else:
+                    created = list(self._output_data.get("files", []))
+            if created:
+                self._scaffold_missing_deps(created)
+
         return result
 
     def _run_file_execution(self, template_path: Path, context: Dict[str, str]) -> bool:
@@ -562,6 +636,145 @@ class NewCommand(BaseCommand):
             template=template.name,
             files=all_created,
         )
+        return True
+
+    def _scaffold_missing_deps(self, created_paths: List[str]) -> None:
+        """Detect and offer to scaffold missing file dependencies.
+
+        Runs the dependency graph on every file produced by the current
+        invocation, collects nodes with ``status="missing"`` (local path) or
+        ``status="external"`` (``@repo/...`` reference), resolves them to
+        absolute paths, and — after a single confirmation prompt — calls
+        :meth:`_scaffold_single_dep` for each absent file.
+
+        Scaffolding failures are reported inline but never propagate as errors
+        on the parent command: the primary file was already created successfully.
+        """
+        from strata.controllers.graph_controller import GraphController
+
+        work_path = self._work_path or Path(os.getcwd())
+
+        # Resolve repo map for @repo/ references
+        repo_map: Dict[str, str] = {}
+        try:
+            ok, _ = self._solution_controller.load()
+            if ok:
+                repo_map = self._solution_controller.get_repo_map()
+        except Exception:
+            pass
+
+        # Collect candidates across all created files (deduplicated)
+        all_candidates: List[Tuple[str, str, Path]] = []
+        seen_paths: set[str] = set()
+
+        for path_str in created_paths:
+            created_path = Path(path_str)
+            if not created_path.exists():
+                continue
+            try:
+                entry_rel = str(created_path.relative_to(work_path))
+            except ValueError:
+                # Created file is outside the workspace root (e.g. written to CWD).
+                # Skip dependency scanning for this file — we cannot resolve
+                # relative cross-file references without a workspace root.
+                self.logger.debug(
+                    "Skipping dep-scan: file outside work_path",
+                    path=path_str,
+                    work_path=str(work_path),
+                )
+                continue
+
+            gc = GraphController(work_path, entry=entry_rel, no_validate=True)
+            graph_result = gc.build_file_graph()
+
+            for kind, name, resolved in _collect_dep_candidates(graph_result, work_path, repo_map):
+                key = str(resolved)
+                if key not in seen_paths:
+                    seen_paths.add(key)
+                    all_candidates.append((kind, name, resolved))
+
+        if not all_candidates:
+            return
+
+        count = len(all_candidates)
+        label = "dependency" if count == 1 else "dependencies"
+        click.echo(f"\n  ⚠  {count} missing {label} referenced by the scaffolded file:")
+        for kind, _name, resolved in all_candidates:
+            try:
+                display = resolved.relative_to(work_path)
+            except ValueError:
+                display = resolved
+            click.echo(f"       {kind:18s}  {display}")
+
+        try:
+            if not click.confirm("\n  Scaffold missing files?", default=True):
+                return
+        except (click.Abort, KeyboardInterrupt):
+            click.echo("\n  Skipped.")
+            return
+
+        click.echo("")
+        scaffolded: list[str] = []
+        for kind, name, resolved in all_candidates:
+            if resolved.exists():
+                continue  # May have been created by a cascade earlier in the loop
+            if self._scaffold_single_dep(kind, name, resolved):
+                scaffolded.append(str(resolved))
+
+        if scaffolded and self._output_data is not None:
+            self._output_data["scaffolded"] = scaffolded
+
+    def _scaffold_single_dep(self, kind: str, name: str, output_path: Path) -> bool:
+        """Scaffold one dependency file using its kind template.
+
+        Only single-file templates are supported.  Bundle templates are skipped
+        with a warning — they require explicit path decisions that cannot be
+        inferred automatically.
+        """
+        template_path = _resolve_template_path(kind, self._work_path)
+        if template_path is None:
+            click.echo(f"  ⚠  No template for kind '{kind}' \u2014 skipping")
+            return False
+
+        if template_path.is_dir():
+            click.echo(f"  ⚠  Bundle template '{kind}' not supported for auto-scaffold \u2014 skipping")
+            return False
+
+        if output_path.exists() and not self._overwrite:
+            try:
+                display: Path | str = output_path.relative_to(self._work_path or Path.cwd())
+            except ValueError:
+                display = output_path
+            click.echo(f"  \u23ed  Already exists: {display}")
+            return True
+
+        context: Dict[str, str] = {"name": name}
+        for kv in self._set_values:
+            if "=" in kv:
+                k, v = kv.split("=", 1)
+                context[k.strip()] = v.strip()
+
+        try:
+            content = template_path.read_text(encoding="utf-8")
+        except Exception as e:
+            click.echo(f"  \u274c  Failed to read template '{template_path}': {e}")
+            return False
+
+        rendered = TemplateProcessor.render(content, context)
+
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(rendered, encoding="utf-8")
+        except Exception as e:
+            click.echo(f"  \u274c  Failed to write '{output_path}': {e}")
+            return False
+
+        try:
+            display = output_path.relative_to(self._work_path or Path.cwd())
+        except ValueError:
+            display = output_path
+        click.echo(f"  \u2705  Created: {display}")
+        self.logger.info("Dependency scaffolded", path=str(output_path), kind=kind)
         return True
 
     def _validate_generated(self) -> bool:

@@ -1,8 +1,32 @@
 # `strata console` — Interactive Workspace Console
 
-- Status: accepted
+- Status: cancelled
 - Date: 2026-06-24
+- Cancelled: 2026-07-21
 - Parent: [0014-onboarding-experience.md](0014-onboarding-experience.md) (items #6, #7, #8, #9)
+
+## Cancellation
+
+After analysis of actual DevOps engineer workflows and existing tooling, this ADR is cancelled. The REPL is the wrong tool for the problem it was solving.
+
+**Reasons:**
+
+1. **VS Code extension already covers the core use case.** The extension provides the readiness checklist, status bar phase indicator, next-step hints, `@strata /guide`, and live file validation — all ambient, all while the user is in their normal authoring workflow. The REPL duplicates this for a subset of users.
+
+2. **Terminal-native users (vim, neovim, SSH) prefer single-shot commands.** These users actively reject persistent shells. Over SSH a persistent REPL is also fragile — network drops kill the session, and without tmux the context is lost. The Unix mental model is: run a command, get output, return to shell.
+
+3. **The real fix is better single-shot commands, not a persistent session.** The problem the REPL was solving — "the user is the state machine between guide invocations" — is better addressed by `strata guide --next` and `strata guide --do` flags. Same guided experience, composable, scriptable, SSH-safe, CI-safe.
+
+4. **No target persona genuinely wants to live inside a strata shell.** The only defensible persona for the REPL was the SSH/headless terminal user doing cold-start onboarding. That user is better served by `strata sln init --guided` (a short wizard that runs and exits) than a persistent session.
+
+5. **Complexity is not justified.** The implementation requires `prompt_toolkit`, Rich rendering for the REPL, a watch-mode background thread, and `workflow.yaml` as a new user-facing file — all to serve a use case already covered by the VS Code extension for the primary persona.
+
+**Replaced by:**
+- `strata guide --next` / `strata guide --do` flags (see [0014-onboarding-experience.md](0014-onboarding-experience.md) items #22, #23)
+- `strata sln init --guided` cold-start wizard (see [0014-onboarding-experience.md](0014-onboarding-experience.md) item #24)
+- VS Code extension onboarding improvements (existing extension roadmap)
+
+---
 
 ## Summary
 

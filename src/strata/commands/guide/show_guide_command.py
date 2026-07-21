@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -9,6 +11,8 @@ import click
 
 from strata.commands.base_command import BaseCommand
 from strata.controllers.guide_controller import ChecklistItem, GuideController, NextStepItem
+
+_PLACEHOLDER_RE = re.compile(r"<[a-z][a-z_]*>")
 
 
 class GuideCommand(BaseCommand):
@@ -19,6 +23,8 @@ class GuideCommand(BaseCommand):
     def __init__(
         self,
         file: Optional[str] = None,
+        next_step: bool = False,
+        do_step: bool = False,
         work_path: Optional[str] = None,
         output: Optional[str] = None,
         verbose: bool = False,
@@ -26,6 +32,9 @@ class GuideCommand(BaseCommand):
     ) -> None:
         super().__init__(work_path=work_path, output=output, verbose=verbose, quiet=quiet)
         self._file = file
+        self._next = next_step
+        self._do = do_step
+        self._do_failed: bool = False
         self._guide_controller: Optional[GuideController] = None
 
     def get_required_integrations(self) -> Dict[str, str]:
@@ -39,7 +48,7 @@ class GuideCommand(BaseCommand):
 
     def _execute(self) -> bool:
         self._run_execution()
-        return True
+        return not self._do_failed
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -70,6 +79,14 @@ class GuideCommand(BaseCommand):
         assert ctrl is not None
         checklist = ctrl.evaluate()
         next_step = ctrl.find_next_step()
+
+        if self._do:
+            self._run_do_mode(next_step, ctrl)
+            return
+
+        if self._next:
+            self._run_next_mode(checklist, next_step, ctrl)
+            return
 
         if self._is_quiet():
             return
@@ -114,6 +131,162 @@ class GuideCommand(BaseCommand):
                 ctrl.workspace_name,
                 ctrl.solution_id,
             )
+
+    # ------------------------------------------------------------------
+    # Do-step mode (--do)
+    # ------------------------------------------------------------------
+
+    def _run_do_mode(self, next_step: Optional[NextStepItem], ctrl: GuideController) -> None:
+        if next_step is None:
+            # Workspace complete — same output as --next complete
+            if not self._is_quiet():
+                if self._is_console_output():
+                    self._render_next_console(None, ctrl.hints)
+                else:
+                    self._output_data = self._render_do_json(None, [], False, None)
+            return
+
+        unresolved = _PLACEHOLDER_RE.findall(next_step.hint)
+        unresolved_names = [p[1:-1] for p in unresolved]  # strip angle brackets
+        executable = len(unresolved_names) == 0
+
+        if self._is_quiet():
+            if executable:
+                returncode = self._execute_hint(next_step.hint)
+                if returncode != 0:
+                    self._do_failed = True
+            return
+
+        if executable:
+            if self._is_console_output():
+                click.echo(f"\n\u2192 Running: {next_step.hint}\n")
+                returncode = self._execute_hint(next_step.hint)
+                if returncode != 0:
+                    self._do_failed = True
+                    click.echo(f"\n\u26a0\ufe0f  Command exited with code {returncode}")
+                click.echo("")
+            else:
+                returncode = self._execute_hint(next_step.hint)
+                if returncode != 0:
+                    self._do_failed = True
+                self._output_data = self._render_do_json(next_step, [], True, returncode)
+        else:
+            if self._is_console_output():
+                self._render_do_blocked_console(next_step, unresolved_names)
+            else:
+                self._output_data = self._render_do_json(next_step, unresolved_names, False, None)
+
+    @staticmethod
+    def _find_unresolved(hint: str) -> List[str]:
+        """Return bare placeholder names (without angle brackets) still in hint."""
+        return [m.group(0)[1:-1] for m in _PLACEHOLDER_RE.finditer(hint)]
+
+    def _execute_hint(self, hint: str) -> int:
+        """Run hint as a shell command in the workspace directory. Returns exit code."""
+        try:
+            result = subprocess.run(hint, shell=True, cwd=str(self._work_path))  # noqa: S602
+            return result.returncode
+        except Exception as e:
+            click.echo(f"\n\u26a0\ufe0f  Failed to execute: {e}")
+            return 1
+
+    def _render_do_blocked_console(self, next_step: NextStepItem, unresolved: List[str]) -> None:
+        placeholder_str = ", ".join(f"<{p}>" for p in unresolved)
+        click.echo(f"\n\u2192 Phase {next_step.phase}: {next_step.label} \u2014 values required\n")
+        for line in next_step.hint.splitlines():
+            click.echo(f"   {line}")
+        click.echo("")
+        click.echo(f"   Fill in {placeholder_str}, then re-run with --do.")
+        if next_step.see_also:
+            click.echo(f"   See: {next_step.see_also}")
+        click.echo("")
+
+    def _render_do_json(
+        self,
+        next_step: Optional[NextStepItem],
+        unresolved: List[str],
+        executed: bool,
+        exit_code: Optional[int],
+    ) -> dict:
+        if next_step is None:
+            return {
+                "complete": True,
+                "phase": None,
+                "label": None,
+                "command": None,
+                "executable": None,
+                "unresolved": [],
+                "executed": False,
+                "exit_code": None,
+                "see_also": None,
+            }
+        return {
+            "complete": False,
+            "phase": next_step.phase,
+            "label": next_step.label,
+            "command": next_step.hint,
+            "executable": len(unresolved) == 0,
+            "unresolved": unresolved,
+            "executed": executed,
+            "exit_code": exit_code,
+            "see_also": next_step.see_also,
+        }
+
+    # ------------------------------------------------------------------
+    # Next-step mode (--next)
+    # ------------------------------------------------------------------
+
+    def _run_next_mode(
+        self,
+        checklist: List[ChecklistItem],
+        next_step: Optional[NextStepItem],
+        ctrl: GuideController,
+    ) -> None:
+        if self._is_quiet():
+            return
+        if self._is_console_output():
+            self._render_next_console(next_step, ctrl.hints)
+        else:
+            self._output_data = self._render_next_json(
+                next_step, ctrl.workspace_name, ctrl.solution_id, ctrl.is_complete
+            )
+
+    def _render_next_console(self, next_step: Optional[NextStepItem], hints: dict) -> None:
+        if next_step is None:
+            complete_msg = hints.get("complete") or "All setup phases complete. Your workspace is ready to deploy."
+            click.echo(f"→ {complete_msg}")
+            click.echo("")
+            return
+        click.echo(f"\n→ Phase {next_step.phase}: {next_step.label}\n")
+        for line in next_step.hint.splitlines():
+            click.echo(f"   {line}")
+        if next_step.see_also:
+            click.echo("")
+            click.echo(f"   See: {next_step.see_also}")
+        click.echo("")
+
+    def _render_next_json(
+        self,
+        next_step: Optional[NextStepItem],
+        workspace_name: Optional[str],
+        solution_id: Optional[str],
+        is_complete: bool,
+    ) -> dict:
+        if next_step is None:
+            return {
+                "complete": True,
+                "phase": None,
+                "label": None,
+                "command": None,
+                "see_also": None,
+            }
+        return {
+            "complete": False,
+            "phase": next_step.phase,
+            "label": next_step.label,
+            "command": next_step.hint,
+            "see_also": next_step.see_also,
+        }
 
     # ------------------------------------------------------------------
     # Console rendering — workspace mode

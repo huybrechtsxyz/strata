@@ -2,32 +2,36 @@
 
 - Status: completed
 - Date: 2026-06-24
+- Revised: 2026-07-21 — items 6, 7, 9, 10, 15, 16, 20 cancelled (REPL approach); items 22–24 added and completed.
 
 ## Summary
 
-| #   | Item                                                                | Phase | Status |
-| --- | ------------------------------------------------------------------- | ----- | ------ |
-| 1   | `strata sln init --list` — discover available templates             | 1     | done   |
-| 2   | `strata new --list` shows bundles + descriptions                    | 1     | done   |
-| 3   | Fix template bundles (`type:` → `provisioner:`)                     | 1     | done   |
-| 4   | CI template validation test                                         | 1     | done   |
-| 5   | Formalize `config/` as reference example workspace                  | 1     | done   |
-| 6   | `strata console` — interactive workspace session (prompt_toolkit)   | 2     | done   |
-| 7   | REPL commands: status, check, next, do, new, validate, flow, tools  | 2     | done   |
-| 8   | `GuideController` extraction from `GuideCommand`                    | 2     | done   |
-| 9   | Rich rendering (panels, tables, progress bar)                       | 2     | done   |
-| 10  | `init` wizard inside the guide REPL                                 | 3     | todo   |
-| 11  | `flow` command — Mermaid dependency graph (`strata validate graph`) | 3     | done   |
-| 12  | `strata validate run --pattern "**"` batch validation               | 3     | done   |
-| 13  | `strata validate --explain` — plain-English file summary            | 3     | done   |
-| 14  | Validation error fix suggestions                                    | 3     | done   |
-| 15  | Interactive `strata new` inside the guide REPL                      | 3     | future |
-| 16  | Session progress persistence (`.strata/guide-progress.json`)        | 3     | done   |
-| 17  | `strata env doctor` — non-interactive health check                  | 3     | future |
-| 18  | Standalone LLM skill file (`strata-onboarding`)                     | 4     | done   |
-| 19  | Progressive dependency scaffolding                                  | 5     | future |
-| 20  | Auto-refresh mode (`strata guide --auto`)                           | 5     | future |
-| 21  | Template marketplace / community templates                          | 5     | future |
+| #   | Item                                                                | Phase | Status                                                                                                                    |
+| --- | ------------------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `strata sln init --list` — discover available templates             | 1     | done                                                                                                                      |
+| 2   | `strata new --list` shows bundles + descriptions                    | 1     | done                                                                                                                      |
+| 3   | Fix template bundles (`type:` → `provisioner:`)                     | 1     | done                                                                                                                      |
+| 4   | CI template validation test                                         | 1     | done                                                                                                                      |
+| 5   | Formalize `config/` as reference example workspace                  | 1     | done                                                                                                                      |
+| 6   | `strata console` — interactive workspace session (prompt_toolkit)   | 2     | cancelled                                                                                                                 |
+| 7   | REPL commands: status, check, next, do, new, validate, flow, tools  | 2     | cancelled                                                                                                                 |
+| 8   | `GuideController` extraction from `GuideCommand`                    | 2     | done                                                                                                                      |
+| 9   | Rich rendering (panels, tables, progress bar)                       | 2     | cancelled                                                                                                                 |
+| 10  | `init` wizard inside the guide REPL                                 | 3     | cancelled                                                                                                                 |
+| 11  | `flow` command — Mermaid dependency graph (`strata validate graph`) | 3     | done                                                                                                                      |
+| 12  | `strata validate run --pattern "**"` batch validation               | 3     | done                                                                                                                      |
+| 13  | `strata validate --explain` — plain-English file summary            | 3     | done                                                                                                                      |
+| 14  | Validation error fix suggestions                                    | 3     | done                                                                                                                      |
+| 15  | Interactive `strata new` inside the guide REPL                      | 3     | cancelled                                                                                                                 |
+| 16  | Session progress persistence (`.strata/guide-progress.json`)        | 3     | cancelled                                                                                                                 |
+| 17  | `strata env doctor` — non-interactive health check                  | 3     | done                                                                                                                      |
+| 18  | Standalone LLM skill file (`strata-onboarding`)                     | 4     | done                                                                                                                      |
+| 19  | Progressive dependency scaffolding                                  | 5     | done                                                                                                                      |
+| 20  | Auto-refresh mode (`strata guide --auto`)                           | 5     | cancelled                                                                                                                 |
+| 21  | Template marketplace / community templates                          | 5     | see [0035](0035-enterprise-store.md), [0039](0039-deployment-templates.md), [0040](0040-tenant-onboarding-scaffolding.md) |
+| 22  | `strata guide --next` — show next pending step with command, exit   | 3     | done                                                                                                                      |
+| 23  | `strata guide --do` — execute next pending step, exit               | 3     | done                                                                                                                      |
+| 24  | `strata sln init --guided` — cold-start wizard (Q&A, exits)         | 3     | done                                                                                                                      |
 
 ---
 
@@ -415,14 +419,14 @@ Status: **accepted** — proceeding with Phase 1, then Phase 2.
 
 ADR-0014 has 21 items across 5 phases. **v1.0 ships with 18 complete** (Phases 1–4 + core Phase 3). The following items are **explicitly post-v1.0:**
 
-| Item | Name                               | Phase | Why Deferred                                                                                                                                         |
-| ---- | ---------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 10   | `init` wizard inside guide REPL    | 3     | Interactive guided initialization is convenient but not blocking. Users can manually scaffold via `strata new` (slower but works). Priority post-v1. |
-| 15   | Interactive `strata new` in REPL   | 3     | Adds conversational UX to scaffolding (`new module --interactive`). Non-essential — single-shot `strata new` is CI-safe and works.                   |
-| 17   | `strata env doctor` — health check | 3     | Designed but not implemented. Useful for diagnosing workspace issues, but not part of cold-start path. Can ship as a separate enhancement.           |
-| 19   | Progressive dependency scaffolding | 5     | When scaffolding a deployment, auto-scaffold missing referenced files. Complex dependency resolution — deferred pending demand.                      |
-| 20   | Auto-refresh mode (`--auto`)       | 5     | REPL with live polling on file changes. Experimental UX feature; v1 doesn't need it.                                                                 |
-| 21   | Template marketplace               | 5     | Community templates via URL/registry. Infrastructure work; built-in templates are sufficient for v1.                                                 |
+| Item | Name                               | Phase | Why Deferred                                                                                                                                                                                                                   |
+| ---- | ---------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 10   | `init` wizard inside guide REPL    | 3     | Interactive guided initialization is convenient but not blocking. Users can manually scaffold via `strata new` (slower but works). Priority post-v1.                                                                           |
+| 15   | Interactive `strata new` in REPL   | 3     | Adds conversational UX to scaffolding (`new module --interactive`). Non-essential — single-shot `strata new` is CI-safe and works.                                                                                             |
+| 17   | `strata env doctor` — health check | 3     | ~~Designed but not implemented.~~ Implemented — `strata env doctor` is live. Removed from deferred backlog.                                                                                                                    |
+| 19   | Progressive dependency scaffolding | 5     | When scaffolding a deployment, auto-scaffold missing referenced files. Complex dependency resolution — deferred pending demand.                                                                                                |
+| 20   | Auto-refresh mode (`--auto`)       | 5     | Cancelled — predicated on the REPL session (items 6, 7, 9) which was cancelled. No host for live polling without the REPL.                                                                                                     |
+| 21   | Template marketplace               | 5     | Superseded by [ADR 0035](0035-enterprise-store.md) (Enterprise Store), [ADR 0039](0039-deployment-templates.md) (Deployment Templates), and [ADR 0040](0040-tenant-onboarding-scaffolding.md) (Tenant Onboarding Scaffolding). |
 
 ### Why These Don't Block v1
 
