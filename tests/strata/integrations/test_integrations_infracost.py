@@ -21,7 +21,7 @@ def _make_run_result(stdout: str = "", stderr: str = "", returncode: int = 0) ->
     result.stdout = stdout
     result.stderr = stderr
     result.returncode = returncode
-    result.success = returncode == 0
+    result.is_successful = returncode == 0
     return result
 
 
