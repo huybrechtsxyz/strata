@@ -1299,8 +1299,10 @@ class SolutionController(BaseController):
                 from strata import __version__
 
                 content = src.read_text(encoding="utf-8")
-                # .j2 files are raw Jinja2 templates for end-users — copy verbatim.
-                if src.suffix != ".j2":
+                # .j2 and .md files are copied verbatim (not rendered as templates).
+                # .j2 files are raw Jinja2 templates for end-users.
+                # .md files are documentation/skill files with example code that shouldn't be templated.
+                if src.suffix not in (".j2", ".md"):
                     content = TemplateProcessor.render(
                         content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
                     )
@@ -1389,8 +1391,10 @@ class SolutionController(BaseController):
                 from strata import __version__
 
                 content = src.read_text(encoding="utf-8")
-                # .j2 files are raw Jinja2 templates for end-users — copy verbatim.
-                if src.suffix != ".j2":
+                # .j2 and .md files are copied verbatim (not rendered as templates).
+                # .j2 files are raw Jinja2 templates for end-users.
+                # .md files are documentation/skill files with example code that shouldn't be templated.
+                if src.suffix not in (".j2", ".md"):
                     content = TemplateProcessor.render(
                         content, {"SOLUTION_NAME": solution_name, "STRATA_VERSION": __version__}
                     )

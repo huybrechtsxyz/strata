@@ -49,6 +49,7 @@ GitHub Actions automate tasks triggered by events (push, PR, schedule).
 
 ### Workflow File Structure
 
+{% raw %}
 ```yaml
 name: Deploy Infrastructure
 
@@ -112,6 +113,7 @@ jobs:
       - name: Verify deployment
         run: strata deploy health -f deploy/prod.yaml
 ```
+{% endraw %}
 
 ### Trigger Events
 
@@ -165,6 +167,7 @@ jobs:
 ```
 
 **Comment on PR with changes:**
+{% raw %}
 ```yaml
   - name: Comment plan on PR
     uses: actions/github-script@v6
@@ -179,8 +182,10 @@ jobs:
           body: `## Infrastructure Changes\n\`\`\`json\n${plan}\n\`\`\``
         });
 ```
+{% endraw %}
 
 **When PR is merged to main:**
+{% raw %}
 ```yaml
 on:
   push:
@@ -198,6 +203,7 @@ jobs:
     steps:
       - run: strata deploy run -f deploy/prod.yaml --force
 ```
+{% endraw %}
 
 ---
 
@@ -205,6 +211,7 @@ jobs:
 
 Run weekly to catch infrastructure changes made outside IaC:
 
+{% raw %}
 ```yaml
 name: Weekly Drift Check
 
@@ -239,6 +246,7 @@ jobs:
               body: 'Run `strata deploy run -f deploy/prod.yaml` to reconcile'
             });
 ```
+{% endraw %}
 
 ---
 
@@ -246,6 +254,7 @@ jobs:
 
 On-demand production deployment:
 
+{% raw %}
 ```yaml
 name: Manual Production Deploy
 
@@ -271,6 +280,7 @@ jobs:
       - name: Deploy to ${{ github.event.inputs.environment }}
         run: strata deploy run -f deploy/${{ github.event.inputs.environment }}.yaml --force
 ```
+{% endraw %}
 
 **Trigger manually:**
 1. GitHub → Actions → Manual Production Deploy
@@ -285,6 +295,7 @@ jobs:
 
 Automated promotion through environments:
 
+{% raw %}
 ```yaml
 name: Promotion Pipeline
 
@@ -334,6 +345,7 @@ jobs:
       - run: strata deploy health -f deploy/prod.yaml
       - run: bash scripts/smoke-tests.sh
 ```
+{% endraw %}
 
 ---
 
@@ -343,6 +355,7 @@ jobs:
 
 **Always require approval before production:**
 
+{% raw %}
 ```yaml
 environment:
   name: production
@@ -351,6 +364,7 @@ environment:
     protected_branches: true     # main only
   wait_timer: 15                 # 15 min delay before deployment
 ```
+{% endraw %}
 
 **Why:**
 - Catches mistakes before they hit production
@@ -362,6 +376,7 @@ environment:
 
 Store credentials in GitHub Secrets, never in code:
 
+{% raw %}
 ```yaml
 # ✅ RIGHT — use GitHub Secrets
 env:
@@ -371,18 +386,22 @@ env:
 steps:
   - run: strata deploy run -f deploy/prod.yaml --force
 ```
+{% endraw %}
 
 **Never:**
+{% raw %}
 ```yaml
 # ❌ WRONG — hardcoded secrets
 env:
   TF_VAR_db_password: "my-secret-password-123"
 ```
+{% endraw %}
 
 ### Notifications & Alerts
 
 Alert on deployment success/failure:
 
+{% raw %}
 ```yaml
 - name: Notify Slack on success
   if: success()
@@ -404,10 +423,12 @@ Alert on deployment success/failure:
         "text": "❌ Production deployment failed: ${{ job.status }}"
       }
 ```
+{% endraw %}
 
 ### Rollback Strategy
 
 **Simple rollback:**
+{% raw %}
 ```yaml
 # Revert commit and push
 git revert HEAD
@@ -416,13 +437,16 @@ git push origin main
 # CI/CD automatically deploys the revert
 # Infrastructure rolls back to previous state
 ```
+{% endraw %}
 
 **Or use version pinning:**
+{% raw %}
 ```yaml
 deploy-prod:
   steps:
     - run: strata deploy run -f deploy/prod.yaml --version 1.2.0 --force
 ```
+{% endraw %}
 
 ---
 
@@ -430,24 +454,29 @@ deploy-prod:
 
 ### Validation Tests (quick)
 
+{% raw %}
 ```yaml
 validate:
   steps:
     - run: strata validate config/ --output json
     - run: strata build plan -f deploy/prod.yaml --output json
 ```
+{% endraw %}
 
 ### Security Scanning
 
+{% raw %}
 ```yaml
 security-scan:
   steps:
     - run: checkov -f deploy/prod.yaml
     - run: trivy fs --severity HIGH .
 ```
+{% endraw %}
 
 ### Integration Tests
 
+{% raw %}
 ```yaml
 integration-test:
   needs: deploy-dev
@@ -456,9 +485,11 @@ integration-test:
     - run: bash tests/health-checks.sh
     - run: bash tests/smoke-tests.sh
 ```
+{% endraw %}
 
 ### Compliance Checks
 
+{% raw %}
 ```yaml
 compliance:
   steps:
@@ -469,6 +500,7 @@ compliance:
         # Check RBAC compliance
         strata audit list --last | grep "APPROVED"
 ```
+{% endraw %}
 
 ---
 
