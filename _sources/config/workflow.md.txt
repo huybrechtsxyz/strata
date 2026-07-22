@@ -1,6 +1,6 @@
 # Workflow Configuration
 
-`.strata/workflow.yaml` defines the onboarding sequence that drives `strata console`. Each step maps to a named check function and an optional strata command. The console uses this file to power the `status`, `next`, and `do` commands.
+`.strata/workflow.yaml` defines the onboarding sequence that drives `strata guide`. Each step maps to a named check function and an optional strata command. The guide uses this file to power the checklist, next-step hints, and (when implemented) the `--next` and `--do` flags.
 
 The file is created automatically by `strata sln init`. Customize it to match your team's workflow — add steps, reorder them, or change the suggested commands.
 

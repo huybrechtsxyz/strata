@@ -98,6 +98,20 @@ strata
    config/manifest
    config/tenant
    config/workflow
+   config/promotion-record
+   config/version-lock
+   config/version
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Guides:
+
+   guides/audit-command-group
+   guides/deploying
+   guides/environment-command-group
+   guides/multi-repo-setup
+   guides/secrets-variables-features
+   guides/service-command-group
 
 .. toctree::
    :maxdepth: 2
@@ -113,58 +127,6 @@ strata
 .. toctree::
    :maxdepth: 2
    :caption: CLI Reference:
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Architectural Decisions:
-
-   decisions/README
-   decisions/0001-kubernetes-style-yaml-schema
-   decisions/0002-python-click-not-compiled-cli
-   decisions/0003-layered-architecture
-   decisions/0004-exit-code-convention
-   decisions/0005-secret-resolution-at-build-time
-   decisions/0006-policy-engine-for-deployment-guardrails
-   decisions/0007-deployment-state-locking
-   decisions/0008-infrastructure-drift-detection
-   decisions/0009-sbom-extended-sources-and-inventory
-   decisions/0010-rename-configuration-repositories-to-remotes
-   decisions/0011-promotion-strategies-for-version-progression
-   decisions/0012-rename-customer-to-tenant
-   decisions/0013-auto-generated-secrets
-   decisions/0014-onboarding-experience
-   decisions/0015-flow-command-dependency-graph
-   decisions/0016-console-interactive-repl
-   decisions/0017-jinja2-template-engine
-   decisions/0017-tag-based-release-workflow-option-c
-   decisions/0018-deployment-audit-traceability
-   decisions/0019-configurable-terraform-build-output
-   decisions/0020-cli-parameter-consistency-standard
-   decisions/0020-lifecycle-phases-and-environment-variables
-   decisions/0021-deployment-manifests-as-first-class-build-artifacts
-   decisions/0022-siem-integration-splunk-hec-cef
-   decisions/0023-pluggable-provisioner-framework
-   decisions/0024-environment-composition-flat-merge-fix
-   decisions/0025-ai-agent-integration-for-build-and-deploy
-   decisions/0026-resolved-model-cache
-   decisions/0027-command-timeout-for-long-running-operations
-   decisions/0028-sigterm-graceful-shutdown-and-lock-release
-   decisions/0029-realtime-progress-streaming-ndjson
-   decisions/0030-command-lifecycle-explicitness-and-thin-overrides
-   decisions/0031-cost-estimation-and-visibility
-   decisions/0032-approval-workflows-and-gates
-   decisions/0033-github-pull-request-integration
-   decisions/0034-diagram-visualization-in-vscode-extension
-   decisions/0035-enterprise-store
-   decisions/0036-workspace-provider-environment-overrides
-   decisions/0037-mass-wave-deployment
-   decisions/0038-multi-tenant-fleet-management-patterns
-   decisions/0039-deployment-templates
-   decisions/0040-tenant-onboarding-scaffolding
-   decisions/0041-gitops-controller-integration
-   decisions/0042-deep-validation-layer-consistency
-   decisions/0043-tenant-offboarding
-   decisions/0044-competitive-landscape-and-feature-gaps
 
 .. toctree::
    :maxdepth: 2
@@ -189,9 +151,9 @@ strata
    guides/cve-vulnerability-scanning
    guides/scaffolding-templates
    guides/at-scale
-   guides/using-console
    guides/building-a-provisioner-plugin
    guides/detecting-infrastructure-drift
+   guides/cost-estimation
 
 .. toctree::
    :maxdepth: 1

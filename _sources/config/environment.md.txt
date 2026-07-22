@@ -185,7 +185,6 @@ spec:
       - provider: azure
         configuration:
           region: westeurope    # overrides spec.properties.region in the loaded provider file
-          engine: azurerm       # overrides spec.properties.engine
 ```
 
 Configuration keys that do not match known `spec.properties` fields are logged and skipped.

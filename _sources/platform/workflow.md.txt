@@ -319,19 +319,19 @@ strata new --list
 strata new namespace my-app
 
 # Create a module config, written to a specific folder
-strata new module my-api --path repos/xyz-config/stack/
+strata new module my-api --output-file repos/xyz-config/stack/
 
 # Create a provider definition with a variable override
-strata new provider azure --path repos/xyz-config/config/ --set owner=myteam
+strata new provider azure --output-file repos/xyz-config/config/ --set owner=myteam
 
 # Create a DNS zones file
-strata new dns my-zones --path repos/xyz-config/dns/
+strata new dns my-zones --output-file repos/xyz-config/dns/
 
 # Create a network topology file
-strata new network my-networks --path repos/xyz-config/network/
+strata new network my-networks --output-file repos/xyz-config/network/
 
 # Create a tenant config across multiple files
-strata new tenant newcorp --path repos/xyz-config/ --set zone=eu --set tier=standard
+strata new tenant newcorp --output-file repos/xyz-config/ --set zone=eu --set tier=standard
 ```
 
 Each command writes a ready-to-edit YAML file with `meta.name` pre-filled and
@@ -348,7 +348,7 @@ file content and path segments. This is the primary way to scaffold multiple rel
 **Example: Tenant bundle** — Creates a complete multi-environment tenant structure with one command:
 
 ```bash
-strata new tenant contoso --path tenants/
+strata new tenant contoso --output-file tenants/
 # Generates:
 #   tenants/contoso/contoso.yaml
 #   tenants/contoso/environments/{dev,qa,prd}.yaml
