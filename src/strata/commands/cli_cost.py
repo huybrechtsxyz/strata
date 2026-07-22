@@ -13,6 +13,7 @@ from strata.commands.cli_common import (
     handle_command_exit,
 )
 from strata.commands.cost.diff_cost_command import DiffCostCommand
+from strata.commands.cost.history_cost_command import HistoryCostCommand
 from strata.commands.cost.show_cost_command import ShowCostCommand
 
 
@@ -122,6 +123,43 @@ def cost_diff(
         plan_file=plan_file,
         currency=currency,
         provisioner=provisioner,
+        output=output,
+        verbose=verbose,
+        quiet=quiet,
+    )
+    success = command.execute()
+    handle_command_exit(command, success)
+
+
+@cost_group.command(
+    name="history",
+    help="Show historical cost snapshots for a deployment.",
+)
+@click_file
+@click.option(
+    "--last",
+    default=10,
+    type=int,
+    metavar="N",
+    help="Number of most-recent snapshots to show (default: 10).",
+)
+@click_work_path
+@click_output_format
+@click_output_verbose
+@click_output_quiet
+def cost_history(
+    file: Optional[str] = None,
+    last: int = 10,
+    work_path: Optional[str] = None,
+    output: Optional[str] = None,
+    verbose: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+):
+    """Show historical cost snapshots for a deployment."""
+    command = HistoryCostCommand(
+        file=file,
+        work_path=work_path,
+        last=last,
         output=output,
         verbose=verbose,
         quiet=quiet,

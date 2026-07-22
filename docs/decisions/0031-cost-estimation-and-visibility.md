@@ -26,16 +26,16 @@
 
 ### Phase 2 — Scenarios + Policies ⏳ Not started
 
-| Item                                                       | Status | Notes                                     |
-| ---------------------------------------------------------- | ------ | ----------------------------------------- |
-| `cost-scenario` YAML schema + model                        | ❌      | New `kind`, new Pydantic model            |
-| `cost-dimensions` YAML schema + model                      | ❌      | New `kind`, per resource-type metrics     |
-| `scenario` field on `EnvironmentModel`                     | ❌      | `env.spec.scenario = "enterprise"`        |
-| `DimensionsRegistry` (local + repo sources)                | ❌      | Resolution: custom > community > built-in |
-| Cost policy gates (`cost_threshold`, `scenario_check`)     | ❌      | Reuse existing policy engine              |
-| `strata cost compare` command                              | ❌      | Compare scenario estimates                |
-| Ship built-in dimension files for top Azure resource types | ❌      |                                           |
-| Historical cost tracking                                   | ❌      | Append snapshots per build                |
+| Item                                                       | Status | Notes                                                                  |
+| ---------------------------------------------------------- | ------ | ---------------------------------------------------------------------- |
+| `cost-scenario` YAML schema + model                        | ❌      | New `kind`, new Pydantic model                                         |
+| `cost-dimensions` YAML schema + model                      | ❌      | New `kind`, per resource-type metrics                                  |
+| `scenario` field on `EnvironmentModel`                     | ❌      | `env.spec.scenario = "enterprise"`                                     |
+| `DimensionsRegistry` (local + repo sources)                | ❌      | Resolution: custom > community > built-in                              |
+| Cost policy gates (`cost_threshold`, `scenario_check`)     | ✅      | `cost_threshold` implemented; `scenario_check` pending scenarios model |
+| `strata cost compare` command                              | ❌      | Compare scenario estimates                                             |
+| Ship built-in dimension files for top Azure resource types | ❌      |                                                                        |
+| Historical cost tracking                                   | ✅      | `.strata/cost/`, `strata cost history` command                         |
 
 ### Phase 3 — Advanced ⏳ Not started
 
@@ -1632,16 +1632,16 @@ Phase 5: Deploy (actual infrastructure)
 - [x] Error handling (missing binary, bad TF, auth failures)
 - [x] Graceful degradation if infracost not available
 
-#### Phase 2 — Deploy Integration + Scenarios ⏳ Not started
+#### Phase 2 — Deploy Integration + Scenarios ⏳ Partial
 
-- [ ] Cost policy gates (threshold, scenario-check)
+- [x] Cost policy gates — `cost_threshold` type (reads `cost.json`, threshold + env pattern)
+- [x] Historical cost tracking per build (`.strata/cost/`, `strata cost history`)
 - [ ] `strata cost compare` (compare scenario estimates)
 - [ ] `cost-scenario` YAML kind + model
 - [ ] `cost-dimensions` YAML kind + model
 - [ ] `scenario` field on environment model
 - [ ] `DimensionsRegistry` (local + community + built-in resolution)
 - [ ] Ship built-in dimension files (top 10 Azure resource types)
-- [ ] Historical cost tracking per build
 
 #### Phase 3 — Advanced ⏳ Not started
 

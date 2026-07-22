@@ -124,6 +124,13 @@ class CostController(BaseController):
         # Write cost.json alongside platform.json in the build directory
         self._write_cost_json(combined, deployment_service, build_path)
 
+        # Append snapshot to cost history
+        self._record_history_snapshot(
+            cost_data=combined,
+            deployment_service=deployment_service,
+            currency=currency or "USD",
+        )
+
         return True, combined
 
     def _write_cost_json(
@@ -142,6 +149,30 @@ class CostController(BaseController):
         except Exception as exc:
             self.logger.debug("cost_json_write_failed", error=str(exc))
             # Non-fatal — cost.json write failure does not affect the estimate result
+
+    def _record_history_snapshot(
+        self,
+        cost_data: Dict[str, Any],
+        deployment_service: "DeploymentService",
+        currency: str = "USD",
+    ) -> None:
+        """Append a cost snapshot to the deployment's history file. Non-fatal."""
+        if self._work_path is None:
+            return
+        try:
+            from strata.utils.cost_history import CostHistoryStore
+
+            deployment_name = deployment_service.get_name() if deployment_service else "unknown"
+            version = deployment_service.get_version() if deployment_service else None
+
+            store = CostHistoryStore(self._work_path, str(deployment_name))
+            store.load()
+            store.record_snapshot(cost_data=cost_data, version=version, currency=currency)
+            store.save()
+            self.logger.debug("cost_history_recorded", deployment=deployment_name)
+        except Exception as exc:
+            self.logger.debug("cost_history_record_failed", error=str(exc))
+            # Non-fatal
 
     def invalidate_cache(self, work_path: Optional[Path] = None) -> int:
         """Remove all cached cost estimates.
