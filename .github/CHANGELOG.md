@@ -7,6 +7,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+---
+
+## [1.3.1] — 2026-07-22
+
 ### Added
 
 - **Cost Estimation and Visibility — ADR 0031 Phase 1 (completed)**
@@ -22,6 +26,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - `cost_threshold` policy type — blocks or warns on deployments exceeding monthly cost limit; environment pattern scoping; reads `cost.json` from build artifacts
   - Configuration YAML integration entries (azure-aks, aws-eks, gcp-gke) — Infracost declared as optional integration with cost capability
   - Full test coverage — 25 unit tests for `CostHistoryStore`, 88+ integration tests for cost commands/controllers/policies
+
+- **VS Code Extension — deployment-centric rework (v1.3.1)**
+  - **Deployment context** — active deployment is now a persistent, workspace-scoped selection (stored across sessions); all commands default to it instead of "whatever file is open"
+  - **Deployments view** (new) — replaces the flat Files view; shows the selected deployment's full hierarchy: workspace → providers, provisioners, topology, namespaces → environments → configurations → policies (lazy loaded); one-click switch between deployments; `$(target) Set Active` code lens on every `kind: deployment` file
+  - **Operations view** (new) — shows runtime status for the active deployment: build cache status, health, drift, lock state, cost snapshot with delta, lazy-loaded outputs per stage, and deploy history
+  - **Workspace view merged** — health, readiness phases, profiles, repositories, and tools unified into one collapsible panel (was 3 separate panels: Workspace, Repositories, Tools)
+  - **Status bar** updated — shows active deployment name alongside health and profile: `◎ HEALTHY  —  dev  | Phase 5/8  $(cloud)  deploy-prd`
+  - **New commands**: `strata.selectDeployment` (Quick Pick from all deployment files), `strata.setActiveDeployment` (set from code lens or tree click), `strata.newFile` (guided scaffolding via `strata new`), `strata.activateProfile` (inline from Workspace view), `strata.showCostHistory` (open cost history terminal)
+  - **Inline YAML manifest parsing** — deployment explorer reads workspace/environment/configuration references from YAML directly (no CLI roundtrip) to resolve file links
+  - **`CostSnapshot` / `CostHistoryData` interfaces** added to `StrataClient` — wired to `strata cost history` via `getCostHistory()`
+  - **Sidebar reduced** from 8 views to 6: removed `strataFiles`, `strataRepositories`, `strataTools`, `strataEnvironment`; added `strataDeployments`, `strataOperations`
+  - **CI pipeline fix** — `cp LICENSE src/vscode/LICENSE` step added before `vsce package`; `--skip-license` flag removed so the AGPL-3.0 license is now bundled inside the `.vsix`
 
 ### Changed
 
