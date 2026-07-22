@@ -288,7 +288,7 @@ class TestInfracostFactoryRegistration:
         assert "cost" in model.capabilities
 
     def test_unknown_capability_rejected(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             IntegrationModel(name="infracost", type="infracost", capabilities={"unknown_cap"})
 
 

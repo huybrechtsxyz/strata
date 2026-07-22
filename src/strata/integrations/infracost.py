@@ -152,7 +152,7 @@ class InfracostIntegration(BaseIntegration):
         logger.debug("Running infracost breakdown", path=terraform_path)
         result = run_command(cmd, timeout=180)
 
-        if not result.success:
+        if not result.is_successful:
             logger.error(
                 "Infracost breakdown failed",
                 path=terraform_path,
@@ -203,7 +203,7 @@ class InfracostIntegration(BaseIntegration):
         logger.debug("Running infracost diff", path=terraform_path, plan=plan_file)
         result = run_command(cmd, timeout=180)
 
-        if not result.success:
+        if not result.is_successful:
             logger.error(
                 "Infracost diff failed",
                 path=terraform_path,

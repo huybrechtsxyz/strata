@@ -405,7 +405,7 @@ class RunDeployCommand(BaseDeployCommand):
     # Internal pipeline steps
     # -------------------------------------------------------------------------
 
-    def _run_cost_diff_for_stage(self, stage: "DeploymentStageModel", plan_json_path: "Path") -> None:
+    def _run_cost_diff_for_stage(self, stage: "DeploymentStageModel", plan_json_path) -> None:
         """Run infracost diff after plan in dry-run mode. Non-fatal — cost errors never block deploy.
 
         Displays cost impact (before/after/delta) in console output.

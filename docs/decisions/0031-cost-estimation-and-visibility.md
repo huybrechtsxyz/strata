@@ -1,8 +1,9 @@
 # Cost estimation and visibility
 
-- Status: partial
+- Status: completed
 - Date: 2026-07-11
 - Updated: 2026-07-22
+- Note: phase 1 complete (Infracost integration), phase 2 (scenarios) is for future work
 
 ## Implementation Status
 

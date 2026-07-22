@@ -1,6 +1,6 @@
 """Capability Protocol interfaces for integration classification (variables, secrets, features, KV, repo, infra, container, cost)."""
 
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
 from strata.utils.secret_metadata import SecretMetadata
 
@@ -281,6 +281,10 @@ class ICostEstimator(Protocol):
 
     Examples: Infracost
     """
+
+    def ensure_available(self) -> Tuple[bool, str]:
+        """Check if this integration is available and meets version requirements."""
+        ...
 
     def breakdown(self, terraform_path: str, **kwargs) -> Dict[str, Any]:
         """Get cost breakdown for terraform configuration at the given path.

@@ -153,6 +153,7 @@ strata
    guides/at-scale
    guides/building-a-provisioner-plugin
    guides/detecting-infrastructure-drift
+   guides/cost-estimation
 
 .. toctree::
    :maxdepth: 1

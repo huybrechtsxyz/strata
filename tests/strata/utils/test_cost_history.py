@@ -168,7 +168,7 @@ class TestCostHistoryMaxSnapshots:
     def test_trims_to_max_snapshots(self, tmp_path):
         store = _store(tmp_path, max_snapshots=3)
         store.load()
-        for i in range(5):
+        for _ in range(5):
             store.record_snapshot(_COST_DATA_5000)
         assert len(store.list_snapshots()) == 3
 
