@@ -18,6 +18,7 @@
 - [ ] **Inline vs Spec.paths Precedence** — Clarify coexistence and conflict resolution for inline conventions (deploy repos) vs `spec.paths` conventions
 - [ ] **ADR 0038 Gap Closure** — Map how this ADR closes Gap 5; add gap closure checklist
 - [ ] **End-to-End Example Workflow** — Add complete scenario: operator setup → file structure → validation → remediation
+- [ ] **Scoped Layering vs Single Layering Migration** — Clarify how operators migrate from a single `spec.layering` list to `spec.layerings` without breaking existing layer identity checks (Rule Set 1)
 
 ## Context and Problem Statement
 
@@ -207,6 +208,172 @@ at a shallower depth).
 Placeholder expansion: `{segment}` references in validate rules are expanded from the
 captured values dict. E.g., if `tenant = "contoso"` was captured, then
 `customers/{tenant}/tenant.yaml` → `customers/contoso/tenant.yaml`.
+
+---
+
+### Option: Scoped layering (`spec.layerings`)
+
+**Problem:** `spec.layering` today is a single ordered list applied uniformly across the
+whole configuration repository. A mixed-structure repository may have different layer
+semantics in different subtrees — standard zone/tenant/environment deployments alongside
+landscape/ring deployments or shared-service deployments with no tenant concept. A single
+layer list cannot describe all of them, so Rule Set 1 (layer identity consistency) cannot
+know which layers are meaningful for a given file.
+
+**Parallel with `spec.paths`:** Just as `spec.paths` declares multiple path conventions
+each scoped to a subtree, `spec.layerings` (or an extended `spec.layering`) can declare
+multiple layering schemes each scoped to a glob. The two features are complementary:
+
+| Feature          | What it validates                                                    |
+| ---------------- | -------------------------------------------------------------------- |
+| `spec.layerings` | Which layer keys are valid and required for files in a given subtree |
+| `spec.paths`     | What the folder structure must look like within that subtree         |
+
+**Proposed model: `spec.layerings`**
+
+A list of scoped layering definitions. Each entry names the layers applicable to files
+matching its `scope` glob and lists the `layers` in order (shallowest first).
+
+```yaml
+# configuration.yaml
+spec:
+  # Current single-scheme form (still valid when all files share one scheme)
+  layering:
+    - name: zone
+      required: true
+    - name: customer
+      required: true
+    - name: environment
+      required: true
+      default: dev
+
+  # Extended multi-scheme form — replaces single layering when repo has mixed structures
+  layerings:
+    - name: zone-tenant-scheme
+      scope: "zones/**"
+      layers:
+        - name: zone
+          required: true
+          pattern: "^[a-z][a-z0-9-]*$"
+        - name: customer
+          required: true
+          pattern: "^[a-z][a-z0-9-]*$"
+        - name: environment
+          required: true
+          pattern: "^(dev|test|staging|prod)$"
+          default: dev
+
+    - name: landscape-scheme
+      scope: "landscape/**"
+      layers:
+        - name: landscape
+          required: true
+        - name: ring
+          required: true
+          pattern: "^[0-9]+$"
+
+    - name: shared-service-scheme
+      scope: "shared/**"
+      layers:
+        - name: environment
+          required: false
+          default: shared
+```
+
+**Fields on each entry:**
+
+| Field    | Required | Description                                                                                |
+| -------- | -------- | ------------------------------------------------------------------------------------------ |
+| `name`   | yes      | Unique scheme name for diagnostics                                                         |
+| `scope`  | yes      | Glob pattern — deployment files matching this scope use this layer scheme                  |
+| `layers` | yes      | Ordered list of `ConfigurationLayerModel` entries (same schema as today's `spec.layering`) |
+
+**Coexistence rule:**
+
+- If `spec.layerings` is present, it takes precedence over `spec.layering`.
+- If only `spec.layering` is present, it applies to all files (current behaviour — no scope).
+- A file matching no `scope` glob in `spec.layerings` uses no layering scheme (no layer
+  identity check is applied).
+- A file matching multiple scopes uses the first matching entry (first-match wins, like
+  routing rules — operators should order from most specific to least specific).
+
+**Impact on Rule Set 1 (layer identity consistency):**
+
+The `LayerConsistencyChecker` currently reads `model.spec.layers` from the deployment file
+and checks it against a single global layering definition. With scoped layering:
+
+1. Resolve the deployment file's path relative to `work_path`.
+2. Find the matching `spec.layerings` entry (first scope glob match).
+3. If no match → skip layer identity check for this file.
+4. Use the matched scheme's `layers` list to determine which layer keys are
+   semantically significant — only those keys participate in the cross-check.
+5. Emit a warning if the deployment's `layers` block contains keys not declared in the
+   matched scheme (unknown layer key for this subtree).
+
+**Example:**
+
+```yaml
+# zones/europe/customers/contoso/dev/deploy.yaml
+layers:
+  zone: europe
+  customer: contoso
+  environment: dev
+  landscape: platform     # ← unexpected in zone-tenant-scheme
+
+→ WARN: layers.landscape = 'platform' is not declared in scheme 'zone-tenant-scheme'
+        (valid for 'zones/**'); remove or move this file to a landscape subtree
+```
+
+**Impact on `spec.paths` integration:**
+
+Both `spec.layerings` and `spec.paths` can define entries with the same `scope`. They
+are evaluated independently — layering validation checks the `layers` block values,
+path convention validation checks the folder structure. An operator typically declares
+both for the same subtree:
+
+```yaml
+spec:
+  layerings:
+    - name: zone-tenant-scheme
+      scope: "zones/**"
+      layers: [zone, customer, environment]
+
+  paths:
+    - name: zone-deployment-tree
+      scope: "zones/**"
+      pattern: "zones/{zone}/customers/{tenant}/{env}"
+      validate:
+        zone: spec.zones[*].name
+        tenant: "customers/{tenant}/tenant.yaml"
+        env: spec.environments[*].name
+```
+
+**Model change required (future work — not in v1):**
+
+```python
+class ScopedLayeringModel(PlatformBaseModel):
+    """A layering scheme scoped to a subtree of the configuration repository."""
+
+    name: PlatformName = Field(description="Unique scheme name")
+    scope: str = Field(description="Glob — deployment files in this subtree use this scheme")
+    layers: List[ConfigurationLayerModel] = Field(
+        min_length=1,
+        description="Ordered layer definitions (same as spec.layering entries)"
+    )
+
+
+# On ConfigurationSpecModel:
+layerings: Optional[List[ScopedLayeringModel]] = Field(
+    None,
+    description=(
+        "Multiple scoped layering schemes. When present, takes precedence over spec.layering. "
+        "First-match wins on scope resolution."
+    ),
+)
+```
+
+`spec.layering` (the single-list form) remains valid and unchanged — operators who have
+a uniform layer structure across the whole repo don't need to migrate.
 
 ---
 
