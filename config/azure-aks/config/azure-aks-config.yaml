@@ -90,3 +90,13 @@ spec:
         min_version: "3.12.0"
       authentication:
         method: cli
+
+    - name: infracost
+      type: infracost
+      capabilities: [cost]
+      required: false
+      validation:
+        command: infracost --version
+        min_version: "0.10.0"
+      authentication:
+        method: cli
