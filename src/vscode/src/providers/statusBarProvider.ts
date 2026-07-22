@@ -98,10 +98,23 @@ export class StatusBarProvider implements vscode.Disposable {
         this._item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     }
 
+    /** Update the active deployment name shown in the status bar. */
+    updateDeployment(name: string | undefined): void {
+        this._deploymentName = name;
+        if (this._lastStatus) {
+            this._render(this._lastStatus);
+        }
+    }
+
+    private _deploymentName: string | undefined;
+    private _lastStatus: WorkspaceStatus | undefined;
+
     private _render(status: WorkspaceStatus): void {
+        this._lastStatus = status;
         const profile = status.profiles.active ?? '(no profile)';
         const { phases_complete, phases_total } = status.readiness;
         const issueCount = status.health.issues.length;
+        const deploy = this._deploymentName ? `  $(cloud)  ${this._deploymentName}` : '';
 
         // ── Text ────────────────────────────────────────────────────────────
         let icon: string;
@@ -109,20 +122,20 @@ export class StatusBarProvider implements vscode.Disposable {
 
         switch (status.health.status) {
             case 'HEALTHY':
-                icon = '$(cloud)';
-                suffix = ` | Phase ${phases_complete}/${phases_total}`;
+                icon = '$(pass)';
+                suffix = `  ${profile}  | Phase ${phases_complete}/${phases_total}${deploy}`;
                 break;
             case 'DEGRADED':
                 icon = '$(warning)';
-                suffix = ` | ${issueCount} issue${issueCount !== 1 ? 's' : ''}`;
+                suffix = `  ${profile}  | ${issueCount} issue${issueCount !== 1 ? 's' : ''}${deploy}`;
                 break;
             case 'BROKEN':
                 icon = '$(error)';
-                suffix = ` | ${issueCount} issue${issueCount !== 1 ? 's' : ''}`;
+                suffix = `  ${profile}  | ${issueCount} issue${issueCount !== 1 ? 's' : ''}${deploy}`;
                 break;
         }
 
-        this._item.text = `${icon} strata: ${profile}${suffix}`;
+        this._item.text = `${icon} strata${suffix}`;
 
         // ── Tooltip ─────────────────────────────────────────────────────────
         const md = new vscode.MarkdownString('', true);

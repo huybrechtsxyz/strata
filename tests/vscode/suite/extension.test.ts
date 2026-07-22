@@ -35,6 +35,12 @@ suite('Strata Extension', () => {
             'strata.openConsole',
             'strata.refreshTreeView',
             'strata.openFile',
+            // Added in rework (deployment-centric architecture)
+            'strata.selectDeployment',
+            'strata.setActiveDeployment',
+            'strata.newFile',
+            'strata.activateProfile',
+            'strata.showCostHistory',
         ];
 
         expectedCommands.forEach((cmdId) => {
@@ -97,15 +103,16 @@ suite('Strata Extension', () => {
             assert.ok(_status.readiness);
         });
 
-        test('ValidationResult has valid and errors fields', () => {
+        test('ValidationResult has validation_passed and errors fields', () => {
             const _result = {
-                valid: true,
-                kind: 'deployment',
-                name: 'my-dep',
                 file: '/tmp/deploy.yaml',
-                errors: [] as Array<{ field: string | null; message: string; severity: string }>,
+                kind: 'deployment' as string | null,
+                deep: false,
+                validation_passed: true,
+                errors: [] as Array<{ code: string; message: string; phase: number }>,
             };
             assert.ok(Array.isArray(_result.errors));
+            assert.strictEqual(typeof _result.validation_passed, 'boolean');
         });
     });
 });

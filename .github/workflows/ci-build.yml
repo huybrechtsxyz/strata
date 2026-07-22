@@ -349,11 +349,14 @@ jobs:
         working-directory: src/vscode
         run: npx tsc -p tsconfig.json --noEmit false
 
+      - name: Copy LICENSE into extension directory
+        run: cp LICENSE src/vscode/LICENSE
+
       - name: Package extension (.vsix)
         working-directory: src/vscode
         run: |
           mkdir -p ${{ github.workspace }}/dist
-          npx @vscode/vsce package --no-dependencies --skip-license --out ${{ github.workspace }}/dist/
+          npx @vscode/vsce package --no-dependencies --out ${{ github.workspace }}/dist/
 
       - name: Upload vsix artifact
         uses: actions/upload-artifact@v7

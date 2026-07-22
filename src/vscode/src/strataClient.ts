@@ -466,6 +466,27 @@ export interface DeployHistoryData {
 }
 
 // ---------------------------------------------------------------------------
+// Cost History types
+// ---------------------------------------------------------------------------
+
+/** A single cost snapshot from `strata cost history --output json` */
+export interface CostSnapshot {
+    recorded_at: string;
+    version?: string;
+    total_monthly: number;
+    currency: string;
+    provisioners: Record<string, { total_monthly: number }>;
+    delta_from_previous: number | null;
+}
+
+/** Matches `cost history --output json` data */
+export interface CostHistoryData {
+    deployment: string;
+    snapshots: CostSnapshot[];
+    count: number;
+}
+
+// ---------------------------------------------------------------------------
 // Ref types
 // ---------------------------------------------------------------------------
 
@@ -833,6 +854,23 @@ export class StrataClient {
             'deploy', 'history', '-f', filePath, '--last', String(last), '--output', 'json',
         ]);
         return resp.data;
+    }
+
+    // ── Cost History ──────────────────────────────────────────────────────────
+
+    /** Run `strata cost history -f <filePath> --last <n> --output json`. */
+    async getCostHistory(filePath: string, last = 10): Promise<CostHistoryData> {
+        try {
+            const resp = await this._run<CostHistoryData>([
+                'cost', 'history', '-f', filePath, '--last', String(last), '--output', 'json',
+            ]);
+            return resp.data;
+        } catch (err: unknown) {
+            const cliErr = err as { response?: CliResponse<CostHistoryData> };
+            if (cliErr?.response?.data) return cliErr.response.data;
+            // Non-fatal — return empty history
+            return { deployment: filePath, snapshots: [], count: 0 };
+        }
     }
 
     // ── Refs ──────────────────────────────────────────────────────────────────

@@ -94,6 +94,16 @@ export class CodeLensProvider
             }));
         }
 
+        // Set as Active Deployment — deployments only
+        if (kind && BUILDABLE_KINDS.includes(kind)) {
+            lenses.push(new vscode.CodeLens(topRange, {
+                title: '$(target) Set Active',
+                command: 'strata.setActiveDeployment',
+                tooltip: 'Set this deployment as the active focus for all Strata views',
+                arguments: [document.uri.fsPath],
+            }));
+        }
+
         // Build / Deploy dry-run — deployments only
         if (kind && BUILDABLE_KINDS.includes(kind)) {
             lenses.push(new vscode.CodeLens(topRange, {
