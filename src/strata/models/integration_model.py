@@ -63,9 +63,13 @@ class IntegrationModel(PlatformBaseModel):
         default_factory=set,
         description=(
             "Set of capabilities this integration provides. "
-            "Valid values: api, container, features, infrastructure, keyvalue, repository, secrets, variables. "
+            "Valid values: api, audit, container, cost, cve_scanner, features, infrastructure, "
+            "keyvalue, repository, secrets, sync, variables. "
             "Use 'infrastructure' for IaC and configuration-management tools (Terraform, Ansible, OpenTofu). "
-            "Use 'container' for container runtimes and container-native deployment tools (Docker, Helm, Podman)."
+            "Use 'container' for container runtimes and container-native deployment tools (Docker, Helm, Podman). "
+            "Use 'cost' for infrastructure cost estimation tools (Infracost). "
+            "Use 'cve_scanner' for CVE vulnerability scanners (Trivy, Grype). "
+            "Use 'audit' for SIEM/audit sink integrations."
         ),
     )
     description: Optional[str] = Field(None, description="Human-readable description of the integration")
