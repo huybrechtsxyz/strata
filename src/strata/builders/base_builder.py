@@ -92,7 +92,7 @@ class BaseBuilder(ABC):
 
             STRATA_DEPLOYMENT_NAME
             STRATA_WORKSPACE_NAME
-            STRATA_PROVIDER_{NAME}_ENGINE / _VERSION / _ORGANIZATION / _TYPE / _REGION / _LOCATION
+            STRATA_PROVIDER_{NAME}_VERSION / _ORGANIZATION / _TYPE / _REGION / _LOCATION
 
         **Nested namespaces** (accessible via ``{{ variables.KEY }}`` / ``{{ features.KEY }}``)::
 
