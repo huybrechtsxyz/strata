@@ -7,6 +7,27 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **Cost Estimation and Visibility — ADR 0031 Phase 1 (completed)**
+  - `strata cost show` command — display monthly cost estimate for a deployment using Infracost
+  - `strata cost diff` command — show cost impact of terraform plan changes (before/after delta)
+  - `strata cost history` command — display historical cost snapshots (up to 50 entries per deployment)
+  - `ICostEstimator` capability protocol — integrations can implement cost estimation; Infracost registered as first implementation
+  - `InfracostIntegration` class — invokes `infracost breakdown` and `infracost diff`; supports Azure, AWS, GCP; non-fatal if binary not installed (graceful degradation)
+  - `CostController` — orchestrates cost estimation; handles multi-provisioner deployments; caches results locally (7-day TTL with content hash key)
+  - `CostHistoryStore` — appends cost snapshots to `.strata/cost/{deployment}.cost-history.json`; auto-computes delta from previous snapshot; capped at 50 entries (most-recent kept)
+  - `cost.json` artifact — written alongside `platform.json` in build directory with monthly/resource breakdown after `strata cost show`
+  - `deploy --dry-run` auto cost diff — after terraform plan, auto-runs infracost diff to show cost impact (non-fatal, never blocks deploy)
+  - `cost_threshold` policy type — blocks or warns on deployments exceeding monthly cost limit; environment pattern scoping; reads `cost.json` from build artifacts
+  - Configuration YAML integration entries (azure-aks, aws-eks, gcp-gke) — Infracost declared as optional integration with cost capability
+  - Full test coverage — 25 unit tests for `CostHistoryStore`, 88+ integration tests for cost commands/controllers/policies
+
+### Changed
+
+- **Provider model `engine` field removed** — unused field that was never applied during cost estimation; cost behavior is now determined entirely by integration type and Infracost availability
+- **Resource model `unit_cost` field removed** — planned for manual per-resource pricing but not implemented; Infracost integration provides automatic cost calculation instead
+
 ---
 
 ## [1.2.1] — 2026-07-20
