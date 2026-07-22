@@ -1183,6 +1183,18 @@ class RunDeployCommand(BaseDeployCommand):
         if hasattr(deployer, "show_plan"):
             _, plan_data, _ = deployer.show_plan()
 
+        # Load cost.json from build artifacts if present
+        cost_data = None
+        if self._deployment_service is not None and self._build_path is not None:
+            try:
+                import json as _json
+
+                cost_path = self._deployment_service.get_build_path(self._build_path) / "cost.json"
+                if cost_path.exists():
+                    cost_data = _json.loads(cost_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass  # cost_data stays None — policy will skip gracefully
+
         context = PolicyContext(
             phase=phase,
             work_path=self._work_path,
@@ -1190,6 +1202,7 @@ class RunDeployCommand(BaseDeployCommand):
             configuration_service=self._configuration_service,
             plan_data=plan_data,
             build_path=self._build_path,
+            cost_data=cost_data,
         )
 
         engine = PolicyEngine(phase_policies)

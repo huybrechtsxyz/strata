@@ -30,6 +30,7 @@ class PolicyContext:
     build_path: Optional[Path] = None
     sbom_components: Optional[List[Any]] = None  # List[SbomComponentModel]
     cve_audit_result: Optional[Any] = None  # CveAuditResultModel — populated when --audit ran before policies
+    cost_data: Optional[Dict[str, Any]] = None  # cost.json contents — populated when cost.json exists in build/
 
 
 @dataclass
