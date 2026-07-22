@@ -2,7 +2,7 @@
   "name": "xyz-strata",
   "displayName": "Strata",
   "description": "Strata infrastructure workspace integration — validate YAML, explore workspace, build and deploy.",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "publisher": "huybrechts-xyz",
   "icon": "resources/icon.png",
   "license": "AGPL-3.0-or-later",
@@ -289,6 +289,31 @@
         "command": "strata.refreshPromotions",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "strata.selectDeployment",
+        "title": "Strata: Select Active Deployment",
+        "icon": "$(search)"
+      },
+      {
+        "command": "strata.setActiveDeployment",
+        "title": "Strata: Set as Active Deployment",
+        "icon": "$(target)"
+      },
+      {
+        "command": "strata.newFile",
+        "title": "Strata: New File",
+        "icon": "$(add)"
+      },
+      {
+        "command": "strata.activateProfile",
+        "title": "Strata: Activate Profile",
+        "icon": "$(account)"
+      },
+      {
+        "command": "strata.showCostHistory",
+        "title": "Strata: Show Cost History",
+        "icon": "$(dashboard)"
       }
     ],
     "viewsContainers": {
@@ -308,24 +333,14 @@
           "contextualTitle": "Strata Workspace"
         },
         {
-          "id": "strataFiles",
-          "name": "Files",
-          "contextualTitle": "Strata Files"
+          "id": "strataDeployments",
+          "name": "Deployments",
+          "contextualTitle": "Strata Deployments"
         },
         {
-          "id": "strataRepositories",
-          "name": "Repositories",
-          "contextualTitle": "Strata Repositories"
-        },
-        {
-          "id": "strataTools",
-          "name": "Tools",
-          "contextualTitle": "Strata Tools"
-        },
-        {
-          "id": "strataEnvironment",
-          "name": "Environments",
-          "contextualTitle": "Strata Environments"
+          "id": "strataOperations",
+          "name": "Operations",
+          "contextualTitle": "Strata Operations"
         },
         {
           "id": "strataAudit",
@@ -348,12 +363,22 @@
       "view/title": [
         {
           "command": "strata.refreshTreeView",
-          "when": "view == strataWorkspace || view == strataFiles || view == strataRepositories || view == strataTools || view == strataEnvironment || view == strataAudit || view == strataValues || view == strataPromotions",
+          "when": "view == strataWorkspace || view == strataDeployments || view == strataOperations || view == strataAudit || view == strataValues || view == strataPromotions",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.selectDeployment",
+          "when": "view == strataDeployments",
+          "group": "navigation"
+        },
+        {
+          "command": "strata.newFile",
+          "when": "view == strataDeployments",
           "group": "navigation"
         },
         {
           "command": "strata.envDoctor",
-          "when": "view == strataEnvironment",
+          "when": "view == strataOperations",
           "group": "navigation"
         },
         {
@@ -378,30 +403,60 @@
         },
         {
           "command": "strata.addRepo",
-          "when": "view == strataRepositories",
+          "when": "view == strataWorkspace",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "strata.validateCurrentFile",
-          "when": "view == strataFiles && viewItem == document",
+          "command": "strata.activateProfile",
+          "when": "view == strataWorkspace && viewItem == profile",
           "group": "strata@1"
+        },
+        {
+          "command": "strata.syncRepo",
+          "when": "view == strataWorkspace && viewItem == repository",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.removeRepo",
+          "when": "view == strataWorkspace && viewItem == repository",
+          "group": "strata@2"
         },
         {
           "command": "strata.openFile",
-          "when": "view == strataFiles && viewItem == document",
-          "group": "strata@0"
-        },
-        {
-          "command": "strata.envStatus",
-          "when": "view == strataEnvironment && viewItem == deployment",
+          "when": "view == strataDeployments && (viewItem == provider-item || viewItem == environment-item || viewItem == configuration-item)",
           "group": "strata@1"
         },
         {
-          "command": "strata.envDrift",
-          "when": "view == strataEnvironment && viewItem == deployment",
+          "command": "strata.setActiveDeployment",
+          "when": "view == strataDeployments && viewItem == deployment-other",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.buildPlan",
+          "when": "view == strataDeployments && viewItem == deployment-active",
+          "group": "strata@1"
+        },
+        {
+          "command": "strata.buildDryRun",
+          "when": "view == strataDeployments && viewItem == deployment-active",
           "group": "strata@2"
+        },
+        {
+          "command": "strata.deployDryRun",
+          "when": "view == strataDeployments && viewItem == deployment-active",
+          "group": "strata@3"
+        },
+        {
+          "command": "strata.checkPolicy",
+          "when": "view == strataDeployments && viewItem == deployment-active",
+          "group": "strata@4"
+        },
+        {
+          "command": "strata.copyOutputValue",
+          "when": "view == strataOperations && viewItem == output-entry",
+          "group": "strata@1"
         },
         {
           "command": "strata.auditResend",
@@ -409,59 +464,9 @@
           "group": "strata@1"
         },
         {
-          "command": "strata.deployStage",
-          "when": "view == strataEnvironment && viewItem == stage",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.lockStatus",
-          "when": "view == strataEnvironment && viewItem == deployment",
-          "group": "strata@3"
-        },
-        {
-          "command": "strata.releaseLock",
-          "when": "view == strataEnvironment && viewItem == deployment",
-          "group": "strata@4"
-        },
-        {
-          "command": "strata.showValues",
-          "when": "view == strataEnvironment && viewItem == deployment",
-          "group": "strata@5"
-        },
-        {
-          "command": "strata.buildSbom",
-          "when": "view == strataEnvironment && viewItem == deployment",
-          "group": "strata@6"
-        },
-        {
-          "command": "strata.syncRepo",
-          "when": "view == strataRepositories && viewItem == repository",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.removeRepo",
-          "when": "view == strataRepositories && viewItem == repository",
-          "group": "strata@2"
-        },
-        {
           "command": "strata.copyValueKey",
           "when": "view == strataValues && viewItem == value",
           "group": "strata@1"
-        },
-        {
-          "command": "strata.copyOutputValue",
-          "when": "view == strataEnvironment && viewItem == output",
-          "group": "strata@1"
-        },
-        {
-          "command": "strata.buildPlan",
-          "when": "view == strataEnvironment && viewItem == deployment",
-          "group": "strata@7"
-        },
-        {
-          "command": "strata.checkPolicy",
-          "when": "view == strataEnvironment && viewItem == deployment",
-          "group": "strata@8"
         },
         {
           "command": "strata.promoteStart",
