@@ -124,7 +124,7 @@ class BaseBuilder(ABC):
                 name_key = str(prov_svc.model.meta.name).upper().replace("-", "_")
                 props = prov_svc.model.spec.properties
                 prefix = f"STRATA_PROVIDER_{name_key}"
-                for field in ("engine", "version", "organization", "type", "region", "location"):
+                for field in ("version", "organization", "type", "region", "location"):
                     val = getattr(props, field, None)
                     if val is not None:
                         ctx[f"{prefix}_{field.upper()}"] = str(val)

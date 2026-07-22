@@ -982,3 +982,263 @@ spec:
 - ✅ AI agent can generate scenarios from workload descriptions
 - ✅ Custom dimensions supported for internal/private resources
 - ✅ Works offline (cached prices + local dimensions)
+
+---
+
+## Appendix: Infracost as a Cost Capability
+
+While the primary cost model uses scenarios + dimensions + API lookup, **Infracost can be integrated as an alternative or complementary cost pathway** for teams who want actual Terraform resource pricing.
+
+### Infracost Capability — Design
+
+**Key principle: Build stays offline and deterministic. Cost estimation is a separate, optional phase.**
+
+**Architecture:**
+1. `strata build` → generates terraform artifacts (OFFLINE, NO cost)
+2. `strata cost show` → runs infracost on artifacts (ONLINE, optional)
+3. `strata deploy --dry-run` → terraform plan + auto-refresh cost (ONLINE, before approval)
+4. `strata deploy` → actual deployment
+
+**When to use Infracost**:
+- ✅ Cost accuracy is critical (you have TF written, want real prices)
+- ✅ You're using standard cloud resources (Azure, AWS, GCP)
+- ✅ You want before/after cost comparison on plan changes
+- ✅ You're in an environment where Infracost binary can run
+
+**When NOT to use Infracost**:
+- ❌ During `strata build` (build must stay offline)
+- ❌ Custom/internal cloud resources
+- ❌ Cost comparison across scenarios (use scenarios instead)
+- ❌ Zero-touch estimation interviews
+
+### Requirements & Integration Points
+
+#### 1. Inputs Infracost Needs
+
+```yaml
+# From strata's build outputs:
+build/{deployment}-{version}/
+  └── terraform/
+      ├── infra/
+      │   ├── main.tf
+      │   ├── variables.tf
+      │   ├── terraform.tfvars
+      │   └── .terraform/          ← terraform init must have run
+      │       └── modules/, providers/
+      └── config/
+          └── terraform.tfvars
+
+# From strata environment/provider config:
+- Provider credentials (az, aws, gcp)
+- Region/location
+- Currency preference
+```
+
+**Critical**: Terraform must have been initialized (`.terraform/` exists) before Infracost can analyze.
+
+#### 2. Invocation Points (Separate from Build)
+
+**Option A: Explicit — User runs cost command**
+```bash
+strata build run -f deploy/prd.yaml
+  → build/{deployment}/terraform/
+  
+strata cost show -f deploy/prd.yaml
+  → reads terraform from build/
+  → infracost breakdown (network OK)
+  → displays cost
+  → caches locally
+```
+
+**Option B: Automatic — During deploy plan phase**
+```bash
+strata build run -f deploy/prd.yaml
+  → build/{deployment}/terraform/
+
+strata deploy run -f deploy/prd.yaml --dry-run
+  → terraform plan (network phase, OK for infracost)
+  → terraform plan -json → plan.tfplan
+  → infracost diff --terraform-plan-json plan.tfplan
+  → show cost + change impact
+  → approval gate
+  
+strata deploy run -f deploy/prd.yaml
+  → actual deployment
+```
+
+**Both patterns**: `terraform init` must run before Infracost can work.
+
+**Provider Support**: Infracost natively supports Azure, AWS, GCP. For other providers (Hetzner, Kamatera, custom), cost estimation requires fallback:
+- Scenario-based estimation (Phase 2)
+- Provider-specific API integration (provider's own pricing API)
+- Manual cost input via scenarios
+
+#### 3. Infracost Command Line
+
+```bash
+# Basic: cost breakdown of terraform config
+infracost breakdown \
+  --path ./build/{deployment}/terraform \
+  --format json \
+  --out-file cost.json
+
+# With options
+infracost breakdown \
+  --path ./build/{deployment}/terraform \
+  --format json \
+  --out-file cost.json \
+  --currency EUR \
+  --no-color
+
+# Plan comparison (before/after impact)
+terraform plan -out=plan.tfplan
+infracost diff \
+  --path ./build/{deployment}/terraform \
+  --terraform-plan-json plan.json \
+  --format json \
+  --out-file cost-diff.json
+```
+
+**Execution context:**
+- Runs after `strata build` (artifacts exist)
+- Runs in deploy `--dry-run` phase (terraform plan exists)
+- Network access required (calls cloud pricing APIs if not cached)
+- Cloud credentials required in environment
+
+#### 4. Credentials Handling
+
+Infracost uses **the same credentials** already configured in strata provider config:
+
+```bash
+# Azure
+export AZURE_SUBSCRIPTION_ID=...
+export AZURE_CLIENT_ID=...
+
+# AWS
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+
+# GCP
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+```
+
+**No extra authentication needed** — reads from environment (same as terraform would).
+
+#### 5. Caching Strategy
+
+```
+.strata/cache/
+  └── infracost/
+      ├── {deployment}-{version}-{terraform-hash}.json  (7d TTL)
+      └── pricing-{provider}-{region}.json              (30d TTL)
+```
+
+**Smart caching:**
+- Cache cost per terraform version (if TF doesn't change, cost doesn't need refresh)
+- Cache pricing separately (refresh pricing less frequently)
+- `strata cost refresh` forces immediate update
+- During `deploy --dry-run`: always calculate fresh (terraform plan may have changed)
+
+### Hybrid Strategy: Scenarios + Infracost
+
+**Timeline of cost estimation:**
+
+```
+Phase 1: Estimation (pre-TF, no code written yet)
+  strata cost compare --scenarios startup,enterprise
+    → scenario-based estimates
+    → AI agent can help generate scenarios
+    → Works offline, no infrastructure needed
+
+Phase 2: Build (TF generated, artifacts ready)
+  strata build run -f deploy/prd.yaml
+    → generates terraform
+    → OFFLINE, deterministic, reproducible
+    → NO cost calculation yet
+
+Phase 3: Cost Review (before deployment)
+  strata cost show -f deploy/prd.yaml
+    → infracost breakdown on terraform (if provider supported)
+    → actual costs from cloud pricing APIs
+    → cached locally
+
+Phase 4: Deploy Plan (approval gate)
+  strata deploy run -f deploy/prd.yaml --dry-run
+    → terraform plan
+    → auto-refresh cost: infracost diff on plan (if provider supported)
+    → show impact: "This change will cost €X more"
+    → approval gate before proceed
+
+Phase 5: Deploy (actual infrastructure)
+  strata deploy run -f deploy/prd.yaml
+    → terraform apply
+```
+
+**Decision logic:**
+- Scenarios: Quick estimation, offline, pre-TF, all providers
+- Infracost: Accurate pricing, online, post-TF, approval gate, Azure/AWS/GCP only
+
+---
+
+## Provider Cost Support Matrix
+
+| Provider           | Infracost | Fallback  | Notes                           |
+| ------------------ | --------- | --------- | ------------------------------- |
+| **Azure**          | ✅ Full    | Scenarios | Retail Prices API               |
+| **AWS**            | ✅ Full    | Scenarios | Bulk Pricing API                |
+| **GCP**            | ✅ Good    | Scenarios | Cloud Billing Catalog           |
+| **Hetzner**        | ❌ None    | Scenarios | Manual pricing (not public API) |
+| **Kamatera**       | ❌ None    | Scenarios | Manual pricing (not public API) |
+| **Custom/On-prem** | ❌ None    | Scenarios | User-defined costs              |
+
+### Why No Alternatives?
+
+**Infracost is the only comprehensive multi-cloud IaC cost tool.** Alternatives:
+
+| Tool                             | Coverage            | Limitation             |
+| -------------------------------- | ------------------- | ---------------------- |
+| Infracost                        | Azure, AWS, GCP     | Industry standard, OSS |
+| Terraform native cost estimation | AWS only            | Very limited           |
+| Cloud provider dashboards        | Individual provider | Post-deploy only       |
+| Pulumi cost estimation           | Only Pulumi IaC     | Not Terraform          |
+
+**Smaller providers (Hetzner, Kamatera, etc.) do NOT have:**
+- Public pricing APIs (Infracost could use)
+- Competitive tooling ecosystems
+- Investment in cost estimation features
+
+**Recommendation**: For non-major-cloud deployments, use scenario-based estimation. As platforms mature (Hetzner, Kamatera), their cost APIs may become available. Strata can add provider-specific cost backends incrementally via Phase 2's extensibility layer.
+
+---
+
+## Implementation Phases for Infracost
+
+#### Phase 1 — Core Cost Command (MVP)
+
+- [ ] `strata cost show` command (separate from build)
+- [ ] Infracost binary detection + version check
+- [ ] Read terraform artifacts from build directory
+- [ ] Invoke: `infracost breakdown --path ./build/{deployment}/terraform`
+- [ ] Parse JSON output
+- [ ] Display cost breakdown in CLI
+- [ ] Cache results locally (.strata/cache/infracost/)
+- [ ] Error handling (missing binary, bad TF, auth failures)
+- [ ] Graceful degradation if infracost not available
+
+#### Phase 2 — Deploy Integration + Scenarios
+
+- [ ] Cost refresh during `strata deploy --dry-run`
+  - Auto-run: `infracost diff --terraform-plan-json`
+  - Show cost impact before approval
+- [ ] Merge scenario + Infracost in `cost.json`
+- [ ] `strata cost compare --methods scenario,infracost`
+- [ ] Cost policy gates (threshold, scenario-check)
+- [ ] VS Code extension integration
+- [ ] Historical cost tracking
+
+#### Phase 3 — Advanced
+
+- [ ] AWS/GCP integration tests (currently tested on Azure)
+- [ ] Right-sizing recommendations from actual costs
+- [ ] Cost reconciliation (estimated vs. actual from billing)
+- [ ] Cost trending over time

@@ -84,7 +84,6 @@ spec:
   properties:
     type: aws                              # Cloud platform
     region: us-east-1                      # Region (fixed)
-    engine: azurerm                        # Optional IaC engine
     version: "~>5.0"                       # Optional version constraint
   authentication:
     role_arn: arn:aws:iam::123456789:role/terraform

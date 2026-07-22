@@ -135,7 +135,6 @@ class ConfigurationProviderModel(PlatformBaseModel):
 
     name: PlatformName = Field(..., description="Provider name (e.g., kamatera, azure)")
     description: str = Field(..., description="Description of the provider")
-    engine: Optional[str] = Field(None, description="Provider engine/driver (e.g., azurerm, aws, gcp)")
     version: Optional[str] = Field(None, description="Provider version constraint (e.g., ~>3.0, >=1.0)")
     additional_regions: bool = Field(
         False,

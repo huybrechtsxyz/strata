@@ -337,7 +337,6 @@ class TerraformBuilder(BaseBuilder):
                 providers_dict[provider.name] = {
                     "type": provider.properties.type,
                     "region": provider.properties.region,
-                    "engine": provider.properties.engine,
                     "version": provider.properties.version,
                     "description": provider.description,
                     "labels": provider.labels or {},
