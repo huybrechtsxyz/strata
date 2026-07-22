@@ -97,6 +97,7 @@ strata sln init --name NAME [--template NAME-OR-PATH] [--list] [standard options
 | `--name NAME`             | ✅        | Name of the solution workspace                                                                                                            |
 | `--template NAME-OR-PATH` | —        | Built-in template name (e.g. `aks`, `compose`) or path to a local template folder containing `scaffold/` and an optional `template.yaml`. |
 | `--list`                  | —        | List available scaffold templates and exit. Does not require `--name`.                                                                    |
+| `--guided`                | —        | Ask a short series of questions (stack type, cloud provider) to select and apply the right template. Requires an interactive terminal.    |
 
 **Discovering templates:**
 
@@ -124,6 +125,7 @@ All `.devcontainer/` files are written **idempotently** — existing files are n
 strata sln init --name my-platform
 strata sln init --name my-platform --template aks
 strata sln init --name my-platform --template .strata/templates/my-corp-base/
+strata sln init --guided
 ```
 
 > **Dev container:** After `strata sln init`, open the workspace in VS Code and select **Reopen in Container** to start a pre-configured environment with all tools installed. The container also works with GitHub Codespaces.
@@ -299,14 +301,15 @@ strata new TEMPLATE NAME [--output-file FILE] [--overwrite] [--set KEY=VALUE ...
 strata new --list
 ```
 
-| Option / Argument    | Description                                                          |
-| -------------------- | -------------------------------------------------------------------- |
-| `TEMPLATE`           | Template name (e.g. `namespace`, `provider`, `tenant`)               |
-| `NAME`               | Injected as `{{ name }}`; used in output filenames and path segments |
-| `--output-file FILE` | Output file path or directory (default: current directory)           |
-| `--overwrite`        | Overwrite output file(s) if they already exist                       |
-| `--set KEY=VALUE`    | Inject an extra variable into the template (repeatable)              |
-| `--list`             | List available templates and bundles, then exit                      |
+| Option / Argument    | Description                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `TEMPLATE`           | Template name (e.g. `namespace`, `provider`, `tenant`)                                                        |
+| `NAME`               | Injected as `{{ name }}`; used in output filenames and path segments                                          |
+| `--output-file FILE` | Output file path or directory (default: current directory)                                                    |
+| `--overwrite`        | Overwrite output file(s) if they already exist                                                                |
+| `--set KEY=VALUE`    | Inject an extra variable into the template (repeatable)                                                       |
+| `--list`             | List available templates and bundles, then exit                                                               |
+| `--scaffold-deps`    | After creation, detect any missing files referenced by the new file and offer to scaffold them automatically. |
 
 **Template discovery** — `strata new --list` shows all templates grouped by type:
 
@@ -1031,55 +1034,6 @@ strata guide
 strata guide --output json
 strata guide --file config/my-config.yaml
 strata guide -f @myrepo/config/app.yaml
-```
-
----
-
-## `console`
-
-Interactive workspace session with guided onboarding. Launches a persistent REPL that keeps workspace state in memory, offers command completion, and provides a guided experience where users can scaffold, validate, and explore without leaving the session.
-
-```
-strata console [OPTIONS]
-```
-
-| Option             | Type | Default       | Description                                                                |
-| ------------------ | ---- | ------------- | -------------------------------------------------------------------------- |
-| `--work-path PATH` | path | auto-detected | Root workspace directory. Falls back to `STRATA_WORK_PATH`, then CWD walk. |
-| `--no-color`       | flag | off           | Disable color output.                                                      |
-
-**Exit code:** `0` on normal exit · `1` on crash.
-
-### REPL Commands
-
-| Command                 | Alias | Action                                  |
-| ----------------------- | ----- | --------------------------------------- |
-| `status`                | `s`   | Show workspace checklist                |
-| `check <file>`          | `c`   | Inspect a YAML file                     |
-| `next`                  | `n`   | Show next step with hint                |
-| `do`                    | `d`   | Execute the suggested next-step command |
-| `new <template> [name]` | —     | Scaffold a file via `strata new`        |
-| `validate [file\|glob]` | `v`   | Run validation                          |
-| `graph [--mode]`        | `g`   | Render dependency graph                 |
-| `templates`             | `t`   | List available templates                |
-| `tools`                 | —     | Check external tool availability        |
-| `open <file>`           | `o`   | Open file in editor                     |
-| `reload`                | —     | Reload workspace state from disk        |
-| `help`                  | `?`   | Show command table                      |
-| `clear`                 | —     | Clear terminal                          |
-| `quit`                  | `q`   | Exit console                            |
-
-### Features
-
-- **Tab completion** for commands, template names, and file paths
-- **Session history** persisted to `.strata/console-history`
-- **Auto-refresh** — checklist re-evaluates after state-changing commands and shows deltas
-- **Rich output** — panels, tables, and progress bars via the Rich library
-- **Works without init** — starts even when `.strata/` is absent; shows phase 1 as pending
-
-```bash
-strata console
-strata console --no-color
 ```
 
 ---

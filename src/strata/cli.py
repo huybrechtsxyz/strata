@@ -175,6 +175,26 @@ class SectionedGroup(click.Group):
 #
 
 
+def _handle_check_updates(ctx: click.Context, param: click.Parameter, value: bool) -> None:
+    """Eager callback to handle --check-updates at root level before command validation."""
+    if not value:
+        return
+    from strata.utils.version import check_for_updates, get_version
+
+    version = get_version()
+    latest, update_available = check_for_updates()
+    if latest and update_available:
+        click.echo(f"Strata {version} → {latest} available")
+        click.echo("Run: pip install --upgrade xyz-strata")
+        ctx.exit(0)
+    elif latest:
+        click.echo(f"Strata {version} is up to date")
+        ctx.exit(0)
+    else:
+        click.echo(f"Strata {version} (could not check for updates)")
+        ctx.exit(0)
+
+
 @click.group(
     cls=SectionedGroup,
     sections=_HELP_SECTIONS,
@@ -192,6 +212,14 @@ class SectionedGroup(click.Group):
     package_name="xyz-strata",
     prog_name="strata",
     message="%(prog)s %(version)s",
+)
+@click.option(
+    "--check-updates",
+    is_flag=True,
+    is_eager=True,
+    expose_value=False,
+    callback=_handle_check_updates,
+    help="Check if a newer version is available on PyPI and exit.",
 )
 @click.option(
     "--no-color",

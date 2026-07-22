@@ -79,8 +79,8 @@ strata new deployment my-platform-dev --path deploy/
 strata validate run -f config/my-platform-config.yaml
 strata validate run -f deploy/my-platform-dev-deploy.yaml --explain
 
-# 5. Interactive onboarding session
-strata console
+# 5. Cold-start wizard (first-time setup)
+strata sln init --guided
 
 # 6. Build artifacts (dry-run)
 strata build plan -f deploy/my-platform-dev-deploy.yaml
@@ -237,28 +237,26 @@ Use `strata schema get <kind>` to inspect the full field reference for any kind.
 
 ---
 
-## Console REPL (Interactive Onboarding)
+## Guided Onboarding
+
+**Cold-start wizard** — asks a few questions and scaffolds a complete connected workspace:
 
 ```bash
-strata console
+strata sln init --guided
 ```
 
-Commands inside the REPL:
+**Dependency scaffolding** — after creating a file, automatically scaffold missing referenced files:
 
-| Command | What it does |
-|---------|-------------|
-| `status` | 8-phase workspace readiness checklist |
-| `next` | Show the next step to take |
-| `do` | Execute the suggested next-step command |
-| `check <file>` | Validate a specific file |
-| `new <kind> [name]` | Scaffold a new YAML file |
-| `validate [file]` | Run validation |
-| `graph` | Show dependency graph |
-| `templates` | List available templates |
-| `tools` | Check external tool availability |
-| `open <file>` | Open file in editor |
-| `reload` | Re-evaluate workspace state |
-| `help` | Show all commands |
+```bash
+strata new deployment my-platform --scaffold-deps
+```
+
+**Workspace readiness checklist** — shows the 8-phase onboarding progress and next action:
+
+```bash
+strata guide
+strata guide -f deploy/my-platform.yaml   # file-mode analysis
+```
 
 ---
 

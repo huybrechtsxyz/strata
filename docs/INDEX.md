@@ -42,27 +42,29 @@ This is a comprehensive guide to all Strata documentation and resources. Use thi
 
 ### Operational Guides
 
-| Guide                                                 | Purpose                                   |
-| ----------------------------------------------------- | ----------------------------------------- |
-| [Commands Reference](./platform/commands.md)          | Complete CLI command documentation        |
-| [Validation & Error Handling](./guides/validation.md) | How validation works and error resolution |
-| [Building Deployments](./guides/building.md)          | Pre-deployment artifact generation        |
-| [Deploying Infrastructure](./guides/deploying.md)     | Deployment process and strategies         |
-| [Managing Environments](./guides/environments.md)     | Environment composition and overrides     |
-| [Secret Management](./guides/secrets.md)              | Handling sensitive data                   |
-| [Audit & Compliance](./guides/audit.md)               | Tracking changes and compliance           |
-| [Troubleshooting](./guides/troubleshooting.md)        | Common issues and solutions               |
+| Guide                                                                   | Purpose                                   |
+| ----------------------------------------------------------------------- | ----------------------------------------- |
+| [Commands Reference](./platform/commands.md)                            | Complete CLI command documentation        |
+| [Validation & Error Handling](./platform/validators.md)                 | How validation works and error resolution |
+| [Building Deployments](./platform/builders.md)                          | Pre-deployment artifact generation        |
+| [Deploying Infrastructure](./guides/deploying.md)                       | End-to-end deployment operations          |
+| [Managing Environments](./guides/environment-composition.md)            | Environment composition and overrides     |
+| [Environment Inspection](./guides/environment-command-group.md)         | Query outputs, state, and drift           |
+| [Multi-Repository Setup](./guides/multi-repo-setup.md)                  | Version pinning and promotion workflows   |
+| [Service Deployment](./guides/service-command-group.md)                 | Deploy individual services/modules        |
+| [Secrets, Variables & Features](./guides/secrets-variables-features.md) | Resolution pattern for all three          |
+| [Deployment Audit Trail](./guides/audit-command-group.md)               | Tracking changes and compliance           |
+| [Troubleshooting](./guides/troubleshooting-what-changed.md)             | Common issues and solutions               |
 
 ### Advanced Topics
 
-| Guide                                                      | Purpose                                                   |
-| ---------------------------------------------------------- | --------------------------------------------------------- |
-| [Scaffolding Templates](./guides/scaffolding-templates.md) | Creating files, bundles, and multi-tenant fleet scaffolds |
-| [Policy Engine](./guides/policies.md)                      | Built-in policies and custom rules                        |
-| [Lifecycle Hooks](./guides/lifecycle-hooks.md)             | Pre/post deployment scripts                               |
-| [Multi-Repository Setup](./guides/multi-repo.md)           | Working with multiple configuration repos                 |
-| [SBOM & Supply Chain](./guides/sbom.md)                    | Bill of materials generation                              |
-| [Drift Detection](./guides/drift.md)                       | Finding configuration drift (Post-v1.0)                   |
+| Guide                                                         | Purpose                                                   |
+| ------------------------------------------------------------- | --------------------------------------------------------- |
+| [Scaffolding Templates](./guides/scaffolding-templates.md)    | Creating files, bundles, and multi-tenant fleet scaffolds |
+| [Policy Engine](./platform/policies.md)                       | Built-in policies and custom rules                        |
+| [Lifecycle Hooks](./platform/lifecycles.md)                   | Pre/post deployment scripts                               |
+| [SBOM & Supply Chain](./guides/extending-sbom-plugins.md)     | Bill of materials generation                              |
+| [Drift Detection](./guides/detecting-infrastructure-drift.md) | Finding configuration drift                               |
 
 ---
 
@@ -76,33 +78,33 @@ Every significant architectural decision is documented as an ADR. Status indicat
 - ⏸️ **Deferred** — Planned but not yet implemented
 - ❌ **Deprecated** — Superseded by newer decisions
 
-| ADR                                                                      | Title                                | Status     | Purpose                                                   |
-| ------------------------------------------------------------------------ | ------------------------------------ | ---------- | --------------------------------------------------------- |
-| [0001](./decisions/0001-kubernetes-style-yaml-schema.md)                 | Kubernetes-style YAML schema         | ✅ Accepted | Model structure and validation                            |
-| [0002](./decisions/0002-python-click-not-compiled-cli.md)                | Python + Click CLI (not compiled)    | ✅ Accepted | Tool implementation language                              |
-| [0003](./decisions/0003-layered-architecture.md)                         | Layered architecture                 | ✅ Accepted | Code organization and dependencies                        |
-| [0004](./decisions/0004-exit-code-convention.md)                         | Exit code convention                 | ✅ Accepted | Standard exit codes (0/1/2/3/4) with lock conflict signal |
-| [0005](./decisions/0005-secret-resolution-at-build-time.md)              | Secret resolution at build time      | ✅ Accepted | When/how secrets are injected                             |
-| [0006](./decisions/0006-policy-engine-for-deployment-guardrails.md)      | Policy engine                        | ✅ Accepted | Validation rules and enforcement                          |
-| [0007](./decisions/0007-deployment-state-locking.md)                     | Deployment state locking             | ✅ Accepted | Concurrent deployment prevention                          |
-| [0008](./decisions/0008-infrastructure-drift-detection.md)               | Infrastructure drift detection       | ⏸️ Deferred | Detecting config vs. state differences                    |
-| [0009](./decisions/0009-sbom-extended-sources-and-inventory.md)          | SBOM extended sources                | ✅ Accepted | Supply chain / Bill of materials                          |
-| [0010](./decisions/0010-rename-configuration-repositories-to-remotes.md) | Rename repositories → remotes        | ✅ Accepted | Terminology clarification                                 |
-| [0011](./decisions/0011-promotion-strategies-for-version-progression.md) | Promotion strategies                 | ✅ Accepted | Cross-environment version progression                     |
-| [0012](./decisions/0012-rename-customer-to-tenant.md)                    | Rename customer → tenant             | ✅ Accepted | Terminology update                                        |
-| [0013](./decisions/0013-auto-generated-secrets.md)                       | Auto-generated secrets               | ✅ Accepted | Automatic secret creation & seeding                       |
-| [0014](./decisions/0014-onboarding-experience.md)                        | Onboarding experience                | ✅ Accepted | Getting-started walkthrough                               |
-| [0015](./decisions/0015-dependency-graph.md)                             | Dependency graph                     | ✅ Accepted | File reference visualization                              |
-| [0016](./decisions/0016-console-repl.md)                                 | Console REPL                         | ✅ Accepted | Interactive shell                                         |
-| [0017](./decisions/0017-jinja2-templates.md)                             | Jinja2 templates                     | ✅ Accepted | YAML templating                                           |
-| [0017b](./decisions/0017b-tag-based-release-workflow.md)                 | Tag-based release workflow           | ⏸️ Deferred | Git tag conventions                                       |
-| [0018](./decisions/0018-deployment-audit-traceability.md)                | Deployment audit traceability        | ✅ Accepted | Change tracking & SIEM                                    |
-| [0019](./decisions/0019-terraform-build-output.md)                       | Terraform build output               | ✅ Accepted | Artifact generation                                       |
-| [0020](./decisions/0020-lifecycle-phases.md)                             | Lifecycle phases                     | ✅ Accepted | Pre/post hooks (27 phases)                                |
-| [0021](./decisions/0021-deployment-manifests.md)                         | Deployment manifests                 | ✅ Accepted | Build & deploy artifacts                                  |
-| [0022](./decisions/0022-siem-integration-splunk-hec-cef.md)              | SIEM integration (Splunk HEC)        | ✅ Accepted | Audit log forwarding                                      |
-| [0023](./decisions/0023-pluggable-provisioners.md)                       | Pluggable provisioners               | ✅ Accepted | Custom infrastructure provisioners                        |
-| [0024](./decisions/0024-environment-composition-flat-merge-fix.md)       | Environment composition (flat merge) | ✅ Accepted | Multi-file environment merging                            |
+| ADR                                                                             | Title                                | Status     | Purpose                                                   |
+| ------------------------------------------------------------------------------- | ------------------------------------ | ---------- | --------------------------------------------------------- |
+| [0001](./decisions/0001-kubernetes-style-yaml-schema.md)                        | Kubernetes-style YAML schema         | ✅ Accepted | Model structure and validation                            |
+| [0002](./decisions/0002-python-click-not-compiled-cli.md)                       | Python + Click CLI (not compiled)    | ✅ Accepted | Tool implementation language                              |
+| [0003](./decisions/0003-layered-architecture.md)                                | Layered architecture                 | ✅ Accepted | Code organization and dependencies                        |
+| [0004](./decisions/0004-exit-code-convention.md)                                | Exit code convention                 | ✅ Accepted | Standard exit codes (0/1/2/3/4) with lock conflict signal |
+| [0005](./decisions/0005-secret-resolution-at-build-time.md)                     | Secret resolution at build time      | ✅ Accepted | When/how secrets are injected                             |
+| [0006](./decisions/0006-policy-engine-for-deployment-guardrails.md)             | Policy engine                        | ✅ Accepted | Validation rules and enforcement                          |
+| [0007](./decisions/0007-deployment-state-locking.md)                            | Deployment state locking             | ✅ Accepted | Concurrent deployment prevention                          |
+| [0008](./decisions/0008-infrastructure-drift-detection.md)                      | Infrastructure drift detection       | ⏸️ Deferred | Detecting config vs. state differences                    |
+| [0009](./decisions/0009-sbom-extended-sources-and-inventory.md)                 | SBOM extended sources                | ✅ Accepted | Supply chain / Bill of materials                          |
+| [0010](./decisions/0010-rename-configuration-repositories-to-remotes.md)        | Rename repositories → remotes        | ✅ Accepted | Terminology clarification                                 |
+| [0011](./decisions/0011-promotion-strategies-for-version-progression.md)        | Promotion strategies                 | ✅ Accepted | Cross-environment version progression                     |
+| [0012](./decisions/0012-rename-customer-to-tenant.md)                           | Rename customer → tenant             | ✅ Accepted | Terminology update                                        |
+| [0013](./decisions/0013-auto-generated-secrets.md)                              | Auto-generated secrets               | ✅ Accepted | Automatic secret creation & seeding                       |
+| [0014](./decisions/0014-onboarding-experience.md)                               | Onboarding experience                | ✅ Accepted | Getting-started walkthrough                               |
+| [0015](./decisions/0015-flow-command-dependency-graph.md)                       | Dependency graph                     | ✅ Accepted | File reference visualization                              |
+| [0016](./decisions/0016-console-interactive-repl.md)                            | Console REPL                         | ✅ Accepted | Interactive shell                                         |
+| [0017](./decisions/0017-jinja2-template-engine.md)                              | Jinja2 templates                     | ✅ Accepted | YAML templating                                           |
+| [0017b](./decisions/0017-tag-based-release-workflow-option-c.md)                | Tag-based release workflow           | ⏸️ Deferred | Git tag conventions                                       |
+| [0018](./decisions/0018-deployment-audit-traceability.md)                       | Deployment audit traceability        | ✅ Accepted | Change tracking & SIEM                                    |
+| [0019](./decisions/0019-configurable-terraform-build-output.md)                 | Terraform build output               | ✅ Accepted | Artifact generation                                       |
+| [0020](./decisions/0020-lifecycle-phases-and-environment-variables.md)          | Lifecycle phases                     | ✅ Accepted | Pre/post hooks (27 phases)                                |
+| [0021](./decisions/0021-deployment-manifests-as-first-class-build-artifacts.md) | Deployment manifests                 | ✅ Accepted | Build & deploy artifacts                                  |
+| [0022](./decisions/0022-siem-integration-splunk-hec-cef.md)                     | SIEM integration (Splunk HEC)        | ✅ Accepted | Audit log forwarding                                      |
+| [0023](./decisions/0023-pluggable-provisioner-framework.md)                     | Pluggable provisioners               | ✅ Accepted | Custom infrastructure provisioners                        |
+| [0024](./decisions/0024-environment-composition-flat-merge-fix.md)              | Environment composition (flat merge) | ✅ Accepted | Multi-file environment merging                            |
 
 ---
 
@@ -118,16 +120,14 @@ Every significant architectural decision is documented as an ADR. Status indicat
 
 ### CLI (Python)
 
-| Resource                               | Purpose                                   |
-| -------------------------------------- | ----------------------------------------- |
-| [Code Architecture](./architecture.md) | Codebase structure and layers (if exists) |
-| [Python Build System](./build.md)      | Building and packaging (if exists)        |
+| Resource                                        | Purpose                       |
+| ----------------------------------------------- | ----------------------------- |
+| [Code Architecture](./platform/architecture.md) | Codebase structure and layers |
 
 ### Contributing
 
 | Resource                                            | Purpose                              |
 | --------------------------------------------------- | ------------------------------------ |
-| [CONTRIBUTING.md](../CONTRIBUTING.md)               | How to contribute code/docs          |
 | [GOVERNANCE.md](../.github/GOVERNANCE.md)           | Project governance & decision-making |
 | [CODE_OF_CONDUCT.md](../.github/CODE_OF_CONDUCT.md) | Community expectations               |
 | [SECURITY.md](../.github/SECURITY.md)               | Reporting security issues            |
@@ -174,12 +174,7 @@ Every significant architectural decision is documented as an ADR. Status indicat
 
 ### Current Version (v0.16.1)
 
-- [Changelog](../CHANGELOG.md) — What's new in this version
-- [v1.0 Roadmap](./v1-todo.md) — What's planned for v1.0 release
-
-### Previous Versions
-
-- See [GitHub Releases](https://github.com/huybrechtsxyz/strata/releases) for historical documentation
+- See [GitHub Releases](https://github.com/huybrechtsxyz/strata/releases) for release notes and historical documentation
 
 ---
 
@@ -193,9 +188,9 @@ Every significant architectural decision is documented as an ADR. Status indicat
 
 ### "I'm using the CLI"
 1. Reference: [Commands](./platform/commands.md)
-2. Learn: [Validation & Errors](./guides/validation.md)
+2. Learn: [Validation & Errors](./platform/validators.md)
 3. Configure: [Workspace](./config/workspace.md) and [Deployment](./config/deployment.md)
-4. Troubleshoot: [Troubleshooting Guide](./guides/troubleshooting.md)
+4. Troubleshoot: [Troubleshooting Guide](./guides/troubleshooting-what-changed.md)
 
 ### "I'm using the VS Code Extension"
 1. Install: [VS Code Extension README](../src/vscode/README.md)
@@ -210,7 +205,7 @@ Every significant architectural decision is documented as an ADR. Status indicat
 4. Reference: [Architecture ADRs](./decisions/) for design context
 
 ### "I have a question or issue"
-1. Check: [Troubleshooting](./guides/troubleshooting.md)
+1. Check: [Troubleshooting](./guides/troubleshooting-what-changed.md)
 2. Search: [GitHub Issues](https://github.com/huybrechtsxyz/strata/issues)
 3. Ask: [GitHub Discussions](https://github.com/huybrechtsxyz/strata/discussions)
 4. Report: Use issue templates for bugs/features

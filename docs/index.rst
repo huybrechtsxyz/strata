@@ -98,6 +98,20 @@ strata
    config/manifest
    config/tenant
    config/workflow
+   config/promotion-record
+   config/version-lock
+   config/version
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Guides:
+
+   guides/audit-command-group
+   guides/deploying
+   guides/environment-command-group
+   guides/multi-repo-setup
+   guides/secrets-variables-features
+   guides/service-command-group
 
 .. toctree::
    :maxdepth: 2
@@ -137,7 +151,6 @@ strata
    guides/cve-vulnerability-scanning
    guides/scaffolding-templates
    guides/at-scale
-   guides/using-console
    guides/building-a-provisioner-plugin
    guides/detecting-infrastructure-drift
 

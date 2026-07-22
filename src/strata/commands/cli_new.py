@@ -52,6 +52,13 @@ from strata.commands.new.run_new_command import NewCommand
     default=False,
     help="Validate each generated file immediately after creation.",
 )
+@click.option(
+    "--scaffold-deps",
+    "scaffold_deps",
+    is_flag=True,
+    default=False,
+    help="After creation, detect and scaffold any missing referenced files.",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -64,6 +71,7 @@ def new_command(
     set_values: Tuple[str, ...],
     list_templates: bool,
     run_validate: bool = False,
+    scaffold_deps: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: bool = False,
@@ -93,6 +101,7 @@ def new_command(
         overwrite=overwrite,
         set_values=set_values,
         run_validate=run_validate,
+        scaffold_deps=scaffold_deps,
         work_path=work_path,
         output=output,
         verbose=verbose,

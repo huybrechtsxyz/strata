@@ -26,7 +26,7 @@ strata uses YAML configuration files to define infrastructure, environments, and
 
 **Workspace state:**
 
-- [workflow.md](workflow.md) - `.strata/workflow.yaml` — onboarding sequence for `strata console`
+- [workflow.md](workflow.md) - `.strata/workflow.yaml` — onboarding sequence for `strata guide`
 
 ## Architecture
 

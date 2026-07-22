@@ -8,6 +8,7 @@ NOTE: ``src/strata/commands/cli_guide.py`` and
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -633,3 +634,379 @@ class TestGuideCommandHintCustomization:
         result = _runner().invoke(guide_command, ["--work-path", str(tmp_path)])
         assert result.exit_code == 0
         assert "my-custom-config" in result.output
+
+
+# ---------------------------------------------------------------------------
+# --next mode
+# ---------------------------------------------------------------------------
+
+
+class TestGuideCommandNextMode:
+    # -----------------------------------------------------------------------
+    # Test 17 — uninitialized workspace → phase 1 hint, exit 0
+    # -----------------------------------------------------------------------
+
+    def test_next_uninitialized_shows_sln_init(self, tmp_path):
+        """--next on an uninitialized workspace prints the phase 1 hint and exits 0."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(guide_command, ["--next", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "strata sln init" in result.output
+
+    def test_next_uninitialized_no_checklist_markers(self, tmp_path):
+        """--next must NOT render the full checklist (no ✅ / ⬜ / ⚠️ markers)."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(guide_command, ["--next", "--work-path", str(tmp_path)])
+        assert "✅" not in result.output
+        assert "⬜" not in result.output
+
+    # -----------------------------------------------------------------------
+    # Test 18 — complete workspace → completion message, exit 0
+    # -----------------------------------------------------------------------
+
+    def test_next_complete_workspace_shows_complete_message(self, tmp_path):
+        """--next on a complete workspace emits the completion message and exits 0."""
+        repo_dir = tmp_path / "repos" / "xyz-svc-app"
+        repo_dir.mkdir(parents=True)
+        solution = _make_solution_json(
+            repositories=[_make_repo(path=str(repo_dir))],
+            profiles=[_make_profile(active=True, config_paths=[_make_config_path()])],
+        )
+        _make_workspace(tmp_path, solution=solution, build_files=["platform.json"])
+        sbom_path = tmp_path / "build" / "sbom.json"
+        sbom_path.write_text(
+            json.dumps(
+                {"bomFormat": "CycloneDX", "components": [{"type": "library", "name": "nginx", "version": "1.0"}]}
+            )
+        )
+
+        result = _runner().invoke(guide_command, ["--next", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "complete" in result.output.lower()
+
+    # -----------------------------------------------------------------------
+    # Test 19 — --next --output json, incomplete workspace
+    # -----------------------------------------------------------------------
+
+    def test_next_json_incomplete_has_required_fields(self, tmp_path):
+        """--next --output json: complete=false, phase/label/command/see_also populated."""
+        _make_workspace(tmp_path)  # uninitialized → phase 1 pending
+        result = _runner().invoke(
+            guide_command,
+            ["--next", "--work-path", str(tmp_path), "--output", "json"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)["data"]
+        assert data["complete"] is False
+        assert isinstance(data["phase"], int)
+        assert isinstance(data["label"], str)
+        assert isinstance(data["command"], str)
+        assert "see_also" in data
+
+    def test_next_json_incomplete_command_contains_hint(self, tmp_path):
+        """--next --output json: command field contains the strata CLI hint."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(
+            guide_command,
+            ["--next", "--work-path", str(tmp_path), "--output", "json"],
+        )
+        data = json.loads(result.output)["data"]
+        assert "strata" in data["command"]
+
+    # -----------------------------------------------------------------------
+    # Test 20 — --next --output json, complete workspace
+    # -----------------------------------------------------------------------
+
+    def test_next_json_complete_returns_nulls(self, tmp_path):
+        """--next --output json on complete workspace: complete=true, all fields null."""
+        repo_dir = tmp_path / "repos" / "xyz-svc-app"
+        repo_dir.mkdir(parents=True)
+        solution = _make_solution_json(
+            repositories=[_make_repo(path=str(repo_dir))],
+            profiles=[_make_profile(active=True, config_paths=[_make_config_path()])],
+        )
+        _make_workspace(tmp_path, solution=solution, build_files=["platform.json"])
+        sbom_path = tmp_path / "build" / "sbom.json"
+        sbom_path.write_text(
+            json.dumps(
+                {"bomFormat": "CycloneDX", "components": [{"type": "library", "name": "nginx", "version": "1.0"}]}
+            )
+        )
+
+        result = _runner().invoke(
+            guide_command,
+            ["--next", "--work-path", str(tmp_path), "--output", "json"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)["data"]
+        assert data["complete"] is True
+        assert data["phase"] is None
+        assert data["label"] is None
+        assert data["command"] is None
+
+    # -----------------------------------------------------------------------
+    # Test 21 — --next only shows the single next phase, not a later one
+    # -----------------------------------------------------------------------
+
+    def test_next_shows_phase4_not_later_phases(self, tmp_path):
+        """--next with repos on disk but no profile shows phase 4, not phase 5+."""
+        repo_dir = tmp_path / "repos" / "xyz-svc-app"
+        repo_dir.mkdir(parents=True)
+        solution = _make_solution_json(
+            repositories=[_make_repo(path=str(repo_dir))],
+            profiles=[],  # phase 4 pending
+        )
+        _make_workspace(tmp_path, solution=solution)
+
+        result = _runner().invoke(
+            guide_command,
+            ["--next", "--work-path", str(tmp_path), "--output", "json"],
+        )
+        data = json.loads(result.output)["data"]
+        assert data["phase"] == 4
+
+    # -----------------------------------------------------------------------
+    # Test 22 — --next exit code is always 0
+    # -----------------------------------------------------------------------
+
+    def test_next_exit_code_always_0_incomplete(self, tmp_path):
+        """--next exit code is 0 even when the workspace is incomplete."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(guide_command, ["--next", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+
+    # -----------------------------------------------------------------------
+    # Test 23 — --next --quiet produces no output
+    # -----------------------------------------------------------------------
+
+    def test_next_quiet_produces_no_output(self, tmp_path):
+        """--next --quiet suppresses all output (consistent with other commands)."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(
+            guide_command,
+            ["--next", "--quiet", "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 0
+        assert result.output.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# --do mode
+# ---------------------------------------------------------------------------
+
+
+def _make_phase7_workspace(tmp_path: Path) -> Path:
+    """Workspace with phases 1–6 complete so phase 7 (strata build run) is next."""
+    repo_dir = tmp_path / "repos" / "xyz-svc-app"
+    repo_dir.mkdir(parents=True)
+    solution = _make_solution_json(
+        repositories=[_make_repo(path=str(repo_dir))],
+        profiles=[_make_profile(active=True, config_paths=[_make_config_path()])],
+    )
+    return _make_workspace(tmp_path, solution=solution)  # no build_files → phase 7 pending
+
+
+class TestGuideCommandDoMode:
+    # -----------------------------------------------------------------------
+    # Test 24 — unresolved placeholder: not executed, shows placeholder
+    # -----------------------------------------------------------------------
+
+    def test_do_unresolved_phase1_not_executed(self, tmp_path):
+        """--do on uninitialized workspace shows placeholder, does not execute."""
+        _make_workspace(tmp_path)
+        with patch("subprocess.run") as mock_run:
+            result = _runner().invoke(guide_command, ["--do", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        mock_run.assert_not_called()
+
+    def test_do_unresolved_shows_fill_in_message(self, tmp_path):
+        """--do with unresolved placeholders tells user to fill in the values."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(guide_command, ["--do", "--work-path", str(tmp_path)])
+        assert "Fill in" in result.output
+
+    def test_do_unresolved_shows_placeholder_token(self, tmp_path):
+        """--do console output includes the angle-bracket placeholder token."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(guide_command, ["--do", "--work-path", str(tmp_path)])
+        assert "<name>" in result.output
+
+    # -----------------------------------------------------------------------
+    # Test 25 — unresolved: JSON shape
+    # -----------------------------------------------------------------------
+
+    def test_do_unresolved_json_executable_false(self, tmp_path):
+        """--do --output json: executable=false when placeholders remain."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(
+            guide_command,
+            ["--do", "--work-path", str(tmp_path), "--output", "json"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)["data"]
+        assert data["executable"] is False
+
+    def test_do_unresolved_json_unresolved_list_populated(self, tmp_path):
+        """--do --output json: unresolved list contains the placeholder name(s)."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(
+            guide_command,
+            ["--do", "--work-path", str(tmp_path), "--output", "json"],
+        )
+        data = json.loads(result.output)["data"]
+        assert isinstance(data["unresolved"], list)
+        assert len(data["unresolved"]) > 0
+        assert "name" in data["unresolved"]
+
+    def test_do_unresolved_json_executed_false(self, tmp_path):
+        """--do --output json: executed=false when step could not be run."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(
+            guide_command,
+            ["--do", "--work-path", str(tmp_path), "--output", "json"],
+        )
+        data = json.loads(result.output)["data"]
+        assert data["executed"] is False
+        assert data["exit_code"] is None
+
+    def test_do_unresolved_json_has_required_fields(self, tmp_path):
+        """--do --output json response has all expected fields."""
+        _make_workspace(tmp_path)
+        result = _runner().invoke(
+            guide_command,
+            ["--do", "--work-path", str(tmp_path), "--output", "json"],
+        )
+        data = json.loads(result.output)["data"]
+        for field in ("complete", "phase", "label", "command", "executable", "unresolved", "executed", "exit_code"):
+            assert field in data, f"Missing field: {field}"
+
+    # -----------------------------------------------------------------------
+    # Test 26 — executable phase (no placeholders): subprocess called
+    # -----------------------------------------------------------------------
+
+    def test_do_executable_calls_subprocess(self, tmp_path):
+        """--do on a phase with no placeholders (phase 7) calls subprocess.run."""
+        _make_phase7_workspace(tmp_path)
+        with patch("subprocess.run", return_value=type("R", (), {"returncode": 0})()) as mock_run:
+            result = _runner().invoke(guide_command, ["--do", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+
+    def test_do_executable_console_shows_running(self, tmp_path):
+        """--do on executable phase shows 'Running:' prefix."""
+        _make_phase7_workspace(tmp_path)
+        with patch("subprocess.run", return_value=type("R", (), {"returncode": 0})()):
+            result = _runner().invoke(guide_command, ["--do", "--work-path", str(tmp_path)])
+        assert "Running:" in result.output
+        assert "strata build run" in result.output
+
+    def test_do_executable_json_executed_true(self, tmp_path):
+        """--do --output json on executable phase: executed=true, executable=true."""
+        _make_phase7_workspace(tmp_path)
+        with patch("subprocess.run", return_value=type("R", (), {"returncode": 0})()):
+            result = _runner().invoke(
+                guide_command,
+                ["--do", "--work-path", str(tmp_path), "--output", "json"],
+            )
+        assert result.exit_code == 0
+        data = json.loads(result.output)["data"]
+        assert data["executed"] is True
+        assert data["executable"] is True
+        assert data["unresolved"] == []
+        assert data["exit_code"] == 0
+
+    # -----------------------------------------------------------------------
+    # Test 27 — subprocess failure propagates as exit code 1
+    # -----------------------------------------------------------------------
+
+    def test_do_subprocess_failure_exits_1(self, tmp_path):
+        """--do exits with code 1 when the executed command fails."""
+        _make_phase7_workspace(tmp_path)
+        with patch("subprocess.run", return_value=type("R", (), {"returncode": 1})()):
+            result = _runner().invoke(guide_command, ["--do", "--work-path", str(tmp_path)])
+        assert result.exit_code == 1
+
+    def test_do_subprocess_failure_json_exit_code(self, tmp_path):
+        """--do --output json records the non-zero exit_code from subprocess."""
+        _make_phase7_workspace(tmp_path)
+        with patch("subprocess.run", return_value=type("R", (), {"returncode": 2})()):
+            result = _runner().invoke(
+                guide_command,
+                ["--do", "--work-path", str(tmp_path), "--output", "json"],
+            )
+        data = json.loads(result.output)["data"]
+        assert data["exit_code"] == 2
+
+    # -----------------------------------------------------------------------
+    # Test 28 — complete workspace
+    # -----------------------------------------------------------------------
+
+    def test_do_complete_workspace_shows_complete_message(self, tmp_path):
+        """--do on complete workspace emits the completion message."""
+        repo_dir = tmp_path / "repos" / "xyz-svc-app"
+        repo_dir.mkdir(parents=True)
+        solution = _make_solution_json(
+            repositories=[_make_repo(path=str(repo_dir))],
+            profiles=[_make_profile(active=True, config_paths=[_make_config_path()])],
+        )
+        _make_workspace(tmp_path, solution=solution, build_files=["platform.json"])
+        sbom_path = tmp_path / "build" / "sbom.json"
+        sbom_path.write_text(
+            json.dumps(
+                {"bomFormat": "CycloneDX", "components": [{"type": "library", "name": "nginx", "version": "1.0"}]}
+            )
+        )
+        result = _runner().invoke(guide_command, ["--do", "--work-path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "complete" in result.output.lower()
+
+    def test_do_complete_workspace_json_complete_true(self, tmp_path):
+        """--do --output json on complete workspace: complete=true."""
+        repo_dir = tmp_path / "repos" / "xyz-svc-app"
+        repo_dir.mkdir(parents=True)
+        solution = _make_solution_json(
+            repositories=[_make_repo(path=str(repo_dir))],
+            profiles=[_make_profile(active=True, config_paths=[_make_config_path()])],
+        )
+        _make_workspace(tmp_path, solution=solution, build_files=["platform.json"])
+        sbom_path = tmp_path / "build" / "sbom.json"
+        sbom_path.write_text(
+            json.dumps(
+                {"bomFormat": "CycloneDX", "components": [{"type": "library", "name": "nginx", "version": "1.0"}]}
+            )
+        )
+        result = _runner().invoke(
+            guide_command,
+            ["--do", "--work-path", str(tmp_path), "--output", "json"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)["data"]
+        assert data["complete"] is True
+
+    # -----------------------------------------------------------------------
+    # Test 29 — --do --quiet
+    # -----------------------------------------------------------------------
+
+    def test_do_quiet_unresolved_no_output(self, tmp_path):
+        """--do --quiet with unresolved placeholders: no output, no execution."""
+        _make_workspace(tmp_path)
+        with patch("subprocess.run") as mock_run:
+            result = _runner().invoke(
+                guide_command,
+                ["--do", "--quiet", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+        assert result.output.strip() == ""
+        mock_run.assert_not_called()
+
+    def test_do_quiet_executable_calls_subprocess(self, tmp_path):
+        """--do --quiet on executable phase still runs subprocess (quiet ≠ skip)."""
+        _make_phase7_workspace(tmp_path)
+        with patch("subprocess.run", return_value=type("R", (), {"returncode": 0})()) as mock_run:
+            result = _runner().invoke(
+                guide_command,
+                ["--do", "--quiet", "--work-path", str(tmp_path)],
+            )
+        assert result.exit_code == 0
+        assert result.output.strip() == ""
+        mock_run.assert_called_once()

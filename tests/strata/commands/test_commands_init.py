@@ -115,3 +115,85 @@ class TestSlnInitCommand:
         result = runner.invoke(sln_group, ["init", "--list", "--work-path", str(tmp_path)])
         assert result.exit_code == 0
         assert "aks" in result.output
+
+
+class TestGuidedWizard:
+    """Tests for ``strata sln init --guided``."""
+
+    def test_guided_flag_in_help(self):
+        runner = CliRunner()
+        result = runner.invoke(init_command, ["--help"])
+        assert result.exit_code == 0
+        assert "--guided" in result.output
+
+    def test_guided_ci_env_exits_2(self, monkeypatch):
+        """--guided in CI environment (CI=true) exits 2 with a helpful message."""
+        monkeypatch.setenv("CI", "true")
+        runner = CliRunner()
+        result = runner.invoke(init_command, ["--guided"])
+        assert result.exit_code == 2
+        assert "--guided requires an interactive terminal" in result.output
+
+    def test_guided_kubernetes_azure_selects_aks(self, tmp_path, monkeypatch):
+        """Kubernetes + Azure maps to the 'aks' template."""
+        monkeypatch.delenv("CI", raising=False)
+        runner = CliRunner()
+        with patch("strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True):
+            result = runner.invoke(
+                init_command,
+                ["--guided", "--work-path", str(tmp_path)],
+                input="my-platform\n1\n1\n",  # name, kubernetes, azure
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_guided_compose_selects_compose_template(self, tmp_path, monkeypatch):
+        """Docker Compose selection maps to the 'compose' template."""
+        monkeypatch.delenv("CI", raising=False)
+        runner = CliRunner()
+        with patch(
+            "strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True
+        ) as mock_exec:
+            result = runner.invoke(
+                init_command,
+                ["--guided", "--work-path", str(tmp_path)],
+                input="my-services\n2\n",  # name, compose (no cloud question)
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_guided_minimal_uses_no_template(self, tmp_path, monkeypatch):
+        """Minimal selection initializes without a template."""
+        monkeypatch.delenv("CI", raising=False)
+        runner = CliRunner()
+        with patch("strata.commands.init.init_solution_command.InitSolutionCommand.execute", return_value=True):
+            result = runner.invoke(
+                init_command,
+                ["--guided", "--work-path", str(tmp_path)],
+                input="my-infra\n3\n",  # name, minimal
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_guided_cancel_exits_0(self, tmp_path, monkeypatch):
+        """Ctrl+C / empty abort during wizard exits 0 cleanly."""
+        monkeypatch.delenv("CI", raising=False)
+        runner = CliRunner()
+        result = runner.invoke(
+            init_command,
+            ["--guided", "--work-path", str(tmp_path)],
+            input="\x03",  # Ctrl+C
+        )
+        assert result.exit_code == 0
+
+    def test_guided_template_map_kubernetes_azure(self):
+        from strata.commands.cli_init import _TEMPLATE_MAP
+
+        assert _TEMPLATE_MAP[("kubernetes", "azure")] == "aks"
+
+    def test_guided_template_map_compose(self):
+        from strata.commands.cli_init import _TEMPLATE_MAP
+
+        assert _TEMPLATE_MAP[("compose", None)] == "compose"
+
+    def test_guided_template_map_minimal(self):
+        from strata.commands.cli_init import _TEMPLATE_MAP
+
+        assert _TEMPLATE_MAP[("minimal", None)] is None

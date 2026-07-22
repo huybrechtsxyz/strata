@@ -24,6 +24,27 @@ strata profile activate <name>     # activate a profile for building
 strata guide show                  # interactive checklist of what's ready vs missing
 ```
 
+## Essential Skills
+
+Before working in this workspace, familiarize yourself with these domain skills (available in `.github/skills/`):
+
+1. **strata-cli-workflows** — Command groups, exit codes (0/1/2/3), JSON output parsing, dry-run patterns
+   - When: Every CLI operation — understand what each command does and how to parse responses
+   
+2. **strata-yaml-schema-and-kinds** — Document structure, valid kinds, name constraints, schema validation
+   - When: Writing or modifying YAML files — what fields are valid, naming rules, cross-references
+
+3. **strata-deployment-lifecycle** — Validate → Build → Deploy → Audit phases, stages, provisioners, health checks
+   - When: Orchestrating deployments — understand the full lifecycle from authoring to verification
+
+4. **strata-secret-resolution-patterns** — Secret store integration, SSH key lifecycle, secure practices
+   - When: Handling credentials — never commit secrets, always use references
+
+5. **strata-terraform-ansible-provisioning** — Terraform IaC + Ansible post-provisioning, stage orchestration
+   - When: Working with infrastructure provisioning — how stages execute, provisioner integration
+
+---
+
 ## Understanding workspace state
 
 **Always start every session by running:**

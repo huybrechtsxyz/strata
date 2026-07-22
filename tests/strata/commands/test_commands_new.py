@@ -335,3 +335,183 @@ class TestNewCommandBundle:
         # Bundle output file (not the single-file default name)
         assert (out / "myapp-custom.yaml").exists()
         assert not (out / "myapp-namespace.yaml").exists()
+
+
+class TestScaffoldDepsHelpers:
+    """Unit tests for the module-level helpers used by --scaffold-deps."""
+
+    def test_resolve_at_repo_path_basic(self, tmp_path):
+        from strata.commands.new.run_new_command import _resolve_at_repo_path
+
+        repo_map = {"myrepo": str(tmp_path)}
+        result = _resolve_at_repo_path("@myrepo/stack/ws.yaml", repo_map)
+        assert result == tmp_path / "stack" / "ws.yaml"
+
+    def test_resolve_at_repo_path_unknown_repo(self):
+        from strata.commands.new.run_new_command import _resolve_at_repo_path
+
+        assert _resolve_at_repo_path("@unknown/path.yaml", {}) is None
+
+    def test_resolve_at_repo_path_non_at_ref(self, tmp_path):
+        from strata.commands.new.run_new_command import _resolve_at_repo_path
+
+        assert _resolve_at_repo_path("stack/ws.yaml", {"myrepo": str(tmp_path)}) is None
+
+    def test_collect_dep_candidates_missing_local(self, tmp_path):
+        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.utils.graph import GraphEdge, GraphNode, GraphResult
+
+        result = GraphResult(mode="files")
+        result.nodes = [
+            GraphNode(identifier="deploy/prd.yaml", path="deploy/prd.yaml", kind="deployment", status="valid"),
+            GraphNode(identifier="stack/ws.yaml", path="stack/ws.yaml", kind="workspace", status="missing"),
+            GraphNode(identifier="envs/dev.yaml", path="envs/dev.yaml", kind="environment", status="missing"),
+        ]
+        result.edges = [
+            GraphEdge(source="deploy/prd.yaml", target="stack/ws.yaml", label="workspace"),
+            GraphEdge(source="deploy/prd.yaml", target="envs/dev.yaml", label="environment"),
+        ]
+
+        candidates = _collect_dep_candidates(result, tmp_path, {})
+        assert len(candidates) == 2
+        kinds = {c[0] for c in candidates}
+        assert kinds == {"workspace", "environment"}
+        assert all(str(c[2]).startswith(str(tmp_path)) for c in candidates)
+
+    def test_collect_dep_candidates_skips_existing(self, tmp_path):
+        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.utils.graph import GraphNode, GraphResult
+
+        existing = tmp_path / "stack" / "ws.yaml"
+        existing.parent.mkdir()
+        existing.write_text("x: 1", encoding="utf-8")
+
+        result = GraphResult(mode="files")
+        result.nodes = [
+            GraphNode(identifier="stack/ws.yaml", path="stack/ws.yaml", kind="workspace", status="missing"),
+        ]
+        result.edges = []
+
+        assert _collect_dep_candidates(result, tmp_path, {}) == []
+
+    def test_collect_dep_candidates_external_ref_resolved(self, tmp_path):
+        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.utils.graph import GraphEdge, GraphNode, GraphResult
+
+        repo_root = tmp_path / "myrepo"
+        repo_root.mkdir()
+        repo_map = {"myrepo": str(repo_root)}
+
+        result = GraphResult(mode="files")
+        result.nodes = [
+            GraphNode(
+                identifier="@myrepo/stack/ws.yaml", path="@myrepo/stack/ws.yaml", kind="workspace", status="external"
+            ),
+        ]
+        result.edges = [
+            GraphEdge(source="deploy/prd.yaml", target="@myrepo/stack/ws.yaml", label="workspace"),
+        ]
+
+        candidates = _collect_dep_candidates(result, tmp_path, repo_map)
+        assert len(candidates) == 1
+        kind, name, resolved = candidates[0]
+        assert kind == "workspace"
+        assert name == "ws"
+        assert resolved == repo_root / "stack" / "ws.yaml"
+
+    def test_collect_dep_candidates_external_ref_unresolvable(self, tmp_path):
+        from strata.commands.new.run_new_command import _collect_dep_candidates
+        from strata.utils.graph import GraphNode, GraphResult
+
+        result = GraphResult(mode="files")
+        result.nodes = [
+            GraphNode(identifier="@unknownrepo/stack/ws.yaml", kind="workspace", status="external"),
+        ]
+        result.edges = []
+
+        assert _collect_dep_candidates(result, tmp_path, {}) == []
+
+
+class TestScaffoldDepsCommand:
+    """Integration tests for ``strata new --scaffold-deps``."""
+
+    def _write_template(self, tmp_path, kind: str, content: str) -> None:
+        tpl_dir = tmp_path / ".strata" / "templates"
+        tpl_dir.mkdir(parents=True, exist_ok=True)
+        (tpl_dir / f"{kind}.yaml").write_text(content, encoding="utf-8")
+
+    def test_scaffold_deps_flag_in_help(self):
+        runner = CliRunner()
+        result = runner.invoke(new_command, ["--help"])
+        assert result.exit_code == 0
+        assert "scaffold-deps" in result.output
+
+    def test_scaffold_deps_no_missing_deps_is_silent(self, tmp_path):
+        """When the created file has no missing deps, no scaffold prompt is shown."""
+        out = tmp_path / "myapp-namespace.yaml"
+        runner = CliRunner()
+        result = runner.invoke(
+            new_command,
+            ["namespace", "myapp", "--output-file", str(out), "--scaffold-deps", "--work-path", str(tmp_path)],
+        )
+        assert result.exit_code == 0
+        assert "Scaffold missing files?" not in result.output
+
+    def test_scaffold_deps_creates_missing_local_dep(self, tmp_path):
+        """After creating a deployment referencing a missing workspace, it is scaffolded."""
+        deploy_tpl = (
+            "apiVersion: strata.huybrechts.xyz/v1\n"
+            "kind: deployment\n"
+            "meta:\n"
+            "  name: {{ name }}\n"
+            "spec:\n"
+            "  workspace:\n"
+            "    file: stack/ws-{{ name }}.yaml\n"
+        )
+        ws_tpl = "apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nmeta:\n  name: {{ name }}\nspec: {}\n"
+        self._write_template(tmp_path, "deployment", deploy_tpl)
+        self._write_template(tmp_path, "workspace", ws_tpl)
+
+        # Place deployment at workspace root so relative refs resolve from there
+        deploy_out = tmp_path / "prd-deployment.yaml"
+        runner = CliRunner()
+        result = runner.invoke(
+            new_command,
+            ["deployment", "prd", "--output-file", str(deploy_out), "--scaffold-deps", "--work-path", str(tmp_path)],
+            input="y\n",
+        )
+
+        assert result.exit_code == 0, result.output
+        assert deploy_out.exists()
+        # workspace ref "stack/ws-prd.yaml" resolves relative to deployment file's parent (= tmp_path)
+        assert (tmp_path / "stack" / "ws-prd.yaml").exists()
+
+    def test_scaffold_deps_declined_leaves_dep_absent(self, tmp_path):
+        """Answering 'n' to the prompt leaves the missing dep uncreated."""
+        deploy_tpl = (
+            "apiVersion: strata.huybrechts.xyz/v1\n"
+            "kind: deployment\n"
+            "meta:\n"
+            "  name: {{ name }}\n"
+            "spec:\n"
+            "  workspace:\n"
+            "    file: stack/ws-{{ name }}.yaml\n"
+        )
+        self._write_template(tmp_path, "deployment", deploy_tpl)
+        self._write_template(
+            tmp_path,
+            "workspace",
+            "apiVersion: strata.huybrechts.xyz/v1\nkind: workspace\nmeta:\n  name: {{ name }}\nspec: {}\n",
+        )
+
+        deploy_out = tmp_path / "prd-deployment.yaml"
+        runner = CliRunner()
+        result = runner.invoke(
+            new_command,
+            ["deployment", "prd", "--output-file", str(deploy_out), "--scaffold-deps", "--work-path", str(tmp_path)],
+            input="n\n",
+        )
+
+        assert result.exit_code == 0
+        assert deploy_out.exists()
+        assert not (tmp_path / "stack" / "ws-prd.yaml").exists()
