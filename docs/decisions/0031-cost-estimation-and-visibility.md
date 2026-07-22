@@ -1,7 +1,53 @@
 # Cost estimation and visibility
 
-- Status: proposed
+- Status: partial
 - Date: 2026-07-11
+- Updated: 2026-07-22
+
+## Implementation Status
+
+### Phase 1 — Infracost Integration ✅ Complete
+
+| Item                                                              | Status | Where                                                  |
+| ----------------------------------------------------------------- | ------ | ------------------------------------------------------ |
+| `ICostEstimator` capability protocol                              | ✅      | `src/strata/integrations/capabilities.py`              |
+| `InfracostIntegration` class (`breakdown`, `diff`)                | ✅      | `src/strata/integrations/infracost.py`                 |
+| Factory registration (`type: infracost`)                          | ✅      | `src/strata/integrations/factory.py`                   |
+| Config YAML integration entries (azure-aks, aws-eks, gcp-gke)     | ✅      | `config/*/config/*.yaml`                               |
+| `CostController` with caching, path resolution, multi-provisioner | ✅      | `src/strata/controllers/cost_controller.py`            |
+| `strata cost show` command (console + JSON output, --refresh)     | ✅      | `src/strata/commands/cost/show_cost_command.py`        |
+| `strata cost diff` command                                        | ✅      | `src/strata/commands/cost/diff_cost_command.py`        |
+| CLI group registered in main (`strata cost`)                      | ✅      | `src/strata/commands/cli_cost.py`, `src/strata/cli.py` |
+| Local cache (`.strata/cache/cost/`, 7-day TTL, content hash key)  | ✅      | `src/strata/controllers/cost_controller.py`            |
+| `cost.json` written alongside `platform.json` in build artifacts  | ✅      | `src/strata/controllers/cost_controller.py`            |
+| `deploy --dry-run` auto cost diff (non-fatal, per-stage)          | ✅      | `src/strata/commands/deploy/run_deploy_command.py`     |
+| Error handling + graceful degradation if infracost missing        | ✅      | Throughout                                             |
+| Provider `engine` field removed (was unused/confusing)            | ✅      | `src/strata/models/provider_model.py`                  |
+
+### Phase 2 — Scenarios + Policies ⏳ Not started
+
+| Item                                                       | Status | Notes                                     |
+| ---------------------------------------------------------- | ------ | ----------------------------------------- |
+| `cost-scenario` YAML schema + model                        | ❌      | New `kind`, new Pydantic model            |
+| `cost-dimensions` YAML schema + model                      | ❌      | New `kind`, per resource-type metrics     |
+| `scenario` field on `EnvironmentModel`                     | ❌      | `env.spec.scenario = "enterprise"`        |
+| `DimensionsRegistry` (local + repo sources)                | ❌      | Resolution: custom > community > built-in |
+| Cost policy gates (`cost_threshold`, `scenario_check`)     | ❌      | Reuse existing policy engine              |
+| `strata cost compare` command                              | ❌      | Compare scenario estimates                |
+| Ship built-in dimension files for top Azure resource types | ❌      |                                           |
+| Historical cost tracking                                   | ❌      | Append snapshots per build                |
+
+### Phase 3 — Advanced ⏳ Not started
+
+| Item                                              | Status | Notes                       |
+| ------------------------------------------------- | ------ | --------------------------- |
+| AWS/GCP integration tests                         | ❌      | Currently only Azure tested |
+| Right-sizing recommendations                      | ❌      | Compare estimated vs actual |
+| Cost reconciliation (estimated vs actual billing) | ❌      |                             |
+| VS Code extension integration                     | ❌      | Extension-side work         |
+| AI scenario generation (VS Code chat)             | ❌      |                             |
+
+---
 
 ## Context and Problem Statement
 
@@ -1571,29 +1617,37 @@ Phase 5: Deploy (actual infrastructure)
 #### Phase 1 — Core Cost Command (MVP)
 
 - [ ] `strata cost show` command (separate from build)
-- [ ] Infracost binary detection + version check
-- [ ] Read terraform artifacts from build directory
-- [ ] Invoke: `infracost breakdown --path ./build/{deployment}/terraform`
-- [ ] Parse JSON output
-- [ ] Display cost breakdown in CLI
-- [ ] Cache results locally (.strata/cache/infracost/)
-- [ ] Error handling (missing binary, bad TF, auth failures)
-- [ ] Graceful degradation if infracost not available
+#### Phase 1 — Core Cost Command ✅ Complete
 
-#### Phase 2 — Deploy Integration + Scenarios
+- [x] `strata cost show` command (separate from build)
+- [x] `strata cost diff` command
+- [x] Infracost binary detection + version check
+- [x] Read terraform artifacts from build directory (via `get_provisioner_path()`)
+- [x] Invoke: `infracost breakdown` / `infracost diff`
+- [x] Parse JSON output
+- [x] Display cost breakdown in CLI
+- [x] Cache results locally (`.strata/cache/cost/`, 7-day TTL)
+- [x] `cost.json` written alongside `platform.json` in build artifacts
+- [x] `deploy --dry-run` auto cost diff (non-fatal, per-stage)
+- [x] Error handling (missing binary, bad TF, auth failures)
+- [x] Graceful degradation if infracost not available
 
-- [ ] Cost refresh during `strata deploy --dry-run`
-  - Auto-run: `infracost diff --terraform-plan-json`
-  - Show cost impact before approval
-- [ ] Merge scenario + Infracost in `cost.json`
-- [ ] `strata cost compare --methods scenario,infracost`
+#### Phase 2 — Deploy Integration + Scenarios ⏳ Not started
+
 - [ ] Cost policy gates (threshold, scenario-check)
-- [ ] VS Code extension integration
-- [ ] Historical cost tracking
+- [ ] `strata cost compare` (compare scenario estimates)
+- [ ] `cost-scenario` YAML kind + model
+- [ ] `cost-dimensions` YAML kind + model
+- [ ] `scenario` field on environment model
+- [ ] `DimensionsRegistry` (local + community + built-in resolution)
+- [ ] Ship built-in dimension files (top 10 Azure resource types)
+- [ ] Historical cost tracking per build
 
-#### Phase 3 — Advanced
+#### Phase 3 — Advanced ⏳ Not started
 
-- [ ] AWS/GCP integration tests (currently tested on Azure)
+- [ ] AWS/GCP integration tests (currently only Azure tested)
 - [ ] Right-sizing recommendations from actual costs
 - [ ] Cost reconciliation (estimated vs. actual from billing)
 - [ ] Cost trending over time
+- [ ] VS Code extension integration
+- [ ] AI scenario generation (VS Code chat)
