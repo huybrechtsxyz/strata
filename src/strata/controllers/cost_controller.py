@@ -119,7 +119,29 @@ class CostController(BaseController):
         if not results:
             return False, {"error": "No cost estimates could be produced", "details": self.get_errors()}
 
-        return True, {"provisioners": results}
+        combined = {"provisioners": results}
+
+        # Write cost.json alongside platform.json in the build directory
+        self._write_cost_json(combined, deployment_service, build_path)
+
+        return True, combined
+
+    def _write_cost_json(
+        self,
+        data: Dict[str, Any],
+        deployment_service: "DeploymentService",
+        build_path: Path,
+    ) -> None:
+        """Write cost.json alongside platform.json in the deployment build directory. Non-fatal."""
+        try:
+            deployment_build_path = deployment_service.get_build_path(build_path)
+            deployment_build_path.mkdir(parents=True, exist_ok=True)
+            cost_path = deployment_build_path / "cost.json"
+            cost_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            self._add_message(f"cost.json written: {cost_path}")
+        except Exception as exc:
+            self.logger.debug("cost_json_write_failed", error=str(exc))
+            # Non-fatal — cost.json write failure does not affect the estimate result
 
     def invalidate_cache(self, work_path: Optional[Path] = None) -> int:
         """Remove all cached cost estimates.

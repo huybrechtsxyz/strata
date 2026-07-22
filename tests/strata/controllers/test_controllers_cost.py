@@ -489,3 +489,64 @@ class TestCostControllerCache:
             ctrl.show(ds, tmp_path, force_refresh=True)  # should bypass cache
 
         assert estimator.breakdown.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# cost.json output
+# ---------------------------------------------------------------------------
+
+
+class TestCostJson:
+    def _setup(self, tmp_path):
+        build_dir = tmp_path / "myapp-1.0.0" / "terraform"
+        build_dir.mkdir(parents=True)
+        (build_dir / ".terraform").mkdir()
+        iac = _make_iac("terraform", "terraform")
+        ds = _make_deployment_service(provisioners=[iac])
+        ds.get_build_path.side_effect = lambda bp: tmp_path / "myapp-1.0.0"
+        return CostController(work_path=tmp_path), ds, tmp_path
+
+    def test_cost_json_written_on_success(self, tmp_path):
+        ctrl, ds, build_path = self._setup(tmp_path)
+        estimator = _make_estimator(available=True, breakdown_result=_SAMPLE_BREAKDOWN)
+        with patch.object(ctrl, "_get_estimator", return_value=estimator):
+            success, _ = ctrl.show(ds, build_path)
+        assert success is True
+        cost_file = tmp_path / "myapp-1.0.0" / "cost.json"
+        assert cost_file.exists()
+
+    def test_cost_json_contains_provisioners_key(self, tmp_path):
+        import json
+
+        ctrl, ds, build_path = self._setup(tmp_path)
+        estimator = _make_estimator(available=True, breakdown_result=_SAMPLE_BREAKDOWN)
+        with patch.object(ctrl, "_get_estimator", return_value=estimator):
+            ctrl.show(ds, build_path)
+        cost_file = tmp_path / "myapp-1.0.0" / "cost.json"
+        data = json.loads(cost_file.read_text())
+        assert "provisioners" in data
+        assert "terraform" in data["provisioners"]
+
+    def test_cost_json_not_written_on_failure(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        ds = _make_deployment_service(provisioners=[])  # no provisioners → fails
+        estimator = _make_estimator(available=True)
+        with patch.object(ctrl, "_get_estimator", return_value=estimator):
+            success, _ = ctrl.show(ds, tmp_path)
+        assert success is False
+        # cost.json should not exist
+        cost_file = tmp_path / "myapp-1.0.0" / "cost.json"
+        assert not cost_file.exists()
+
+    def test_write_cost_json_is_nonfatal_on_os_error(self, tmp_path):
+        ctrl, ds, build_path = self._setup(tmp_path)
+        estimator = _make_estimator(available=True, breakdown_result=_SAMPLE_BREAKDOWN)
+        # Simulate an OS error when writing
+        with (
+            patch.object(ctrl, "_get_estimator", return_value=estimator),
+            patch("pathlib.Path.write_text", side_effect=OSError("disk full")),
+        ):
+            success, result = ctrl.show(ds, build_path)
+        # Cost result is still returned — write failure is non-fatal
+        assert success is True
+        assert "provisioners" in result
