@@ -39,6 +39,12 @@ def cost_group():
     metavar="NAME",
     help="Limit cost estimation to a specific terraform provisioner by name.",
 )
+@click.option(
+    "--refresh",
+    is_flag=True,
+    default=False,
+    help="Bypass local cache and force a fresh estimate from Infracost.",
+)
 @click_work_path
 @click_output_format
 @click_output_verbose
@@ -47,6 +53,7 @@ def cost_show(
     file: Optional[str] = None,
     currency: Optional[str] = None,
     provisioner: Optional[str] = None,
+    refresh: bool = False,
     work_path: Optional[str] = None,
     output: Optional[str] = None,
     verbose: Optional[bool] = None,
@@ -58,6 +65,7 @@ def cost_show(
         work_path=work_path,
         currency=currency,
         provisioner=provisioner,
+        force_refresh=refresh,
         output=output,
         verbose=verbose,
         quiet=quiet,

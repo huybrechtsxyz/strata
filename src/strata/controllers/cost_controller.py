@@ -10,21 +10,32 @@ from the CLI layer rather than re-discovering paths internally.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from strata.controllers.base_controller import BaseController
 from strata.integrations.capabilities import ICostEstimator
 from strata.models.common_models import ProvisionerType
+from strata.utils.config import get_cost_cache_dir
 
 if TYPE_CHECKING:
     from strata.controllers.solution_controller import SolutionController
     from strata.models.workspace_model import WorkspaceIacModel
     from strata.services.deployment_service import DeploymentService
 
+# Cache TTL: 7 days in seconds
+_CACHE_TTL_SECONDS = 7 * 24 * 3600
+
 
 class CostController(BaseController):
     """Controller for infrastructure cost estimation operations."""
+
+    def __init__(self, work_path: Optional[Path] = None) -> None:
+        super().__init__()
+        self._work_path = work_path
 
     # ------------------------------------------------------------------
     # Public API
@@ -37,11 +48,15 @@ class CostController(BaseController):
         solution_controller: Optional["SolutionController"] = None,
         currency: Optional[str] = None,
         provisioner_filter: Optional[str] = None,
+        force_refresh: bool = False,
     ) -> Tuple[bool, Dict[str, Any]]:
         """Get cost breakdown for a deployment's terraform provisioners.
 
         Iterates over terraform provisioners in the workspace and runs
         ``infracost breakdown`` on each. Returns combined results.
+
+        Results are cached in ``.strata/cache/cost/`` keyed by a hash of
+        the terraform directory contents. Cache TTL is 7 days.
 
         Args:
             deployment_service: Loaded deployment service with resolved workspace.
@@ -49,6 +64,7 @@ class CostController(BaseController):
             solution_controller: Optional solution context for path resolution.
             currency: Optional ISO 4217 currency code (e.g. "EUR", "GBP").
             provisioner_filter: Optional provisioner name to limit estimation to.
+            force_refresh: Skip cache and always run infracost.
 
         Returns:
             Tuple of (success, result_dict).
@@ -83,8 +99,18 @@ class CostController(BaseController):
                 )
                 continue
 
+            # Check cache first (unless force_refresh)
+            cache_key = self._compute_cache_key(terraform_path, currency)
+            if not force_refresh:
+                cached = self._read_cache(cache_key)
+                if cached is not None:
+                    results[str(iac.name)] = cached
+                    self._add_message(f"Cost estimate loaded from cache for provisioner '{iac.name}'")
+                    continue
+
             try:
                 result = estimator.breakdown(str(terraform_path), currency=currency)
+                self._write_cache(cache_key, result)
                 results[str(iac.name)] = result
                 self._add_message(f"Cost estimate retrieved for provisioner '{iac.name}'")
             except Exception as exc:
@@ -94,6 +120,27 @@ class CostController(BaseController):
             return False, {"error": "No cost estimates could be produced", "details": self.get_errors()}
 
         return True, {"provisioners": results}
+
+    def invalidate_cache(self, work_path: Optional[Path] = None) -> int:
+        """Remove all cached cost estimates.
+
+        Args:
+            work_path: Workspace root. Falls back to self._work_path if not given.
+
+        Returns:
+            Number of cache files removed.
+        """
+        cache_dir = self._get_cache_dir(work_path)
+        if cache_dir is None or not cache_dir.exists():
+            return 0
+        count = 0
+        for f in cache_dir.glob("*.json"):
+            try:
+                f.unlink()
+                count += 1
+            except OSError:
+                pass
+        return count
 
     def diff(
         self,
@@ -232,3 +279,60 @@ class CostController(BaseController):
         """Add error and return a failure tuple."""
         self._add_error(message)
         return False, {"error": message}
+
+    # ------------------------------------------------------------------
+    # Cache helpers
+    # ------------------------------------------------------------------
+
+    def _get_cache_dir(self, work_path: Optional[Path] = None) -> Optional[Path]:
+        """Return the cache directory, or None if work_path is unavailable."""
+        root = work_path or self._work_path
+        if root is None:
+            return None
+        return get_cost_cache_dir(root)
+
+    def _compute_cache_key(self, terraform_path: Path, currency: Optional[str]) -> str:
+        """Compute a cache key from terraform directory content hash + currency.
+
+        Hash is computed from file names + sizes (fast, avoids reading all content).
+        Adding currency ensures separate cache entries per currency.
+        """
+        h = hashlib.sha256()
+        try:
+            for f in sorted(terraform_path.rglob("*")):
+                if f.is_file() and ".terraform" not in f.parts:
+                    h.update(f.name.encode())
+                    h.update(str(f.stat().st_size).encode())
+        except OSError:
+            pass
+        h.update((currency or "USD").encode())
+        return h.hexdigest()[:16]
+
+    def _read_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Return cached result if it exists and is within TTL, else None."""
+        cache_dir = self._get_cache_dir()
+        if cache_dir is None:
+            return None
+        cache_file = cache_dir / f"{cache_key}.json"
+        if not cache_file.exists():
+            return None
+        try:
+            age = time.time() - cache_file.stat().st_mtime
+            if age > _CACHE_TTL_SECONDS:
+                cache_file.unlink(missing_ok=True)
+                return None
+            return json.loads(cache_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _write_cache(self, cache_key: str, data: Dict[str, Any]) -> None:
+        """Write result to cache. Non-fatal on failure."""
+        cache_dir = self._get_cache_dir()
+        if cache_dir is None:
+            return
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_file = cache_dir / f"{cache_key}.json"
+            cache_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except OSError:
+            pass  # cache write failures are non-fatal

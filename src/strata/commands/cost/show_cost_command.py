@@ -35,6 +35,7 @@ class ShowCostCommand(BaseDeployCommand):
         work_path: Optional[str] = None,
         currency: Optional[str] = None,
         provisioner: Optional[str] = None,
+        force_refresh: bool = False,
         output: Optional[str] = None,
         verbose: Optional[bool] = None,
         quiet: Optional[bool] = None,
@@ -48,6 +49,7 @@ class ShowCostCommand(BaseDeployCommand):
         )
         self._currency = currency
         self._provisioner_filter = provisioner
+        self._force_refresh = force_refresh
 
     # -------------------------------------------------------------------------
     # Core logic
@@ -58,13 +60,14 @@ class ShowCostCommand(BaseDeployCommand):
             self._errors.append("Deployment service not loaded")
             return False
 
-        controller = CostController()
+        controller = CostController(work_path=self._work_path)
         success, result = controller.show(
             deployment_service=self._deployment_service,
             build_path=self._build_path,
             solution_controller=self._solution_controller,
             currency=self._currency,
             provisioner_filter=self._provisioner_filter,
+            force_refresh=self._force_refresh,
         )
 
         # Propagate controller messages/errors

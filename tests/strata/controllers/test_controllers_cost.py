@@ -368,3 +368,124 @@ class TestCostControllerIsAvailable:
         estimator = _make_estimator(available=True)
         with patch.object(ctrl, "_get_estimator", return_value=estimator):
             assert ctrl.is_available() is True
+
+
+# ---------------------------------------------------------------------------
+# Cache helpers
+# ---------------------------------------------------------------------------
+
+
+class TestCostControllerCache:
+    def test_get_cache_dir_returns_none_without_work_path(self):
+        ctrl = CostController()
+        assert ctrl._get_cache_dir() is None
+
+    def test_get_cache_dir_returns_path_with_work_path(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        cache_dir = ctrl._get_cache_dir()
+        assert cache_dir is not None
+        assert str(cache_dir).startswith(str(tmp_path))
+        assert "cache" in str(cache_dir)
+        assert "cost" in str(cache_dir)
+
+    def test_compute_cache_key_is_deterministic(self, tmp_path):
+        tf_path = tmp_path / "terraform"
+        tf_path.mkdir()
+        (tf_path / "main.tf").write_text("resource {}")
+        ctrl = CostController(work_path=tmp_path)
+        key1 = ctrl._compute_cache_key(tf_path, "EUR")
+        key2 = ctrl._compute_cache_key(tf_path, "EUR")
+        assert key1 == key2
+
+    def test_compute_cache_key_differs_by_currency(self, tmp_path):
+        tf_path = tmp_path / "terraform"
+        tf_path.mkdir()
+        (tf_path / "main.tf").write_text("resource {}")
+        ctrl = CostController(work_path=tmp_path)
+        key_eur = ctrl._compute_cache_key(tf_path, "EUR")
+        key_usd = ctrl._compute_cache_key(tf_path, "USD")
+        assert key_eur != key_usd
+
+    def test_read_cache_returns_none_when_no_work_path(self):
+        ctrl = CostController()
+        assert ctrl._read_cache("somekey") is None
+
+    def test_write_and_read_cache_roundtrip(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        data = {"breakdown": {"totalMonthlyCost": "500.00"}}
+        ctrl._write_cache("testkey", data)
+        result = ctrl._read_cache("testkey")
+        assert result == data
+
+    def test_read_cache_returns_none_for_missing_key(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        assert ctrl._read_cache("nonexistent") is None
+
+    def test_read_cache_returns_none_for_expired_entry(self, tmp_path):
+        import time
+
+        ctrl = CostController(work_path=tmp_path)
+        data = {"totalMonthlyCost": "100.00"}
+        ctrl._write_cache("expiredkey", data)
+        cache_dir = ctrl._get_cache_dir()
+        cache_file = cache_dir / "expiredkey.json"
+        # Set mtime to 8 days ago
+        old_time = time.time() - (8 * 24 * 3600)
+        import os
+
+        os.utime(cache_file, (old_time, old_time))
+        assert ctrl._read_cache("expiredkey") is None
+        assert not cache_file.exists()
+
+    def test_invalidate_cache_removes_files(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        ctrl._write_cache("key1", {"a": 1})
+        ctrl._write_cache("key2", {"b": 2})
+        removed = ctrl.invalidate_cache()
+        assert removed == 2
+        # Cache dir exists but is empty
+        cache_dir = ctrl._get_cache_dir()
+        assert list(cache_dir.glob("*.json")) == []
+
+    def test_invalidate_cache_returns_zero_when_empty(self, tmp_path):
+        ctrl = CostController(work_path=tmp_path)
+        assert ctrl.invalidate_cache() == 0
+
+    def test_show_uses_cache_on_second_call(self, tmp_path):
+        """Second call with same terraform artifacts returns cached result."""
+        build_dir = tmp_path / "myapp-1.0.0" / "terraform"
+        build_dir.mkdir(parents=True)
+        (build_dir / ".terraform").mkdir()
+        (build_dir / "main.tf").write_text("resource {}")
+        iac = _make_iac("terraform", "terraform")
+        ds = _make_deployment_service(provisioners=[iac])
+        ds.get_build_path.side_effect = lambda bp: tmp_path / "myapp-1.0.0"
+
+        ctrl = CostController(work_path=tmp_path)
+        estimator = _make_estimator(available=True, breakdown_result=_SAMPLE_BREAKDOWN)
+
+        with patch.object(ctrl, "_get_estimator", return_value=estimator):
+            ctrl.show(ds, tmp_path)  # first call — runs infracost
+            ctrl.show(ds, tmp_path)  # second call — should use cache
+
+        # Infracost should only have been called once
+        assert estimator.breakdown.call_count == 1
+
+    def test_force_refresh_bypasses_cache(self, tmp_path):
+        """force_refresh=True always calls infracost even if cache is fresh."""
+        build_dir = tmp_path / "myapp-1.0.0" / "terraform"
+        build_dir.mkdir(parents=True)
+        (build_dir / ".terraform").mkdir()
+        (build_dir / "main.tf").write_text("resource {}")
+        iac = _make_iac("terraform", "terraform")
+        ds = _make_deployment_service(provisioners=[iac])
+        ds.get_build_path.side_effect = lambda bp: tmp_path / "myapp-1.0.0"
+
+        ctrl = CostController(work_path=tmp_path)
+        estimator = _make_estimator(available=True, breakdown_result=_SAMPLE_BREAKDOWN)
+
+        with patch.object(ctrl, "_get_estimator", return_value=estimator):
+            ctrl.show(ds, tmp_path)  # populates cache
+            ctrl.show(ds, tmp_path, force_refresh=True)  # should bypass cache
+
+        assert estimator.breakdown.call_count == 2
