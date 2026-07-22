@@ -297,7 +297,6 @@ class TestAnsibleBuilderVarAssembly:
         provider.name = "aws_eu"
         provider.properties.type = "aws"
         provider.properties.region = "eu-west-1"
-        provider.properties.engine = "terraform"
         provider.properties.version = "5.0"
         provider.description = "AWS EU"
         provider.labels = {"team": "infra"}

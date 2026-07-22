@@ -92,7 +92,7 @@ class BaseBuilder(ABC):
 
             STRATA_DEPLOYMENT_NAME
             STRATA_WORKSPACE_NAME
-            STRATA_PROVIDER_{NAME}_ENGINE / _VERSION / _ORGANIZATION / _TYPE / _REGION / _LOCATION
+            STRATA_PROVIDER_{NAME}_VERSION / _ORGANIZATION / _TYPE / _REGION / _LOCATION
 
         **Nested namespaces** (accessible via ``{{ variables.KEY }}`` / ``{{ features.KEY }}``)::
 
@@ -124,7 +124,7 @@ class BaseBuilder(ABC):
                 name_key = str(prov_svc.model.meta.name).upper().replace("-", "_")
                 props = prov_svc.model.spec.properties
                 prefix = f"STRATA_PROVIDER_{name_key}"
-                for field in ("engine", "version", "organization", "type", "region", "location"):
+                for field in ("version", "organization", "type", "region", "location"):
                     val = getattr(props, field, None)
                     if val is not None:
                         ctx[f"{prefix}_{field.upper()}"] = str(val)

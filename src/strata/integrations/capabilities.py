@@ -1,6 +1,6 @@
-"""Capability Protocol interfaces for integration classification (variables, secrets, features, KV, repo, infra, container)."""
+"""Capability Protocol interfaces for integration classification (variables, secrets, features, KV, repo, infra, container, cost)."""
 
-from typing import Any, List, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
 from strata.utils.secret_metadata import SecretMetadata
 
@@ -15,6 +15,7 @@ __all__ = [
     "IContainerTool",
     "ISiemSink",
     "ICveScanner",
+    "ICostEstimator",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -270,6 +271,45 @@ class ICveScanner(Protocol):
         ...
 
 
+@runtime_checkable
+class ICostEstimator(Protocol):
+    """
+    Capability: Integration supports cost estimation for infrastructure.
+
+    Integrations implementing this interface can estimate monthly costs
+    for infrastructure configurations (Terraform plans, resource definitions).
+
+    Examples: Infracost
+    """
+
+    def ensure_available(self) -> Tuple[bool, str]:
+        """Check if this integration is available and meets version requirements."""
+        ...
+
+    def breakdown(self, terraform_path: str, **kwargs) -> Dict[str, Any]:
+        """Get cost breakdown for terraform configuration at the given path.
+
+        Args:
+            terraform_path: Path to terraform directory (must contain .terraform/)
+
+        Returns:
+            Parsed Infracost JSON output with monthly cost estimates per resource.
+        """
+        ...
+
+    def diff(self, terraform_path: str, plan_file: str, **kwargs) -> Dict[str, Any]:
+        """Get cost diff between current state and a terraform plan.
+
+        Args:
+            terraform_path: Path to terraform directory
+            plan_file: Path to terraform plan JSON file (from terraform plan -json)
+
+        Returns:
+            Parsed Infracost JSON output with before/after costs and monthly delta.
+        """
+        ...
+
+
 # Capability registry for metadata
 # NOTE: ISiemSink is intentionally absent from CAPABILITY_REGISTRY — it is a
 # platform-wide forwarding protocol, not a data-store capability.  Sinks are
@@ -316,6 +356,11 @@ CAPABILITY_REGISTRY = {
         "methods": ["scan_sbom"],
         "examples": ["Trivy", "Grype"],
     },
+    "ICostEstimator": {
+        "description": "Infrastructure cost estimation",
+        "methods": ["breakdown", "diff"],
+        "examples": ["Infracost"],
+    },
 }
 
 
@@ -330,6 +375,7 @@ CAPABILITY_MAP = {
     "container": IContainerTool,
     "audit": ISiemSink,
     "cve_scanner": ICveScanner,
+    "cost": ICostEstimator,
 }
 
 
@@ -365,6 +411,7 @@ CUSTOM_TYPE_CAPABILITY_MAP = {
     "customcontainer": "container",
     "customapi": None,  # Can have any capability
     "customaudit": "audit",
+    "customcost": "cost",
 }
 
 

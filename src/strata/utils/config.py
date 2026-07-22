@@ -52,6 +52,8 @@ SOLUTION_BUILD_DIR: str = "build"
 SOLUTION_DEPLOY_LOG_DIR: str = "deploy-log"
 SOLUTION_DRIFT_DIR: str = "drift"
 SOLUTION_DRIFT_RULES_FILE: str = "drift_rules.yaml"
+SOLUTION_COST_DIR: str = "cost"
+SOLUTION_COST_CACHE_DIR: str = "cache/cost"
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +170,16 @@ def get_build_dir(work_path: Path) -> Path:
 def get_deploy_log_dir(work_path: Path) -> Path:
     """Return the path to ``.strata/deploy-log/``."""
     return work_path / SOLUTION_DIR / SOLUTION_DEPLOY_LOG_DIR
+
+
+def get_cost_cache_dir(work_path: Path) -> Path:
+    """Return the path to ``.strata/cache/cost/``."""
+    return work_path / SOLUTION_DIR / SOLUTION_COST_CACHE_DIR
+
+
+def get_cost_dir(work_path: Path) -> Path:
+    """Return the path to ``.strata/cost/``."""
+    return work_path / SOLUTION_DIR / SOLUTION_COST_DIR
 
 
 def get_drift_dir(work_path: Path) -> Path:

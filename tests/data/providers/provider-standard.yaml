@@ -15,16 +15,15 @@ spec:
   properties:
     type: kamatera
     region: eu-fr
-    engine: kamatera-api
     version: "~>1.0"
-  
+
   authentication:
     method: api_key
     api_key:
       api_key: kamatera_api_key
       api_secret: kamatera_api_secret
       endpoint: kamatera_api_endpoint
-  
+
   references:
     variables:
       - vm_image
@@ -37,18 +36,18 @@ spec:
     features:
       - enable_auto_scaling
       - enable_monitoring
-  
+
   default_tags:
     ManagedBy: strata
     Environment: production
     CostCenter: strata
     Project: cloud-platform
-  
+
   custom:
     costcenter: "strata"
     billing_account: "kamatera-prod-001"
     support_tier: "enterprise"
-  
+
   lifecycle:
     deploy_check:
       scripts: ["../data/scripts/mock_validate.sh"]

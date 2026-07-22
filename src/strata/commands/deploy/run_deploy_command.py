@@ -405,6 +405,52 @@ class RunDeployCommand(BaseDeployCommand):
     # Internal pipeline steps
     # -------------------------------------------------------------------------
 
+    def _run_cost_diff_for_stage(self, stage: "DeploymentStageModel", plan_json_path) -> None:
+        """Run infracost diff after plan in dry-run mode. Non-fatal — cost errors never block deploy.
+
+        Displays cost impact (before/after/delta) in console output.
+        Skips silently if Infracost is not installed or not available.
+        """
+        if self._deployment_service is None:
+            return
+
+        try:
+            from strata.controllers.cost_controller import CostController
+
+            controller = CostController(work_path=self._work_path)
+
+            if not controller.is_available():
+                return  # Infracost not installed — skip silently
+
+            success, result = controller.diff(
+                deployment_service=self._deployment_service,
+                build_path=self._build_path,
+                plan_file=str(plan_json_path),
+                solution_controller=self._solution_controller,
+                provisioner_filter=stage.provisioner,
+            )
+
+            if not success:
+                # Non-fatal — log at debug level, don't surface to user
+                self.logger.debug("cost_diff_skipped", stage=stage.name, reason=result.get("error", "unknown"))
+                return
+
+            if self._is_console_output():
+                diff = result.get("diff", {})
+                past_total = result.get("pastTotalMonthlyCost", diff.get("pastTotalMonthlyCost", "0.00"))
+                total = result.get("totalMonthlyCost", diff.get("totalMonthlyCost", "0.00"))
+                try:
+                    delta = float(total or 0) - float(past_total or 0)
+                    delta_sign = "+" if delta >= 0 else ""
+                    delta_str = f"{delta_sign}{delta:.2f}"
+                except (ValueError, TypeError):
+                    delta_str = "n/a"
+                click.echo(f"    💰 Cost impact:  {past_total} → {total}/month  (delta: {delta_str})")
+
+        except Exception as exc:
+            # Cost diff is always non-fatal
+            self.logger.debug("cost_diff_error", stage=stage.name, error=str(exc))
+
     def _write_deploy_log(self, success: bool) -> None:
         """Assemble and write deploy-log via AuditController.
 
@@ -1026,7 +1072,11 @@ class RunDeployCommand(BaseDeployCommand):
                 for msg in save_msgs:
                     click.echo(f"      {msg}")
                 if ok_save and plan_json_path:
-                    click.echo(f"    plan JSON \u2192 {plan_json_path}")
+                    click.echo(f"    plan JSON → {plan_json_path}")
+
+            # --- cost diff after plan (dry-run only, non-fatal) ---
+            if self._dry_run and ok_save and plan_json_path:
+                self._run_cost_diff_for_stage(stage, plan_json_path)
 
         # --- collect outputs for downstream stages ---
         out_path = None
@@ -1133,6 +1183,18 @@ class RunDeployCommand(BaseDeployCommand):
         if hasattr(deployer, "show_plan"):
             _, plan_data, _ = deployer.show_plan()
 
+        # Load cost.json from build artifacts if present
+        cost_data = None
+        if self._deployment_service is not None and self._build_path is not None:
+            try:
+                import json as _json
+
+                cost_path = self._deployment_service.get_build_path(self._build_path) / "cost.json"
+                if cost_path.exists():
+                    cost_data = _json.loads(cost_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass  # cost_data stays None — policy will skip gracefully
+
         context = PolicyContext(
             phase=phase,
             work_path=self._work_path,
@@ -1140,6 +1202,7 @@ class RunDeployCommand(BaseDeployCommand):
             configuration_service=self._configuration_service,
             plan_data=plan_data,
             build_path=self._build_path,
+            cost_data=cost_data,
         )
 
         engine = PolicyEngine(phase_policies)

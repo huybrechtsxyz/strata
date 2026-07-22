@@ -60,13 +60,9 @@ class ProviderPropertiesModel(PlatformBaseModel):
         None,
         description="Optional organization or subscription name/ID for this provider. Used for documentation and may be used by some providers for resource naming or tagging, but is not required for provider validation.",
     )
-    engine: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
-        None,
-        description="Infrastructure as Code (IaC) engine to use for this provider (e.g., azurerm, azureapi)",
-    )
     version: Optional[Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]] = Field(
         None,
-        description="Version constraint for the IaC engine (e.g., '~>3.0')",
+        description="Version constraint for the provider (e.g., '~>3.0')",
     )
 
     @field_validator("type")

@@ -30,6 +30,7 @@ from strata.commands.cli_common import apply_standard_epilog
 from strata.commands.cli_completion import completion_command
 from strata.commands.cli_config import config_group
 from strata.commands.cli_console import console_command
+from strata.commands.cli_cost import cost_group
 from strata.commands.cli_deploy import deploy as deploy_group
 from strata.commands.cli_env import env_group
 from strata.commands.cli_guide import guide_command
@@ -129,7 +130,7 @@ def _build_default_map(command: click.Command, defaults: dict) -> dict:
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Workspace Setup", ["sln", "profile", "new"]),
     ("Configuration", ["config", "ref", "repo", "vars", "values"]),
-    ("Build & Deploy", ["build", "deploy", "env", "service", "versions"]),
+    ("Build & Deploy", ["build", "deploy", "cost", "env", "service", "versions"]),
     ("Inspection & Validation", ["guide", "validate", "schema", "policy", "tools"]),
     ("Utility", ["secret", "version", "help", "log", "completion", "mcp"]),
 ]
@@ -299,6 +300,7 @@ main.add_command(schema_group, name="schema")
 main.add_command(policy_group, name="policy")
 main.add_command(build_group, name="build")
 main.add_command(deploy_group, name="deploy")
+main.add_command(cost_group, name="cost")
 main.add_command(env_group, name="env")
 main.add_command(values_group, name="values")
 main.add_command(versions_group, name="versions")
