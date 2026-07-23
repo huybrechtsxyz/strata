@@ -15,6 +15,7 @@ __all__ = [
     "IContainerTool",
     "ISiemSink",
     "ICveScanner",
+    "IIacSecurityScanner",
     "ICostEstimator",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
@@ -272,6 +273,27 @@ class ICveScanner(Protocol):
 
 
 @runtime_checkable
+class IIacSecurityScanner(Protocol):
+    """
+    Capability: Integration supports IaC static security analysis.
+
+    Integrations implementing this interface can scan Infrastructure-as-Code
+    artifacts (Terraform, CloudFormation, Kubernetes, Helm, Dockerfile, etc.)
+    for misconfigurations and security policy violations.
+
+    Examples: Checkov
+    """
+
+    def scan(self, terraform_dir, framework: str = "terraform", **kwargs):
+        """Scan an IaC artifact directory for security findings.
+
+        Returns:
+            Structured scan result with findings and severity counts.
+        """
+        ...
+
+
+@runtime_checkable
 class ICostEstimator(Protocol):
     """
     Capability: Integration supports cost estimation for infrastructure.
@@ -356,6 +378,11 @@ CAPABILITY_REGISTRY = {
         "methods": ["scan_sbom"],
         "examples": ["Trivy", "Grype"],
     },
+    "IIacSecurityScanner": {
+        "description": "IaC static security analysis (Terraform, CloudFormation, Kubernetes, etc.)",
+        "methods": ["scan"],
+        "examples": ["Checkov"],
+    },
     "ICostEstimator": {
         "description": "Infrastructure cost estimation",
         "methods": ["breakdown", "diff"],
@@ -375,6 +402,7 @@ CAPABILITY_MAP = {
     "container": IContainerTool,
     "audit": ISiemSink,
     "cve_scanner": ICveScanner,
+    "iac_security": IIacSecurityScanner,
     "cost": ICostEstimator,
 }
 

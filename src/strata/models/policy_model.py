@@ -24,7 +24,7 @@ class PolicyModel(PlatformBaseModel):
     name: PlatformName
     type: str = Field(
         ...,
-        description="Policy type: tenant_zone | required_tags | naming_pattern | resource_type_restrictions | script | cve_max_severity | cost_threshold | path_convention",
+        description="Policy type: tenant_zone | required_tags | naming_pattern | resource_type_restrictions | script | cve_max_severity | cost_threshold | path_convention | checkov",
     )
     phase: str = Field(..., description="Evaluation phase: validate | build | plan | deploy")
     enforcement: str = Field("deny", description="Enforcement level: deny | warn | audit")

@@ -32,6 +32,17 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   - `strata.utils.path_convention` module — `match_pattern`, `resolve_spec_rule`, `evaluate_file_rule`, `evaluate_conventions`
   - 45 tests, zero regressions against 4607-test suite
 
+- **Checkov IaC security scanning — ADR 0051 Phase 1 (completed)**
+  - `checkov` policy type — runs Checkov CLI against Terraform build artifacts during the `build` phase
+  - `CheckovIntegration(BaseIntegration)` — invokes `checkov --directory ... --output json --compact`; parses single and multi-framework JSON output; graceful degradation when Checkov not installed
+  - `CheckovPolicy(BasePolicy)` — resolves Terraform artifact dir from `context.build_path` (deployment-scoped → `terraform/` subdir → root); applies `severity_gate` and `skip_checks` filters
+  - `CheckovFinding` / `CheckovScanResult` dataclasses — structured scan result with per-finding severity, resource, file path, and guideline
+  - `CheckovScanResult.findings_at_or_above(severity)` — filters findings by severity level for gate evaluation
+  - `iac_security` capability added to `CAPABILITY_MAP` / `CAPABILITY_REGISTRY` with `IIacSecurityScanner` protocol
+  - Registered in `IntegrationFactory._BUILTIN_CLASS_MAP` and `PolicyEngine._create()`
+  - Graceful degradation: Checkov not found → skip; no `.tf` files in build path → skip; subprocess failure → skip (non-fatal, never blocks build)
+  - 30 tests, zero regressions against 4637-test suite
+
 ### Changed
 
 - **Removed hardcoded "environment" layer name constraint** — last layer no longer required to be named `"environment"`. Layer names are now arbitrary (e.g., `ring`, `stage`, `landscape` as last layer). Collision prevention is entirely owned by `OverlapController` artifact path uniqueness check, not by layer naming.

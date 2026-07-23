@@ -47,6 +47,7 @@ class IntegrationFactory:
         "opentofu": ("strata.integrations.opentofu", "OpenTofuIntegration"),
         "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
         "infracost": ("strata.integrations.infracost", "InfracostIntegration"),
+        "checkov": ("strata.integrations.checkov", "CheckovIntegration"),
         # SIEM / audit sinks
         "sentinel": ("strata.integrations.siem.sentinel_integration", "SentinelIntegration"),
         "elk": ("strata.integrations.siem.elk_siem_integration", "ElkSiemIntegration"),

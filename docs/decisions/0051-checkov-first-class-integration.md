@@ -1,7 +1,8 @@
 # Checkov as a first-class integration
 
-- Status: pending
+- Status: implemented (Phase 1)
 - Date: 2026-07-22
+- Revised: 2026-07-23
 - Supersedes: Partial aspects of ADR-0006 (policy-engine-for-deployment-guardrails)
 
 ## Context and Problem Statement
@@ -263,6 +264,90 @@ After mapping to strata resources:
   "remediation": "Add 'versioning { enabled = true }' to the resource"
 }
 ```
+
+## Revised Scope (2026-07-23)
+
+The original implementation approach was over-engineered. Comparing against the existing patterns
+in the codebase (`CveScannerIntegration` + `CveMaxSeverityPolicy`, `InfracostIntegration` +
+`CostThresholdPolicy`), the actual integration is straightforward:
+
+**What the original ADR over-specified:**
+- File-based `.strata/cache/checkov/` cache — not needed; Checkov is fast for typical Terraform
+  artifact sizes, and neither `cve_scanner` nor `infracost` use file-based caching
+- New CLI commands (`strata policy activate checkov`, `strata policy checkov scan/cache/silence/report`) — no
+  other integration has dedicated CLI commands; policy YAML handles all configuration
+- `ComplianceFinding` data model enriching Checkov results with strata resource context — useful
+  eventually but out of scope for first-class integration; `PolicyResult.details` is sufficient
+- `DeploymentManifestModel.compliance_findings[]` — requires manifest model changes; deferred
+- Plan phase scanning via `terraform show -json` pipe — deferred to Phase 2
+
+**What is actually needed (Phase 1 — buildable in one session):**
+
+1. `src/strata/integrations/checkov.py` — `CheckovIntegration(BaseIntegration)` with:
+   - `COMMAND = "checkov"`
+   - `scan(terraform_dir, skip_checks, include_checks, custom_checks_dir, timeout)` → `CheckovScanResult`
+   - `_parse_output(raw_json)` → `CheckovScanResult`
+   - `get_version_command()`, `parse_version()`, `get_setup_info()`, `ensure_available()`
+
+2. `src/strata/integrations/checkov_models.py` — `CheckovFinding` + `CheckovScanResult` dataclasses
+
+3. `src/strata/validators/policies/checkov_policy.py` — `CheckovPolicy(BasePolicy)` with:
+   - Resolves terraform artifact dir from `context.build_path`
+   - Instantiates `CheckovIntegration`, calls `scan()`
+   - Applies `severity_gate` and `skip_checks` from `policy.configuration`
+   - Returns `PolicyResult` with violations and details
+
+4. Register `"checkov"` in `IntegrationFactory._BUILTIN_CLASS_MAP` and `PolicyEngine._create()`
+
+5. Tests — integration unit tests + policy unit tests (mock subprocess)
+
+**Configuration (unchanged from original ADR):**
+
+```yaml
+policies:
+  - name: terraform_security_baseline
+    type: checkov
+    phase: build
+    enforcement: deny
+    configuration:
+      framework: terraform           # default: terraform
+      severity_gate: high            # fail if high or critical found (critical|high|medium|low)
+      skip_checks:                   # CKV IDs to suppress
+        - CKV_AWS_1
+        - CKV_AWS_20
+      custom_checks_dir: ".strata/checkov/custom/"  # optional
+      timeout: 120                   # seconds, default 120
+```
+
+**`CheckovScanResult` (minimal, no strata resource mapping):**
+
+```python
+@dataclass
+class CheckovFinding:
+    check_id: str          # e.g. "CKV_AWS_144"
+    check_name: str
+    severity: str          # CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN
+    resource: str          # e.g. "aws_s3_bucket.example"
+    file_path: str
+    guideline: str         # remediation URL from Checkov
+
+@dataclass
+class CheckovScanResult:
+    passed: int
+    failed: int
+    skipped: int
+    findings: List[CheckovFinding]
+    scanner_version: str
+    framework: str
+```
+
+**Graceful degradation (same pattern as cve_scanner):**
+- Checkov not installed → `PolicyResult(passed=True, details={"skipped": "checkov not found"})`
+- Build path unavailable → skip
+- Terraform artifacts don't exist → skip
+- Scan subprocess fails → skip with warning (non-fatal)
+
+---
 
 ## Implementation Approach
 
