@@ -2,12 +2,13 @@
 
 import json
 from pathlib import Path
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 try:
-    from strata.deployers.bicep_deployer import BicepDeployer, _SCOPE_CMD
+    from strata.deployers.bicep_deployer import _SCOPE_CMD, BicepDeployer
     from strata.models.common_models import ProvisionerType
 
     IMPL_MISSING = False
@@ -22,7 +23,8 @@ pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="BicepDeployer not availabl
 # Helpers
 # ===========================================================================
 
-def _make_deployer(tmp_path: Path, config: dict = None) -> BicepDeployer:
+
+def _make_deployer(tmp_path: Path, config: Optional[dict] = None) -> BicepDeployer:
     """Build a BicepDeployer with minimal mocked services."""
     stage = MagicMock()
     stage.name = "infra"
@@ -53,7 +55,7 @@ def _make_deployer(tmp_path: Path, config: dict = None) -> BicepDeployer:
     }
     d._iac_model = iac
     d._working_dir = tmp_path / "bicep"
-    d._az = MagicMock()
+    d._az = MagicMock()  # type: ignore[assignment]
     return d
 
 
@@ -77,6 +79,7 @@ def _fail(stderr: str = "ERROR") -> MagicMock:
 # ProvisionerType.BICEP enum
 # ===========================================================================
 
+
 class TestProvisionerType:
     def test_bicep_in_enum(self):
         assert ProvisionerType.BICEP == "bicep"
@@ -86,6 +89,7 @@ class TestProvisionerType:
 # ===========================================================================
 # _scope_cmd mapping
 # ===========================================================================
+
 
 class TestScopeCmdMapping:
     def test_all_scopes_present(self):
@@ -98,6 +102,7 @@ class TestScopeCmdMapping:
 # ===========================================================================
 # validate_workspace
 # ===========================================================================
+
 
 class TestValidateWorkspace:
     def test_fails_when_no_workspace_service(self, tmp_path):
@@ -136,23 +141,27 @@ class TestValidateWorkspace:
 # validate_environment
 # ===========================================================================
 
+
 class TestValidateEnvironment:
     def test_fails_when_az_not_available(self, tmp_path):
         d = _make_deployer(tmp_path)
-        with patch("strata.integrations.azure_cli.AzureCLIIntegration.ensure_available",
-                   return_value=(False, "not logged in")), \
-             patch("strata.integrations.azure_cli.AzureCLIIntegration.is_available",
-                   return_value=True):
+        with (
+            patch(
+                "strata.integrations.azure_cli.AzureCLIIntegration.ensure_available",
+                return_value=(False, "not logged in"),
+            ),
+            patch("strata.integrations.azure_cli.AzureCLIIntegration.is_available", return_value=True),
+        ):
             ok, msgs = d.validate_environment()
         assert not ok
         assert "not logged in" in msgs[0]
 
     def test_passes_when_az_available(self, tmp_path):
         d = _make_deployer(tmp_path)
-        with patch("strata.integrations.azure_cli.AzureCLIIntegration.ensure_available",
-                   return_value=(True, "")), \
-             patch("strata.integrations.azure_cli.AzureCLIIntegration.is_available",
-                   return_value=True):
+        with (
+            patch("strata.integrations.azure_cli.AzureCLIIntegration.ensure_available", return_value=(True, "")),
+            patch("strata.integrations.azure_cli.AzureCLIIntegration.is_available", return_value=True),
+        ):
             ok, _ = d.validate_environment()
         assert ok
 
@@ -160,6 +169,7 @@ class TestValidateEnvironment:
 # ===========================================================================
 # setup / check
 # ===========================================================================
+
 
 class TestSetup:
     def test_calls_az_bicep_build(self, tmp_path):
@@ -199,6 +209,7 @@ class TestSetup:
 # plan (what-if)
 # ===========================================================================
 
+
 class TestPlan:
     def test_calls_what_if(self, tmp_path):
         d = _make_deployer(tmp_path)
@@ -226,10 +237,13 @@ class TestPlan:
         assert d._last_whatif == payload
 
     def test_subscription_scope_uses_location(self, tmp_path):
-        d = _make_deployer(tmp_path, config={
-            "scope": "subscription",
-            "location": "westeurope",
-        })
+        d = _make_deployer(
+            tmp_path,
+            config={
+                "scope": "subscription",
+                "location": "westeurope",
+            },
+        )
         (tmp_path / "bicep").mkdir()
         (tmp_path / "bicep" / "main.bicep").write_text("")
 
@@ -245,6 +259,7 @@ class TestPlan:
 # ===========================================================================
 # apply
 # ===========================================================================
+
 
 class TestApply:
     def test_calls_deployment_create(self, tmp_path):
@@ -275,14 +290,17 @@ class TestApply:
         assert any("failed" in m for m in msgs)
 
     def test_parameters_file_included(self, tmp_path):
-        d = _make_deployer(tmp_path, config={
-            "scope": "resourceGroup",
-            "resource_group": "rg",
-            "parameters_file": "params.json",
-        })
+        d = _make_deployer(
+            tmp_path,
+            config={
+                "scope": "resourceGroup",
+                "resource_group": "rg",
+                "parameters_file": "params.json",
+            },
+        )
         (tmp_path / "bicep").mkdir()
         (tmp_path / "bicep" / "main.bicep").write_text("")
-        (tmp_path / "bicep" / "params.json").write_text('{}')
+        (tmp_path / "bicep" / "params.json").write_text("{}")
 
         d._az.run_az.return_value = _ok("{}")
         d.apply()
@@ -291,11 +309,14 @@ class TestApply:
         assert "--parameters" in call_args
 
     def test_parameters_file_skipped_if_missing(self, tmp_path):
-        d = _make_deployer(tmp_path, config={
-            "scope": "resourceGroup",
-            "resource_group": "rg",
-            "parameters_file": "nonexistent.json",
-        })
+        d = _make_deployer(
+            tmp_path,
+            config={
+                "scope": "resourceGroup",
+                "resource_group": "rg",
+                "parameters_file": "nonexistent.json",
+            },
+        )
         (tmp_path / "bicep").mkdir()
         (tmp_path / "bicep" / "main.bicep").write_text("")
 
@@ -309,6 +330,7 @@ class TestApply:
 # ===========================================================================
 # destroy
 # ===========================================================================
+
 
 class TestDestroy:
     def test_calls_deployment_delete(self, tmp_path):
@@ -337,6 +359,7 @@ class TestDestroy:
 # output
 # ===========================================================================
 
+
 class TestOutput:
     def test_parses_arm_outputs(self, tmp_path):
         d = _make_deployer(tmp_path)
@@ -364,6 +387,7 @@ class TestOutput:
 # show_plan
 # ===========================================================================
 
+
 class TestShowPlan:
     def test_returns_last_whatif(self, tmp_path):
         d = _make_deployer(tmp_path)
@@ -383,6 +407,7 @@ class TestShowPlan:
 # _deployment_cmd scope routing
 # ===========================================================================
 
+
 class TestDeploymentCmd:
     def test_resource_group_scope(self, tmp_path):
         d = _make_deployer(tmp_path, config={"scope": "resourceGroup", "resource_group": "my-rg"})
@@ -398,11 +423,14 @@ class TestDeploymentCmd:
         assert "--location" in cmd and "eastus" in cmd
 
     def test_management_group_scope(self, tmp_path):
-        d = _make_deployer(tmp_path, config={
-            "scope": "managementGroup",
-            "location": "westeurope",
-            "management_group_id": "mg-root",
-        })
+        d = _make_deployer(
+            tmp_path,
+            config={
+                "scope": "managementGroup",
+                "location": "westeurope",
+                "management_group_id": "mg-root",
+            },
+        )
         cmd = d._deployment_cmd("managementGroup", "create")
         assert "mg" in cmd
         assert "--management-group-id" in cmd

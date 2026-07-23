@@ -87,28 +87,31 @@ class GCloudScript:
         3. ``gcloud config get-value project``
         → exits with error if none resolves
         """
-        p = (os.environ.get("GOOGLE_CLOUD_PROJECT")
-             or os.environ.get("CLOUDSDK_CORE_PROJECT")
-             or os.environ.get("GCLOUD_PROJECT"))
+        p = (
+            os.environ.get("GOOGLE_CLOUD_PROJECT")
+            or os.environ.get("CLOUDSDK_CORE_PROJECT")
+            or os.environ.get("GCLOUD_PROJECT")
+        )
         if p:
             return p
         result = subprocess.run(
             ["gcloud", "config", "get-value", "project"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
-        self.log(
-            "GCP project not set. Set GOOGLE_CLOUD_PROJECT or run: "
-            "gcloud config set project <PROJECT_ID>"
-        )
+        self.log("GCP project not set. Set GOOGLE_CLOUD_PROJECT or run: gcloud config set project <PROJECT_ID>")
         sys.exit(1)
 
     def account(self) -> Optional[str]:
         """Return the active account email from gcloud config."""
         result = subprocess.run(
             ["gcloud", "config", "get-value", "account"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()

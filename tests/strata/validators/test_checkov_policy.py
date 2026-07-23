@@ -19,7 +19,7 @@ try:
     )
     from strata.models.integration_model import IntegrationModel
     from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import PolicyContext, PolicyResult
+    from strata.validators.policies.base_policy import PolicyContext
     from strata.validators.policies.checkov_policy import CheckovPolicy
 
     IMPL_MISSING = False

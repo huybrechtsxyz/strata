@@ -29,7 +29,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional  # noqa: F401  Optional used by subclasses
 
 
 class AWSScript:
@@ -89,19 +89,19 @@ class AWSScript:
             return r
         result = subprocess.run(
             ["aws", "configure", "get", "region"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
-        self.log(
-            "AWS region not set. Set AWS_DEFAULT_REGION or configure a profile with "
-            "'aws configure'."
-        )
+        self.log("AWS region not set. Set AWS_DEFAULT_REGION or configure a profile with 'aws configure'.")
         sys.exit(1)
 
     def account_id(self) -> str:
         """Return the active AWS account ID via ``aws sts get-caller-identity``."""
         import json
+
         result = self.run_aws(["sts", "get-caller-identity", "--output", "json"])
         if result.returncode != 0:
             self.log("Could not determine AWS account ID (aws sts get-caller-identity failed).")

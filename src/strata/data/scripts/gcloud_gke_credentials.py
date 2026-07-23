@@ -48,8 +48,12 @@ class GkeCredentials(GCloudScript):
         internal_ip = self.env("GKE_INTERNAL_IP", "false").lower() == "true"
 
         args = [
-            "container", "clusters", "get-credentials", cluster,
-            "--project", gcp_project,
+            "container",
+            "clusters",
+            "get-credentials",
+            cluster,
+            "--project",
+            gcp_project,
         ]
         if zone:
             args += ["--zone", zone]

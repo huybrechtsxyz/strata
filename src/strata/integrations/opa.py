@@ -252,10 +252,10 @@ class OPAIntegration(BaseIntegration):
                 capture_output=True,
                 timeout=timeout,
             )
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"OPA eval timed out after {timeout}s")
-        except FileNotFoundError:
-            raise RuntimeError("OPA binary not found in PATH")
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"OPA eval timed out after {timeout}s") from exc
+        except FileNotFoundError as exc:
+            raise RuntimeError("OPA binary not found in PATH") from exc
 
         if proc.returncode not in (0, 1) and not proc.stdout:
             raise RuntimeError(f"OPA eval failed (exit {proc.returncode}): {proc.stderr.decode()[:300]}")

@@ -55,6 +55,7 @@ from strata.deployers.base_deployer import (
     STEP_SHOW_PLAN,
     BaseDeployer,
 )
+from strata.integrations.azure_cli import AzureCLIIntegration
 from strata.models.workspace_model import WorkspaceIacModel
 from strata.services.configuration_service import ConfigurationService
 from strata.services.deployment_service import DeploymentService
@@ -115,7 +116,7 @@ class BicepDeployer(BaseDeployer):
         )
         self._iac_model: Optional[WorkspaceIacModel] = None
         self._working_dir: Optional[Path] = None
-        self._az = None  # AzureCLIIntegration, set in validate_environment
+        self._az: Optional[AzureCLIIntegration] = None  # set in validate_environment
         self._last_whatif: Optional[Dict[str, Any]] = None  # saved by plan()
 
     # ------------------------------------------------------------------
@@ -126,8 +127,16 @@ class BicepDeployer(BaseDeployer):
         return "bicep"
 
     def get_supported_steps(self) -> List[str]:
-        return [STEP_SETUP, STEP_CHECK, STEP_PLAN, STEP_APPLY, STEP_DESTROY,
-                STEP_PLAN_DESTROY, STEP_SHOW_PLAN, STEP_OUTPUT]
+        return [
+            STEP_SETUP,
+            STEP_CHECK,
+            STEP_PLAN,
+            STEP_APPLY,
+            STEP_DESTROY,
+            STEP_PLAN_DESTROY,
+            STEP_SHOW_PLAN,
+            STEP_OUTPUT,
+        ]
 
     # ------------------------------------------------------------------
     # Validation
@@ -156,9 +165,8 @@ class BicepDeployer(BaseDeployer):
                 self.deployment_service, self.build_path, self._iac_model
             )
         else:
-            self._working_dir = self._get_working_dir(
-                self.deployment_service, self.build_path, self._iac_model
-            )
+            # Compute path directly — bicep deployer has no _get_working_dir helper
+            self._working_dir = self.build_path / self._iac_model.name
 
         if not self._working_dir.exists():
             messages.append(
@@ -176,9 +184,7 @@ class BicepDeployer(BaseDeployer):
             return False, messages
 
         if self.verbose:
-            messages.append(
-                f"Bicep working directory OK: {self._working_dir} ({len(bicep_files)} .bicep file(s))"
-            )
+            messages.append(f"Bicep working directory OK: {self._working_dir} ({len(bicep_files)} .bicep file(s))")
 
         return True, messages
 
@@ -219,6 +225,7 @@ class BicepDeployer(BaseDeployer):
         if not self._ready(messages):
             return False, messages
 
+        assert self._az is not None  # guaranteed by _ready()
         template = self._main_template()
         if template is None:
             messages.append(f"No main.bicep found in {self._working_dir}")
@@ -254,6 +261,7 @@ class BicepDeployer(BaseDeployer):
         if not self._ready(messages):
             return False, messages
 
+        assert self._az is not None  # guaranteed by _ready()
         scope = self._scope()
         template = self._main_template()
         if template is None:
@@ -293,6 +301,7 @@ class BicepDeployer(BaseDeployer):
         if not self._ready(messages):
             return False, messages
 
+        assert self._az is not None  # guaranteed by _ready()
         scope = self._scope()
         template = self._main_template()
         if template is None:
@@ -302,20 +311,21 @@ class BicepDeployer(BaseDeployer):
         deployment_name = self._deployment_name()
         cmd = self._deployment_cmd(scope, "create")
         cmd += [
-            "--template-file", str(template),
-            "--name", deployment_name,
-            "--mode", self._mode(),
-            "--output", "json",
+            "--template-file",
+            str(template),
+            "--name",
+            deployment_name,
+            "--mode",
+            self._mode(),
+            "--output",
+            "json",
             "--no-prompt",
         ]
         params = self._parameters_file()
         if params:
             cmd += ["--parameters", f"@{params}"]
 
-        messages.append(
-            f"az deployment {_SCOPE_CMD[scope]} create  →  {template.name} "
-            f"(deployment: {deployment_name})"
-        )
+        messages.append(f"az deployment {_SCOPE_CMD[scope]} create  →  {template.name} (deployment: {deployment_name})")
         result = self._az.run_az(cmd, timeout=self._get_timeout("apply", 1800))
 
         if result.returncode != 0:
@@ -337,6 +347,7 @@ class BicepDeployer(BaseDeployer):
         if not self._ready(messages):
             return False, messages
 
+        assert self._az is not None  # guaranteed by _ready()
         scope = self._scope()
         deployment_name = self._deployment_name()
         cmd = self._deployment_cmd(scope, "delete")
@@ -360,6 +371,7 @@ class BicepDeployer(BaseDeployer):
         if not self._ready(messages):
             return False, messages
 
+        assert self._az is not None  # guaranteed by _ready()
         scope = self._scope()
         if scope != "resourceGroup":
             messages.append("plan_destroy (mode=Complete) is only supported for resourceGroup scope.")
@@ -371,8 +383,7 @@ class BicepDeployer(BaseDeployer):
             return False, messages
 
         cmd = self._deployment_cmd(scope, "what-if")
-        cmd += ["--template-file", str(template), "--mode", "Complete",
-                "--output", "json", "--no-prompt"]
+        cmd += ["--template-file", str(template), "--mode", "Complete", "--output", "json", "--no-prompt"]
 
         messages.append("az deployment group what-if --mode Complete")
         result = self._az.run_az(cmd, timeout=self._get_timeout("plan_destroy", 300))
@@ -394,11 +405,11 @@ class BicepDeployer(BaseDeployer):
         if not self._ready(messages):
             return False, outputs, messages
 
+        assert self._az is not None  # guaranteed by _ready()
         scope = self._scope()
         deployment_name = self._deployment_name()
         cmd = self._deployment_cmd(scope, "show")
-        cmd += ["--name", deployment_name, "--output", "json",
-                "--query", "properties.outputs"]
+        cmd += ["--name", deployment_name, "--output", "json", "--query", "properties.outputs"]
 
         messages.append(f"az deployment {_SCOPE_CMD[scope]} show  {deployment_name}")
         result = self._az.run_az(cmd, timeout=self._get_timeout("output", 60))

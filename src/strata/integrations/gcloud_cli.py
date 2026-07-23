@@ -31,7 +31,6 @@ from typing import Any, Dict, Optional, Tuple
 
 from strata.integrations.base_integration import BaseIntegration
 from strata.logger import get_logger
-from strata.models.integration_model import IntegrationModel
 
 logger = get_logger(__name__)
 
@@ -74,22 +73,27 @@ class GCloudCLIIntegration(BaseIntegration):
             "command": "gcloud",
             "install_url": "https://cloud.google.com/sdk/docs/install",
             "env_vars": [
-                {"name": "GOOGLE_APPLICATION_CREDENTIALS", "purpose": "Path to service account key JSON", "required": False},
+                {
+                    "name": "GOOGLE_APPLICATION_CREDENTIALS",
+                    "purpose": "Path to service account key JSON",
+                    "required": False,
+                },
                 {"name": "GOOGLE_CLOUD_PROJECT", "purpose": "Override active project ID", "required": False},
                 {"name": "CLOUDSDK_CORE_PROJECT", "purpose": "Alternative project override", "required": False},
             ],
             "auth_methods": [
                 {"method": "gcloud auth login", "description": "Interactive browser login. Preferred for local dev."},
-                {"method": "gcloud auth application-default login", "description": "ADC for Terraform google provider — run separately."},
-                {"method": "Service account key", "description": "Set GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json."},
+                {
+                    "method": "gcloud auth application-default login",
+                    "description": "ADC for Terraform google provider — run separately.",
+                },
+                {
+                    "method": "Service account key",
+                    "description": "Set GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json.",
+                },
                 {"method": "Workload Identity", "description": "Automatic on GKE/Cloud Run — no env vars needed."},
             ],
-            "yaml_example": (
-                "- name: gcloud\n"
-                "  type: gcloud_cli\n"
-                "  capabilities: [gcloud]\n"
-                "  required: true"
-            ),
+            "yaml_example": ("- name: gcloud\n  type: gcloud_cli\n  capabilities: [gcloud]\n  required: true"),
             "info": status,
         }
 
@@ -106,10 +110,7 @@ class GCloudCLIIntegration(BaseIntegration):
         3. Active project (``gcloud config get-value project``)
         """
         if not self.is_available():
-            msg = (
-                "Google Cloud CLI is not installed or not in PATH. "
-                "Install: https://cloud.google.com/sdk/docs/install"
-            )
+            msg = "Google Cloud CLI is not installed or not in PATH. Install: https://cloud.google.com/sdk/docs/install"
             self._info = msg
             return False, msg
 
@@ -142,10 +143,13 @@ class GCloudCLIIntegration(BaseIntegration):
     def get_project(self) -> Optional[str]:
         """Return the active GCP project ID from ``gcloud config get-value project``."""
         import os
+
         # Environment variable overrides
-        project = (os.environ.get("GOOGLE_CLOUD_PROJECT")
-                   or os.environ.get("CLOUDSDK_CORE_PROJECT")
-                   or os.environ.get("GCLOUD_PROJECT"))
+        project = (
+            os.environ.get("GOOGLE_CLOUD_PROJECT")
+            or os.environ.get("CLOUDSDK_CORE_PROJECT")
+            or os.environ.get("GCLOUD_PROJECT")
+        )
         if project:
             return project
         try:
@@ -181,9 +185,7 @@ class GCloudCLIIntegration(BaseIntegration):
                 return self.__class__._token_cache
 
         try:
-            result = self._run_integration(
-                ["auth", "print-access-token"], timeout=30
-            )
+            result = self._run_integration(["auth", "print-access-token"], timeout=30)
             if result.returncode != 0 or not result.stdout.strip():
                 return None
             token = result.stdout.strip()

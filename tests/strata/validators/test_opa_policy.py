@@ -14,7 +14,7 @@ try:
     from strata.integrations.opa import OPAIntegration, OPAResult
     from strata.models.integration_model import IntegrationModel
     from strata.models.policy_model import PolicyModel
-    from strata.validators.policies.base_policy import PolicyContext, PolicyResult
+    from strata.validators.policies.base_policy import PolicyContext
     from strata.validators.policies.opa_policy import OPAPolicy
 
     IMPL_MISSING = False

@@ -57,11 +57,17 @@ class GcsBucketEnsure(GCloudScript):
         bucket_url = f"gs://{bucket}" if not bucket.startswith("gs://") else bucket
 
         args = [
-            "storage", "buckets", "create", bucket_url,
-            "--project", gcp_project,
-            "--location", location,
-            "--default-storage-class", storage_class,
-            "--no-fail-on-existing-bucket",   # idempotent
+            "storage",
+            "buckets",
+            "create",
+            bucket_url,
+            "--project",
+            gcp_project,
+            "--location",
+            location,
+            "--default-storage-class",
+            storage_class,
+            "--no-fail-on-existing-bucket",  # idempotent
         ]
 
         if labels_raw:
@@ -77,10 +83,15 @@ class GcsBucketEnsure(GCloudScript):
 
         # Versioning (separate command — only applies if bucket was just created or changed)
         if versioning:
-            r = self.run_gcloud([
-                "storage", "buckets", "update", bucket_url,
-                "--versioning",
-            ])
+            r = self.run_gcloud(
+                [
+                    "storage",
+                    "buckets",
+                    "update",
+                    bucket_url,
+                    "--versioning",
+                ]
+            )
             if r.returncode == 0:
                 self.log("Versioning enabled")
             else:

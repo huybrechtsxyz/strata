@@ -532,7 +532,7 @@ class DeploymentService(BaseService["DeploymentModel"]):
             )
             if scheme is None:
                 return ""
-            return compute_artifact_path(self.model.spec.layers or {}, scheme)
+            return compute_artifact_path(self.model.spec.layers or {}, scheme)  # type: ignore[union-attr]
         elif configuration_model.spec.layering:
             active_layers = configuration_model.spec.layering
         else:

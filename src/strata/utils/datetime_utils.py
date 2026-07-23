@@ -72,10 +72,10 @@ def parse_iso_timestamp(value: str) -> datetime:
 
     try:
         dt = datetime.fromisoformat(normalised)
-    except ValueError:
+    except ValueError as exc:
         raise click.BadParameter(
             f"'{value}' is not a valid ISO 8601 timestamp. Use e.g. 2026-07-20T14:30:00+00:00 or 2026-07-20T14:30:00Z."
-        )
+        ) from exc
 
     if dt.tzinfo is None:
         raise click.BadParameter(

@@ -24,33 +24,51 @@ pytestmark = pytest.mark.skipif(IMPL_MISSING, reason="AWS CLI integration not av
 # Helpers
 # ===========================================================================
 
-_IDENTITY = json.dumps({
-    "UserId": "AIDAIOSFODNN7EXAMPLE",
-    "Account": "123456789012",
-    "Arn": "arn:aws:iam::123456789012:user/Alice",
-})
+_IDENTITY = json.dumps(
+    {
+        "UserId": "AIDAIOSFODNN7EXAMPLE",
+        "Account": "123456789012",
+        "Arn": "arn:aws:iam::123456789012:user/Alice",
+    }
+)
 
 
 def _ok(stdout: str = ""):
-    r = MagicMock(); r.returncode = 0; r.stdout = stdout; r.stderr = ""; return r
+    r = MagicMock()
+    r.returncode = 0
+    r.stdout = stdout
+    r.stderr = ""
+    return r
+
 
 def _fail(stderr: str = "ERROR"):
-    r = MagicMock(); r.returncode = 1; r.stdout = ""; r.stderr = stderr; return r
+    r = MagicMock()
+    r.returncode = 1
+    r.stdout = ""
+    r.stderr = stderr
+    return r
+
 
 def _make_integration():
     return AWSCLIIntegration(IntegrationModel(name="aws", type="aws_cli"))
 
+
 def _cp(returncode=0, stdout="", stderr=""):
     return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
 
+
 class _SimpleAWSScript(AWSScript):
-    def __init__(self): self.ran = False
-    def run(self): self.ran = True
+    def __init__(self):
+        self.ran = False
+
+    def run(self):
+        self.ran = True
 
 
 # ===========================================================================
 # AWSCLIIntegration
 # ===========================================================================
+
 
 class TestParseVersion:
     def test_parses_version(self):
@@ -72,28 +90,36 @@ class TestEnsureAvailable:
 
     def test_installed_not_authenticated(self):
         az = _make_integration()
-        with patch.object(az, "is_available", return_value=True), \
-             patch.object(az, "_run_integration", return_value=_fail("InvalidClientTokenId")):
+        with (
+            patch.object(az, "is_available", return_value=True),
+            patch.object(az, "_run_integration", return_value=_fail("InvalidClientTokenId")),
+        ):
             ok, msg = az.ensure_available()
         assert not ok
         assert "aws configure" in msg or "authenticated" in msg.lower()
 
     def test_authenticated(self):
         az = _make_integration()
+
         def _side(args, **kwargs):
             if "get-caller-identity" in args:
                 return _ok(_IDENTITY)
             return _ok("us-east-1")
-        with patch.object(az, "is_available", return_value=True), \
-             patch.object(az, "_run_integration", side_effect=_side):
+
+        with (
+            patch.object(az, "is_available", return_value=True),
+            patch.object(az, "_run_integration", side_effect=_side),
+        ):
             ok, msg = az.ensure_available()
         assert ok
         assert "123456789012" in az._info
 
     def test_info_includes_account_and_region(self):
         az = _make_integration()
-        with patch.object(az, "is_available", return_value=True), \
-             patch.object(az, "_run_integration", return_value=_ok(_IDENTITY)):
+        with (
+            patch.object(az, "is_available", return_value=True),
+            patch.object(az, "_run_integration", return_value=_ok(_IDENTITY)),
+        ):
             az.ensure_available()
         assert "123456789012" in (az._info or "")
 
@@ -156,6 +182,7 @@ class TestRunAws:
 # AWSScript base class
 # ===========================================================================
 
+
 class TestAWSScriptBase:
     def test_execute_calls_run(self):
         script = _SimpleAWSScript()
@@ -166,7 +193,9 @@ class TestAWSScriptBase:
 
     def test_execute_exits_1_on_exception(self):
         class Bad(AWSScript):
-            def run(self): raise RuntimeError("boom")
+            def run(self):
+                raise RuntimeError("boom")
+
         with pytest.raises(SystemExit) as exc:
             Bad().execute()
         assert exc.value.code == 1
@@ -217,9 +246,11 @@ class TestAWSScriptBase:
 # Built-in scripts
 # ===========================================================================
 
+
 class TestEksCredentials:
     def _load(self):
         from strata.data.scripts.aws_eks_credentials import EksCredentials
+
         return EksCredentials()
 
     def test_calls_update_kubeconfig(self, monkeypatch):
@@ -252,14 +283,17 @@ class TestEksCredentials:
 class TestEcrLogin:
     def _load(self):
         from strata.data.scripts.aws_ecr_login import EcrLogin
+
         return EcrLogin()
 
     def test_calls_get_login_password_and_docker_login(self, monkeypatch):
         monkeypatch.setenv("ECR_REGISTRY", "123.dkr.ecr.us-east-1.amazonaws.com")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
         script = self._load()
-        with patch.object(script, "run_aws", return_value=_cp(0, stdout="password")) as mock_aws, \
-             patch("subprocess.run", return_value=_cp(0, stdout="Login Succeeded")) as mock_docker:
+        with (
+            patch.object(script, "run_aws", return_value=_cp(0, stdout="password")) as mock_aws,
+            patch("subprocess.run", return_value=_cp(0, stdout="Login Succeeded")) as mock_docker,
+        ):
             script.run()
         mock_aws.assert_called_once()
         assert mock_docker.call_args[0][0][0] == "docker"
@@ -269,8 +303,10 @@ class TestEcrLogin:
         monkeypatch.setenv("ECR_ACCOUNT_ID", "999000111")
         monkeypatch.setenv("AWS_DEFAULT_REGION", "eu-west-1")
         script = self._load()
-        with patch.object(script, "run_aws", return_value=_cp(0, stdout="pw")), \
-             patch("subprocess.run", return_value=_cp(0)) as mock_docker:
+        with (
+            patch.object(script, "run_aws", return_value=_cp(0, stdout="pw")),
+            patch("subprocess.run", return_value=_cp(0)) as mock_docker,
+        ):
             script.run()
         # docker login should have been called with the constructed registry URL
         docker_args = mock_docker.call_args[0][0]
@@ -281,6 +317,7 @@ class TestEcrLogin:
 class TestS3BucketEnsure:
     def _load(self):
         from strata.data.scripts.aws_s3_bucket_ensure import S3BucketEnsure
+
         return S3BucketEnsure()
 
     def test_calls_create_bucket(self, monkeypatch):
