@@ -66,6 +66,7 @@ class PolicyEngine:
         from strata.validators.policies.cost_threshold_policy import CostThresholdPolicy
         from strata.validators.policies.cve_max_severity_policy import CveMaxSeverityPolicy
         from strata.validators.policies.naming_policy import NamingPolicy
+        from strata.validators.policies.opa_policy import OPAPolicy
         from strata.validators.policies.path_convention_policy import PathConventionPolicy
         from strata.validators.policies.ref_convention_policy import RefConventionPolicy
         from strata.validators.policies.required_tags_policy import RequiredTagsPolicy
@@ -93,6 +94,7 @@ class PolicyEngine:
             "cve_max_severity": CveMaxSeverityPolicy,
             "cost_threshold": CostThresholdPolicy,
             "checkov": CheckovPolicy,
+            "opa": OPAPolicy,
             "path_convention": PathConventionPolicy,
         }
 

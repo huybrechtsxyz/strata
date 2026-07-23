@@ -436,6 +436,84 @@ spec:
 - No `.tf` files found in build path → policy skips
 - Checkov subprocess fails → policy skips (non-fatal, never blocks build)
 
+## OPA Policy
+
+Evaluate [Open Policy Agent](https://www.openpolicyagent.org) Rego rules against the
+deployment context. Supports two modes: HTTP REST to a running OPA server (fast), or
+`opa eval` CLI as a stateless fallback (no server required).
+
+strata does **not** manage the OPA server lifecycle — that is the operator's responsibility.
+
+### Installation
+
+```bash
+brew install opa          # macOS
+# or: https://www.openpolicyagent.org/docs/latest/#1-download-opa
+```
+
+### Declaring the policy
+
+```yaml
+spec:
+  policies:
+    - name: zone_enforcement
+      type: opa
+      phase: build
+      enforcement: deny
+      configuration:
+        rule: "data.strata.zones.deny"      # OPA rule path to evaluate
+        policy_dir: ".strata/policies/"     # .rego files directory (CLI mode)
+        endpoint: "http://localhost:8181"   # OPA server URL (HTTP mode, optional)
+        timeout: 30
+```
+
+### Writing OPA rules
+
+Rules must return a **set of violation strings** named `deny`:
+
+```rego
+package strata.zones
+
+deny contains msg if {
+    resource := input.platform.spec.resources[_]
+    not resource.properties.region in input.configuration.spec.allowed_regions
+    msg := sprintf("Resource '%s' in disallowed region '%s'",
+                   [resource.meta.name, resource.properties.region])
+}
+```
+
+### OPA input document
+
+strata sends a JSON document containing available context:
+
+```json
+{
+  "phase": "build",
+  "platform": { ... },       // platform artifact (if available)
+  "configuration": { ... },  // configuration model (if available)
+  "deployment": { ... },     // deployment model (if available)
+  "plan_data": { ... },      // terraform plan JSON (if available)
+  "work_path": "/workspace",
+  "build_path": "/workspace/.strata/build"
+}
+```
+
+### Mode selection
+
+| `endpoint` / `OPA_ENDPOINT`     | Behavior                              |
+| ------------------------------- | ------------------------------------- |
+| Set and server reachable        | HTTP mode: `POST /v1/data/{rule}`     |
+| Set but server unreachable      | Falls back to CLI mode                |
+| Not set                         | CLI mode: `opa eval --stdin-input`    |
+| Not set and `opa` not installed | Policy skips (passes), warning logged |
+
+### Graceful degradation
+
+- OPA not installed and no server configured → policy skips (passes), warning logged
+- `policy_dir` not found → policy skips
+- Server unreachable → falls back to CLI mode
+- Rule returns empty set or false → pass (no violations)
+
 ## Secret Stores
 
 Secrets in `spec.secrets` are resolved at build time by the `strata build` command. The `store` field controls which backend is used. The following stores are supported:

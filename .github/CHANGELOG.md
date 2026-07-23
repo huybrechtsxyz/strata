@@ -52,6 +52,17 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 - **Layer name constraint removal** — configurations or deployment code that relied on the final layer being named `"environment"` should be updated. The constraint was overly restrictive and served no functional purpose in artifact path generation.
 
+- **OPA (Open Policy Agent) integration — ADR 0050 (completed)**
+  - `opa` policy type — evaluates Rego rules against strata deployment context
+  - Two modes: HTTP REST (`POST /v1/data/{rule}` to running OPA server) and `opa eval` CLI fallback (stateless, no server required)
+  - Auto-fallback: if HTTP endpoint unreachable, falls back to CLI mode transparently
+  - `OPAIntegration(BaseIntegration)` — `evaluate_http()`, `evaluate_cli()`, unified `evaluate()` entry point
+  - `OPAPolicy(BasePolicy)` — serializes `PolicyContext` (platform artifact, configuration, deployment, plan data) to OPA input document; parses violations from result
+  - `OPAResult` dataclass — `passed: bool`, `violations: List[str]`, `raw: Any`
+  - strata does **not** manage OPA server lifecycle — binary install and server start/stop are the operator's responsibility
+  - Registered in `IntegrationFactory` and `PolicyEngine`; `iac_security` capability; help file `strata help --topic opa`
+  - 34 tests, zero regressions against 4671-test suite
+
 ---
 
 ## [1.3.1] — 2026-07-22

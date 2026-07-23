@@ -48,6 +48,7 @@ class IntegrationFactory:
         "terraform": ("strata.integrations.terraform", "TerraformIntegration"),
         "infracost": ("strata.integrations.infracost", "InfracostIntegration"),
         "checkov": ("strata.integrations.checkov", "CheckovIntegration"),
+        "opa": ("strata.integrations.opa", "OPAIntegration"),
         # SIEM / audit sinks
         "sentinel": ("strata.integrations.siem.sentinel_integration", "SentinelIntegration"),
         "elk": ("strata.integrations.siem.elk_siem_integration", "ElkSiemIntegration"),

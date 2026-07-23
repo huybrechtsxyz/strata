@@ -46,6 +46,7 @@ _TOPICS: dict[str, tuple[str, str]] = {
     "infracost": ("Infracost: Terraform cost estimation and diff", "infracost.md"),
     "openbao": ("OpenBao: Linux Foundation Vault fork (MPL-2.0)", "openbao.md"),
     "opentofu": ("OpenTofu: Linux Foundation Terraform fork (MPL-2.0)", "opentofu.md"),
+    "opa": ("OPA (Open Policy Agent): Rego policy evaluation via HTTP server or opa eval CLI", "opa.md"),
     "sentinel": ("Azure Sentinel: DCR Logs Ingestion API SIEM sink", "siem_sentinel.md"),
     "elk": ("ELK / Logstash: TCP JSON and Elasticsearch Bulk API SIEM sink", "siem_elk.md"),
     "otel": ("OpenTelemetry: OTLP/HTTP audit event forwarding", "siem_otel.md"),
