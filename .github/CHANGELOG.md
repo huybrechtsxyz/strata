@@ -9,6 +9,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **Google Cloud CLI integration + lifecycle scripts — ADR 0055 Phase 1**
+  - `GCloudCLIIntegration(BaseIntegration)` — `COMMAND = "gcloud"`; `ensure_available()` checks binary + `gcloud config get-value account` + active project (three-step check, unlike Azure/AWS which stop at auth); `get_project()`, `get_account()`, `get_access_token()` (cached), `run_gcloud()` passthrough
+  - `IGCloudTool` capability protocol + `"gcloud"` in `CAPABILITY_MAP`; registered in `IntegrationFactory`
+  - `strata.utils.gcloud_script_base.GCloudScript` — base class mirroring `AzureScript`/`AWSScript`; `project()` resolves via `GOOGLE_CLOUD_PROJECT` → `CLOUDSDK_CORE_PROJECT` → `gcloud config`; `account()` and `get_access_token()` helpers
+  - Built-in script: `gcloud_gke_credentials.py` — `gcloud container clusters get-credentials`; `GKE_CLUSTER` + `GKE_ZONE`/`GKE_REGION`; optional `GKE_ROLE_ARN` → `GKE_INTERNAL_IP`
+  - Built-in script: `gcloud_artifact_registry_login.py` — `gcloud auth configure-docker`; `GAR_LOCATION` for Artifact Registry or `GCR_ENABLE=true` for legacy GCR
+  - Built-in script: `gcloud_gcs_bucket_ensure.py` — idempotent bucket create with `--no-fail-on-existing-bucket`; optional versioning, storage class, location, labels
+  - Solution scaffold: `.strata/scripts/gcloud_lifecycle_example.py`
+  - Help: `strata help --topic gcloud_cli`, `strata help --topic gcloud_scripts`; guide: `docs/guides/gcloud-lifecycle-scripts.md`
+  - ADR 0055 updated: status → phase 1 implemented; corrected "no existing GCP integrations" (gcp_secretmanager.py and gcp_runtimeconfig.py were fictitious)
+  - 35 tests, zero regressions against 4833-test suite
+
 - **AWS CLI integration + lifecycle scripts**
   - `AWSCLIIntegration(BaseIntegration)` — `COMMAND = "aws"`; `ensure_available()` checks binary AND `aws sts get-caller-identity`; `get_identity()`, `get_region()`, `run_aws()` passthrough
   - `IAWSTool` capability protocol + `"aws"` in `CAPABILITY_MAP`; registered in `IntegrationFactory`

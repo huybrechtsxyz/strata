@@ -19,6 +19,7 @@ __all__ = [
     "ICostEstimator",
     "IAzureTool",
     "IAWSTool",
+    "IGCloudTool",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -275,6 +276,31 @@ class ICveScanner(Protocol):
 
 
 @runtime_checkable
+class IGCloudTool(Protocol):
+    """
+    Capability: Integration provides Google Cloud CLI operations.
+
+    Integrations implementing this interface can check gcloud CLI
+    availability, retrieve project context, obtain access tokens,
+    and run arbitrary ``gcloud`` subcommands.
+
+    Examples: Google Cloud CLI (gcloud)
+    """
+
+    def ensure_available(self) -> tuple:
+        """Check that gcloud is installed, authenticated, and has an active project."""
+        ...
+
+    def get_project(self):
+        """Return active GCP project ID."""
+        ...
+
+    def get_access_token(self):
+        """Return a cached bearer token from gcloud auth print-access-token."""
+        ...
+
+
+@runtime_checkable
 class IAWSTool(Protocol):
     """
     Capability: Integration provides AWS CLI operations.
@@ -450,6 +476,11 @@ CAPABILITY_REGISTRY = {
         "methods": ["ensure_available", "get_identity", "get_region"],
         "examples": ["AWS CLI (aws)"],
     },
+    "IGCloudTool": {
+        "description": "Google Cloud CLI operations: auth check, project context, access tokens, gcloud subcommands",
+        "methods": ["ensure_available", "get_project", "get_access_token"],
+        "examples": ["Google Cloud CLI (gcloud)"],
+    },
 }
 
 
@@ -468,6 +499,7 @@ CAPABILITY_MAP = {
     "cost": ICostEstimator,
     "azure": IAzureTool,
     "aws": IAWSTool,
+    "gcloud": IGCloudTool,
 }
 
 

@@ -1,27 +1,24 @@
 # Google Cloud CLI (`gcloud`) as a First-Class Integration
 
-- Status: proposed
+- Status: phase 1 implemented
 - Date: 2026-07-23
 - Related: ADR-0048 (CDK pattern), ADR-0051 (Checkov pattern), ADR-0053 (az CLI pattern)
 
 ## Context and Problem Statement
 
-strata's Google Cloud support is currently spread across:
+strata's Google Cloud support is minimal today:
 
 | Component               | How it uses GCP                                               |
 | ----------------------- | ------------------------------------------------------------- |
-| `gcp_secretmanager.py`  | REST API + `gcloud` CLI for secret resolution                 |
-| `gcp_runtimeconfig.py`  | REST API + `gcloud` CLI for variable resolution               |
 | `terraform_deployer.py` | Assumes Application Default Credentials for `google` provider |
 
-None of these check whether `gcloud` is actually installed, authenticated, or targeting
-the right project. Each integration independently attempts GCP operations and fails with
-unhelpful subprocess errors when `gcloud` is unavailable or not authenticated.
+There are **no built-in GCP integrations** — no Secret Manager, no RuntimeConfig, no GCS.
+strata never checks whether `gcloud` is installed or authenticated. Operations targeting
+GCP fail with unhelpful subprocess errors when credentials are missing.
 
 **The opportunity:** `gcloud` is a single entry point to the entire Google Cloud platform.
-One integration that validates availability and authentication gives all GCP-related features
-a shared foundation — including future deployment integrations targeting GKE, Cloud Run,
-and Deployment Manager.
+One integration that validates availability and authentication gives all current and future
+GCP-related features a shared foundation.
 
 ## What `gcloud` Enables Beyond Terraform
 
@@ -150,20 +147,34 @@ immediately before any GCP operations are attempted.
 
 ## Implementation Plan
 
-### Phase 1 — Integration + GKE deployer foundation
-1. `src/strata/integrations/gcloud_cli.py` — `GCloudCLIIntegration`
-2. Register `gcloud_cli` in `IntegrationFactory._BUILTIN_CLASS_MAP`
-3. Help file: `src/strata/data/help/gcloud_cli.md`
-4. Tests for `ensure_available()`, `get_project()`, `get_account()`, `get_access_token()`
+### Phase 1 — Integration + lifecycle scripts ✅
+1. `src/strata/integrations/gcloud_cli.py` — `GCloudCLIIntegration` ✅
+   - `ensure_available()`: binary + account + project all checked
+   - `get_project()`: `GOOGLE_CLOUD_PROJECT` → `CLOUDSDK_CORE_PROJECT` → `gcloud config`
+   - `get_account()`: `gcloud config get-value account`
+   - `get_access_token()`: `gcloud auth print-access-token` (cached)
+   - `run_gcloud(args)`: passthrough
+2. Register `gcloud_cli` in `IntegrationFactory._BUILTIN_CLASS_MAP` ✅
+3. `IGCloudTool` capability protocol + `"gcloud"` in `CAPABILITY_MAP` ✅
+4. Help files: `gcloud_cli.md`, `gcloud_scripts.md` ✅
+5. Tests: 35 unit tests ✅
 
-### Phase 2 — GKE credential setup (uses GCloudCLIIntegration)
-- `GKECredentialSetup` calls `GCloudCLIIntegration` to run `gcloud container clusters get-credentials`
-- Pre-deploy step for Helm/ArgoCD deployments targeting GKE
+**GCloudScript base class + built-in lifecycle scripts (also Phase 1):**
+- `strata.utils.gcloud_script_base.GCloudScript` — mirrors `AzureScript`/`AWSScript`; adds `project()` (3-tier resolution) and `account()` ✅
+- `gcloud_gke_credentials.py` — `gcloud container clusters get-credentials`; `GKE_CLUSTER` + `GKE_ZONE`/`GKE_REGION` ✅
+- `gcloud_artifact_registry_login.py` — `gcloud auth configure-docker`; `GAR_LOCATION` or `GCR_ENABLE=true` ✅
+- `gcloud_gcs_bucket_ensure.py` — idempotent `gcloud storage buckets create` + versioning ✅
+- Solution scaffold: `.strata/scripts/gcloud_lifecycle_example.py` ✅
+- Guide: `docs/guides/gcloud-lifecycle-scripts.md` ✅
 
-### Phase 3 — Token unification (optional)
-- `GCPSecretManagerIntegration._get_access_token()` delegates to `GCloudCLIIntegration.get_access_token()`
-- `GCPRuntimeConfigIntegration._get_access_token()` same
-- Single cached token per session
+### Phase 2 — GCP secret/variable integrations (future)
+- `gcp_secretmanager.py` — `gcloud secrets versions access` / REST; uses `GCloudCLIIntegration` for auth
+- `gcp_appconfig.py` or Firestore — GCP-native variable/config store
+- See ADR-0056 for full gap analysis
+
+### Phase 3 — Token caching for future GCP integrations (optional)
+- Future `GCPSecretManagerIntegration._get_access_token()` delegates to `GCloudCLIIntegration.get_access_token()`
+- Single cached token per resource scope per session
 
 ## Consequences
 

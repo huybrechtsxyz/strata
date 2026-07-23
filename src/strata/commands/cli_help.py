@@ -58,6 +58,11 @@ _TOPICS: dict[str, tuple[str, str]] = {
         "AWS lifecycle scripts: AWSScript base class and built-in EKS/ECR/S3 scripts",
         "aws_scripts.md",
     ),
+    "gcloud_cli": ("Google Cloud CLI (gcloud): availability check, authentication, project context", "gcloud_cli.md"),
+    "gcloud_scripts": (
+        "GCP lifecycle scripts: GCloudScript base class and built-in GKE/GAR/GCS scripts",
+        "gcloud_scripts.md",
+    ),
     "sentinel": ("Azure Sentinel: DCR Logs Ingestion API SIEM sink", "siem_sentinel.md"),
     "elk": ("ELK / Logstash: TCP JSON and Elasticsearch Bulk API SIEM sink", "siem_elk.md"),
     "otel": ("OpenTelemetry: OTLP/HTTP audit event forwarding", "siem_otel.md"),
