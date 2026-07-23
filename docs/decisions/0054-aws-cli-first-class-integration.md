@@ -1,27 +1,27 @@
 # AWS CLI (`aws`) as a First-Class Integration
 
-- Status: proposed
+- Status: phase 1 implemented
 - Date: 2026-07-23
 - Related: ADR-0048 (CDK provisioner), ADR-0051 (Checkov pattern), ADR-0053 (az CLI pattern)
 
 ## Context and Problem Statement
 
-strata's AWS support is currently spread across:
+strata's AWS support is minimal today:
 
 | Component               | How it uses AWS                                        |
 | ----------------------- | ------------------------------------------------------ |
-| `aws_secretsmanager.py` | REST API + `aws` CLI for secret resolution             |
-| `aws_ssm.py`            | REST API + `aws` CLI for parameter/variable resolution |
-| `terraform_deployer.py` | Assumes AWS CLI auth for `awscc` / `aws` provider      |
-| ADR-0048 (CDK)          | Needs `cdk deploy` which requires `aws` credentials    |
+| `terraform_deployer.py` | Assumes AWS credentials are set up externally          |
+| `auth_models.py`        | `AWSAuthenticationModel` (schema only, no integration) |
 
-None of these check whether `aws` is actually installed, authenticated, or targeting the
-right account and region. Each integration independently attempts AWS operations and fails
-with unhelpful subprocess errors when `aws` is unavailable or not authenticated.
+There are **no built-in AWS integrations** for secrets (SecretsManager), variables (SSM
+Parameter Store), or container registry (ECR). Operators configure Terraform to use AWS
+providers directly, but strata itself never checks whether `aws` is installed or
+authenticated — operations fail with unhelpful subprocess errors when credentials are
+missing.
 
-**The opportunity:** `aws` is a single entry point to the entire AWS platform. One integration
-that validates availability and authentication gives all AWS-related features a shared
-foundation — including the CDK provisioner (ADR-0048) and CloudFormation-based deployers.
+**The opportunity:** `aws` is a single entry point to the entire AWS platform. One
+integration that validates availability and authentication gives all current and future
+AWS-related features a shared foundation.
 
 ## What `aws` Enables Beyond CDK
 
@@ -39,37 +39,32 @@ foundation — including the CDK provisioner (ADR-0048) and CloudFormation-based
 
 ## Relationship to Existing AWS Integrations
 
-### Current: SDK-first, `aws` as fallback
+### Current: no AWS-specific integrations
 
-```
-AWSSecretsManagerIntegration  → REST API (urllib) → uses aws CLI credentials if available
-AWSSsmIntegration             → REST API (urllib) → uses aws CLI credentials if available
-```
+There are no `aws_secretsmanager.py`, `aws_ssm.py`, or other AWS integrations today.
+Terraform handles AWS provider authentication externally; strata trusts that credentials
+are pre-configured before `strata deploy run` is called.
 
-Both integrations independently resolve credentials — either from environment variables
-(`AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`) or from the shared credentials file
-managed by `aws configure`.
-
-### Proposed: `AWSCLIIntegration` as shared auth foundation
+### AWSCLIIntegration: foundation for future AWS integrations
 
 ```
 AWSCLIIntegration(BaseIntegration)
     COMMAND = "aws"
     ensure_available()     → aws sts get-caller-identity (confirms login + account)
-    get_account()          → current account id + alias
+    get_identity()         → current account id, userId, Arn
     get_region()           → current default region from config
-    ↓ Used by:
-    ├── CDKDeployer                  (cdk deploy via aws credentials)
+    ↓ Foundation for future AWS integrations:
+    ├── CDKDeployer                  (cdk deploy via aws credentials) — ADR-0048
     ├── CloudFormationDeployer       (aws cloudformation create/update-stack)
-    ├── AWSSecretsManagerIntegration (credential chain validation)
-    ├── AWSSsmIntegration            (credential chain validation)
+    ├── AWSSecretsManagerIntegration (future — not yet implemented)
+    ├── AWSSsmIntegration            (future — not yet implemented)
     ├── EKS credential setup         (aws eks update-kubeconfig)
     └── ECR login                    (aws ecr get-login-password)
 ```
 
-**Key principle:** `AWSCLIIntegration` is a tool-availability + auth check, not a
-replacement for the existing SDK-based integrations. SecretsManager and SSM continue using
-REST directly (faster, no subprocess per secret). The CLI integration provides:
+**Key principle:** `AWSCLIIntegration` is a tool-availability + auth check and the shared
+foundation for future AWS integrations. There are currently **no** `AWSSecretsManagerIntegration`
+or `AWSSsmIntegration` classes — those are planned future work. The CLI integration provides:
 
 1. **Tools view status** — "AWS CLI ✅ authenticated (account: 123456789012 / eu-west-1)" vs "❌ not authenticated"
 2. **Account validation** — confirms the right account and region are active before deploy
@@ -78,16 +73,16 @@ REST directly (faster, no subprocess per secret). The CLI integration provides:
 
 ### Impact on existing integrations
 
-| Integration                        | Change needed?             | How                                            |
-| ---------------------------------- | -------------------------- | ---------------------------------------------- |
-| `AWSSecretsManagerIntegration`     | No (Phase 1)               | Continues working as-is                        |
-| `AWSSsmIntegration`                | No (Phase 1)               | Continues working as-is                        |
-| Terraform `aws` / `awscc` provider | No                         | Uses own auth (env vars or credentials file)   |
-| CDK (ADR-0048)                     | **Uses AWSCLIIntegration** | `cdk deploy` depends on `aws` credential chain |
+| Integration                | Change needed?             | How                                            |
+| -------------------------- | -------------------------- | ---------------------------------------------- |
+| Terraform `aws` provider   | No                         | Uses own auth (env vars or credentials file)   |
+| CDK (ADR-0048)             | **Uses AWSCLIIntegration** | `cdk deploy` depends on `aws` credential chain |
+| AWSSecretsManager (future) | Will use this              | Not yet implemented                            |
+| AWSSSM (future)            | Will use this              | Not yet implemented                            |
 
-Future (Phase 2): SecretsManager and SSM integrations could delegate credential validation
-to `AWSCLIIntegration.ensure_available()` — centralising the check and surfacing auth
-problems in the Tools view before any secrets are resolved.
+Phase 2 future integrations (SecretsManager, SSM) will call `AWSCLIIntegration.ensure_available()`
+as their auth check — surfacing credential problems in the Tools view before any secrets
+are resolved.
 
 ## Design
 
@@ -101,11 +96,14 @@ class AWSCLIIntegration(BaseIntegration):
     def ensure_available(self) -> Tuple[bool, str]:
         """Check aws is installed AND authenticated (aws sts get-caller-identity succeeds)."""
 
-    def get_account(self) -> Optional[Dict[str, str]]:
-        """Return {account, arn, userId} from aws sts get-caller-identity."""
+    def get_identity(self) -> Optional[Dict[str, str]]:
+        """Return {Account, UserId, Arn} from aws sts get-caller-identity."""
 
     def get_region(self) -> Optional[str]:
-        """Return the default region from aws configure get region."""
+        """Return region: AWS_DEFAULT_REGION → AWS_REGION → aws configure get region."""
+
+    def run_aws(self, args, timeout=120):
+        """Run arbitrary aws subcommand — used by lifecycle scripts and future deployers."""
 ```
 
 ### Configuration YAML
@@ -145,20 +143,33 @@ binary-without-credentials is useless — operators need to know immediately.
 
 ## Implementation Plan
 
-### Phase 1 — Integration + CDK/CloudFormation deployer foundation
-1. `src/strata/integrations/aws_cli.py` — `AWSCLIIntegration`
-2. Register `aws_cli` in `IntegrationFactory._BUILTIN_CLASS_MAP`
-3. Help file: `src/strata/data/help/aws_cli.md`
-4. Tests for `ensure_available()`, `get_account()`, `get_region()`
+### Phase 1 — Integration + CDK/CloudFormation deployer foundation ✅
+1. `src/strata/integrations/aws_cli.py` — `AWSCLIIntegration` ✅
+   - `ensure_available()`: binary check + `aws sts get-caller-identity`
+   - `get_identity()`: returns `{Account, UserId, Arn}`
+   - `get_region()`: `AWS_DEFAULT_REGION` → `AWS_REGION` → `aws configure get region`
+   - `run_aws(args)`: passthrough for lifecycle scripts and future deployers
+2. Register `aws_cli` in `IntegrationFactory._BUILTIN_CLASS_MAP` ✅
+3. `IAWSTool` capability protocol + `"aws"` in `CAPABILITY_MAP` ✅
+4. Help files: `aws_cli.md`, `aws_scripts.md` ✅
+5. Tests: 33 unit tests ✅
+
+**AWSScript base class + built-in lifecycle scripts (also Phase 1):**
+- `strata.utils.aws_script_base.AWSScript` — mirrors `AzureScript`; adds `region()` (3-tier resolution) and `account_id()` ✅
+- `aws_eks_credentials.py` — `aws eks update-kubeconfig`; `EKS_CLUSTER`, `AWS_DEFAULT_REGION`, optional `EKS_ROLE_ARN` ✅
+- `aws_ecr_login.py` — `get-login-password | docker login`; accepts `ECR_REGISTRY` or auto-constructs from `ECR_ACCOUNT_ID` ✅
+- `aws_s3_bucket_ensure.py` — idempotent `aws s3api create-bucket` + versioning + encryption + public block + tags ✅
+- Solution scaffold: `.strata/scripts/aws_lifecycle_example.py` ✅
+- Guide: `docs/guides/aws-lifecycle-scripts.md` ✅
 
 ### Phase 2 — CDK deployer (uses AWSCLIIntegration)
 - See ADR-0048 for full CDK deployer design
 - `CDKDeployer(BaseDeployer)` calls `AWSCLIIntegration` to validate credentials before `cdk deploy`
 
-### Phase 3 — Credential unification (optional)
-- `AWSSecretsManagerIntegration.ensure_available()` delegates to `AWSCLIIntegration.ensure_available()`
-- `AWSSsmIntegration.ensure_available()` same
-- Single credential check per session
+### Phase 3 \u2014 AWS secret/variable integrations (future)
+- `AWSSecretsManagerIntegration` \u2014 `aws secretsmanager get-secret-value` via REST; uses `AWSCLIIntegration` for auth
+- `AWSSsmIntegration` \u2014 `aws ssm get-parameter` via REST; uses `AWSCLIIntegration` for auth
+- Single credential check per session; centralised in `AWSCLIIntegration.ensure_available()`
 
 ## Consequences
 

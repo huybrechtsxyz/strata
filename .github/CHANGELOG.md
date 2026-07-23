@@ -9,6 +9,17 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ### Added
 
+- **AWS CLI integration + lifecycle scripts**
+  - `AWSCLIIntegration(BaseIntegration)` — `COMMAND = "aws"`; `ensure_available()` checks binary AND `aws sts get-caller-identity`; `get_identity()`, `get_region()`, `run_aws()` passthrough
+  - `IAWSTool` capability protocol + `"aws"` in `CAPABILITY_MAP`; registered in `IntegrationFactory`
+  - `strata.utils.aws_script_base.AWSScript` — base class mirroring `AzureScript` for AWS; adds `region()` (3-tier resolution: `AWS_DEFAULT_REGION` → `AWS_REGION` → `aws configure`) and `account_id()`
+  - Built-in script: `aws_eks_credentials.py` — `aws eks update-kubeconfig` before Helm/ArgoCD/Flux; configured via `EKS_CLUSTER`, `AWS_DEFAULT_REGION`; optional `EKS_ROLE_ARN`, `EKS_CONTEXT_ALIAS`
+  - Built-in script: `aws_ecr_login.py` — two-step `get-login-password | docker login`; accepts `ECR_REGISTRY` or auto-constructs from `ECR_ACCOUNT_ID` + region
+  - Built-in script: `aws_s3_bucket_ensure.py` — idempotent `aws s3api create-bucket`; optional versioning, AES-256 encryption, public access block, and tags in one script
+  - Solution scaffold: `.strata/scripts/aws_lifecycle_example.py` — ready-to-use starter
+  - Help: `strata help --topic aws_cli`, `strata help --topic aws_scripts`; guide: `docs/guides/aws-lifecycle-scripts.md`
+  - 33 tests, zero regressions against 4798-test suite
+
 - **Azure lifecycle scripts — `AzureScript` base class and built-in scripts**
   - `strata.utils.azure_script_base.AzureScript` — base class for `.strata/scripts/*.py` lifecycle scripts; wraps Azure CLI with `run_az()`, `exit_on_failure()`, `require_env()`, `get_token()`, `log()` and strata context helpers
   - Built-in script: `azure_aks_credentials.py` — `az aks get-credentials` before Helm/ArgoCD stages; configurable via `AKS_CLUSTER`, `AKS_RESOURCE_GROUP`, optional `AKS_ADMIN_CREDENTIALS`, `AKS_CONTEXT_NAME`

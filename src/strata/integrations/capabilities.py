@@ -18,6 +18,7 @@ __all__ = [
     "IIacSecurityScanner",
     "ICostEstimator",
     "IAzureTool",
+    "IAWSTool",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -274,6 +275,31 @@ class ICveScanner(Protocol):
 
 
 @runtime_checkable
+class IAWSTool(Protocol):
+    """
+    Capability: Integration provides AWS CLI operations.
+
+    Integrations implementing this interface can check AWS CLI
+    availability, retrieve identity context (account, region),
+    and run arbitrary ``aws`` subcommands.
+
+    Examples: AWS CLI (aws)
+    """
+
+    def ensure_available(self) -> tuple:
+        """Check that aws is installed and authenticated."""
+        ...
+
+    def get_identity(self):
+        """Return active identity (Account, UserId, Arn)."""
+        ...
+
+    def get_region(self):
+        """Return the active AWS region."""
+        ...
+
+
+@runtime_checkable
 class IAzureTool(Protocol):
     """
     Capability: Integration provides Azure CLI operations.
@@ -419,6 +445,11 @@ CAPABILITY_REGISTRY = {
         "methods": ["ensure_available", "get_subscription", "get_access_token"],
         "examples": ["Azure CLI (az)"],
     },
+    "IAWSTool": {
+        "description": "AWS CLI operations: auth check, identity context, region, aws subcommands",
+        "methods": ["ensure_available", "get_identity", "get_region"],
+        "examples": ["AWS CLI (aws)"],
+    },
 }
 
 
@@ -436,6 +467,7 @@ CAPABILITY_MAP = {
     "iac_security": IIacSecurityScanner,
     "cost": ICostEstimator,
     "azure": IAzureTool,
+    "aws": IAWSTool,
 }
 
 
