@@ -517,14 +517,19 @@ class TestGenerateAndMaskIntegration:
         assert mask_result.exit_code == 0
 
     def test_password_generation_and_mask(self):
-        """Generate password and mask it."""
+        """Generate password and mask it.
+
+        Uses '--' separator so passwords starting with '-' are not
+        misinterpreted as CLI options (see changelog: secret mask fix).
+        """
         runner = CliRunner()
         gen_result = runner.invoke(secret_group, ["generate", "--format", "password", "--length", "20"])
         assert gen_result.exit_code == 0
         password = gen_result.output.strip()
 
-        mask_result = runner.invoke(secret_group, ["mask", password, "--show", "5"])
-        assert mask_result.exit_code == 0
+        # '--' ends option parsing so passwords starting with '-' are safe
+        mask_result = runner.invoke(secret_group, ["mask", "--show", "5", "--", password])
+        assert mask_result.exit_code == 0, f"mask failed for password={password!r}: {mask_result.output}"
         masked = mask_result.output.strip()
         assert len(masked) == len(password)
 
