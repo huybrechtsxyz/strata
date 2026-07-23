@@ -17,6 +17,7 @@ __all__ = [
     "ICveScanner",
     "IIacSecurityScanner",
     "ICostEstimator",
+    "IAzureTool",
     # Registry and mapping
     "CAPABILITY_REGISTRY",
     "CAPABILITY_MAP",
@@ -273,6 +274,31 @@ class ICveScanner(Protocol):
 
 
 @runtime_checkable
+class IAzureTool(Protocol):
+    """
+    Capability: Integration provides Azure CLI operations.
+
+    Integrations implementing this interface can check Azure CLI
+    availability, retrieve subscription context, obtain access tokens,
+    and run arbitrary ``az`` subcommands.
+
+    Examples: Azure CLI (az)
+    """
+
+    def ensure_available(self) -> tuple:
+        """Check that az is installed and authenticated."""
+        ...
+
+    def get_subscription(self):
+        """Return active subscription metadata (id, name, tenantId)."""
+        ...
+
+    def get_access_token(self, resource: str = "https://management.azure.com"):
+        """Return a cached bearer token for the given resource scope."""
+        ...
+
+
+@runtime_checkable
 class IIacSecurityScanner(Protocol):
     """
     Capability: Integration supports IaC static security analysis.
@@ -388,6 +414,11 @@ CAPABILITY_REGISTRY = {
         "methods": ["breakdown", "diff"],
         "examples": ["Infracost"],
     },
+    "IAzureTool": {
+        "description": "Azure CLI operations: auth check, subscription context, access tokens, az subcommands",
+        "methods": ["ensure_available", "get_subscription", "get_access_token"],
+        "examples": ["Azure CLI (az)"],
+    },
 }
 
 
@@ -404,6 +435,7 @@ CAPABILITY_MAP = {
     "cve_scanner": ICveScanner,
     "iac_security": IIacSecurityScanner,
     "cost": ICostEstimator,
+    "azure": IAzureTool,
 }
 
 

@@ -52,6 +52,17 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 - **Layer name constraint removal** — configurations or deployment code that relied on the final layer being named `"environment"` should be updated. The constraint was overly restrictive and served no functional purpose in artifact path generation.
 
+- **Azure CLI integration — ADR 0053 Phase 1 (completed)**
+  - `AzureCLIIntegration(BaseIntegration)` — `COMMAND = "az"`; shared foundation for all Azure CLI-based operations
+  - `ensure_available()` checks binary presence **and** active login (`az account show`) — surfaces "not authenticated" in Tools view immediately
+  - `get_subscription()` — returns active subscription `id`, `name`, `tenantId`
+  - `get_access_token(resource)` — cached bearer tokens per resource scope; avoids repeated `az account get-access-token` spawns
+  - `bicep_version()` — reports Bicep extension version (`az bicep version`)
+  - `run_az(args)` — passthrough for arbitrary `az` subcommands (used by upcoming Bicep deployer)
+  - `IAzureTool` capability protocol + `"azure"` in `CAPABILITY_MAP`
+  - Registered in `IntegrationFactory`; Tools view shows subscription name and auth status
+  - 20 tests, zero regressions against 4712-test suite
+
 - **OPA (Open Policy Agent) integration — ADR 0050 (completed)**
   - `opa` policy type — evaluates Rego rules against strata deployment context
   - Two modes: HTTP REST (`POST /v1/data/{rule}` to running OPA server) and `opa eval` CLI fallback (stateless, no server required)
