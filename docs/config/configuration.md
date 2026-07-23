@@ -486,7 +486,7 @@ deny contains msg if {
 
 strata sends a JSON document containing available context:
 
-```json
+```
 {
   "phase": "build",
   "platform": { ... },       // platform artifact (if available)
