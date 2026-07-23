@@ -158,7 +158,20 @@ class TerraformDeployer(BaseDeployer):
         return True, messages
 
     def validate_environment(self) -> Tuple[bool, List[str]]:
-        """Verify Terraform binary is on PATH and the integration can be resolved."""
+        """Verify Terraform binary is on PATH and cloud CLI auth if detectable.
+
+        After confirming the Terraform/OpenTofu binary, inspects the backend
+        type to infer which cloud is targeted and runs a quick CLI auth check:
+
+        - ``azurerm`` backend → ``AzureCLIIntegration.ensure_available()``
+        - ``s3`` backend      → ``AWSCLIIntegration.ensure_available()``
+        - ``gcs`` backend     → ``GCloudCLIIntegration.ensure_available()``
+
+        Auth check behaviour:
+        - CLI installed but **not** authenticated → **error** (fail fast, clear fix hint)
+        - CLI not installed → **warning only** (operators may use env-var credentials
+          without the cloud CLI — do not block)
+        """
         messages: List[str] = []
 
         if self._iac_model is None:
@@ -172,10 +185,74 @@ class TerraformDeployer(BaseDeployer):
             return False, messages
 
         if not self._tf.is_available():
-            messages.append("Terraform binary not found on PATH. Install Terraform and ensure it is accessible.")
+            tool = self._tf.command if self._tf else "terraform"
+            messages.append(f"{tool} binary not found on PATH. Install it and ensure it is accessible.")
+            return False, messages
+
+        # Cloud CLI pre-flight — infer cloud from backend type
+        backend_type = ""
+        if self._iac_model.backend and self._iac_model.backend.type:
+            backend_type = str(self._iac_model.backend.type).lower()
+
+        cloud_ok, cloud_msgs = self._check_cloud_cli(backend_type)
+        messages.extend(cloud_msgs)
+        if not cloud_ok:
             return False, messages
 
         return True, messages
+
+    def _check_cloud_cli(self, backend_type: str) -> Tuple[bool, List[str]]:
+        """Run a non-blocking cloud CLI auth check based on the backend type.
+
+        Returns (False, [error]) only when the CLI *is* installed but auth fails.
+        Returns (True, [warning]) when the CLI is absent — env-var auth may still work.
+        Returns (True, []) when the CLI is available and authenticated.
+        """
+        from strata.models.integration_model import IntegrationModel
+
+        cloud_map = {
+            "azurerm": ("azure_cli", "AzureCLIIntegration", "az login"),
+            "s3": ("aws_cli", "AWSCLIIntegration", "aws configure  or  aws sso login"),
+            "gcs": ("gcloud_cli", "GCloudCLIIntegration", "gcloud auth login"),
+        }
+
+        entry = cloud_map.get(backend_type)
+        if not entry:
+            return True, []
+
+        integration_type, class_name, fix_cmd = entry
+
+        try:
+            if integration_type == "azure_cli":
+                from strata.integrations.azure_cli import AzureCLIIntegration as Cls
+            elif integration_type == "aws_cli":
+                from strata.integrations.aws_cli import AWSCLIIntegration as Cls  # type: ignore[assignment]
+            else:
+                from strata.integrations.gcloud_cli import GCloudCLIIntegration as Cls  # type: ignore[assignment]
+
+            cli = Cls(IntegrationModel(name=integration_type, type=integration_type))
+
+            if not cli.is_available():
+                # CLI not installed — warn but don't block (env-var credentials may work)
+                if self.verbose:
+                    return True, [
+                        f"Note: {cli.command} CLI not found — assuming env-var credentials for {backend_type} backend."
+                    ]
+                return True, []
+
+            ok, reason = cli.ensure_available()
+            if not ok:
+                return False, [
+                    f"Cloud CLI auth check failed for '{backend_type}' backend: {reason}",
+                    f"Run: {fix_cmd}",
+                ]
+
+            if self.verbose:
+                return True, [f"Cloud CLI check passed: {cli._info}"]
+            return True, []
+
+        except Exception:
+            return True, []  # never block deploy on unexpected errors here
 
     # ------------------------------------------------------------------
     # Step methods
