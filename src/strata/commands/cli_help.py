@@ -37,6 +37,7 @@ _TOPICS: dict[str, tuple[str, str]] = {
     "hashicorp_consul": ("HashiCorp Consul: service discovery and distributed config", "hashicorp_consul.md"),
     "hashicorp_vault": ("HashiCorp Vault: secret management and dynamic credentials", "hashicorp_vault.md"),
     "ansible": ("Ansible: configuration management provisioner for server setup", "ansible.md"),
+    "bicep": ("Bicep: Azure-native IaC provisioner using ARM deployments (no state file)", "bicep.md"),
     "checkov": ("Checkov: IaC static security scanner for Terraform artifacts", "checkov.md"),
     "cve_scanner": ("CVE Scanner: Trivy/Grype vulnerability scanner for SBOMs", "cve_scanner.md"),
     "etcd": ("etcd: distributed key-value store for variables and config", "etcd.md"),

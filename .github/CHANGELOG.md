@@ -52,8 +52,30 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 - **Layer name constraint removal** — configurations or deployment code that relied on the final layer being named `"environment"` should be updated. The constraint was overly restrictive and served no functional purpose in artifact path generation.
 
+- **Bicep provisioner — ADR 0046 (completed)**
+  - `ProvisionerType.BICEP = "bicep"` added to the enum — Bicep is now a first-class provisioner type
+  - `BicepDeployer(BaseDeployer)` — Azure-native IaC deployer using ARM deployments (no state file, no backend)
+  - Steps: `setup` → `az bicep build`, `plan` → `az deployment {scope} what-if`, `apply` → `az deployment {scope} create`, `destroy` → `az deployment {scope} delete`, `output` → ARM deployment outputs
+  - Four ARM deployment scopes: `resourceGroup` (default), `subscription`, `managementGroup`, `tenant`
+  - `BicepDeployer` uses `AzureCLIIntegration` for all `az` calls — inherits auth check and token caching
+  - `_deployment_cmd()` routes to the correct `az deployment group/sub/mg/tenant` subcommand based on scope
+  - What-if result cached by `plan()` and returned by `show_plan()`; output parsed from ARM `properties.outputs`
+  - Registered in `DeployerFactory._BUILTIN_MAP`
+  - 27 tests, zero regressions against 4739-test suite
+
 - **Azure CLI integration — ADR 0053 Phase 1 (completed)**
   - `AzureCLIIntegration(BaseIntegration)` — `COMMAND = "az"`; shared foundation for all Azure CLI-based operations
+
+- **Bicep provisioner — ADR 0046 (completed)**
+  - `ProvisionerType.BICEP = "bicep"` — Bicep is now a first-class provisioner type
+  - `BicepDeployer(BaseDeployer)` — Azure-native IaC deployer; no state file or backend required (ARM manages state server-side)
+  - Steps: `setup` → `az bicep build`, `plan` → `az deployment {scope} what-if`, `apply` → `az deployment {scope} create`, `destroy` → `az deployment {scope} delete`, `output` → ARM deployment outputs
+  - Four ARM scopes: `resourceGroup` (default), `subscription`, `managementGroup`, `tenant`
+  - Uses `AzureCLIIntegration` for all `az` calls — inherits auth check and token caching from ADR-0053
+  - Registered in `DeployerFactory._BUILTIN_MAP`; `provisioner: bicep` valid in workspace YAML
+  - `docs/config/workspace.md` updated — `provisioner: bicep` added to provisioner list with `configuration` fields documented
+  - Help file: `strata help --topic bicep`
+  - 27 tests, zero regressions against 4739-test suite
   - `ensure_available()` checks binary presence **and** active login (`az account show`) — surfaces "not authenticated" in Tools view immediately
   - `get_subscription()` — returns active subscription `id`, `name`, `tenantId`
   - `get_access_token(resource)` — cached bearer tokens per resource scope; avoids repeated `az account get-access-token` spawns

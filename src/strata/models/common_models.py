@@ -90,6 +90,7 @@ class ProvisionerType(str, Enum):
     HELM = "helm"
     ARGOCD = "argocd"
     FLUX = "flux"
+    BICEP = "bicep"
 
 
 # Provisioner types that do not require an IaC source directory — they render
