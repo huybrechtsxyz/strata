@@ -99,6 +99,15 @@ export interface IntegrationInfo {
     info: string | null;
 }
 
+export interface ToolsStatusRow {
+    name: string;
+    available: boolean;
+    version: string | null;
+    capabilities: string[];
+    command: string | null;
+    requirement: string | null; // "required" | "optional" | null
+}
+
 export interface HealthData {
     status: 'HEALTHY' | 'DEGRADED' | 'BROKEN';
     issues: string[];
@@ -986,6 +995,64 @@ export class StrataClient {
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
+
+    // ── Tools ─────────────────────────────────────────────────────────────────
+
+    /** Run `strata tools status --output json` and return ALL known integration rows. */
+    async getToolsStatus(deploymentFile?: string): Promise<ToolsStatusRow[]> {
+        const args = ['tools', 'status', '--output', 'json'];
+        if (deploymentFile) {
+            args.push('-f', deploymentFile);
+        }
+        const resp = await this._run<{ integrations: ToolsStatusRow[] }>(args);
+        return resp.data?.integrations ?? [];
+    }
+
+    // ── Help ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Run `strata help --topic <name>` and return the raw Markdown string.
+     * Returns undefined when the topic is not found (exit 1, empty stdout).
+     */
+    async getHelpTopic(name: string): Promise<string | undefined> {
+        try {
+            const parts = this.cliPath.trim().split(/\s+/);
+            const executable = parts[0];
+            const prefixArgs = parts.slice(1);
+            const { stdout } = await execFileAsync(
+                executable,
+                [...prefixArgs, 'help', '--topic', name],
+                { cwd: this.workPath, timeout: 10_000, maxBuffer: 512 * 1024 },
+            );
+            return stdout.trim() || undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
+    /**
+     * Run `strata help --list` and return the list of available topic names.
+     */
+    async listHelpTopics(): Promise<string[]> {
+        try {
+            const parts = this.cliPath.trim().split(/\s+/);
+            const executable = parts[0];
+            const prefixArgs = parts.slice(1);
+            const { stdout } = await execFileAsync(
+                executable,
+                [...prefixArgs, 'help', '--list'],
+                { cwd: this.workPath, timeout: 10_000, maxBuffer: 64 * 1024 },
+            );
+            // Output is plain text: "name    description\n..."
+            return stdout.trim().split('\n')
+                .map(l => l.split(/\s{2,}/)[0].trim())
+                .filter(Boolean);
+        } catch {
+            return [];
+        }
+    }
+
+    // ── Internal ─────────────────────────────────────────────────────────────
 
     /**
      * Spawn the CLI, parse JSON from stdout, and return the envelope.

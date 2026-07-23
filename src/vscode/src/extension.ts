@@ -31,6 +31,7 @@ import { AuditViewProvider } from './providers/auditViewProvider';
 import { ValuesViewProvider } from './providers/valuesViewProvider';
 import { BuildPlanProvider } from './providers/buildPlanProvider';
 import { PromotionsViewProvider } from './providers/promotionsViewProvider';
+import { IntegrationHelpProvider } from './providers/integrationHelpProvider';
 
 // ---------------------------------------------------------------------------
 // Extension state (singleton per VS Code window)
@@ -53,6 +54,7 @@ let _chatParticipant: StrataChatParticipant | undefined;
 let _auditView: AuditViewProvider | undefined;
 let _valuesView: ValuesViewProvider | undefined;
 let _promotionsView: PromotionsViewProvider | undefined;
+let _integrationHelp: IntegrationHelpProvider | undefined;
 let _lastStatus: import('./strataClient').WorkspaceStatus | undefined;
 let _lastDriftTarget: string | undefined;
 let _lastDeployTarget: string | undefined;
@@ -74,6 +76,7 @@ async function _refreshAll(): Promise<void> {
         _lastStatus = status;
         _statusBar?.update(status);
         _workspaceHealth?.update(status);
+        _workspaceHealth?.setActiveDeployment(_deployCtx?.activeFile);
         _guideView?.update(status);
         _crossRef?.update(status.repositories ?? []);
         _fileDecorations?.update(status);
@@ -161,6 +164,9 @@ export function activate(context: vscode.ExtensionContext): void {
     _promotionsView = new PromotionsViewProvider();
     _promotionsView.setClient(_client);
 
+    _integrationHelp = new IntegrationHelpProvider();
+    _integrationHelp.setClient(_client);
+
     // Propagate deployment context changes to status bar
     context.subscriptions.push(
         _deployCtx.onDidChange((filePath) => {
@@ -168,6 +174,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 filePath ? require('path').basename(filePath, '.yaml') : undefined,
             );
             _operationsView?.refresh();
+            _workspaceHealth?.setActiveDeployment(filePath);
         }),
     );
 
@@ -215,7 +222,17 @@ export function activate(context: vscode.ExtensionContext): void {
     // ── Register commands ──────────────────────────────────────────────────────
 
     context.subscriptions.push(
-
+        vscode.commands.registerCommand('strata.showIntegrationHelp', async (nameOrItem?: string | { label?: string }) => {
+            // Accepts either a raw string name or a ToolTreeItem from the context menu
+            const name = typeof nameOrItem === 'string'
+                ? nameOrItem
+                : (nameOrItem as { label?: string })?.label ?? '';
+            if (!name) {
+                void vscode.window.showWarningMessage('Strata: no integration name provided.');
+                return;
+            }
+            await _integrationHelp?.show(name);
+        }),
         // ── Deployment context ─────────────────────────────────────────────────
 
         vscode.commands.registerCommand('strata.selectDeployment', async () => {

@@ -1,23 +1,33 @@
 /**
  * ToolsViewProvider — "Tools" pane in the Strata activity bar.
  *
- * Shows integration/tool availability from `strata sln status`:
+ * Shows ALL known integrations from `strata tools status --output json`,
+ * grouped into three visual tiers:
  *
- *   terraform    1.9.2   ✅
- *   helm         3.15.0  ✅
- *   docker               ❌ not found
- *   kubectl              ❌ not found
+ *   ✅ green  = configured in the deployment + available (version shown)
+ *   ❌ red    = configured in the deployment + NOT installed (needs action)
+ *   ○ gray   = not configured / not referenced (informational, no action needed)
+ *
+ * When an active deployment file is known the tool passes `-f <file>` to
+ * `strata tools status`, which populates the `requirement` field
+ * ("required" | "optional" | null) on each row.
  */
 
 import * as vscode from 'vscode';
-import type { WorkspaceStatus, IntegrationInfo } from '../strataClient';
+import type { StrataClient, ToolsStatusRow } from '../strataClient';
 
-type ItemKind = 'tool' | 'loading' | 'error' | 'empty';
+type ItemKind =
+    | 'tool-configured-ok'       // configured (req/opt) + available
+    | 'tool-configured-missing'  // configured (req/opt) + NOT available
+    | 'tool-unconfigured'        // not referenced — gray
+    | 'loading'
+    | 'error'
+    | 'empty';
 
 export class ToolTreeItem extends vscode.TreeItem {
     constructor(
         label: string,
-        public readonly kind: ItemKind,
+        public readonly kind: ItemKind | 'tool' | 'tool-unavailable',
         collapsible: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.None,
     ) {
         super(label, collapsible);
@@ -29,28 +39,33 @@ export class ToolsViewProvider implements vscode.TreeDataProvider<ToolTreeItem>,
     private readonly _onChange = new vscode.EventEmitter<ToolTreeItem | undefined | null | void>();
     readonly onDidChangeTreeData = this._onChange.event;
 
-    private _integrations: Record<string, IntegrationInfo> = {};
+    private _client: StrataClient | undefined;
+    private _rows: ToolsStatusRow[] = [];
     private _error: string | undefined;
     private _loading = true;
+    private _deploymentFile: string | undefined;
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    update(status: WorkspaceStatus): void {
-        this._integrations = status.integrations;
-        this._error = undefined;
-        this._loading = false;
+    setClient(client: StrataClient): void {
+        this._client = client;
+    }
+
+    /**
+     * Refresh the list. Optionally pass the active deployment file so
+     * `strata tools status -f <file>` can populate the `requirement` field.
+     */
+    refresh(deploymentFile?: string): void {
+        this._deploymentFile = deploymentFile;
+        this._loading = true;
         this._onChange.fire();
+        void this._load();
     }
 
     setError(message: string): void {
-        this._integrations = {};
+        this._rows = [];
         this._error = message;
         this._loading = false;
-        this._onChange.fire();
-    }
-
-    setLoading(): void {
-        this._loading = true;
         this._onChange.fire();
     }
 
@@ -65,9 +80,9 @@ export class ToolsViewProvider implements vscode.TreeDataProvider<ToolTreeItem>,
     }
 
     getChildren(element?: ToolTreeItem): ToolTreeItem[] {
-        if (element) return []; // tools have no children
+        if (element) return [];
 
-        if (this._loading && Object.keys(this._integrations).length === 0) {
+        if (this._loading && this._rows.length === 0) {
             return [this._loadingItem()];
         }
         if (this._error) {
@@ -77,46 +92,113 @@ export class ToolsViewProvider implements vscode.TreeDataProvider<ToolTreeItem>,
         return this._buildTools();
     }
 
+    // ── Internals ─────────────────────────────────────────────────────────────
+
+    private async _load(): Promise<void> {
+        if (!this._client) return;
+        try {
+            this._rows = await this._client.getToolsStatus(this._deploymentFile);
+            this._error = undefined;
+        } catch (err) {
+            this._error = err instanceof Error ? err.message : String(err);
+            this._rows = [];
+        } finally {
+            this._loading = false;
+            this._onChange.fire();
+        }
+    }
+
     // ── Builders ──────────────────────────────────────────────────────────────
 
     private _buildTools(): ToolTreeItem[] {
-        const entries = Object.entries(this._integrations);
-
-        if (entries.length === 0) {
-            const empty = new ToolTreeItem('No integrations configured', 'empty');
+        if (this._rows.length === 0) {
+            const empty = new ToolTreeItem('No tools detected', 'empty');
             empty.iconPath = new vscode.ThemeIcon('info');
             return [empty];
         }
 
-        // Sort: available first, then alphabetically within each group
-        entries.sort(([nameA, a], [nameB, b]) => {
-            if (a.available !== b.available) return a.available ? -1 : 1;
-            return nameA.localeCompare(nameB);
+        // Sort: tier 0 (configured+ok) → tier 1 (configured+missing) → tier 2 (unconfigured)
+        const tier = (r: ToolsStatusRow): number => {
+            const configured = r.requirement != null;
+            if (configured && r.available) return 0;
+            if (configured && !r.available) return 1;
+            return 2;
+        };
+
+        const sorted = [...this._rows].sort((a, b) => {
+            const td = tier(a) - tier(b);
+            if (td !== 0) return td;
+            return a.name.localeCompare(b.name);
         });
 
-        return entries.map(([name, info]) => {
-            const item = new ToolTreeItem(name, 'tool');
-            item.description = info.version ?? (info.available ? '—' : 'not found');
-            item.iconPath = new vscode.ThemeIcon(
-                info.available ? 'pass-filled' : 'error',
-                info.available
-                    ? new vscode.ThemeColor('testing.iconPassed')
-                    : new vscode.ThemeColor('list.errorForeground'),
-            );
-            item.tooltip = new vscode.MarkdownString(
-                `**${name}**\n\n` +
-                `${info.available ? '✅ Available' : '❌ Not found'}` +
-                (info.version ? ` — v${info.version}` : '') +
-                (info.info ? `\n\n${info.info}` : ''),
-            );
-            return item;
-        });
+        return sorted.map(row => this._rowToItem(row));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    private _rowToItem(row: ToolsStatusRow): ToolTreeItem {
+        const configured = row.requirement != null;
+        const reqLabel = row.requirement === 'required'
+            ? '  required'
+            : row.requirement === 'optional'
+                ? '  optional'
+                : '';
+
+        // ── Tier 0: configured + available ─────────────────────────────────────
+        if (configured && row.available) {
+            const item = new ToolTreeItem(row.name, 'tool-configured-ok');
+            item.description = (row.version ?? '—') + reqLabel;
+            item.iconPath = new vscode.ThemeIcon('pass-filled',
+                new vscode.ThemeColor('testing.iconPassed'));
+            item.tooltip = this._tooltip(row, '✅ Configured & available');
+            return item;
+        }
+
+        // ── Tier 1: configured + NOT available (needs action) ───────────────────
+        if (configured && !row.available) {
+            const item = new ToolTreeItem(row.name, 'tool-configured-missing');
+            const severity = row.requirement === 'required'
+                ? new vscode.ThemeColor('list.errorForeground')
+                : new vscode.ThemeColor('list.warningForeground');
+            const icon = row.requirement === 'required' ? 'error' : 'warning';
+            item.description = 'not found' + reqLabel;
+            item.iconPath = new vscode.ThemeIcon(icon, severity);
+            item.tooltip = this._tooltip(row,
+                row.requirement === 'required'
+                    ? '❌ Required — install this tool'
+                    : '⚠️ Optional — some features unavailable');
+            return item;
+        }
+
+        // ── Tier 2: not configured (gray, informational) ───────────────────────
+        const item = new ToolTreeItem(row.name, 'tool-unconfigured');
+        item.description = row.version ?? '';
+        item.iconPath = new vscode.ThemeIcon(
+            row.available ? 'circle-filled' : 'circle-outline',
+            new vscode.ThemeColor('disabledForeground'),
+        );
+        item.tooltip = this._tooltip(row,
+            row.available ? 'Available but not configured' : 'Not installed — not required');
+        return item;
+    }
+
+    private _tooltip(row: ToolsStatusRow, status: string): vscode.MarkdownString {
+        const caps = row.capabilities?.length
+            ? `\n\nCapabilities: ${row.capabilities.join(', ')}`
+            : '';
+        const req = row.requirement
+            ? `\n\nDeployment requirement: **${row.requirement}**`
+            : '';
+        return new vscode.MarkdownString(
+            `**${row.name}**  \`${row.command ?? row.name}\`\n\n${status}` +
+            (row.version ? ` \u2014 v${row.version}` : '') +
+            caps + req +
+            `\n\n*Click \$(book) to open setup guide*`,
+        );
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private _loadingItem(): ToolTreeItem {
-        const item = new ToolTreeItem('Loading…', 'loading');
+        const item = new ToolTreeItem('Loading\u2026', 'loading');
         item.iconPath = new vscode.ThemeIcon('sync~spin');
         return item;
     }
